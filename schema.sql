@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS characters (
   heat NUMERIC NOT NULL DEFAULT 0,
   trade_rep BIGINT NOT NULL DEFAULT 0,
   gta_at TIMESTAMPTZ,
+  gun TEXT,
+  vest TEXT,
+  shoot_cd_until TIMESTAMPTZ,
+  busts INT NOT NULL DEFAULT 0,
   season INT NOT NULL,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -91,6 +95,81 @@ CREATE TABLE IF NOT EXISTS account_gear (
   gear_id TEXT NOT NULL,
   minted_onchain BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (account_id, gear_id)
+);
+
+CREATE TABLE IF NOT EXISTS character_guns (
+  character_id TEXT NOT NULL,
+  gun_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, gun_id)
+);
+
+-- ── M3 social systems (spec §3.3) ──
+CREATE TABLE IF NOT EXISTS gangs (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  tag TEXT NOT NULL UNIQUE,
+  treasury NUMERIC NOT NULL DEFAULT 0,
+  omr_reserve NUMERIC NOT NULL DEFAULT 0,
+  ammo_bank INT NOT NULL DEFAULT 0,
+  lifetime_tribute NUMERIC NOT NULL DEFAULT 0,   -- standing for buyback payouts
+  wars_won INT NOT NULL DEFAULT 0,               -- +10,000 standing each
+  weekly_week INT,
+  weekly_progress NUMERIC NOT NULL DEFAULT 0,
+  weekly_done BOOLEAN NOT NULL DEFAULT false,
+  war_with TEXT,
+  war_until TIMESTAMPTZ,
+  war_score_us INT NOT NULL DEFAULT 0,
+  war_score_them INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- role is the source of truth for command: 'boss' | 'underboss' | 'capo' | 'soldier'
+CREATE TABLE IF NOT EXISTS gang_members (
+  gang_id TEXT NOT NULL,
+  character_id TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL DEFAULT 'soldier',
+  PRIMARY KEY (gang_id, character_id)
+);
+CREATE TABLE IF NOT EXISTS districts (
+  id TEXT PRIMARY KEY,
+  holder_gang TEXT,
+  garrison NUMERIC NOT NULL DEFAULT 0,
+  seized_at TIMESTAMPTZ
+);
+INSERT INTO districts (id) SELECT 'docks'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='docks');
+INSERT INTO districts (id) SELECT 'neon'      WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='neon');
+INSERT INTO districts (id) SELECT 'foundry'   WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='foundry');
+INSERT INTO districts (id) SELECT 'brick'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='brick');
+INSERT INTO districts (id) SELECT 'canal'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='canal');
+INSERT INTO districts (id) SELECT 'cathedral' WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='cathedral');
+CREATE TABLE IF NOT EXISTS bounties (
+  target_character TEXT PRIMARY KEY,
+  amount NUMERIC NOT NULL,
+  posted_by TEXT NOT NULL,                       -- character id; never paid to the poster
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS searches (
+  hunter TEXT PRIMARY KEY,                       -- one active contract each (§5.2)
+  target TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Escrowed Exchange order book (§5.4): cb | ammo | item; product is rejected.
+CREATE TABLE IF NOT EXISTS listings (
+  id TEXT PRIMARY KEY,
+  seller_character TEXT NOT NULL,
+  item_kind TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  qty INT NOT NULL,
+  unit_price NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,
+  type TEXT NOT NULL,                            -- attack|attempt|whacked|busted|witness|sale|estate|war
+  payload TEXT NOT NULL DEFAULT '{}',
+  delivered BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ── M2 economy singletons (spec §3.4, §7.12) ──

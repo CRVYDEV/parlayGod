@@ -471,3 +471,22 @@ export const gearStat=(ids=[],st)=>ids.reduce((a,id)=>{const g=gearOf(id);return
 export const cargoCapacity=(ids=[])=>10+ids.reduce((a,id)=>a+(assetOf(id)?.cargo||0),0);
 // effective stat = base + owned gear boosts + owned asset boosts (spec §6)
 export const effStat=(base,st,assetIds=[],gearIds=[])=>base+gearStat(gearIds,st)+assetStat(assetIds,st);
+
+// ── M3 helpers (§7.6–7.9, §5.5) ──
+export const gunObjOf=(id)=>GUNS.find(g=>g.id===id)||null;
+export const vestMultOf=(id)=>VESTS.find(v=>v.id===id)?.mult||1;
+// fleet value from actual cars rows [{model_id,trim_id,dmg}] — the whack chop base (§7.7)
+export const fleetValue=(cars=[])=>cars.reduce((a,c)=>a+Math.floor(carVal(c.model_id,c.trim_id)*(1-(c.dmg||0)/100)),0);
+export const gangLevelOf=(treasury)=>Math.min(5,Math.floor(Number(treasury||0)/50000));
+export const roleMultOf=(role)=>role==='boss'||role==='underboss'?1.10:role==='capo'?1.05:1;
+export const weekOf=(day=dayOf())=>Math.floor(day/7);
+export const familyTaskOf=(wk=weekOf())=>FAMILY_TASKS[((wk%FAMILY_TASKS.length)+FAMILY_TASKS.length)%FAMILY_TASKS.length];
+export const M3 = {
+  GANG_FOUND_COST: 25000, GANG_FOUND_LEVEL: 5, GANG_MAX_MEMBERS: 20, TRIBUTE_MIN: 100,
+  WAR_COST: 10000, WAR_MS: 30*60*1000, WAR_SPOILS: 0.20,      // §5.5 (30 min pending design call, spec §9)
+  SEIZE_BASE: 30000, SEIZE_OUTBID: 1.5,
+  JUMP_ENERGY: 25, JUMP_AMMO: 5, JUMP_MIN_HEALTH: 20, JUMP_HOSP_MS: 3*60*1000, JUMP_STEAL_CAP: 25000,
+  FIRE_ENERGY: 40, KILL_HOSP_MS: 5*60*1000, CHOP_RATE: 0.40,
+  BOUNTY_MIN: 500, BUST_FAIL_JAIL_S: 180,
+  WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
+};

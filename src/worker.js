@@ -1,7 +1,7 @@
 // §7.12 buyback worker. Every 12h the accumulated street tax buys $OMR through the
 // same AMM curve as player swaps: 50% → event fund, 50% split pro-rata across the
-// top-25 families' omr_reserve, remainder → fund. Families arrive in M3, so until
-// then the whole buyback rolls to the event fund.
+// top-25 families by standing (lifetime tribute + 10,000 per war won) into their
+// omr_reserve; the undistributed remainder rolls to the fund.
 //
 // Run standalone: `node src/worker.js` (checks hourly, fires when a cycle is due).
 // Exported `runBuyback` is called by the worker loop and exercised by the tests.
@@ -16,6 +16,8 @@ export async function runBuyback(pool, opts = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // lock order matches the swap path (amm_pool before street_tax) — no lock cycles
+    const amm = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
     const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
     const cashPool = Number(tax.pool);
     const dueMs = now.getTime() - new Date(tax.last_buyback).getTime();
@@ -23,19 +25,33 @@ export async function runBuyback(pool, opts = {}) {
       await client.query('COMMIT');
       return null;
     }
-    // Claim the cycle first (pool→0) so a second runner can't double-distribute.
-    const amm = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
     const c = Number(amm.cash_reserve), o = Number(amm.omr_reserve), k = c * o;
     const bought = o - k / (c + cashPool);
     if (!(bought > 0)) { await client.query('COMMIT'); return null; }
     await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + cashPool, o - bought]);
 
-    // 50% to families by standing (M3), 50% to the fund. No families yet → all to fund.
-    // The family split will subtract its distributed share here once gangs exist.
-    const toFund = bought;
+    // 50% pro-rata to the top-25 families by standing; the rest (plus any
+    // undistributed remainder) rolls to the event fund.
+    const clanShare = bought / 2;
+    let toFund = bought / 2, distributed = 0;
+    const ranked = (await client.query(
+      `SELECT id, lifetime_tribute, wars_won FROM gangs
+        WHERE lifetime_tribute + 10000 * wars_won > 0
+        ORDER BY lifetime_tribute + 10000 * wars_won DESC LIMIT 25`)).rows;
+    const totalStanding = ranked.reduce((a, g) => a + Number(g.lifetime_tribute) + 10000 * Number(g.wars_won), 0);
+    if (totalStanding > 0) {
+      for (const g of ranked) {
+        const share = clanShare * (Number(g.lifetime_tribute) + 10000 * Number(g.wars_won)) / totalStanding;
+        await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [g.id, share]);
+        distributed += share;
+      }
+      toFund += clanShare - distributed;
+    } else {
+      toFund = bought; // no eligible families yet: whole buyback to the event fund
+    }
     await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
     await client.query('COMMIT');
-    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: bought - toFund };
+    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: ranked.length };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
