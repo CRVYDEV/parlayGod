@@ -7,7 +7,8 @@ import { CONSTANTS, RACKETS, levelOf, rankIdxOf, cityEventOf, dayOf,
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
 // ch is the character row (mutated in place); acct is account_persistent (mutated);
-// ctx carries the owned racket/asset id lists so income can be computed.
+// ctx carries the owned racket/asset id lists (income) and ctx.held — the district
+// ids the character's gang holds (turf perks: cathedral nerve, neon income).
 export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const last = new Date(ch.last_accrued_at);
   const dtMs = Math.max(0, now - last);
@@ -19,10 +20,11 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const rackets = ctx.rackets || [];
   const ev = cityEventOf(dayOf());
 
+  const held = ctx.held || [];
   const maxEnergy = 50 + 2 * lvl + assetEnergyCap(assets);
   const maxNerve = 10 + lvl;
   ch.energy = Math.min(maxEnergy, Number(ch.energy) + (40 + (rIdx >= 2 ? 20 : 0)) * dtMin); // Runner+ regen bump
-  ch.nerve = Math.min(maxNerve, Number(ch.nerve) + 20 * dtMin);
+  ch.nerve = Math.min(maxNerve, Number(ch.nerve) + 20 * (held.includes('cathedral') ? 2 : 1) * dtMin); // Cathedral Hill turf
   ch.health = Math.min(100, Number(ch.health) + 20 * dtMin);
 
   // bank interest: 2% per 12h, continuous approximation, income window cap
@@ -32,7 +34,8 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   // §7.1 racket + front income — capped at the 8h offline window, never minted
   // without a matching ledger row (the caller records it, see game.withCharacter)
   const incPerMin = (rackets.reduce((a, id) => a + racketIncome(id), 0) + assetIncome(assets))
-    * (ev.racketMult || 1) * (ch.path === 'ledger' ? 1.1 : 1) * (rIdx >= 7 ? 1.1 : 1);
+    * (ev.racketMult || 1) * (held.includes('neon') ? 1.15 : 1)   // Neon Mile turf
+    * (ch.path === 'ledger' ? 1.1 : 1) * (rIdx >= 7 ? 1.1 : 1);
   const income = Math.floor(incPerMin * (capped / 60000));
   ch._accruedIncome = income;                 // surfaced so the caller ledgers it
   if (income > 0) ch.cash = Number(ch.cash) + income;

@@ -1,11 +1,13 @@
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
+import websocket from '@fastify/websocket';
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import * as G from './game.js';
 import * as E from './economy.js';
+import * as S from './social.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         GOODS, DRUGS, DISTRICTS } from './rules.js';
+         levelOf, GOODS, DRUGS, DISTRICTS } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -109,6 +111,135 @@ export async function buildServer() {
   app.post('/v1/gear/:id/mint', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.mintGear(ch, req.params.id, client, h)));
 
+  // ── M3: armory (§5.2) ──
+  app.post('/v1/armory/gun/:id/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyGun(ch, req.params.id, client, h)));
+  app.post('/v1/armory/gun/:id/equip', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.equipGun(ch, req.params.id, client, h)));
+  app.post('/v1/armory/unequip', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.equipGun(ch, null, client, h)));
+  app.post('/v1/armory/vest/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyVest(ch, req.params.id, client, h)));
+  app.post('/v1/armory/ammo', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyAmmo(ch, client, h)));
+
+  // ── M3: family (§5.5) ──
+  app.post('/v1/gangs', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.createGang(ch, req.body?.name, req.body?.tag, client, h)));
+  app.post('/v1/gangs/:id/join', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.joinGang(ch, req.params.id, client, h)));
+  app.post('/v1/gangs/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.leaveGang(ch, client, h)));
+  app.post('/v1/gangs/kick', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.kickMember(ch, req.body?.characterId, client, h)));
+  app.post('/v1/gangs/promote', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.promoteMember(ch, req.body?.characterId, req.body?.role, client, h)));
+  app.post('/v1/gangs/tribute', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.tribute(ch, req.body?.amount, client, h)));
+  app.post('/v1/gangs/war/:targetGangId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.declareWar(ch, req.params.targetGangId, client, h)));
+  app.post('/v1/districts/:id/seize', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.seizeDistrict(ch, req.params.id, client, h)));
+
+  app.get('/v1/gangs', async () => {
+    const r = await pool.query(`SELECT g.id, g.name, g.tag, g.treasury, g.wars_won, g.lifetime_tribute,
+      (SELECT COUNT(*) FROM gang_members m WHERE m.gang_id = g.id) AS members FROM gangs g`);
+    return { gangs: r.rows.map((g) => ({ id: g.id, name: g.name, tag: g.tag,
+      members: Number(g.members), warsWon: Number(g.wars_won),
+      standing: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) })) };
+  });
+  app.get('/v1/gangs/:id', async (req) => {
+    const client = await pool.connect();
+    try { // war state resolves lazily on read
+      await client.query('BEGIN');
+      await S.resolveWarIfDue(client, req.params.id);
+      const g = (await client.query('SELECT * FROM gangs WHERE id=$1', [req.params.id])).rows[0];
+      if (!g) { await client.query('COMMIT'); return { gang: null }; }
+      const members = (await client.query(
+        'SELECT m.character_id, m.role, c.name FROM gang_members m JOIN characters c ON c.id = m.character_id WHERE m.gang_id=$1', [req.params.id])).rows;
+      const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [req.params.id])).rows.map((d) => d.id);
+      await client.query('COMMIT');
+      return { gang: { id: g.id, name: g.name, tag: g.tag, treasury: Math.floor(Number(g.treasury)),
+        ammoBank: Number(g.ammo_bank), omrReserve: Number(g.omr_reserve), warsWon: Number(g.wars_won),
+        war: g.war_with ? { with: g.war_with, until: g.war_until, us: g.war_score_us, them: g.war_score_them } : null,
+        weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
+        members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held } };
+    } catch (e) { await client.query('ROLLBACK'); throw e; }
+    finally { client.release(); }
+  });
+  app.get('/v1/districts', async () => {
+    const r = await pool.query('SELECT d.id, d.holder_gang, d.garrison, g.name AS gang_name, g.tag FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang');
+    return { districts: r.rows.map((d) => ({ id: d.id, perk: DISTRICTS.find((x) => x.id === d.id)?.perk,
+      holder: d.holder_gang ? { gangId: d.holder_gang, name: d.gang_name, tag: d.tag } : null,
+      garrison: Math.floor(Number(d.garrison)) })) };
+  });
+
+  // ── M3: the streets (§5.2) ──
+  app.get('/v1/streets', { preHandler: auth }, async () => {
+    const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, g.tag
+      FROM characters c LEFT JOIN gang_members m ON m.character_id = c.id LEFT JOIN gangs g ON g.id = m.gang_id
+      WHERE c.alive ORDER BY c.respect DESC LIMIT 100`);
+    return { streets: r.rows.map((c) => ({ id: c.id, name: c.name, level: levelOf(Number(c.respect)),
+      respect: Number(c.respect), loc: c.loc, gangTag: c.tag || null,
+      jailed: !!(c.jail_until && new Date(c.jail_until) > new Date()),
+      hospitalized: !!(c.hosp_until && new Date(c.hosp_until) > new Date()) })) };
+  });
+  app.post('/v1/streets/:targetId/jump', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h)));
+  app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h)));
+  app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
+  app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => S.callOffSearch(ch, client)));
+  app.post('/v1/streets/:targetId/fire', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.fire(ch, victim, client, h, req.body?.rounds)));
+  app.post('/v1/streets/:targetId/bust', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.bust(ch, victim, client, h)));
+
+  // ── M3: the exchange (§5.4, escrowed order book) ──
+  app.get('/v1/exchange', async () => {
+    const r = await pool.query('SELECT l.*, c.name AS seller_name FROM listings l JOIN characters c ON c.id = l.seller_character ORDER BY l.created_at');
+    return { listings: r.rows.map((l) => ({ id: l.id, seller: l.seller_name, kind: l.item_kind,
+      itemId: l.item_id, qty: Number(l.qty), unitPrice: Number(l.unit_price) })) };
+  });
+  app.post('/v1/exchange/list', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.listItem(ch, req.body?.kind, req.body?.itemId, req.body?.qty, req.body?.unitPrice, client, h)));
+  app.delete('/v1/exchange/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelListing(ch, req.params.id, client, h)));
+  app.post('/v1/exchange/:id/buy', { preHandler: auth }, async (req) => {
+    const l = (await pool.query('SELECT seller_character FROM listings WHERE id=$1', [req.params.id])).rows[0];
+    if (!l) throw new G.GameError('gone', 'Too slow — someone else took that lot.');
+    return G.withTwoCharacters(pool, req.user.sub, l.seller_character,
+      (ch, seller, client, h) => S.buyListing(ch, seller, client, h, req.params.id));
+  });
+
+  // ── M3: notifications (§3.3) — reading marks delivered ──
+  app.get('/v1/notifications', { preHandler: auth }, async (req) => {
+    const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    if (!me) return { notifications: [] };
+    const r = await pool.query('SELECT * FROM notifications WHERE character_id=$1 AND NOT delivered ORDER BY created_at', [me.id]);
+    await pool.query('UPDATE notifications SET delivered=true WHERE character_id=$1', [me.id]);
+    return { notifications: r.rows.map((n) => ({ id: n.id, type: n.type, payload: JSON.parse(n.payload), at: n.created_at })) };
+  });
+
+  // ── M3: websocket gateway (§5.6) — channels: me, streets, gang:{id} ──
+  await app.register(websocket);
+  app.get('/v1/ws', { websocket: true }, async (socket, req) => {
+    let accountId;
+    try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
+    catch { socket.close(4001, 'auth'); return; }
+    const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+    if (!me) { socket.close(4004, 'no_character'); return; }
+    const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
+    const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
+    const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')]];
+    if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
+    for (const [ev, fn] of subs) G.bus.on(ev, fn);
+    socket.on('close', () => { for (const [ev, fn] of subs) G.bus.off(ev, fn); });
+    socket.send(JSON.stringify({ channel: 'hello', characterId: me.id }));
+  });
+
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {
     const block = priceBlock();
@@ -130,5 +261,5 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const app = await buildServer();
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
-  console.log(`OMERTÀ backend (M1+M2) listening on :${port}`);
+  console.log(`OMERTÀ backend (M1–M3) listening on :${port}`);
 }

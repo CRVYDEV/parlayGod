@@ -12,24 +12,34 @@ You are building the production backend for OMERTÀ, a multiplayer noir mafia RP
 7. Run `npm test` after every change; extend `test/smoke.js` (or add files) for every new endpoint — both success and gate-rejection paths.
 
 ## Where things stand
-M1 + M2 complete and tested (`npm test` runs both journeys). M2 shipped: the garage
-(boost/melt/repair/fence), workshop (craft/ammo) + consumable use, trade goods on the
-deterministic price hash (§7.11, `hash01`/`goodPriceOf` in the rules.js tail, SEED via
-`MARKET_SEED` env), rackets/assets with lazy income accrual (§7.1), the row-locked AMM
-swap (§7.12), staking (real 14% APY, lazily accrued on the account row), NFT gear mint,
-and the 12h buyback worker (`src/worker.js`). `withCharacter` now row-locks the character
-**and** its account and accrues both. Ledger invariants tested: cash faucets/sinks all
-ledgered, and car conservation (boost is the only faucet; melt/fence the only sinks).
+M1 + M2 + M3 complete and tested (`npm test` runs all three journeys). M2 shipped the
+economy: garage, workshop + consumables, trade goods on the deterministic price hash
+(§7.11, SEED via `MARKET_SEED` env), rackets/assets with lazy income accrual, the
+row-locked AMM swap, staking (real 14% APY), NFT gear mint, 12h buyback worker.
 
-Two things deferred to M3 by design (flagged in code): the melt **tithe** to a family
-armory and family-turf **price discounts** need gangs, and the buyback's 50% family split
-routes wholly to the event fund until families exist. One spec/prototype discrepancy
-raised: asset sell-back is **80%** (prototype `sellAsset`) not 70% (spec §5.4) — prototype
-wins per ground rule #1; flip the constant in `economy.js:sellAsset` if design says 70%.
+M3 shipped the social layer (`src/social.js`): gangs (found/join/leave/kick/promote,
+roles are the command truth in `gang_members`), tribute + weekly family contracts
+(`bumpFamilyTask` in game.js), wars (declare $10k / 30 min / lazy resolution on read,
+winner takes 20% spoils + standing), turf seizure with live perks (docks/canal/brick
+in crime, neon+cathedral in accrual, foundry in craft, ±5% goods prices), jumps (§7.6),
+bounty escrow (never pays its poster), hit contracts (§7.7: search 3h → fire, chop = 40%
+of the victim's REAL fleet), server-side death + estate (§7.9: heir row, prestige,
+account survives, street dies — all one transaction), busting (§7.8), the escrowed
+Exchange (deferred from M2; product rejected), notifications table + websocket gateway
+(`/v1/ws`, channels me/streets/gang via the in-process `bus` in game.js), armory, and
+the buyback's 50% family split by standing. `withTwoCharacters` locks both character
+rows then both account rows, each in sorted-id order — keep that global lock order
+(characters → accounts → gangs → singletons) for anything new.
 
-Next: **M3 (social)** — gangs, wars, turf, jumps, bounties, notifications, websocket, hit
-contracts + death, busting. Extend `withCharacter` to lock **both** parties in a stable
-order (§10.1) for the two-party actions.
+M2/M3 discrepancies raised (prototype wins per ground rule #1): asset sell-back is
+**80%** not spec's 70% (`economy.js:sellAsset`); gang joining is **immediate** (no
+apply/accept queue — v24 `joinGang`); war duration **30 min** pending the §9 design
+call. Test-only env knobs `SEARCH_MS`/`SHOOT_CD_MS` shrink the §9 hit timers — never
+set them in production.
+
+Next: **M4 (Kitchen + growth)** — full §7.10 (makings/cook/collect/deal, crew, raids
+in accrual), paths, trade ranks, heist + missions + daily jobs, First Week with real
+OAuth verifies, referrals (§7.13), telemetry, mod tools.
 
 ## Sensitive design notes
 - $OMR framing is utility-only; never add mechanics implying price appreciation.

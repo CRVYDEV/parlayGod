@@ -2,18 +2,18 @@
 // Every formula cites spec §7 / prototype v24. Actions receive the locked character
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
-import { GameError } from './game.js';
+import { GameError, bumpFamilyTask } from './game.js';
 import {
-  CONSUMABLES, RACKETS, ASSETS, GOODS, CONSTANTS,
+  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
-  effStat, cargoCapacity, goodPriceOf, gearOf,
+  effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf,
 } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
-// Family turf discounts land in M3; until then, no district is player-held.
-const turfMult = (_loc, side) => (side === 'buy' ? 1 : 1);
+// Family turf (§5.4): holding the district you're standing in gets better prices both ways.
+const turfMult = (held, loc, side) => (held.includes(loc) ? (side === 'buy' ? 0.95 : 1.05) : 1);
 
 // The 1% street tax on every house-take feeds the 12h buyback (spec §7.12).
 // The 1% dev fee is an off-ledger cut. Neither touches a character's cash ledger,
@@ -51,6 +51,7 @@ export async function boostCar(ch, client, h) {
       [carId, ch.id, model.id, trim.id, dmg]);
     h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg });
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
+    await bumpFamilyTask(client, h, 'gta', 1);
     return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare } };
   }
   const stint = 15 + Math.floor(Math.random() * 16); // 15–30s
@@ -72,12 +73,23 @@ async function removeCar(client, h, carId) {
 export async function meltCar(ch, carId, client, h) {
   const car = findCar(h, carId);
   const yieldRounds = carMelt(car.model_id, car.trim_id, car.dmg);
-  // 25% tithe to the family armory lands in M3 (no gang membership yet) → keep all.
-  const keep = yieldRounds;
+  // §7.5: in a family, 25% of the rounds tithe to the armory and the treasury is
+  // credited $30/round — atomically, in this same transaction.
+  const tithe = h.owned.gangId ? Math.floor(yieldRounds * CONSTANTS.MELT_TITHE) : 0;
+  const keep = yieldRounds - tithe;
   ch.ammo = Number(ch.ammo || 0) + keep;
   await removeCar(client, h, carId);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: keep, reason: 'melt' });
-  return { ok: true, rounds: keep };
+  if (tithe > 0) {
+    const titheValue = tithe * CONSTANTS.TITHE_ROUND_VALUE;
+    await client.query('UPDATE gangs SET ammo_bank = ammo_bank + $2, treasury = treasury + $3 WHERE id=$1',
+      [h.owned.gangId, tithe, titheValue]);
+    // gang-bucket rows carry no character_id so per-character invariants stay exact
+    await h.ledger(client, { currency: 'ammo', amount: tithe, reason: 'melt:tithe', counterparty: h.owned.gangId });
+    await h.ledger(client, { currency: 'cash', amount: titheValue, reason: 'melt:tithe', counterparty: h.owned.gangId });
+  }
+  await bumpFamilyTask(client, h, 'melt', yieldRounds);
+  return { ok: true, rounds: keep, tithe };
 }
 
 export async function repairCar(ch, carId, client, h) {
@@ -115,8 +127,8 @@ export async function fenceCar(ch, carId, client, h) {
 export async function craft(ch, itemId, client, h) {
   const c = CONSUMABLES.find((x) => x.id === itemId);
   if (!c) throw new GameError('bad_item', 'No such craftable.');
-  // Old Foundry's −25% cash discount requires holding that district (M3) → full price for now.
-  const cost = c.cost;
+  // Old Foundry turf: crafts cost 25% less cash for the holding family
+  const cost = (h.owned.held || []).includes('foundry') ? Math.floor(c.cost * 0.75) : c.cost;
   if (Number(ch.cb || 0) < c.cb) throw new GameError('cb', `Need ${c.cb} crates of contraband.`);
   if (Number(ch.cash) < cost) throw new GameError('cash', 'Not enough pocket cash for materials.');
   ch.cb = Number(ch.cb) - c.cb;
@@ -169,7 +181,7 @@ export async function buyGood(ch, goodId, qty, client, h) {
   const n = Math.max(1, Math.floor(Number(qty) || 0));
   const cap = cargoCapacity(h.owned.assets);
   if (cargoCount(h.owned.cargo) + n > cap) throw new GameError('cargo', `The trunk holds ${cap} units. Better Wheels carry more.`);
-  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(ch.loc, 'buy'));
+  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'buy'));
   const cost = unit * n, fee = Math.ceil(cost * 0.01), tax = Math.ceil(cost * 0.01);
   if (Number(ch.cash) < cost + fee + tax) throw new GameError('cash', `That runs $${cost + fee + tax} with the 2% house take.`);
   ch.cash = Number(ch.cash) - cost - fee - tax;
@@ -188,7 +200,7 @@ export async function sellGood(ch, goodId, qty, client, h) {
   const n = Math.min(Math.max(1, Math.floor(Number(qty) || 0)), have);
   if (n <= 0) throw new GameError('none', 'Nothing of that in the trunk.');
   const ev = cityEventOf(dayOf());
-  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(ch.loc, 'sell') * (ev.tradeMult || 1) * (ch.path === 'ledger' ? 1.05 : 1));
+  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'sell') * (ev.tradeMult || 1) * (ch.path === 'ledger' ? 1.05 : 1));
   const gross = unit * n, fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;
@@ -304,6 +316,50 @@ export async function claimRewards(ch, client, h) {
   h.acct.rewards = 0;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: rewards, reason: 'stake:reward' });
   return { ok: true, claimed: rewards };
+}
+
+// ═══════════════════ THE ARMORY (§5.2) ═══════════════════
+export async function buyGun(ch, gunId, client, h) {
+  const g = GUNS.find((x) => x.id === gunId);
+  if (!g) throw new GameError('bad_gun', 'No such piece.');
+  if (h.owned.guns.includes(gunId)) throw new GameError('owned', 'You already own that piece.');
+  if (Number(ch.cash) < g.cash) throw new GameError('cash', 'The dealer doesn\'t extend credit.');
+  if ((Number(ch.cb) || 0) < g.crates) throw new GameError('cb', `The dealer wants ${g.crates} crates on top of the cash.`);
+  ch.cash = Number(ch.cash) - g.cash;
+  ch.cb = Number(ch.cb) - g.crates;
+  await client.query('INSERT INTO character_guns (character_id, gun_id) VALUES ($1,$2)', [ch.id, gunId]);
+  h.owned.guns.push(gunId);
+  if (!ch.gun) ch.gun = gunId; // first iron auto-equips (v24)
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -g.cash, reason: `gun:buy:${gunId}` });
+  await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -g.crates, reason: `gun:buy:${gunId}` });
+  return { ok: true, gun: gunId, equipped: ch.gun === gunId };
+}
+
+export function equipGun(ch, gunId, client, h) {
+  if (gunId && !h.owned.guns.includes(gunId)) throw new GameError('none', "You don't own that piece.");
+  ch.gun = gunId || null;
+  return { ok: true, gun: ch.gun };
+}
+
+// Vests are an $OMR burn (§5.2) — they don't survive death, the burn is final.
+export async function buyVest(ch, vestId, client, h) {
+  const v = VESTS.find((x) => x.id === vestId);
+  if (!v) throw new GameError('bad_vest', 'No such vest.');
+  if (ch.vest === vestId) throw new GameError('worn', "You're already wearing it.");
+  if (Number(h.acct.omr) < v.omr) throw new GameError('omr', `The ${v.name} runs ${v.omr} $OMR.`);
+  h.acct.omr = Number(h.acct.omr) - v.omr;
+  ch.vest = vestId;
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -v.omr, reason: `vest:${vestId}` });
+  return { ok: true, vest: vestId, mult: v.mult };
+}
+
+export async function buyAmmo(ch, client, h) {
+  if (Number(ch.cash) < 2000) throw new GameError('cash', 'A box of 50 rounds runs $2,000.');
+  ch.cash = Number(ch.cash) - 2000;
+  ch.ammo = Number(ch.ammo) + 50;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -2000, reason: 'ammo:buy' });
+  await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: 50, reason: 'ammo:buy' });
+  return { ok: true, ammo: 50 };
 }
 
 // ═══════════════════ NFT GEAR MINT (§5.4) ═══════════════════
