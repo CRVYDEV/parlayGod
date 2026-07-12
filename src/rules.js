@@ -437,7 +437,37 @@ export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
 export const trimOf=(id)=>TRIMS.find(t=>t.id===id)||TRIMS[1];
 export const carOf=(id)=>CARS.find(c=>c.id===id);
 export const drugOf=(id)=>DRUGS.find(d=>d.id===id);
+export const kitchenOf=(id)=>KITCHENS.find(k=>k.id===id);
+export const assetOf=(id)=>ASSETS.find(a=>a.id===id);
+export const gearOf=(id)=>MARKET.find(m=>m.id===id);
 export const tradeRankIdx=(rep)=>{let i=0;TRADE_RANKS.forEach((r,j)=>{if((rep||0)>=r.at)i=j;});return i;};
 export const rankIdxOf=(lvl)=>{let i=0;RANKS.forEach((r,j)=>{if(lvl>=r.lvl)i=j;});return i;};
 export const cityEventOf=(day)=>CITY_EVENTS[((day%CITY_EVENTS.length)+CITY_EVENTS.length)%CITY_EVENTS.length];
 export const dayOf=(t=Date.now())=>Math.floor(t/86400000);
+
+// ── §7.11 deterministic markets — FNV-1a hash, ported byte-for-byte from v24 ──
+// SEED is a per-season server secret so future price blocks can't be precomputed.
+// GET /market/prices returns the current block's numbers; the client never hashes.
+export const MARKET_SEED = process.env.MARKET_SEED || 'omerta-server-seed';
+export const hash01=(s)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%1000)/1000;};
+export const priceBlock=(t=Date.now())=>Math.floor(t/(4*3600*1000));
+export const goodPriceOf=(goodId,districtId,blk=priceBlock())=>{const g=GOODS.find(x=>x.id===goodId);if(!g)return 0;return Math.max(10,Math.round(g.base*(0.6+hash01(goodId+':'+districtId+':'+blk+':'+MARKET_SEED))));};
+export const demandOf=(drugId,districtId,blk=priceBlock())=>0.7+hash01(drugId+'@'+districtId+':'+blk+':'+MARKET_SEED)*0.8;
+export const makingsPriceOf=(drugId,blk=priceBlock())=>Math.max(5,Math.round((drugOf(drugId)?.mk||0)*(0.75+hash01('mk:'+drugId+':'+blk+':'+MARKET_SEED)*0.5)));
+
+// ── car value & melt yield (operate on a DB car row: {model_id, trim_id, dmg}) ──
+export const carVal=(modelId,trimId)=>Math.floor((carOf(modelId)?.val||0)*trimOf(trimId).val);
+export const carMelt=(modelId,trimId,dmg=0)=>Math.max(5,Math.round((carOf(modelId)?.melt||0)*trimOf(trimId).melt*(1-(dmg||0)/150)));
+export const rollByWeight=(rows)=>{const total=rows.reduce((a,r)=>a+r.w,0);let r=Math.random()*total;for(const row of rows){r-=row.w;if(r<=0)return row;}return rows[rows.length-1];};
+export const rollCar=()=>rollByWeight(CARS);
+export const rollTrim=()=>rollByWeight(TRIMS);
+
+// ── asset & gear aggregates (take arrays of owned ids) ──
+export const assetIncome=(ids=[])=>ids.reduce((a,id)=>a+(assetOf(id)?.income||0),0);
+export const assetEnergyCap=(ids=[])=>ids.reduce((a,id)=>a+(assetOf(id)?.energyCap||0),0);
+export const assetStat=(ids=[],st)=>ids.reduce((a,id)=>{const it=assetOf(id);return a+(it?.stat===st?it.boost:0);},0);
+export const assetsValue=(ids=[])=>ids.reduce((a,id)=>a+(assetOf(id)?.price||0),0);
+export const gearStat=(ids=[],st)=>ids.reduce((a,id)=>{const g=gearOf(id);return a+(g?.stat===st?g.boost:0);},0);
+export const cargoCapacity=(ids=[])=>10+ids.reduce((a,id)=>a+(assetOf(id)?.cargo||0),0);
+// effective stat = base + owned gear boosts + owned asset boosts (spec §6)
+export const effStat=(base,st,assetIds=[],gearIds=[])=>base+gearStat(gearIds,st)+assetStat(assetIds,st);

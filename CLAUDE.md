@@ -12,7 +12,24 @@ You are building the production backend for OMERTÀ, a multiplayer noir mafia RP
 7. Run `npm test` after every change; extend `test/smoke.js` (or add files) for every new endpoint — both success and gate-rejection paths.
 
 ## Where things stand
-M1 complete and tested. Next: **M2 (economy)** — garage/melt/tithe, workshop, exchange escrow, trade goods with the deterministic price hash (§7.11 — keep SEED server-side), rackets/assets accrual, the AMM swap with row lock (§7.12), and the 12h buyback worker. The prototype implementations to port live in `omerta-game-v24.jsx` (search for `boostCar`, `meltCar`, `ammSwap`, `runBuyback`).
+M1 + M2 complete and tested (`npm test` runs both journeys). M2 shipped: the garage
+(boost/melt/repair/fence), workshop (craft/ammo) + consumable use, trade goods on the
+deterministic price hash (§7.11, `hash01`/`goodPriceOf` in the rules.js tail, SEED via
+`MARKET_SEED` env), rackets/assets with lazy income accrual (§7.1), the row-locked AMM
+swap (§7.12), staking (real 14% APY, lazily accrued on the account row), NFT gear mint,
+and the 12h buyback worker (`src/worker.js`). `withCharacter` now row-locks the character
+**and** its account and accrues both. Ledger invariants tested: cash faucets/sinks all
+ledgered, and car conservation (boost is the only faucet; melt/fence the only sinks).
+
+Two things deferred to M3 by design (flagged in code): the melt **tithe** to a family
+armory and family-turf **price discounts** need gangs, and the buyback's 50% family split
+routes wholly to the event fund until families exist. One spec/prototype discrepancy
+raised: asset sell-back is **80%** (prototype `sellAsset`) not 70% (spec §5.4) — prototype
+wins per ground rule #1; flip the constant in `economy.js:sellAsset` if design says 70%.
+
+Next: **M3 (social)** — gangs, wars, turf, jumps, bounties, notifications, websocket, hit
+contracts + death, busting. Extend `withCharacter` to lock **both** parties in a stable
+order (§10.1) for the two-party actions.
 
 ## Sensitive design notes
 - $OMR framing is utility-only; never add mechanics implying price appreciation.

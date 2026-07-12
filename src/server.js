@@ -3,7 +3,9 @@ import jwt from '@fastify/jwt';
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import * as G from './game.js';
-import { dayOf, cityEventOf } from './rules.js';
+import * as E from './economy.js';
+import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
+         GOODS, DRUGS, DISTRICTS } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -49,7 +51,7 @@ export async function buildServer() {
   app.get('/v1/me', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, async () => ({})));
 
-  // ── M1 actions ──
+  // ── M1 actions (crimes/gym/doc/checkin/bank/travel) ──
   app.post('/v1/crimes/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h)));
   app.post('/v1/train/:stat', { preHandler: auth }, async (req) =>
@@ -63,6 +65,63 @@ export async function buildServer() {
   app.post('/v1/travel/:district', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.travel(ch, req.params.district, client, h)));
 
+  // ── M2: garage (§7.5) ──
+  app.post('/v1/garage/boost', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.boostCar(ch, client, h)));
+  app.post('/v1/garage/:carId/melt', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.meltCar(ch, req.params.carId, client, h)));
+  app.post('/v1/garage/:carId/repair', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.repairCar(ch, req.params.carId, client, h)));
+  app.post('/v1/garage/:carId/fence', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.fenceCar(ch, req.params.carId, client, h)));
+
+  // ── M2: workshop + consumables (§5.4) ──
+  app.post('/v1/workshop/craft/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.craft(ch, req.params.id, client, h)));
+  app.post('/v1/workshop/ammo', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.craftAmmo(ch, client, h)));
+  app.post('/v1/items/:id/use', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.useItem(ch, req.params.id, client, h)));
+
+  // ── M2: trade goods (§7.11) ──
+  app.post('/v1/goods/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyGood(ch, req.body?.goodId, req.body?.qty, client, h)));
+  app.post('/v1/goods/sell', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.sellGood(ch, req.body?.goodId, req.body?.qty, client, h)));
+
+  // ── M2: rackets & assets (§5.4) ──
+  app.post('/v1/rackets/:id/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyRacket(ch, req.params.id, client, h)));
+  app.post('/v1/assets/:id/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyAsset(ch, req.params.id, client, h)));
+  app.post('/v1/assets/:id/sell', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.sellAsset(ch, req.params.id, client, h)));
+
+  // ── M2: swap, staking, gear (§7.12 / §5.4) ──
+  app.post('/v1/swap', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.swap(ch, req.body?.direction, req.body?.amount, client, h)));
+  app.post('/v1/stake', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.stake(ch, req.body?.amount, client, h)));
+  app.post('/v1/unstake', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.unstake(ch, client, h)));
+  app.post('/v1/claim-rewards', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.claimRewards(ch, client, h)));
+  app.post('/v1/gear/:id/mint', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.mintGear(ch, req.params.id, client, h)));
+
+  // ── M2: deterministic market board (§7.11) — public, server-computed ──
+  app.get('/v1/market/prices', async () => {
+    const block = priceBlock();
+    return {
+      block,
+      goods: Object.fromEntries(DISTRICTS.map((d) =>
+        [d.id, Object.fromEntries(GOODS.map((g) => [g.id, goodPriceOf(g.id, d.id, block)]))])),
+      demand: Object.fromEntries(DISTRICTS.map((d) =>
+        [d.id, Object.fromEntries(DRUGS.map((dr) => [dr.id, Math.round(demandOf(dr.id, d.id, block) * 100) / 100]))])),
+      makings: Object.fromEntries(DRUGS.map((dr) => [dr.id, makingsPriceOf(dr.id, block)])),
+    };
+  });
+
   app.get('/v1/city', async () => ({ day: dayOf(), event: cityEventOf(dayOf()) }));
   return app;
 }
@@ -71,5 +130,5 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const app = await buildServer();
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
-  console.log(`OMERTÀ backend (M1) listening on :${port}`);
+  console.log(`OMERTÀ backend (M1+M2) listening on :${port}`);
 }

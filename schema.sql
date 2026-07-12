@@ -44,10 +44,74 @@ CREATE TABLE IF NOT EXISTS characters (
   streak INT NOT NULL DEFAULT 0,
   checkin_day INT NOT NULL DEFAULT 0,
   lc_crime INT NOT NULL DEFAULT 0,
+  ammo INT NOT NULL DEFAULT 25,
+  cb INT NOT NULL DEFAULT 0,
+  heat NUMERIC NOT NULL DEFAULT 0,
+  trade_rep BIGINT NOT NULL DEFAULT 0,
+  gta_at TIMESTAMPTZ,
   season INT NOT NULL,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ── M2 street-side possessions (spec §3.2) ──
+CREATE TABLE IF NOT EXISTS cars (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  trim_id TEXT NOT NULL,
+  dmg INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS character_items (
+  character_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, item_id)
+);
+CREATE TABLE IF NOT EXISTS character_rackets (
+  character_id TEXT NOT NULL,
+  racket_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, racket_id)
+);
+CREATE TABLE IF NOT EXISTS character_assets (
+  character_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, asset_id)
+);
+CREATE TABLE IF NOT EXISTS character_cargo (
+  character_id TEXT NOT NULL,
+  good_id TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, good_id)
+);
+-- NFT gear is ACCOUNT-side (survives death, spec §3.2)
+CREATE TABLE IF NOT EXISTS account_gear (
+  account_id TEXT NOT NULL,
+  gear_id TEXT NOT NULL,
+  minted_onchain BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (account_id, gear_id)
+);
+
+-- ── M2 economy singletons (spec §3.4, §7.12) ──
+-- Constant-product AMM, single row, row-locked on every swap.
+CREATE TABLE IF NOT EXISTS amm_pool (
+  id INT PRIMARY KEY,
+  cash_reserve NUMERIC NOT NULL,
+  omr_reserve NUMERIC NOT NULL
+);
+-- Street-tax accumulator + event fund; the 12h buyback drains `pool`.
+CREATE TABLE IF NOT EXISTS street_tax (
+  id INT PRIMARY KEY,
+  pool NUMERIC NOT NULL DEFAULT 0,
+  fund NUMERIC NOT NULL DEFAULT 0,
+  last_buyback TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Seed the singletons once (idempotent; virtual pool ≈ $500 / $OMR).
+INSERT INTO amm_pool (id, cash_reserve, omr_reserve)
+  SELECT 1, 10000000, 20000 WHERE NOT EXISTS (SELECT 1 FROM amm_pool);
+INSERT INTO street_tax (id, pool, fund)
+  SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   at TIMESTAMPTZ NOT NULL DEFAULT now(),
