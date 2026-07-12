@@ -1,53 +1,100 @@
-// M1 game actions — every formula cites spec §7 / prototype v24.
+// M1 core + shared transaction machinery. Every formula cites spec §7 / prototype v24.
 import crypto from 'node:crypto';
-import { CRIMES, DISTRICTS, CONSTANTS, levelOf, rankIdxOf, cityEventOf, dayOf } from './rules.js';
+import { CRIMES, DISTRICTS, CONSTANTS, levelOf, rankIdxOf, cityEventOf, dayOf,
+         assetEnergyCap, effStat, assetsValue, cargoCapacity } from './rules.js';
 import { accrue } from './accrual.js';
 
 const uid = () => crypto.randomUUID();
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
-async function ledger(client, { characterId = null, accountId = null, currency, amount, reason, counterparty = null }) {
+export async function ledger(client, { characterId = null, accountId = null, currency, amount, reason, counterparty = null }) {
   await client.query(
     'INSERT INTO transactions (id, character_id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5,$6,$7)',
     [uid(), characterId, accountId, currency, amount, reason, counterparty]);
 }
-async function rngLog(client, characterId, action, roll, outcome) {
+export async function rngLog(client, characterId, action, roll, outcome) {
   await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
     [uid(), characterId, action, roll, outcome]);
 }
 
-// Load-and-lock the living character, accrue, hand to fn, persist. One transaction.
+const idList = (rows, col) => rows.map((r) => r[col]);
+const cargoMap = (rows) => Object.fromEntries(rows.map((r) => [r.good_id, Number(r.qty)]));
+const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(r.qty)]));
+
+// Load-and-lock the living character + its account, accrue both, hand to fn, persist.
+// One DB transaction per action (spec §10.1). Child tables are loaded for the action
+// to read; the action mutates them via `client` and updates h.owned so the view is fresh.
 export async function withCharacter(pool, accountId, fn) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const r = await client.query('SELECT * FROM characters WHERE account_id = $1 AND alive FOR UPDATE', [accountId]);
     if (!r.rows.length) throw new GameError('no_character', 'Create a character first.');
-    const ch = accrue(r.rows[0]);
-    const events = [];
-    const result = await fn(ch, client, { ledger, rngLog, events });
-    await client.query(
-      `UPDATE characters SET respect=$2, energy=$3, nerve=$4, health=$5, cash=$6, bank=$7,
-        muscle=$8, cunning=$9, speed=$10, jail_until=$11, loc=$12, streak=$13, checkin_day=$14,
-        lc_crime=$15, last_accrued_at=$16 WHERE id=$1`,
-      [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
-       ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
-       ch.lc_crime, ch.last_accrued_at]);
+    const ch = r.rows[0];
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id = $1 FOR UPDATE', [accountId])).rows[0];
+
+    const [rk, as, cars, cargo, items, gear] = await Promise.all([
+      client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
+      client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
+      client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
+      client.query('SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', [ch.id]),
+      client.query('SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', [ch.id]),
+      client.query('SELECT gear_id FROM account_gear WHERE account_id=$1', [accountId]),
+    ]);
+    const owned = {
+      rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
+      cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
+      gear: idList(gear.rows, 'gear_id'),
+    };
+
+    accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets });
+    // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
+    if (ch._accruedIncome > 0)
+      await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
+
+    const h = { ledger, rngLog, events: [], acct, owned, accountId };
+    const result = await fn(ch, client, h);
+
+    await persistCharacter(client, ch);
+    await client.query('UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4 WHERE account_id=$1',
+      [accountId, acct.omr, acct.staked, acct.rewards]);
     await client.query('COMMIT');
-    return { character: view(ch), events, ...result };
+    return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
 
-export function view(ch) {
+async function persistCharacter(client, ch) {
+  await client.query(
+    `UPDATE characters SET respect=$2, energy=$3, nerve=$4, health=$5, cash=$6, bank=$7,
+      muscle=$8, cunning=$9, speed=$10, jail_until=$11, loc=$12, streak=$13, checkin_day=$14,
+      lc_crime=$15, ammo=$16, cb=$17, heat=$18, trade_rep=$19, gta_at=$20, path=$21,
+      last_accrued_at=$22 WHERE id=$1`,
+    [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
+     ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
+     ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path, ch.last_accrued_at]);
+}
+
+export function view(ch, acct = {}, owned = {}) {
   const lvl = levelOf(Number(ch.respect));
+  const assets = owned.assets || [];
+  const gear = owned.gear || [];
+  const eff = (s) => effStat(ch[s], s, assets, gear);
   return { id: ch.id, name: ch.name, generation: ch.generation, level: lvl,
     respect: Number(ch.respect), energy: Math.floor(Number(ch.energy)), nerve: Math.floor(Number(ch.nerve)),
     health: Math.floor(Number(ch.health)), cash: Math.floor(Number(ch.cash)), bank: Math.floor(Number(ch.bank)),
+    omr: Number(acct.omr || 0), staked: Number(acct.staked || 0), rewards: Number(acct.rewards || 0),
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
+    eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
+    ammo: Number(ch.ammo || 0), cb: Number(ch.cb || 0), heat: Math.round(Number(ch.heat || 0)),
+    tradeRep: Number(ch.trade_rep || 0),
     jailSeconds: ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
-    maxEnergy: 50 + 2 * lvl, maxNerve: 10 + lvl,
+    maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
+    cargoCap: cargoCapacity(assets),
+    rackets: owned.rackets || [], assets, cargo: owned.cargo || {}, items: owned.items || {}, gear,
+    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg })),
+    netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id };
 }
 
@@ -71,8 +118,16 @@ export function doCrime(ch, crimeId, client, h) {
       const rep = Math.round(c.respect * (ev.crimeRep || 1));
       ch.cash = Number(ch.cash) + take; ch.respect = Number(ch.respect) + rep; ch.lc_crime += 1;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: `crime:${c.id}` });
+      // §7.2 contraband crates: docks turf +50%, event cbMult; feed the workshop/exchange
+      const pCrate = (0.25 + Number(ch.nerve) * 0.02) * (ev.cbMult || 1) * (ch.loc === 'docks' ? 1.5 : 1);
+      let crates = 0;
+      if (Math.random() < pCrate) {
+        crates = 1 + Math.floor(Number(ch.nerve) / 8);
+        ch.cb = Number(ch.cb || 0) + crates;
+        await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: crates, reason: `crime:${c.id}:cb` });
+      }
       await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'success');
-      return { ok: true, success: true, take, rep };
+      return { ok: true, success: true, take, rep, crates };
     }
     const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
