@@ -112,6 +112,8 @@ async function accrueAndLedger(client, ch, acct, owned) {
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
   if (ch._accruedIncome > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
+  if (ch._bankInterest >= 0.01)
+    await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._bankInterest, reason: 'bank:interest' });
   // §7.1 crew sales are a faucet too; the raid is logged, notified, and telemetered
   if (ch._crewSale?.proceeds > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._crewSale.proceeds, reason: 'crew:sales' });

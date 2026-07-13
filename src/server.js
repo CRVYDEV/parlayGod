@@ -8,6 +8,9 @@ import * as E from './economy.js';
 import * as S from './social.js';
 import * as K from './kitchen.js';
 import * as W from './growth.js';
+import * as A from './auth.js';
+import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
+import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS } from './rules.js';
 
@@ -37,13 +40,71 @@ export async function buildServer() {
       return reply.code(401).send({ error: 'mod_auth' });
   };
 
-  // ── auth ──
+  // ── M5 hardening hooks: §10.2 rate limits + §5 idempotency keys ──
+  // Applied to mutating player endpoints (auth/mod routes are excluded).
+  await initRateLimiter();
+  const guarded = (req) => (req.method === 'POST' || req.method === 'DELETE')
+    && req.url.startsWith('/v1') && !req.url.startsWith('/v1/auth') && !req.url.startsWith('/v1/mod');
+  app.addHook('preHandler', async (req, reply) => {
+    if (!guarded(req)) return;
+    try { await req.jwtVerify(); } catch { return; } // unauthenticated → the route 401s
+    if (rateLimitsEnabled()) {
+      const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!req.user.agent,
+        path: req.routeOptions?.url || req.url });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
+    const idem = req.headers['idempotency-key'];
+    if (idem) {
+      const hit = (await pool.query('SELECT status, response FROM idempotency WHERE account_id=$1 AND key=$2',
+        [req.user.sub, String(idem)])).rows[0];
+      if (hit) return reply.code(hit.status).header('x-idempotent-replay', 'true')
+        .type('application/json').send(hit.response);
+    }
+  });
+  app.addHook('onSend', async (req, reply, payload) => {
+    const idem = req.headers['idempotency-key'];
+    if (!idem || !guarded(req) || !req.user || reply.statusCode >= 500) return payload;
+    if (reply.getHeader('x-idempotent-replay')) return payload; // don't re-store a replay
+    try {
+      await pool.query('INSERT INTO idempotency (account_id, key, status, response) VALUES ($1,$2,$3,$4)',
+        [req.user.sub, String(idem), reply.statusCode, String(payload)]);
+    } catch { /* concurrent duplicate — first write wins */ }
+    return payload;
+  });
+
+  // ── auth (§4): guest, X, Privy — all behind the invite gate when INVITE_MODE=on ──
   app.post('/v1/auth/guest', async (req) => {
+    await A.consumeInvite(pool, req.body?.inviteCode);
     const id = uid();
     await pool.query('INSERT INTO accounts (id, auth_provider, auth_subject, created_ip, last_ip) VALUES ($1,$2,$3,$4,$4)',
       [id, 'guest', id, req.ip || '0.0.0.0']);
     await pool.query('INSERT INTO account_persistent (account_id) VALUES ($1)', [id]);
     return { token: app.jwt.sign({ sub: id }, { expiresIn: '30d' }) };
+  });
+  const providerLogin = (verify) => async (req) => {
+    const identity = await verify(req.body?.token);
+    const existing = (await pool.query('SELECT id FROM accounts WHERE auth_provider=$1 AND auth_subject=$2',
+      [identity.provider, identity.subject])).rows[0];
+    if (!existing) await A.consumeInvite(pool, req.body?.inviteCode); // invites gate NEW accounts only
+    const { accountId, created } = await A.accountForIdentity(pool, identity, req.ip || '0.0.0.0');
+    return { token: app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }), created };
+  };
+  app.post('/v1/auth/x', providerLogin(A.verifyX));
+  app.post('/v1/auth/privy', providerLogin(A.verifyPrivy));
+  // guest → provider upgrade preserves the account row and everything on it (§4)
+  app.post('/v1/auth/upgrade', { preHandler: auth }, async (req) => {
+    const verify = req.body?.provider === 'x' ? A.verifyX
+      : req.body?.provider === 'privy' ? A.verifyPrivy : null;
+    if (!verify) throw new G.GameError('bad_provider', 'Providers: x, privy.');
+    const identity = await verify(req.body?.token);
+    return A.upgradeAccount(pool, req.user.sub, identity);
+  });
+  // §4/§10.2 agent API keys: flags the account permanently (🤖 badge, referral
+  // exclusion) and mints a token the rate limiter throttles at 1 action / 3 s.
+  app.post('/v1/auth/agent-key', { preHandler: auth }, async (req) => {
+    await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [req.user.sub]);
+    return { token: app.jwt.sign({ sub: req.user.sub, agent: true }, { expiresIn: '90d' }), agent: true };
   });
 
   // ── character ──
@@ -315,10 +376,10 @@ export async function buildServer() {
       const victimAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [victim.account_id])).rows[0];
       const victimOwned = await G.loadOwned(client, victim);
       const h = { ledger: G.ledger, notify: G.notify, victimAcct, victimOwned };
-      const estate = await S.runEstate(client, h, victim, 'THE COMMISSION');
+      const estate = await S.runEstate(client, h, victim, 'THE COMMISSION'); // tracks the death itself
       await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3 WHERE account_id=$1',
         [victim.account_id, victimAcct.prestige, victimAcct.deaths]);
-      await G.track(client, victim.account_id, 'death', { by: 'mod', reason: reason || null });
+      if (reason) await G.track(client, victim.account_id, 'mod_kill_reason', { reason });
       await client.query('COMMIT');
       return { ok: true, heirId: estate.heirId };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
@@ -341,6 +402,18 @@ export async function buildServer() {
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   });
+  app.post('/v1/mod/invites', { preHandler: modAuth }, async (req) => {
+    const count = Math.min(100, Math.max(1, Math.floor(Number(req.body?.count) || 1)));
+    const uses = Math.max(1, Math.floor(Number(req.body?.uses) || 1));
+    const codes = [];
+    for (let i = 0; i < count; i++) {
+      const code = crypto.randomBytes(6).toString('hex');
+      await pool.query('INSERT INTO invite_codes (code, uses_left, created_by) VALUES ($1,$2,$3)', [code, uses, 'mod']);
+      codes.push(code);
+    }
+    return { codes, uses };
+  });
+  app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
   app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
     const cid = req.query?.characterId;
     const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
@@ -369,5 +442,5 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const app = await buildServer();
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
-  console.log(`OMERTÀ backend (M1–M4) listening on :${port}`);
+  console.log(`OMERTÀ backend (M1–M5) listening on :${port}`);
 }

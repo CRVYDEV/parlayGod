@@ -4,8 +4,12 @@
 // omr_reserve; the undistributed remainder rolls to the fund.
 //
 // Run standalone: `node src/worker.js` (checks hourly, fires when a cycle is due).
-// Exported `runBuyback` is called by the worker loop and exercised by the tests.
+// The hourly tick also runs the §8 season rollover and, once a day, the §10.4
+// ledger-invariant sweep. All three are exported for the tests.
+import crypto from 'node:crypto';
 import { makeDb } from './db.js';
+import { levelOf, dayOf } from './rules.js';
+import { runLedgerInvariants } from './invariants.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -56,14 +60,49 @@ export async function runBuyback(pool, opts = {}) {
   finally { client.release(); }
 }
 
+// §8 SEASON ROLLOVER — seasons are 28-day windows from the epoch. Characters
+// stamped with an older season convert level → prestige (floor(level/2), the
+// §7.9 formula) and reset respect. Batched; each character is row-locked.
+export async function runSeasonRollover(pool, opts = {}) {
+  const current = opts.season ?? Math.floor(dayOf() / 28);
+  const client = await pool.connect();
+  let converted = 0;
+  try {
+    await client.query('BEGIN');
+    const rows = (await client.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
+    for (const { id } of rows) {
+      const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+      if (!ch || ch.season >= current) continue;
+      const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
+      await client.query('UPDATE characters SET respect=0, season=$2 WHERE id=$1', [id, current]);
+      if (legacy > 0)
+        await client.query('UPDATE account_persistent SET prestige = prestige + $2 WHERE account_id=$1', [ch.account_id, legacy]);
+      await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
+        [crypto.randomUUID(), ch.account_id, 'season_convert', JSON.stringify({ season: current, legacy })]);
+      converted++;
+    }
+    await client.query('COMMIT');
+    return { season: current, converted };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   const pool = await makeDb();
-  console.log('OMERTÀ buyback worker up — checking hourly for a due 12h cycle.');
+  console.log('OMERTÀ worker up — hourly: buyback + season check; daily: §10.4 invariant sweep.');
+  let lastInvariantDay = -1;
   const tick = async () => {
     try {
       const r = await runBuyback(pool);
-      if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)})`);
-    } catch (e) { console.error('buyback error', e); }
+      if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
+      const s = await runSeasonRollover(pool);
+      if (s.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
+      if (dayOf() !== lastInvariantDay) {
+        lastInvariantDay = dayOf();
+        const inv = await runLedgerInvariants(pool);
+        console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
+      }
+    } catch (e) { console.error('worker tick error', e); }
   };
   await tick();
   setInterval(tick, 3600 * 1000);

@@ -3,7 +3,7 @@
 // Every formula cites spec §7 / prototype v24. Two-party actions run under
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, bus } from './game.js';
+import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
@@ -58,6 +58,14 @@ export async function removeMember(client, gangId, characterId) {
   const left = (await client.query(
     "SELECT character_id, role FROM gang_members WHERE gang_id=$1 ORDER BY CASE role WHEN 'underboss' THEN 0 WHEN 'capo' THEN 1 ELSE 2 END, character_id", [gangId])).rows;
   if (!left.length) {
+    // the family dies with its last member — remaining buckets burn, ledgered
+    // so the §10.4 job can reconcile treasuries/reserves/armory exactly
+    const g = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0];
+    if (g) {
+      if (Number(g.treasury) > 0) await ledger(client, { currency: 'cash', amount: -Number(g.treasury), reason: 'gang:dissolved', counterparty: gangId });
+      if (Number(g.omr_reserve) > 0) await ledger(client, { currency: 'omr', amount: -Number(g.omr_reserve), reason: 'gang:dissolved', counterparty: gangId });
+      if (Number(g.ammo_bank) > 0) await ledger(client, { currency: 'ammo', amount: -Number(g.ammo_bank), reason: 'gang:dissolved', counterparty: gangId });
+    }
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0 WHERE holder_gang=$1', [gangId]);
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
     await client.query('DELETE FROM gangs WHERE id=$1', [gangId]);
@@ -266,7 +274,10 @@ export async function postBounty(ch, targetCharacterId, amount, client, h) {
   const cur = (await client.query('SELECT * FROM bounties WHERE target_character=$1 FOR UPDATE', [targetCharacterId])).rows[0];
   if (cur) await client.query('UPDATE bounties SET amount = amount + $2, posted_by=$3 WHERE target_character=$1', [targetCharacterId, amt, ch.id]);
   else await client.query('INSERT INTO bounties (target_character, amount, posted_by) VALUES ($1,$2,$3)', [targetCharacterId, amt, ch.id]);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(amt + fee + tax), reason: 'bounty:post', counterparty: targetCharacterId });
+  // two rows so the §10.4 job can reconcile the escrow bucket exactly:
+  // the escrowed amount vs the 2% house take
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'bounty:post', counterparty: targetCharacterId });
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(fee + tax), reason: 'bounty:take', counterparty: targetCharacterId });
   await takeHouse(client, tax);
   bus.emit('streets', { type: 'bounty', on: t.name, amount: amt });
   return { ok: true, total: Number(cur?.amount || 0) + amt };
@@ -354,6 +365,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const wits = (await client.query('SELECT id FROM characters WHERE alive AND id<>$1 AND id<>$2 LIMIT 20', [ch.id, victim.id])).rows;
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
+    await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id });
     const estate = await runEstate(client, h, victim, ch.name);
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, bounty, jammed, estate: { heirId: estate.heirId } };
@@ -392,11 +404,19 @@ export async function runEstate(client, h, victim, killerName) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
+  // an unclaimed bounty dies with its target — ledgered so the escrow bucket reconciles
+  const openBounty = (await client.query('SELECT amount FROM bounties WHERE target_character=$1', [victim.id])).rows[0];
+  if (openBounty && Number(openBounty.amount) > 0)
+    await h.ledger(client, { currency: 'cash', amount: -Number(openBounty.amount), reason: 'death:bounty', counterparty: victim.id });
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victim.id]);
-  await client.query('DELETE FROM listings WHERE seller_character=$1', [victim.id]); // escrow forfeits (v24 rule)
+  // Exchange escrow forfeits with the man (v24 rule) — bucket rows keep cb/ammo conservation exact
+  const escrowed = (await client.query("SELECT item_kind, SUM(qty) q FROM listings WHERE seller_character=$1 AND item_kind IN ('cb','ammo') GROUP BY item_kind", [victim.id])).rows;
+  for (const e of escrowed)
+    await h.ledger(client, { currency: e.item_kind, amount: -Number(e.q), reason: 'death:escrow', counterparty: victim.id });
+  await client.query('DELETE FROM listings WHERE seller_character=$1', [victim.id]);
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
   victim.alive = false;
@@ -411,6 +431,9 @@ export async function runEstate(client, h, victim, killerName) {
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
   await h.notify(client, heirId, 'estate', report);
+  // §12 + §10.4: the death event carries the destroyed fleet size for car conservation
+  await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
+    [uid(), victim.account_id, 'death', JSON.stringify({ by: killerName, cars: h.victimOwned.cars.length, lvl })]);
   return { heirId, report };
 }
 
