@@ -6,6 +6,8 @@ import { makeDb } from './db.js';
 import * as G from './game.js';
 import * as E from './economy.js';
 import * as S from './social.js';
+import * as K from './kitchen.js';
+import * as W from './growth.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS } from './rules.js';
 
@@ -23,7 +25,17 @@ export async function buildServer() {
     req.log?.error?.(err); console.error(err);
     return reply.code(500).send({ error: 'internal' });
   });
-  const auth = async (req) => { await req.jwtVerify(); };
+  const auth = async (req, reply) => {
+    await req.jwtVerify();
+    // §10.3 — banned accounts are refused at the door
+    const a = (await pool.query('SELECT status FROM accounts WHERE id=$1', [req.user.sub])).rows[0];
+    if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
+  };
+  // Mod endpoints (§10.3) authenticate with the MOD_KEY header, never a player JWT.
+  const modAuth = async (req, reply) => {
+    if (!process.env.MOD_KEY || req.headers['x-mod-key'] !== process.env.MOD_KEY)
+      return reply.code(401).send({ error: 'mod_auth' });
+  };
 
   // ── auth ──
   app.post('/v1/auth/guest', async (req) => {
@@ -44,8 +56,14 @@ export async function buildServer() {
     const id = uid();
     await pool.query('INSERT INTO characters (id, account_id, name, season) VALUES ($1,$2,$3,$4)', [id, req.user.sub, name, season]);
     if (req.body?.referralCode) {
+      // §7.13 — the referral code is the recruiter's character name
       const rec = await pool.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [String(req.body.referralCode), req.user.sub]);
-      if (rec.rows.length) await pool.query('UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL', [rec.rows[0].account_id, req.user.sub]);
+      if (rec.rows.length) {
+        await pool.query('UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL', [rec.rows[0].account_id, req.user.sub]);
+        const existing = await pool.query('SELECT 1 FROM referrals WHERE recruit_account=$1', [req.user.sub]);
+        if (!existing.rows.length)
+          await pool.query('INSERT INTO referrals (recruit_account, recruiter_account) VALUES ($1,$2)', [req.user.sub, rec.rows[0].account_id]);
+      }
     }
     return { ok: true, id };
   });
@@ -57,7 +75,7 @@ export async function buildServer() {
   app.post('/v1/crimes/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h)));
   app.post('/v1/train/:stat', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch) => G.train(ch, req.params.stat)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => G.train(ch, req.params.stat, client, h)));
   app.post('/v1/heal', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.heal(ch, client, h)));
   app.post('/v1/checkin', { preHandler: auth }, async (req) =>
@@ -240,6 +258,96 @@ export async function buildServer() {
     socket.send(JSON.stringify({ channel: 'hello', characterId: me.id }));
   });
 
+  // ── M4: the Kitchen (§5.3, §7.10) ──
+  app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.buyMakings(ch, req.params.drugId, req.body?.qty, client, h)));
+  app.post('/v1/kitchen/lab/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.upgradeLab(ch, client, h)));
+  app.post('/v1/kitchen/cook', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cook(ch, req.body?.drugId, req.body?.qty, client, h)));
+  app.post('/v1/kitchen/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.collect(ch, client, h)));
+  app.post('/v1/kitchen/deal', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.deal(ch, req.body?.drugId, req.body?.qty, client, h)));
+  app.post('/v1/kitchen/crew/hire', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.hireCrew(ch, client, h)));
+  app.post('/v1/kitchen/laylow', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layLow(ch, client, h)));
+  app.post('/v1/kitchen/cleanpapers', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cleanPapers(ch, client, h)));
+
+  // ── M4: growth (§5.1) ──
+  app.post('/v1/path', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.choosePath(ch, req.body?.path, client, h)));
+  app.post('/v1/heist', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.heist(ch, client, h)));
+  app.post('/v1/missions/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.doMission(ch, req.params.id, client, h)));
+  app.get('/v1/daily', { preHandler: auth }, async (req) => {
+    const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    if (!me) throw new G.GameError('no_character', 'Create a character first.');
+    return W.getDaily(pool, me.id);
+  });
+  app.post('/v1/daily/:id/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
+  app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
+  app.post('/v1/wallet', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.linkWallet(ch, req.body?.address, client, h)));
+
+  // ── M4: mod tools (§10.3) — X-Mod-Key header; disabled unless MOD_KEY is set ──
+  app.post('/v1/mod/ban', { preHandler: modAuth }, async (req) => {
+    const { accountId, reason } = req.body || {};
+    if (!accountId) throw new G.GameError('args', 'accountId required.');
+    await pool.query("UPDATE accounts SET status='banned' WHERE id=$1", [accountId]);
+    await pool.query('INSERT INTO bans (account_id, kind, reason, by_mod) VALUES ($1,$2,$3,$4)',
+      [accountId, 'ban', reason || null, 'mod']);
+    return { ok: true };
+  });
+  app.post('/v1/mod/kill', { preHandler: modAuth }, async (req) => {
+    // runs the §7.9 estate without a killer ("THE COMMISSION")
+    const { characterId, reason } = req.body || {};
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const victim = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [characterId])).rows[0];
+      if (!victim) throw new G.GameError('no_target', 'No living character by that id.');
+      const victimAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [victim.account_id])).rows[0];
+      const victimOwned = await G.loadOwned(client, victim);
+      const h = { ledger: G.ledger, notify: G.notify, victimAcct, victimOwned };
+      const estate = await S.runEstate(client, h, victim, 'THE COMMISSION');
+      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3 WHERE account_id=$1',
+        [victim.account_id, victimAcct.prestige, victimAcct.deaths]);
+      await G.track(client, victim.account_id, 'death', { by: 'mod', reason: reason || null });
+      await client.query('COMMIT');
+      return { ok: true, heirId: estate.heirId };
+    } catch (e) { await client.query('ROLLBACK'); throw e; }
+    finally { client.release(); }
+  });
+  app.post('/v1/mod/confiscate', { preHandler: modAuth }, async (req) => {
+    // seized cash recycles into the street-tax pool (next buyback)
+    const { characterId, amount } = req.body || {};
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [characterId])).rows[0];
+      if (!ch) throw new G.GameError('no_target', 'No living character by that id.');
+      const amt = Math.min(Math.floor(Number(amount) || 0) || Math.floor(Number(ch.cash)), Math.floor(Number(ch.cash)));
+      await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [characterId, amt]);
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
+      await G.ledger(client, { characterId, currency: 'cash', amount: -amt, reason: 'mod:confiscate' });
+      await client.query('COMMIT');
+      return { ok: true, confiscated: amt };
+    } catch (e) { await client.query('ROLLBACK'); throw e; }
+    finally { client.release(); }
+  });
+  app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
+    const cid = req.query?.characterId;
+    const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
+    const rng = await pool.query('SELECT * FROM rng_audit WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
+    return { transactions: tx.rows, rng: rng.rows };
+  });
+
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {
     const block = priceBlock();
@@ -261,5 +369,5 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const app = await buildServer();
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
-  console.log(`OMERTÀ backend (M1–M3) listening on :${port}`);
+  console.log(`OMERTÀ backend (M1–M4) listening on :${port}`);
 }

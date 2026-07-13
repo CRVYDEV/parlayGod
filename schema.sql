@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS characters (
   vest TEXT,
   shoot_cd_until TIMESTAMPTZ,
   busts INT NOT NULL DEFAULT 0,
+  lab TEXT,
+  crew INT NOT NULL DEFAULT 0,
+  heist_at TIMESTAMPTZ,
   season INT NOT NULL,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -169,6 +172,64 @@ CREATE TABLE IF NOT EXISTS notifications (
   type TEXT NOT NULL,                            -- attack|attempt|whacked|busted|witness|sale|estate|war
   payload TEXT NOT NULL DEFAULT '{}',
   delivered BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── M4 the Kitchen (spec §3.2, §7.10) ──
+CREATE TABLE IF NOT EXISTS makings (
+  character_id TEXT NOT NULL,
+  drug_id TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, drug_id)
+);
+-- quality is the weighted average across merged batches
+CREATE TABLE IF NOT EXISTS stash (
+  character_id TEXT NOT NULL,
+  drug_id TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  quality NUMERIC NOT NULL DEFAULT 1,
+  PRIMARY KEY (character_id, drug_id)
+);
+-- one batch at a time per character
+CREATE TABLE IF NOT EXISTS batches (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL UNIQUE,
+  drug_id TEXT NOT NULL,
+  qty INT NOT NULL,
+  done_at TIMESTAMPTZ NOT NULL
+);
+
+-- ── M4 growth (spec §3.2/§3.3, §7.13, §12, §10.3) ──
+CREATE TABLE IF NOT EXISTS missions_done (
+  character_id TEXT NOT NULL,
+  mission_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, mission_id)
+);
+CREATE TABLE IF NOT EXISTS daily_progress (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  counters TEXT NOT NULL DEFAULT '{}',
+  claimed TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (character_id, day)
+);
+CREATE TABLE IF NOT EXISTS referrals (
+  recruit_account TEXT PRIMARY KEY,
+  recruiter_account TEXT NOT NULL,
+  qualified_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS telemetry (
+  id TEXT PRIMARY KEY,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  account_id TEXT,
+  event TEXT NOT NULL,
+  props TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS bans (
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  reason TEXT,
+  by_mod TEXT,
+  until TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
