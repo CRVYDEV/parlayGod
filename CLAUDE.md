@@ -54,9 +54,29 @@ pool draws **dice** contracts but there is no dice endpoint in spec §5 (undrawa
 gap — needs a design call). Test-only env knobs `SEARCH_MS`/`SHOOT_CD_MS` shrink the
 §9 hit timers — never set them in production.
 
-Next: **M5 (alpha hardening)** — rate limits (§10.2, Redis), nightly ledger-invariant
-job with alerting (§10.4), backups, invite codes, season rollover worker (§8),
-idempotency keys, X/Privy OAuth (real providers alongside guest). Then M6 (Solana).
+M5 shipped alpha hardening. `src/invariants.js` is the §10.4 job: seven checks
+(character cash, gang treasuries, bounty escrow, $OMR, cars, cb, ammo — each bucket
+reconciled against a per-currency reason vocabulary; an unknown reason is itself an
+alert) with telemetry + optional `INVARIANT_WEBHOOK_URL` alerting; the worker runs it
+nightly and `GET /v1/mod/invariants` on demand. Every faucet/sink now has a row —
+M5 closed the gaps (bank interest, bounty escrow split, death-cleared bounties,
+forfeited exchange escrow, gang dissolution). `src/ratelimit.js`: §10.2 token buckets
+(human 1/s burst 5, agent 1/3s hard, swaps 6/min; in-memory, Redis via `REDIS_URL`),
+enabled in production or `RATE_LIMIT=on`; rates are read per-call, not at import.
+Idempotency-Key is honored on all mutating player routes (stored responses replay
+with `x-idempotent-replay`). `src/auth.js`: X sign-in (bearer → /2/users/me), Privy
+(ES256 JWT vs app JWKS, needs `PRIVY_APP_ID`), guest→provider upgrade preserving the
+account row, agent keys (`POST /v1/auth/agent-key` — permanent agent_flag + throttled
+token), and the `INVITE_MODE=on` closed-alpha gate (codes minted via
+`POST /v1/mod/invites`). Season rollover (§8) is `runSeasonRollover` in the worker:
+level→prestige (floor(lvl/2)), respect reset, batched, telemetered. `tools/backup.sh`
+is the nightly pg_dump. The hardening test's invariant scenario earns every dollar
+through ledgered faucets — never SQL-seed cash/cb/ammo/$OMR in it.
+
+Next: **M6 (Solana service, §11)** — isolated chain service (vouchers table is its
+only write), Ed25519 signed-voucher withdrawals, cNFT gear mints via Bubblegum,
+DAS holdings verification on wallet link, Jupiter buyback bot — devnet first,
+third-party audit before mainnet.
 
 ## Sensitive design notes
 - $OMR framing is utility-only; never add mechanics implying price appreciation.

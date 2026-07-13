@@ -233,6 +233,22 @@ CREATE TABLE IF NOT EXISTS bans (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── M5 alpha hardening (spec §5, §10.2) ──
+CREATE TABLE IF NOT EXISTS idempotency (
+  account_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  status INT NOT NULL,
+  response TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, key)
+);
+CREATE TABLE IF NOT EXISTS invite_codes (
+  code TEXT PRIMARY KEY,
+  uses_left INT NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.
 CREATE TABLE IF NOT EXISTS amm_pool (

@@ -1,0 +1,193 @@
+// M5 hardening test: the §10.4 invariant job over an organically-earned economy
+// (zero SQL cash seeding), drift detection, idempotency keys, invite codes,
+// X OAuth + guest upgrade, season rollover (§8), and §10.2 rate limits
+// (human burst / agent 1-per-3s / swap 6-per-minute). Runs on pg-mem.
+process.env.RATE_LIMIT = 'off';           // flipped on for the rate-limit section
+process.env.RATE_HUMAN_PER_SEC = '0.5';   // slow refill so bursts are observable
+process.env.RATE_HUMAN_BURST = '8';
+process.env.MOD_KEY = 'test-mod-key';
+
+import assert from 'node:assert';
+import { buildServer } from '../src/server.js';
+import { runLedgerInvariants } from '../src/invariants.js';
+import { runSeasonRollover } from '../src/worker.js';
+
+const app = await buildServer();
+const pool = app.pool;
+const modH = { 'x-mod-key': 'test-mod-key' };
+const call = async (method, url, { token, body, headers } = {}) => {
+  const res = await app.inject({ method, url, payload: body,
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(headers || {}) } });
+  return { code: res.statusCode, body: res.json(), headers: res.headers };
+};
+const meOf = async (token) => (await call('GET', '/v1/me', { token })).body.character;
+const seedCh = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${id}'`);
+const mk = async (name, body = {}) => {
+  const { body: { token } } = await call('POST', '/v1/auth/guest', { body });
+  await call('POST', '/v1/character', { token, body: { name, ...body } });
+  return { token, id: (await meOf(token)).id };
+};
+
+// ═══════ §10.4 — an economy earned entirely through ledgered faucets ═══════
+// Stats/respect/energy get seeded (they aren't currency); cash/cb/ammo/$OMR never are.
+const boss = await mk('Avon B');
+const rival = await mk('Marlo S');
+await seedCh(boss.id, "respect=10000, muscle=100, cunning=50, speed=50, energy=200, nerve=60, loc='docks'");
+await seedCh(rival.id, "respect=400, energy=200, nerve=60, loc='docks'");
+
+let r = await call('POST', '/v1/heist', { token: boss.token });
+assert.equal(r.code, 200, 'boss heist');
+r = await call('POST', '/v1/heist', { token: rival.token });
+assert.equal(r.code, 200, 'rival heist');
+
+// crimes until the boss holds crates (cb faucet) — high-tier jobs pay the war chest
+for (let i = 0; i < 60; i++) {
+  await seedCh(boss.id, 'nerve=60, energy=200, jail_until=NULL, health=100');
+  await call('POST', '/v1/crimes/fixfight', { token: boss.token });
+  const m = await meOf(boss.token);
+  if (m.cash > 150000 && m.cb >= 4) break;
+}
+let m = await meOf(boss.token);
+assert(m.cash > 60000 && m.cb >= 1, `earned a bankroll organically (cash ${m.cash}, cb ${m.cb})`);
+
+assert.equal((await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'Barksdale Org', tag: 'BO' } })).code, 200);
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: boss.token, body: { amount: 31000 } })).code, 200);
+assert.equal((await call('POST', '/v1/districts/docks/seize', { token: boss.token })).code, 200);
+
+// garage: boost two, melt one (tithe), fence one
+let cars = [];
+for (let i = 0; i < 120 && cars.length < 2; i++) {
+  await seedCh(boss.id, 'gta_at=NULL, energy=200, jail_until=NULL');
+  const b = await call('POST', '/v1/garage/boost', { token: boss.token });
+  if (b.body.success) cars = b.body.character.cars;
+}
+assert.equal(cars.length, 2, 'two cars boosted');
+assert.equal((await call('POST', `/v1/garage/${cars[0].id}/melt`, { token: boss.token })).code, 200);
+assert.equal((await call('POST', `/v1/garage/${cars[1].id}/fence`, { token: boss.token })).code, 200);
+
+// armory + exchange + bounty + jump + swap + stake + mission
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: boss.token })).code, 200);
+assert.equal((await call('POST', '/v1/armory/ammo', { token: boss.token })).code, 200);
+r = await call('POST', '/v1/exchange/list', { token: boss.token, body: { kind: 'ammo', qty: 40, unitPrice: 10 } });
+assert.equal(r.code, 200, 'ammo lot listed');
+assert.equal((await call('POST', `/v1/exchange/${r.body.listingId}/buy`, { token: rival.token })).code, 200, 'rival bought the lot');
+assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: boss.token, body: { amount: 500 } })).code, 200);
+await seedCh(boss.id, 'energy=200, jail_until=NULL, health=100');
+r = await call('POST', `/v1/streets/${rival.id}/jump`, { token: boss.token });
+assert.equal(r.code, 200, 'jump resolved');
+assert.equal(r.body.bounty || 0, 0, 'a bounty never pays its own poster');
+assert.equal((await call('POST', '/v1/swap', { token: boss.token, body: { direction: 'buy', amount: 1000 } })).code, 200);
+assert.equal((await call('POST', '/v1/stake', { token: boss.token, body: { amount: 0.5 } })).code, 200);
+await seedCh(boss.id, 'muscle=100');
+assert.equal((await call('POST', '/v1/missions/m1', { token: boss.token })).code, 200);
+
+// death path: the Commission retires the rival (open bounty clears, estate burns)
+assert.equal((await call('POST', '/v1/mod/kill', { body: { characterId: rival.id }, headers: modH })).code, 200);
+assert.equal((await meOf(rival.token)).generation, 2, 'heir stood up');
+
+// the sweep: every bucket reconciles to the ledger exactly
+let inv = await runLedgerInvariants(pool);
+assert(inv.ok, `§10.4 invariants hold: ${JSON.stringify(inv.checks.filter((c) => !c.ok))}`);
+
+// drift detection: an unledgered mint must trip the character-cash check + alert
+await seedCh(boss.id, 'cash = cash + 12345');
+inv = await runLedgerInvariants(pool);
+assert(!inv.ok, 'drift detected');
+assert(inv.checks.find((c) => c.name === 'character cash' && !c.ok), 'the right check tripped');
+assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='invariant_drift'")).rows[0].n) >= 1, 'drift alert recorded');
+await seedCh(boss.id, 'cash = cash - 12345');
+assert((await runLedgerInvariants(pool)).ok, 'clean again after revert');
+
+// ═══════ idempotency keys (§5) ═══════
+const idemKey = { 'idempotency-key': 'dep-001' };
+const r1 = await call('POST', '/v1/bank/deposit', { token: boss.token, body: { amount: 100 }, headers: idemKey });
+assert.equal(r1.code, 200, 'first deposit');
+const bankAfter = r1.body.character.bank;
+const r2 = await call('POST', '/v1/bank/deposit', { token: boss.token, body: { amount: 100 }, headers: idemKey });
+assert.equal(r2.code, 200, 'replay returns the stored response');
+assert.equal(r2.headers['x-idempotent-replay'], 'true', 'flagged as replay');
+assert.equal(r2.body.character.bank, bankAfter, 'identical body');
+assert.equal(Math.floor((await meOf(boss.token)).bank), Math.floor(bankAfter), 'deposited exactly once');
+
+// ═══════ invite codes (closed alpha) ═══════
+process.env.INVITE_MODE = 'on';
+assert.equal((await call('POST', '/v1/auth/guest', {})).code, 400, 'no code, no entry');
+r = await call('POST', '/v1/mod/invites', { body: { count: 2, uses: 1 }, headers: modH });
+assert.equal(r.code, 200); assert.equal(r.body.codes.length, 2, 'codes minted');
+const code = r.body.codes[0];
+assert.equal((await call('POST', '/v1/auth/guest', { body: { inviteCode: code } })).code, 200, 'valid code enters');
+assert.equal((await call('POST', '/v1/auth/guest', { body: { inviteCode: code } })).code, 400, 'single-use code spent');
+process.env.INVITE_MODE = 'off';
+
+// ═══════ real OAuth (§4): X login + guest upgrade, provider APIs stubbed ═══════
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, opts) => {
+  if (String(url).includes('api.x.com/2/users/me')) {
+    const tok = opts?.headers?.authorization || '';
+    if (tok.includes('good-x-token')) return { ok: true, json: async () => ({ data: { id: 'x-user-42' } }) };
+    if (tok.includes('other-x-token')) return { ok: true, json: async () => ({ data: { id: 'x-user-99' } }) };
+    return { ok: false, json: async () => ({}) };
+  }
+  return realFetch(url, opts);
+};
+assert.equal((await call('POST', '/v1/auth/x', { body: { token: 'bad-token' } })).code, 400, 'X rejects bad tokens');
+const x1 = await call('POST', '/v1/auth/x', { body: { token: 'good-x-token' } });
+assert.equal(x1.code, 200, 'X sign-in'); assert.equal(x1.body.created, true, 'new account');
+const x2 = await call('POST', '/v1/auth/x', { body: { token: 'good-x-token' } });
+assert.equal(x2.body.created, false, 'same identity, same account');
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM accounts WHERE auth_provider='x'")).rows[0].n), 1, 'one X account');
+// guest upgrade preserves the character
+const up = await mk('Guest Gus');
+const gusId = up.id;
+assert.equal((await call('POST', '/v1/auth/upgrade', { token: up.token, body: { provider: 'x', token: 'good-x-token' } })).code, 400, 'identity already linked elsewhere');
+assert.equal((await call('POST', '/v1/auth/upgrade', { token: up.token, body: { provider: 'x', token: 'other-x-token' } })).code, 200, 'guest upgraded');
+assert.equal((await meOf(up.token)).id, gusId, 'possessions survive the upgrade');
+assert.equal((await call('POST', '/v1/auth/privy', { body: { token: 'whatever' } })).code, 400, 'privy unconfigured → clean error');
+globalThis.fetch = realFetch;
+
+// ═══════ season rollover (§8) ═══════
+await seedCh(boss.id, 'season = season - 1'); // boss is level ~51 → floor(lvl/2) prestige
+const prestigeBefore = (await meOf(boss.token)).prestige;
+const lvlBefore = (await meOf(boss.token)).level;
+const season = await runSeasonRollover(pool);
+assert(season.converted >= 1, 'stale-season characters converted');
+m = await meOf(boss.token);
+assert.equal(m.respect, 0, 'respect reset for the new season');
+assert.equal(m.prestige, prestigeBefore + Math.floor(lvlBefore / 2), 'level converted to prestige');
+assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='season_convert'")).rows[0].n) >= 1, 'conversion telemetered');
+assert((await runLedgerInvariants(pool)).ok, 'invariants still hold after rollover');
+
+// ═══════ rate limits (§10.2) — flipped on for this section ═══════
+process.env.RATE_LIMIT = 'on';
+// human bucket: burst 8 (test config). Character creation ate 1 token → 7 left.
+const human = await mk('Hasty Harry');
+let limited = null;
+for (let i = 0; i < 8; i++) {
+  const d = await call('POST', '/v1/bank/deposit', { token: human.token, body: { amount: 1 } });
+  if (d.code === 429) { limited = d; break; }
+}
+assert(limited, 'human burst exhausted → 429');
+assert.equal(limited.body.error, 'rate_limited');
+assert(Number(limited.headers['retry-after']) >= 1, 'Retry-After header set');
+// agent keys: 1 action per 3 s, hard — the second immediate call bounces
+const agentBase = await mk('Agent Smith');
+const ak = await call('POST', '/v1/auth/agent-key', { token: agentBase.token });
+assert.equal(ak.code, 200, 'agent key minted');
+assert.equal((await pool.query(`SELECT agent_flag FROM account_persistent WHERE account_id = (SELECT account_id FROM characters WHERE id='${agentBase.id}')`)).rows[0].agent_flag, true, 'agent_flag permanent');
+const agentToken = ak.body.token;
+assert.equal((await call('POST', '/v1/bank/deposit', { token: agentToken, body: { amount: 1 } })).code, 200, 'agent action 1');
+assert.equal((await call('POST', '/v1/bank/deposit', { token: agentToken, body: { amount: 1 } })).code, 429, 'agent action 2 inside 3s → 429');
+// swap bucket: 6/min on top of the account bucket
+const swapper = await mk('Swappy');
+await seedCh(swapper.id, 'cash=1000000');
+let swapLimited = null;
+for (let i = 0; i < 7; i++) {
+  const s = await call('POST', '/v1/swap', { token: swapper.token, body: { direction: 'buy', amount: 500 } });
+  if (s.code === 429) { swapLimited = { at: i + 1, res: s }; break; }
+  assert.equal(s.code, 200, `swap ${i + 1} fills`);
+}
+assert(swapLimited && swapLimited.at === 7, 'the seventh swap in a minute → 429');
+process.env.RATE_LIMIT = 'off';
+
+console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
+await app.close();

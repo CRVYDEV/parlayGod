@@ -27,9 +27,12 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   ch.nerve = Math.min(maxNerve, Number(ch.nerve) + 20 * (held.includes('cathedral') ? 2 : 1) * dtMin); // Cathedral Hill turf
   ch.health = Math.min(100, Number(ch.health) + 20 * dtMin);
 
-  // bank interest: 2% per 12h, continuous approximation, income window cap
+  // bank interest: 2% per 12h, continuous approximation, income window cap.
+  // The delta is surfaced so the caller ledgers it (§10.4: every faucet has a row).
   const capped = Math.min(dtMs, CONSTANTS.OFFLINE_CAP_MS);
-  ch.bank = Number(ch.bank) * (1 + CONSTANTS.BANK_RATE * (capped / CONSTANTS.BANK_PERIOD_MS));
+  const bankBefore = Number(ch.bank);
+  ch.bank = bankBefore * (1 + CONSTANTS.BANK_RATE * (capped / CONSTANTS.BANK_PERIOD_MS));
+  ch._bankInterest = Number(ch.bank) - bankBefore;
 
   // §7.1 racket + front income — capped at the 8h offline window, never minted
   // without a matching ledger row (the caller records it, see game.withCharacter)
