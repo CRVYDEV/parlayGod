@@ -1,9 +1,11 @@
 // M1 core + shared transaction machinery. Every formula cites spec §7 / prototype v24.
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { CRIMES, DISTRICTS, CONSTANTS, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetEnergyCap, effStat, assetsValue, cargoCapacity,
-         gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3 } from './rules.js';
+import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
+         levelOf, rankIdxOf, cityEventOf, dayOf,
+         assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
+         gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
+         gunsValue, fleetValue, racketsValue } from './rules.js';
 import { accrue } from './accrual.js';
 
 const uid = () => crypto.randomUUID();
@@ -75,7 +77,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -84,6 +86,9 @@ export async function loadOwned(client, ch) {
     client.query('SELECT gear_id FROM account_gear WHERE account_id=$1', [ch.account_id]),
     client.query('SELECT gun_id FROM character_guns WHERE character_id=$1', [ch.id]),
     client.query('SELECT gang_id, role FROM gang_members WHERE character_id=$1', [ch.id]),
+    client.query('SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]),
+    client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
+    client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -96,14 +101,54 @@ export async function loadOwned(client, ch) {
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
     gangId, gangRole: gm.rows[0]?.role || null, gang, held,
+    makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
+    stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
+    batch: batch.rows[0] || null,
   };
 }
 
 async function accrueAndLedger(client, ch, acct, owned) {
-  accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held });
+  accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash });
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
   if (ch._accruedIncome > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
+  // §7.1 crew sales are a faucet too; the raid is logged, notified, and telemetered
+  if (ch._crewSale?.proceeds > 0)
+    await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._crewSale.proceeds, reason: 'crew:sales' });
+  if (ch._raid) {
+    await rngLog(client, ch.id, 'raid', ch._raid.roll, `raided (P ${ch._raid.pWindow.toFixed(4)}, kept ${ch._raid.keepPct}%)`);
+    await notify(client, ch.id, 'raid', { lost: ch._raid.lost, keptPct: ch._raid.keepPct });
+    await track(client, ch.account_id, 'raid', { lost: ch._raid.lost });
+  }
+}
+
+// Persist the in-memory stash/makings maps back to their tables (kitchen state
+// is mutated by accrual and actions alike, so one uniform write path).
+async function persistKitchen(client, ch, owned) {
+  await client.query('DELETE FROM stash WHERE character_id=$1', [ch.id]);
+  for (const s of owned.stash)
+    if (Number(s.qty) > 0)
+      await client.query('INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ($1,$2,$3,$4)', [ch.id, s.drug_id, s.qty, s.quality]);
+  await client.query('DELETE FROM makings WHERE character_id=$1', [ch.id]);
+  for (const [drugId, qty] of Object.entries(owned.makings))
+    if (qty > 0)
+      await client.query('INSERT INTO makings (character_id, drug_id, qty) VALUES ($1,$2,$3)', [ch.id, drugId, qty]);
+}
+
+// §12 telemetry — one row per event, queried by the mod dashboards.
+export async function track(client, accountId, event, props = {}) {
+  await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
+    [uid(), accountId, event, JSON.stringify(props)]);
+}
+
+// §7.4 daily-contract counters (drawn jobs claim against these in growth.js)
+export async function bumpDaily(client, characterId, kind) {
+  const day = dayOf();
+  const row = (await client.query('SELECT * FROM daily_progress WHERE character_id=$1 AND day=$2 FOR UPDATE', [characterId, day])).rows[0];
+  const counters = row ? JSON.parse(row.counters) : {};
+  counters[kind] = (counters[kind] || 0) + 1;
+  if (row) await client.query('UPDATE daily_progress SET counters=$3 WHERE character_id=$1 AND day=$2', [characterId, day, JSON.stringify(counters)]);
+  else await client.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)', [characterId, day, JSON.stringify(counters)]);
 }
 
 // Load-and-lock the living character + its account, accrue both, hand to fn, persist.
@@ -120,16 +165,27 @@ export async function withCharacter(pool, accountId, fn) {
     const owned = await loadOwned(client, ch);
     await accrueAndLedger(client, ch, acct, owned);
 
-    const h = { ledger, rngLog, notify, events: [], acct, owned, accountId };
+    const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId };
     const result = await fn(ch, client, h);
 
     if (ch.alive !== false) await persistCharacter(client, ch); // a killed row is finalized by the estate
-    await client.query('UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4 WHERE account_id=$1',
-      [accountId, acct.omr, acct.staked, acct.rewards]);
+    await persistKitchen(client, ch, owned);
+    await persistAccount(client, accountId, acct);
     await client.query('COMMIT');
+    // §7.13 — qualification is re-checked after any action by a referred, unpaid
+    // account; it runs in its OWN transaction so its two-party locks stay sorted.
+    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}
+
+async function persistAccount(client, accountId, a) {
+  await client.query(
+    `UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6,
+      recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11 WHERE account_id=$1`,
+    [accountId, a.omr, a.staked, a.rewards, a.prestige, a.deaths,
+     a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address]);
 }
 
 // Two-party actions (§10.1): lock BOTH character rows in stable id order, then both
@@ -165,16 +221,19 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     await accrueAndLedger(client, ch, acct, owned);
     await accrueAndLedger(client, victim, victimAcct, victimOwned);
 
-    const h = { ledger, rngLog, notify, events: [], acct, owned, accountId,
+    const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId,
                 victimAcct, victimOwned };
     const result = await fn(ch, victim, client, h);
 
     await persistCharacter(client, ch);
-    if (victim.alive !== false) await persistCharacter(client, victim); // death finalizes its own row
-    for (const [accId, a] of Object.entries(accts))
-      await client.query('UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6 WHERE account_id=$1',
-        [accId, a.omr, a.staked, a.rewards, a.prestige, a.deaths]);
+    await persistKitchen(client, ch, owned);
+    if (victim.alive !== false) { // death finalizes its own row and wipes the tables
+      await persistCharacter(client, victim);
+      await persistKitchen(client, victim, victimOwned);
+    }
+    for (const [accId, a] of Object.entries(accts)) await persistAccount(client, accId, a);
     await client.query('COMMIT');
+    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
@@ -186,11 +245,13 @@ async function persistCharacter(client, ch) {
       muscle=$8, cunning=$9, speed=$10, jail_until=$11, loc=$12, streak=$13, checkin_day=$14,
       lc_crime=$15, ammo=$16, cb=$17, heat=$18, trade_rep=$19, gta_at=$20, path=$21,
       gun=$22, vest=$23, shoot_cd_until=$24, busts=$25, hosp_until=$26,
-      last_accrued_at=$27 WHERE id=$1`,
+      lab=$27, crew=$28, heist_at=$29, title=$30,
+      last_accrued_at=$31 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
-     ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until, ch.last_accrued_at]);
+     ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
+     ch.lab, ch.crew, ch.heist_at, ch.title, ch.last_accrued_at]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -218,6 +279,17 @@ export function view(ch, acct = {}, owned = {}) {
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
+    lab: ch.lab || null, crew: Number(ch.crew || 0),
+    makings: owned.makings || {},
+    stash: (owned.stash || []).filter((s) => Number(s.qty) > 0)
+      .map((s) => ({ drug: s.drug_id, qty: Number(s.qty), quality: Math.round(Number(s.quality) * 100) / 100 })),
+    batch: owned.batch ? { drug: owned.batch.drug_id, qty: Number(owned.batch.qty),
+      readySeconds: Math.max(0, Math.ceil((new Date(owned.batch.done_at) - Date.now()) / 1000)) } : null,
+    tradeRank: tradeRankIdx(Number(ch.trade_rep || 0)),
+    heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
+    prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
+    wallet: acct.wallet_address || null,
+    onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id };
 }
@@ -257,25 +329,40 @@ export function doCrime(ch, crimeId, client, h) {
         ch.cb = Number(ch.cb || 0) + crates;
         await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: crates, reason: `crime:${c.id}:cb` });
       }
+      // §7.2 makings drop: P = 0.15, a random unlocked line, 1 + floor(nerve/6) units
+      let makingsDrop = null;
+      if (Math.random() < 0.15) {
+        const unlocked = DRUGS.filter((d) => tradeRankIdx(Number(ch.trade_rep || 0)) >= d.unlock);
+        if (unlocked.length) {
+          const d = unlocked[Math.floor(Math.random() * unlocked.length)];
+          const n = 1 + Math.floor(Number(ch.nerve) / 6);
+          h.owned.makings[d.id] = (h.owned.makings[d.id] || 0) + n;
+          makingsDrop = { drug: d.id, qty: n };
+        }
+      }
       await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'success');
+      await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: true });
+      await h.bumpDaily(client, ch.id, 'crime');
       await bumpFamilyTask(client, h, 'crime', 1);
-      return { ok: true, success: true, take, rep, crates };
+      return { ok: true, success: true, take, rep, crates, makingsDrop };
     }
     const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
     await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'fail');
+    await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: false });
     return { ok: true, success: false, jailSeconds: jailS };
   })();
 }
 
 // ── §7.3 TRAIN ──
-export function train(ch, stat) {
+export async function train(ch, stat, client, h) {
   if (!['muscle', 'cunning', 'speed'].includes(stat)) throw new GameError('bad_stat', 'No such stat.');
   if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup.');
   if (Number(ch.energy) < 10) throw new GameError('energy', 'Too tired to train.');
   ch.energy = Number(ch.energy) - 10;
   const gain = Math.max(1, Math.round((1 + Math.random() * 2) * (200 / (200 + ch[stat]))));
   ch[stat] += gain;
+  await h.bumpDaily(client, ch.id, 'train');
   return { ok: true, stat, gain };
 }
 
@@ -300,6 +387,7 @@ export async function checkin(ch, client, h) {
   const pay = 250 * lvl + 100 * lvl * Math.min(ch.streak, 7);
   ch.cash = Number(ch.cash) + pay;
   ch.energy = Math.min(50 + 2 * lvl, Number(ch.energy) + 20);
+  h.acct.checkins_lifetime = Number(h.acct.checkins_lifetime || 0) + 1; // referral gate §7.13
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pay, reason: 'checkin' });
   return { ok: true, pay, streak: ch.streak };
 }
@@ -326,4 +414,101 @@ export async function travel(ch, district, client, h) {
   ch.cash = Number(ch.cash) - CONSTANTS.TRAVEL_COST; ch.loc = district;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.TRAVEL_COST, reason: 'travel' });
   return { ok: true, loc: district };
+}
+
+// ── §7.13 REFERRAL QUALIFICATION ──
+// Runs in its own transaction after any action by a referred, unpaid account.
+// All four gates required (level 8, 40 jobs, 3 check-ins, $25k net worth), once
+// ever. Pays recruiter + recruit atomically, bumps milestones and the recruiter
+// gang's weekly `recruit` progress, notifies both. Agent-flagged accounts are
+// excluded on both sides; same-IP pairs are flagged for review (§10.3).
+export async function maybeQualifyReferral(pool, recruitAccountId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [recruitAccountId])).rows[0];
+    if (!acct || !acct.referred_by || acct.ref_paid || acct.agent_flag) { await client.query('ROLLBACK'); return null; }
+    const recruiterAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [acct.referred_by])).rows[0];
+    if (!recruiterAcct || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
+
+    // lock both living characters in sorted-id order (§10.1 discipline)
+    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, acct.referred_by]])).rows;
+    const recruitId = ids.find((r) => r.account_id === recruitAccountId)?.id;
+    const recruiterId = ids.find((r) => r.account_id === acct.referred_by)?.id;
+    if (!recruitId || !recruiterId) { await client.query('ROLLBACK'); return null; }
+    const locked = {};
+    for (const id of [recruitId, recruiterId].sort())
+      locked[id] = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+    const recruit = locked[recruitId], recruiter = locked[recruiterId];
+    if (!recruit || !recruiter) { await client.query('ROLLBACK'); return null; }
+
+    // the four gates, all required
+    const owned = await loadOwned(client, recruit);
+    const netWorth = Number(recruit.cash) + Number(recruit.bank) + assetsValue(owned.assets)
+      + gunsValue(owned.guns) + fleetValue(owned.cars) + racketsValue(owned.rackets);
+    const qualified = levelOf(Number(recruit.respect)) >= M4.REF_GATES.level
+      && Number(recruit.lc_crime) >= M4.REF_GATES.jobs
+      && Number(acct.checkins_lifetime) >= M4.REF_GATES.checkins
+      && netWorth >= M4.REF_GATES.netWorth;
+    if (!qualified) { await client.query('ROLLBACK'); return null; }
+
+    // $OMR side only if the event fund covers the full 4 (3 recruiter + 1 recruit, v24)
+    const fund = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    const funded = Number(fund.fund) >= M4.REF_FUND_OMR;
+    if (funded) await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [M4.REF_FUND_OMR]);
+
+    recruit.cash = Number(recruit.cash) + M4.REF_RECRUIT_CASH;
+    recruiter.cash = Number(recruiter.cash) + M4.REF_RECRUITER_CASH;
+    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: M4.REF_RECRUIT_CASH, reason: 'referral:recruit' });
+    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: M4.REF_RECRUITER_CASH, reason: 'referral:recruiter', counterparty: recruit.id });
+    if (funded) {
+      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [recruitAccountId, M4.REF_RECRUIT_OMR]);
+      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [acct.referred_by, M4.REF_RECRUITER_OMR]);
+      await ledger(client, { accountId: recruitAccountId, currency: 'omr', amount: M4.REF_RECRUIT_OMR, reason: 'referral:fund' });
+      await ledger(client, { accountId: acct.referred_by, currency: 'omr', amount: M4.REF_RECRUITER_OMR, reason: 'referral:fund' });
+    }
+
+    // recruiter ladder: recruits++ and any milestones crossed (cash faucet;
+    // milestone $OMR pays only what the event fund still covers)
+    const before = Number(recruiterAcct.recruits), after = before + 1;
+    let milestoneCash = 0, milestoneOmr = 0, title = null;
+    let fundLeft = Number(fund.fund) - (funded ? M4.REF_FUND_OMR : 0);
+    for (const m of RECRUIT_MILESTONES.filter((m) => m.n > before && m.n <= after)) {
+      milestoneCash += m.cash || 0;
+      if (m.omr && fundLeft >= m.omr) { milestoneOmr += m.omr; fundLeft -= m.omr; }
+      if (m.title) title = m.title;
+    }
+    if (milestoneCash > 0) {
+      recruiter.cash = Number(recruiter.cash) + milestoneCash;
+      await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: milestoneCash, reason: 'referral:milestone' });
+    }
+    if (milestoneOmr > 0) {
+      await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [milestoneOmr]);
+      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [acct.referred_by, milestoneOmr]);
+      await ledger(client, { accountId: acct.referred_by, currency: 'omr', amount: milestoneOmr, reason: 'referral:milestone' });
+    }
+    if (title) recruiter.title = title;
+    await client.query('UPDATE account_persistent SET recruits=$2 WHERE account_id=$1', [acct.referred_by, after]);
+    await client.query('UPDATE account_persistent SET ref_paid=true WHERE account_id=$1', [recruitAccountId]);
+    await client.query('UPDATE referrals SET qualified_at=now() WHERE recruit_account=$1', [recruitAccountId]);
+
+    // recruiter's family gets weekly `recruit` progress
+    const rGang = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [recruiter.id])).rows[0];
+    if (rGang?.gang_id) await bumpFamilyTask(client, { owned: { gangId: rGang.gang_id } }, 'recruit', 1);
+
+    // §10.3 — same-IP recruiter/recruit pairs auto-flag for review
+    const ips = (await client.query('SELECT id, created_ip FROM accounts WHERE id = ANY($1)', [[recruitAccountId, acct.referred_by]])).rows;
+    if (ips.length === 2 && ips[0].created_ip && ips[0].created_ip === ips[1].created_ip)
+      await track(client, recruitAccountId, 'referral_same_ip_flag', { recruiter: acct.referred_by });
+
+    await client.query(
+      `UPDATE characters SET cash=$2, title=COALESCE($3, title) WHERE id=$1`, [recruiter.id, recruiter.cash, title]);
+    await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: M4.REF_RECRUITER_CASH + milestoneCash, omr: (funded ? M4.REF_RECRUITER_OMR : 0) + milestoneOmr, recruits: after });
+    await notify(client, recruit.id, 'ref', { made: true, amt: M4.REF_RECRUIT_CASH, omr: funded ? M4.REF_RECRUIT_OMR : 0 });
+    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, funded });
+    await client.query('COMMIT');
+    return { qualified: true, funded };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
 }

@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "worker": "node src/worker.js",
-    "test": "node test/smoke.js && node test/economy.js && node test/social.js"
+    "test": "node test/smoke.js && node test/economy.js && node test/social.js && node test/growth.js"
   },
   "dependencies": {
     "@fastify/jwt": "^9.0.0",

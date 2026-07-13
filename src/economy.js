@@ -51,6 +51,7 @@ export async function boostCar(ch, client, h) {
       [carId, ch.id, model.id, trim.id, dmg]);
     h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg });
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
+    await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
     return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare } };
   }
@@ -88,6 +89,7 @@ export async function meltCar(ch, carId, client, h) {
     await h.ledger(client, { currency: 'ammo', amount: tithe, reason: 'melt:tithe', counterparty: h.owned.gangId });
     await h.ledger(client, { currency: 'cash', amount: titheValue, reason: 'melt:tithe', counterparty: h.owned.gangId });
   }
+  await h.bumpDaily(client, ch.id, 'melt');
   await bumpFamilyTask(client, h, 'melt', yieldRounds);
   return { ok: true, rounds: keep, tithe };
 }
@@ -138,6 +140,7 @@ export async function craft(ch, itemId, client, h) {
   await setItem(client, ch.id, itemId, have);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: `craft:${itemId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -c.cb, reason: `craft:${itemId}` });
+  await h.bumpDaily(client, ch.id, 'craft');
   return { ok: true, item: itemId };
 }
 
@@ -209,6 +212,7 @@ export async function sellGood(ch, goodId, qty, client, h) {
   await setCargo(client, ch.id, goodId, left);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `goods:sell:${goodId}` });
   await takeHouse(client, tax);
+  await h.bumpDaily(client, ch.id, 'goods');
   return { ok: true, unit, qty: n, earned: net };
 }
 

@@ -112,6 +112,7 @@ export async function tribute(ch, amount, client, h) {
   // treasury is a §10.4 cash bucket, not a sink — the ledger row keeps Σ balanced
   await client.query('UPDATE gangs SET treasury = treasury + $2, lifetime_tribute = lifetime_tribute + $2 WHERE id=$1', [h.owned.gangId, amt]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'gang:tribute', counterparty: h.owned.gangId });
+  await h.bumpDaily(client, ch.id, 'tribute');
   await bumpFamilyTask(client, h, 'tribute', amt);
   bus.emit(`gang:${h.owned.gangId}`, { type: 'tribute', amount: amt });
   return { ok: true, amount: amt };
@@ -240,6 +241,7 @@ export async function jump(ch, victim, client, h) {
     }
     const bounty = await claimBounty(client, h, ch, victim.id);
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
+    await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
     return { ok: true, win: true, stolen, crates, rep, bounty, war: !!war };
@@ -428,6 +430,7 @@ export async function bust(ch, victim, client, h) {
     ch.busts = (Number(ch.busts) || 0) + 1;
     victim.jail_until = null;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: reward, reason: 'bust:reward' });
+    await h.bumpDaily(client, ch.id, 'bust');
     await h.notify(client, victim.id, 'busted', { from: ch.name });
     bus.emit('streets', { type: 'bust', by: ch.name, freed: victim.name });
     return { ok: true, success: true, reward, busts: ch.busts };
@@ -508,6 +511,7 @@ export async function buyListing(ch, seller, client, h, listingId) {
     await client.query('INSERT INTO character_items (character_id, item_id, qty) VALUES ($1,$2,$3)', [ch.id, l.item_id, totalQty]);
     h.owned.items[l.item_id] = totalQty;
   }
+  await h.bumpDaily(client, ch.id, 'trade');
   await h.notify(client, seller.id, 'sale', { what: `${n}× ${l.item_id}`, amt: net, to: ch.name });
   return { ok: true, qty: n, paid: total };
 }

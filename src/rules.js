@@ -481,6 +481,21 @@ export const gangLevelOf=(treasury)=>Math.min(5,Math.floor(Number(treasury||0)/5
 export const roleMultOf=(role)=>role==='boss'||role==='underboss'?1.10:role==='capo'?1.05:1;
 export const weekOf=(day=dayOf())=>Math.floor(day/7);
 export const familyTaskOf=(wk=weekOf())=>FAMILY_TASKS[((wk%FAMILY_TASKS.length)+FAMILY_TASKS.length)%FAMILY_TASKS.length];
+// ── M4 helpers (§7.10, §5.1, §7.13) ──
+export const gunsValue=(ids=[])=>ids.reduce((a,id)=>a+(GUNS.find(g=>g.id===id)?.cash||0),0);
+export const racketsValue=(ids=[])=>ids.reduce((a,id)=>a+(RACKETS.find(r=>r.id===id)?.cost||0),0);
+export const dailyJobsOf=(day=dayOf())=>[0,1,2].map(i=>DAILY_POOL[(day+i*2)%DAILY_POOL.length]);
+export const M4 = {
+  CREW_MAX: 5, CREW_COST_STEP: 50000,          // $50k × (crew+1)
+  LAYLOW_CASH: 5000, LAYLOW_ENERGY: 25, LAYLOW_COOL: 25,
+  CLEANPAPERS_OMR: 10,
+  HEIST_CD_MS: 8*3600*1000,
+  BATCH_CRATE_UNITS: 20,                        // 1 📦 per 20 units cooked
+  DAILY_ALL_OMR: 0.5,                           // all-three bonus from the event fund
+  REF_RECRUITER_CASH: 10000, REF_RECRUIT_CASH: 5000,
+  REF_FUND_OMR: 4, REF_RECRUITER_OMR: 3, REF_RECRUIT_OMR: 1,  // fund ≥4 → 3 + 1 split (v24)
+  REF_GATES: { level: 8, jobs: 40, checkins: 3, netWorth: 25000 },
+};
 export const M3 = {
   GANG_FOUND_COST: 25000, GANG_FOUND_LEVEL: 5, GANG_MAX_MEMBERS: 20, TRIBUTE_MIN: 100,
   WAR_COST: 10000, WAR_MS: 30*60*1000, WAR_SPOILS: 0.20,      // §5.5 (30 min pending design call, spec §9)
