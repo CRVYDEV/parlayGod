@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddress, verifyMessage } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { GameError, ledger } from './game.js';
+import { reconcileFees } from './fees.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -85,6 +86,7 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
     await client.query('BEGIN');
     const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
     if (!acct) throw new GameError('no_account', 'No such account.');
+    if (!acct.minted) throw new GameError('not_minted', 'Only a made account can cash out — pay the 0.01 ETH mint fee first.');
     const to = toAddress || acct.wallet_address;
     if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
     if (Number(acct.omr) < amt) throw new GameError('omr', 'Not that much $OMR.');
@@ -121,6 +123,7 @@ export async function requestGearWithdraw(pool, accountId, gearId, toAddress) {
   try {
     await client.query('BEGIN');
     const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct?.minted) throw new GameError('not_minted', 'Only a made account can take gear on-chain — pay the 0.01 ETH mint fee first.');
     const to = toAddress || acct?.wallet_address;
     if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
     const g = (await client.query('SELECT * FROM account_gear WHERE account_id=$1 AND gear_id=$2 FOR UPDATE', [accountId, gearId])).rows[0];
@@ -214,5 +217,7 @@ export async function walletVerify(pool, accountId, address, signature) {
   if (taken) throw new GameError('wallet_taken', 'That wallet is already linked to another account.');
   await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [accountId, addr]);
   await pool.query('DELETE FROM wallet_challenges WHERE account_id=$1', [accountId]);
-  return { ok: true, wallet: addr, verified: true };
+  // pay-before-link ordering: grant any fees this wallet paid before it was attributable
+  const { credited } = await reconcileFees(pool, accountId, addr);
+  return { ok: true, wallet: addr, verified: true, feesCredited: credited };
 }

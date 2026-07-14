@@ -6,6 +6,7 @@ import {OMR} from "../src/OMR.sol";
 import {GearVault} from "../src/GearVault.sol";
 import {VoucherClaim, IGearVault} from "../src/VoucherClaim.sol";
 import {OMRStaking} from "../src/OMRStaking.sol";
+import {OmertaFees} from "../src/OmertaFees.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract OmertaTest is Test {
@@ -226,5 +227,66 @@ contract OmertaTest is Test {
         vm.prank(safe);
         vm.expectRevert("Staking: apy too high");
         staking.setApy(5_001);
+    }
+
+    // ── §11 OmertaFees: exact-fee entry/revive tollbooth, ETH straight to the dev wallet ──
+    function _fees() internal returns (OmertaFees f, address payable dev) {
+        dev = payable(makeAddr("dev"));
+        f = new OmertaFees(safe, dev, 0.01 ether, 0.10 ether);
+    }
+
+    function test_mint_fee_forwards_to_dev_and_emits() public {
+        (OmertaFees f, address payable dev) = _fees();
+        vm.deal(player, 1 ether);
+        uint256 devBefore = dev.balance;
+        vm.expectEmit(true, true, false, true, address(f));
+        emit OmertaFees.MintFeePaid(player, 1, 0.01 ether);
+        vm.prank(player);
+        f.payMintFee{value: 0.01 ether}();
+        assertEq(dev.balance, devBefore + 0.01 ether, "ETH forwarded to dev wallet");
+        assertEq(address(f).balance, 0, "contract custodies nothing");
+        assertEq(f.nonce(), 1, "nonce advanced");
+    }
+
+    function test_respawn_fee_forwards_and_nonce_monotonic() public {
+        (OmertaFees f, address payable dev) = _fees();
+        vm.deal(player, 1 ether);
+        vm.startPrank(player);
+        f.payMintFee{value: 0.01 ether}();       // nonce 1
+        vm.expectEmit(true, true, false, true, address(f));
+        emit OmertaFees.RespawnFeePaid(player, 2, 0.10 ether);
+        f.payRespawnFee{value: 0.10 ether}();     // nonce 2
+        vm.stopPrank();
+        assertEq(dev.balance, 0.11 ether, "both fees reached the dev wallet");
+        assertEq(f.nonce(), 2, "monotonic nonce");
+    }
+
+    function test_wrong_fee_reverts() public {
+        (OmertaFees f, ) = _fees();
+        vm.deal(player, 1 ether);
+        vm.startPrank(player);
+        vm.expectRevert(abi.encodeWithSelector(OmertaFees.WrongFee.selector, 0.02 ether, 0.01 ether));
+        f.payMintFee{value: 0.02 ether}();
+        vm.expectRevert(abi.encodeWithSelector(OmertaFees.WrongFee.selector, 0, 0.10 ether));
+        f.payRespawnFee{value: 0}();
+        vm.stopPrank();
+    }
+
+    function test_only_owner_sets_fees_and_recipient() public {
+        (OmertaFees f, ) = _fees();
+        vm.prank(player);
+        vm.expectRevert();
+        f.setFees(1, 2);
+        address payable dev2 = payable(makeAddr("dev2"));
+        vm.startPrank(safe);
+        f.setFees(0.02 ether, 0.20 ether);
+        f.setFeeRecipient(dev2);
+        vm.stopPrank();
+        assertEq(f.mintFee(), 0.02 ether);
+        assertEq(f.feeRecipient(), dev2);
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        f.payMintFee{value: 0.02 ether}();       // new fee + new recipient in effect
+        assertEq(dev2.balance, 0.02 ether);
     }
 }

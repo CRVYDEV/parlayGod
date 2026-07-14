@@ -187,9 +187,11 @@ export async function withCharacter(pool, accountId, fn) {
 async function persistAccount(client, accountId, a) {
   await client.query(
     `UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6,
-      recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11 WHERE account_id=$1`,
+      recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11,
+      minted=$12, mint_credits=$13, respawn_tokens=$14 WHERE account_id=$1`,
     [accountId, a.omr, a.staked, a.rewards, a.prestige, a.deaths,
-     a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address]);
+     a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address,
+     a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0]);
 }
 
 // Two-party actions (§10.1): lock BOTH character rows in stable id order, then both
@@ -293,6 +295,7 @@ export function view(ch, acct = {}, owned = {}) {
     heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
     prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
     wallet: acct.wallet_address || null,
+    minted: !!acct.minted, respawnTokens: Number(acct.respawn_tokens || 0), mintCredits: Number(acct.mint_credits || 0),
     onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id };

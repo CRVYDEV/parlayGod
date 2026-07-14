@@ -32,10 +32,11 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `src/ratelimit.js` — §10.2 token buckets: human 1/s burst 5, agent 1-per-3s, swaps 6/min (in-memory; Redis via REDIS_URL)
 - `src/auth.js` — X/Privy sign-in, guest→provider upgrade, invite-code gate (INVITE_MODE=on)
 - `src/chain.js` — M6-B chain service (§11, EVM): SIWE wallet link, EIP-712 voucher signing on viem (in parity with `VoucherClaim`), the full-reserve withdrawal queue, gear-mint vouchers, Claimed reserve release
+- `src/fees.js` — §11 inbound real-ETH fees: the 0.01 ETH two-tier mint (free trial → permanent, withdrawal-eligible) and 0.10 ETH pre-paid revive insurance. Watches OmertaFees events, credits entitlements idempotently, reconciles pay-before-link. Never touches the §10.4 ledger (ETH → dev wallet on-chain)
 - `src/worker.js` — hourly: the 12h buyback (§7.12) + season rollover (§8); daily: the §10.4 invariant sweep; `npm run worker`
 - `src/server.js` — Fastify routes, JWT auth (+ban check), rate-limit + idempotency-key hooks, mod endpoints (MOD_KEY), `/v1/ws` websocket gateway
 - `tools/backup.sh` — nightly pg_dump rotation (cron it with DATABASE_URL set)
-- `omerta-contracts/` — M6-A on-chain suite (Foundry/Solidity) for Robinhood Chain; has its own README/CLAUDE.md. `omerta-chain-migration-evm.md` documents the Solana→EVM switch.
+- `omerta-contracts/` — M6-A on-chain suite (Foundry/Solidity) for Robinhood Chain; has its own README/CLAUDE.md. OMR, VoucherClaim, GearVault, OMRStaking + `OmertaFees` (the §11 entry/revive fee tollbooth — exact fees, ETH straight to the dev wallet, events the backend watches). `omerta-chain-migration-evm.md` documents the Solana→EVM switch.
 - `schema.sql` — M1–M4 tables (spec §3 subset)
 - `test/smoke.js` — M1 end-to-end journey + the §10.4 ledger invariant
 - `test/economy.js` — M2 economy journey + §10.4 cash-ledger and car-conservation invariants
@@ -43,7 +44,7 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `test/growth.js` — M4 journey: kitchen loop with crew + raid, heist, missions, dailies, First Week capstone, referral qualification, mod tools
 - `test/hardening.js` — M5: zero-drift invariants over an organically-earned economy, drift alarm, idempotency, invites, X OAuth + upgrade, season rollover, all three rate buckets
 - `test/security.js` — red-team regression suite: one test per audited exploit (see `AUDIT.md`)
-- `test/chain.js` — M6-B: SIWE link, EIP-712 signing parity (recovers the signer), full-reserve queue, $OMR ledger conservation, gear vouchers
+- `test/chain.js` — M6-B/C: SIWE link, EIP-712 signing parity (recovers the signer), full-reserve queue, $OMR ledger conservation, gear vouchers, the §11 mint gate (unminted can't withdraw) + fee reconcile (pay-before-link)
 
 ## M2 endpoints
 `GET /market/prices` (deterministic, public) · `POST /goods/buy|sell` · `POST /garage/boost` · `POST /garage/:carId/melt|repair|fence` · `POST /workshop/craft/:id` · `POST /workshop/ammo` · `POST /items/:id/use` · `POST /rackets/:id/buy` · `POST /assets/:id/buy|sell` · `POST /swap` · `POST /stake` · `POST /unstake` · `POST /claim-rewards` · `POST /gear/:id/mint`
@@ -65,3 +66,4 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - [x] **M5** — alpha hardening: §10.2 rate limits + agent keys, §10.4 invariant job with alerting, idempotency keys, invite codes, season rollover (§8), X/Privy OAuth + guest upgrade, backups → invite-code alpha
 - [~] **M6-A** — on-chain contracts for **Robinhood Chain** (EVM, migrated from Solana): `omerta-contracts/` (OMR, VoucherClaim, GearVault, OMRStaking) — Foundry suite, 15 tests. See `omerta-chain-migration-evm.md`.
 - [~] **M6-B** — backend chain service (`src/chain.js`): viem EIP-712 signer in `VOUCHER_TYPEHASH` parity, `vouchers`/`chain_reserve`/`wallet_challenges` tables, full-reserve withdrawal queue, `Claimed` watcher, SIWE wallet verify. Deferred: buyback bot, devnet deploy → audit → mainnet
+- [~] **M6-C** — §11 real-ETH fees (`src/fees.js` + `OmertaFees.sol`): 0.01 ETH two-tier mint (free trial → withdrawal-eligible), 0.10 ETH pre-paid revive insurance (absorbs a killing blow), both forwarded straight to the dev wallet. `POST /character/mint`, `GET /fees/status`, fee-event watcher. Deferred: devnet deploy + `forge test` run

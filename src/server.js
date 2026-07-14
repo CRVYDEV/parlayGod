@@ -10,6 +10,7 @@ import * as K from './kitchen.js';
 import * as W from './growth.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
+import * as Fees from './fees.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -486,6 +487,16 @@ export async function buildServer() {
   app.post('/v1/mod/reserve/fund', { preHandler: modAuth }, async (req) => Chain.fundReserve(pool, req.body?.amount));
   app.get('/v1/mod/reserve', { preHandler: modAuth }, async () => Chain.reserveStatus(pool));
   app.post('/v1/mod/reserve/claimed', { preHandler: modAuth }, async (req) => Chain.markClaimed(pool, Number(req.body?.nonce)));
+
+  // ── §11 entry/revive fees (paid on-chain to OmertaFees → dev wallet) ──
+  // Spend a paid mint credit to make your character permanent (the two-tier upgrade).
+  app.post('/v1/character/mint', { preHandler: auth }, async (req) => Fees.mintCharacter(pool, req.user.sub));
+  app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
+  // Ops/manual reconciliation of an on-chain payment (the worker's watcher does this live from
+  // MintFeePaid/RespawnFeePaid events; this endpoint is the manual + test path for the same call).
+  app.post('/v1/mod/fees/record', { preHandler: modAuth }, async (req) =>
+    Fees.recordFeePayment(pool, { nonce: req.body?.nonce, kind: req.body?.kind,
+      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: req.body?.txHash }));
 
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {
