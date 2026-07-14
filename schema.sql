@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS characters (
   crew INT NOT NULL DEFAULT 0,
   heist_at TIMESTAMPTZ,
   season INT NOT NULL,
+  -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
+  -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
+  -- player touches an action, closing the "collect every <8h → ~24h/day" multiplier.
+  -- Seeded at OFFLINE_CAP_MS so a first collect still yields the normal 8h burst.
+  racket_credit_ms BIGINT NOT NULL DEFAULT 28800000,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
