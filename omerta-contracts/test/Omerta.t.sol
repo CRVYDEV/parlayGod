@@ -30,6 +30,7 @@ contract OmertaTest is Test {
         staking = new OMRStaking(safe, IERC20(address(omr)), 1400);
         vm.startPrank(safe);
         gear.setMinter(address(vc));
+        vc.setGearSupplyCap(7, 1000);                // gear class 7 mintable up to 1000
         omr.transfer(address(vc), TRANCHE);          // tranche 1
         omr.approve(address(staking), type(uint256).max);
         staking.fundRewards(100_000e18);             // reward pool
@@ -70,6 +71,43 @@ contract OmertaTest is Test {
         vm.prank(player);
         vc.claim(v, _sign(v, signerPk));
         assertEq(gear.balanceOf(player, 7), 1);
+    }
+
+    // ── AUDIT F-1: gear is fail-closed and bounded by a per-gearId cap ──
+    // An uncapped gearId cannot mint at all (a compromised signer can't mint unknown gear).
+    function test_gear_uncapped_class_reverts() public {
+        VoucherClaim.Voucher memory v = _voucher(player, 1, 1, 42, 20); // class 42 has no cap
+        bytes memory sig = _sign(v, signerPk);
+        vm.expectRevert("VC: gear cap");
+        vm.prank(player); vc.claim(v, sig);
+    }
+
+    // The per-gearId lifetime cap bounds total supply — a leaked signer can't exceed it.
+    function test_gear_cap_enforced() public {
+        vm.prank(safe); vc.setGearSupplyCap(9, 2);
+        VoucherClaim.Voucher memory v1 = _voucher(player, 2, 1, 9, 21);
+        vm.prank(player); vc.claim(v1, _sign(v1, signerPk)); // mints 2 of 2
+        assertEq(gear.balanceOf(player, 9), 2);
+        VoucherClaim.Voucher memory v2 = _voucher(player, 1, 1, 9, 22);
+        bytes memory s2 = _sign(v2, signerPk);
+        vm.expectRevert("VC: gear cap"); // the 3rd exceeds the cap
+        vm.prank(player); vc.claim(v2, s2);
+    }
+
+    function test_set_gear_cap_only_owner() public {
+        vm.expectRevert();
+        vc.setGearSupplyCap(1, 100);
+        vm.prank(safe); vc.setGearSupplyCap(1, 100);
+        assertEq(vc.gearSupplyCap(1), 100);
+    }
+
+    // ── AUDIT F-5: a deadline beyond the TTL backstop is rejected ──
+    function test_deadline_too_far_reverts() public {
+        VoucherClaim.Voucher memory v =
+            VoucherClaim.Voucher(player, 100e18, 0, 0, 23, block.timestamp + 31 days);
+        bytes memory sig = _sign(v, signerPk);
+        vm.expectRevert("VC: deadline too far");
+        vm.prank(player); vc.claim(v, sig);
     }
 
     // ── VoucherClaim: every gate ──

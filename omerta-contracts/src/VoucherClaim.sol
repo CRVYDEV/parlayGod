@@ -27,6 +27,11 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     uint8 public constant KIND_OMR = 0;
     uint8 public constant KIND_GEAR = 1;
 
+    /// @notice Backstop on how far out a voucher's deadline may be, so a leaked
+    ///         (then-rotated) signer key's pre-signed vouchers can't stay claimable
+    ///         for months. The server signs much shorter deadlines in practice.
+    uint256 public constant MAX_VOUCHER_TTL = 30 days;
+
     bytes32 public constant VOUCHER_TYPEHASH = keccak256(
         "Voucher(address to,uint256 amount,uint8 kind,uint256 gearId,uint256 nonce,uint256 deadline)"
     );
@@ -46,9 +51,15 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     uint256 public dailyCapOMR;               // max OMR claimable per UTC day, 0 = unlimited
     mapping(uint256 => bool) public usedNonce;
     mapping(uint256 => uint256) public claimedOnDay; // day => OMR total
+    // Gear is bounded the same way OMR is bounded by the tranche: a per-gearId
+    // lifetime supply cap the Safe sets. FAIL-CLOSED — a gearId with cap 0 cannot
+    // be minted at all, so a compromised signer can't mint unlimited/unknown gear.
+    mapping(uint256 => uint256) public gearSupplyCap;  // gearId => max lifetime supply (0 = mint blocked)
+    mapping(uint256 => uint256) public gearMinted;     // gearId => minted so far
 
     event SignerSet(address indexed signer);
     event DailyCapSet(uint256 cap);
+    event GearSupplyCapSet(uint256 indexed gearId, uint256 cap);
     event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId);
     event Swept(address indexed to, uint256 amount);
 
@@ -75,6 +86,15 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         emit DailyCapSet(cap);
     }
 
+    /// @notice Per-gearId lifetime supply cap. Must be set (> 0) before any gear of
+    ///         that class can be claimed. Lowering below already-minted just blocks
+    ///         further mints of that class.
+    function setGearSupplyCap(uint256 gearId, uint256 cap) external onlyOwner {
+        require(gearId != 0, "VC: zero gear");
+        gearSupplyCap[gearId] = cap;
+        emit GearSupplyCapSet(gearId, cap);
+    }
+
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
@@ -93,6 +113,7 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     function claim(Voucher calldata v, bytes calldata sig) external nonReentrant whenNotPaused {
         require(block.timestamp <= v.deadline, "VC: expired");
+        require(v.deadline <= block.timestamp + MAX_VOUCHER_TTL, "VC: deadline too far");
         require(!usedNonce[v.nonce], "VC: replay");
         require(ECDSA.recover(hashVoucher(v), sig) == signer, "VC: bad signature");
         usedNonce[v.nonce] = true;
@@ -105,6 +126,12 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
             omr.safeTransfer(v.to, v.amount); // transfers pre-funded balance; NEVER mints
         } else if (v.kind == KIND_GEAR) {
             require(v.gearId != 0, "VC: zero gear");
+            // fail-closed per-gearId lifetime cap — bounds a compromised signer's gear
+            // blast radius the way the tranche bounds OMR (cap 0 => class can't mint)
+            uint256 cap = gearSupplyCap[v.gearId];
+            uint256 minted = gearMinted[v.gearId] + v.amount;
+            require(cap != 0 && minted <= cap, "VC: gear cap");
+            gearMinted[v.gearId] = minted;
             gear.mint(v.to, v.gearId, v.amount);
         } else {
             revert("VC: bad kind");

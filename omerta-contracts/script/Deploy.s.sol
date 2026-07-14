@@ -21,17 +21,19 @@ contract Deploy is Script {
 
         vm.startBroadcast();
         OMR omr = new OMR(safe);
-        GearVault gear = new GearVault(msg.sender, baseUri); // temp owner to wire minter
+        // Own GearVault to the Safe from birth — never leave a hot deployer key as the
+        // mint-authority gatekeeper (setMinter). Minter stays unset (mint impossible)
+        // until the Safe wires it, and gear can't mint until the Safe sets supply caps.
+        GearVault gear = new GearVault(safe, baseUri);
         VoucherClaim vc = new VoucherClaim(safe, signer, IERC20(address(omr)), IGearVault(address(gear)), cap);
         OMRStaking staking = new OMRStaking(safe, IERC20(address(omr)), 1400);
-        gear.setMinter(address(vc));
-        gear.transferOwnership(safe); // Safe must accept (Ownable2Step)
         vm.stopBroadcast();
 
         console.log("OMR:         ", address(omr));
         console.log("GearVault:   ", address(gear));
         console.log("VoucherClaim:", address(vc));
         console.log("OMRStaking:  ", address(staking));
-        console.log("NEXT: Safe accepts GearVault ownership, funds VoucherClaim tranche + staking rewards.");
+        console.log("NEXT (all Safe txs): gear.setMinter(VoucherClaim); vc.setGearSupplyCap(id,cap) per class;");
+        console.log("  fund VoucherClaim OMR tranche; omr.approve(staking) + staking.fundRewards(...).");
     }
 }
