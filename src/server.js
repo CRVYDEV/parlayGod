@@ -9,6 +9,7 @@ import * as S from './social.js';
 import * as K from './kitchen.js';
 import * as W from './growth.js';
 import * as A from './auth.js';
+import * as Chain from './chain.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -462,6 +463,29 @@ export async function buildServer() {
     const rng = await pool.query('SELECT * FROM rng_audit WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
     return { transactions: tx.rows, rng: rng.rows };
   });
+
+  // ── M6-B: the chain service (§11, EVM) — withdrawals, gear mint, SIWE wallet link ──
+  app.post('/v1/wallet/challenge', { preHandler: auth }, async (req) => Chain.walletChallenge(pool, req.user.sub));
+  app.post('/v1/wallet/verify', { preHandler: auth }, async (req) =>
+    Chain.walletVerify(pool, req.user.sub, req.body?.address, req.body?.signature));
+  app.post('/v1/withdraw', { preHandler: auth }, async (req) =>
+    Chain.requestWithdraw(pool, req.user.sub, req.body?.amount, req.body?.address));
+  app.post('/v1/gear/:id/withdraw', { preHandler: auth }, async (req) =>
+    Chain.requestGearWithdraw(pool, req.user.sub, req.params.id, req.body?.address));
+  app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
+    const mine = (await pool.query(
+      'SELECT id, kind, amount, gear_id, nonce, status, claimed_onchain, signed_payload FROM vouchers WHERE account_id=$1 ORDER BY created_at DESC LIMIT 50',
+      [req.user.sub])).rows;
+    return { reserve: await Chain.reserveStatus(pool),
+      vouchers: mine.map((v) => ({ id: v.id, kind: v.kind, amount: Number(v.amount), gearId: v.gear_id,
+        nonce: Number(v.nonce), status: v.status, claimed: v.claimed_onchain,
+        payload: v.signed_payload ? JSON.parse(v.signed_payload) : null })) };
+  });
+  // Mod/ops: mirror an on-chain tranche funding into the reserve (drains the queue),
+  // read the reserve gauge, and (for tests/ops) mark a voucher claimed.
+  app.post('/v1/mod/reserve/fund', { preHandler: modAuth }, async (req) => Chain.fundReserve(pool, req.body?.amount));
+  app.get('/v1/mod/reserve', { preHandler: modAuth }, async () => Chain.reserveStatus(pool));
+  app.post('/v1/mod/reserve/claimed', { preHandler: modAuth }, async (req) => Chain.markClaimed(pool, Number(req.body?.nonce)));
 
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {

@@ -266,6 +266,40 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── M6-B chain service (spec §11, EVM) — the ONLY chain-facing state ──
+-- A withdrawal debits the in-game $OMR ledger immediately (no double-spend), then
+-- either SIGNS an EIP-712 voucher (if the funded reserve covers it) or QUEUES (full
+-- reserve: the chain never owes more than the Safe has funded into VoucherClaim).
+CREATE TABLE IF NOT EXISTS vouchers (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                          -- 'omr' | 'gear'
+  amount NUMERIC NOT NULL DEFAULT 0,           -- whole $OMR for omr; 1 for gear
+  gear_id TEXT,                                -- gear class id (gear kind)
+  nonce BIGINT NOT NULL UNIQUE,                -- server-unique uint256 nonce (replay guard)
+  to_address TEXT NOT NULL,                    -- recipient EVM address
+  deadline BIGINT NOT NULL,                    -- unix seconds (server signs short, < MAX_VOUCHER_TTL)
+  status TEXT NOT NULL DEFAULT 'queued',       -- queued | signed | claimed
+  signed_payload TEXT,                         -- JSON {voucher, signature}
+  claimed_onchain BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Reserve accounting + nonce counter. funded_omr mirrors the OMR the Safe has funded
+-- into the VoucherClaim tranche on-chain; the backend never signs beyond it.
+CREATE TABLE IF NOT EXISTS chain_reserve (
+  id INT PRIMARY KEY,
+  funded_omr NUMERIC NOT NULL DEFAULT 0,
+  next_nonce BIGINT NOT NULL DEFAULT 1,
+  last_funded_at TIMESTAMPTZ
+);
+INSERT INTO chain_reserve (id, funded_omr) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM chain_reserve);
+-- Sign-in-with-Ethereum challenges (wallet link, §4 EVM — replaces the deferred DAS check).
+CREATE TABLE IF NOT EXISTS wallet_challenges (
+  account_id TEXT PRIMARY KEY,
+  nonce TEXT NOT NULL,
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.
 CREATE TABLE IF NOT EXISTS amm_pool (
