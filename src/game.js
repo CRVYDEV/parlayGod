@@ -112,7 +112,9 @@ async function accrueAndLedger(client, ch, acct, owned) {
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
   if (ch._accruedIncome > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
-  if (ch._bankInterest >= 0.01)
+  // ledger the EXACT interest applied (any positive delta) — gating at ≥ $0.01 left
+  // sub-cent interest on the bank balance with no matching row, a slow §10.4 drift
+  if (ch._bankInterest > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._bankInterest, reason: 'bank:interest' });
   // §7.1 crew sales are a faucet too; the raid is logged, notified, and telemetered
   if (ch._crewSale?.proceeds > 0)
@@ -425,24 +427,32 @@ export async function travel(ch, district, client, h) {
 // gang's weekly `recruit` progress, notifies both. Agent-flagged accounts are
 // excluded on both sides; same-IP pairs are flagged for review (§10.3).
 export async function maybeQualifyReferral(pool, recruitAccountId) {
+  // cheap unlocked pre-check to avoid opening a transaction for the common no-op
+  const pre = (await pool.query('SELECT referred_by, ref_paid, agent_flag FROM account_persistent WHERE account_id=$1', [recruitAccountId])).rows[0];
+  if (!pre || !pre.referred_by || pre.ref_paid || pre.agent_flag) return null;
+  const recruiterAccountId = pre.referred_by;
+  if (recruiterAccountId === recruitAccountId) return null; // never self-refer (defense-in-depth)
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [recruitAccountId])).rows[0];
-    if (!acct || !acct.referred_by || acct.ref_paid || acct.agent_flag) { await client.query('ROLLBACK'); return null; }
-    const recruiterAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [acct.referred_by])).rows[0];
-    if (!recruiterAcct || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
-
-    // lock both living characters in sorted-id order (§10.1 discipline)
-    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, acct.referred_by]])).rows;
+    // GLOBAL LOCK ORDER (§10.1): characters (sorted id) THEN accounts (sorted id),
+    // matching withTwoCharacters so the two paths can never deadlock each other.
+    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, recruiterAccountId]])).rows;
     const recruitId = ids.find((r) => r.account_id === recruitAccountId)?.id;
-    const recruiterId = ids.find((r) => r.account_id === acct.referred_by)?.id;
+    const recruiterId = ids.find((r) => r.account_id === recruiterAccountId)?.id;
     if (!recruitId || !recruiterId) { await client.query('ROLLBACK'); return null; }
-    const locked = {};
+    const lockedC = {};
     for (const id of [recruitId, recruiterId].sort())
-      locked[id] = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
-    const recruit = locked[recruitId], recruiter = locked[recruiterId];
-    if (!recruit || !recruiter) { await client.query('ROLLBACK'); return null; }
+      lockedC[id] = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+    const lockedA = {};
+    for (const id of [recruitAccountId, recruiterAccountId].sort())
+      lockedA[id] = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [id])).rows[0];
+    const recruit = lockedC[recruitId], recruiter = lockedC[recruiterId];
+    const acct = lockedA[recruitAccountId], recruiterAcct = lockedA[recruiterAccountId];
+    // re-validate every gate under the locks (state may have changed since the pre-check)
+    if (!recruit || !recruiter || !acct || !recruiterAcct) { await client.query('ROLLBACK'); return null; }
+    if (acct.referred_by !== recruiterAccountId || acct.ref_paid || acct.agent_flag || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
 
     // the four gates, all required
     const owned = await loadOwned(client, recruit);

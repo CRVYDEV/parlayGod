@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   auth_subject TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   created_ip TEXT, last_ip TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (auth_provider, auth_subject)   -- one account per real identity (audit: no dup-identity race)
 );
 CREATE TABLE IF NOT EXISTS account_persistent (
   account_id TEXT PRIMARY KEY,
@@ -147,9 +148,16 @@ INSERT INTO districts (id) SELECT 'cathedral' WHERE NOT EXISTS (SELECT 1 FROM di
 CREATE TABLE IF NOT EXISTS bounties (
   target_character TEXT PRIMARY KEY,
   amount NUMERIC NOT NULL,
-  posted_by TEXT NOT NULL,                       -- character id; never paid to the poster
+  posted_by TEXT NOT NULL,                       -- character id of the FIRST poster (display only)
   reason TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Every account that ever funded a bounty on a target; none of them can collect it
+-- (audit: closes the top-up-overwrites-posted_by self-pay bypass).
+CREATE TABLE IF NOT EXISTS bounty_contributors (
+  target_character TEXT NOT NULL,
+  contributor TEXT NOT NULL,                     -- poster's character id
+  PRIMARY KEY (target_character, contributor)
 );
 CREATE TABLE IF NOT EXISTS searches (
   hunter TEXT PRIMARY KEY,                       -- one active contract each (§5.2)
@@ -205,6 +213,14 @@ CREATE TABLE IF NOT EXISTS missions_done (
   mission_id TEXT NOT NULL,
   PRIMARY KEY (character_id, mission_id)
 );
+-- The $OMR half of a mission reward pays ONCE PER ACCOUNT, not per character —
+-- $OMR survives death, so a per-character check would re-mint it on every heir
+-- (audit: mission $OMR is minted directly, not drawn from the fund).
+CREATE TABLE IF NOT EXISTS mission_omr_claimed (
+  account_id TEXT NOT NULL,
+  mission_id TEXT NOT NULL,
+  PRIMARY KEY (account_id, mission_id)
+);
 CREATE TABLE IF NOT EXISTS daily_progress (
   character_id TEXT NOT NULL,
   day INT NOT NULL,
@@ -237,7 +253,8 @@ CREATE TABLE IF NOT EXISTS bans (
 CREATE TABLE IF NOT EXISTS idempotency (
   account_id TEXT NOT NULL,
   key TEXT NOT NULL,
-  status INT NOT NULL,
+  status INT NOT NULL,        -- 0 = reserved/in-flight; else the stored HTTP status
+  body_hash TEXT NOT NULL,    -- binds the key to one request body (audit: reject key reuse w/ different body)
   response TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_id, key)
@@ -286,3 +303,18 @@ CREATE TABLE IF NOT EXISTS rng_audit (
   roll NUMERIC NOT NULL,
   outcome TEXT NOT NULL
 );
+
+-- ── Indexes & integrity (audit hardening) — after all tables exist ──
+-- No two LIVING characters may share a name (referral codes resolve by name, §7.13).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_char_name_alive ON characters (name) WHERE alive;
+-- Hot paths that would otherwise full-scan under load: the Streets board, gang
+-- rosters, the exchange, and the nightly §10.4 ledger sweep.
+CREATE INDEX IF NOT EXISTS ix_char_respect ON characters (respect);
+CREATE INDEX IF NOT EXISTS ix_gang_members_gang ON gang_members (gang_id);
+CREATE INDEX IF NOT EXISTS ix_listings_created ON listings (created_at);
+CREATE INDEX IF NOT EXISTS ix_tx_currency_reason ON transactions (currency, reason);
+CREATE INDEX IF NOT EXISTS ix_tx_character ON transactions (character_id);
+CREATE INDEX IF NOT EXISTS ix_rng_action ON rng_audit (action);
+CREATE INDEX IF NOT EXISTS ix_notif_char_undelivered ON notifications (character_id) WHERE NOT delivered;
+-- one wallet address binds to at most one account (§4)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_wallet_address ON account_persistent (wallet_address) WHERE wallet_address IS NOT NULL;

@@ -17,6 +17,10 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
 const uid = () => crypto.randomUUID();
 
 export async function buildServer() {
+  // Never boot production on the public dev fallback secret — anyone could forge a
+  // token for any account. Dev/test may use the fallback (in-memory db, no real value).
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET)
+    throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
   const app = Fastify({ logger: false });
   const pool = await makeDb();
   app.decorate('pool', pool);
@@ -48,28 +52,56 @@ export async function buildServer() {
   app.addHook('preHandler', async (req, reply) => {
     if (!guarded(req)) return;
     try { await req.jwtVerify(); } catch { return; } // unauthenticated → the route 401s
+    // Ban + agent status come from the DB, never the token: an agent-flagged account
+    // could otherwise keep using its pre-flag token to dodge the harder agent throttle.
+    const acct = (await pool.query(
+      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      [req.user.sub])).rows[0];
+    if (!acct || acct.status === 'banned') return reply.code(403).send({ error: 'banned' });
     if (rateLimitsEnabled()) {
-      const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!req.user.agent,
+      const limited = await checkRateLimit({ accountId: req.user.sub, agent: !!acct.agent_flag,
         path: req.routeOptions?.url || req.url });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }
+    // Idempotency: RESERVE the key transactionally before the handler runs, so two
+    // concurrent requests with the same key can't both execute (a check-only guard
+    // that stores in onSend does not stop the double-submit it exists to prevent).
     const idem = req.headers['idempotency-key'];
     if (idem) {
-      const hit = (await pool.query('SELECT status, response FROM idempotency WHERE account_id=$1 AND key=$2',
-        [req.user.sub, String(idem)])).rows[0];
-      if (hit) return reply.code(hit.status).header('x-idempotent-replay', 'true')
-        .type('application/json').send(hit.response);
+      const key = String(idem);
+      const bodyHash = crypto.createHash('sha256')
+        .update(req.method + '\n' + req.url + '\n' + JSON.stringify(req.body ?? null)).digest('hex');
+      let reserved = false;
+      try {
+        await pool.query('INSERT INTO idempotency (account_id, key, status, body_hash, response) VALUES ($1,$2,0,$3,$4)',
+          [req.user.sub, key, bodyHash, '']);
+        reserved = true;
+      } catch { /* PK conflict → the key already exists */ }
+      if (reserved) { req._idem = { key, bodyHash }; return; }
+      const row = (await pool.query('SELECT status, body_hash, response FROM idempotency WHERE account_id=$1 AND key=$2',
+        [req.user.sub, key])).rows[0];
+      if (!row) { req._idem = { key, bodyHash }; return; } // released between insert and read — proceed
+      if (row.body_hash !== bodyHash)
+        return reply.code(422).send({ error: 'idempotency_key_reuse', message: 'This Idempotency-Key was used with a different request.' });
+      if (row.status === 0)
+        return reply.code(409).header('retry-after', 1).send({ error: 'in_progress', message: 'A request with this key is still processing.' });
+      return reply.code(row.status).header('x-idempotent-replay', 'true').type('application/json').send(row.response);
     }
   });
   app.addHook('onSend', async (req, reply, payload) => {
-    const idem = req.headers['idempotency-key'];
-    if (!idem || !guarded(req) || !req.user || reply.statusCode >= 500) return payload;
-    if (reply.getHeader('x-idempotent-replay')) return payload; // don't re-store a replay
-    try {
-      await pool.query('INSERT INTO idempotency (account_id, key, status, response) VALUES ($1,$2,$3,$4)',
-        [req.user.sub, String(idem), reply.statusCode, String(payload)]);
-    } catch { /* concurrent duplicate — first write wins */ }
+    if (!req._idem || reply.getHeader('x-idempotent-replay')) return payload;
+    const { key } = req._idem;
+    // Only a genuine success is stored (and thus replayed). A 4xx/5xx RELEASES the
+    // reservation so the key isn't poisoned — a transient "jailed" or a 429 must not
+    // permanently lock the key out.
+    if (reply.statusCode >= 200 && reply.statusCode < 300) {
+      await pool.query('UPDATE idempotency SET status=$3, response=$4 WHERE account_id=$1 AND key=$2',
+        [req.user.sub, key, reply.statusCode, String(payload)]).catch(() => {});
+    } else {
+      await pool.query('DELETE FROM idempotency WHERE account_id=$1 AND key=$2 AND status=0',
+        [req.user.sub, key]).catch(() => {});
+    }
     return payload;
   });
 
@@ -113,6 +145,10 @@ export async function buildServer() {
     if (name.length < 2) throw new G.GameError('name', 'Pick a name (2–24 chars).');
     const existing = await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub]);
     if (existing.rows.length) throw new G.GameError('exists', 'One living character per account.');
+    // names must be unique among the living (referral codes resolve by name, §7.13);
+    // the partial unique index ux_char_name_alive is the race backstop
+    const nameClash = await pool.query('SELECT 1 FROM characters WHERE name=$1 AND alive', [name]);
+    if (nameClash.rows.length) throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.');
     const season = Math.floor(dayOf() / 28);
     const id = uid();
     await pool.query('INSERT INTO characters (id, account_id, name, season) VALUES ($1,$2,$3,$4)', [id, req.user.sub, name, season]);
@@ -297,9 +333,11 @@ export async function buildServer() {
   app.get('/v1/notifications', { preHandler: auth }, async (req) => {
     const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
     if (!me) return { notifications: [] };
-    const r = await pool.query('SELECT * FROM notifications WHERE character_id=$1 AND NOT delivered ORDER BY created_at', [me.id]);
-    await pool.query('UPDATE notifications SET delivered=true WHERE character_id=$1', [me.id]);
-    return { notifications: r.rows.map((n) => ({ id: n.id, type: n.type, payload: JSON.parse(n.payload), at: n.created_at })) };
+    // flip-and-return in one statement: a plain SELECT-then-UPDATE would silently
+    // drop any notification inserted between the two queries
+    const r = await pool.query('UPDATE notifications SET delivered=true WHERE character_id=$1 AND NOT delivered RETURNING *', [me.id]);
+    const rows = r.rows.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return { notifications: rows.map((n) => ({ id: n.id, type: n.type, payload: JSON.parse(n.payload), at: n.created_at })) };
   });
 
   // ── M3: websocket gateway (§5.6) — channels: me, streets, gang:{id} ──
@@ -308,6 +346,10 @@ export async function buildServer() {
     let accountId;
     try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
     catch { socket.close(4001, 'auth'); return; }
+    // banned accounts must not keep a live intel feed (REST re-checks per request;
+    // the socket is long-lived, so check status at connect)
+    const acct = (await pool.query('SELECT status FROM accounts WHERE id=$1', [accountId])).rows[0];
+    if (!acct || acct.status === 'banned') { socket.close(4003, 'banned'); return; }
     const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
     if (!me) { socket.close(4004, 'no_character'); return; }
     const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];

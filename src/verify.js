@@ -8,7 +8,13 @@ import { GameError } from './game.js';
 
 export async function verifySocial(taskId, acct) {
   const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
-  if (mode === 'trust') return true;
+  // 'trust' is an honor-system faucet — never let it run in production, where it
+  // would pay social-task cash to the whole player base with no proof.
+  if (mode === 'trust') {
+    if (process.env.NODE_ENV === 'production')
+      throw new GameError('verify_unavailable', 'Honor-system verification is disabled in production.');
+    return true;
+  }
   if (mode !== 'live')
     throw new GameError('verify_unavailable', 'Social verification is not configured on this server yet.');
 

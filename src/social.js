@@ -42,7 +42,9 @@ export async function createGang(ch, name, tag, client, h) {
 
 export async function joinGang(ch, gangId, client, h) {
   if (h.owned.gangId) throw new GameError('in_gang', 'Leave your current family first.');
-  const g = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0];
+  // lock the gang row FOR UPDATE so concurrent joiners serialize — otherwise a
+  // check-then-insert race lets N accounts blow past GANG_MAX_MEMBERS at once
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
   if (!g) throw new GameError('no_gang', 'That family no longer exists.');
   const n = Number((await client.query('SELECT COUNT(*) n FROM gang_members WHERE gang_id=$1', [gangId])).rows[0].n);
   if (n >= M3.GANG_MAX_MEMBERS) throw new GameError('full', `That family is full (${M3.GANG_MAX_MEMBERS} made members max).`);
@@ -272,8 +274,12 @@ export async function postBounty(ch, targetCharacterId, amount, client, h) {
   if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That bounty costs $${amt + fee + tax} with the 2% take.`);
   ch.cash = Number(ch.cash) - amt - fee - tax;
   const cur = (await client.query('SELECT * FROM bounties WHERE target_character=$1 FOR UPDATE', [targetCharacterId])).rows[0];
-  if (cur) await client.query('UPDATE bounties SET amount = amount + $2, posted_by=$3 WHERE target_character=$1', [targetCharacterId, amt, ch.id]);
+  // keep the FIRST poster as posted_by (do NOT overwrite on top-up); record EVERY
+  // funder in bounty_contributors so none of them can collect the pot — otherwise a
+  // poster funds a hit then tops it up via a confederate to flip the lock-out target
+  if (cur) await client.query('UPDATE bounties SET amount = amount + $2 WHERE target_character=$1', [targetCharacterId, amt]);
   else await client.query('INSERT INTO bounties (target_character, amount, posted_by) VALUES ($1,$2,$3)', [targetCharacterId, amt, ch.id]);
+  await client.query('INSERT INTO bounty_contributors (target_character, contributor) VALUES ($1,$2) ON CONFLICT (target_character, contributor) DO NOTHING', [targetCharacterId, ch.id]);
   // two rows so the §10.4 job can reconcile the escrow bucket exactly:
   // the escrowed amount vs the 2% house take
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'bounty:post', counterparty: targetCharacterId });
@@ -286,8 +292,12 @@ export async function postBounty(ch, targetCharacterId, amount, client, h) {
 async function claimBounty(client, h, ch, victimId) {
   const b = (await client.query('SELECT * FROM bounties WHERE target_character=$1 FOR UPDATE', [victimId])).rows[0];
   if (!b) return 0;
-  if (b.posted_by === ch.id) return 0; // the contract stands for others
+  // no funder of the pot may collect it — checked against EVERY contributor, not just
+  // the (overwriteable) posted_by. The contract stands for others; the bounty remains.
+  const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND contributor=$2', [victimId, ch.id])).rows.length;
+  if (contributed) return 0;
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victimId]);
+  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victimId]);
   const amt = Math.floor(Number(b.amount));
   ch.cash = Number(ch.cash) + amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: amt, reason: 'bounty:claim', counterparty: victimId });
@@ -412,6 +422,7 @@ export async function runEstate(client, h, victim, killerName) {
   if (openBounty && Number(openBounty.amount) > 0)
     await h.ledger(client, { currency: 'cash', amount: -Number(openBounty.amount), reason: 'death:bounty', counterparty: victim.id });
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victim.id]);
+  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victim.id]);
   // Exchange escrow forfeits with the man (v24 rule) — bucket rows keep cb/ammo conservation exact
   const escrowed = (await client.query("SELECT item_kind, SUM(qty) q FROM listings WHERE seller_character=$1 AND item_kind IN ('cb','ammo') GROUP BY item_kind", [victim.id])).rows;
   for (const e of escrowed)
@@ -473,9 +484,12 @@ export async function listItem(ch, kind, itemId, qty, unitPrice, client, h) {
   if (kind === 'item' && !CONSUMABLES.find((c) => c.id === itemId)) throw new GameError('bad_item', 'No such item.');
   const have = kind === 'cb' ? Number(ch.cb) : kind === 'ammo' ? Number(ch.ammo) : (h.owned.items[itemId] || 0);
   if (have < n) throw new GameError('short', "You can't sell what you don't have.");
-  // escrow: the goods leave the seller NOW (§5.4) — ledgered so cb/ammo conservation holds
-  if (kind === 'cb') { ch.cb = Number(ch.cb) - n; await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -n, reason: 'exchange:escrow' }); }
-  else if (kind === 'ammo') { ch.ammo = Number(ch.ammo) - n; await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -n, reason: 'exchange:escrow' }); }
+  // Escrow moves goods character → the `listings` bucket, which the §10.4 job counts
+  // as live inventory — so it is an INTERNAL transfer and must NOT be ledgered (a
+  // ledger sink would double-count against the escrow bucket). Only forfeiture at
+  // death removes cb/ammo from the system, and that path ledgers `death:escrow`.
+  if (kind === 'cb') { ch.cb = Number(ch.cb) - n; }
+  else if (kind === 'ammo') { ch.ammo = Number(ch.ammo) - n; }
   else {
     const left = (h.owned.items[itemId] || 0) - n;
     h.owned.items[itemId] = left;
@@ -498,8 +512,9 @@ export async function cancelListing(ch, listingId, client, h) {
 
 async function returnEscrow(ch, l, client, h) {
   const n = Number(l.qty);
-  if (l.item_kind === 'cb') { ch.cb = Number(ch.cb) + n; await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: n, reason: 'exchange:refund' }); }
-  else if (l.item_kind === 'ammo') { ch.ammo = Number(ch.ammo) + n; await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: n, reason: 'exchange:refund' }); }
+  // internal transfer back from the escrow bucket — not ledgered (see listItem)
+  if (l.item_kind === 'cb') { ch.cb = Number(ch.cb) + n; }
+  else if (l.item_kind === 'ammo') { ch.ammo = Number(ch.ammo) + n; }
   else {
     const cur = (await client.query('SELECT qty FROM character_items WHERE character_id=$1 AND item_id=$2', [ch.id, l.item_id])).rows[0];
     const total = Number(cur?.qty || 0) + n;
@@ -516,17 +531,22 @@ export async function buyListing(ch, seller, client, h, listingId) {
   if (l.seller_character !== seller.id) throw new GameError('bad_seller', 'Listing/seller mismatch.');
   const total = Number(l.unit_price) * Number(l.qty);
   if (Number(ch.cash) < total) throw new GameError('cash', `That lot costs $${total}.`);
+  // the 2% house take is paid by the seller (v24); on a tiny lot the take can exceed
+  // the price — clamp so the seller is never DEBITED on a completed sale, and split
+  // the actual take (never more than the buyer paid) between street tax and dev burn
   const fee = Math.ceil(total * 0.01), tax = Math.ceil(total * 0.01);
-  const net = total - fee - tax; // the 2% house take is paid by the seller (v24)
+  const net = Math.max(0, total - fee - tax);
+  const poolTax = Math.min(tax, total - net);
   await client.query('DELETE FROM listings WHERE id=$1', [listingId]);
   ch.cash = Number(ch.cash) - total;
   seller.cash = Number(seller.cash) + net;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -total, reason: 'exchange:buy', counterparty: seller.id });
   await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: net, reason: 'exchange:sale', counterparty: ch.id });
-  await takeHouse(client, tax);
+  await takeHouse(client, poolTax);
   const n = Number(l.qty);
-  if (l.item_kind === 'cb') { ch.cb = Number(ch.cb) + n; await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: n, reason: 'exchange:buy' }); }
-  else if (l.item_kind === 'ammo') { ch.ammo = Number(ch.ammo) + n; await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: n, reason: 'exchange:buy' }); }
+  // delivery is an internal transfer out of the escrow bucket to the buyer — not ledgered
+  if (l.item_kind === 'cb') { ch.cb = Number(ch.cb) + n; }
+  else if (l.item_kind === 'ammo') { ch.ammo = Number(ch.ammo) + n; }
   else {
     const cur = (await client.query('SELECT qty FROM character_items WHERE character_id=$1 AND item_id=$2', [ch.id, l.item_id])).rows[0];
     const totalQty = Number(cur?.qty || 0) + n;

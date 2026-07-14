@@ -288,6 +288,9 @@ export async function swap(ch, direction, amount, client, h) {
   const gross = c - k / (o + amt);
   if (!(gross > 0)) throw new GameError('pool', "The pool couldn't fill that.");
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01), net = Math.floor(gross - fee - tax);
+  // the buy side has a $500 minimum; the sell side had none, so a dust sale could
+  // yield net ≤ 0 (ceil fees > gross) — the seller would burn $OMR and be DEBITED cash
+  if (net <= 0) throw new GameError('min', 'That sale is too small to clear the 2% house take.');
   h.acct.omr = Number(h.acct.omr) - amt;
   ch.cash = Number(ch.cash) + net;
   await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c - gross, o + amt]);
