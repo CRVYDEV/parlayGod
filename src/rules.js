@@ -431,6 +431,11 @@ export const CONSTANTS = {
   COOK_MULT: 12, APY: 0.14, SWAP_MIN: 500, PATH_FIRST_COST: 10000, PATH_SWITCH_OMR: 25,
   ONBOARD_CAPSTONE: { cash: 5000, cb: 3, en: 25 },
   TRAVEL_COST: 250, BANK_RATE: 0.02, BANK_PERIOD_MS: 12*3600*1000, OFFLINE_CAP_MS: 8*3600*1000,
+  // D2b racket/front income cap — rolling budget refills to this many hours of income per
+  // real day (continuous online play tops out here); offline collect still bursts to
+  // OFFLINE_CAP_MS. 12h is the generous end of the plan's 8-12h range; re-sim + founder
+  // sign-off before tuning tighter (ground rule #1 — this bounds a faucet, not a mechanic).
+  RACKET_DAILY_CAP_MS: 12*3600*1000,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;

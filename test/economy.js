@@ -84,6 +84,27 @@ assert.equal(r.body.character.maxEnergy, capBefore + 5, 'studio adds +5 to the e
 r = await call('POST', '/v1/assets/studio/sell', { token });
 assert.equal(r.code, 200, 'sell asset'); assert(!r.body.character.assets.includes('studio'));
 
+// ── D2b: rolling racket-income cap (frequent touching no longer collects ~24h/day) ──
+// Pre-fix, income was only capped 8h *per accrual gap*, so touching every <8h harvested
+// ~24h/day. The refilling credit bucket (RACKET_DAILY_CAP_MS/day) caps steady-state
+// income to ~12h/day no matter how often you touch. Isolate racket income: bank=0, no
+// assets/crew, laundro the only racket. (Every read cancels the daily city-event mult,
+// so we compare against a measured 1h rate rather than an absolute number.)
+await seed("cash=0, bank=0, racket_credit_ms=3600000, last_accrued_at = now() - interval '1 hour'");
+const rate1h = (await meOf(token)).cash;                     // income for exactly 1h eligible
+assert(rate1h > 0, 'racket pays income per hour');
+// three back-to-back 8h collects over a 24h window, starting from a drained bucket
+await seed("cash=0, racket_credit_ms=0, last_accrued_at = now()");
+for (let i = 0; i < 3; i++) { await seed("last_accrued_at = now() - interval '8 hours'"); await meOf(token); }
+const day = (await meOf(token)).cash;                        // total income across that 24h of touches
+const hoursCollected = day / rate1h;
+assert(hoursCollected < 14, `D2b caps racket income to ~12h/day (got ${hoursCollected.toFixed(1)}h) — pre-fix this window paid 24h`);
+assert(hoursCollected > 10, `income still flows under the cap (got ${hoursCollected.toFixed(1)}h)`);
+// a returning offline player still gets one full 8h burst (credit seeded to OFFLINE_CAP)
+await seed("cash=0, racket_credit_ms=28800000, last_accrued_at = now() - interval '48 hours'");
+assert(Math.round((await meOf(token)).cash / rate1h) === 8, 'offline collect still bursts to the 8h window');
+await seed("cash=2000000, bank=0, racket_credit_ms=28800000"); // restore for the rest of the suite
+
 // ── AMM swap (§7.12): buy $OMR, then sell some back ──
 await seed("cash=2000000");
 const ammPre = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];

@@ -111,8 +111,11 @@ product track (design pass of its own).
 ## Suggested sequencing
 
 1. **Legal read** (token + gambling + drug theme + Robinhood ToS + *governance*). Gates the rest.
-2. **Racket-window cap (D2b)** — low-risk, high-impact, do early.
-3. **M6-B** built around the **full-reserve queue (D1)** + agent extraction config (D4).
+2. **Racket-window cap (D2b)** — ✅ **shipped** (`accrual.js` refilling `racket_credit_ms`
+   bucket, `CONSTANTS.RACKET_DAILY_CAP_MS`, regression in `test/economy.js`). Steady-state
+   ~12h/day; offline still bursts to 8h. The 12h number is provisional pending re-sim.
+3. **M6-B** built around the **full-reserve queue (D1)** — ✅ **shipped** (`src/chain.js`).
+   Agent extraction config (D4) still open.
 4. **Re-sim** the wealth sink (D2c) + permadeath softeners (D3); Jorge signs the numbers; implement.
 5. **Mob Council (D2d)** and the **agent-experience layer (D4)** — separate design docs, legal-gated.
 

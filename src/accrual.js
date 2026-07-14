@@ -35,11 +35,24 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   ch._bankInterest = Number(ch.bank) - bankBefore;
 
   // §7.1 racket + front income — capped at the 8h offline window, never minted
-  // without a matching ledger row (the caller records it, see game.withCharacter)
+  // without a matching ledger row (the caller records it, see game.withCharacter).
+  //
+  // D2b rolling cap: the raw §7.1 window (`capped`) still bursts to OFFLINE_CAP_MS, but
+  // income is metered by a refilling token bucket of *eligible* ms (`racket_credit_ms`).
+  // The bucket refills at RACKET_DAILY_CAP_MS per real day (up to an OFFLINE_CAP_MS burst)
+  // and each collect spends from it — so continuous play tops out at the daily cap while a
+  // returning offline player still gets one full 8h burst. Closes the pre-D2b exploit where
+  // touching an action every <8h collected ~24h/day (the per-gap cap never engaged).
+  const refillPerMs = CONSTANTS.RACKET_DAILY_CAP_MS / 86400000;
+  const burst = CONSTANTS.OFFLINE_CAP_MS;
+  let credit = Math.min(burst, Number(ch.racket_credit_ms ?? burst) + dtMs * refillPerMs);
+  const eligibleMs = Math.min(capped, credit); // income-eligible time this accrual
+  credit -= eligibleMs;
+  ch.racket_credit_ms = Math.round(credit);
   const incPerMin = (rackets.reduce((a, id) => a + racketIncome(id), 0) + assetIncome(assets))
     * (ev.racketMult || 1) * (held.includes('neon') ? 1.15 : 1)   // Neon Mile turf
     * (ch.path === 'ledger' ? 1.1 : 1) * (rIdx >= 7 ? 1.1 : 1);
-  const income = Math.floor(incPerMin * (capped / 60000));
+  const income = Math.floor(incPerMin * (eligibleMs / 60000));
   ch._accruedIncome = income;                 // surfaced so the caller ledgers it
   if (income > 0) ch.cash = Number(ch.cash) + income;
 
