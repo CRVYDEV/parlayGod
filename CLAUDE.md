@@ -85,10 +85,29 @@ uniqueness, and hot-path indexes. `test/security.js` has a regression per findin
 Three items left as design calls (turf goods arbitrage, daily same-kind draw + dice
 contracts, per-IP throttle) — flagged in AUDIT.md, not patched per ground rule #1.
 
-Next: **M6 (Solana service, §11)** — isolated chain service (vouchers table is its
-only write), Ed25519 signed-voucher withdrawals, cNFT gear mints via Bubblegum,
-DAS holdings verification on wallet link, Jupiter buyback bot — devnet first,
-third-party audit before mainnet.
+**M6 moved from Solana to Robinhood Chain (Arbitrum Orbit L2, EVM)** — see
+`omerta-chain-migration-evm.md`. The spec §11 intent is unchanged (off-chain stays
+authoritative; the chain settles withdrawals + ownership proofs; nothing mints), but
+the mechanism is now EVM: EIP-712 signed vouchers (not Ed25519), ERC-1155 gear (not
+Bubblegum cNFTs), ERC-20 OMR, an EVM DEX buyback (not Jupiter), and `balanceOf`/SIWE
+holdings checks (not DAS).
+
+M6-A (on-chain) is delivered in `omerta-contracts/` — a Foundry/Solidity suite:
+`OMR` (inert fixed-supply ERC-20 + Permit), `VoucherClaim` (the only bridge —
+EIP-712, replay-proof via nonce, deadline-bound, daily-capped, pausable,
+tranche-funded), `GearVault` (ERC-1155, mint gated to VoucherClaim), `OMRStaking`
+(pre-funded pool, 50% APY ceiling, principal always withdrawable). 15 Foundry tests
+incl. fuzz. Its own `CLAUDE.md`/`README.md` govern that subtree (`forge test` must
+pass; nothing mints; no owner mint paths; no hardcoded chainIds).
+
+Next: **M6-B (backend chain service, NOT built)** — isolated service whose only DB
+write is the `vouchers` table; `POST /v1/withdraw` + gear mint that debit the ledger
+and sign an EIP-712 voucher on **viem** in exact parity with `VOUCHER_TYPEHASH`; a
+`Claimed` event watcher setting `claimed_onchain`; SIWE wallet verification; the
+buyback bot. Devnet first, third-party audit of contracts **and** signer before
+mainnet. Note flagged in review: `VoucherClaim`'s daily cap + tranche bound OMR
+claims only — gear mints are uncapped, so a compromised signer can mint unlimited
+gear (revocable by the Safe); treat as an audit-surface decision.
 
 ## Sensitive design notes
 - $OMR framing is utility-only; never add mechanics implying price appreciation.

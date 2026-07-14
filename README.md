@@ -34,6 +34,7 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `src/worker.js` — hourly: the 12h buyback (§7.12) + season rollover (§8); daily: the §10.4 invariant sweep; `npm run worker`
 - `src/server.js` — Fastify routes, JWT auth (+ban check), rate-limit + idempotency-key hooks, mod endpoints (MOD_KEY), `/v1/ws` websocket gateway
 - `tools/backup.sh` — nightly pg_dump rotation (cron it with DATABASE_URL set)
+- `omerta-contracts/` — M6-A on-chain suite (Foundry/Solidity) for Robinhood Chain; has its own README/CLAUDE.md. `omerta-chain-migration-evm.md` documents the Solana→EVM switch.
 - `schema.sql` — M1–M4 tables (spec §3 subset)
 - `test/smoke.js` — M1 end-to-end journey + the §10.4 ledger invariant
 - `test/economy.js` — M2 economy journey + §10.4 cash-ledger and car-conservation invariants
@@ -60,4 +61,5 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - [x] **M3** — social: gangs, wars, turf, jumps, bounties, hits + death (the Estate), busting, exchange, notifications, websocket
 - [x] **M4** — Kitchen (§7.10 + crew/raids in accrual), paths, trade ranks, heist/missions/dailies, First Week, referrals (§7.13), telemetry, mod tools
 - [x] **M5** — alpha hardening: §10.2 rate limits + agent keys, §10.4 invariant job with alerting, idempotency keys, invite codes, season rollover (§8), X/Privy OAuth + guest upgrade, backups → invite-code alpha
-- [ ] **M6** — Solana service (devnet → audit → mainnet)
+- [~] **M6-A** — on-chain contracts for **Robinhood Chain** (EVM, migrated from Solana): `omerta-contracts/` (OMR, VoucherClaim, GearVault, OMRStaking) — Foundry suite, 15 tests. See `omerta-chain-migration-evm.md`.
+- [ ] **M6-B** — backend chain service (viem EIP-712 signer, `vouchers` table, `Claimed` watcher, SIWE wallet verify, buyback bot) → audit → mainnet
