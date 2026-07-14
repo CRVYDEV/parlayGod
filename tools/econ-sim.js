@@ -87,6 +87,17 @@ function ammSwap(cashIn, pool = { c: 10_000_000, o: 20_000 }) {
   return { omrOut: out, priceBefore: pool.c / pool.o, priceAfter: newC / newO, poolOmrLeft: newO };
 }
 
+// ── PROPOSED wealth-scaling sink (illustrative — not shipped) ──
+// A progressive daily "upkeep" burned as a % of holdings (rackets/turf/net worth),
+// so the top burns as fast as it earns. Net worth proxied by cumulative racket cost
+// + a level factor. Tunable; shown only to check the direction closes the 50-70x gap.
+const UPKEEP_DAILY_PCT = 0.015; // 1.5%/day of estimated holdings
+function proposedSink(a) {
+  const heldValue = RACKETS.filter((r) => a.lvl >= r.lvl && a.ownsRackets).reduce((s, r) => s + r.cost, 0)
+    + ASSETS.filter((x) => x.income && a.lvl >= 20).reduce((s, x) => s + x.price, 0) * (a.ownsRackets ? 1 : 0);
+  return heldValue * UPKEEP_DAILY_PCT;
+}
+
 const rows = ARCHETYPES.map(dailyForArchetype);
 const fmt = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}k` : `$${Math.round(n)}`;
 
@@ -97,6 +108,17 @@ for (const r of rows) {
   console.log(
     `${r.name.padEnd(10)} ${String(r.lvl).padStart(4)}  ${String(r.attempts).padStart(10)}  ${fmt(r.crimeCash).padStart(9)}  ${fmt(r.racketCash).padStart(11)}  ${fmt(r.faucetCash).padStart(11)}  ${fmt(r.sinkCash).padStart(9)}  ${fmt(r.netCash).padStart(9)}   ${String(ratio).padStart(6)}×`);
 }
+
+console.log('\n══════ PROPOSED: with a 1.5%/day wealth-upkeep sink (illustrative) ══════');
+console.log('archetype   faucet÷sink NOW   +upkeep sink       new ratio');
+for (const r of rows) {
+  const up = proposedSink(r);
+  const newSink = r.sinkCash + up;
+  const nowRatio = r.sinkCash > 0 ? (r.faucetCash / r.sinkCash).toFixed(0) : '∞';
+  const newRatio = newSink > 0 ? (r.faucetCash / newSink).toFixed(1) : '∞';
+  console.log(`${r.name.padEnd(10)} ${String(nowRatio + '×').padStart(11)}   ${fmt(up).padStart(11)}/day   ${String(newRatio + '×').padStart(9)}`);
+}
+console.log('(Upkeep scales with holdings, so the whale burns most — the lever works; exact % needs a full re-sim + your sign-off.)');
 
 console.log('\n══════ AMM DEPTH: one day of a whale\'s cash routed into the 10M/20k pool ══════');
 const whale = rows.find((r) => r.name === 'Whale');
