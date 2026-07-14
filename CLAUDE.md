@@ -73,6 +73,18 @@ level→prestige (floor(lvl/2)), respect reset, batched, telemetered. `tools/bac
 is the nightly pg_dump. The hardening test's invariant scenario earns every dollar
 through ledgered faucets — never SQL-seed cash/cb/ammo/$OMR in it.
 
+A full red-team audit (`AUDIT.md`) hardened M1–M5: two §10.4 leaks closed (sub-cent
+bank interest now ledgered; exchange cb/ammo escrow is an un-ledgered internal bucket
+transfer, only `death:escrow` forfeiture is ledgered), concurrency-safe idempotency
+(reserve-before-execute, 2xx-only, body-bound), DB-driven agent throttle, atomic
+invite consume, `UNIQUE(auth_provider,auth_subject)`, mission $OMR once-per-account
+(`mission_omr_claimed`), bounty `bounty_contributors` (no funder can collect), gang
+row-lock on join, swap-sell/buyListing net-≤0 guards, referral lock order fixed,
+banned-WS close, Privy JWT hardening, base58 wallet + uniqueness, living-name
+uniqueness, and hot-path indexes. `test/security.js` has a regression per finding.
+Three items left as design calls (turf goods arbitrage, daily same-kind draw + dice
+contracts, per-IP throttle) — flagged in AUDIT.md, not patched per ground rule #1.
+
 Next: **M6 (Solana service, §11)** — isolated chain service (vouchers table is its
 only write), Ed25519 signed-voucher withdrawals, cNFT gear mints via Bubblegum,
 DAS holdings verification on wallet link, Jupiter buyback bot — devnet first,

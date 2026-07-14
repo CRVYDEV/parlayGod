@@ -99,6 +99,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       if (s.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
       if (dayOf() !== lastInvariantDay) {
         lastInvariantDay = dayOf();
+        // prune idempotency keys older than a day (incl. any reservation orphaned by a
+        // crash between reserve and response, which would otherwise 409 that key forever)
+        await pool.query("DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'");
         const inv = await runLedgerInvariants(pool);
         console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
       }

@@ -40,6 +40,7 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `test/social.js` — M3 two-gang journey: war with spoils, hit → death/estate, live websocket push, buyback family split
 - `test/growth.js` — M4 journey: kitchen loop with crew + raid, heist, missions, dailies, First Week capstone, referral qualification, mod tools
 - `test/hardening.js` — M5: zero-drift invariants over an organically-earned economy, drift alarm, idempotency, invites, X OAuth + upgrade, season rollover, all three rate buckets
+- `test/security.js` — red-team regression suite: one test per audited exploit (see `AUDIT.md`)
 
 ## M2 endpoints
 `GET /market/prices` (deterministic, public) · `POST /goods/buy|sell` · `POST /garage/boost` · `POST /garage/:carId/melt|repair|fence` · `POST /workshop/craft/:id` · `POST /workshop/ammo` · `POST /items/:id/use` · `POST /rackets/:id/buy` · `POST /assets/:id/buy|sell` · `POST /swap` · `POST /stake` · `POST /unstake` · `POST /claim-rewards` · `POST /gear/:id/mint`

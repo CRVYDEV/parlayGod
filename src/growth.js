@@ -64,11 +64,20 @@ export async function doMission(ch, missionId, client, h) {
   ch.respect = Number(ch.respect) + (m.reward.respect || 0);
   if (m.title) ch.title = m.title;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: m.reward.cash || 0, reason: `mission:${missionId}` });
-  if (m.reward.omr) { // an enumerated legal $OMR faucet (spec §2)
-    h.acct.omr = Number(h.acct.omr) + m.reward.omr;
-    await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: m.reward.omr, reason: `mission:${missionId}` });
+  // $OMR pays ONCE PER ACCOUNT (it survives death; missions_done is per-character, so a
+  // per-character check would re-mint it on every heir). cash/respect/title can be
+  // re-earned each life — they're street progression and cost a full re-grind.
+  let omrPaid = 0;
+  if (m.reward.omr) {
+    const claimed = (await client.query('SELECT 1 FROM mission_omr_claimed WHERE account_id=$1 AND mission_id=$2', [h.accountId, missionId])).rows.length;
+    if (!claimed) {
+      await client.query('INSERT INTO mission_omr_claimed (account_id, mission_id) VALUES ($1,$2)', [h.accountId, missionId]);
+      omrPaid = m.reward.omr;
+      h.acct.omr = Number(h.acct.omr) + omrPaid;
+      await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrPaid, reason: `mission:${missionId}` }); // enumerated legal faucet (§2)
+    }
   }
-  return { ok: true, reward: m.reward, title: m.title || null };
+  return { ok: true, reward: { ...m.reward, omr: omrPaid }, title: m.title || null };
 }
 
 // ── DAILY CONTRACTS (§7.4): 3 drawn by (day + 2i) mod pool — no draw storage ──
@@ -150,10 +159,16 @@ export async function claimOnboard(ch, taskId, client, h) {
   return { ok: true, task: taskId, cash, cb, en, capstone: allDone };
 }
 
-// ── WALLET LINK (§4): sets the account's wallet; DAS holdings verify in phase 2 ──
+// ── WALLET LINK (§4): sets the account's wallet. This binds an address only; a
+// signature challenge + DAS holdings verification land with the chain service (M6),
+// and the ob_wallet First-Week reward should stay gated behind that real proof.
+// Base58 + length validated here, and one address may bind to only one account.
+const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/; // Solana addresses, no 0/O/I/l
 export async function linkWallet(ch, address, client, h) {
   const a = String(address || '').trim();
-  if (a.length < 32 || a.length > 44) throw new GameError('bad_address', "That doesn't look like a Solana address.");
+  if (!BASE58.test(a)) throw new GameError('bad_address', "That doesn't look like a Solana address.");
+  const taken = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1 AND account_id<>$2', [a, h.accountId])).rows[0];
+  if (taken) throw new GameError('wallet_taken', 'That wallet is already linked to another account.');
   h.acct.wallet_address = a;
-  return { ok: true, wallet: a };
+  return { ok: true, wallet: a, verified: false };
 }
