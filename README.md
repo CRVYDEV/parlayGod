@@ -33,7 +33,8 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `src/auth.js` — X/Privy sign-in, guest→provider upgrade, invite-code gate (INVITE_MODE=on)
 - `src/chain.js` — M6-B chain service (§11, EVM): SIWE wallet link, EIP-712 voucher signing on viem (in parity with `VoucherClaim`), the full-reserve withdrawal queue, gear-mint vouchers, Claimed reserve release
 - `src/fees.js` — §11 inbound real-ETH fees: the 0.01 ETH two-tier mint (free trial → permanent, withdrawal-eligible) and 0.10 ETH pre-paid revive insurance. Watches OmertaFees events, credits entitlements idempotently, reconciles pay-before-link. Never touches the §10.4 ledger (ETH → dev wallet on-chain)
-- `src/worker.js` — hourly: the 12h buyback (§7.12) + season rollover (§8); daily: the §10.4 invariant sweep; `npm run worker`
+- `src/worker.js` — hourly: the 12h buyback (§7.12) + season rollover (§8); daily: the §10.4 invariant sweep; the §11 chain-event sync poll; `npm run worker`
+- `src/watcher.js` — §11 chain-event sync (audit F2/F3): polls `getLogs` over a persisted block cursor (`chain_cursor`), staying `CHAIN_CONFIRMATIONS` behind head — downtime backfills (no lost fee credits), shallow reorgs are never acted on. Idempotent; dormant without `CHAIN_RPC_URL`
 - `src/server.js` — Fastify routes, JWT auth (+ban check), rate-limit + idempotency-key hooks, mod endpoints (MOD_KEY), `/v1/ws` websocket gateway
 - `tools/backup.sh` — nightly pg_dump rotation (cron it with DATABASE_URL set)
 - `omerta-contracts/` — M6-A on-chain suite (Foundry/Solidity) for Robinhood Chain; has its own README/CLAUDE.md. OMR, VoucherClaim, GearVault, OMRStaking + `OmertaFees` (the §11 entry/revive fee tollbooth — exact fees, ETH straight to the dev wallet, events the backend watches). `omerta-chain-migration-evm.md` documents the Solana→EVM switch.
@@ -44,7 +45,8 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `test/growth.js` — M4 journey: kitchen loop with crew + raid, heist, missions, dailies, First Week capstone, referral qualification, mod tools
 - `test/hardening.js` — M5: zero-drift invariants over an organically-earned economy, drift alarm, idempotency, invites, X OAuth + upgrade, season rollover, all three rate buckets
 - `test/security.js` — red-team regression suite: one test per audited exploit (see `AUDIT.md`)
-- `test/chain.js` — M6-B/C: SIWE link, EIP-712 signing parity (recovers the signer), full-reserve queue, $OMR ledger conservation, gear vouchers, the §11 mint gate (unminted can't withdraw) + fee reconcile (pay-before-link)
+- `test/chain.js` — M6-B/C: SIWE link, EIP-712 signing parity (recovers the signer), full-reserve queue, $OMR ledger conservation, gear vouchers, the §11 mint gate (unminted can't withdraw) + fee reconcile (pay-before-link) + concurrent-credit safety
+- `test/watcher.js` — §11 chain-event sync: confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, idempotent reprocessing (mock chain source)
 
 ## M2 endpoints
 `GET /market/prices` (deterministic, public) · `POST /goods/buy|sell` · `POST /garage/boost` · `POST /garage/:carId/melt|repair|fence` · `POST /workshop/craft/:id` · `POST /workshop/ammo` · `POST /items/:id/use` · `POST /rackets/:id/buy` · `POST /assets/:id/buy|sell` · `POST /swap` · `POST /stake` · `POST /unstake` · `POST /claim-rewards` · `POST /gear/:id/mint`

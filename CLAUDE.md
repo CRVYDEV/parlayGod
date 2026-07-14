@@ -128,7 +128,7 @@ chain boundary, not out. `omerta-contracts/src/OmertaFees.sol` is a metered toll
 (Safe-owned, ReentrancyGuard): `payMintFee()` / `payRespawnFee()` enforce the exact fee,
 forward the ETH **straight to the dev wallet** in the same tx (the contract custodies
 nothing, mints nothing), and emit `MintFeePaid`/`RespawnFeePaid` with a monotonic nonce.
-`src/fees.js` is the backend half — the worker's fee watcher (dormant unless
+`src/fees.js` is the backend half — the worker's fee sync (dormant unless
 `CHAIN_RPC_URL` + `OMERTA_FEES_ADDRESS`) calls `recordFeePayment`, which idempotently
 (nonce PK) credits the paying account an in-game entitlement. Two mechanics: **(1) the
 two-tier mint** — a **0.01 ETH** fee grants a mint credit; `POST /v1/character/mint`
@@ -149,6 +149,24 @@ the rest of the suite — **`forge test` was not run this session** (no toolchai
 run it before audit. Product note: "free trial" is enforced only as the extract-gate today
 (no character expiry yet); the fee amounts live at deploy time (`MINT_FEE_WEI` /
 `RESPAWN_FEE_WEI`), owner-settable on-chain.
+
+A full five-lens audit (`AUDIT-gameplay-chain.md`: economy, social/PvP, UX, chain,
+contracts) confirmed the system sound (no §10.4 leak, D2b correct, revive concurrency-
+safe, contracts mint nothing) and fixed the confirmed bugs: a HIGH concurrent fee
+double-credit (`reconcileFees` is now atomic claim-then-credit), the retired Solana
+`POST /v1/wallet` free-reward path (linking is SIWE-only; `ob_wallet` needs the proven 0x),
+a revive that wiped all hunters' searches (now only the shooter's), silent fee credits
+(now `notify('fee_credited')`/`'made'`), `OmertaFees` zero-fee floor + `sweep`→owner, the
+weekly-family $OMR ledger row (`family:weekly`), and a `GET /v1/session` probe. Balance
+items left for founder sign-off: bank interest ~4%/day online asymmetry, trade-goods
+arbitrage. `src/watcher.js` then replaced the reorg-fragile `watchEvent` with a polled
+`getLogs` sync over a persisted `chain_cursor`, `CHAIN_CONFIRMATIONS` behind head
+(downtime backfill + reorg safety; `test/watcher.js`).
+
+Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
+`reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New
+cars are on-curve with modest drop weights: the GTA-boost faucet moved only −1.5% E[val] /
++1.1% E[melt] — content, not a rebalance. `test/economy.js` guards catalog integrity.
 
 An internal red-team pass on the contracts (`AUDIT-contracts.md`) closed the one hole
 that broke the suite's own thesis — **uncapped gear minting** (gear is now fail-closed

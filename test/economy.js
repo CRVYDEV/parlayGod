@@ -4,6 +4,20 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
+import { CARS, carVal, carMelt } from '../src/rules.js';
+
+// ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
+{
+  const ids = CARS.map((c) => c.id);
+  assert.equal(new Set(ids).size, ids.length, 'car ids are unique (no dupes from an expansion)');
+  assert(CARS.length >= 60, `car catalog is the expanded set (${CARS.length} cars)`);
+  for (const c of CARS) {
+    assert(c.w > 0 && c.melt > 0 && c.val > 0 && c.name && c.desc, `car ${c.id} is well-formed`);
+    assert(carVal(c.id, 'stock') > 0 && carMelt(c.id, 'stock') > 0, `car ${c.id} prices via the helpers`);
+  }
+  // values strictly ascending keeps the progression legible and the drop curve smooth
+  for (let i = 1; i < CARS.length; i++) assert(CARS[i].val > CARS[i - 1].val, `cars ordered by value at ${CARS[i].id}`);
+}
 
 const app = await buildServer();
 const pool = app.pool;
