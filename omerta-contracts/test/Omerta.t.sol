@@ -274,9 +274,12 @@ contract OmertaTest is Test {
 
     function test_only_owner_sets_fees_and_recipient() public {
         (OmertaFees f, ) = _fees();
-        vm.prank(player);
+        vm.startPrank(player);
         vm.expectRevert();
         f.setFees(1, 2);
+        vm.expectRevert();
+        f.setFeeRecipient(payable(player));       // setFeeRecipient is also owner-gated
+        vm.stopPrank();
         address payable dev2 = payable(makeAddr("dev2"));
         vm.startPrank(safe);
         f.setFees(0.02 ether, 0.20 ether);
@@ -288,5 +291,67 @@ contract OmertaTest is Test {
         vm.prank(player);
         f.payMintFee{value: 0.02 ether}();       // new fee + new recipient in effect
         assertEq(dev2.balance, 0.02 ether);
+    }
+
+    function test_zero_fee_and_zero_address_rejected() public {
+        address payable dev = payable(makeAddr("dev"));
+        vm.expectRevert(OmertaFees.ZeroFee.selector);
+        new OmertaFees(safe, dev, 0, 0.10 ether);              // ctor: zero mint fee
+        vm.expectRevert(OmertaFees.ZeroAddress.selector);
+        new OmertaFees(safe, payable(address(0)), 0.01 ether, 0.10 ether);
+        (OmertaFees f, ) = _fees();
+        vm.startPrank(safe);
+        vm.expectRevert(OmertaFees.ZeroFee.selector);
+        f.setFees(0, 1);                                        // setter: zero fee blocked (no free credits)
+        vm.expectRevert(OmertaFees.ZeroAddress.selector);
+        f.setFeeRecipient(payable(address(0)));
+        vm.stopPrank();
+    }
+
+    function test_forward_failure_reverts_the_fee() public {
+        RejectETH bad = new RejectETH();
+        OmertaFees f = new OmertaFees(safe, payable(address(bad)), 0.01 ether, 0.10 ether);
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        vm.expectRevert(OmertaFees.ForwardFailed.selector);    // recipient rejects → whole fee unwinds, no partial state
+        f.payMintFee{value: 0.01 ether}();
+        assertEq(f.nonce(), 0, "nonce rolled back on revert");
+    }
+
+    function test_sweep_routes_to_owner_not_recipient() public {
+        (OmertaFees f, address payable dev) = _fees();
+        vm.deal(address(f), 1 ether);                          // force-pushed ETH lands on the contract
+        uint256 safeBefore = safe.balance;
+        vm.prank(safe);
+        f.sweep();
+        assertEq(safe.balance, safeBefore + 1 ether, "sweep goes to owner (Safe), not feeRecipient");
+        assertEq(dev.balance, 0, "recipient untouched by sweep");
+        assertEq(address(f).balance, 0);
+    }
+
+    function test_reentrant_recipient_is_blocked() public {
+        ReentrantDev bad = new ReentrantDev();
+        OmertaFees f = new OmertaFees(safe, payable(address(bad)), 0.01 ether, 0.10 ether);
+        bad.arm(f);
+        vm.deal(player, 1 ether);
+        vm.prank(player);
+        vm.expectRevert();                                     // re-entry hits nonReentrant → forward fails → tx unwinds
+        f.payMintFee{value: 0.01 ether}();
+    }
+}
+
+/// Recipient that rejects all ETH — exercises the ForwardFailed / DoS path.
+contract RejectETH {
+    receive() external payable { revert("no ETH"); }
+}
+
+/// Malicious recipient that tries to re-enter payMintFee on receive().
+contract ReentrantDev {
+    OmertaFees private fees;
+    function arm(OmertaFees f) external { fees = f; }
+    receive() external payable {
+        if (address(fees) != address(0) && address(fees).balance == 0) {
+            fees.payMintFee{value: 0.01 ether}(); // re-entry attempt; guard must reject
+        }
     }
 }

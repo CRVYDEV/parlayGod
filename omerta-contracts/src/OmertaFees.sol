@@ -32,11 +32,13 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
     error WrongFee(uint256 sent, uint256 required);
     error ForwardFailed();
     error ZeroAddress();
+    error ZeroFee();
 
     constructor(address owner_, address payable feeRecipient_, uint256 mintFee_, uint256 respawnFee_)
         Ownable(owner_)
     {
         if (feeRecipient_ == address(0)) revert ZeroAddress();
+        if (mintFee_ == 0 || respawnFee_ == 0) revert ZeroFee();
         feeRecipient = feeRecipient_;
         mintFee = mintFee_;
         respawnFee = respawnFee_;
@@ -60,6 +62,10 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         emit RespawnFeePaid(msg.sender, n, msg.value);
     }
 
+    /// @dev Forwards `amount` to the fee recipient. INVARIANT: `feeRecipient` MUST be an EOA
+    ///      or a contract that trivially accepts ETH — if it reverts on receive, every fee call
+    ///      reverts (a recoverable DoS: the Safe rotates the recipient). CEI + nonReentrant make
+    ///      this safe against a reentrant recipient; the accept-ETH assumption is on the Safe.
     function _forward(uint256 amount) private {
         (bool ok, ) = feeRecipient.call{value: amount}("");
         if (!ok) revert ForwardFailed();
@@ -73,15 +79,21 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
     }
 
     function setFees(uint256 mintFee_, uint256 respawnFee_) external onlyOwner {
+        if (mintFee_ == 0 || respawnFee_ == 0) revert ZeroFee(); // a 0 fee = free entitlements off-chain
         mintFee = mintFee_;
         respawnFee = respawnFee_;
         emit FeesChanged(mintFee_, respawnFee_);
     }
 
     /// @notice Rescue any ETH that somehow lands here outside the pay* paths (e.g. a
-    ///         selfdestruct push) — the pay paths never leave a balance behind.
+    ///         selfdestruct push) — the pay paths never leave a balance behind. Routes to
+    ///         `owner()` (the Safe), NOT `feeRecipient`, so a misconfigured recipient can't
+    ///         also trap the rescue.
     function sweep() external onlyOwner nonReentrant {
         uint256 bal = address(this).balance;
-        if (bal > 0) _forward(bal);
+        if (bal > 0) {
+            (bool ok, ) = payable(owner()).call{value: bal}("");
+            if (!ok) revert ForwardFailed();
+        }
     }
 }

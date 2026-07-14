@@ -170,6 +170,17 @@ export async function buildServer() {
   app.get('/v1/me', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, async () => ({})));
 
+  // Lightweight pre-character session probe: a freshly-authed client can ask "am I set up?"
+  // without eating a no_character 400 from /v1/me. Surfaces the whole gate state at a glance.
+  app.get('/v1/session', { preHandler: auth }, async (req) => {
+    const a = (await pool.query('SELECT minted, mint_credits, respawn_tokens, wallet_address, agent_flag FROM account_persistent WHERE account_id=$1', [req.user.sub])).rows[0] || {};
+    const ch = (await pool.query('SELECT id, name, generation FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0] || null;
+    return { authed: true, hasCharacter: !!ch, character: ch ? { id: ch.id, name: ch.name, generation: ch.generation } : null,
+      minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),
+      wallet: a.wallet_address || null, agent: !!a.agent_flag,
+      canWithdraw: !!a.minted && !!a.wallet_address };
+  });
+
   // ── M1 actions (crimes/gym/doc/checkin/bank/travel) ──
   app.post('/v1/crimes/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h)));
@@ -397,8 +408,12 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
-  app.post('/v1/wallet', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.linkWallet(ch, req.body?.address, client, h)));
+  // Wallet linking is SIWE now (EVM migration): the base58/no-proof path is retired. A real
+  // 0x link — the only thing that sets wallet_address and satisfies the ob_wallet reward —
+  // goes through POST /v1/wallet/challenge → POST /v1/wallet/verify (chain.js).
+  app.post('/v1/wallet', { preHandler: auth }, async () => {
+    throw new G.GameError('use_siwe', 'Wallet linking moved to sign-in-with-Ethereum: call POST /v1/wallet/challenge, sign it, then POST /v1/wallet/verify.');
+  });
 
   // ── M4: mod tools (§10.3) — X-Mod-Key header; disabled unless MOD_KEY is set ──
   app.post('/v1/mod/ban', { preHandler: modAuth }, async (req) => {

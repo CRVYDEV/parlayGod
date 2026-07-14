@@ -11,14 +11,21 @@
 // `account_persistent` (minted / mint_credits / respawn_tokens). It writes ZERO rows to
 // `transactions` — real ETH is out-of-band value, outside the §10.4 in-game conservation set.
 import { getAddress } from 'viem';
-import { GameError } from './game.js';
+import { GameError, notify } from './game.js';
 
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
+// A payment only grants an entitlement if it actually carried value — belt-and-suspenders
+// against a zero/underpriced fee misconfig on-chain (the contract also enforces a >0 floor).
+const positiveWei = (s) => { try { return BigInt(s ?? '0') > 0n; } catch { return false; } };
 
 async function creditEntitlement(client, accountId, kind) {
   if (kind === 'mint') await client.query('UPDATE account_persistent SET mint_credits = mint_credits + 1 WHERE account_id=$1', [accountId]);
   else if (kind === 'respawn') await client.query('UPDATE account_persistent SET respawn_tokens = respawn_tokens + 1 WHERE account_id=$1', [accountId]);
   else throw new GameError('bad_fee_kind', `Unknown fee kind: ${kind}`);
+  // tell the player their real-ETH payment landed (offline-durable + live push); the paywall's
+  // silent moment otherwise gives zero in-game acknowledgement. Skip if no living character yet.
+  const ch = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+  if (ch) await notify(client, ch.id, 'fee_credited', { kind });
 }
 
 // Record one on-chain payment. Idempotent on the contract nonce: a re-delivered event (reorg,
@@ -46,9 +53,11 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let credited = false;
     if (acct) {
-      await creditEntitlement(client, acct.account_id, kind);
-      await client.query('UPDATE fee_payments SET account_id=$2, credited=true WHERE nonce=$1', [n, acct.account_id]);
-      credited = true;
+      // attribute now; only GRANT the entitlement when the payment carried value
+      const grant = positiveWei(amountWei);
+      if (grant) await creditEntitlement(client, acct.account_id, kind);
+      await client.query('UPDATE fee_payments SET account_id=$2, credited=$3 WHERE nonce=$1', [n, acct.account_id, grant]);
+      credited = grant;
     }
     await client.query('COMMIT');
     return { recorded: true, credited, attributed: !!acct };
@@ -65,11 +74,15 @@ export async function reconcileFees(pool, accountId, address) {
   let credited = 0;
   try {
     await client.query('BEGIN');
-    const rows = (await client.query('SELECT nonce, kind FROM fee_payments WHERE payer_address=$1 AND NOT credited', [addr])).rows;
-    for (const r of rows) {
-      await creditEntitlement(client, accountId, r.kind);
-      await client.query('UPDATE fee_payments SET account_id=$2, credited=true WHERE nonce=$1', [Number(r.nonce), accountId]);
-      credited++;
+    // CLAIM-then-credit, atomically: the guarded UPDATE ... WHERE NOT credited RETURNING lets
+    // exactly one transaction win each row. Two concurrent links (or a link racing the watcher)
+    // can no longer both see the same uncredited row and each grant a token — the loser's UPDATE
+    // matches zero rows. (Prior SELECT-then-credit double-credited one on-chain fee into N tokens.)
+    const claimed = (await client.query(
+      'UPDATE fee_payments SET credited=true, account_id=$2 WHERE payer_address=$1 AND NOT credited RETURNING kind, amount_wei',
+      [addr, accountId])).rows;
+    for (const r of claimed) {
+      if (positiveWei(r.amount_wei)) { await creditEntitlement(client, accountId, r.kind); credited++; }
     }
     await client.query('COMMIT');
     return { credited };
@@ -98,6 +111,7 @@ export async function mintCharacter(pool, accountId) {
     if (!ch) throw new GameError('no_character', 'Create a character first, then mint it.');
     await client.query('UPDATE account_persistent SET minted=true, mint_credits = mint_credits - 1 WHERE account_id=$1', [accountId]);
     await client.query('UPDATE characters SET minted=true WHERE account_id=$1 AND alive', [accountId]);
+    await notify(client, ch.id, 'made', {}); // a made man — the street is permanent now
     await client.query('COMMIT');
     return { minted: true };
   } catch (e) { await client.query('ROLLBACK'); throw e; }

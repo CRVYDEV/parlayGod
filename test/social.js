@@ -156,6 +156,8 @@ await seedCh(rocco.id, "hosp_until=NULL, loc='docks', health=100");
 
 // ── §11 pre-paid revive insurance: a respawn token absorbs a killing blow (no permadeath) ──
 await pool.query(`UPDATE account_persistent SET respawn_tokens = 1 WHERE account_id = (SELECT account_id FROM characters WHERE id='${rocco.id}')`);
+// audit MEDIUM: a revive must NOT wipe OTHER hunters' searches — plant a second hunter (mook) on rocco
+await pool.query(`INSERT INTO searches (hunter, target, started_at) VALUES ('${mook.id}','${rocco.id}', now() - interval '4 hours')`);
 r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } }); // uses the search from above
 assert.equal(r.code, 200, 'shots fired at an insured target');
 assert.equal(r.body.kill, false, 'the killing blow is absorbed — not a kill');
@@ -164,6 +166,8 @@ let survivor = await meOf(rocco.token);
 assert.equal(survivor.generation, 1, 'no heir — the same street lives on');
 assert.equal(survivor.respawnTokens, 0, 'the respawn token was consumed');
 assert.equal(survivor.health, 100, 'revived at full health');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM searches WHERE hunter='${mook.id}' AND target='${rocco.id}'`)).rows[0].n), 1, "other hunters' searches survive the revive (no manhunt reset)");
+await pool.query(`DELETE FROM searches WHERE hunter='${mook.id}'`); // clean up the planted search
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE character_id='${rocco.id}'`)).rows[0].n), 1, 'the insured man keeps his fleet');
 // the hunt reset — re-search for the real (uninsured) kill below (top up ammo for the 2nd burst)
 await seedCh(don.id, "energy=200, ammo=3000, jail_until=NULL, shoot_cd_until=NULL, loc='docks'");

@@ -16,6 +16,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 const { buildServer } = await import('../src/server.js');
 const { chainConfig, VOUCHER_TYPES } = await import('../src/chain.js');
+const { reconcileFees } = await import('../src/fees.js');
 const { runLedgerInvariants } = await import('../src/invariants.js');
 
 const app = await buildServer();
@@ -141,5 +142,17 @@ let fs2 = (await call('GET', '/v1/fees/status', { token: tok2 })).body;
 assert.equal(fs2.mintCredits, 1, 'mint credit granted retroactively');
 assert.equal(fs2.respawnTokens, 1, 'respawn token granted retroactively');
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, §11 mint-gate + fee reconcile');
+// ── audit HIGH: reconcileFees must credit ONE payment exactly once, even under concurrent
+// links (the old SELECT-then-credit double-credited one on-chain fee into N tokens). ──
+const a2id = (await pool.query(`SELECT account_id FROM account_persistent WHERE wallet_address='${player2.address}'`)).rows[0].account_id;
+const respBefore = Number((await pool.query(`SELECT respawn_tokens FROM account_persistent WHERE account_id='${a2id}'`)).rows[0].respawn_tokens);
+// one fresh, uncredited on-chain payment parked against player2's (already-linked) wallet
+await pool.query(`INSERT INTO fee_payments (nonce, kind, payer_address, amount_wei) VALUES (7777,'respawn','${player2.address}','100000000000000000')`);
+// fire two reconciles at once (models two concurrent /wallet/verify) — must net exactly +1
+await Promise.all([reconcileFees(pool, a2id, player2.address), reconcileFees(pool, a2id, player2.address)]);
+const respAfter = Number((await pool.query(`SELECT respawn_tokens FROM account_persistent WHERE account_id='${a2id}'`)).rows[0].respawn_tokens);
+assert.equal(respAfter - respBefore, 1, 'one fee → exactly one token, even across concurrent reconciles (no double-credit)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM fee_payments WHERE nonce=7777 AND credited`)).rows[0].n), 1, 'payment claimed exactly once');
+
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, §11 mint-gate + fee reconcile + concurrent-credit safety');
 await app.close();

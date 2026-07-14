@@ -181,7 +181,10 @@ assert.equal((await call('POST', '/v1/onboard/ob_crime/claim', { token: chef.tok
 await seedCh(chef.id, 'gta_at=NULL, energy=200, jail_until=NULL');
 await call('POST', '/v1/garage/boost', { token: chef.token }); // gta_at set win or lose
 await call('POST', '/v1/bank/deposit', { token: chef.token, body: { amount: 100 } });
-await call('POST', '/v1/wallet', { token: chef.token, body: { address: 'So1anaAddre55Fake1111111111111111111111111' } });
+// the legacy base58 wallet route is retired (EVM migration) — it now redirects to SIWE
+assert.equal((await call('POST', '/v1/wallet', { token: chef.token, body: { address: 'So1anaAddre55Fake1111111111111111111111111' } })).code, 400, 'legacy /v1/wallet redirects to SIWE');
+// ob_wallet requires a real proven wallet_address — set here as a completed SIWE link would
+await pool.query(`UPDATE account_persistent SET wallet_address='0x1111111111111111111111111111111111111111' WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
 await seedCh(chef.id, 'jail_until=NULL, cash=500000');
 assert.equal((await call('POST', '/v1/gangs', { token: chef.token, body: { name: 'The Kitchen Cartel', tag: 'KC' } })).code, 200);
 for (const t of ['ob_boost', 'ob_bank', 'ob_wallet', 'ob_path', 'ob_family', 'ob_x', 'ob_discord']) {
