@@ -11,6 +11,7 @@ import { makeDb } from './db.js';
 import { levelOf, dayOf } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
 import { markClaimed } from './chain.js';
+import { recordFeePayment } from './fees.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -125,5 +126,23 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       });
       console.log('👁  Claimed watcher live on', process.env.VOUCHER_CLAIM_ADDRESS);
     } catch (e) { console.error('Claimed watcher failed to start', e.message); }
+  }
+
+  // §11 fee watcher: OmertaFees emits MintFeePaid / RespawnFeePaid on each on-chain payment
+  // (the ETH is already forwarded to the dev wallet). recordFeePayment credits the paying
+  // account its entitlement, idempotent on the contract nonce. Dormant without RPC + address.
+  if (process.env.CHAIN_RPC_URL && process.env.OMERTA_FEES_ADDRESS) {
+    try {
+      const { createPublicClient, http, parseAbiItem } = await import('viem');
+      const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+      const address = process.env.OMERTA_FEES_ADDRESS;
+      const ingest = (kind) => (logs) => logs.forEach((l) =>
+        recordFeePayment(pool, { nonce: Number(l.args.nonce), kind, payer: l.args.payer,
+          amountWei: l.args.amount?.toString(), txHash: l.transactionHash })
+          .catch((e) => console.error('recordFeePayment', e)));
+      client.watchEvent({ address, event: parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)'), onLogs: ingest('mint') });
+      client.watchEvent({ address, event: parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)'), onLogs: ingest('respawn') });
+      console.log('💰 fee watcher live on', address);
+    } catch (e) { console.error('fee watcher failed to start', e.message); }
   }
 }

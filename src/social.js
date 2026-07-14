@@ -360,6 +360,22 @@ export async function fire(ch, victim, client, h, rounds) {
   await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
 
   if (effective >= btk) {
+    // ── PRE-PAID REVIVE INSURANCE (§11) ──
+    // A killing blow lands, but the target bought a respawn on-chain (0.10 ETH → dev wallet).
+    // It's spent to pull them from the brink: full heal, keeps EVERYTHING, and the shooter's
+    // blow lands on nothing — no rep, no chop, no bounty, no estate. Nothing here touches the
+    // §10.4 ledger (no in-game value moves); the real ETH already left to the dev wallet.
+    // Mod-kills call runEstate directly and bypass this — insurance stops players, not mods.
+    if (Number(h.victimAcct.respawn_tokens || 0) > 0) {
+      h.victimAcct.respawn_tokens = Number(h.victimAcct.respawn_tokens) - 1;
+      victim.health = 100;
+      await client.query('DELETE FROM searches WHERE target=$1', [victim.id]); // the hunt resets
+      await h.notify(client, victim.id, 'revived', { from: ch.name });
+      await h.notify(client, ch.id, 'target_revived', { victim: victim.name });
+      await h.track(client, victim.account_id, 'respawn', { from: ch.id });
+      bus.emit('streets', { type: 'revive', who: victim.name });
+      return { ok: true, kill: false, revived: true, jammed };
+    }
     // ── THE KILL ──
     const rep = Math.max(10, vicLvl * 2);
     // AUDIT R5 — the chop comes from the victim's ACTUAL cars rows; value transfers
@@ -436,9 +452,10 @@ export async function runEstate(client, h, victim, killerName) {
   // the heir — same name (the bloodline), next generation, legacy stake
   const heirId = uid();
   const stake = 500 + 100 * Number(acct.prestige);
+  // the bloodline stays "made" — a paid mint (§11) carries down the estate to the heir
   await client.query(
-    'INSERT INTO characters (id, account_id, name, generation, season, cash) VALUES ($1,$2,$3,$4,$5,$6)',
-    [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake]);
+    'INSERT INTO characters (id, account_id, name, generation, season, cash, minted) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake, !!acct.minted]);
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
   await h.notify(client, heirId, 'estate', report);

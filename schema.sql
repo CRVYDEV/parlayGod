@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   checkins_lifetime INT NOT NULL DEFAULT 0,
   referred_by TEXT, ref_paid BOOLEAN NOT NULL DEFAULT false,
   agent_flag BOOLEAN NOT NULL DEFAULT false,
-  deaths INT NOT NULL DEFAULT 0
+  deaths INT NOT NULL DEFAULT 0,
+  -- §11 real-ETH entry fees (paid on-chain to OmertaFees, forwarded straight to the dev
+  -- wallet — never in-game currency, never touches the §10.4 ledger). `minted` = paid the
+  -- 0.01 ETH mint fee (the two-tier gate: only minted accounts can withdraw/mint gear).
+  -- `mint_credits` / `respawn_tokens` are unspent on-chain payments the watcher credited.
+  minted BOOLEAN NOT NULL DEFAULT false,
+  mint_credits INT NOT NULL DEFAULT 0,
+  respawn_tokens INT NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
@@ -58,6 +65,9 @@ CREATE TABLE IF NOT EXISTS characters (
   crew INT NOT NULL DEFAULT 0,
   heist_at TIMESTAMPTZ,
   season INT NOT NULL,
+  -- §11 two-tier: mirrors account_persistent.minted onto the living street (and its heirs)
+  -- so the character view can show "made" status. Account-level `minted` is the gate truth.
+  minted BOOLEAN NOT NULL DEFAULT false,
   -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
   -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
   -- player touches an action, closing the "collect every <8h → ~24h/day" multiplier.
@@ -304,6 +314,22 @@ CREATE TABLE IF NOT EXISTS wallet_challenges (
   nonce TEXT NOT NULL,
   issued_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- §11 inbound real-ETH fees. One row per on-chain OmertaFees payment, keyed by the
+-- contract's monotonic `nonce` (idempotent against watcher re-delivery / reorg replay).
+-- `credited` = the in-game entitlement (mint_credit / respawn_token) was granted; a payment
+-- from an unlinked wallet lands with account_id NULL and is reconciled when its wallet links.
+-- The ETH itself never touches this DB — the contract forwarded it to the dev wallet.
+CREATE TABLE IF NOT EXISTS fee_payments (
+  nonce BIGINT PRIMARY KEY,
+  kind TEXT NOT NULL,                 -- 'mint' | 'respawn'
+  payer_address TEXT NOT NULL,
+  amount_wei TEXT NOT NULL,
+  tx_hash TEXT,
+  account_id TEXT,
+  credited BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_fee_payments_payer ON fee_payments (payer_address) WHERE NOT credited;
 
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.

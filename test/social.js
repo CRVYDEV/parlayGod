@@ -152,7 +152,23 @@ assert.equal((await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.to
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.token })).code, 200, 'search started');
 assert.equal((await call('POST', `/v1/streets/${mook.id}/search`, { token: don.token })).code, 400, 'one active search');
 await seedCh(don.id, "energy=200, jail_until=NULL, loc='docks'");
-await seedCh(rocco.id, "hosp_until=NULL, loc='docks'");
+await seedCh(rocco.id, "hosp_until=NULL, loc='docks', health=100");
+
+// ── §11 pre-paid revive insurance: a respawn token absorbs a killing blow (no permadeath) ──
+await pool.query(`UPDATE account_persistent SET respawn_tokens = 1 WHERE account_id = (SELECT account_id FROM characters WHERE id='${rocco.id}')`);
+r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } }); // uses the search from above
+assert.equal(r.code, 200, 'shots fired at an insured target');
+assert.equal(r.body.kill, false, 'the killing blow is absorbed — not a kill');
+assert.equal(r.body.revived, true, 'target revived via pre-paid insurance');
+let survivor = await meOf(rocco.token);
+assert.equal(survivor.generation, 1, 'no heir — the same street lives on');
+assert.equal(survivor.respawnTokens, 0, 'the respawn token was consumed');
+assert.equal(survivor.health, 100, 'revived at full health');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE character_id='${rocco.id}'`)).rows[0].n), 1, 'the insured man keeps his fleet');
+// the hunt reset — re-search for the real (uninsured) kill below (top up ammo for the 2nd burst)
+await seedCh(don.id, "energy=200, ammo=3000, jail_until=NULL, shoot_cd_until=NULL, loc='docks'");
+assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.token })).code, 200, 're-search after the revive');
+
 r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } });
 assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);

@@ -32,6 +32,7 @@ const seedCh = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id=
 
 const signerAddr = privateKeyToAccount(SIGNER_PK).address;
 const player = privateKeyToAccount(PLAYER_PK);
+const player2 = privateKeyToAccount('0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a'); // anvil #2
 
 // ── bootstrap: a character that EARNS $OMR through the AMM (never SQL-seeded) ──
 const { body: { token } } = await call('POST', '/v1/auth/guest');
@@ -42,13 +43,26 @@ let r = await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount
 assert.equal(r.code, 200, 'swap buys $OMR'); assert(r.body.character.omr > 100, 'holds >100 $OMR');
 
 // ── SIWE wallet link (§4 EVM) ──
-assert.equal((await call('POST', '/v1/withdraw', { token, body: { amount: 1 } })).code, 400, 'no wallet, no withdraw');
+assert.equal((await call('POST', '/v1/withdraw', { token, body: { amount: 1 } })).code, 400, 'no wallet + unminted, no withdraw');
 r = await call('POST', '/v1/wallet/challenge', { token });
 assert.equal(r.code, 200, 'challenge issued');
 const goodSig = await player.signMessage({ message: r.body.message });
 assert.equal((await call('POST', '/v1/wallet/verify', { token, body: { address: player.address, signature: '0xdead' } })).code, 400, 'bad signature rejected');
 r = await call('POST', '/v1/wallet/verify', { token, body: { address: player.address, signature: goodSig } });
 assert.equal(r.code, 200, 'wallet verified'); assert.equal(r.body.wallet.toLowerCase(), player.address.toLowerCase(), 'wallet linked');
+
+// ── §11 two-tier mint gate: an unminted account can't cash out until the 0.01 ETH fee ──
+assert.equal((await call('POST', '/v1/withdraw', { token, body: { amount: 1 } })).code, 400, 'unminted account cannot withdraw');
+assert.equal((await call('POST', '/v1/character/mint', { token })).code, 400, 'no mint without a paid credit');
+// the worker's fee watcher calls this on a MintFeePaid event; the mod route is its manual twin
+r = await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 5001, kind: 'mint', payer: player.address, amountWei: '10000000000000000' } });
+assert.equal(r.code, 200); assert(r.body.credited, 'linked wallet credited immediately');
+assert.equal((await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 5001, kind: 'mint', payer: player.address, amountWei: '10000000000000000' } })).body.duplicate, true, 'same payment nonce is idempotent');
+assert.equal((await call('GET', '/v1/fees/status', { token })).body.mintCredits, 1, 'exactly one mint credit (no double-credit)');
+r = await call('POST', '/v1/character/mint', { token });
+assert.equal(r.code, 200, 'mint spends the credit'); assert.equal(r.body.minted, true, 'character is made');
+assert.equal((await meOf(token)).minted, true, 'view shows minted');
+assert.equal((await call('GET', '/v1/fees/status', { token })).body.mintCredits, 0, 'credit consumed');
 
 // ── full-reserve queue ──
 // funded reserve starts at 0 → the first withdrawal QUEUES (debited in-game, unsigned)
@@ -112,5 +126,20 @@ await call('POST', '/v1/mod/reserve/claimed', { body: { nonce: nonceA }, headers
 const afterClaim = (await call('GET', '/v1/mod/reserve', { headers: modH })).body.signedOutstanding;
 assert.equal(afterClaim, beforeClaim - 10, 'a claimed voucher stops counting against the reserve');
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release');
+// ── §11 pay-before-link: a fee paid before the wallet is linked reconciles on link ──
+const { body: { token: tok2 } } = await call('POST', '/v1/auth/guest');
+await call('POST', '/v1/character', { token: tok2, body: { name: 'Late Linker Lou' } });
+// two payments (mint + respawn) arrive while player2's wallet is unlinked → parked, uncredited
+await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 6001, kind: 'mint', payer: player2.address, amountWei: '10000000000000000' } });
+await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 6002, kind: 'respawn', payer: player2.address, amountWei: '100000000000000000' } });
+assert.equal((await call('GET', '/v1/fees/status', { token: tok2 })).body.mintCredits, 0, 'nothing credited before the wallet links');
+const chal2 = (await call('POST', '/v1/wallet/challenge', { token: tok2 })).body.message;
+const sig2 = await player2.signMessage({ message: chal2 });
+r = await call('POST', '/v1/wallet/verify', { token: tok2, body: { address: player2.address, signature: sig2 } });
+assert.equal(r.code, 200); assert.equal(r.body.feesCredited, 2, 'both parked payments reconcile on link');
+let fs2 = (await call('GET', '/v1/fees/status', { token: tok2 })).body;
+assert.equal(fs2.mintCredits, 1, 'mint credit granted retroactively');
+assert.equal(fs2.respawnTokens, 1, 'respawn token granted retroactively');
+
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, §11 mint-gate + fee reconcile');
 await app.close();

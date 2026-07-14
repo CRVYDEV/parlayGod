@@ -65,6 +65,35 @@ the devnet deploy/wiring.
 Env the service needs (placeholders in `.env.example`): `VOUCHER_SIGNER_PK`,
 `VOUCHER_CLAIM_ADDRESS`, `CHAIN_ID`, `CHAIN_RPC_URL`.
 
+## M6-C — inbound entry/revive fees (BUILT — `OmertaFees.sol`, `src/fees.js`)
+
+The first value that flows *into* the chain boundary. Two flat native-ETH fees, both
+forwarded straight to the developer wallet on-chain (nothing is custodied, nothing minted):
+
+- **0.01 ETH mint (two-tier onboarding).** Anyone plays a free trial character; paying the
+  mint fee grants a mint credit, and `POST /v1/character/mint` spends it to make the
+  account `minted` — the permanent, on-chain-eligible tier. **Only a minted account can
+  withdraw $OMR or take gear on-chain** (the M6-B withdrawal paths gate on it). Applies to
+  agents too. The "made" status is mirrored onto the living character and carried to heirs
+  through the estate.
+- **0.10 ETH pre-paid revive insurance.** Grants a `respawn_token`; a killing blow (§7.7)
+  consumes one to absorb the hit — full heal, keeps everything, the shooter's blow lands on
+  nothing — instead of permadeath. Bought ahead of time because death is atomic (can't
+  pause mid-transaction to collect a fee). Mod-kills bypass insurance by design.
+
+Mechanism: `OmertaFees` (Safe-owned, ReentrancyGuard) enforces the exact fee, forwards the
+ETH, and emits `MintFeePaid`/`RespawnFeePaid` with a monotonic nonce. The worker's fee
+watcher (dormant unless `CHAIN_RPC_URL` + `OMERTA_FEES_ADDRESS`) calls
+`fees.recordFeePayment`, idempotent on the nonce, which credits the paying wallet's account.
+Pay-before-link is reconciled when the wallet links (SIWE). **Real ETH is out-of-band
+value** — it never enters the §10.4 in-game conservation set, so `fees.js` writes no ledger
+rows and a revive that skips the estate moves no in-game value.
+
+Env (placeholders in `.env.example`): `OMERTA_FEES_ADDRESS`, `DEV_WALLET`, `MINT_FEE_WEI`
+(0.01 ETH), `RESPAWN_FEE_WEI` (0.10 ETH). Fees are owner-settable on-chain post-deploy.
+Deferred: devnet deploy + wiring, and `forge test` on the new `OmertaFees` suite (the
+Foundry VM was not run this session).
+
 ## Before mainnet (non-negotiable)
 Third-party audit of all four contracts **and** the signing service; counsel review
 of Robinhood Chain ToS re: wagering-adjacent dApps; a Safe signer ceremony; and

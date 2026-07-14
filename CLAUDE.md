@@ -123,6 +123,33 @@ cycle, $OMR ledger conservation, gear vouchers, and reserve release. Still pendi
 devnet deploy + wiring, the buyback bot, and third-party audit of contracts **and**
 signer before mainnet.
 
+M6-C added **inbound real-ETH fees** (§11) — the first value that flows *into* the
+chain boundary, not out. `omerta-contracts/src/OmertaFees.sol` is a metered tollbooth
+(Safe-owned, ReentrancyGuard): `payMintFee()` / `payRespawnFee()` enforce the exact fee,
+forward the ETH **straight to the dev wallet** in the same tx (the contract custodies
+nothing, mints nothing), and emit `MintFeePaid`/`RespawnFeePaid` with a monotonic nonce.
+`src/fees.js` is the backend half — the worker's fee watcher (dormant unless
+`CHAIN_RPC_URL` + `OMERTA_FEES_ADDRESS`) calls `recordFeePayment`, which idempotently
+(nonce PK) credits the paying account an in-game entitlement. Two mechanics: **(1) the
+two-tier mint** — a **0.01 ETH** fee grants a mint credit; `POST /v1/character/mint`
+spends it to set `account_persistent.minted` (mirrored onto the living character + carried
+to heirs in `runEstate`); **only a minted account can withdraw $OMR or take gear on-chain**
+(`chain.js` gate — free trial characters play fully, just can't extract). **(2) pre-paid
+revive insurance** — a **0.10 ETH** fee grants a `respawn_token`; the hit kill-branch in
+`social.js` consumes one to absorb a killing blow (full heal, keeps everything, no rep/
+chop/bounty/estate for the shooter) *before* the estate runs — mod-kills call `runEstate`
+directly and bypass it. Fees agents too (they pay from a funded wallet like anyone). Real
+ETH is **out-of-band value** — `fees.js` writes zero `transactions` rows and adds nothing
+to the §10.4 set; a revive simply skips the estate (no value moves). Pay-before-link is
+reconciled: `walletVerify` sweeps parked payments for the freshly-linked address.
+`test/chain.js` proves the mint gate + idempotent credit + reconcile; `test/social.js`
+proves a respawn token turns a lethal hit into a survival with no heir. `OmertaFees` has
+Foundry tests (exact-fee, forward-to-dev, monotonic nonce, owner-only admin) but — like
+the rest of the suite — **`forge test` was not run this session** (no toolchain/egress);
+run it before audit. Product note: "free trial" is enforced only as the extract-gate today
+(no character expiry yet); the fee amounts live at deploy time (`MINT_FEE_WEI` /
+`RESPAWN_FEE_WEI`), owner-settable on-chain.
+
 An internal red-team pass on the contracts (`AUDIT-contracts.md`) closed the one hole
 that broke the suite's own thesis — **uncapped gear minting** (gear is now fail-closed
 behind a per-`gearId` supply cap the Safe sets) — removed the **hot-deployer
