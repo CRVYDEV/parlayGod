@@ -21,7 +21,7 @@ The off-chain game stays authoritative and value-conserving exactly as before
 | Holdings verification | DAS API | EVM `balanceOf` (ERC-20) / `balanceOf(addr,id)` (ERC-1155) via RPC |
 | Buyback bot | Jupiter (Squads multisig, Pyth prices) | an EVM DEX from the treasury Safe (bot design deferred to M6-B) |
 | Wallet address | base58 (already validated in `growth.js:linkWallet`) | EVM `0x…` checksummed address; the signature-challenge + on-chain holdings check land with M6-B |
-| Blast-radius model | server writes only `vouchers`; compromised bot can't mint gameplay value | unchanged intent: a compromised **signer** is bounded by the current tranche + daily cap (OMR) and revocable by the Safe |
+| Blast-radius model | server writes only `vouchers`; compromised bot can't mint gameplay value | unchanged intent: a compromised **signer** is bounded by the tranche + daily cap (OMR) **and a per-gearId supply cap (gear, fail-closed — see `AUDIT-contracts.md`)**, and revocable by the Safe |
 
 ## M6-A — on-chain (delivered, in `omerta-contracts/`)
 

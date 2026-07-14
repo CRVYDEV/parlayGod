@@ -6,7 +6,7 @@ Four contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 
 |---|---|
 | `OMR.sol` | Fixed-supply ERC-20 + Permit. No owner, no mint. Inert by design. |
 | `VoucherClaim.sol` | THE bridge. EIP-712 vouchers signed by the game server; replay-proof, deadline-bound, daily-capped, pausable, tranche-funded. Nothing mints. |
-| `GearVault.sol` | ERC-1155 gear (one tokenId per gear class). Mints only via VoucherClaim. |
+| `GearVault.sol` | ERC-1155 gear (one tokenId per gear class). Mints only via VoucherClaim, which is **fail-closed**: a gearId only mints up to a per-class supply cap the Safe sets (`vc.setGearSupplyCap`). |
 | `OMRStaking.sol` | 14% APY (owner-set, 50% hard ceiling), pre-funded reward pool, principal always withdrawable. |
 
 ## Test & deploy
@@ -22,8 +22,11 @@ The chain service must produce signatures `VoucherClaim.claim` accepts:
 ```ts
 import { privateKeyToAccount } from 'viem/accounts';
 const account = privateKeyToAccount(process.env.VOUCHER_SIGNER_PK);
+const chainId = await publicClient.getChainId(); // NEVER hardcode: the on-chain EIP-712
+                                                 // domain uses the deployed chain's id, so a
+                                                 // wrong constant makes every claim revert
 const signature = await account.signTypedData({
-  domain: { name: 'OmertaVoucherClaim', version: '1', chainId: 46630,
+  domain: { name: 'OmertaVoucherClaim', version: '1', chainId,
             verifyingContract: VOUCHER_CLAIM_ADDRESS },
   types: { Voucher: [
     { name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' },
@@ -36,4 +39,7 @@ const signature = await account.signTypedData({
 `nonce` = the `vouchers.nonce` column (server-unique). Store `signed_payload`, hand `(voucher, signature)` to the client, watch `Claimed(nonce,...)` to set `claimed_onchain`.
 
 ## Before mainnet (non-negotiable)
-Third-party audit of all four contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; daily cap + tranche sizes set deliberately small for launch.
+Third-party audit of all four contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; daily cap + OMR tranche + **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.
+
+## Internal red-team pass (see `../AUDIT-contracts.md`)
+Patched: gear mints are now bounded per class (was uncapped — a compromised signer could mint unlimited gear); GearVault is Safe-owned from deploy (no hot-deployer window); a `MAX_VOUCHER_TTL` deadline backstop; and the signer snippet no longer hardcodes a chainId. The OMR rail, EIP-712/replay, reentrancy, and staking pool-separation were reviewed and found sound. Accepted-as-designed (Safe is root of trust): sweep/pause, global daily-cap contention, APY-change retroactivity. The suite compiles clean (solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings) but the producing environment had no `forge` — run `forge test` locally to execute the VM assertions.

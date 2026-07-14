@@ -105,9 +105,18 @@ write is the `vouchers` table; `POST /v1/withdraw` + gear mint that debit the le
 and sign an EIP-712 voucher on **viem** in exact parity with `VOUCHER_TYPEHASH`; a
 `Claimed` event watcher setting `claimed_onchain`; SIWE wallet verification; the
 buyback bot. Devnet first, third-party audit of contracts **and** signer before
-mainnet. Note flagged in review: `VoucherClaim`'s daily cap + tranche bound OMR
-claims only — gear mints are uncapped, so a compromised signer can mint unlimited
-gear (revocable by the Safe); treat as an audit-surface decision.
+mainnet.
+
+An internal red-team pass on the contracts (`AUDIT-contracts.md`) closed the one hole
+that broke the suite's own thesis — **uncapped gear minting** (gear is now fail-closed
+behind a per-`gearId` supply cap the Safe sets) — removed the **hot-deployer
+mint-authority window** (GearVault is Safe-owned from deploy), added a
+`MAX_VOUCHER_TTL` deadline backstop, and fixed the README signer snippet's hardcoded
+chainId. The OMR rail, EIP-712/replay, reentrancy, and staking pool-separation were
+verified sound. `forge` was egress-blocked in that session; the suite was compiled clean
+(solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings) but the Foundry VM was **not run**, so
+`forge test` must pass locally before the third-party audit. Accepted-as-designed
+(Safe = root of trust): sweep/pause, global daily-cap contention, APY-change retroactivity.
 
 ## Sensitive design notes
 - $OMR framing is utility-only; never add mechanics implying price appreciation.
