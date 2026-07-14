@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "worker": "node src/worker.js",
-    "test": "node test/smoke.js && node test/economy.js && node test/social.js && node test/growth.js && node test/hardening.js && node test/security.js",
+    "test": "node test/smoke.js && node test/economy.js && node test/social.js && node test/growth.js && node test/hardening.js && node test/security.js && node test/chain.js",
     "invariants": "node -e \"import('./src/db.js').then(async ({makeDb}) => { const {runLedgerInvariants} = await import('./src/invariants.js'); console.log(JSON.stringify(await runLedgerInvariants(await makeDb()), null, 2)); })\""
   },
   "dependencies": {
@@ -14,6 +14,7 @@
     "fastify": "^5.0.0",
     "ioredis": "^5.11.1",
     "pg": "^8.12.0",
-    "pg-mem": "^3.0.3"
+    "pg-mem": "^3.0.3",
+    "viem": "^2.55.1"
   }
 }

@@ -100,12 +100,28 @@ tranche-funded), `GearVault` (ERC-1155, mint gated to VoucherClaim), `OMRStaking
 incl. fuzz. Its own `CLAUDE.md`/`README.md` govern that subtree (`forge test` must
 pass; nothing mints; no owner mint paths; no hardcoded chainIds).
 
-Next: **M6-B (backend chain service, NOT built)** — isolated service whose only DB
-write is the `vouchers` table; `POST /v1/withdraw` + gear mint that debit the ledger
-and sign an EIP-712 voucher on **viem** in exact parity with `VOUCHER_TYPEHASH`; a
-`Claimed` event watcher setting `claimed_onchain`; SIWE wallet verification; the
-buyback bot. Devnet first, third-party audit of contracts **and** signer before
-mainnet.
+M6-B (backend chain service) is **built** in `src/chain.js` — the isolated service
+whose only DB writes are `vouchers`, `chain_reserve`, `wallet_challenges`, and the
+one `withdraw:omr` ledger row. It signs EIP-712 `Voucher`s on **viem** in exact
+parity with `VOUCHER_TYPEHASH` (fields `to,amount,kind,gearId,nonce,deadline`;
+domain `OmertaVoucherClaim`/`1`, chainId from `CHAIN_ID`, `verifyingContract` =
+`VOUCHER_CLAIM_ADDRESS`). `POST /v1/withdraw` debits $OMR through the ledger
+(`withdraw:omr` is a §10.4-legal burn, added to `invariants.js`), allocates a nonce
+from `chain_reserve`, and — per the **full-reserve queue** (D1) — signs only if
+`signedOutstanding + amt ≤ funded_omr`, else marks the voucher `queued` (debited but
+unsigned, no double-spend); `POST /v1/mod/reserve/fund` tops up the tranche and
+`drainQueue` signs queued vouchers FIFO. Deadlines are `now + 24h` (< contract
+`MAX_VOUCHER_TTL`). Gear withdrawal (`POST /v1/gear/:id/withdraw`) signs immediately
+(kind 1 — the contract's per-`gearId` cap bounds supply, not the reserve) and flips
+`account_gear.minted_onchain`. Wallet linking is **SIWE**: `POST /v1/wallet/challenge`
+→ sign → `POST /v1/wallet/verify` (viem `verifyMessage`, malformed sig → clean 400,
+base58→0x wallet uniqueness enforced). The worker runs a `Claimed(nonce,…)` watcher
+(viem `watchEvent`, dormant unless `CHAIN_RPC_URL` + `VOUCHER_CLAIM_ADDRESS` set) that
+calls `markClaimed` to free reserve. `test/chain.js` proves signing parity
+(`recoverTypedDataAddress` == the server signer), the debit→queue→fund→drain→sign
+cycle, $OMR ledger conservation, gear vouchers, and reserve release. Still pending:
+devnet deploy + wiring, the buyback bot, and third-party audit of contracts **and**
+signer before mainnet.
 
 An internal red-team pass on the contracts (`AUDIT-contracts.md`) closed the one hole
 that broke the suite's own thesis — **uncapped gear minting** (gear is now fail-closed

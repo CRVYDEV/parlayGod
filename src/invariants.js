@@ -13,7 +13,7 @@ const KNOWN_REASONS = {
     'bounty:', 'bust:reward', 'whack:chop', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
-    'daily:all', 'referral:', 'gang:dissolved'],
+    'daily:all', 'referral:', 'gang:dissolved', 'withdraw:omr'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved'],
 };
@@ -63,7 +63,7 @@ export async function runLedgerInvariants(pool) {
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs');
   const omrMints = await sum(pool, "currency='omr' AND (reason='stake:reward' OR reason LIKE 'mission:%')");
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved')"));
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // (e) CAR CONSERVATION: boost is the only faucet; melt, fence, and death the only

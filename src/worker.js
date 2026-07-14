@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { levelOf, dayOf } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
+import { markClaimed } from './chain.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -109,4 +110,20 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   };
   await tick();
   setInterval(tick, 3600 * 1000);
+
+  // §11 Claimed watcher: when CHAIN_RPC_URL + VOUCHER_CLAIM_ADDRESS are set, subscribe to
+  // the on-chain Claimed(nonce,…) event and mark each voucher claimed (freeing reserve).
+  // No RPC configured (or in tests) → the watcher simply stays dormant.
+  if (process.env.CHAIN_RPC_URL && process.env.VOUCHER_CLAIM_ADDRESS) {
+    try {
+      const { createPublicClient, http, parseAbiItem } = await import('viem');
+      const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+      client.watchEvent({
+        address: process.env.VOUCHER_CLAIM_ADDRESS,
+        event: parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)'),
+        onLogs: (logs) => logs.forEach((l) => markClaimed(pool, Number(l.args.nonce)).catch((e) => console.error('markClaimed', e))),
+      });
+      console.log('👁  Claimed watcher live on', process.env.VOUCHER_CLAIM_ADDRESS);
+    } catch (e) { console.error('Claimed watcher failed to start', e.message); }
+  }
 }
