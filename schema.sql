@@ -330,6 +330,13 @@ CREATE TABLE IF NOT EXISTS fee_payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_fee_payments_payer ON fee_payments (payer_address) WHERE NOT credited;
+-- §11 watcher cursor: last on-chain block fully processed per event stream ('fees','claimed').
+-- Lets the worker resume after downtime (getLogs backfill from here) instead of losing events
+-- that fired while it was down, and stay `confirmations` behind head so a reorg can't be acted on.
+CREATE TABLE IF NOT EXISTS chain_cursor (
+  stream TEXT PRIMARY KEY,
+  last_block BIGINT NOT NULL DEFAULT 0
+);
 
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.

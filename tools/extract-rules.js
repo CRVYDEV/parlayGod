@@ -5,7 +5,7 @@ const grab = (n) => { const m = proto.match(new RegExp('const ' + n + ' = (\\[[\
 const tables = ['CRIMES','MISSIONS','RACKETS','CITY_EVENTS','CARS','TRIMS','GUNS','VESTS','CONSUMABLES','GOODS','ASSETS','MARKET','DAILY_POOL','FAMILY_TASKS','DRUGS','KITCHENS','TRADE_RANKS','PATHS','RANKS','DISTRICTS','ONBOARD_TASKS','RECRUIT_MILESTONES'];
 const cur = fs.readFileSync(new URL('../src/rules.js', import.meta.url), 'utf8');
 const tail = cur.slice(cur.indexOf('export const CONSTANTS'));
-let out = '// AUTO-GENERATED — do not hand-edit.\n';
+let out = `// AUTO-GENERATED from ${process.argv[2].split('/').pop()} — do not hand-edit.\n`;
 for (const t of tables) out += `export const ${t} = ${grab(t)}\n\n`;
 fs.writeFileSync(new URL('../src/rules.js', import.meta.url), out + tail);
 console.log('rules.js regenerated from', process.argv[2]);

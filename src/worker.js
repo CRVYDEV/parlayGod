@@ -10,8 +10,7 @@ import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { levelOf, dayOf } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
-import { markClaimed } from './chain.js';
-import { recordFeePayment } from './fees.js';
+import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -112,45 +111,28 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   await tick();
   setInterval(tick, 3600 * 1000);
 
-  // §11 Claimed watcher: when CHAIN_RPC_URL + VOUCHER_CLAIM_ADDRESS are set, subscribe to
-  // the on-chain Claimed(nonce,…) event and mark each voucher claimed (freeing reserve).
-  // No RPC configured (or in tests) → the watcher simply stays dormant.
-  if (process.env.CHAIN_RPC_URL && process.env.VOUCHER_CLAIM_ADDRESS) {
-    try {
-      const { createPublicClient, http, parseAbiItem } = await import('viem');
-      const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
-      client.watchEvent({
-        address: process.env.VOUCHER_CLAIM_ADDRESS,
-        event: parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)'),
-        onLogs: (logs) => logs.forEach((l) => markClaimed(pool, Number(l.args.nonce)).catch((e) => console.error('markClaimed', e))),
-      });
-      console.log('👁  Claimed watcher live on', process.env.VOUCHER_CLAIM_ADDRESS);
-    } catch (e) { console.error('Claimed watcher failed to start', e.message); }
-  }
-
-  // BEFORE MAINNET (audit F2/F3 — required, not yet implemented; these watchers are dormant
-  // until devnet wiring): both watchEvent subscriptions start at chain head with no confirmation
-  // depth and no persisted cursor. That means (a) a reorged Claimed frees reserve the backend
-  // then over-signs against, and (b) a fee paid while the worker is down is never credited —
-  // the player loses real ETH. recordFeePayment/markClaimed are idempotent (nonce/claimed PK),
-  // so the fix is safe to add: persist a last-processed block and, on startup, getLogs({fromBlock})
-  // to backfill the gap before going live, and wait N confirmations before markClaimed frees reserve.
-  //
-  // §11 fee watcher: OmertaFees emits MintFeePaid / RespawnFeePaid on each on-chain payment
-  // (the ETH is already forwarded to the dev wallet). recordFeePayment credits the paying
-  // account its entitlement, idempotent on the contract nonce. Dormant without RPC + address.
-  if (process.env.CHAIN_RPC_URL && process.env.OMERTA_FEES_ADDRESS) {
-    try {
-      const { createPublicClient, http, parseAbiItem } = await import('viem');
-      const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
-      const address = process.env.OMERTA_FEES_ADDRESS;
-      const ingest = (kind) => (logs) => logs.forEach((l) =>
-        recordFeePayment(pool, { nonce: Number(l.args.nonce), kind, payer: l.args.payer,
-          amountWei: l.args.amount?.toString(), txHash: l.transactionHash })
-          .catch((e) => console.error('recordFeePayment', e)));
-      client.watchEvent({ address, event: parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)'), onLogs: ingest('mint') });
-      client.watchEvent({ address, event: parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)'), onLogs: ingest('respawn') });
-      console.log('💰 fee watcher live on', address);
-    } catch (e) { console.error('fee watcher failed to start', e.message); }
+  // §11 chain-event sync (audit F2/F3): POLL getLogs over a persisted block cursor, staying
+  // CHAIN_CONFIRMATIONS behind head — so worker downtime backfills (no lost fee credits) and a
+  // shallow reorg is never acted on (no premature reserve free). Idempotent, so overlapping
+  // reprocessing on restart is harmless. Dormant (source=null) without CHAIN_RPC_URL. Seed
+  // CHAIN_START_BLOCK to the contracts' deploy block so the first run doesn't scan from genesis.
+  const source = await makeViemSource();
+  if (source) {
+    const startBlock = process.env.CHAIN_START_BLOCK ? Number(process.env.CHAIN_START_BLOCK) : undefined;
+    const syncTick = async () => {
+      try {
+        if (process.env.OMERTA_FEES_ADDRESS) {
+          const f = await syncFeeEvents(pool, source, { startBlock });
+          if (f.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
+        }
+        if (process.env.VOUCHER_CLAIM_ADDRESS) {
+          const c = await syncClaimedEvents(pool, source, { startBlock });
+          if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
+        }
+      } catch (e) { console.error('chain sync error', e.message); }
+    };
+    await syncTick();
+    setInterval(syncTick, Number(process.env.CHAIN_POLL_MS || 30000));
+    console.log(`⛓  chain sync polling every ${Number(process.env.CHAIN_POLL_MS || 30000) / 1000}s, ${DEFAULT_CONFIRMATIONS} confirmations behind head`);
   }
 }
