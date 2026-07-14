@@ -123,14 +123,16 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal((await meOf(chef.token)).omr, heirOmr, 'account $OMR unchanged the second time');
 }
 
-// ═══ FINDING (kitchen-1): wallet link validates base58 and enforces uniqueness ═══
+// ═══ FINDING (audit ux-1): legacy base58 wallet link RETIRED — it satisfied ob_wallet with
+// no proof and wrote a wrong-chain address. Linking is SIWE-only now (proof of key control;
+// uniqueness + malformed-sig handling are covered in test/chain.js). ═══
 {
-  const w1 = await mk('Wallet One'); const w2 = await mk('Wallet Two');
-  assert.equal((await call('POST', '/v1/wallet', { token: w1.token, body: { address: 'not a real wallet !!!' } })).code, 400, 'junk address rejected');
-  const addr = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'; // valid base58, 43 chars
-  assert.equal((await call('POST', '/v1/wallet', { token: w1.token, body: { address: 'has0OIl_forbidden_base58_chars_XXXXXXXXXX' } })).code, 400, 'non-base58 rejected');
-  assert.equal((await call('POST', '/v1/wallet', { token: w1.token, body: { address: addr } })).code, 200, 'valid address linked');
-  assert.equal((await call('POST', '/v1/wallet', { token: w2.token, body: { address: addr } })).code, 400, 'same wallet cannot bind two accounts');
+  const w1 = await mk('Wallet One');
+  const r = await call('POST', '/v1/wallet', { token: w1.token, body: { address: 'So1anaAddre55Fake1111111111111111111111111' } });
+  assert.equal(r.code, 400, 'legacy /v1/wallet is retired');
+  assert.equal(r.body.error, 'use_siwe', 'redirects to the SIWE challenge/verify flow');
+  // and ob_wallet can no longer be earned by the free base58 path (wallet_address stays null)
+  assert.equal((await call('POST', '/v1/onboard/ob_wallet/claim', { token: w1.token })).code, 400, 'no ob_wallet reward without a real SIWE link');
 }
 
 // ═══ FINDING (infra CRIT-2): idempotency prevents CONCURRENT double-execution ═══

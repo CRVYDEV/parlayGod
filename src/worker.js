@@ -128,6 +128,14 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     } catch (e) { console.error('Claimed watcher failed to start', e.message); }
   }
 
+  // BEFORE MAINNET (audit F2/F3 — required, not yet implemented; these watchers are dormant
+  // until devnet wiring): both watchEvent subscriptions start at chain head with no confirmation
+  // depth and no persisted cursor. That means (a) a reorged Claimed frees reserve the backend
+  // then over-signs against, and (b) a fee paid while the worker is down is never credited —
+  // the player loses real ETH. recordFeePayment/markClaimed are idempotent (nonce/claimed PK),
+  // so the fix is safe to add: persist a last-processed block and, on startup, getLogs({fromBlock})
+  // to backfill the gap before going live, and wait N confirmations before markClaimed frees reserve.
+  //
   // §11 fee watcher: OmertaFees emits MintFeePaid / RespawnFeePaid on each on-chain payment
   // (the ETH is already forwarded to the dev wallet). recordFeePayment credits the paying
   // account its entitlement, idempotent on the contract nonce. Dormant without RPC + address.

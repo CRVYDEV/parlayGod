@@ -369,7 +369,9 @@ export async function fire(ch, victim, client, h, rounds) {
     if (Number(h.victimAcct.respawn_tokens || 0) > 0) {
       h.victimAcct.respawn_tokens = Number(h.victimAcct.respawn_tokens) - 1;
       victim.health = 100;
-      await client.query('DELETE FROM searches WHERE target=$1', [victim.id]); // the hunt resets
+      // the shooter's own search was already spent above (line ~360). Do NOT wipe OTHER hunters'
+      // searches — a target could otherwise bait the weakest hunter, burn one cheap token, and
+      // reset the entire manhunt (each search is a 3h investment). The mark stays hunted.
       await h.notify(client, victim.id, 'revived', { from: ch.name });
       await h.notify(client, ch.id, 'target_revived', { victim: victim.name });
       await h.track(client, victim.account_id, 'respawn', { from: ch.id });

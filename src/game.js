@@ -54,6 +54,9 @@ export async function bumpFamilyTask(client, h, kind, amount) {
     await client.query(
       'UPDATE gangs SET weekly_week=$2, weekly_progress=$3, weekly_done=true, lifetime_tribute = lifetime_tribute + $4, omr_reserve = omr_reserve + $5 WHERE id=$1',
       [gangId, wk, prog, M3.WEEKLY_STANDING, omrPaid]);
+    // ground rule #4: ledger the fund→family $OMR transfer for the audit trail, at parity with
+    // daily:all / referral (a recognized transfer reason, not a mint — both buckets are tracked).
+    if (omrPaid > 0) await h.ledger(client, { currency: 'omr', amount: omrPaid, reason: 'family:weekly', counterparty: gangId });
     bus.emit(`gang:${gangId}`, { type: 'weekly_done', task: task.id, omr: omrPaid });
   } else {
     await client.query('UPDATE gangs SET weekly_week=$2, weekly_progress=$3, weekly_done=false WHERE id=$1', [gangId, wk, prog]);
