@@ -462,6 +462,10 @@ export const CONSTANTS = {
   // bank interest is metered by a daily token bucket like racket income (BANK_DAILY_CAP_MS/day),
   // so continuous online play can't compound ~4%/day risk-free (the audit's #1 safe-beats-risky).
   LAUNDER_HEAT: 15, LAUNDER_DISTRICTS: ['docks', 'canal'], BANK_DAILY_CAP_MS: 12*3600*1000,
+  // Phase 3 — a territory racket's income accrues lazily up to this bound (collected on demand),
+  // so an uncollected operation can't hoard unlimited income; uncollected income is forfeited to
+  // the void when the district is seized (collect before you lose the turf).
+  TERRITORY_CAP_MS: 24*3600*1000,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
@@ -611,6 +615,17 @@ export const GANG_SEALS = [
   { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 1500 },
 ];
 export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tier)) || null;
+// Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
+// Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
+// capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to
+// the victor when the district is seized — so families fight wars over income streams, not just a
+// one-time treasury cut. New/tunable numbers — sim + founder sign-off before production.
+export const TERRITORY_RACKETS = [
+  { tier: 1, name: 'Numbers Racket',    cost: 50000,  incomePerHr: 4000 },
+  { tier: 2, name: 'Protection Racket', cost: 200000, incomePerHr: 16000 },
+  { tier: 3, name: 'Smuggling Front',   cost: 750000, incomePerHr: 60000 },
+];
+export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tier === Number(tier)) || null;
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet

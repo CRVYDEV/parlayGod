@@ -12,7 +12,7 @@ const KNOWN_REASONS = {
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
-    'gang:contract', 'bodyguard:'],
+    'gang:contract', 'bodyguard:', 'territory:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr'],
@@ -50,7 +50,11 @@ export async function runLedgerInvariants(pool) {
   // (character refunds carry a character_id, so the split is exact).
   const contractOut = -(await sum(pool, "currency='cash' AND reason LIKE 'gang:contract%'"));
   const treasuryRefunds = await sum(pool, "currency='cash' AND reason='bounty:refund' AND character_id IS NULL");
-  push('gang treasuries', treasuries, tributeIn + titheIn - warOut - seizeOut - dissolvedCash - contractOut + treasuryRefunds);
+  // Phase 3 territory rackets: `territory:income` is a treasury FAUCET, `territory:establish` a SINK.
+  const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
+  const territoryOut = -(await sum(pool, "currency='cash' AND reason='territory:establish'"));
+  push('gang treasuries', treasuries,
+    tributeIn + titheIn + territoryIncome - warOut - seizeOut - dissolvedCash - contractOut - territoryOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.

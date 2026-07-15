@@ -10,6 +10,7 @@ import {
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
+import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -71,6 +72,7 @@ export async function removeMember(client, gangId, characterId) {
       if (Number(g.ammo_bank) > 0) await ledger(client, { currency: 'ammo', amount: -Number(g.ammo_bank), reason: 'gang:dissolved', counterparty: gangId });
     }
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0 WHERE holder_gang=$1', [gangId]);
+    await releaseTerritoryRackets(client, gangId); // Phase 3: the operations die with the family (turf released)
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
     await client.query('DELETE FROM gangs WHERE id=$1', [gangId]);
     return { dissolved: true };
@@ -212,6 +214,9 @@ export async function seizeDistrict(ch, districtId, client, h) {
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
   await client.query('UPDATE districts SET holder_gang=$2, garrison=$3, seized_at=$4 WHERE id=$1', [districtId, h.owned.gangId, cost, now()]);
   await h.ledger(client, { currency: 'cash', amount: -cost, reason: `turf:seize:${districtId}`, counterparty: h.owned.gangId });
+  // Phase 3: the district's productive operation (if any) transfers to the victor with the turf —
+  // wars are now fought over income, not just a treasury cut. Uncollected income forfeits (clock resets).
+  await seizeTerritoryRackets(client, districtId, h.owned.gangId);
   if (!h.owned.held.includes(districtId)) h.owned.held.push(districtId);
   bus.emit('streets', { type: 'seize', district: districtId, gang: g.name });
   return { ok: true, district: districtId, garrison: cost };

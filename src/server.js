@@ -13,6 +13,7 @@ import * as Chain from './chain.js';
 import * as Fees from './fees.js';
 import * as V from './vanity.js';
 import * as Vig from './vig.js';
+import * as Territory from './territory.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -273,6 +274,18 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.declareWar(ch, req.params.targetGangId, client, h)));
   app.post('/v1/districts/:id/seize', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.seizeDistrict(ch, req.params.id, client, h)));
+  // Risk-to-Earn Phase 3: territory rackets — establish/upgrade an operation on your turf, collect
+  // its income, and lose it (with the district) to whoever seizes the turf.
+  app.post('/v1/territory/:districtId/establish', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.establishRacket(ch, req.params.districtId, client, h)));
+  app.post('/v1/territory/:districtId/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.upgradeRacket(ch, req.params.districtId, client, h)));
+  app.post('/v1/territory/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.collectTerritory(ch, client, h)));
+  app.get('/v1/territory', { preHandler: auth }, async (req) => {
+    const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
+    return { territory: gid ? await Territory.territoryOf(pool, gid) : [] };
+  });
 
   app.get('/v1/gangs', async () => {
     // two flat queries instead of a correlated subquery — identical response, and pg-mem
@@ -295,6 +308,7 @@ export async function buildServer() {
       const members = (await client.query(
         'SELECT m.character_id, m.role, c.name FROM gang_members m JOIN characters c ON c.id = m.character_id WHERE m.gang_id=$1', [req.params.id])).rows;
       const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [req.params.id])).rows.map((d) => d.id);
+      const territory = await Territory.territoryOf(client, req.params.id); // Phase 3 productive operations
       await client.query('COMMIT');
       return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
         seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
@@ -303,7 +317,7 @@ export async function buildServer() {
         ammoBank: Number(g.ammo_bank), omrReserve: Number(g.omr_reserve), warsWon: Number(g.wars_won),
         war: g.war_with ? { with: g.war_with, until: g.war_until, us: g.war_score_us, them: g.war_score_them } : null,
         weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
-        members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held } };
+        members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held, territory } };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   });
