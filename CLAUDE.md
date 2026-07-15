@@ -376,10 +376,18 @@ a treasury cash FAUCET (both character_id NULL like gang:war; the treasury check
 subtracts establish; vocabulary extended). Routes `POST /v1/territory/:id/establish|upgrade`,
 `/v1/territory/collect`, `GET /v1/territory`; surfaced on `GET /v1/gangs/:id` (`territory`).
 `test/social.js` covers the rank/turf gates, one-per-district, income + the 24h cap, upgrade, the
-SEIZURE transfer to the victor, and a treasury §10.4 reconcile. Still Phase-3 remainder (deferred):
-gear-looting on death, and the on-chain tradeable-NFT layer (mint territory rackets/gear as
-ERC-1155/721 + a secondary market — the `minted_onchain` flag is the dormant hook). Phase 4 (backed
-emission) remains design-only.
+SEIZURE transfer to the victor, and a treasury §10.4 reconcile. **Gear-looting (Phase 3 remainder)
+is BUILT**: a player `fire`-kill has a `GEAR_LOOT_CHANCE` (0.15, env-overridable for tests) to strip
+ONE piece of the victim's IN-GAME gear to the killer — but **on-chain-minted gear (`minted_onchain`)
+is SAFE** (it's been extracted to the player's own ERC-1155, out of the game's reach). So gear is a
+real risk tradeoff: keep it in-game to use it (losable) or extract it on-chain (safe + tradeable via
+the existing GearVault/M6 rail, but it leaves play). Gear isn't a §10.4 currency, so the loot is a
+pure ownership move (DELETE+INSERT, count conserved); the in-memory `h.victimOwned.gear`/`h.owned.gear`
+are kept honest so the estate report + killer effStat stay right; test forces the roll via env.
+**Design note:** gear IS the tradeable on-chain NFT (GearVault, already delivered in M6); territory
+rackets are intentionally NOT independently tradeable NFTs — that would conflict with in-game seizure,
+so they stay seizable in-game capital (the two asset types serve different Risk-to-Earn roles). Phase 4
+(backed emission) remains design-only.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

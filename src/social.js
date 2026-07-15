@@ -784,6 +784,26 @@ export async function fire(ch, victim, client, h, rounds) {
       await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrLoot, reason: 'whack:loot', counterparty: victim.id });
       await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -omrLoot, reason: 'whack:loot', counterparty: ch.id });
     }
+    // GEAR LOOT (Phase 3 remainder): a chance to strip ONE piece of the victim's IN-GAME gear —
+    // on-chain-minted gear is safe (it's been extracted). Gear isn't a §10.4 currency, so this is
+    // a pure ownership move (count conserved by the DELETE+INSERT). Skip a type the killer already
+    // owns (account_gear is type-keyed, PK (account,gear) — can't stack a duplicate).
+    let gearLoot = null;
+    const gearRoll = Math.random();
+    // env-overridable for tests (the SEARCH_MS pattern); production reads the M3 default
+    if (gearRoll < Number(process.env.GEAR_LOOT_CHANCE ?? M3.GEAR_LOOT_CHANCE)) {
+      const vg = (await client.query('SELECT gear_id FROM account_gear WHERE account_id=$1 AND NOT minted_onchain', [victim.account_id])).rows.map((x) => x.gear_id);
+      const killerHas = new Set(h.owned.gear || []);
+      const takeable = vg.filter((g) => !killerHas.has(g));
+      if (takeable.length) {
+        gearLoot = takeable[Math.floor(Math.random() * takeable.length)];
+        await client.query('DELETE FROM account_gear WHERE account_id=$1 AND gear_id=$2', [victim.account_id, gearLoot]);
+        await client.query('INSERT INTO account_gear (account_id, gear_id) VALUES ($1,$2)', [h.accountId, gearLoot]);
+        h.victimOwned.gear = (h.victimOwned.gear || []).filter((g) => g !== gearLoot); // keep the estate report honest
+        h.owned.gear = [...(h.owned.gear || []), gearLoot];                             // and the killer's effStat view
+      }
+      await h.rngLog(client, ch.id, `gearloot:${victim.id}`, gearRoll, gearLoot ? `looted ${gearLoot}` : 'none');
+    }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);
@@ -811,7 +831,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, loot, omrLoot, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
