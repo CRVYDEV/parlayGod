@@ -57,6 +57,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M7 endpoints (Contracts & Hitmen)
 `POST /streets/:id/bounty` (kind hospitalize|kill, reason, hours, anon, hitman, exclusiveHours) · `GET /contracts` (the board) · `POST /contracts/:targetId/:kind/cancel` · `GET /leaderboard/hitmen` (legend + season) · `POST /streets/:id/npchit` (hire an NPC contractor — tier legbreaker|journeyman|professional; fee burns, rolled attempt) · `POST /safehouse` (go to ground — $25k, 4h untargetable by fire+npchit; Phase 4) · `POST /gangs/contract/:targetId` (boss/underboss posts a TREASURY-funded family contract; no member collects) · `POST /gangs/contract/:targetId/:kind/cancel` (refund → treasury) · `POST /bodyguard/offer` (list yourself, price ≥ $1k; 0 clears) · `POST /bodyguard/hire/:guardId` (24h window — the guard absorbs ONE lethal hit, hospitalized in your place, before any respawn token)
 
+## M8 endpoints (Tailor & Engraver — vanity $OMR sinks, display-only)
+`POST /vanity/name` (new street name, 5 $OMR — living-name uniqueness; rotates your referral code) · `POST /vanity/title` (custom title, 10 $OMR; empty clears free) · `POST /vanity/plate/:carId` (2 $OMR, 2–8 chars, engraved uppercase) · `POST /gangs/vanity/color` (boss only, #rrggbb, 10 $OMR) · `POST /gangs/vanity/name` (boss only, rename/retag, 25 $OMR)
+
 ## M4 endpoints
 `POST /kitchen/makings/:drugId` · `POST /kitchen/lab/upgrade` · `POST /kitchen/cook|collect|deal` · `POST /kitchen/crew/hire` · `POST /kitchen/laylow|cleanpapers` · `POST /path` · `POST /heist` · `POST /missions/:id` · `GET /daily`, `POST /daily/:id/claim` · `POST /onboard/:taskId/claim` · `POST /wallet` · mod (X-Mod-Key): `POST /mod/ban|kill|confiscate`, `GET /mod/audit`
 

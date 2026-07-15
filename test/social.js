@@ -573,6 +573,46 @@ for (let i = 0; i < 40 && !npcAbsorbed; i++) {
 assert(npcAbsorbed, "gina took the contractor's bullet");
 assert((await meOf(gina.token)).hospSeconds > 0, 'gina is in the hospital, carla is not in the ground');
 
+// ── M8: the Tailor & Engraver — vanity/identity $OMR sinks (display-only, ledgered burns) ──
+await pool.query(`UPDATE account_persistent SET omr = 100 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
+const donOmr0 = (await meOf(don.token)).omr;
+// street name change: costs 5 $OMR, living-name uniqueness still enforced
+assert.equal((await call('POST', '/v1/vanity/name', { token: don.token, body: { name: 'Bullet Barry' } })).body.error, 'name_taken', 'no stealing a living name');
+r = await call('POST', '/v1/vanity/name', { token: don.token, body: { name: 'Don Fabrizio II' } });
+assert.equal(r.code, 200, 'the Don rebranded');
+assert.equal((await meOf(don.token)).name, 'Don Fabrizio II', 'the streets know the new name');
+assert.equal((await meOf(don.token)).omr, donOmr0 - 5, 'the name change burned 5 $OMR');
+// custom title: 10 $OMR into the SAME display slot mission titles use; clearing is free
+r = await call('POST', '/v1/vanity/title', { token: don.token, body: { title: 'The Velvet Hammer' } });
+assert.equal(r.code, 200, 'title engraved'); assert.equal((await meOf(don.token)).title, 'The Velvet Hammer', 'title displayed');
+assert.equal((await meOf(don.token)).omr, donOmr0 - 15, 'the title burned 10 $OMR');
+assert.equal((await call('POST', '/v1/vanity/title', { token: don.token, body: { title: '' } })).code, 200, 'cleared');
+assert.equal((await meOf(don.token)).title, null, 'slot empty again');
+assert.equal((await meOf(don.token)).omr, donOmr0 - 15, 'clearing a title is free (ink, not ransom)');
+// vanity plate: on YOUR car only, 2 $OMR, engraved uppercase
+await pool.query(`INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ('doncar','${don.id}','junker','stock',0)`);
+assert.equal((await call('POST', '/v1/vanity/plate/nosuchcar', { token: don.token, body: { plate: 'OMERTA' } })).body.error, 'no_car', 'no engraving another man\'s ride');
+r = await call('POST', '/v1/vanity/plate/doncar', { token: don.token, body: { plate: 'omerta 1' } });
+assert.equal(r.code, 200, 'plate engraved'); assert.equal(r.body.plate, 'OMERTA 1', 'plates come back uppercase');
+assert((await meOf(don.token)).cars.some((c) => c.plate === 'OMERTA 1'), 'the garage shows the plate');
+// family colors: boss only, '#rrggbb'
+assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: mook.token, body: { color: '#aa00ff' } })).body.error, 'rank', 'the underboss does not pick the colors');
+assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, body: { color: 'purple' } })).body.error, 'color', 'a crest color is #rrggbb');
+assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, body: { color: '#AA00FF' } })).code, 200, 'the family flies new colors');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.color, '#aa00ff', 'the crest color shows on the family page');
+// family rename: boss only, founding rules + uniqueness, 25 $OMR
+await seedCh(barry.id, 'respect=100, cash=50000'); // barry founds a throwaway family to squat a name
+assert.equal((await call('POST', '/v1/gangs', { token: barry.token, body: { name: 'The Landmarks', tag: 'LMK' } })).code, 200, 'barry founded a family');
+assert.equal((await call('POST', '/v1/gangs/vanity/name', { token: don.token, body: { name: 'The Landmarks' } })).body.error, 'taken', 'no renaming onto a claimed name');
+r = await call('POST', '/v1/gangs/vanity/name', { token: don.token, body: { name: 'The New Fabrizi', tag: 'NFAB' } });
+assert.equal(r.code, 200, 'the family rebranded');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.name, 'The New Fabrizi', 'the ledger of record shows the new name');
+// §10.4: every vanity purchase is an enumerated, ledgered $OMR burn — spends match rows exactly
+const vanitySpent = donOmr0 - (await meOf(don.token)).omr;
+const vanityLedger = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason LIKE 'vanity:%'")).rows[0].s);
+assert.equal(vanitySpent, 5 + 10 + 2 + 10 + 25, 'the shop charged exactly its price list');
+assert.equal(vanityLedger, vanitySpent, 'every $OMR the Tailor took is a ledgered vanity:* burn');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
@@ -580,5 +620,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns)');
 await app.close();
