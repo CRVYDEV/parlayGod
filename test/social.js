@@ -529,8 +529,12 @@ assert.equal(jr.bounty, 3000, 'an outsider collects the family contract in full'
 // ── M7 Phase 4 remainder: BODYGUARDS — the player-to-player defense market ──
 const barry = await mk('Bullet Barry'); const paula = await mk('Principal Paula');
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 400 } })).body.error, 'min', 'nobody eats a bullet for pocket change');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 'Infinity' } })).body.error, 'price', 'a non-finite price is refused (no NUMERIC-write 500)'); // audit: Number("Infinity")===Infinity
 assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'not_offering', 'no hiring a guard who is not listed');
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 5000 } })).code, 200, 'barry lists himself');
+// audit: the offer is discoverable on the streets board (else the whole hire market is dead)
+const barryOnBoard = (await call('GET', '/v1/streets', { token: paula.token })).body.streets.find((s) => s.id === barry.id);
+assert.equal(barryOnBoard.guardPrice, 5000, 'the guard price is surfaced on the streets board');
 await seedCh(paula.id, "cash=50000, loc='docks'");
 const barryCash0 = (await meOf(barry.token)).cash;
 r = await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token });

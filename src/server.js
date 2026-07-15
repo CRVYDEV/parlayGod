@@ -315,11 +315,14 @@ export async function buildServer() {
 
   // ── M3: the streets (§5.2) ──
   app.get('/v1/streets', { preHandler: auth }, async () => {
-    const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, g.tag
+    const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, c.guard_price, g.tag
       FROM characters c LEFT JOIN gang_members m ON m.character_id = c.id LEFT JOIN gangs g ON g.id = m.gang_id
       WHERE c.alive ORDER BY c.respect DESC LIMIT 100`);
     return { streets: r.rows.map((c) => ({ id: c.id, name: c.name, level: levelOf(Number(c.respect)),
       respect: Number(c.respect), loc: c.loc, gangTag: c.tag || null,
+      // surface the bodyguard offer so the hire market is discoverable (a guard lists a price,
+      // consent-by-listing; without this the whole earnable-defense feature is unreachable)
+      guardPrice: c.guard_price != null ? Math.floor(Number(c.guard_price)) : null,
       jailed: !!(c.jail_until && new Date(c.jail_until) > new Date()),
       hospitalized: !!(c.hosp_until && new Date(c.hosp_until) > new Date()) })) };
   });

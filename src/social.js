@@ -431,19 +431,21 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
   const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
-  // gang row AFTER character/account rows — the global lock order (characters → accounts → gangs)
-  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
-  if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes $${amt + fee + tax} from the treasury (2% take included).`);
-
-  // pot lifecycle mirrors postBounty exactly: pot row locked FIRST, live pot topped up, an
-  // expired-unswept pot refunded (skipId = the posting BOSS: if they personally funded the old
-  // pot, their refund must land in-memory or persistCharacter clobbers the SQL credit).
+  // pot row locked FIRST, THEN the gang — the stable pot → gang order every other pot path uses
+  // (cancelFamilyContract, the expiry sweep). Locking the gang first (as this did) inverts that
+  // order and AB-BA deadlocks a repost against a concurrent cancel/sweep under real Postgres.
+  // A live pot is topped up; an expired-unswept pot is refunded (skipId = the posting BOSS: if
+  // they personally funded the old pot, their refund must land in-memory or persistCharacter
+  // clobbers the SQL credit).
   const existing = (await client.query('SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
   const live = existing && !(existing.expires_at && new Date(existing.expires_at) <= new Date());
   if (existing && !live) {
     const { selfRefund } = await refundPot(client, targetCharacterId, kind, ch.id);
     ch.cash = Number(ch.cash) + selfRefund;
   }
+  // gang row AFTER the pot (and after character/account rows) — the global lock order
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
+  if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes $${amt + fee + tax} from the treasury (2% take included).`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [gangId, amt + fee + tax]);
   if (live) {
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
@@ -764,8 +766,12 @@ export async function fire(ch, victim, client, h, rounds) {
     if (h.owned.gangId && h.victimOwned.gangId) {
       const myGang = (await client.query('SELECT * FROM gangs WHERE id=$1', [h.owned.gangId])).rows[0];
       if (warActive(myGang) && myGang.war_with === h.victimOwned.gangId) {
-        await client.query('UPDATE gangs SET war_score_us = war_score_us + $2 WHERE id=$1', [h.owned.gangId, M3.WAR_KILL_POINTS]);
-        await client.query('UPDATE gangs SET war_score_them = war_score_them + $2 WHERE id=$1', [h.victimOwned.gangId, M3.WAR_KILL_POINTS]);
+        // both score updates in ONE statement — two separate "my gang first" UPDATEs acquire the
+        // rows unsorted, so a simultaneous cross-kill between the two families AB-BA deadlocks.
+        await client.query(
+          `UPDATE gangs SET war_score_us = war_score_us + CASE WHEN id=$1 THEN $3 ELSE 0 END,
+                            war_score_them = war_score_them + CASE WHEN id=$2 THEN $3 ELSE 0 END
+            WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId, M3.WAR_KILL_POINTS]);
         warKill = true;
       }
     }
@@ -814,6 +820,7 @@ export async function enterSafehouse(ch, client, h) {
 export async function offerBodyguard(ch, price, client, h) {
   const p = Math.floor(Number(price) || 0);
   if (p <= 0) { ch.guard_price = null; return { ok: true, offering: false }; }
+  if (!Number.isFinite(p)) throw new GameError('price', 'Name a real number.'); // Infinity/NaN → NUMERIC write 500
   if (p < M3.BODYGUARD_MIN_PRICE) throw new GameError('min', `Nobody stands in front of a bullet for less than $${M3.BODYGUARD_MIN_PRICE}.`);
   ch.guard_price = p;
   return { ok: true, offering: true, price: p };
