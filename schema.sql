@@ -385,6 +385,21 @@ CREATE TABLE IF NOT EXISTS chain_cursor (
   last_block BIGINT NOT NULL DEFAULT 0
 );
 
+-- ── Risk-to-Earn Phase 3: TERRITORY RACKETS (productive, seizable capital) ──
+-- The asset that makes wars fight over income, not just a treasury cut. ONE racket per district,
+-- owned by whoever holds the turf: established on your own turf, income accrues to the owning
+-- family's treasury (lazy, collected on demand), and on a district seizure it TRANSFERS to the
+-- victor. `minted_onchain` is the dormant Phase-3 chain layer (tradeable NFT — deferred).
+CREATE TABLE IF NOT EXISTS territory_rackets (
+  district_id TEXT PRIMARY KEY,
+  owner_gang TEXT NOT NULL,
+  tier INT NOT NULL DEFAULT 1,
+  last_income_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  established_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  minted_onchain BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS ix_territory_owner ON territory_rackets (owner_gang);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in

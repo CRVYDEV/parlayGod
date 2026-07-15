@@ -689,6 +689,46 @@ assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id ==
 assert.equal((await meOf(don.token)).gang.seal, 'Brass Seal', 'every member carries it');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -100, 'every seal $OMR is a ledgered burn');
 
+// ── Risk-to-Earn Phase 3: TERRITORY RACKETS — productive, seizable capital ──
+// gangA (DON) holds 'docks' (seized at the top). Establish an operation, earn from it, upgrade it,
+// then watch a rival seize the turf and take the operation — and its income — with it.
+assert.equal((await call('POST', '/v1/territory/docks/establish', { token: sal.token })).body.error, 'rank', 'a soldier does not run the rackets');
+assert.equal((await call('POST', '/v1/territory/neon/establish', { token: don.token })).body.error, 'turf', "can't run an operation on turf you don't hold");
+await seedCh(don.id, 'cash=500000');
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 100000 } })).code, 200, 'treasury funded for the operation');
+let treA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/docks/establish', { token: don.token });
+assert.equal(r.code, 200, 'operation established on docks'); assert.equal(r.body.name, 'Numbers Racket');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, treA - 50000, 'establish cost ($50k) paid from the treasury');
+assert.equal((await call('POST', '/v1/territory/docks/establish', { token: don.token })).body.error, 'exists', 'one operation per district');
+// income accrues lazily; backdate the clock and collect to the treasury (any member can collect)
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '2 hours' WHERE district_id='docks'`);
+treA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/collect', { token: mook.token });
+assert.equal(r.code, 200); assert.equal(r.body.collected, 8000, '2h × $4000/hr = $8000 collected');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, treA + 8000, 'income landed in the treasury');
+// the cap bounds hoarding: 100h backdated collects only the 24h cap
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '100 hours' WHERE district_id='docks'`);
+assert.equal((await call('POST', '/v1/territory/collect', { token: don.token })).body.collected, 24 * 4000, 'income capped at TERRITORY_CAP_MS (24h)');
+// upgrade to tier 2
+r = await call('POST', '/v1/territory/docks/upgrade', { token: don.token });
+assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.name, 'Protection Racket'); assert.equal(r.body.tier, 2);
+assert(((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.territory || []).some((t) => t.district === 'docks' && t.tier === 2), 'the gang view shows the tier-2 operation');
+// ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
+const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=400, cash=500000');
+const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name: 'The Claimants', tag: 'CLM' } })).body.gangId;
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: 300000 } })).code, 200, 'raider funds the war chest');
+r = await call('POST', '/v1/districts/docks/seize', { token: raider.token });
+assert.equal(r.code, 200, 'the raider seized the docks');
+const raiderSeize = r.body.garrison;
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE district_id='docks' AND owner_gang='${rg}'`)).rows[0].n), 1, 'the operation transferred to the victor with the turf');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE owner_gang='${gangA}'`)).rows[0].n), 0, 'the loser no longer owns it');
+// the victor now earns the operation's income at the tier-2 rate
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '1 hour' WHERE district_id='docks'`);
+assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'the new owner earns the tier-2 rate ($16k/hr)');
+// §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
+assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
@@ -696,5 +736,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile)');
 await app.close();

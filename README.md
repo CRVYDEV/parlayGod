@@ -63,6 +63,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
+## Risk-to-Earn Phase 3 — territory rackets (productive, seizable capital)
+`POST /territory/:districtId/establish` (boss/underboss; one operation per district you hold; cost from treasury — Numbers $50k / Protection $200k / Smuggling $750k) · `POST /territory/:districtId/upgrade` (next tier; collects pending first) · `POST /territory/collect` (any member banks the family's territory income to the treasury; lazy, capped 24h) · `GET /territory` (your family's operations). On a `POST /districts/:id/seize` the operation TRANSFERS to the victor with the turf — wars fight over income now. Surfaced on `GET /gangs/:id` (`territory`). Design: `omerta-risk-to-earn-design.md` (Pillar 2).
+
 ## Risk-to-Earn Phase 2 — the Vig (off-chain core; chain dormant, no mainnet extraction)
 `POST /plex/mint` · `POST /plex/respawn` (pay a real-money fee from EARNED $OMR — burns `plex:*`, grants the same mint credit / respawn token an ETH payer gets; the EVE PLEX bridge) · mod/ops: `GET /mod/vig` (status + the extraction-≤-inflow invariant) · `POST /mod/vig/buyback` `{priceOmrPerEth}` (the DEX bot's manual/test twin — spends only unspent Vig revenue) · `POST /mod/vig/prizes` `{winners:[{accountId,omr}]}` (pay season prizes, backed by hard $OMR moved to the reserve). Real ETH fees route their `VIG_BPS` (60%) share into the pool; the reserve that backs every withdrawal is now fed only by revenue buybacks, so extraction ≤ inflow holds by construction. Design: `omerta-phase2-vig-design.md`.
 

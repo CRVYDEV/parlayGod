@@ -358,8 +358,28 @@ gained `prize:omr` (mint) + `plex:%` (burn) so in-game §10.4 stays exact. Confi
 legacy `POST /v1/mod/reserve/fund` still exists but the Vig invariant flags any reserve it can't
 back. Still design-only in Phase 2: the on-chain `OmertaFees` fee-split, the real DEX buyback bot,
 new ETH revenue sources (cosmetics/rent/pass), and wiring prize distribution into season rollover —
-all **gated on legal counsel + a third-party audit** before mainnet. Phases 3–4 (productive NFTs,
-backed emission) remain design-only.
+all **gated on legal counsel + a third-party audit** before mainnet.
+
+**Phase 3 (Productive assets) — the seizable-capital CORE is BUILT** (`src/territory.js`,
+`test/social.js`). Founder directed "assume legal counsel approved all architecture going forward,"
+so the pivot proceeds; numbers are proposed defaults (sim + sign-off, ground rule #1). **Territory
+rackets** are productive, SEIZABLE capital: ONE per district (`territory_rackets`, district_id PK),
+owned by whoever holds the turf. A boss/underboss `establishRacket` on a district the family holds
+(cost from the treasury, `TERRITORY_RACKETS` ladder Numbers $50k → Protection $200k → Smuggling
+$750k), income accrues lazily (`incomePerHr`, capped at `TERRITORY_CAP_MS` 24h) and `collectTerritory`
+banks it to the treasury; `upgradeRacket` climbs tiers (collecting pending at the old rate first).
+The point: on a district `seizeDistrict`, `seizeTerritoryRackets` **transfers the operation to the
+victor** (uncollected income forfeits, clock resets) — so wars finally fight over income streams, not
+just a one-time treasury cut (closes the audit's B4/B7). A dissolved family's operations die with it
+(`releaseTerritoryRackets`). §10.4: `territory:establish` is a treasury cash SINK, `territory:income`
+a treasury cash FAUCET (both character_id NULL like gang:war; the treasury check adds income and
+subtracts establish; vocabulary extended). Routes `POST /v1/territory/:id/establish|upgrade`,
+`/v1/territory/collect`, `GET /v1/territory`; surfaced on `GET /v1/gangs/:id` (`territory`).
+`test/social.js` covers the rank/turf gates, one-per-district, income + the 24h cap, upgrade, the
+SEIZURE transfer to the victor, and a treasury §10.4 reconcile. Still Phase-3 remainder (deferred):
+gear-looting on death, and the on-chain tradeable-NFT layer (mint territory rackets/gear as
+ERC-1155/721 + a secondary market — the `minted_onchain` flag is the dormant hook). Phase 4 (backed
+emission) remains design-only.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
