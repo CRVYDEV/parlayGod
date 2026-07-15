@@ -339,8 +339,27 @@ continuous online play can't compound ~4%/day risk-free. `whack:loot` added to t
 `invariants.js` vocabularies (the $OMR one a transfer, in neither mint nor burn term — §10.4 exact).
 Tests: social (loot amounts to killer, heir keeps the rest, safehouse blocks offense/extraction,
 bodyguard reprice), economy (launder gate/heat + ungated sell + the bank daily cap). Full suite 8/8.
-Phases 2–4 (the Vig, productive NFTs, backed emission) remain design-only and **gated on legal
-counsel** before any mainnet extraction.
+**Phase 2 (the Vig) — off-chain CORE is BUILT** (`src/vig.js`, `test/vig.js`), chain dormant (M6
+pattern), no mainnet extraction, so still no new regulatory surface until wired. It re-sources the
+existing full-reserve withdrawal queue from real spender revenue instead of team charity, so
+"extraction ≤ inflow" holds BY CONSTRUCTION (the reserve is fed only by Vig buybacks; the queue
+can't sign beyond it). Flow: `recordFeePayment` routes each fee's Vig share (`VIG_BPS` 60%) into
+`vig_revenue`; `runVigBuyback` spends the UNSPENT Vig revenue on hard $OMR at a price (mainnet: the
+DEX bot's TWAP; here a param) — `ethToSpend ≤ revenue−alreadySpent` is the root cap — and splits it
+`RESERVE_BPS` (50%) to `fundReserve` (backs withdrawals) + the rest to `vig_prize_pool`. `payPrizes`
+credits a winner in-game $OMR (`prize:omr`, a §10.4 mint BACKED by hard $OMR moved to the reserve).
+The **PLEX bridge** (`payPlex`, `POST /v1/plex/mint|respawn`) lets a player pay a real-money fee from
+EARNED $OMR — burns it (`plex:*`, a §10.4 sink) for the same entitlement an ETH payer gets (the EVE
+"pay your rent in ISK" path; ETH payers fund the pool, $OMR payers shrink supply). `runVigInvariants`
+(`GET /v1/mod/vig`) is the second §10.4, on the real-value side: spend≤revenue, buyback-split-exact,
+reserve-fully-backed (`funded ≤ toReserve+prizePaid`), extraction≤reserve, prizes≤bought. `invariants.js`
+gained `prize:omr` (mint) + `plex:%` (burn) so in-game §10.4 stays exact. Config is env (`VIG_BPS`,
+`VIG_RESERVE_BPS`, `PLEX_MINT_OMR` 5, `PLEX_RESPAWN_OMR` 50 — sign-off levers). Retired nothing: the
+legacy `POST /v1/mod/reserve/fund` still exists but the Vig invariant flags any reserve it can't
+back. Still design-only in Phase 2: the on-chain `OmertaFees` fee-split, the real DEX buyback bot,
+new ETH revenue sources (cosmetics/rent/pass), and wiring prize distribution into season rollover —
+all **gated on legal counsel + a third-party audit** before mainnet. Phases 3–4 (productive NFTs,
+backed emission) remain design-only.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

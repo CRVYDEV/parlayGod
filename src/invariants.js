@@ -15,7 +15,7 @@ const KNOWN_REASONS = {
     'gang:contract', 'bodyguard:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved'],
 };
@@ -72,8 +72,12 @@ export async function runLedgerInvariants(pool) {
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM amm_pool')
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs');
-  const omrMints = await sum(pool, "currency='omr' AND (reason='stake:reward' OR reason LIKE 'mission:%')");
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason='respec')"));
+  // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
+  // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
+  const omrMints = await sum(pool, "currency='omr' AND (reason='stake:reward' OR reason LIKE 'mission:%' OR reason='prize:omr')");
+  // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
+  // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason='respec' OR reason LIKE 'plex:%')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // (e) CAR CONSERVATION: boost is the only faucet; melt, fence, and death the only
