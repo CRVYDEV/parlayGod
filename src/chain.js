@@ -72,9 +72,19 @@ async function signVoucher(row) {
 }
 
 // Σ signed-but-unclaimed $OMR — the live claim on the funded tranche.
+// unclaimed signed $OMR — a DISPLAY metric only (how much is signed-but-not-yet-claimed).
 async function signedOutstanding(client) {
   return Number((await client.query(
     "SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND status='signed' AND NOT claimed_onchain")).rows[0].s);
+}
+// The GATE quantity: cumulative $OMR ever committed to leave the reserve = signed (will be claimed)
+// PLUS already-claimed. funded_omr is cumulative-ever-funded and is NEVER decremented, so the honest
+// full-reserve rule is committed-ever ≤ funded — a CLAIM must NOT free signing room (the tokens
+// physically left the tranche; only a fresh fundReserve opens more). Counting only unclaimed here
+// let cumulative signed exceed cumulative funded once a voucher was claimed → extraction > inflow.
+async function committedOutstanding(client) {
+  return Number((await client.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND (status='signed' OR claimed_onchain)")).rows[0].s);
 }
 
 // ── OMR withdrawal (full-reserve queue) ──
@@ -100,7 +110,7 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
     await client.query('UPDATE chain_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
     const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
 
-    const outstanding = await signedOutstanding(client);
+    const outstanding = await committedOutstanding(client); // committed-ever, not just unclaimed
     const fits = outstanding + amt <= Number(res.funded_omr);
     const id = uid();
     const row = { id, account_id: accountId, kind: 'omr', amount: amt, gear_id: null, nonce, to_address: getAddress(to), deadline };
@@ -155,12 +165,15 @@ export async function drainQueue(pool) {
   try {
     await client.query('BEGIN');
     const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
-    let outstanding = await signedOutstanding(client);
+    let outstanding = await committedOutstanding(client); // committed-ever gate (see requestWithdraw)
     const queued = (await client.query("SELECT * FROM vouchers WHERE kind='omr' AND status='queued' ORDER BY created_at, nonce")).rows;
     for (const row of queued) {
       if (outstanding + Number(row.amount) > Number(res.funded_omr)) break; // FIFO stops at the reserve edge
-      const payload = JSON.stringify(await signVoucher(row));
-      await client.query("UPDATE vouchers SET status='signed', signed_payload=$2 WHERE id=$1", [row.id, payload]);
+      // recompute the deadline at SIGN time — a voucher may have sat queued past its original 24h TTL,
+      // and the contract rejects an already-expired voucher (the in-game $OMR is already burned).
+      const freshDeadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
+      const payload = JSON.stringify(await signVoucher({ ...row, deadline: freshDeadline }));
+      await client.query("UPDATE vouchers SET status='signed', signed_payload=$2, deadline=$3 WHERE id=$1", [row.id, payload, freshDeadline]);
       outstanding += Number(row.amount); signed++;
     }
     await client.query('COMMIT');
@@ -180,10 +193,13 @@ export async function fundReserve(pool, amount) {
 export async function reserveStatus(pool) {
   const res = (await pool.query('SELECT * FROM chain_reserve WHERE id=1')).rows[0];
   const signed = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND status='signed' AND NOT claimed_onchain")).rows[0].s);
+  const committed = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND (status='signed' OR claimed_onchain)")).rows[0].s);
   const queued = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM vouchers WHERE kind='omr' AND status='queued'")).rows[0].s);
   const funded = Number(res.funded_omr);
-  return { fundedOmr: funded, signedOutstanding: signed, queuedOmr: queued,
-    available: Math.max(0, funded - signed), reserveRatio: signed > 0 ? funded / signed : null };
+  // `signedOutstanding` (unclaimed) is a display metric; `available` is funded − committed-EVER,
+  // since a claim never re-opens signing room (the honest full-reserve model).
+  return { fundedOmr: funded, signedOutstanding: signed, committedOutstanding: committed, queuedOmr: queued,
+    available: Math.max(0, funded - committed), reserveRatio: committed > 0 ? funded / committed : null };
 }
 
 // The Claimed(nonce,…) watcher marks a voucher claimed and frees its reserve. Needs a

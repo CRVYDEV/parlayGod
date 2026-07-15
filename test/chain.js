@@ -125,7 +125,17 @@ assert.equal((await call('POST', '/v1/gear/knuckles/withdraw', { token })).code,
 const beforeClaim = (await call('GET', '/v1/mod/reserve', { headers: modH })).body.signedOutstanding;
 await call('POST', '/v1/mod/reserve/claimed', { body: { nonce: nonceA }, headers: modH });
 const afterClaim = (await call('GET', '/v1/mod/reserve', { headers: modH })).body.signedOutstanding;
-assert.equal(afterClaim, beforeClaim - 10, 'a claimed voucher stops counting against the reserve');
+assert.equal(afterClaim, beforeClaim - 10, 'a claimed voucher stops counting against the DISPLAYED unclaimed-outstanding');
+// audit HIGH: but a claim must NOT free signing ROOM — funded_omr is cumulative-ever and the gate
+// counts committed-ever (signed OR claimed), so extraction can never exceed cumulative funding.
+const rs = (await call('GET', '/v1/mod/reserve', { headers: modH })).body;
+// committed-ever so far: A(10 claimed) + 30 + C(100) + 5 = 145, all against 200 funded → 55 available
+assert.equal(rs.committedOutstanding, 145, 'committed-ever counts the claimed voucher too');
+assert.equal(rs.available, 200 - 145, 'available = funded − committed-ever (a claim did NOT re-open room)');
+// a withdrawal beyond the committed-ever headroom QUEUES even though the claim freed "unclaimed" room
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 60 } });
+assert.equal(r.body.status, 'queued', 'a claim does not free signing room — 145+60 > 200 queues (no extraction > inflow)');
+await pool.query("UPDATE vouchers SET status='queued', signed_payload=NULL WHERE nonce=$1", [r.body.nonce]); // leave the ledger clean for the conservation checks below
 
 // ── §11 pay-before-link: a fee paid before the wallet is linked reconciles on link ──
 const { body: { token: tok2 } } = await call('POST', '/v1/auth/guest');

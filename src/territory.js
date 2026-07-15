@@ -23,7 +23,11 @@ function accrued(racket) {
 export async function establishRacket(ch, districtId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss runs the rackets.');
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
-  if (!(h.owned.held || []).includes(districtId)) throw new GameError('turf', 'Your family must hold that district first.');
+  // LOCK + re-read the district row (not the stale cached h.owned.held) FIRST, in the same
+  // district → gang order seizeDistrict uses — otherwise a concurrent seizure of this turf could
+  // land an operation owned by us on a district the rival now holds (an orphaned, unseizable racket).
+  const d = (await client.query('SELECT holder_gang FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!d || d.holder_gang !== h.owned.gangId) throw new GameError('turf', 'Your family must hold that district first.');
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const existing = (await client.query('SELECT district_id FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
   if (existing) throw new GameError('exists', 'An operation already runs there — upgrade it instead.');

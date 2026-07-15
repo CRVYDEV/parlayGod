@@ -802,8 +802,9 @@ export async function fire(ch, victim, client, h, rounds) {
         h.victimOwned.gear = (h.victimOwned.gear || []).filter((g) => g !== gearLoot); // keep the estate report honest
         h.owned.gear = [...(h.owned.gear || []), gearLoot];                             // and the killer's effStat view
       }
-      await h.rngLog(client, ch.id, `gearloot:${victim.id}`, gearRoll, gearLoot ? `looted ${gearLoot}` : 'none');
     }
+    // ground rule #3: log EVERY roll (pass or fail), not just the ones that strip gear
+    await h.rngLog(client, ch.id, `gearloot:${victim.id}`, gearRoll, gearLoot ? `looted ${gearLoot}` : 'none');
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);

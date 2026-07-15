@@ -232,7 +232,30 @@ contract OmertaTest is Test {
     // ── §11 OmertaFees: exact-fee entry/revive tollbooth, ETH straight to the dev wallet ──
     function _fees() internal returns (OmertaFees f, address payable dev) {
         dev = payable(makeAddr("dev"));
-        f = new OmertaFees(safe, dev, 0.01 ether, 0.10 ether);
+        f = new OmertaFees(safe, dev, dev, 0, 0.01 ether, 0.10 ether); // vigBps 0 → 100% to dev (pre-split behaviour)
+    }
+
+    function test_fee_split_dev_and_vig() public {
+        address payable dev = payable(makeAddr("dev"));
+        address payable vig = payable(makeAddr("vig"));
+        OmertaFees f = new OmertaFees(safe, dev, vig, 6000, 0.01 ether, 0.10 ether); // 60% Vig / 40% dev
+        vm.deal(player, 1 ether);
+        vm.expectEmit(true, false, false, true, address(f));
+        emit OmertaFees.FeeSplit(1, 0.004 ether, 0.006 ether);
+        vm.prank(player);
+        f.payMintFee{value: 0.01 ether}();
+        assertEq(vig.balance, 0.006 ether, "Vig wallet got its 60% share");
+        assertEq(dev.balance, 0.004 ether, "dev got the remaining 40%");
+        assertEq(address(f).balance, 0, "contract still custodies nothing");
+        // MintFeePaid still carries the GROSS amount (backend keys idempotency on nonce, books gross x VIG_BPS)
+    }
+
+    function test_bad_bps_and_missing_vig_recipient_rejected() public {
+        address payable dev = payable(makeAddr("dev"));
+        vm.expectRevert(OmertaFees.BadBps.selector);
+        new OmertaFees(safe, dev, dev, 10001, 0.01 ether, 0.10 ether);         // bps > 100%
+        vm.expectRevert(OmertaFees.ZeroAddress.selector);
+        new OmertaFees(safe, dev, payable(address(0)), 6000, 0.01 ether, 0.10 ether); // split with no Vig wallet
     }
 
     function test_mint_fee_forwards_to_dev_and_emits() public {
@@ -296,9 +319,9 @@ contract OmertaTest is Test {
     function test_zero_fee_and_zero_address_rejected() public {
         address payable dev = payable(makeAddr("dev"));
         vm.expectRevert(OmertaFees.ZeroFee.selector);
-        new OmertaFees(safe, dev, 0, 0.10 ether);              // ctor: zero mint fee
+        new OmertaFees(safe, dev, dev, 0, 0, 0.10 ether);              // ctor: zero mint fee
         vm.expectRevert(OmertaFees.ZeroAddress.selector);
-        new OmertaFees(safe, payable(address(0)), 0.01 ether, 0.10 ether);
+        new OmertaFees(safe, payable(address(0)), dev, 0, 0.01 ether, 0.10 ether);
         (OmertaFees f, ) = _fees();
         vm.startPrank(safe);
         vm.expectRevert(OmertaFees.ZeroFee.selector);
@@ -310,7 +333,7 @@ contract OmertaTest is Test {
 
     function test_forward_failure_reverts_the_fee() public {
         RejectETH bad = new RejectETH();
-        OmertaFees f = new OmertaFees(safe, payable(address(bad)), 0.01 ether, 0.10 ether);
+        OmertaFees f = new OmertaFees(safe, payable(address(bad)), payable(address(bad)), 0, 0.01 ether, 0.10 ether);
         vm.deal(player, 1 ether);
         vm.prank(player);
         vm.expectRevert(OmertaFees.ForwardFailed.selector);    // recipient rejects → whole fee unwinds, no partial state
@@ -331,7 +354,7 @@ contract OmertaTest is Test {
 
     function test_reentrant_recipient_is_blocked() public {
         ReentrantDev bad = new ReentrantDev();
-        OmertaFees f = new OmertaFees(safe, payable(address(bad)), 0.01 ether, 0.10 ether);
+        OmertaFees f = new OmertaFees(safe, payable(address(bad)), payable(address(bad)), 0, 0.01 ether, 0.10 ether);
         bad.arm(f);
         vm.deal(player, 1 ether);
         vm.prank(player);
