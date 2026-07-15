@@ -645,7 +645,10 @@ export async function npcHit(ch, victim, client, h, tierId) {
     await h.notify(client, victim.id, 'revived', { from: 'a hired gun' });
     return { ok: true, hit: true, revived: true, success, cost: tier.cost };
   }
-  const estate = await runEstate(client, h, victim, 'A HIRED GUN'); // no killerCh → exclusive pots refund
+  // pass the PAYER as killerCh so that if THEY funded a still-exclusive directed pot on this
+  // victim, refundPot's refund lands on their in-memory cash (else persistCharacter clobbers the
+  // SQL credit → §10.4 drift + the payer loses their escrow). killerCh drives no chop/rep here.
+  const estate = await runEstate(client, h, victim, 'A HIRED GUN', { killerCh: ch });
   await h.notify(client, victim.id, 'whacked', { from: 'a hired gun' });
   bus.emit('streets', { type: 'kill', by: 'a hired gun', victim: victim.name });
   return { ok: true, hit: true, killed: true, success, cost: tier.cost, estate: { heirId: estate.heirId } };

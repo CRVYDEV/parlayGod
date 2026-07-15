@@ -540,6 +540,8 @@ export const M3 = {
   // paying more buys a better base, a higher-level mark defends it down — so the weak can buy a
   // CHANCE at the strong, never a certainty. Fee burns win or lose; heat + a cooldown throttle it.
   NPC_HIT_HEAT: 25, NPC_HIT_CD_MS: 6 * 3600 * 1000, NPC_MIN_TARGET_LVL: 5,
+  // NPC_MAX_SUCCESS is headroom for future high-base tiers (today's top base 0.55 < 0.60, so the
+  // floor is the clamp that bites); NPC_MIN_SUCCESS keeps even a whale at a small standing risk.
   NPC_DEF_PER_LVL: 0.005, NPC_MAX_SUCCESS: 0.60, NPC_MIN_SUCCESS: 0.02,
 };
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
