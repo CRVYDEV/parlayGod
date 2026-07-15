@@ -62,6 +62,10 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // lock the Vig singleton FIRST (before the spend-basis reads) so two concurrent buybacks (the
+    // bot + a manual mod call, say) can't both read the same `alreadySpent` and each spend the full
+    // unspent revenue → over-buy → unbacked reserve. payPrizes already locks this row first.
+    await client.query('SELECT balance FROM vig_prize_pool WHERE id=1 FOR UPDATE');
     const revenueIn = await sumEth(client, 'vig_revenue', 'vig_eth');
     const alreadySpent = await sumEth(client, 'vig_buyback', 'eth_spent');
     let ethToSpend = round6(revenueIn - alreadySpent);           // only ever spend money that came in

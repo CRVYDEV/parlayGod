@@ -29,11 +29,16 @@ contract Deploy is Script {
         GearVault gear = new GearVault(safe, baseUri);
         VoucherClaim vc = new VoucherClaim(safe, signer, IERC20(address(omr)), IGearVault(address(gear)), cap);
         OMRStaking staking = new OMRStaking(safe, IERC20(address(omr)), 1400);
-        // §11 fee tollbooth — forwards ETH straight to the dev wallet, owned by the Safe.
+        // §11 fee tollbooth — splits each fee dev/Vig and forwards straight to those wallets,
+        // owned by the Safe. VIG_BPS MUST equal the backend's VIG_BPS (src/vig.js) so on- and
+        // off-chain revenue accounting never drift. VIG_WALLET defaults to the dev wallet with a
+        // 0-bps split (100% dev) so a deploy without Phase-2 config keeps the pre-split behaviour.
         address payable devWallet = payable(vm.envAddress("DEV_WALLET"));
+        address payable vigWallet = payable(vm.envOr("VIG_WALLET", devWallet));
+        uint256 vigBps = vm.envOr("VIG_BPS", uint256(0));
         uint256 mintFee = vm.envOr("MINT_FEE_WEI", uint256(0.01 ether));
         uint256 respawnFee = vm.envOr("RESPAWN_FEE_WEI", uint256(0.10 ether));
-        OmertaFees fees = new OmertaFees(safe, devWallet, mintFee, respawnFee);
+        OmertaFees fees = new OmertaFees(safe, devWallet, vigWallet, vigBps, mintFee, respawnFee);
         vm.stopBroadcast();
 
         console.log("OMR:         ", address(omr));
