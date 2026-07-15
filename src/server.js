@@ -315,7 +315,12 @@ export async function buildServer() {
   app.post('/v1/streets/:targetId/jump', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h,
+      { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon })));
+  // The contract board — browse open contracts, and pull your own funding back.
+  app.get('/v1/contracts', { preHandler: auth }, async () => ({ contracts: await S.listContracts(pool) }));
+  app.post('/v1/contracts/:targetId/:kind/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

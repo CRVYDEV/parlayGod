@@ -45,12 +45,13 @@ export async function runLedgerInvariants(pool) {
   const dissolvedCash = -(await sum(pool, "currency='cash' AND reason='gang:dissolved'"));
   push('gang treasuries', treasuries, tributeIn + titheIn - warOut - seizeOut - dissolvedCash);
 
-  // (c) BOUNTY ESCROW: posted (escrow rows) − claimed − cleared at death.
+  // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows) − claimed − refunded (cancel/expiry) − cleared at death.
   const escrow = await one(pool, 'SELECT COALESCE(SUM(amount),0) s FROM bounties');
   const posted = -(await sum(pool, "currency='cash' AND reason='bounty:post'"));
   const claimed = await sum(pool, "currency='cash' AND reason='bounty:claim'");
+  const refunded = await sum(pool, "currency='cash' AND reason='bounty:refund'");
   const deadBounties = -(await sum(pool, "currency='cash' AND reason='death:bounty'"));
-  push('bounty escrow', escrow, posted - claimed - deadBounties);
+  push('bounty escrow', escrow, posted - claimed - refunded - deadBounties);
 
   // (d) $OMR CONSERVATION: buckets = accounts (omr + staked; unclaimed rewards mint
   // at claim time) + AMM reserve + event fund + family reserves. Genesis is the
