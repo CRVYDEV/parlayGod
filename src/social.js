@@ -304,6 +304,8 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   // (SELECT-then-write — pg-mem's ON CONFLICT is unreliable.)
   const existing = (await client.query('SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
   const live = existing && !(existing.expires_at && new Date(existing.expires_at) <= new Date());
+  // direction is set by the FIRST poster only — a top-up can't silently redirect (or fail to)
+  if (hitmanId && live) throw new GameError('directed_exists', 'That mark already has a standing contract — only the first poster names the hitman.');
   if (existing && !live) { // clear the lapsed pot first, crediting the poster's own lapsed stake in-memory
     const { selfRefund } = await refundPot(client, targetCharacterId, kind, ch.id);
     ch.cash = Number(ch.cash) + selfRefund;
@@ -455,25 +457,31 @@ export async function sweepExpiredBounties(pool) {
 // ═══════════════════ THE ASSASSIN'S REPUTATION (M7 Phase 2) ═══════════════════
 // A confirmed gameplay kill grows the killer's LEGEND (account-level lifetime kills + feared-rep,
 // surviving death like prestige) and this STREET's season kill streak. Rep is a STATUS axis only
-// (no gameplay power → no §10.4 / balance impact). Anti-abuse: rep only from targets ≥ MIN level;
-// diminished 1/(prior kills of that bloodline) to kill farming; agents accrue kills but NOT rep
-// (excluded from the feared board, like referral payouts). `directed` adds a bonus multiplier.
+// (no gameplay power → no §10.4 / balance impact). Anti-abuse — a kill only COUNTS (kills,
+// season_kills, AND rep) when the target is a real one (≥ MIN level): killing rookies/alts earns
+// nothing on any board. Rep additionally: diminished 1/(prior REP-earning kills of that bloodline)
+// to blunt bloodline farming, excluded for agents (they still tally kills, just not the feared
+// board — like referral payouts), and ×HITMAN_DIRECTED_BONUS on a directed hit.
 async function awardHitmanRep(client, h, ch, victim, vicLvl, directed) {
-  h.acct.kills = Number(h.acct.kills || 0) + 1;
-  ch.season_kills = Number(ch.season_kills || 0) + 1;
+  const qualifies = vicLvl >= M3.HITMAN_MIN_TARGET_LVL; // a real target, not rookie/alt farming
   let repGain = 0;
-  if (!h.acct.agent_flag && vicLvl >= M3.HITMAN_MIN_TARGET_LVL) {
-    const prior = Number((await client.query(
-      'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [ch.account_id, victim.account_id])).rows[0].n);
-    repGain = Math.max(1, Math.floor(vicLvl * M3.HITMAN_REP_PER_LVL * (directed ? M3.HITMAN_DIRECTED_BONUS : 1) / (prior + 1)));
-    const before = Number(h.acct.hitman_rep || 0);
-    h.acct.hitman_rep = before + repGain;
-    if (hitmanRankOf(before + repGain).title !== hitmanRankOf(before).title)
-      await h.notify(client, ch.id, 'hitman_rank', { title: hitmanRankOf(before + repGain).title, rep: before + repGain });
+  if (qualifies) {
+    h.acct.kills = Number(h.acct.kills || 0) + 1;
+    ch.season_kills = Number(ch.season_kills || 0) + 1;
+    if (!h.acct.agent_flag) {
+      const prior = Number((await client.query(
+        'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2 AND rep > 0', [ch.account_id, victim.account_id])).rows[0].n);
+      repGain = Math.max(1, Math.floor(vicLvl * M3.HITMAN_REP_PER_LVL * (directed ? M3.HITMAN_DIRECTED_BONUS : 1) / (prior + 1)));
+      const before = Number(h.acct.hitman_rep || 0);
+      h.acct.hitman_rep = before + repGain;
+      if (hitmanRankOf(before + repGain).title !== hitmanRankOf(before).title)
+        await h.notify(client, ch.id, 'hitman_rank', { title: hitmanRankOf(before + repGain).title, rep: before + repGain });
+    }
   }
+  // every kill is logged for the feed; rep>0 marks the ones that count for bloodline diminishing
   await client.query('INSERT INTO kill_log (id, killer_account, victim_account, victim_name, rep) VALUES ($1,$2,$3,$4,$5)',
     [uid(), ch.account_id, victim.account_id, victim.name, repGain]);
-  return { repGain, kills: h.acct.kills, title: hitmanRankOf(h.acct.hitman_rep).title };
+  return { repGain, qualified: qualifies, kills: Number(h.acct.kills || 0), title: hitmanRankOf(h.acct.hitman_rep).title };
 }
 
 // The feared-assassin leaderboard: the lifetime LEGEND (accounts by hitman_rep, with rank/title)
@@ -486,7 +494,8 @@ export async function hitmanLeaderboard(pool, limit = 20) {
   const season = (await pool.query(
     `SELECT c.name, c.season_kills, a.agent_flag FROM characters c
        JOIN account_persistent a ON a.account_id = c.account_id
-      WHERE c.alive AND c.season_kills > 0 ORDER BY c.season_kills DESC LIMIT $1`, [limit])).rows;
+      WHERE c.alive AND c.season_kills > 0 AND NOT a.agent_flag
+      ORDER BY c.season_kills DESC LIMIT $1`, [limit])).rows;
   return {
     legend: legend.map((r) => ({ name: r.name, rep: Number(r.hitman_rep), kills: Number(r.kills),
       title: hitmanRankOf(Number(r.hitman_rep)).title, agent: !!r.agent_flag })),
@@ -586,7 +595,7 @@ export async function fire(ch, victim, client, h, rounds) {
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
-    const estate = await runEstate(client, h, victim, ch.name);
+    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, bounty, jammed, hitman: hit, estate: { heirId: estate.heirId } };
   }
@@ -603,7 +612,7 @@ export async function fire(ch, victim, client, h, rounds) {
 // bounty cleared. The account survives: $OMR, staked, rewards, wallet, gear,
 // prestige (+floor(level/2)), recruits, onboard, checkins, deaths+1. The heir
 // row starts at generation+1 with the legacy stake.
-export async function runEstate(client, h, victim, killerName) {
+export async function runEstate(client, h, victim, killerName, opts = {}) {
   const acct = h.victimAcct;
   const lvl = levelOf(Number(victim.respect));
   const legacy = Math.floor(lvl / 2);
@@ -627,7 +636,16 @@ export async function runEstate(client, h, victim, killerName) {
   for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
-  // any unclaimed contracts (all kinds) die with the target — ledgered so escrow reconciles
+  // M7: a directed contract still in its EXCLUSIVE window is REFUNDED, not burned — an outsider
+  // killing the mark first shouldn't torch the poster's stake (the named hitman never got their
+  // shot). killerCh lets a killer who also funded such a pot take their own refund in-memory
+  // (persistCharacter would clobber a direct SQL credit to the killer's row → §10.4 drift).
+  const exclusive = (await client.query("SELECT kind FROM bounties WHERE target_character=$1 AND hitman IS NOT NULL AND opens_at > now()", [victim.id])).rows;
+  for (const p of exclusive) {
+    const { selfRefund } = await refundPot(client, victim.id, p.kind, opts.killerCh?.id);
+    if (opts.killerCh && selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + selfRefund;
+  }
+  // any remaining unclaimed contracts (open / past-window) die with the target — ledgered so escrow reconciles
   const openBounty = Number((await client.query('SELECT COALESCE(SUM(amount),0) s FROM bounties WHERE target_character=$1', [victim.id])).rows[0].s);
   if (openBounty > 0)
     await h.ledger(client, { currency: 'cash', amount: -openBounty, reason: 'death:bounty', counterparty: victim.id });
