@@ -2,10 +2,11 @@
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
 import { GameError } from './game.js';
 import {
-  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4,
+  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap,
 } from './rules.js';
 import { verifySocial } from './verify.js';
+import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
@@ -26,6 +27,28 @@ export async function choosePath(ch, pathId, client, h) {
   }
   ch.path = pathId;
   return { ok: true, path: pathId };
+}
+
+// M8 — STAT RESPEC: redistribute the points you already trained (§5.1 stats). The TOTAL is
+// conserved exactly and no stat lands below the creation base, so this mints zero power — it
+// converts re-grinding time into an $OMR burn, the same convenience-not-power argument as the
+// path switch above. Same total is rejected only when nothing changes (no charge for a no-op).
+export async function respec(ch, alloc, client, h) {
+  const want = {};
+  for (const s of ['muscle', 'cunning', 'speed']) {
+    want[s] = Math.floor(Number(alloc?.[s]));
+    if (!Number.isFinite(want[s]) || want[s] < M8.RESPEC_STAT_MIN)
+      throw new GameError('alloc', `Each stat needs at least ${M8.RESPEC_STAT_MIN} — nobody forgets how to walk.`);
+  }
+  const total = Number(ch.muscle) + Number(ch.cunning) + Number(ch.speed);
+  if (want.muscle + want.cunning + want.speed !== total)
+    throw new GameError('alloc', `Redistribute exactly what you trained: ${total} points.`);
+  if (want.muscle === Number(ch.muscle) && want.cunning === Number(ch.cunning) && want.speed === Number(ch.speed))
+    throw new GameError('same', "That's already you.");
+  await spendOmr(client, h, M8.RESPEC_OMR, 'respec');
+  ch.muscle = want.muscle; ch.cunning = want.cunning; ch.speed = want.speed;
+  await h.track(client, ch.account_id, 'respec', want);
+  return { ok: true, stats: want };
 }
 
 // ── THE DAILY SCORE (§5.1): 8h cooldown, level-scaled faucet ──

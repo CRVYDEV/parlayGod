@@ -321,6 +321,9 @@ export async function buildServer() {
         hitman: req.body?.hitman, exclusiveHours: req.body?.exclusiveHours })));
   // The contract board — browse open contracts, and pull your own funding back.
   app.get('/v1/contracts', { preHandler: auth }, async () => ({ contracts: await S.listContracts(pool) }));
+  // M8 counter-intel: the mark pays $OMR to read every funder on their own head (pierces anon).
+  app.post('/v1/contracts/peek', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.peekContracts(ch, client, h)));
   app.post('/v1/contracts/:targetId/:kind/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
   // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
@@ -432,6 +435,9 @@ export async function buildServer() {
   // ── M4: growth (§5.1) ──
   app.post('/v1/path', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.choosePath(ch, req.body?.path, client, h)));
+  // M8: stat respec — redistribute trained points (sum-conserving, $OMR burn).
+  app.post('/v1/respec', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.respec(ch, req.body, client, h)));
   app.post('/v1/heist', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.heist(ch, client, h)));
   app.post('/v1/missions/:id', { preHandler: auth }, async (req) =>

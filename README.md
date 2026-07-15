@@ -60,6 +60,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (Tailor & Engraver — vanity $OMR sinks, display-only)
 `POST /vanity/name` (new street name, 5 $OMR — living-name uniqueness; rotates your referral code) · `POST /vanity/title` (custom title, 10 $OMR; empty clears free) · `POST /vanity/plate/:carId` (2 $OMR, 2–8 chars, engraved uppercase) · `POST /gangs/vanity/color` (boss only, #rrggbb, 10 $OMR) · `POST /gangs/vanity/name` (boss only, rename/retag, 25 $OMR)
 
+## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
+`anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
+
 ## M4 endpoints
 `POST /kitchen/makings/:drugId` · `POST /kitchen/lab/upgrade` · `POST /kitchen/cook|collect|deal` · `POST /kitchen/crew/hire` · `POST /kitchen/laylow|cleanpapers` · `POST /path` · `POST /heist` · `POST /missions/:id` · `GET /daily`, `POST /daily/:id/claim` · `POST /onboard/:taskId/claim` · `POST /wallet` · mod (X-Mod-Key): `POST /mod/ban|kill|confiscate`, `GET /mod/audit`
 

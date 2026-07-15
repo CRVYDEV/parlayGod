@@ -14,9 +14,10 @@ import { VANITY } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
-// enumerated 'vanity:*' reason.
-async function spendOmr(client, h, cost, reason) {
-  if (Number(h.acct.omr) < cost) throw new GameError('omr', `The Tailor's price is ${cost} $OMR. Come back flush.`);
+// enumerated reason. Exported — the M8 sinks outside this shop (board anonymity, intel peek,
+// respec) pay through the same till so the burn discipline lives in exactly one place.
+export async function spendOmr(client, h, cost, reason) {
+  if (Number(h.acct.omr) < cost) throw new GameError('omr', `That costs ${cost} $OMR. Come back flush.`);
   h.acct.omr = Number(h.acct.omr) - cost;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -cost, reason });
 }

@@ -568,6 +568,19 @@ export const VANITY = {
   GANG_RENAME_OMR: 25,  // family rename/retag (boss only; founding-rules validation + uniqueness)
   TITLE_MAX: 24, PLATE_MAX: 8,
 };
+// M8 second drop — sinks tied to the game's loops (not pure vanity, so each carries a note on
+// what it buys). ANON: posting a contract with your name off the board is INFORMATION hiding,
+// not power — the mark still sees the pot, the hit works the same. PEEK: the counter to anon —
+// the mark pays to read every funder on their own head (anonymity is purchasable, so is piercing
+// it; the two sinks feed each other). RESPEC: redistributes ALREADY-TRAINED stat points, total
+// conserved, none below the creation base — convenience over re-grinding, zero new power (the
+// path-switch precedent at 25 $OMR). Prices new/tunable — founder sign-off before production.
+export const M8 = {
+  BOARD_ANON_OMR: 3,   // anonymity on a FRESH contract pot (top-ups inherit the pot's flag, never charged)
+  INTEL_PEEK_OMR: 5,   // "who wants me dead?" — funder names + shares on every open pot on you
+  RESPEC_OMR: 15,      // redistribute muscle/cunning/speed; sum must match, each ≥ RESPEC_STAT_MIN
+  RESPEC_STAT_MIN: 5,  // the creation base — respec never drops a stat below the man you started as
+};
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet
