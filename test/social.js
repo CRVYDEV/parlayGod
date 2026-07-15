@@ -435,5 +435,23 @@ assert(absorbed, 'the respawn token absorbs a landed NPC hit');
 assert.equal((await meOf(insured.token)).generation, 1, 'the insured target lives on (no heir)');
 assert.equal((await meOf(insured.token)).respawnTokens, 0, 'the token was consumed');
 
+// audit HIGH: a payer who funded an EXCLUSIVE directed pot on the victim is REFUNDED on the NPC
+// kill — else refundPot's SQL credit is clobbered by persistCharacter (§10.4 drift + stolen escrow)
+const rival = await mk('Rival Rick'); await seedCh(rival.id, 'respect=100'); // level ~6
+await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
+assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: hirer.token, body: { amount: 3000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } })).code, 200, 'hirer funds a directed contract on the rival');
+let refundOk = false;
+for (let i = 0; i < 40 && !refundOk; i++) {
+  await seedCh(hirer.id, 'npchit_at=NULL'); // let cash ride (do NOT re-seed) so the kill-shot delta is measurable
+  await seedCh(rival.id, 'hosp_until=NULL');
+  const before = (await meOf(hirer.token)).cash;
+  const res = (await call('POST', `/v1/streets/${rival.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
+  if (res.killed) {
+    assert.equal((await meOf(hirer.token)).cash, before - 1000000 + 3000, 'the $1M fee burned AND the $3000 exclusive escrow refunded (no clobber)');
+    refundOk = true;
+  }
+}
+assert(refundOk, 'the NPC landed the kill and the payer-funded escrow was verifiably refunded');
+
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
 await app.close();

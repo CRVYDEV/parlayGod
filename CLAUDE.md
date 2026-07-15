@@ -198,7 +198,13 @@ landed hit runs the estate (no chop/bounty) unless pre-paid revive insurance abs
 player hit. `POST /v1/streets/:id/npchit`; blocks family/self/jailed/rookie(<lvl 5)/hospitalized.
 NPC-hit numbers are new/tunable — sim + founder sign-off before production. `test/social.js` covers
 the fee-burn, heat, cooldown, level floor, a looped roll to a kill (estate, zero rep), and revive
-absorption. Phase 4 (earnable defense, war-kill scoring, fire-heat) remains design-only.
+absorption. A red-team fixed one HIGH: `npcHit` called `runEstate` without `killerCh`, so a payer
+who'd funded a still-exclusive directed pot on the victim had their refund SQL-credited then
+clobbered by `persistCharacter` (§10.4 drift + stolen escrow) — now threads `{ killerCh: ch }` like
+`fire`; regression added. Flagged for founder sign-off (not silently retuned per ground rule #1):
+NPC-hit heat is a weak deterrent for non-kitchen whales, so repeat-resetting one rival wants a
+per-target cooldown or post-death grace. Phase 4 (earnable defense, war-kill scoring, fire-heat)
+remains design-only.
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New
