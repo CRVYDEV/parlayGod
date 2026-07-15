@@ -22,15 +22,32 @@ export async function runBuyback(pool, opts = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // lock order matches the swap path (amm_pool before street_tax) — no lock cycles
+    // lock order matches the swap path (amm_pool first) — no lock cycles
     const amm = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
-    const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-    const cashPool = Number(tax.pool);
-    const dueMs = now.getTime() - new Date(tax.last_buyback).getTime();
-    if (cashPool <= 0 || (!opts.force && dueMs < BUYBACK_PERIOD_MS)) {
+    // cheap unlocked due-check so a not-due tick doesn't lock the top-25 gangs for nothing. Two
+    // buybacks can't both be here (they serialize on the amm_pool lock above), and the authoritative
+    // pool value is re-read under lock below, so a tribute landing after this peek is not lost.
+    const peek = (await client.query('SELECT pool, last_buyback FROM street_tax WHERE id=1')).rows[0];
+    const dueMs = now.getTime() - new Date(peek.last_buyback).getTime();
+    if (Number(peek.pool) <= 0 || (!opts.force && dueMs < BUYBACK_PERIOD_MS)) {
       await client.query('COMMIT');
       return null;
     }
+    // Lock the payout gangs (sorted id order) BEFORE the street_tax singleton — the global order is
+    // gangs → singletons, which bumpFamilyTask (gang, then street_tax on weekly completion) also
+    // follows. The old code locked street_tax before the gangs, AB-BA deadlocking the buyback against
+    // a family finishing its weekly contract. Ranking may go slightly stale between here and the
+    // distribution; harmless (we lock and credit exactly the rows we ranked).
+    const ranked = (await client.query(
+      `SELECT id, lifetime_tribute, wars_won FROM gangs
+        WHERE lifetime_tribute + 10000 * wars_won > 0
+        ORDER BY lifetime_tribute + 10000 * wars_won DESC LIMIT 25`)).rows;
+    for (const id of ranked.map((g) => g.id).sort())
+      await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [id]);
+    // now the singleton — authoritative pool under lock
+    const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    const cashPool = Number(tax.pool);
+    if (cashPool <= 0) { await client.query('COMMIT'); return null; }
     const c = Number(amm.cash_reserve), o = Number(amm.omr_reserve), k = c * o;
     const bought = o - k / (c + cashPool);
     if (!(bought > 0)) { await client.query('COMMIT'); return null; }
@@ -40,10 +57,6 @@ export async function runBuyback(pool, opts = {}) {
     // undistributed remainder) rolls to the event fund.
     const clanShare = bought / 2;
     let toFund = bought / 2, distributed = 0;
-    const ranked = (await client.query(
-      `SELECT id, lifetime_tribute, wars_won FROM gangs
-        WHERE lifetime_tribute + 10000 * wars_won > 0
-        ORDER BY lifetime_tribute + 10000 * wars_won DESC LIMIT 25`)).rows;
     const totalStanding = ranked.reduce((a, g) => a + Number(g.lifetime_tribute) + 10000 * Number(g.wars_won), 0);
     if (totalStanding > 0) {
       for (const g of ranked) {
