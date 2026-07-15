@@ -535,6 +535,12 @@ export const M3 = {
   // or above MIN_TARGET_LVL, diminished 1/(priorBloodlineKills+1). Directed-contract kills add
   // a BONUS multiplier. Numbers are cosmetic-tunable (no economy effect).
   HITMAN_MIN_TARGET_LVL: 5, HITMAN_REP_PER_LVL: 3, HITMAN_DIRECTED_BONUS: 1.5,
+  // M7 Phase 3 NPC-hitmen (a paid, rolled cash SINK — new numbers, tunable, need sim sign-off
+  // before production). Success = tier.base − targetLvl×NPC_DEF_PER_LVL, clamped [MIN,MAX]:
+  // paying more buys a better base, a higher-level mark defends it down — so the weak can buy a
+  // CHANCE at the strong, never a certainty. Fee burns win or lose; heat + a cooldown throttle it.
+  NPC_HIT_HEAT: 25, NPC_HIT_CD_MS: 6 * 3600 * 1000, NPC_MIN_TARGET_LVL: 5,
+  NPC_DEF_PER_LVL: 0.005, NPC_MAX_SUCCESS: 0.60, NPC_MIN_SUCCESS: 0.02,
 };
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
@@ -545,3 +551,10 @@ export const HITMAN_RANKS = [
   { at: 5000, title: 'The Undertaker' },
 ];
 export const hitmanRankOf = (rep = 0) => { let r = HITMAN_RANKS[0]; for (const h of HITMAN_RANKS) if (rep >= h.at) r = h; return r; };
+// M7 Phase 3 — NPC hitmen for hire (fixed fee → a rolled attempt; the fee is a §10.4 sink).
+export const NPC_HITMEN = [
+  { id: 'legbreaker', name: 'Leg-Breaker', cost: 50000, base: 0.25, desc: 'Cheap muscle. More enthusiasm than aim.' },
+  { id: 'journeyman', name: 'Journeyman', cost: 250000, base: 0.40, desc: 'Does clean work, most of the time.' },
+  { id: 'professional', name: 'The Professional', cost: 1000000, base: 0.55, desc: 'Expensive. Worth it. Ask around — you can\'t.' },
+];
+export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);

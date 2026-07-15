@@ -6,8 +6,13 @@ split, reason/expiry/anon, cancel + expiry refund, target-notified). **Phase 2 (
 the hybrid legend (account-level lifetime `hitman_rep` + `kills`, surviving death) + per-season
 `season_kills` streak, the Button Man→Undertaker rank ladder, `GET /leaderboard/hitmen`, with
 anti-abuse (level floor, repeat-bloodline diminishing, agents earn kills but not leaderboard rep).
-Rep is a **status axis only** (no gameplay power → no §10.4 / balance impact). Phases 3 (NPC-hitmen)
-and 4 (earnable defense + interlocks) remain design-only below.
+Rep is a **status axis only** (no gameplay power → no §10.4 / balance impact). **Phase 3
+(NPC-hitmen) — BUILT**: `POST /v1/streets/:id/npchit` hires a fixed-fee contractor (`NPC_HITMEN`
+tiers) for a server-rolled hit — success `tier.base − targetLvl×NPC_DEF_PER_LVL` clamped `[MIN,MAX]`
+so the weak buy a *chance* at the strong, never a certainty; the fee **burns win or lose**
+(`npchit:hire`, a §10.4 sink), draws heat + a cooldown, pays **zero rep**, and runs the estate on a
+hit (no chop/bounty) unless revive insurance absorbs it. Phase 4 (earnable defense + interlocks)
+remains design-only below.
 
 ---
 

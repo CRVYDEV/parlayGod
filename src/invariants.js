@@ -11,7 +11,7 @@ const KNOWN_REASONS = {
     'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
-    'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate'],
+    'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],

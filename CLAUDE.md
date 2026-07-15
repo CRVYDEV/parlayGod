@@ -183,8 +183,22 @@ gameplay power**, so it's outside §10.4 and the sim-audited balance. Anti-abuse
 targets ≥ `HITMAN_MIN_TARGET_LVL`, diminished `1/(prior bloodline kills+1)` (via `kill_log` keyed
 on killer×victim account), and agents earn `kills` but not leaderboard `hitman_rep` (excluded like
 referral payouts). `test/social.js` covers the split, board, cancel/refund, expired-repost,
-dead-funder burn, directed bonus, level floor, bloodline diminishing, and the leaderboard. Phases
-3 (NPC-hitmen) + 4 (earnable defense, war-kill scoring, fire-heat) remain design-only.
+dead-funder burn, directed bonus, level floor, bloodline diminishing, and the leaderboard. A
+red-team pass on Phases 1+2 (`AUDIT-contracts.md` covers the contracts; the hitman findings are
+in-commit) fixed a `cancelBounty` deadlock, an expired-repost 500, a dead-funder corpse-refund
+(Phase 1) and, for Phase 2, a farmable kills/season board (kills now share the rep level-floor),
+a silently-dropped directed top-up (now a clean `directed_exists` error), and a directed-window
+outsider-kill that burned the poster's escrow — `runEstate` now refunds still-exclusive pots
+(threading the killer so a killer-funder's refund can't drift §10.4). **Phase 3 — NPC-hitmen**
+(`social.js:npcHit`, `NPC_HITMEN` tiers in the rules.js tail): pay a fixed fee for a server-rolled
+hit — success `tier.base − targetLvl×NPC_DEF_PER_LVL` clamped `[MIN,MAX]` (the weak buy a *chance*
+at the strong, never a certainty). The fee **burns win or lose** (`npchit:hire`, a §10.4 cash sink
+in `invariants.js`), draws law heat + a 6h cooldown, pays **zero rep** (no player killer), and on a
+landed hit runs the estate (no chop/bounty) unless pre-paid revive insurance absorbs it like a
+player hit. `POST /v1/streets/:id/npchit`; blocks family/self/jailed/rookie(<lvl 5)/hospitalized.
+NPC-hit numbers are new/tunable — sim + founder sign-off before production. `test/social.js` covers
+the fee-burn, heat, cooldown, level floor, a looped roll to a kill (estate, zero rep), and revive
+absorption. Phase 4 (earnable defense, war-kill scoring, fire-heat) remains design-only.
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New

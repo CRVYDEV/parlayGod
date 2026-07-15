@@ -7,7 +7,7 @@ import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
-  gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf,
+  gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf,
 } from './rules.js';
 
 const uid = () => crypto.randomUUID();
@@ -605,6 +605,50 @@ export async function fire(ch, victim, client, h, rounds) {
   victim.health = Math.max(1, Number(victim.health) - dmg);
   await h.notify(client, victim.id, 'attempt', { from: ch.name, dmg });
   return { ok: true, kill: false, jammed, effective, btk };
+}
+
+// ═══════════════════ NPC HITMEN FOR HIRE (M7 Phase 3) ═══════════════════
+// Pay cash to a contractor for a ROLLED attempt on a target — the mechanic that lets a weak
+// player buy a CHANCE at a strong one, and a ledgered wealth SINK. The fee burns win or lose
+// (`npchit:hire`), the payer takes law heat + a cooldown, and it pays ZERO rep (no player
+// killer). On a landed hit the estate runs (no chop/bounty — nobody fulfilled a contract);
+// pre-paid revive insurance absorbs it exactly like a player hit.
+export async function npcHit(ch, victim, client, h, tierId) {
+  const tier = npcHitmanOf(tierId);
+  if (!tier) throw new GameError('bad_tier', 'No such contractor for hire.');
+  if (jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  const vicLvl = levelOf(Number(victim.respect));
+  if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
+  if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
+  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `${tier.name} charges $${tier.cost}.`);
+
+  // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
+  ch.cash = Number(ch.cash) - tier.cost;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.cost, reason: 'npchit:hire', counterparty: victim.id });
+  ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
+  ch.npchit_at = new Date(Date.now() + M3.NPC_HIT_CD_MS);
+
+  const success = Math.min(M3.NPC_MAX_SUCCESS, Math.max(M3.NPC_MIN_SUCCESS, tier.base - vicLvl * M3.NPC_DEF_PER_LVL));
+  const roll = Math.random();
+  await h.rngLog(client, ch.id, `npchit:${victim.id}`, roll, roll < success ? `hit (p=${success.toFixed(2)})` : `miss (p=${success.toFixed(2)})`);
+  await h.track(client, ch.account_id, 'npchit', { tier: tierId, target: victim.id, success: roll < success });
+  if (roll >= success) {
+    await h.notify(client, victim.id, 'npchit_survived', {}); // "you feel someone wants you dead" — nudge to insure
+    return { ok: true, hit: false, success, cost: tier.cost };
+  }
+  // ── the contractor lands the kill ──
+  if (Number(h.victimAcct.respawn_tokens || 0) > 0) { // pre-paid insurance absorbs it (like a player hit)
+    h.victimAcct.respawn_tokens = Number(h.victimAcct.respawn_tokens) - 1;
+    victim.health = 100;
+    await h.notify(client, victim.id, 'revived', { from: 'a hired gun' });
+    return { ok: true, hit: true, revived: true, success, cost: tier.cost };
+  }
+  const estate = await runEstate(client, h, victim, 'A HIRED GUN'); // no killerCh → exclusive pots refund
+  await h.notify(client, victim.id, 'whacked', { from: 'a hired gun' });
+  bus.emit('streets', { type: 'kill', by: 'a hired gun', victim: victim.name });
+  return { ok: true, hit: true, killed: true, success, cost: tier.cost, estate: { heirId: estate.heirId } };
 }
 
 // ═══════════════════ DEATH — THE ESTATE (§7.9, atomic) ═══════════════════
