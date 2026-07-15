@@ -555,6 +555,19 @@ export const M3 = {
   // insurance: the earnable shield burns first.
   BODYGUARD_MIN_PRICE: 1000, BODYGUARD_MS: 24 * 3600 * 1000, BODYGUARD_HOSP_MS: 2 * 3600 * 1000,
 };
+// M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
+// display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited
+// balance or §10.4 value flows beyond its own enumerated $OMR burn ('vanity:*'). These are the
+// RECURRING utility sinks the token economy was missing (the framing rule holds: utility only).
+// Prices are new/tunable — sim + founder sign-off before production.
+export const VANITY = {
+  NAME_CHANGE_OMR: 5,   // a new street name (living-name uniqueness still enforced; your referral code follows it)
+  TITLE_OMR: 10,        // a custom title — the same display slot mission titles use; clearing it is free
+  PLATE_OMR: 2,         // a vanity plate for one car in the garage
+  GANG_COLOR_OMR: 10,   // the family crest color (boss only)
+  GANG_RENAME_OMR: 25,  // family rename/retag (boss only; founding-rules validation + uniqueness)
+  TITLE_MAX: 24, PLATE_MAX: 8,
+};
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet

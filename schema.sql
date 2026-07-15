@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS cars (
   model_id TEXT NOT NULL,
   trim_id TEXT NOT NULL,
   dmg INT NOT NULL DEFAULT 0,
+  plate TEXT,                                    -- M8 vanity plate (display only, $OMR sink)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS character_items (
@@ -140,6 +141,7 @@ CREATE TABLE IF NOT EXISTS gangs (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   tag TEXT NOT NULL UNIQUE,
+  color TEXT,                                    -- M8 crest color, '#rrggbb' (display only, $OMR sink)
   treasury NUMERIC NOT NULL DEFAULT 0,
   omr_reserve NUMERIC NOT NULL DEFAULT 0,
   ammo_bank INT NOT NULL DEFAULT 0,

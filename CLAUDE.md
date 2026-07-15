@@ -236,6 +236,24 @@ collect via jump, offer/hire transfer, absorb+consume, token ordering, betrayal,
 escrow reconciliation with family money in the mix. Bodyguard/family-contract numbers
 (BODYGUARD_MIN_PRICE/MS/HOSP_MS) are new/tunable — sim + founder sign-off before production.
 
+M8 (token sinks) opened with the **Tailor & Engraver** (`src/vanity.js`) — the recurring,
+utility-only $OMR sinks the late game lacked (every prior burn was one-time; a kitted veteran
+had nothing left to spend on, so supply pooled into staking). Five items, all pure STATUS
+(display-only, zero gameplay power → outside the sim-audited balance, same argument as hitman
+rep): street name change (5 $OMR — creation rules + living-name uniqueness; renames dodge
+nothing since bounties/searches/kill_log key on ids, but the referral code rotates since codes
+resolve by living name), custom title (10, writes the same `characters.title` slot mission
+titles use; clearing is free), car vanity plate (2, `cars.plate`, owner-checked via
+`h.owned.cars`), family crest color (10, `gangs.color`, boss-only, `#rrggbb`), family
+rename/retag (25, boss-only, founding validation + uniqueness excluding self). Every burn is
+an account-bucket debit ledgered `vanity:*` (cleanpapers/path pattern) — vocabulary + omrBurns
+in `invariants.js` extended. Routes: `POST /v1/vanity/name|title`, `/v1/vanity/plate/:carId`,
+`/v1/gangs/vanity/color|name`. `test/social.js` covers prices, uniqueness rejections, rank
+gates, uppercase plates, view/board surfacing, free title-clear, and spends==ledgered-burns.
+Prices are new/tunable — founder sign-off before production. Recommended next sinks (designed,
+not built): contract-board anonymity fee + counter-intel peek, stat respec, family seals; the
+14% staking APY remains the deepest lever (standing sign-off item).
+
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New
 cars are on-curve with modest drop weights: the GTA-boost faucet moved only −1.5% E[val] /
