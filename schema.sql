@@ -27,7 +27,11 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- `mint_credits` / `respawn_tokens` are unspent on-chain payments the watcher credited.
   minted BOOLEAN NOT NULL DEFAULT false,
   mint_credits INT NOT NULL DEFAULT 0,
-  respawn_tokens INT NOT NULL DEFAULT 0
+  respawn_tokens INT NOT NULL DEFAULT 0,
+  -- M7 Phase 2 — the assassin's LEGEND (account-level, survives death like prestige/$OMR):
+  -- lifetime feared-reputation (the "most feared" ladder) + lifetime confirmed kills.
+  hitman_rep BIGINT NOT NULL DEFAULT 0,
+  kills INT NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
@@ -68,6 +72,9 @@ CREATE TABLE IF NOT EXISTS characters (
   -- §11 two-tier: mirrors account_persistent.minted onto the living street (and its heirs)
   -- so the character view can show "made" status. Account-level `minted` is the gate truth.
   minted BOOLEAN NOT NULL DEFAULT false,
+  -- M7 Phase 2 — this STREET's kills this season (the fresh, contestable board); resets on
+  -- season rollover and starts at 0 for an heir (dies with the man, unlike the account legend).
+  season_kills INT NOT NULL DEFAULT 0,
   -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
   -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
   -- player touches an action, closing the "collect every <8h → ~24h/day" multiplier.
@@ -171,6 +178,10 @@ CREATE TABLE IF NOT EXISTS bounties (
   posted_by TEXT NOT NULL,                       -- character id of the FIRST poster (display only)
   anon BOOLEAN NOT NULL DEFAULT false,           -- hide the poster on the board
   reason TEXT,
+  -- M7 Phase 2 directed contract: a named hitman has an EXCLUSIVE window (until opens_at) to
+  -- fulfil it; after that it auto-escalates to open (anyone). NULL hitman = open from the start.
+  hitman TEXT,
+  opens_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (target_character, kind)
@@ -184,6 +195,18 @@ CREATE TABLE IF NOT EXISTS bounty_contributors (
   amount NUMERIC NOT NULL DEFAULT 0,             -- their tracked share of the pot (for refunds)
   PRIMARY KEY (target_character, kind, contributor)
 );
+-- M7 Phase 2 — one row per confirmed gameplay kill. Drives repeat-bloodline rep diminishing
+-- (killer_account × victim_account) and the kill feed. victim_account = the bloodline (heirs
+-- keep the account); rep is what the killer earned (0 for rookie targets / agents).
+CREATE TABLE IF NOT EXISTS kill_log (
+  id TEXT PRIMARY KEY,
+  killer_account TEXT NOT NULL,
+  victim_account TEXT NOT NULL,
+  victim_name TEXT NOT NULL,
+  rep INT NOT NULL DEFAULT 0,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_kill_log_bloodline ON kill_log (killer_account, victim_account);
 CREATE TABLE IF NOT EXISTS searches (
   hunter TEXT PRIMARY KEY,                       -- one active contract each (§5.2)
   target TEXT NOT NULL,

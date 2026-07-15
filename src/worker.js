@@ -76,7 +76,7 @@ export async function runSeasonRollover(pool, opts = {}) {
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
       if (!ch || ch.season >= current) continue;
       const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
-      await client.query('UPDATE characters SET respect=0, season=$2 WHERE id=$1', [id, current]);
+      await client.query('UPDATE characters SET respect=0, season_kills=0, season=$2 WHERE id=$1', [id, current]);
       if (legacy > 0)
         await client.query('UPDATE account_persistent SET prestige = prestige + $2 WHERE account_id=$1', [ch.account_id, legacy]);
       await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',

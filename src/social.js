@@ -7,7 +7,7 @@ import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
-  gunObjOf, vestMultOf, fleetValue, effStat,
+  gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf,
 } from './rules.js';
 
 const uid = () => crypto.randomUUID();
@@ -249,7 +249,7 @@ export async function jump(ch, victim, client, h) {
       await client.query('UPDATE gangs SET war_score_us = war_score_us + 1 WHERE id=$1', [h.owned.gangId]);
       await client.query('UPDATE gangs SET war_score_them = war_score_them + 1 WHERE id=$1', [h.victimOwned.gangId]);
     }
-    const bounty = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
+    const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
@@ -283,6 +283,18 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
   if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs $${amt + fee + tax} with the 2% take.`);
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
+  // directed contract: name a hitman who gets an exclusive window before it opens to all. Only
+  // set on a FRESH pot (a top-up inherits the original's direction — you fund the standing job).
+  let hitmanId = null, opensAt = null;
+  if (opts.hitman) {
+    if (opts.hitman === targetCharacterId) throw new GameError('bad_hitman', "You can't name the mark as the hitman.");
+    if (opts.hitman === ch.id) throw new GameError('bad_hitman', "Name someone else — you can't collect your own contract anyway.");
+    const hm = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [opts.hitman])).rows[0];
+    if (!hm) throw new GameError('no_hitman', 'No such hitman on the streets.');
+    hitmanId = hm.id;
+    const exH = Math.min(ttlH, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
+    opensAt = new Date(Date.now() + exH * 3600 * 1000);
+  }
   ch.cash = Number(ch.cash) - amt - fee - tax;
 
   // Lock any existing pot for (target,kind) in ANY state (pot row BEFORE funder rows — the
@@ -300,8 +312,8 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
   } else {
     const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
-    await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), expiresAt]);
+    await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, hitman, opens_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), hitmanId, opensAt, expiresAt]);
   }
   // track EVERY funder's share: none can collect (anti-self-pay), and a cancel/expiry refunds
   // each exactly what they put in.
@@ -315,22 +327,25 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   await takeHouse(client, tax);
   bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind });
   await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt }); // the mark can react (lay low, etc.)
-  return { ok: true, kind, total: (live ? Number(existing.amount) : 0) + amt, expiresHours: ttlH };
+  if (hitmanId && !live) await h.notify(client, hitmanId, 'contract_offer', { target: t.name, kind, amount: amt }); // the named hitman is tapped
+  return { ok: true, kind, total: (live ? Number(existing.amount) : 0) + amt, expiresHours: ttlH, hitman: hitmanId || undefined };
 }
 
 // Collect every claimable pot on the victim: `kinds` is what this takedown fulfils — a jump
-// pays ['hospitalize']; a kill pays ['hospitalize','kill']. A pot the collector funded is
-// skipped (lock-out) and an expired pot is left for the refund sweep.
+// pays ['hospitalize']; a kill pays ['hospitalize','kill']. Skips a pot the collector funded
+// (lock-out), a pot still inside another hitman's exclusive window, and an expired pot (left
+// for the refund sweep). Returns { total, directed } — directed=true if a pot named to `ch`
+// (a directed contract they were tapped for) was among those collected → bonus assassin rep.
 async function claimBounty(client, h, ch, victimId, kinds) {
-  // only LIVE pots — an expired pot is left untouched for the worker sweep to refund. Excluding
-  // them from the FOR UPDATE also keeps claim + sweep on disjoint rows (no deadlock on a funder
-  // who is also the killer).
-  const pots = (await client.query('SELECT kind, amount FROM bounties WHERE target_character=$1 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [victimId])).rows;
-  let total = 0;
+  const pots = (await client.query('SELECT kind, amount, hitman, opens_at FROM bounties WHERE target_character=$1 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [victimId])).rows;
+  let total = 0, directed = false;
   for (const p of pots) {
     if (!kinds.includes(p.kind)) continue;
+    // directed contract still in its exclusive window → only the named hitman may collect
+    if (p.hitman && p.opens_at && new Date(p.opens_at) > new Date() && p.hitman !== ch.id) continue;
     const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [victimId, p.kind, ch.id])).rows.length;
     if (contributed) continue; // a funder never collects; the pot stands (dies with the target)
+    if (p.hitman === ch.id) directed = true; // fulfilled a contract they were named on
     await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
     await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
     total += Math.floor(Number(p.amount));
@@ -339,7 +354,7 @@ async function claimBounty(client, h, ch, victimId, kinds) {
     ch.cash = Number(ch.cash) + total;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: total, reason: 'bounty:claim', counterparty: victimId });
   }
-  return total;
+  return { total, directed };
 }
 
 // A funder withdraws their own share of a LIVE contract (the 2% take is non-refundable).
@@ -363,22 +378,30 @@ export async function cancelBounty(ch, targetCharacterId, kind, client, h) {
   return { ok: true, refunded: refund, potRemaining: Math.max(0, remaining) };
 }
 
-// The public board — open (non-expired) contracts, richest first.
+// The public board — open (non-expired) contracts, richest first. A directed contract inside
+// its exclusive window shows the named hitman + when it opens to everyone.
 export async function listContracts(pool) {
   const rows = (await pool.query(
-    `SELECT b.target_character, b.kind, b.amount, b.anon, b.reason, b.expires_at,
-            t.name AS target_name, p.name AS poster_name
+    `SELECT b.target_character, b.kind, b.amount, b.anon, b.reason, b.expires_at, b.opens_at,
+            t.name AS target_name, p.name AS poster_name, hm.name AS hitman_name
        FROM bounties b
        JOIN characters t ON t.id = b.target_character
        LEFT JOIN characters p ON p.id = b.posted_by
+       LEFT JOIN characters hm ON hm.id = b.hitman
       WHERE b.expires_at IS NULL OR b.expires_at > now()
       ORDER BY b.amount DESC LIMIT 100`)).rows;
-  return rows.map((r) => ({
-    target: { id: r.target_character, name: r.target_name },
-    kind: r.kind, pot: Math.floor(Number(r.amount)), reason: r.reason || null,
-    poster: r.anon ? null : (r.poster_name || null),
-    expiresInSeconds: r.expires_at ? Math.max(0, Math.ceil((new Date(r.expires_at) - Date.now()) / 1000)) : null,
-  }));
+  const secsTo = (t) => (t ? Math.max(0, Math.ceil((new Date(t) - Date.now()) / 1000)) : null);
+  return rows.map((r) => {
+    const exclusive = r.hitman_name && r.opens_at && new Date(r.opens_at) > new Date();
+    return {
+      target: { id: r.target_character, name: r.target_name },
+      kind: r.kind, pot: Math.floor(Number(r.amount)), reason: r.reason || null,
+      poster: r.anon ? null : (r.poster_name || null),
+      directedTo: exclusive ? r.hitman_name : null, // only while the exclusive window is open
+      opensInSeconds: exclusive ? secsTo(r.opens_at) : null,
+      expiresInSeconds: secsTo(r.expires_at),
+    };
+  });
 }
 
 // Refund one pot to its funders and delete it — shared by the expiry sweep and a repost that
@@ -427,6 +450,48 @@ export async function sweepExpiredBounties(pool) {
     return { pots, refunded };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}
+
+// ═══════════════════ THE ASSASSIN'S REPUTATION (M7 Phase 2) ═══════════════════
+// A confirmed gameplay kill grows the killer's LEGEND (account-level lifetime kills + feared-rep,
+// surviving death like prestige) and this STREET's season kill streak. Rep is a STATUS axis only
+// (no gameplay power → no §10.4 / balance impact). Anti-abuse: rep only from targets ≥ MIN level;
+// diminished 1/(prior kills of that bloodline) to kill farming; agents accrue kills but NOT rep
+// (excluded from the feared board, like referral payouts). `directed` adds a bonus multiplier.
+async function awardHitmanRep(client, h, ch, victim, vicLvl, directed) {
+  h.acct.kills = Number(h.acct.kills || 0) + 1;
+  ch.season_kills = Number(ch.season_kills || 0) + 1;
+  let repGain = 0;
+  if (!h.acct.agent_flag && vicLvl >= M3.HITMAN_MIN_TARGET_LVL) {
+    const prior = Number((await client.query(
+      'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [ch.account_id, victim.account_id])).rows[0].n);
+    repGain = Math.max(1, Math.floor(vicLvl * M3.HITMAN_REP_PER_LVL * (directed ? M3.HITMAN_DIRECTED_BONUS : 1) / (prior + 1)));
+    const before = Number(h.acct.hitman_rep || 0);
+    h.acct.hitman_rep = before + repGain;
+    if (hitmanRankOf(before + repGain).title !== hitmanRankOf(before).title)
+      await h.notify(client, ch.id, 'hitman_rank', { title: hitmanRankOf(before + repGain).title, rep: before + repGain });
+  }
+  await client.query('INSERT INTO kill_log (id, killer_account, victim_account, victim_name, rep) VALUES ($1,$2,$3,$4,$5)',
+    [uid(), ch.account_id, victim.account_id, victim.name, repGain]);
+  return { repGain, kills: h.acct.kills, title: hitmanRankOf(h.acct.hitman_rep).title };
+}
+
+// The feared-assassin leaderboard: the lifetime LEGEND (accounts by hitman_rep, with rank/title)
+// and the SEASON board (living streets by this season's kill streak).
+export async function hitmanLeaderboard(pool, limit = 20) {
+  const legend = (await pool.query(
+    `SELECT a.hitman_rep, a.kills, a.agent_flag, c.name FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+      WHERE a.hitman_rep > 0 ORDER BY a.hitman_rep DESC LIMIT $1`, [limit])).rows;
+  const season = (await pool.query(
+    `SELECT c.name, c.season_kills, a.agent_flag FROM characters c
+       JOIN account_persistent a ON a.account_id = c.account_id
+      WHERE c.alive AND c.season_kills > 0 ORDER BY c.season_kills DESC LIMIT $1`, [limit])).rows;
+  return {
+    legend: legend.map((r) => ({ name: r.name, rep: Number(r.hitman_rep), kills: Number(r.kills),
+      title: hitmanRankOf(Number(r.hitman_rep)).title, agent: !!r.agent_flag })),
+    season: season.map((r) => ({ name: r.name, kills: Number(r.season_kills), agent: !!r.agent_flag })),
+  };
 }
 
 // ═══════════════════ HIT CONTRACTS (§7.7) ═══════════════════
@@ -512,16 +577,18 @@ export async function fire(ch, victim, client, h, rounds) {
       ch.cash = Number(ch.cash) + chop;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: chop, reason: 'whack:chop', counterparty: victim.id });
     }
-    const bounty = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
+    const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
+    // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
+    const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);
     await h.notify(client, victim.id, 'whacked', { from: ch.name });
     // witnesses: 3 random living characters saw something (§7.7)
     const wits = (await client.query('SELECT id FROM characters WHERE alive AND id<>$1 AND id<>$2 LIMIT 20', [ch.id, victim.id])).rows;
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
-    await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id });
+    await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name);
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, bounty, jammed, estate: { heirId: estate.heirId } };
+    return { ok: true, kill: true, rep, chop, bounty, jammed, hitman: hit, estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());

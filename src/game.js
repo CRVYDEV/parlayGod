@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf } from './rules.js';
 import { accrue } from './accrual.js';
 
 const uid = () => crypto.randomUUID();
@@ -191,10 +191,10 @@ async function persistAccount(client, accountId, a) {
   await client.query(
     `UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6,
       recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11,
-      minted=$12, mint_credits=$13, respawn_tokens=$14 WHERE account_id=$1`,
+      minted=$12, mint_credits=$13, respawn_tokens=$14, hitman_rep=$15, kills=$16 WHERE account_id=$1`,
     [accountId, a.omr, a.staked, a.rewards, a.prestige, a.deaths,
      a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address,
-     a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0]);
+     a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0, a.hitman_rep ?? 0, a.kills ?? 0]);
 }
 
 // Two-party actions (§10.1): lock BOTH character rows in stable id order, then both
@@ -255,12 +255,12 @@ async function persistCharacter(client, ch) {
       lc_crime=$15, ammo=$16, cb=$17, heat=$18, trade_rep=$19, gta_at=$20, path=$21,
       gun=$22, vest=$23, shoot_cd_until=$24, busts=$25, hosp_until=$26,
       lab=$27, crew=$28, heist_at=$29, title=$30,
-      racket_credit_ms=$31, last_accrued_at=$32 WHERE id=$1`,
+      racket_credit_ms=$31, season_kills=$32, last_accrued_at=$33 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
-     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.last_accrued_at]);
+     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.last_accrued_at]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -299,6 +299,8 @@ export function view(ch, acct = {}, owned = {}) {
     prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
     wallet: acct.wallet_address || null,
     minted: !!acct.minted, respawnTokens: Number(acct.respawn_tokens || 0), mintCredits: Number(acct.mint_credits || 0),
+    hitmanRep: Number(acct.hitman_rep || 0), kills: Number(acct.kills || 0), seasonKills: Number(ch.season_kills || 0),
+    hitmanTitle: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
     onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id };

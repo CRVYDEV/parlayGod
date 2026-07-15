@@ -163,6 +163,29 @@ arbitrage. `src/watcher.js` then replaced the reorg-fragile `watchEvent` with a 
 `getLogs` sync over a persisted `chain_cursor`, `CHAIN_CONFIRMATIONS` behind head
 (downtime backfill + reorg safety; `test/watcher.js`).
 
+M7 (Contracts & Hitmen) is underway on the `social.js` PvP layer (design in
+`omerta-hitman-contracts-design.md`, grounded by `AUDIT-core-loop.md`). **Phase 1 — the
+Contract Board**: bounties became browsable, lifecycle-managed contracts — one escrow pot per
+`(target, kind)` where `hospitalize` pays on a jump or kill and `kill` pays only on a completed
+hit, each with a reason/expiry/anon poster; a funder cancels their own tracked share (2% take
+kept) and expired pots refund every funder via the worker sweep (dead funders' stakes burn as
+`death:bounty`, not to their corpse); `GET /v1/contracts` is the board; the mark is notified.
+Escrow reconciles `posted − claimed − refunded − death` (`bounty:refund` under the `bounty:`
+vocabulary). A red-team fixed a `cancelBounty` lock-order inversion (deadlock vs kills), a
+500-on-repost of an expired pot, and the dead-funder corpse-refund. **Phase 2 — Player-hitmen +
+the assassin's reputation**: directed contracts (`postBounty` `hitman`+`exclusiveHours` → a named
+hitman's exclusive window on the `(target,kind)` pot, auto-opening at `opens_at`; +1.5× rep on
+fulfilment); a hybrid legend — account-level lifetime `hitman_rep` + `kills` (survive death like
+prestige) plus this street's per-season `season_kills` (resets on rollover, dies with the man);
+the Associate→Button Man→Mechanic→Ghost→The Undertaker ladder (`HITMAN_RANKS`/`hitmanRankOf`,
+rules.js tail); `GET /v1/leaderboard/hitmen` (legend + season). Rep is a **status axis with no
+gameplay power**, so it's outside §10.4 and the sim-audited balance. Anti-abuse: rep only from
+targets ≥ `HITMAN_MIN_TARGET_LVL`, diminished `1/(prior bloodline kills+1)` (via `kill_log` keyed
+on killer×victim account), and agents earn `kills` but not leaderboard `hitman_rep` (excluded like
+referral payouts). `test/social.js` covers the split, board, cancel/refund, expired-repost,
+dead-funder burn, directed bonus, level floor, bloodline diminishing, and the leaderboard. Phases
+3 (NPC-hitmen) + 4 (earnable defense, war-kill scoring, fire-heat) remain design-only.
+
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New
 cars are on-curve with modest drop weights: the GTA-boost faucet moved only −1.5% E[val] /
