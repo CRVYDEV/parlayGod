@@ -303,7 +303,49 @@ verified sound. `forge` was egress-blocked in that session; the suite was compil
 `forge test` must pass locally before the third-party audit. Accepted-as-designed
 (Safe = root of trust): sweep/pause, global daily-cap contention, APY-change retroactivity.
 
+A full five-lens audit (`AUDIT-full-game.md`: code red-team, economy, loops, new-player) then
+ran over everything. Fixed in-commit (code correctness, behavior-preserving): three real-Postgres
+deadlock cycles (a `postFamilyContract` gang-before-pot lock inversion; unsorted two-gang war-kill
+score updates in `fire`+`jump`, now one `WHERE id IN` CASE statement; the buyback worker locking
+`street_tax` before gangs, now gangs-first with an unlocked due-check), an `offerBodyguard` Infinity
+guard, and the undiscoverable bodyguard market (`guardPrice` now on `GET /v1/streets`). §10.4 came
+back clean across every M8 path. The rest (staking APY, bank interest, cheap defenses, kill-economy
+on-ramp, family-contract laundering, etc.) were flagged as founder balance/design calls, NOT patched.
+
+**RISK-TO-EARN PIVOT (founder-directed — overrides the utility-only note below).** The founder
+chose to move $OMR from utility-only toward a genuine EVE/Axie/DFK-style Risk-to-Earn economy
+where a skilled, risk-taking player can theoretically earn a small living. Design docs:
+`omerta-risk-to-earn-design.md` (parent — four pillars, the "spenders fund earners" sustainability
+model, the honest legal/financial flags), `omerta-phase2-vig-design.md` (the Vig — real-revenue
+redistribution + PLEX bridge + the "extraction ≤ inflow" invariant enforced by the existing
+full-reserve queue), `omerta-phase1-riskpay-design.md` (the off-chain first step).
+
+**Phase 1 (Make Risk Pay) is BUILT** — a pure off-chain rebalance, no chain work, no new extraction,
+so zero new regulatory surface. Numbers are proposed defaults (founder sim + sign-off, ground rule #1):
+**P1.1 Loot the living** (`social.js` `fire` kill branch) — a PLAYER fire-kill loots
+`CASH_LOOT_RATE` (0.25) of the victim's POCKET cash (bank untouched) + `OMR_LOOT_RATE` (0.20) of
+their LIQUID unstaked $OMR (staked untouched), both ledgered `whack:loot` TRANSFERS (cash carved
+out of what `runEstate` would burn — reduce `victim.cash` first; $OMR account→account, heir keeps the
+rest). Only `fire` loots — NPC/mod kills don't — so skill+risk earns. `OMR_LOOT_RATE` is the dial
+(0 ships cash-only). Makes killing +EV, the rich into targets, staking a real safe harbour.
+**P1.2 Laundering** (`economy.js` `swap` buy) — cash→$OMR is now located (a wash-house district in
+`LAUNDER_DISTRICTS` docks/canal, or your family's turf) + draws `LAUNDER_HEAT` (15) + blocked from a
+safehouse; the sell direction stays ungated. Extraction prep is a deliberate, exposed act.
+**P1.3 Shield, not bunker** — a safe-housed player can no longer `fire`/`jump`/`deal`/launder (added
+`safeHoused(ch)` actor-guards); bodyguard repriced toward safehouse parity (`BODYGUARD_MIN_PRICE`
+1000→10000, `BODYGUARD_HOSP_MS` 2h→4h). **B2 Bank daily cap** (`accrual.js`) — bank interest metered
+by a `bank_credit_ms` token bucket (`BANK_DAILY_CAP_MS` 12h/day) exactly like racket income, so
+continuous online play can't compound ~4%/day risk-free. `whack:loot` added to the cash + $OMR
+`invariants.js` vocabularies (the $OMR one a transfer, in neither mint nor burn term — §10.4 exact).
+Tests: social (loot amounts to killer, heir keeps the rest, safehouse blocks offense/extraction,
+bodyguard reprice), economy (launder gate/heat + ungated sell + the bank daily cap). Full suite 8/8.
+Phases 2–4 (the Vig, productive NFTs, backed emission) remain design-only and **gated on legal
+counsel** before any mainnet extraction.
+
 ## Sensitive design notes
-- $OMR framing is utility-only; never add mechanics implying price appreciation.
-- Social/onboarding rewards pay in-game cash only, never $OMR (v24 rule).
+- **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
+  losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
+  add explicit price-appreciation *marketing/messaging* — that stays out for legal reasons until
+  counsel signs off on Phase 2. The mechanics change; the promises don't.
+- Social/onboarding rewards pay in-game cash only, never $OMR (v24 rule) — unchanged.
 - Agent-flagged accounts: excluded from referral payouts, harder rate limits, public badge.

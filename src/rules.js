@@ -456,6 +456,12 @@ export const CONSTANTS = {
   // OFFLINE_CAP_MS. 12h is the generous end of the plan's 8-12h range; re-sim + founder
   // sign-off before tuning tighter (ground rule #1 — this bounds a faucet, not a mechanic).
   RACKET_DAILY_CAP_MS: 12*3600*1000,
+  // Risk-to-Earn Phase 1 (new/tunable, sim + sign-off). P1.2 LAUNDERING: converting cash → $OMR
+  // (extraction prep) is legal only at a wash-house district or on your family's turf, and draws
+  // LAUNDER_HEAT — so extraction is a located, exposed act, not a free click. B2 BANK DAILY CAP:
+  // bank interest is metered by a daily token bucket like racket income (BANK_DAILY_CAP_MS/day),
+  // so continuous online play can't compound ~4%/day risk-free (the audit's #1 safe-beats-risky).
+  LAUNDER_HEAT: 15, LAUNDER_DISTRICTS: ['docks', 'canal'], BANK_DAILY_CAP_MS: 12*3600*1000,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
@@ -553,7 +559,16 @@ export const M3 = {
   // lists a price; a principal hires them for a window — the guard absorbs ONE lethal hit
   // (hospitalized in the principal's place, contract consumed). Checked BEFORE real-ETH revive
   // insurance: the earnable shield burns first.
-  BODYGUARD_MIN_PRICE: 1000, BODYGUARD_MS: 24 * 3600 * 1000, BODYGUARD_HOSP_MS: 2 * 3600 * 1000,
+  // Risk-to-Earn Phase 1 P1.3 — the bodyguard was a tenth the price of a safehouse for comparable
+  // cover, so cheap defense cancelled the kill economy. Repriced toward safehouse parity, and the
+  // guard's absorbed-hit cost (their hospital stay) raised so bullet-catching is a real risk.
+  BODYGUARD_MIN_PRICE: 10000, BODYGUARD_MS: 24 * 3600 * 1000, BODYGUARD_HOSP_MS: 4 * 3600 * 1000,
+  // Risk-to-Earn Phase 1 P1.1 — LOOT THE LIVING (new/tunable, sim + sign-off). On a PLAYER fire-kill
+  // the killer takes CASH_LOOT_RATE of the victim's POCKET cash (bank untouched) and OMR_LOOT_RATE of
+  // their LIQUID (unstaked) $OMR (staked untouched) — both TRANSFERS (whack:loot), the rest still
+  // burns/survives. Makes killing +EV, the rich into targets, and staking a real safe harbour.
+  // OMR_LOOT_RATE is the dial: set to 0 to ship a cash-only version first.
+  CASH_LOOT_RATE: 0.25, OMR_LOOT_RATE: 0.20,
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited

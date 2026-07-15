@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS characters (
   -- player touches an action, closing the "collect every <8h → ~24h/day" multiplier.
   -- Seeded at OFFLINE_CAP_MS so a first collect still yields the normal 8h burst.
   racket_credit_ms BIGINT NOT NULL DEFAULT 28800000,
+  bank_credit_ms BIGINT NOT NULL DEFAULT 28800000,   -- Risk-to-Earn B2: daily bank-interest budget (seeded at OFFLINE_CAP_MS)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

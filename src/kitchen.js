@@ -10,6 +10,7 @@ import {
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date(); // Risk-to-Earn P1.3
 
 async function takeHouse(client, tax) {
   if (tax > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
@@ -111,6 +112,7 @@ export async function deal(ch, drugId, qty, client, h) {
   const d = drugOf(drugId);
   if (!d) throw new GameError('bad_drug', 'No such line.');
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from a cell.');
+  if (safeHoused(ch)) throw new GameError('safe', "No corner work while you're to ground — a safehouse hides you, it doesn't move product."); // P1.3 shield-not-bunker
   const s = h.owned.stash.find((x) => x.drug_id === drugId);
   if (!s || Number(s.qty) < 1) throw new GameError('stash', `No ${d.name} in the stash.`);
   const n = Math.max(1, Math.min(Math.floor(Number(qty) || 0) || 1, Number(s.qty)));
