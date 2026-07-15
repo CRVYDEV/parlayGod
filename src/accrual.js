@@ -30,8 +30,17 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   // bank interest: 2% per 12h, continuous approximation, income window cap.
   // The delta is surfaced so the caller ledgers it (§10.4: every faucet has a row).
   const capped = Math.min(dtMs, CONSTANTS.OFFLINE_CAP_MS);
+  // Risk-to-Earn B2: meter interest by a daily token bucket (BANK_DAILY_CAP_MS/day, bursts to the
+  // 8h offline window) exactly like racket income below — so a continuously-online player can't
+  // compound the full ~4%/day risk-free. An offline returner still gets one full burst; only the
+  // "poke an action every few minutes to bank 24h of interest a day" exploit is closed.
+  const bankRefillPerMs = CONSTANTS.BANK_DAILY_CAP_MS / 86400000;
+  let bankCredit = Math.min(CONSTANTS.OFFLINE_CAP_MS, Number(ch.bank_credit_ms ?? CONSTANTS.OFFLINE_CAP_MS) + dtMs * bankRefillPerMs);
+  const bankEligibleMs = Math.min(capped, bankCredit);
+  bankCredit -= bankEligibleMs;
+  ch.bank_credit_ms = Math.round(bankCredit);
   const bankBefore = Number(ch.bank);
-  ch.bank = bankBefore * (1 + CONSTANTS.BANK_RATE * (capped / CONSTANTS.BANK_PERIOD_MS));
+  ch.bank = bankBefore * (1 + CONSTANTS.BANK_RATE * (bankEligibleMs / CONSTANTS.BANK_PERIOD_MS));
   ch._bankInterest = Number(ch.bank) - bankBefore;
 
   // §7.1 racket + front income — capped at the 8h offline window, never minted

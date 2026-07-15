@@ -63,6 +63,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
+## Risk-to-Earn Phase 1 (off-chain rebalance — no new routes, changed behavior)
+Loot on a player fire-kill (killer takes 25% of victim pocket cash + 20% of liquid $OMR; `whack:loot` transfers; response adds `loot`/`omrLoot`) · `POST /swap` `direction:buy` (laundering) now requires a wash-house district (docks/canal) or your family's turf, draws +15 heat, and is blocked from a safehouse (sell is ungated) · a safe-housed player can't `fire`/`jump`/`deal`/launder (shield, not bunker) · bodyguard floor $1k→$10k, guard hospital 2h→4h · bank interest capped by a daily bucket (no ~4%/day risk-free). Numbers are founder sign-off levers. Design: `omerta-phase1-riskpay-design.md`.
+
 ## M8 endpoints (family seals — the gang prestige ladder)
 `POST /gangs/tribute/omr` (any member pools $OMR into the family reserve) · `POST /gangs/vanity/seal` (boss only — buys the NEXT seal from the reserve: Wax 25 → Brass 75 → Silver 200 → Gold 500 → Obsidian 1500; displayed on the family everywhere, pure status)
 

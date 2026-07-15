@@ -122,9 +122,21 @@ await seed("cash=2000000, bank=0, racket_credit_ms=28800000"); // restore for th
 // ── AMM swap (§7.12): buy $OMR, then sell some back ──
 await seed("cash=2000000");
 const ammPre = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+// Risk-to-Earn P1.2 — laundering (cash→$OMR) is located + risky: illegal outside a wash house,
+// blocked from a safehouse, and it draws heat. (The test char sits in 'docks', a wash house.)
+await seed("loc='neon', heat=0"); // not a launder district, no turf
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'district', 'no washing cash outside a wash house');
+await seed("loc='docks', heat=0, safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'safe', "can't wash cash from a safehouse");
+await seed("loc='docks', heat=0, safe_until=NULL");
 assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 100 } })).code, 400, 'min swap $500 enforced');
 r = await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } });
 assert.equal(r.code, 200, 'swap buy'); assert(r.body.gotOmr > 0, 'received $OMR');
+assert(r.body.character.heat >= 15, 'laundering drew law heat (~15)');
+// the reverse (sell, bringing money in) is ungated — works anywhere
+await seed("loc='neon'");
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'sell', amount: 1 } })).code, 200, 'selling $OMR back is ungated');
+await seed("loc='docks'");
 const omrHeld = r.body.character.omr;
 assert(omrHeld > 0, 'omr on the account');
 const ammMid = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
@@ -210,5 +222,15 @@ assert.equal(Number(held.rows[0].n), faucet - sinks, `car conservation: ${faucet
 const ammFinal = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
 assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'AMM reserves stay positive');
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap, staking (real APY), gear, 12h buyback, ledger invariants');
+// ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──
+// An empty bucket over a 4h gap refills only ~2h of interest-eligibility (BANK_DAILY_CAP_MS 12h/day
+// → 0.5 ms credit per ms), so a continuously-online player banks HALF the raw 4h they'd otherwise
+// compound — closing the audit's ~4%/day risk-free exploit. (Seeded post-invariant-check on `cid`.)
+await seed("bank=1000000");
+await pool.query(`UPDATE characters SET bank_credit_ms=0, last_accrued_at = now() - interval '4 hours' WHERE id='${cid}'`);
+const afterCap = await meOf(token); // any action triggers accrual; interest is metered by the bucket
+assert(afterCap.bank > 1003000 && afterCap.bank < 1004000,
+  `bank interest capped to ~2h of a 4h gap (~+0.33%, got +${afterCap.bank - 1000000}); uncapped 4h would be ~+6667`);
+
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap');
 await app.close();

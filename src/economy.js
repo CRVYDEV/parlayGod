@@ -270,6 +270,15 @@ export async function swap(ch, direction, amount, client, h) {
   const c = Number(pool.cash_reserve), o = Number(pool.omr_reserve), k = c * o;
 
   if (direction === 'buy') {
+    // Risk-to-Earn P1.2 — LAUNDERING: turning cash into $OMR is the extraction on-ramp, so it's a
+    // RISKY, LOCATED act, not a free click. Legal only at a wash-house district or on your family's
+    // own turf, and it draws LAUNDER_HEAT (law attention + marks you as carrying value worth a hit).
+    // You can't wash cash from a safehouse (P1.3 — hiding, not extracting). The reverse (sell,
+    // $OMR → cash, bringing money back in-game) is ungated — only extraction prep carries risk.
+    if (ch.safe_until && new Date(ch.safe_until) > new Date()) throw new GameError('safe', "You can't move money while you're to ground.");
+    const onTurf = (h.owned?.held || []).includes(ch.loc);
+    if (!CONSTANTS.LAUNDER_DISTRICTS.includes(ch.loc) && !onTurf)
+      throw new GameError('district', `Cash is washed at a wash house (${CONSTANTS.LAUNDER_DISTRICTS.join(', ')}) or on your family's turf — not here.`);
     if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum swap is $${CONSTANTS.SWAP_MIN}.`);
     if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
     const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01), netIn = amt - fee - tax;
@@ -277,6 +286,7 @@ export async function swap(ch, direction, amount, client, h) {
     if (!(out > 0)) throw new GameError('pool', "The pool couldn't fill that.");
     await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + netIn, o - out]);
     ch.cash = Number(ch.cash) - amt;
+    ch.heat = Number(ch.heat || 0) + CONSTANTS.LAUNDER_HEAT; // washing cash draws the law
     h.acct.omr = Number(h.acct.omr) + out;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
     await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });

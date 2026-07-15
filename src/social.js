@@ -220,6 +220,7 @@ export async function seizeDistrict(ch, districtId, client, h) {
 // ═══════════════════ JUMPS (§7.6) ═══════════════════
 export async function jump(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "Can't throw hands while you're to ground — a safehouse is a shield, not a bunker.");
   if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape for a fight.");
   if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
@@ -694,6 +695,7 @@ export async function fire(ch, victim, client, h, rounds) {
   if (new Date(s.started_at).getTime() + searchMs() > Date.now())
     throw new GameError('searching', "They haven't been placed yet. Patience is a caliber.");
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
   if (ch.shoot_cd_until && new Date(ch.shoot_cd_until) > new Date())
     throw new GameError('cooldown', "Your trigger's still hot.");
   const gun = gunObjOf(ch.gun);
@@ -756,6 +758,27 @@ export async function fire(ch, victim, client, h, rounds) {
       ch.cash = Number(ch.cash) + chop;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: chop, reason: 'whack:chop', counterparty: victim.id });
     }
+    // ── LOOT THE LIVING (Risk-to-Earn P1.1) — the killer takes a cut of the victim's CARRIED value,
+    // so wealth on the street is worth killing for and staking $OMR is the safe harbour. Pocket cash
+    // and liquid (unstaked) $OMR only — bank cash and staked $OMR are out of a street hit's reach.
+    // Both are TRANSFERS (whack:loot): the looted cash is carved out of what runEstate would burn
+    // (reduce victim.cash first → its death:estate burn shrinks by exactly the loot), the looted $OMR
+    // moves account→account (the heir keeps the rest). Only a PLAYER fire-kill reaches here — NPC/mod
+    // kills call runEstate directly and don't loot, so skill + risk is what earns.
+    const loot = Math.floor(Number(victim.cash) * M3.CASH_LOOT_RATE);
+    if (loot > 0) {
+      victim.cash = Number(victim.cash) - loot; // the estate now burns only the remainder
+      ch.cash = Number(ch.cash) + loot;
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: loot, reason: 'whack:loot', counterparty: victim.id });
+      await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -loot, reason: 'whack:loot', counterparty: ch.id });
+    }
+    const omrLoot = Math.floor(Number(h.victimAcct.omr) * M3.OMR_LOOT_RATE);
+    if (omrLoot > 0) {
+      h.victimAcct.omr = Number(h.victimAcct.omr) - omrLoot; // staked untouched; the heir keeps the rest
+      h.acct.omr = Number(h.acct.omr) + omrLoot;
+      await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrLoot, reason: 'whack:loot', counterparty: victim.id });
+      await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -omrLoot, reason: 'whack:loot', counterparty: ch.id });
+    }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);
@@ -783,7 +806,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
@@ -877,6 +900,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   const tier = npcHitmanOf(tierId);
   if (!tier) throw new GameError('bad_tier', 'No such contractor for hire.');
   if (jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");

@@ -224,18 +224,26 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE charact
 await seedCh(don.id, "energy=200, ammo=3000, jail_until=NULL, shoot_cd_until=NULL, loc='docks'");
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/search`, { token: don.token })).code, 200, 're-search after the revive');
 
+const donCashPreKill = (await meOf(don.token)).cash;
+const donOmrPreKill = (await meOf(don.token)).omr;
+const roccoCashPreKill = (await meOf(rocco.token)).cash;
 r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body: { rounds: 2200 } });
 assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);
 assert.equal(r.body.chop, Math.floor(900 * 0.4), 'chop = 40% of the real fleet value');
 assert.equal(r.body.bounty, 5000, "the completed hit collects Mook's open kill contract");
+// Risk-to-Earn P1.1 — the killer loots 25% of the victim's POCKET cash and 20% of their LIQUID $OMR
+assert.equal(r.body.loot, Math.floor(roccoCashPreKill * 0.25), 'looted 25% of the victim pocket cash');
+assert.equal(r.body.omrLoot, Math.floor(7 * 0.20), 'looted 20% of the victim liquid $OMR (floor(7×0.2)=1)');
+assert.equal((await meOf(don.token)).omr, donOmrPreKill + 1, 'the looted $OMR landed in the killer\'s account');
+assert.equal((await meOf(don.token)).cash, donCashPreKill + r.body.chop + r.body.bounty + r.body.loot, 'chop + bounty + cash loot all paid to the killer');
 
 // estate: heir stands up on the same account; the street died with the man
 const heir = await meOf(rocco.token);
 assert.equal(heir.generation, 2, 'heir generation');
 assert.equal(heir.name, 'Rocco Two-Knives', 'the bloodline keeps the name');
 assert.equal(heir.cash, 500 + 100 * 5, 'legacy stake: $500 + $100 × prestige (floor(11/2))');
-assert.equal(heir.omr, 7, '$OMR survives death on the account');
+assert.equal(heir.omr, 6, 'liquid $OMR survives death on the account MINUS the 20% the killer looted (7−1)');
 assert.equal(heir.cars.length, 0, 'fleet died');
 assert(!heir.gang, 'gang seat vacated');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE character_id='${rocco.id}'`)).rows[0].n), 0, 'victim cars wiped');
@@ -469,6 +477,12 @@ assert.equal(blocked.code, 400, 'a fire on a safe-housed target is blocked'); as
 await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
 const npcBlocked = await call('POST', `/v1/streets/${dave.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } });
 assert.equal(npcBlocked.code, 400, 'an NPC hit on a safe-housed target is blocked'); assert.equal(npcBlocked.body.error, 'safe', 'the contractor can\'t find them');
+// Risk-to-Earn P1.3 — SHIELD, NOT BUNKER: while safe, DAVE himself can't do offense or extraction.
+await seedCh(dave.id, "energy=200, ammo=8000, health=100, loc='docks'"); // still safe_until in the future
+await call('POST', `/v1/streets/${don.id}/search`, { token: dave.token }); // (search itself isn't gated; firing is)
+assert.equal((await call('POST', `/v1/streets/${don.id}/fire`, { token: dave.token, body: { rounds: 6000 } })).body.error, 'safe', "a safe-housed player can't fire (shield, not bunker)");
+assert.equal((await call('POST', `/v1/streets/${don.id}/jump`, { token: dave.token })).body.error, 'safe', "a safe-housed player can't jump");
+assert.equal((await call('POST', '/v1/swap', { token: dave.token, body: { direction: 'buy', amount: 1000 } })).body.error, 'safe', "a safe-housed player can't launder/extract");
 // once the safehouse lapses, they're fair game — and the hit draws law HEAT on the shooter
 await seedCh(dave.id, "safe_until = now() - interval '1 minute', loc='docks'");
 await seedCh(don.id, "energy=200, ammo=8000, shoot_cd_until=NULL, heat=0, loc='docks'");
@@ -531,16 +545,16 @@ const barry = await mk('Bullet Barry'); const paula = await mk('Principal Paula'
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 400 } })).body.error, 'min', 'nobody eats a bullet for pocket change');
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 'Infinity' } })).body.error, 'price', 'a non-finite price is refused (no NUMERIC-write 500)'); // audit: Number("Infinity")===Infinity
 assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'not_offering', 'no hiring a guard who is not listed');
-assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 5000 } })).code, 200, 'barry lists himself');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 15000 } })).code, 200, 'barry lists himself');
 // audit: the offer is discoverable on the streets board (else the whole hire market is dead)
 const barryOnBoard = (await call('GET', '/v1/streets', { token: paula.token })).body.streets.find((s) => s.id === barry.id);
-assert.equal(barryOnBoard.guardPrice, 5000, 'the guard price is surfaced on the streets board');
-await seedCh(paula.id, "cash=50000, loc='docks'");
+assert.equal(barryOnBoard.guardPrice, 15000, 'the guard price is surfaced on the streets board');
+await seedCh(paula.id, "cash=100000, loc='docks'");
 const barryCash0 = (await meOf(barry.token)).cash;
 r = await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token });
 assert.equal(r.code, 200, 'paula hired protection');
-assert.equal((await meOf(paula.token)).cash, 45000, 'paula paid the listed rate');
-assert.equal((await meOf(barry.token)).cash, barryCash0 + 5000, 'barry pocketed it up front (a ledgered transfer)');
+assert.equal((await meOf(paula.token)).cash, 85000, 'paula paid the listed rate');
+assert.equal((await meOf(barry.token)).cash, barryCash0 + 15000, 'barry pocketed it up front (a ledgered transfer)');
 assert((await meOf(paula.token)).guardSeconds > 0, 'under protection');
 assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'guarded', 'one bullet-catcher at a time');
 // the earnable shield burns BEFORE real-ETH insurance — and one contract stops ONE bullet
@@ -562,8 +576,8 @@ const betrayal = (await call('POST', `/v1/streets/${paula.id}/fire`, { token: ba
 assert.equal(betrayal.kill, true, "the guard's OWN shot is never absorbed — betrayal beats protection");
 // the guard steps in front of an NPC contractor's bullet too (payer-as-guard would step aside)
 const gina = await mk('Guardian Gina');
-assert.equal((await call('POST', '/v1/bodyguard/offer', { token: gina.token, body: { price: 1000 } })).code, 200, 'gina lists herself');
-await seedCh(carla.id, "hosp_until=NULL, cash=20000, loc='docks'");
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: gina.token, body: { price: 15000 } })).code, 200, 'gina lists herself');
+await seedCh(carla.id, "hosp_until=NULL, cash=50000, loc='docks'");
 assert.equal((await call('POST', `/v1/bodyguard/hire/${gina.id}`, { token: carla.token })).code, 200, 'carla hired gina');
 await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
 let npcAbsorbed = false;
