@@ -11,8 +11,16 @@ Rep is a **status axis only** (no gameplay power → no §10.4 / balance impact)
 tiers) for a server-rolled hit — success `tier.base − targetLvl×NPC_DEF_PER_LVL` clamped `[MIN,MAX]`
 so the weak buy a *chance* at the strong, never a certainty; the fee **burns win or lose**
 (`npchit:hire`, a §10.4 sink), draws heat + a cooldown, pays **zero rep**, and runs the estate on a
-hit (no chop/bounty) unless revive insurance absorbs it. Phase 4 (earnable defense + interlocks)
-remains design-only below.
+hit (no chop/bounty) unless revive insurance absorbs it. **Phase 4 (earnable defense + interlocks)
+— BUILT (core)**: the **safehouse** (`POST /v1/safehouse`, `enterSafehouse`) — pay `SAFEHOUSE_COST`
+($25k, a §10.4 `safehouse` cash sink) to go to ground for `SAFEHOUSE_MS` (4h): untargetable by both
+`fire` and `npcHit` (both throw `safe`) but still jumpable (non-lethal), giving an in-game survival
+shield beside real-ETH revive insurance. Two interlocks: **fire-heat** — every `fire` adds
+`FIRE_HEAT` (20) to the shooter's law heat, so wet work isn't heat-free vs the Kitchen's deals; and
+**war-kill scoring** — a `fire` kill on a family you're actively at war with scores `WAR_KILL_POINTS`
+(3) to the war chest (vs a jump's 1), so lethal play decides wars, not just jump-spam. All three
+numbers are new/tunable — sim + founder sign-off before production. Phase 4 remainder still design-only
+below: treasury-funded family contracts, two-party bodyguard protection.
 
 ---
 

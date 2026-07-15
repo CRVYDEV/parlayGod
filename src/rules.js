@@ -543,6 +543,12 @@ export const M3 = {
   // NPC_MAX_SUCCESS is headroom for future high-base tiers (today's top base 0.55 < 0.60, so the
   // floor is the clamp that bites); NPC_MIN_SUCCESS keeps even a whale at a small standing risk.
   NPC_DEF_PER_LVL: 0.005, NPC_MAX_SUCCESS: 0.60, NPC_MIN_SUCCESS: 0.02,
+  // M7 Phase 4 — earnable defense + PvP interlocks (new/tunable numbers, sim + sign-off before
+  // production). SAFEHOUSE: pay cash to go to ground → untargetable by fire/NPC-hit for a window
+  // (the in-game shield, so real-ETH respawn isn't the only survival). FIRE_HEAT: a hit draws law
+  // heat like a deal. WAR_KILL_POINTS: a kill on a family at war scores war points (the lethal
+  // layer finally feeds war resolution, not just jumps).
+  SAFEHOUSE_COST: 25000, SAFEHOUSE_MS: 4 * 3600 * 1000, FIRE_HEAT: 20, WAR_KILL_POINTS: 3,
 };
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [

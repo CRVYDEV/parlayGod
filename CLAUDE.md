@@ -203,8 +203,19 @@ who'd funded a still-exclusive directed pot on the victim had their refund SQL-c
 clobbered by `persistCharacter` (§10.4 drift + stolen escrow) — now threads `{ killerCh: ch }` like
 `fire`; regression added. Flagged for founder sign-off (not silently retuned per ground rule #1):
 NPC-hit heat is a weak deterrent for non-kitchen whales, so repeat-resetting one rival wants a
-per-target cooldown or post-death grace. Phase 4 (earnable defense, war-kill scoring, fire-heat)
-remains design-only.
+per-target cooldown or post-death grace. **Phase 4 — earnable defense + interlocks** (`social.js`):
+the **safehouse** (`enterSafehouse`, `POST /v1/safehouse`) is the in-game survival shield — pay
+`SAFEHOUSE_COST` ($25k, a §10.4 `safehouse` cash sink) to go to ground for `SAFEHOUSE_MS` (4h),
+untargetable by `fire` AND `npcHit` (both throw `safe`) but still jumpable (non-lethal), so real-ETH
+revive insurance isn't the only way to weather a contract on your head; blocks in lockup / while
+already safe. Two interlocks close the loops: **fire-heat** — every `fire` now adds `FIRE_HEAT` (20)
+to the shooter's law heat (wet work is no longer heat-free vs the Kitchen's deals), and **war-kill
+scoring** — a `fire` kill on a family you're actively at war with scores `WAR_KILL_POINTS` (3) to
+your war chest (vs a jump's 1), so the lethal layer finally decides wars, not just jump-spam; scored
+before the estate vacates the seat, returned as `warKill`. `test/social.js` covers the fee-burn,
+fire+npc block, lapse (fair game again), fire-heat, and war-kill scoring. Safehouse/fire-heat/war-kill
+numbers are new/tunable — sim + founder sign-off before production. Phase 4 remainder left design-only:
+treasury-funded family contracts and two-party bodyguard protection.
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New

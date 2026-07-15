@@ -327,6 +327,9 @@ export async function buildServer() {
   // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
   app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier)));
+  // M7 Phase 4: go to ground in a safehouse — earnable defense (untargetable by fire/NPC-hit).
+  app.post('/v1/safehouse', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.enterSafehouse(ch, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

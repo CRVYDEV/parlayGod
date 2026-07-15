@@ -13,6 +13,7 @@ import {
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 
@@ -540,6 +541,7 @@ export async function fire(ch, victim, client, h, rounds) {
   const fired = Math.max(50, Math.floor(Number(rounds) || 0)); // §7.7 rounds ≥ 50
   if ((Number(ch.ammo) || 0) < fired) throw new GameError('ammo', `Calling for ${fired} rounds with ${ch.ammo} on hand.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  if (safeHoused(victim)) throw new GameError('safe', "They've gone to ground — your people can't place them.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('family', "They've been made family since you took the contract. It's off.");
@@ -548,6 +550,7 @@ export async function fire(ch, victim, client, h, rounds) {
 
   ch.energy = Number(ch.energy) - M3.FIRE_ENERGY;
   ch.ammo = Number(ch.ammo) - fired;
+  ch.heat = Number(ch.heat || 0) + M3.FIRE_HEAT; // §7 interlock: wet work draws law heat, like a deal
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -fired, reason: 'fire' });
 
   const vicLvl = levelOf(Number(victim.respect));
@@ -589,6 +592,18 @@ export async function fire(ch, victim, client, h, rounds) {
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);
+    // war interlock: a kill on a family you're at war with scores war points (worth more than a
+    // jump's 1) — the lethal layer finally decides wars, not just jump-spam. Done BEFORE the
+    // estate vacates the victim's gang seat, while h.victimOwned.gangId is still known.
+    let warKill = false;
+    if (h.owned.gangId && h.victimOwned.gangId) {
+      const myGang = (await client.query('SELECT * FROM gangs WHERE id=$1', [h.owned.gangId])).rows[0];
+      if (warActive(myGang) && myGang.war_with === h.victimOwned.gangId) {
+        await client.query('UPDATE gangs SET war_score_us = war_score_us + $2 WHERE id=$1', [h.owned.gangId, M3.WAR_KILL_POINTS]);
+        await client.query('UPDATE gangs SET war_score_them = war_score_them + $2 WHERE id=$1', [h.victimOwned.gangId, M3.WAR_KILL_POINTS]);
+        warKill = true;
+      }
+    }
     await h.notify(client, victim.id, 'whacked', { from: ch.name });
     // witnesses: 3 random living characters saw something (§7.7)
     const wits = (await client.query('SELECT id FROM characters WHERE alive AND id<>$1 AND id<>$2 LIMIT 20', [ch.id, victim.id])).rows;
@@ -597,7 +612,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, bounty, jammed, hitman: hit, estate: { heirId: estate.heirId } };
+    return { ok: true, kill: true, rep, chop, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
@@ -605,6 +620,21 @@ export async function fire(ch, victim, client, h, rounds) {
   victim.health = Math.max(1, Number(victim.health) - dmg);
   await h.notify(client, victim.id, 'attempt', { from: ch.name, dmg });
   return { ok: true, kill: false, jammed, effective, btk };
+}
+
+// ═══════════════════ SAFEHOUSE — EARNABLE DEFENSE (M7 Phase 4) ═══════════════════
+// Pay cash to go to ground: for a window you can't be `fire`d on or NPC-hit — the in-game
+// survival shield, so real-ETH revive insurance isn't the only way to weather a contract on
+// your head. Jumps (non-lethal) still land. `safehouse` is a §10.4 cash sink.
+export async function enterSafehouse(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No safehouse reaches into lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "You're already off the grid.");
+  if (Number(ch.cash) < M3.SAFEHOUSE_COST) throw new GameError('cash', `A safehouse runs $${M3.SAFEHOUSE_COST}.`);
+  ch.cash = Number(ch.cash) - M3.SAFEHOUSE_COST;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -M3.SAFEHOUSE_COST, reason: 'safehouse' });
+  ch.safe_until = new Date(Date.now() + M3.SAFEHOUSE_MS);
+  await h.track(client, ch.account_id, 'safehouse', {});
+  return { ok: true, safeUntil: ch.safe_until };
 }
 
 // ═══════════════════ NPC HITMEN FOR HIRE (M7 Phase 3) ═══════════════════
@@ -621,6 +651,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  if (safeHoused(victim)) throw new GameError('safe', "The contractor can't find them — they've gone to ground.");
   if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
   if (Number(ch.cash) < tier.cost) throw new GameError('cash', `${tier.name} charges $${tier.cost}.`);
 
