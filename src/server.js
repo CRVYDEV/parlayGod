@@ -330,6 +330,17 @@ export async function buildServer() {
   // M7 Phase 4: go to ground in a safehouse — earnable defense (untargetable by fire/NPC-hit).
   app.post('/v1/safehouse', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.enterSafehouse(ch, client, h)));
+  // M7 Phase 4: family contracts — the boss posts (and cancels) a contract funded from the treasury.
+  app.post('/v1/gangs/contract/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postFamilyContract(ch, req.params.targetId, req.body?.amount, client, h,
+      { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon })));
+  app.post('/v1/gangs/contract/:targetId/:kind/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelFamilyContract(ch, req.params.targetId, req.params.kind, client, h)));
+  // M7 Phase 4: bodyguards — list yourself for hire; hire a listed guard (two-party, ledgered transfer).
+  app.post('/v1/bodyguard/offer', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.offerBodyguard(ch, req.body?.price, client, h)));
+  app.post('/v1/bodyguard/hire/:guardId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.guardId, (ch, guard, client, h) => S.hireBodyguard(ch, guard, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

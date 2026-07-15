@@ -11,7 +11,8 @@ const KNOWN_REASONS = {
     'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
-    'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse'],
+    'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
+    'gang:contract', 'bodyguard:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
@@ -43,15 +44,22 @@ export async function runLedgerInvariants(pool) {
   const warOut = -(await sum(pool, "currency='cash' AND reason='gang:war'"));
   const seizeOut = -(await sum(pool, "currency='cash' AND reason LIKE 'turf:seize:%'"));
   const dissolvedCash = -(await sum(pool, "currency='cash' AND reason='gang:dissolved'"));
-  push('gang treasuries', treasuries, tributeIn + titheIn - warOut - seizeOut - dissolvedCash);
+  // M7 Phase 4 family contracts: treasury → escrow ('gang:contract' + its 2% ':take') is an
+  // outflow; a cancel/expiry refund comes home as a character_id-NULL 'bounty:refund' row
+  // (character refunds carry a character_id, so the split is exact).
+  const contractOut = -(await sum(pool, "currency='cash' AND reason LIKE 'gang:contract%'"));
+  const treasuryRefunds = await sum(pool, "currency='cash' AND reason='bounty:refund' AND character_id IS NULL");
+  push('gang treasuries', treasuries, tributeIn + titheIn - warOut - seizeOut - dissolvedCash - contractOut + treasuryRefunds);
 
-  // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows) − claimed − refunded (cancel/expiry) − cleared at death.
+  // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
+  // − claimed − refunded (cancel/expiry) − cleared at death.
   const escrow = await one(pool, 'SELECT COALESCE(SUM(amount),0) s FROM bounties');
   const posted = -(await sum(pool, "currency='cash' AND reason='bounty:post'"));
+  const gangPosted = -(await sum(pool, "currency='cash' AND reason='gang:contract'"));
   const claimed = await sum(pool, "currency='cash' AND reason='bounty:claim'");
   const refunded = await sum(pool, "currency='cash' AND reason='bounty:refund'");
   const deadBounties = -(await sum(pool, "currency='cash' AND reason='death:bounty'"));
-  push('bounty escrow', escrow, posted - claimed - refunded - deadBounties);
+  push('bounty escrow', escrow, posted + gangPosted - claimed - refunded - deadBounties);
 
   // (d) $OMR CONSERVATION: buckets = accounts (omr + staked; unclaimed rewards mint
   // at claim time) + AMM reserve + event fund + family reserves. Genesis is the

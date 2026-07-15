@@ -255,12 +255,14 @@ async function persistCharacter(client, ch) {
       lc_crime=$15, ammo=$16, cb=$17, heat=$18, trade_rep=$19, gta_at=$20, path=$21,
       gun=$22, vest=$23, shoot_cd_until=$24, busts=$25, hosp_until=$26,
       lab=$27, crew=$28, heist_at=$29, title=$30,
-      racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34, last_accrued_at=$35 WHERE id=$1`,
+      racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
+      guard_price=$35, guarded_by=$36, guarded_until=$37, last_accrued_at=$38 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
-     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until, ch.last_accrued_at]);
+     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
+     ch.guard_price, ch.guarded_by, ch.guarded_until, ch.last_accrued_at]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -281,6 +283,9 @@ export function view(ch, acct = {}, owned = {}) {
     hospSeconds: ch.hosp_until ? Math.max(0, Math.ceil((new Date(ch.hosp_until) - Date.now()) / 1000)) : 0,
     shootCdSeconds: ch.shoot_cd_until ? Math.max(0, Math.ceil((new Date(ch.shoot_cd_until) - Date.now()) / 1000)) : 0,
     safeSeconds: ch.safe_until ? Math.max(0, Math.ceil((new Date(ch.safe_until) - Date.now()) / 1000)) : 0,
+    guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
+    guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
+    guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
     maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
     cargoCap: cargoCapacity(assets),

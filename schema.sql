@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS characters (
   season_kills INT NOT NULL DEFAULT 0,
   npchit_at TIMESTAMPTZ,                          -- M7 Phase 3: NPC-hitman hire cooldown
   safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
+  guard_price NUMERIC,                             -- M7 Phase 4: bodyguard-for-hire listing (NULL = not offering)
+  guarded_by TEXT,                                 -- M7 Phase 4: my hired bodyguard's character id
+  guarded_until TIMESTAMPTZ,                       -- M7 Phase 4: protection window (one absorb, then consumed)
 
   -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
   -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
@@ -186,16 +189,20 @@ CREATE TABLE IF NOT EXISTS bounties (
   hitman TEXT,
   opens_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
+  posted_by_gang TEXT,                           -- M7 Phase 4: set when the pot was OPENED by a family contract (board shows the family)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (target_character, kind)
 );
 -- Every account that funded a pot + how much (so a cancel/expiry refunds each fairly, and
 -- none of them can collect it — closes the top-up-overwrites-posted_by self-pay bypass).
+-- M7 Phase 4: a family contract's share rides the same table with contributor = the GANG id and
+-- funder_gang = true — refunds go to the treasury, and NO member of the funding family collects.
 CREATE TABLE IF NOT EXISTS bounty_contributors (
   target_character TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'kill',
-  contributor TEXT NOT NULL,                     -- funder's character id
+  contributor TEXT NOT NULL,                     -- funder's character id (or gang id when funder_gang)
   amount NUMERIC NOT NULL DEFAULT 0,             -- their tracked share of the pot (for refunds)
+  funder_gang BOOLEAN NOT NULL DEFAULT false,    -- true = contributor is a gang id; refund → treasury
   PRIMARY KEY (target_character, kind, contributor)
 );
 -- M7 Phase 2 — one row per confirmed gameplay kill. Drives repeat-bloodline rep diminishing
