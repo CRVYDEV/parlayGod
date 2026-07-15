@@ -144,6 +144,31 @@ assert.equal((await meOf(vito.token)).cash, vitoPre + 800, 'refund returned to t
 assert.equal((await call('POST', `/v1/contracts/${rocco.id}/hospitalize/cancel`, { token: vito.token })).code, 400, 'nothing left to cancel');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${rocco.id}' AND kind='hospitalize'`)).rows[0].n), 0, 'empty pot removed');
 
+// ── red-team M1: reposting onto an expired-but-unswept pot refunds the old funder + posts fresh (no 500) ──
+const snitch = await mk('Snitch Sammy');
+assert.equal((await call('POST', `/v1/streets/${snitch.id}/bounty`, { token: vito.token, body: { amount: 1000, kind: 'kill' } })).code, 200, 'first contract on snitch');
+await pool.query(`UPDATE bounties SET expires_at = now() - interval '1 hour' WHERE target_character='${snitch.id}' AND kind='kill'`);
+const vitoBefore = (await meOf(vito.token)).cash;
+r = await call('POST', `/v1/streets/${snitch.id}/bounty`, { token: vito.token, body: { amount: 2000, kind: 'kill' } });
+assert.equal(r.code, 200, 'repost onto a lapsed pot succeeds (no PK 500)');
+assert.equal(r.body.total, 2000, 'fresh pot, not a top-up of the lapsed one');
+assert.equal((await meOf(vito.token)).cash, vitoBefore + 1000 - 2040, 'lapsed $1000 refunded, then $2040 charged for the fresh contract');
+assert.equal(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${snitch.id}' AND kind='kill'`)).rows[0].amount), 2000, 'pot holds only the fresh amount');
+
+// ── red-team M2: a DEAD funder's stake is BURNED on expiry (death:bounty), not paid to their corpse ──
+const ghost = await mk('Ghost Funder'); await seedCh(ghost.id, 'cash=5000');
+const markd = await mk('Marked Man');
+assert.equal((await call('POST', `/v1/streets/${markd.id}/bounty`, { token: ghost.token, body: { amount: 1500, kind: 'kill' } })).code, 200, 'ghost funds a contract');
+const ghostCash = (await meOf(ghost.token)).cash;
+await pool.query(`UPDATE characters SET alive=false WHERE id='${ghost.id}'`); // ghost dies, stake still escrowed on markd
+await pool.query(`UPDATE bounties SET expires_at = now() - interval '1 hour' WHERE target_character='${markd.id}'`);
+const { sweepExpiredBounties } = await import('../src/social.js');
+const sw = await sweepExpiredBounties(pool);
+assert(sw.pots >= 1, 'expired pot swept');
+assert.equal(Number((await pool.query(`SELECT cash FROM characters WHERE id='${ghost.id}'`)).rows[0].cash), ghostCash, 'no refund credited to the dead funder');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='death:bounty' AND counterparty='${markd.id}'`)).rows[0].s), -1500, 'dead stake burned as death:bounty');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${markd.id}'`)).rows[0].n), 0, 'pot cleared after the sweep');
+
 // ── war (§5.5): declare, score via jumps, resolve with spoils ──
 r = await call('POST', `/v1/gangs/war/${gangB}`, { token: don.token });
 assert.equal(r.code, 200, 'war declared');
@@ -218,7 +243,9 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM gangs WHERE id='${
 const heirNotes = (await call('GET', '/v1/notifications', { token: rocco.token })).body.notifications;
 assert(heirNotes.some((n) => n.type === 'estate' && n.payload.legacy === 5), 'estate report delivered to the heir');
 const mookNotes = (await call('GET', '/v1/notifications', { token: mook.token })).body.notifications;
-assert(mookNotes.some((n) => n.type === 'witness'), 'a witness saw something');
+// the kill notifies 3 RANDOM living witnesses — assert 3 were delivered globally (robust to which
+// ones the RNG picks from the now-larger cast), not that a specific character was chosen
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM notifications WHERE type='witness'")).rows[0].n), 3, 'three witnesses saw something');
 assert(mookNotes.some((n) => n.type === 'sale'), 'exchange sale notified');
 assert.equal((await call('GET', '/v1/notifications', { token: mook.token })).body.notifications.length, 0, 'reading marks delivered');
 

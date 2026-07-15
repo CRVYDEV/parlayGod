@@ -285,12 +285,18 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
   ch.cash = Number(ch.cash) - amt - fee - tax;
 
-  // upsert the pot (SELECT-then-write — pg-mem's ON CONFLICT is unreliable). Keep the FIRST
-  // poster/reason/expiry on a top-up; the expiry does NOT extend (no grief-forever contracts).
-  // top up only a LIVE pot; an expired-but-unswept pot is treated as gone (a fresh pot is made,
-  // resetting expiry) so money never lands on a contract that's about to refund.
-  const cur = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [targetCharacterId, kind])).rows[0];
-  if (cur) {
+  // Lock any existing pot for (target,kind) in ANY state (pot row BEFORE funder rows — the
+  // stable order). A LIVE pot is topped up (keeping its first poster/reason/expiry — expiry
+  // does NOT extend, so no grief-forever contracts). An EXPIRED-but-unswept pot is refunded to
+  // its old funders and replaced by a fresh pot (matching "expired = gone"). None → a fresh pot.
+  // (SELECT-then-write — pg-mem's ON CONFLICT is unreliable.)
+  const existing = (await client.query('SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
+  const live = existing && !(existing.expires_at && new Date(existing.expires_at) <= new Date());
+  if (existing && !live) { // clear the lapsed pot first, crediting the poster's own lapsed stake in-memory
+    const { selfRefund } = await refundPot(client, targetCharacterId, kind, ch.id);
+    ch.cash = Number(ch.cash) + selfRefund;
+  }
+  if (live) {
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
   } else {
     const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
@@ -309,7 +315,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   await takeHouse(client, tax);
   bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind });
   await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt }); // the mark can react (lay low, etc.)
-  return { ok: true, kind, total: Number(cur?.amount || 0) + amt, expiresHours: ttlH };
+  return { ok: true, kind, total: (live ? Number(existing.amount) : 0) + amt, expiresHours: ttlH };
 }
 
 // Collect every claimable pot on the victim: `kinds` is what this takedown fulfils — a jump
@@ -336,16 +342,20 @@ async function claimBounty(client, h, ch, victimId, kinds) {
   return total;
 }
 
-// A funder withdraws their own share of a contract (the 2% take is non-refundable).
+// A funder withdraws their own share of a LIVE contract (the 2% take is non-refundable).
 export async function cancelBounty(ch, targetCharacterId, kind, client, h) {
   const k = kind || 'kill';
   if (!BKINDS.has(k)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
+  // lock the POT row first, then the contributor row — the SAME order claim/sweep use, so a
+  // cancel can never deadlock against a concurrent kill/jump or the expiry sweep. Live pots
+  // only: a lapsed pot refunds itself via the sweep.
+  const pot = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [targetCharacterId, k])).rows[0];
+  if (!pot) throw new GameError('no_contract', 'No open contract of yours there (a lapsed one refunds itself).');
   const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3 FOR UPDATE', [targetCharacterId, k, ch.id])).rows[0];
   if (!mine || !(Number(mine.amount) > 0)) throw new GameError('no_contract', "You haven't funded that contract.");
   const refund = Math.floor(Number(mine.amount));
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, k, ch.id]);
-  const pot = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, k])).rows[0];
-  const remaining = Number(pot?.amount || 0) - refund;
+  const remaining = Number(pot.amount) - refund;
   if (remaining > 0) await client.query('UPDATE bounties SET amount=$3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, k, remaining]);
   else await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [targetCharacterId, k]);
   ch.cash = Number(ch.cash) + refund;
@@ -371,29 +381,48 @@ export async function listContracts(pool) {
   }));
 }
 
-// Worker sweep: refund every funder of an expired pot their tracked share (ledgered), then
-// drop the pot. Idempotent-safe: a pot is deleted in the same txn it's refunded.
+// Refund one pot to its funders and delete it — shared by the expiry sweep and a repost that
+// lands on an expired-unswept pot. A LIVING funder is credited (ledgered bounty:refund); a
+// DEAD funder's stake is BURNED (death:bounty) rather than paid to their corpse — death
+// forfeits escrowed stakes like the rest of a dead street's wealth. The caller must already
+// hold the pot row lock; everyone locks the pot BEFORE funder rows (stable order).
+// `skipId` is the LIVE poster's character id (postBounty): their own refund must NOT be written
+// via SQL — the surrounding withCharacter txn persists the in-memory `ch` at commit and would
+// clobber it — so it's returned as `selfRefund` for the caller to apply to `ch.cash`. The sweep
+// passes no skipId. Returns { refunded (total leaving escrow), selfRefund }.
+async function refundPot(client, target, kind, skipId = null) {
+  const funders = (await client.query(
+    'SELECT bc.contributor, bc.amount, c.alive FROM bounty_contributors bc JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2',
+    [target, kind])).rows;
+  let refunded = 0, selfRefund = 0;
+  for (const f of funders) {
+    const amt = Math.floor(Number(f.amount));
+    if (amt <= 0) continue;
+    if (f.contributor === skipId) {
+      selfRefund += amt; // caller applies to the poster's in-memory cash
+      await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
+    } else if (f.alive) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [f.contributor, amt]);
+      await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
+    } else {
+      await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target }); // burn the dead man's stake
+    }
+    refunded += amt;
+  }
+  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [target, kind]);
+  await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [target, kind]);
+  return { refunded, selfRefund };
+}
+
+// Worker sweep: refund every funder of an expired pot, then drop the pot. Idempotent-safe:
+// a pot is deleted in the same txn it's refunded.
 export async function sweepExpiredBounties(pool) {
   const client = await pool.connect();
   let pots = 0, refunded = 0;
   try {
     await client.query('BEGIN');
     const expired = (await client.query("SELECT target_character, kind FROM bounties WHERE expires_at IS NOT NULL AND expires_at <= now() FOR UPDATE")).rows;
-    for (const b of expired) {
-      const funders = (await client.query('SELECT contributor, amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind])).rows;
-      for (const f of funders) {
-        const amt = Math.floor(Number(f.amount));
-        if (amt <= 0) continue;
-        // refund to the funder's character row (keeps the escrow invariant exact even if the
-        // funder has since died — a dead street's refund is a wash, not a mint)
-        await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [f.contributor, amt]);
-        await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: b.target_character });
-        refunded += amt;
-      }
-      await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind]);
-      await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind]);
-      pots++;
-    }
+    for (const b of expired) { refunded += (await refundPot(client, b.target_character, b.kind)).refunded; pots++; }
     await client.query('COMMIT');
     return { pots, refunded };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
