@@ -453,5 +453,39 @@ for (let i = 0; i < 40 && !refundOk; i++) {
 }
 assert(refundOk, 'the NPC landed the kill and the payer-funded escrow was verifiably refunded');
 
+// ── M7 Phase 4: earnable defense (safehouse) + interlocks (fire-heat, war-kill scoring) ──
+// safehouse: pay cash to go to ground → untargetable by fire AND NPC-hit for a window
+const dave = await mk('Ducking Dave'); await seedCh(dave.id, 'respect=100, cash=100000');
+const daveCash = (await meOf(dave.token)).cash;
+r = await call('POST', '/v1/safehouse', { token: dave.token });
+assert.equal(r.code, 200, 'went to ground in a safehouse');
+assert.equal((await meOf(dave.token)).cash, daveCash - 25000, 'safehouse fee burned (a §10.4 sink)');
+assert((await meOf(dave.token)).safeSeconds > 0, 'off the grid for a window');
+await seedCh(don.id, "energy=200, ammo=8000, shoot_cd_until=NULL, jail_until=NULL, loc='docks'");
+await seedCh(dave.id, "loc='docks'"); // same district — but he's in the safehouse
+await call('POST', `/v1/streets/${dave.id}/search`, { token: don.token });
+const blocked = await call('POST', `/v1/streets/${dave.id}/fire`, { token: don.token, body: { rounds: 6000 } });
+assert.equal(blocked.code, 400, 'a fire on a safe-housed target is blocked'); assert.equal(blocked.body.error, 'safe', 'because they went to ground');
+await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+const npcBlocked = await call('POST', `/v1/streets/${dave.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } });
+assert.equal(npcBlocked.code, 400, 'an NPC hit on a safe-housed target is blocked'); assert.equal(npcBlocked.body.error, 'safe', 'the contractor can\'t find them');
+// once the safehouse lapses, they're fair game — and the hit draws law HEAT on the shooter
+await seedCh(dave.id, "safe_until = now() - interval '1 minute', loc='docks'");
+await seedCh(don.id, "energy=200, ammo=8000, shoot_cd_until=NULL, heat=0, loc='docks'");
+const donHeat0 = (await meOf(don.token)).heat;
+const lapsed = await call('POST', `/v1/streets/${dave.id}/fire`, { token: don.token, body: { rounds: 6000 } }); // search persists from above
+assert.equal(lapsed.code, 200, 'a lapsed safehouse offers no protection');
+assert((await meOf(don.token)).heat >= donHeat0 + 15, 'the hit drew law heat on the shooter (~20)');
+
+// war-kill scoring: a kill on a family you're at war with scores war points (not just jumps)
+const enemy = await mk('Enemy Eddie'); await seedCh(enemy.id, 'respect=400, cash=50000'); // level 11
+const egId = (await call('POST', '/v1/gangs', { token: enemy.token, body: { name: 'The Rivals', tag: 'RIV' } })).body.gangId;
+assert(egId, 'enemy founded a rival family');
+await pool.query(`UPDATE gangs SET war_with='${egId}', war_until=now()+interval '1 hour', war_score_us=0 WHERE id='${gangA}'`);
+await pool.query(`UPDATE gangs SET war_with='${gangA}', war_until=now()+interval '1 hour', war_score_them=0 WHERE id='${egId}'`);
+const kr = await whack(enemy.id); // Don (gangA) whacks the enemy boss mid-war
+assert(kr.kill && kr.warKill === true, 'a kill on a warring family is a war kill');
+assert.equal(Number((await pool.query(`SELECT war_score_us FROM gangs WHERE id='${gangA}'`)).rows[0].war_score_us), 3, 'a war kill scores WAR_KILL_POINTS (3), worth more than a jump');
+
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
 await app.close();

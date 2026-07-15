@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS characters (
   -- season rollover and starts at 0 for an heir (dies with the man, unlike the account legend).
   season_kills INT NOT NULL DEFAULT 0,
   npchit_at TIMESTAMPTZ,                          -- M7 Phase 3: NPC-hitman hire cooldown
+  safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
 
   -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
   -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
