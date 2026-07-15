@@ -649,6 +649,28 @@ assert(names.includes('The New Fabrizi (family)'), 'a family stake is attributed
 // nothing on your head → no charge, just the good news
 assert.equal((await call('POST', '/v1/contracts/peek', { token: gina.token })).body.error, 'no_contracts', 'silence is free (checked before any charge)');
 
+// ── M8: family seals — the gang-prestige ladder, paid from the POOLED $OMR reserve ──
+const close = (a, b) => Math.abs(a - b) < 1e-6; // reserve is NUMERIC and buybacks pay fractions
+assert.equal((await call('POST', '/v1/gangs/vanity/seal', { token: mook.token })).body.error, 'rank', 'only the boss commissions the seal');
+assert.equal((await call('POST', '/v1/gangs/vanity/seal', { token: barry.token })).body.error, 'reserve', 'an empty reserve buys no seal');
+// any member pools $OMR into the reserve — the seal is a cooperative purchase, not a wallet flex
+await seedOmr(mook.id, 3000);
+assert.equal((await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 0 } })).body.error, 'min', 'zero tribute rejected');
+const reserve0 = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve;
+assert.equal((await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 2000 } })).code, 200, 'mook pooled tokens for the family');
+assert.equal((await meOf(mook.token)).omr, 1000, "the tribute left mook's vault");
+assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000), 'and landed in the family reserve (a §10.4 bucket transfer)');
+// the ladder climbs sequentially: Wax (25) then Brass (75) — each burn ledgered against the reserve
+r = await call('POST', '/v1/gangs/vanity/seal', { token: don.token });
+assert.equal(r.code, 200, 'the family took its first seal'); assert.equal(r.body.seal.name, 'Wax Seal', 'the ladder starts at wax');
+r = await call('POST', '/v1/gangs/vanity/seal', { token: don.token });
+assert.equal(r.code, 200, 'and climbed'); assert.equal(r.body.seal.name, 'Brass Seal', 'no skipping tiers');
+assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, reserve0 + 2000 - 100), 'Wax (25) + Brass (75) burned from the reserve');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.seal, 'Brass Seal', 'the family page bears the seal');
+assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id === gangA).seal, 'Brass Seal', 'the seal shows on the families list');
+assert.equal((await meOf(don.token)).gang.seal, 'Brass Seal', 'every member carries it');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -100, 'every seal $OMR is a ledgered burn');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
@@ -656,5 +678,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns)');
 await app.close();

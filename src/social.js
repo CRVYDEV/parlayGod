@@ -130,6 +130,23 @@ export async function tribute(ch, amount, client, h) {
   return { ok: true, amount: amt };
 }
 
+// M8 — $OMR TRIBUTE: any member pools tokens into the family's $OMR RESERVE (the bucket the
+// buyback split + weekly bonuses feed), so a seal is a cooperative purchase, not a boss's
+// wallet flex. A pure §10.4 bucket TRANSFER (account → reserve, both counted in conservation —
+// the total moves nothing), same 'gang:tribute' reason as cash tribute, split by currency.
+// It does NOT bump the weekly tribute task (that counts dollars, v24 rule).
+export async function tributeOmr(ch, amount, client, h) {
+  if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
+  const amt = Math.floor(Number(amount) || 0);
+  if (amt < M8.TRIBUTE_OMR_MIN) throw new GameError('min', `Minimum $OMR tribute is ${M8.TRIBUTE_OMR_MIN}.`);
+  if (Number(h.acct.omr) < amt) throw new GameError('omr', 'Not that many tokens in the vault.');
+  h.acct.omr = Number(h.acct.omr) - amt;
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [h.owned.gangId, amt]);
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -amt, reason: 'gang:tribute', counterparty: h.owned.gangId });
+  bus.emit(`gang:${h.owned.gangId}`, { type: 'tribute_omr', amount: amt });
+  return { ok: true, amount: amt };
+}
+
 // ═══════════════════ WARS (§5.5) ═══════════════════
 const warActive = (g) => g && g.war_with && new Date(g.war_until) > new Date();
 

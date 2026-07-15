@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf } from './rules.js';
 import { accrue } from './accrual.js';
 
 const uid = () => crypto.randomUUID();
@@ -292,7 +292,7 @@ export function view(ch, acct = {}, owned = {}) {
     rackets: owned.rackets || [], assets, cargo: owned.cargo || {}, items: owned.items || {}, gear,
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
-      color: owned.gang.color || null,
+      color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
     lab: ch.lab || null, crew: Number(ch.crew || 0),
