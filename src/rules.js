@@ -573,6 +573,12 @@ export const M3 = {
   // burns/survives. Makes killing +EV, the rich into targets, and staking a real safe harbour.
   // OMR_LOOT_RATE is the dial: set to 0 to ship a cash-only version first.
   CASH_LOOT_RATE: 0.25, OMR_LOOT_RATE: 0.20,
+  // Phase 3 remainder — GEAR LOOT: on a player fire-kill, a chance to strip ONE piece of the
+  // victim's IN-GAME gear to the killer. On-chain-minted gear (minted_onchain) is SAFE — it's been
+  // extracted to the player's own ERC-1155, out of the game's reach — so gear is a real risk
+  // tradeoff: keep it in-game to use it (losable) or extract it on-chain (safe + tradeable, but
+  // it leaves play). New/tunable — sim + sign-off.
+  GEAR_LOOT_CHANCE: 0.15,
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited

@@ -689,6 +689,22 @@ assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id ==
 assert.equal((await meOf(don.token)).gang.seal, 'Brass Seal', 'every member carries it');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -100, 'every seal $OMR is a ledgered burn');
 
+// ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
+process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)
+const geared = await mk('Geared Gary'); await seedCh(geared.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const garyAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${geared.id}'`)).rows[0].account_id;
+const donAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${don.id}'`)).rows[0].account_id;
+await pool.query(`INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ('${garyAcct}','knuckles',false)`); // in-game — lootable
+await pool.query(`INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ('${garyAcct}','brasspin',true)`);  // extracted on-chain — safe
+const kg = await whack(geared.id);
+assert(kg.kill, 'the geared mark went down');
+assert.equal(kg.gearLoot, 'knuckles', 'the killer stripped the IN-GAME gear piece');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${donAcct}' AND gear_id='knuckles'`)).rows[0].n), 1, 'the looted gear is now the killer\'s');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${garyAcct}' AND gear_id='knuckles'`)).rows[0].n), 0, 'the victim lost it');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${donAcct}' AND gear_id='brasspin'`)).rows[0].n), 0, 'the on-chain gear was NOT looted — it left the game, out of reach');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${garyAcct}' AND gear_id='brasspin' AND minted_onchain`)).rows[0].n), 1, 'the extracted piece stays with the bloodline account, safe');
+delete process.env.GEAR_LOOT_CHANCE; // restore the production default for the rest of the suite
+
 // ── Risk-to-Earn Phase 3: TERRITORY RACKETS — productive, seizable capital ──
 // gangA (DON) holds 'docks' (seized at the top). Establish an operation, earn from it, upgrade it,
 // then watch a rival seize the turf and take the operation — and its income — with it.
