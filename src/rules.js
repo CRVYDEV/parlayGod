@@ -549,6 +549,11 @@ export const M3 = {
   // heat like a deal. WAR_KILL_POINTS: a kill on a family at war scores war points (the lethal
   // layer finally feeds war resolution, not just jumps).
   SAFEHOUSE_COST: 25000, SAFEHOUSE_MS: 4 * 3600 * 1000, FIRE_HEAT: 20, WAR_KILL_POINTS: 3,
+  // M7 Phase 4 remainder (new/tunable, sim + sign-off before production). BODYGUARD: a guard
+  // lists a price; a principal hires them for a window — the guard absorbs ONE lethal hit
+  // (hospitalized in the principal's place, contract consumed). Checked BEFORE real-ETH revive
+  // insurance: the earnable shield burns first.
+  BODYGUARD_MIN_PRICE: 1000, BODYGUARD_MS: 24 * 3600 * 1000, BODYGUARD_HOSP_MS: 2 * 3600 * 1000,
 };
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [

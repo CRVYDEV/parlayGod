@@ -487,5 +487,98 @@ const kr = await whack(enemy.id); // Don (gangA) whacks the enemy boss mid-war
 assert(kr.kill && kr.warKill === true, 'a kill on a warring family is a war kill');
 assert.equal(Number((await pool.query(`SELECT war_score_us FROM gangs WHERE id='${gangA}'`)).rows[0].war_score_us), 3, 'a war kill scores WAR_KILL_POINTS (3), worth more than a jump');
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
+// ── M7 Phase 4 remainder: FAMILY CONTRACTS — the treasury orders the hit ──
+const carl = await mk('Contract Carl'); await seedCh(carl.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const sal = await mk('Soldier Sal'); // a PLAIN soldier (mook is the underboss, who legitimately can)
+assert.equal((await call('POST', `/v1/gangs/${gangA}/join`, { token: sal.token })).code, 200, 'sal made his bones');
+assert.equal((await call('POST', `/v1/gangs/contract/${carl.id}`, { token: sal.token, body: { amount: 10000 } })).body.error, 'rank', 'a soldier cannot spend family money');
+await seedCh(don.id, 'cash=500000');
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 100000 } })).code, 200, 'the family war chest is funded');
+let tre = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+r = await call('POST', `/v1/gangs/contract/${carl.id}`, { token: don.token, body: { amount: 10000, kind: 'kill', reason: 'He knows what he did.' } });
+assert.equal(r.code, 200, 'the boss posted a family contract');
+assert.equal(r.body.treasury, tre - 10200, 'the TREASURY paid the pot + the 2% take (no character cash moved)');
+const famRow = (await call('GET', '/v1/contracts', { token: mook.token })).body.contracts.find((c) => c.target.id === carl.id && c.kind === 'kill');
+assert(famRow && famRow.family === true && famRow.poster === 'The Fabrizi' && famRow.pot === 10000, 'the board names the FAMILY as the poster');
+// the funder lockout extends to the whole family: even the boss collects nothing on his own order
+const kCarl = await whack(carl.id);
+assert(kCarl.kill, 'the mark went down');
+assert.equal(kCarl.bounty, 0, "no member of the funding family collects the family's own money");
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${carl.id}'`)).rows[0].n), 0, 'the unclaimed pot died with the mark (burned, ledgered death:bounty)');
+// cancel → the pot goes home to the treasury (the 2% take is spent)
+const carla = await mk('Contract Carla'); await seedCh(carla.id, "respect=400, muscle=1, speed=1, loc='docks'");
+tre = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+assert.equal((await call('POST', `/v1/gangs/contract/${carla.id}`, { token: don.token, body: { amount: 5000 } })).code, 200, 'second family contract posted');
+r = await call('POST', `/v1/gangs/contract/${carla.id}/kill/cancel`, { token: don.token });
+assert.equal(r.code, 200, 'the boss called it off'); assert.equal(r.body.refunded, 5000, 'the full pot came back');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, tre - 100, 'treasury made whole minus the 2% take');
+// expiry → the sweep refunds the treasury like any other funder
+tre = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+assert.equal((await call('POST', `/v1/gangs/contract/${carla.id}`, { token: don.token, body: { amount: 4000 } })).code, 200, 'third family contract posted');
+await pool.query(`UPDATE bounties SET expires_at = now() - interval '1 minute' WHERE target_character='${carla.id}'`);
+await sweepExpiredBounties(pool);
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, tre - 4080 + 4000, 'the expired pot refunded the treasury via the sweep');
+// an OUTSIDER collects: a freelancer fulfils the family's hospitalize contract with a jump
+const frank = await mk('Freelance Frank'); await seedCh(frank.id, "muscle=800, speed=800, energy=200, loc='docks'");
+assert.equal((await call('POST', `/v1/gangs/contract/${carla.id}`, { token: don.token, body: { amount: 3000, kind: 'hospitalize' } })).code, 200, 'family hospitalize contract posted');
+await seedCh(carla.id, "hosp_until=NULL, loc='docks', cash=1000");
+const jr = (await call('POST', `/v1/streets/${carla.id}/jump`, { token: frank.token })).body;
+assert(jr.win, 'the freelancer took the job');
+assert.equal(jr.bounty, 3000, 'an outsider collects the family contract in full');
+
+// ── M7 Phase 4 remainder: BODYGUARDS — the player-to-player defense market ──
+const barry = await mk('Bullet Barry'); const paula = await mk('Principal Paula');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 400 } })).body.error, 'min', 'nobody eats a bullet for pocket change');
+assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'not_offering', 'no hiring a guard who is not listed');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 5000 } })).code, 200, 'barry lists himself');
+await seedCh(paula.id, "cash=50000, loc='docks'");
+const barryCash0 = (await meOf(barry.token)).cash;
+r = await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token });
+assert.equal(r.code, 200, 'paula hired protection');
+assert.equal((await meOf(paula.token)).cash, 45000, 'paula paid the listed rate');
+assert.equal((await meOf(barry.token)).cash, barryCash0 + 5000, 'barry pocketed it up front (a ledgered transfer)');
+assert((await meOf(paula.token)).guardSeconds > 0, 'under protection');
+assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'guarded', 'one bullet-catcher at a time');
+// the earnable shield burns BEFORE real-ETH insurance — and one contract stops ONE bullet
+await pool.query(`UPDATE account_persistent SET respawn_tokens = 1 WHERE account_id = (SELECT account_id FROM characters WHERE id='${paula.id}')`);
+const ka = await whack(paula.id);
+assert.equal(ka.kill, false, 'the blow never reached paula'); assert.equal(ka.absorbed, true, 'barry took the bullet');
+assert.equal((await meOf(paula.token)).respawnTokens, 1, 'the real-ETH token was NOT spent — the bodyguard goes first');
+assert((await meOf(barry.token)).hospSeconds > 0, "barry is under the Doc's care in her place");
+assert.equal((await meOf(paula.token)).guardedBy, null, 'the contract is consumed — one bullet each');
+const kb = await whack(paula.id);
+assert.equal(kb.revived, true, 'with the guard spent, the respawn token is the last line');
+// the betrayal: your own bodyguard's trigger finger voids the protection entirely
+await seedCh(barry.id, "hosp_until=NULL, jail_until=NULL, energy=200, ammo=8000, cash=100000, cb=5, loc='docks'");
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: barry.token })).code, 200, 'barry armed');
+assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).code, 200, 'paula, ever trusting, re-hired him');
+assert.equal((await call('POST', `/v1/streets/${paula.id}/search`, { token: barry.token })).code, 200, 'her own guard put eyes on her');
+await seedCh(paula.id, "hosp_until=NULL, loc='docks'"); await seedCh(barry.id, "energy=200, shoot_cd_until=NULL, loc='docks'");
+const betrayal = (await call('POST', `/v1/streets/${paula.id}/fire`, { token: barry.token, body: { rounds: 6000 } })).body;
+assert.equal(betrayal.kill, true, "the guard's OWN shot is never absorbed — betrayal beats protection");
+// the guard steps in front of an NPC contractor's bullet too (payer-as-guard would step aside)
+const gina = await mk('Guardian Gina');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: gina.token, body: { price: 1000 } })).code, 200, 'gina lists herself');
+await seedCh(carla.id, "hosp_until=NULL, cash=20000, loc='docks'");
+assert.equal((await call('POST', `/v1/bodyguard/hire/${gina.id}`, { token: carla.token })).code, 200, 'carla hired gina');
+await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
+let npcAbsorbed = false;
+for (let i = 0; i < 40 && !npcAbsorbed; i++) {
+  await seedCh(hirer.id, 'npchit_at=NULL');
+  await seedCh(carla.id, 'hosp_until=NULL');
+  const res = (await call('POST', `/v1/streets/${carla.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
+  assert(!res.killed, 'a guarded target is never killed by an NPC hit');
+  if (res.absorbed) npcAbsorbed = true;
+}
+assert(npcAbsorbed, "gina took the contractor's bullet");
+assert((await meOf(gina.token)).hospSeconds > 0, 'gina is in the hospital, carla is not in the ground');
+
+// §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
+const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
+const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
+const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang:contract'"))
+  - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
+assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
+
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering)');
 await app.close();

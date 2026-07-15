@@ -19,8 +19,18 @@ shield beside real-ETH revive insurance. Two interlocks: **fire-heat** — every
 `FIRE_HEAT` (20) to the shooter's law heat, so wet work isn't heat-free vs the Kitchen's deals; and
 **war-kill scoring** — a `fire` kill on a family you're actively at war with scores `WAR_KILL_POINTS`
 (3) to the war chest (vs a jump's 1), so lethal play decides wars, not just jump-spam. All three
-numbers are new/tunable — sim + founder sign-off before production. Phase 4 remainder still design-only
-below: treasury-funded family contracts, two-party bodyguard protection.
+numbers are new/tunable — sim + founder sign-off before production. **Phase 4 remainder — BUILT**:
+**family contracts** (`POST /v1/gangs/contract/:targetId`) — the boss/underboss posts from the GANG
+TREASURY (the Layer-5 gang interlock: the first sanctioned player-directed treasury outflow); the
+family's share rides `bounty_contributors` with contributor = the gang id (`funder_gang`), so NO
+member of the funding family collects and cancel/expiry refunds the treasury (ledgered
+`gang:contract` / `gang:contract:take` / character_id-NULL `bounty:refund` — the §10.4 escrow and
+treasury checks both extended). **Bodyguards** (Layer-4 earnable defense) — a guard lists a price
+(`POST /v1/bodyguard/offer`), a principal hires them (`POST /v1/bodyguard/hire/:guardId`, a ledgered
+up-front transfer, two-party locked); ONE lethal fire/NPC-hit is absorbed — the guard is hospitalized
+in the principal's place and the contract is consumed — checked BEFORE real-ETH revive insurance, and
+never against the guard's own attempt (betrayal). All numbers (BODYGUARD_MIN_PRICE $1k / 24h window /
+2h guard hospital) new/tunable — sim + founder sign-off before production.
 
 ---
 

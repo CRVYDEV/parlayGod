@@ -346,8 +346,12 @@ async function claimBounty(client, h, ch, victimId, kinds) {
     if (!kinds.includes(p.kind)) continue;
     // directed contract still in its exclusive window → only the named hitman may collect
     if (p.hitman && p.opens_at && new Date(p.opens_at) > new Date() && p.hitman !== ch.id) continue;
-    const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [victimId, p.kind, ch.id])).rows.length;
-    if (contributed) continue; // a funder never collects; the pot stands (dies with the target)
+    // a funder never collects; the pot stands (dies with the target). A family-funded share
+    // (contributor = gang id) locks out EVERY member of that family — the family ordered the
+    // job, so doing it is your duty, not a payday (and the boss can't pay himself from the pot).
+    const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND (contributor=$3 OR contributor=$4)',
+      [victimId, p.kind, ch.id, h.owned.gangId || ch.id])).rows.length;
+    if (contributed) continue;
     if (p.hitman === ch.id) directed = true; // fulfilled a contract they were named on
     await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
     await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
@@ -381,16 +385,101 @@ export async function cancelBounty(ch, targetCharacterId, kind, client, h) {
   return { ok: true, refunded: refund, potRemaining: Math.max(0, remaining) };
 }
 
+// ═══════════════════ FAMILY CONTRACTS (M7 Phase 4) — the treasury orders the hit ═══════════════════
+// The boss (or underboss) posts a contract funded from the GANG TREASURY — the first sanctioned
+// player-directed outflow from the roach-motel treasury, tying the social layer to the kill layer.
+// It rides the SAME (target, kind) pot as player bounties: the family's share is a
+// bounty_contributors row with contributor = the GANG id + funder_gang, so the proven funder
+// lockout extends to the whole family (no member collects the family's own money — the family
+// ordered the job; doing it is your duty, not a payday) and a cancel/expiry refunds the treasury.
+// §10.4: the escrow transfer is ledgered 'gang:contract' with NO character_id (treasury bucket →
+// escrow bucket; character cash never moves), the 2% take as 'gang:contract:take'. Family
+// contracts are always OPEN (no directed hitman) — the family taps no one, it taps everyone.
+export async function postFamilyContract(ch, targetCharacterId, amount, client, h, opts = {}) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss spends family money.');
+  const gangId = h.owned.gangId;
+  if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
+  const kind = opts.kind || 'kill';
+  if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
+  const t = (await client.query('SELECT id, name FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
+  const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
+  if (tg?.gang_id && tg.gang_id === gangId) throw new GameError('family', "They're family. Omertà.");
+  const amt = Math.floor(Number(amount) || 0);
+  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
+  const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
+  const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
+  // gang row AFTER character/account rows — the global lock order (characters → accounts → gangs)
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
+  if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes $${amt + fee + tax} from the treasury (2% take included).`);
+
+  // pot lifecycle mirrors postBounty exactly: pot row locked FIRST, live pot topped up, an
+  // expired-unswept pot refunded (skipId = the posting BOSS: if they personally funded the old
+  // pot, their refund must land in-memory or persistCharacter clobbers the SQL credit).
+  const existing = (await client.query('SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
+  const live = existing && !(existing.expires_at && new Date(existing.expires_at) <= new Date());
+  if (existing && !live) {
+    const { selfRefund } = await refundPot(client, targetCharacterId, kind, ch.id);
+    ch.cash = Number(ch.cash) + selfRefund;
+  }
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [gangId, amt + fee + tax]);
+  if (live) {
+    await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
+  } else {
+    const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
+    await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, posted_by_gang, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), gangId, expiresAt]);
+  }
+  const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, gangId])).rows[0];
+  if (mine) await client.query('UPDATE bounty_contributors SET amount = amount + $4 WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, gangId, amt]);
+  else await client.query('INSERT INTO bounty_contributors (target_character, kind, contributor, amount, funder_gang) VALUES ($1,$2,$3,$4,true)', [targetCharacterId, kind, gangId, amt]);
+
+  await h.ledger(client, { currency: 'cash', amount: -amt, reason: 'gang:contract', counterparty: targetCharacterId });
+  await h.ledger(client, { currency: 'cash', amount: -(fee + tax), reason: 'gang:contract:take', counterparty: targetCharacterId });
+  await takeHouse(client, tax);
+  await h.track(client, ch.account_id, 'family_contract', { target: targetCharacterId, kind, amount: amt });
+  bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind, family: g.name });
+  bus.emit(`gang:${gangId}`, { type: 'family_contract', on: t.name, amount: amt, kind });
+  await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt });
+  // fresh read: an expired-repost may have refunded the old pot's gang share mid-flight
+  const treasury = Number((await client.query('SELECT treasury FROM gangs WHERE id=$1', [gangId])).rows[0].treasury);
+  if (h.owned.gang) h.owned.gang.treasury = treasury; // keep the view honest
+  return { ok: true, kind, total: (live ? Number(existing.amount) : 0) + amt, expiresHours: ttlH, treasury };
+}
+
+// The boss calls the family's contract off — the family's share goes home to the treasury
+// (the 2% take is spent). Pot row locked FIRST, same order as claim/sweep/cancel.
+export async function cancelFamilyContract(ch, targetCharacterId, kind, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss calls off family business.');
+  const gangId = h.owned.gangId;
+  const k = kind || 'kill';
+  if (!BKINDS.has(k)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
+  const pot = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [targetCharacterId, k])).rows[0];
+  if (!pot) throw new GameError('no_contract', 'No open family contract there (a lapsed one refunds itself).');
+  const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3 FOR UPDATE', [targetCharacterId, k, gangId])).rows[0];
+  if (!mine || !(Number(mine.amount) > 0)) throw new GameError('no_contract', "The family hasn't funded that contract.");
+  const refund = Math.floor(Number(mine.amount));
+  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, k, gangId]);
+  const remaining = Number(pot.amount) - refund;
+  if (remaining > 0) await client.query('UPDATE bounties SET amount=$3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, k, remaining]);
+  else await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [targetCharacterId, k]);
+  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [gangId, refund]);
+  await h.ledger(client, { currency: 'cash', amount: refund, reason: 'bounty:refund', counterparty: targetCharacterId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(h.owned.gang.treasury) + refund; // keep the view honest
+  return { ok: true, refunded: refund, potRemaining: Math.max(0, remaining) };
+}
+
 // The public board — open (non-expired) contracts, richest first. A directed contract inside
 // its exclusive window shows the named hitman + when it opens to everyone.
 export async function listContracts(pool) {
   const rows = (await pool.query(
     `SELECT b.target_character, b.kind, b.amount, b.anon, b.reason, b.expires_at, b.opens_at,
-            t.name AS target_name, p.name AS poster_name, hm.name AS hitman_name
+            t.name AS target_name, p.name AS poster_name, hm.name AS hitman_name, fg.name AS family_name
        FROM bounties b
        JOIN characters t ON t.id = b.target_character
        LEFT JOIN characters p ON p.id = b.posted_by
        LEFT JOIN characters hm ON hm.id = b.hitman
+       LEFT JOIN gangs fg ON fg.id = b.posted_by_gang
       WHERE b.expires_at IS NULL OR b.expires_at > now()
       ORDER BY b.amount DESC LIMIT 100`)).rows;
   const secsTo = (t) => (t ? Math.max(0, Math.ceil((new Date(t) - Date.now()) / 1000)) : null);
@@ -399,7 +488,9 @@ export async function listContracts(pool) {
     return {
       target: { id: r.target_character, name: r.target_name },
       kind: r.kind, pot: Math.floor(Number(r.amount)), reason: r.reason || null,
-      poster: r.anon ? null : (r.poster_name || null),
+      // a family contract shows the FAMILY on the board (unless anon) — the message is the point
+      poster: r.anon ? null : (r.family_name || r.poster_name || null),
+      family: r.anon ? false : !!r.family_name,
       directedTo: exclusive ? r.hitman_name : null, // only while the exclusive window is open
       opensInSeconds: exclusive ? secsTo(r.opens_at) : null,
       expiresInSeconds: secsTo(r.expires_at),
@@ -417,14 +508,27 @@ export async function listContracts(pool) {
 // clobber it — so it's returned as `selfRefund` for the caller to apply to `ch.cash`. The sweep
 // passes no skipId. Returns { refunded (total leaving escrow), selfRefund }.
 async function refundPot(client, target, kind, skipId = null) {
+  // LEFT JOIN: a family-funded share (contributor = gang id, funder_gang) has no characters row —
+  // an inner join would silently drop it from the refund and leak the escrow.
   const funders = (await client.query(
-    'SELECT bc.contributor, bc.amount, c.alive FROM bounty_contributors bc JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2',
+    'SELECT bc.contributor, bc.amount, bc.funder_gang, c.alive FROM bounty_contributors bc LEFT JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2',
     [target, kind])).rows;
   let refunded = 0, selfRefund = 0;
   for (const f of funders) {
     const amt = Math.floor(Number(f.amount));
     if (amt <= 0) continue;
-    if (f.contributor === skipId) {
+    if (f.funder_gang) {
+      // a family's stake goes home to the treasury (a §10.4 bucket transfer, character_id NULL so
+      // character-cash reconciliation is untouched); a DISSOLVED family's stake burns like a dead
+      // funder's — there is no treasury left to take it home.
+      const g = (await client.query('SELECT id FROM gangs WHERE id=$1', [f.contributor])).rows[0];
+      if (g) {
+        await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [f.contributor, amt]);
+        await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
+      } else {
+        await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target });
+      }
+    } else if (f.contributor === skipId) {
       selfRefund += amt; // caller applies to the poster's in-memory cash
       await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
     } else if (f.alive) {
@@ -562,6 +666,12 @@ export async function fire(ch, victim, client, h, rounds) {
   await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
 
   if (effective >= btk) {
+    // ── THE BODYGUARD (M7 Phase 4) — the earnable shield burns BEFORE real-ETH insurance ──
+    const guard = await bodyguardAbsorbs(client, h, ch, victim);
+    if (guard) {
+      await h.notify(client, ch.id, 'target_guarded', { victim: victim.name, guard: guard.name });
+      return { ok: true, kill: false, absorbed: true, guard: guard.name, jammed };
+    }
     // ── PRE-PAID REVIVE INSURANCE (§11) ──
     // A killing blow lands, but the target bought a respawn on-chain (0.10 ETH → dev wallet).
     // It's spent to pull them from the brink: full heal, keeps EVERYTHING, and the shooter's
@@ -637,6 +747,64 @@ export async function enterSafehouse(ch, client, h) {
   return { ok: true, safeUntil: ch.safe_until };
 }
 
+// ═══════════════════ BODYGUARDS — TWO-PARTY PROTECTION (M7 Phase 4) ═══════════════════
+// The player-to-player defense market: a guard LISTS a price (consent-by-listing), a principal
+// HIRES them for a window. While guarded, ONE lethal blow (fire or NPC hit) is absorbed — the
+// guard takes the bullet (hospitalized in the principal's place) and the contract is consumed.
+// The hire is a pure ledgered transfer ('bodyguard:hire' ±price) — no escrow, no §10.4 bucket:
+// the guard is paid up front for the risk, saved or not. Checked BEFORE real-ETH revive
+// insurance: the earnable shield burns first, the paid one stays in your pocket.
+
+// Opt in (or out) of the protection racket: price <= 0 clears the listing.
+export async function offerBodyguard(ch, price, client, h) {
+  const p = Math.floor(Number(price) || 0);
+  if (p <= 0) { ch.guard_price = null; return { ok: true, offering: false }; }
+  if (p < M3.BODYGUARD_MIN_PRICE) throw new GameError('min', `Nobody stands in front of a bullet for less than $${M3.BODYGUARD_MIN_PRICE}.`);
+  ch.guard_price = p;
+  return { ok: true, offering: true, price: p };
+}
+
+// Two-party (withTwoCharacters): `guard` arrives locked as the second row.
+export async function hireBodyguard(ch, guard, client, h) {
+  const price = guard.guard_price != null ? Math.floor(Number(guard.guard_price)) : 0;
+  if (!(price > 0)) throw new GameError('not_offering', "They're not in the protection business.");
+  if (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date())
+    throw new GameError('guarded', 'You already have a shadow. One bullet-catcher at a time.');
+  if (jailed(guard) || hospitalized(guard)) throw new GameError('unavailable', "They can't watch your back from where they are.");
+  if (Number(ch.cash) < price) throw new GameError('cash', `Their rate is $${price}.`);
+  ch.cash = Number(ch.cash) - price;
+  guard.cash = Number(guard.cash) + price;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'bodyguard:hire', counterparty: guard.id });
+  await h.ledger(client, { characterId: guard.id, currency: 'cash', amount: price, reason: 'bodyguard:hire', counterparty: ch.id });
+  ch.guarded_by = guard.id;
+  ch.guarded_until = new Date(Date.now() + M3.BODYGUARD_MS);
+  await h.notify(client, guard.id, 'bodyguard_hired', { by: ch.name, price, hours: M3.BODYGUARD_MS / 3600000 });
+  await h.track(client, ch.account_id, 'bodyguard_hire', { guard: guard.id, price });
+  return { ok: true, guard: guard.id, price, until: ch.guarded_until };
+}
+
+// The absorb: called at the top of every lethal kill branch. Returns the guard ({name}) if the
+// bullet was taken, else null. The guard is a THIRD character — a plain relative UPDATE (the
+// same discipline as refundPot's funder credits: no in-memory copy exists, so nothing clobbers).
+// No ledger rows — health and hospital time aren't currency; §10.4 is untouched.
+// `attacker` is the shooter (fire) or the paying client (npcHit): if the victim's own guard is
+// behind the attempt, they simply step aside — the bodyguard turning on you is the oldest move
+// in the book, and it means the contract was never protection at all.
+async function bodyguardAbsorbs(client, h, attacker, victim) {
+  if (!victim.guarded_by || !victim.guarded_until || new Date(victim.guarded_until) <= new Date()) return null;
+  if (victim.guarded_by === attacker.id) return null; // the betrayal
+  const g = (await client.query('SELECT id, name, jail_until, hosp_until FROM characters WHERE id=$1 AND alive', [victim.guarded_by])).rows[0];
+  if (!g || jailed(g) || hospitalized(g)) return null; // nobody between you and the bullet right now
+  victim.guarded_by = null; victim.guarded_until = null; // one bullet per contract
+  await client.query('UPDATE characters SET health=$2, hosp_until=$3 WHERE id=$1',
+    [g.id, 10, new Date(Date.now() + M3.BODYGUARD_HOSP_MS)]);
+  await h.notify(client, g.id, 'took_bullet', { for: victim.name });
+  await h.notify(client, victim.id, 'guard_saved_you', { guard: g.name });
+  await h.track(client, victim.account_id, 'bodyguard_absorb', { guard: g.id });
+  bus.emit('streets', { type: 'bodyguard', guard: g.name, saved: victim.name });
+  return { name: g.name };
+}
+
 // ═══════════════════ NPC HITMEN FOR HIRE (M7 Phase 3) ═══════════════════
 // Pay cash to a contractor for a ROLLED attempt on a target — the mechanic that lets a weak
 // player buy a CHANCE at a strong one, and a ledgered wealth SINK. The fee burns win or lose
@@ -670,6 +838,11 @@ export async function npcHit(ch, victim, client, h, tierId) {
     return { ok: true, hit: false, success, cost: tier.cost };
   }
   // ── the contractor lands the kill ──
+  // the bodyguard steps in first (earnable shield before real-ETH insurance). The PAYER is the
+  // attacker for the betrayal check: a guard who hires out the job on their own principal has
+  // already stepped aside.
+  const guard = await bodyguardAbsorbs(client, h, ch, victim);
+  if (guard) return { ok: true, hit: true, absorbed: true, guard: guard.name, success, cost: tier.cost };
   if (Number(h.victimAcct.respawn_tokens || 0) > 0) { // pre-paid insurance absorbs it (like a player hit)
     h.victimAcct.respawn_tokens = Number(h.victimAcct.respawn_tokens) - 1;
     victim.health = 100;

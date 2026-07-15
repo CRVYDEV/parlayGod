@@ -214,8 +214,27 @@ scoring** — a `fire` kill on a family you're actively at war with scores `WAR_
 your war chest (vs a jump's 1), so the lethal layer finally decides wars, not just jump-spam; scored
 before the estate vacates the seat, returned as `warKill`. `test/social.js` covers the fee-burn,
 fire+npc block, lapse (fair game again), fire-heat, and war-kill scoring. Safehouse/fire-heat/war-kill
-numbers are new/tunable — sim + founder sign-off before production. Phase 4 remainder left design-only:
-treasury-funded family contracts and two-party bodyguard protection.
+numbers are new/tunable — sim + founder sign-off before production. **Phase 4 remainder — family
+contracts + bodyguards** (`social.js`): a boss/underboss posts a contract funded from the **gang
+treasury** (`postFamilyContract`, `POST /v1/gangs/contract/:targetId`) — it rides the same
+`(target,kind)` pot; the family's share is a `bounty_contributors` row with contributor = the GANG id
++ `funder_gang`, so no member of the funding family collects (the boss can't pay himself), and
+cancel/expiry refunds the **treasury** (a dissolved family's stake burns like a dead funder's).
+§10.4: escrow transfer ledgered `gang:contract` with NO character_id + `gang:contract:take` (2%);
+`invariants.js` treasury check subtracts `gang:contract%` and adds character_id-NULL `bounty:refund`
+rows; the escrow check adds `gang:contract` to posted. The board shows the FAMILY as poster
+(`posted_by_gang`). **Bodyguards** are the two-party defense market: a guard lists a price
+(`POST /v1/bodyguard/offer`, consent-by-listing), a principal hires via `withTwoCharacters`
+(`POST /v1/bodyguard/hire/:guardId` — a pure ledgered transfer `bodyguard:hire`, paid up front, no
+escrow). While guarded, ONE lethal `fire`/`npcHit` is absorbed (`bodyguardAbsorbs`): the guard is
+hospitalized in the principal's place (a third-character relative UPDATE — the refundPot discipline,
+no clobber) and the contract is consumed. Checked BEFORE the real-ETH respawn token (earnable shield
+burns first); the guard's own shot (or NPC hire) is never absorbed — betrayal beats protection; a
+jailed/hospitalized/dead guard can't step in. `test/social.js` covers rank gate, treasury debit+take,
+board attribution, member lockout (boss collects $0), cancel/expiry→treasury refunds, outsider
+collect via jump, offer/hire transfer, absorb+consume, token ordering, betrayal, NPC absorb, and the
+escrow reconciliation with family money in the mix. Bodyguard/family-contract numbers
+(BODYGUARD_MIN_PRICE/MS/HOSP_MS) are new/tunable — sim + founder sign-off before production.
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New
