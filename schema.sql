@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS gangs (
   name TEXT NOT NULL UNIQUE,
   tag TEXT NOT NULL UNIQUE,
   color TEXT,                                    -- M8 crest color, '#rrggbb' (display only, $OMR sink)
+  seal INT NOT NULL DEFAULT 0,                   -- M8 family seal tier (display only; bought from omr_reserve)
   treasury NUMERIC NOT NULL DEFAULT 0,
   omr_reserve NUMERIC NOT NULL DEFAULT 0,
   ammo_bank INT NOT NULL DEFAULT 0,

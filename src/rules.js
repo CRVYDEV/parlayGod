@@ -580,7 +580,22 @@ export const M8 = {
   INTEL_PEEK_OMR: 5,   // "who wants me dead?" — funder names + shares on every open pot on you
   RESPEC_OMR: 15,      // redistribute muscle/cunning/speed; sum must match, each ≥ RESPEC_STAT_MIN
   RESPEC_STAT_MIN: 5,  // the creation base — respec never drops a stat below the man you started as
+  TRIBUTE_OMR_MIN: 1,  // minimum $OMR tribute into the family reserve
 };
+// M8 — FAMILY SEALS: the gang-prestige ladder, the family-level $OMR sink. Pure STATUS (a badge
+// on the family's name everywhere it appears — no member cap, no combat edge, no income). Bought
+// SEQUENTIALLY by the boss from the family's $OMR RESERVE — the bucket the buyback split and
+// weekly-contract bonuses already feed, now also fed by member $OMR tribute — so a seal is a
+// COOPERATIVE purchase: the family pools tokens for its colors. Escalating prices make the top
+// seals genuinely rare. Prices new/tunable — founder sign-off before production.
+export const GANG_SEALS = [
+  { tier: 1, id: 'wax',      name: 'Wax Seal',      omr: 25 },
+  { tier: 2, id: 'brass',    name: 'Brass Seal',    omr: 75 },
+  { tier: 3, id: 'silver',   name: 'Silver Seal',   omr: 200 },
+  { tier: 4, id: 'gold',     name: 'Gold Seal',     omr: 500 },
+  { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 1500 },
+];
+export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tier)) || null;
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet

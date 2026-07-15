@@ -10,7 +10,7 @@
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
 import { GameError } from './game.js';
-import { VANITY } from './rules.js';
+import { VANITY, GANG_SEALS, sealOf } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
@@ -73,6 +73,28 @@ export async function recolorGang(ch, color, client, h) {
   await client.query('UPDATE gangs SET color=$2 WHERE id=$1', [h.owned.gangId, c]);
   if (h.owned.gang) h.owned.gang.color = c;
   return { ok: true, color: c };
+}
+
+// M8 — THE FAMILY SEAL: the gang-prestige ladder, bought SEQUENTIALLY by the boss from the
+// family's $OMR RESERVE (not the boss's pocket — spendOmr doesn't apply here; the reserve is
+// its own §10.4 bucket, so the burn is ledgered directly against it, and 'vanity:%' already
+// covers it in the invariant job's burn term). The reserve fills from buyback winnings, weekly
+// bonuses, and member $OMR tribute — so the seal is the family's achievement, pooled and paid
+// for together. Display-only: a badge, never a buff.
+export async function buySeal(ch, client, h) {
+  if (h.owned.gangRole !== 'boss') throw new GameError('rank', 'Only the boss commissions the family seal.');
+  // lock the gang row: seal tier + reserve read-and-spend must be atomic under concurrent buys
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const next = GANG_SEALS.find((s) => s.tier === Number(g.seal || 0) + 1);
+  if (!next) throw new GameError('maxed', 'The family already bears the highest seal there is.');
+  if (Number(g.omr_reserve) < next.omr)
+    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, seal = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
+  await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'vanity:gang:seal', counterparty: g.id });
+  if (h.owned.gang) { h.owned.gang.seal = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }
+  await h.track(client, ch.account_id, 'gang_seal', { tier: next.tier, omr: next.omr });
+  return { ok: true, seal: { tier: next.tier, name: next.name }, reserve: Number(g.omr_reserve) - next.omr,
+           nextSeal: sealOf(next.tier + 1) || null };
 }
 
 // Family rename/retag — founding-rules validation (name 3–24, tag 2–4 A–Z/0–9) and the same

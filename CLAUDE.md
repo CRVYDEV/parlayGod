@@ -266,8 +266,26 @@ muscle/cunning/speed with the total conserved exactly, each ≥ RESPEC_STAT_MIN 
 base), no-ops refused unpaid — convenience-not-power, the path-switch precedent. Vocabulary +
 omrBurns extended (`intel:`, `respec`). Tests: social (anon fee/rollback/top-up-free,
 peek pierce + family attribution + free-silence), growth (sum/floor/same gates, ledgered burn).
-Prices new/tunable — founder sign-off. Remaining designed-not-built sink: family seals; the
-14% staking APY remains the deepest lever (standing sign-off item).
+Prices new/tunable — founder sign-off.
+
+M8's third drop is **family seals** — the gang-level $OMR sink (rules.js tail: `GANG_SEALS`
+ladder Wax 25 → Brass 75 → Silver 200 → Gold 500 → Obsidian 1500, `sealOf`). Pure STATUS
+(`gangs.seal`, a badge on the family everywhere it's shown: me.gang, `GET /v1/gangs`,
+`GET /v1/gangs/:id` incl. `nextSeal`). Bought SEQUENTIALLY by the boss
+(`vanity.js:buySeal`, `POST /v1/gangs/vanity/seal`, gang row locked) from the family's
+**$OMR reserve** — the bucket buyback splits + weekly bonuses feed, which finally has a spend
+path. New with it: **$OMR tribute** (`social.js:tributeOmr`, `POST /v1/gangs/tribute/omr`) —
+any member pools tokens into the reserve (a §10.4 bucket TRANSFER, account → reserve, ledgered
+`gang:tribute` currency-omr, in the vocabulary but in neither the mint nor burn term; it does
+NOT bump the weekly tribute task, which counts dollars). The seal burn is ledgered
+`vanity:gang:seal` against the reserve bucket (no account id) and rides the existing `vanity:%`
+burn term — check (d) stays exact with zero formula changes. So a seal is a cooperative family
+purchase: pool → commission → badge. `GET /v1/gangs` was also rewritten from a correlated
+subquery (which pg-mem can't parse — the route had been untestable) to two flat queries, same
+response. Tests: boss-only gate, empty-reserve rejection, tribute min + transfer, sequential
+Wax→Brass with exact reserve deltas, seal on all three views, spends==ledgered burns. Prices
+new/tunable — founder sign-off. The M8 sink list is now fully built; the 14% staking APY
+remains the deepest lever (standing sign-off item).
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —
 `reference-prototype-v24.jsx` edited, `tools/extract-rules.js` regenerates `rules.js`). New

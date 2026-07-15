@@ -15,7 +15,7 @@ import * as V from './vanity.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS } from './rules.js';
+         levelOf, GOODS, DRUGS, DISTRICTS, sealOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -265,16 +265,23 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.promoteMember(ch, req.body?.characterId, req.body?.role, client, h)));
   app.post('/v1/gangs/tribute', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.tribute(ch, req.body?.amount, client, h)));
+  // M8: $OMR tribute — any member pools tokens into the family reserve (feeds the seal ladder).
+  app.post('/v1/gangs/tribute/omr', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.tributeOmr(ch, req.body?.amount, client, h)));
   app.post('/v1/gangs/war/:targetGangId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.declareWar(ch, req.params.targetGangId, client, h)));
   app.post('/v1/districts/:id/seize', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.seizeDistrict(ch, req.params.id, client, h)));
 
   app.get('/v1/gangs', async () => {
-    const r = await pool.query(`SELECT g.id, g.name, g.tag, g.treasury, g.wars_won, g.lifetime_tribute,
-      (SELECT COUNT(*) FROM gang_members m WHERE m.gang_id = g.id) AS members FROM gangs g`);
+    // two flat queries instead of a correlated subquery — identical response, and pg-mem
+    // (the test db) can execute it, so the route is actually covered by the suite
+    const r = await pool.query('SELECT id, name, tag, seal, treasury, wars_won, lifetime_tribute FROM gangs');
+    const counts = await pool.query('SELECT gang_id, COUNT(*) n FROM gang_members GROUP BY gang_id');
+    const members = Object.fromEntries(counts.rows.map((c) => [c.gang_id, Number(c.n)]));
     return { gangs: r.rows.map((g) => ({ id: g.id, name: g.name, tag: g.tag,
-      members: Number(g.members), warsWon: Number(g.wars_won),
+      seal: sealOf(g.seal)?.name || null,
+      members: members[g.id] || 0, warsWon: Number(g.wars_won),
       standing: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) })) };
   });
   app.get('/v1/gangs/:id', async (req) => {
@@ -288,7 +295,10 @@ export async function buildServer() {
         'SELECT m.character_id, m.role, c.name FROM gang_members m JOIN characters c ON c.id = m.character_id WHERE m.gang_id=$1', [req.params.id])).rows;
       const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [req.params.id])).rows.map((d) => d.id);
       await client.query('COMMIT');
-      return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null, treasury: Math.floor(Number(g.treasury)),
+      return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
+        seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
+        nextSeal: sealOf(Number(g.seal || 0) + 1) || null,
+        treasury: Math.floor(Number(g.treasury)),
         ammoBank: Number(g.ammo_bank), omrReserve: Number(g.omr_reserve), warsWon: Number(g.wars_won),
         war: g.war_with ? { with: g.war_with, until: g.war_until, us: g.war_score_us, them: g.war_score_them } : null,
         weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
@@ -356,6 +366,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.recolorGang(ch, req.body?.color, client, h)));
   app.post('/v1/gangs/vanity/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.renameGang(ch, req.body?.name, req.body?.tag, client, h)));
+  app.post('/v1/gangs/vanity/seal', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => V.buySeal(ch, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

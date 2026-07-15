@@ -63,6 +63,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
+## M8 endpoints (family seals — the gang prestige ladder)
+`POST /gangs/tribute/omr` (any member pools $OMR into the family reserve) · `POST /gangs/vanity/seal` (boss only — buys the NEXT seal from the reserve: Wax 25 → Brass 75 → Silver 200 → Gold 500 → Obsidian 1500; displayed on the family everywhere, pure status)
+
 ## M4 endpoints
 `POST /kitchen/makings/:drugId` · `POST /kitchen/lab/upgrade` · `POST /kitchen/cook|collect|deal` · `POST /kitchen/crew/hire` · `POST /kitchen/laylow|cleanpapers` · `POST /path` · `POST /heist` · `POST /missions/:id` · `GET /daily`, `POST /daily/:id/claim` · `POST /onboard/:taskId/claim` · `POST /wallet` · mod (X-Mod-Key): `POST /mod/ban|kill|confiscate`, `GET /mod/audit`
 
