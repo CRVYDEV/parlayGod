@@ -255,12 +255,12 @@ async function persistCharacter(client, ch) {
       lc_crime=$15, ammo=$16, cb=$17, heat=$18, trade_rep=$19, gta_at=$20, path=$21,
       gun=$22, vest=$23, shoot_cd_until=$24, busts=$25, hosp_until=$26,
       lab=$27, crew=$28, heist_at=$29, title=$30,
-      racket_credit_ms=$31, season_kills=$32, last_accrued_at=$33 WHERE id=$1`,
+      racket_credit_ms=$31, season_kills=$32, npchit_at=$33, last_accrued_at=$34 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
-     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.last_accrued_at]);
+     ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.last_accrued_at]);
 }
 
 export function view(ch, acct = {}, owned = {}) {

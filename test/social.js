@@ -390,5 +390,50 @@ assert.equal(Number(aAcct.hitman_rep), 0, 'zero rep on the account');
 const lb2 = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
 assert(!lb2.legend.some((e) => e.name === 'Agent Smith') && !lb2.season.some((e) => e.name === 'Agent Smith'), 'agent absent from both boards');
 
+// ── M7 Phase 3: NPC hitmen for hire (paid, rolled, rep-less §10.4 cash sink) ──
+const hirer = await mk('Hiram the Hirer'); await seedCh(hirer.id, 'cash=5000000');
+// a high-level mark for the hire/cooldown checks — near-impossible to actually drop, so it
+// survives to test the deterministic parts (fee burn, heat, cooldown)
+const tough = await mk('Tough Tony'); await seedCh(tough.id, 'respect=10000'); // ~level 51 → legbreaker clamps to the 2% floor
+assert.equal((await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'nope' } })).code, 400, 'bad tier rejected');
+const hirerPre = (await meOf(hirer.token)).cash;
+r = await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'legbreaker' } });
+assert.equal(r.code, 200, 'contractor hired');
+assert.equal((await meOf(hirer.token)).cash, hirerPre - 50000, 'the fee burns win or lose (a §10.4 sink)');
+assert((await meOf(hirer.token)).heat >= 20, 'arranging a hit draws law heat (~25, minus a hair of decay on read)');
+assert.equal((await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'legbreaker' } })).code, 400, 'contractor cooldown between jobs');
+// a rookie target is off-limits
+const rook2 = await mk('Nobody Nick');
+assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).code, 400, 'no sanctioned hits on nobodies (level floor)');
+
+// a fresh, killable mark: loop the server roll until the contractor lands a kill → the estate runs
+const kt = await mk('Killable Kelly'); await seedCh(kt.id, 'respect=100'); // level ~6 → professional ≈ 0.52
+let killed = false;
+for (let i = 0; i < 80 && !killed; i++) {
+  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+  await seedCh(kt.id, "hosp_until=NULL, respect=100");
+  const res = (await call('POST', `/v1/streets/${kt.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
+  killed = !!res.killed;
+}
+assert(killed, 'the contractor eventually lands the kill');
+assert.equal((await meOf(kt.token)).generation, 2, 'the NPC kill runs the estate — heir stands up');
+assert.equal((await meOf(hirer.token)).hitmanRep, 0, 'NPC hits earn the payer NO feared-rep');
+assert.equal((await meOf(hirer.token)).kills, 0, 'nor any kills on the legend');
+
+// pre-paid revive insurance absorbs an NPC hit too (the target paid ETH to survive)
+const insured = await mk('Insured Izzy'); await seedCh(insured.id, 'respect=100');
+await pool.query(`UPDATE account_persistent SET respawn_tokens=1 WHERE account_id=(SELECT account_id FROM characters WHERE id='${insured.id}')`);
+let absorbed = false;
+for (let i = 0; i < 60 && !absorbed; i++) {
+  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+  await seedCh(insured.id, 'hosp_until=NULL');
+  const res = (await call('POST', `/v1/streets/${insured.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
+  assert(!res.killed, 'an insured target is never killed by an NPC hit');
+  absorbed = !!res.revived;
+}
+assert(absorbed, 'the respawn token absorbs a landed NPC hit');
+assert.equal((await meOf(insured.token)).generation, 1, 'the insured target lives on (no heir)');
+assert.equal((await meOf(insured.token)).respawnTokens, 0, 'the token was consumed');
+
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
 await app.close();

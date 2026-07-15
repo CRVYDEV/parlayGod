@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS characters (
   -- M7 Phase 2 — this STREET's kills this season (the fresh, contestable board); resets on
   -- season rollover and starts at 0 for an heir (dies with the man, unlike the account legend).
   season_kills INT NOT NULL DEFAULT 0,
+  npchit_at TIMESTAMPTZ,                          -- M7 Phase 3: NPC-hitman hire cooldown
+
   -- D2b: rolling racket/front income budget (a refilling token bucket of income-eligible
   -- ms). Caps total racket income to RACKET_DAILY_CAP hours/day regardless of how often a
   -- player touches an action, closing the "collect every <8h → ~24h/day" multiplier.
