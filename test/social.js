@@ -319,12 +319,16 @@ const whack = async (tid, rounds = 6000) => {
   return (await call('POST', `/v1/streets/${tid}/fire`, { token: don.token, body: { rounds } })).body;
 };
 
-// anti-farm floor: a sub-level-5 rookie counts as a kill but pays ZERO rep
+// anti-farm floor (audit M1): whacking a sub-level-5 rookie counts on NO board — not rep, not
+// the kills counter, not the season streak — so the leaderboards can't be farmed with rookies/alts
 const rookie = await mk('Rookie Ricky');
 let k = await whack(rookie.id);
 assert(k.kill, 'rookie whacked'); assert.equal(k.hitman.repGain, 0, 'no rep for a rookie (below the level floor)');
+assert.equal(k.hitman.qualified, false, 'a rookie kill does not qualify for the boards');
 donMe = await meOf(don.token);
-assert.equal(donMe.kills, 2, 'the kill still counts'); assert.equal(donMe.hitmanRep, 33, 'but rep is unchanged');
+assert.equal(donMe.kills, 1, 'rookie kill does NOT inflate the lifetime kills board');
+assert.equal(donMe.seasonKills, 1, 'nor the season streak');
+assert.equal(donMe.hitmanRep, 33, 'and rep is unchanged');
 
 // directed contract: Vito names Don as the hitman → exclusive window + a 1.5x rep bonus on the kill
 const marked = await mk('Marked Mario'); await seedCh(marked.id, 'respect=400'); // level 11
@@ -344,13 +348,47 @@ k = await whack(heir2.id);
 assert(k.kill, 'the heir is whacked too');
 assert.equal(k.hitman.repGain, 16, 'a repeat kill of the same bloodline is diminished: floor(11×3 / 2)');
 donMe = await meOf(don.token);
-assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16'); assert.equal(donMe.kills, 4, 'four lifetime kills');
+assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16');
+assert.equal(donMe.kills, 3, 'three QUALIFYING lifetime kills (Rocco, Marked, heir — rookie excluded)');
 assert.equal(donMe.hitmanTitle, 'Button Man', '98 rep → Button Man');
 
 // the feared-assassin leaderboard: the lifetime legend + this season's streak
 const lb = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
 assert(lb.legend.some((e) => e.name === donName && e.rep === 98 && e.title === 'Button Man'), 'Don leads the legend board');
 assert(lb.season.some((e) => e.name === donName && e.kills === donMe.seasonKills), 'Don on the season board');
+
+// audit M2: a directed post onto an EXISTING live pot is rejected (direction is the first poster's)
+r = await call('POST', `/v1/streets/${don.id}/bounty`, { token: vito.token, body: { amount: 1000, kind: 'kill' } }); // open pot on Don
+assert.equal(r.code, 200, 'open contract on Don');
+r = await call('POST', `/v1/streets/${don.id}/bounty`, { token: vito.token, body: { amount: 1000, kind: 'kill', hitman: mook.id } });
+assert.equal(r.code, 400, 'cannot direct a mark that already has a standing contract');
+assert.equal(r.body.error, 'directed_exists', 'clear error, not a silent drop');
+await call('POST', `/v1/contracts/${don.id}/kill/cancel`, { token: vito.token }); // clean up
+
+// audit M3: an OUTSIDER killing the mark inside the exclusive window REFUNDS the poster (not a burn)
+const wanted = await mk('Wanted Wally'); await seedCh(wanted.id, 'respect=400'); // level 11
+r = await call('POST', `/v1/streets/${wanted.id}/bounty`, { token: vito.token, body: { amount: 4000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } });
+assert.equal(r.code, 200, 'directed at Mook');
+const vitoPreBurn = (await meOf(vito.token)).cash;
+k = await whack(wanted.id); // DON (not the named Mook) kills Wally while the window is open
+assert(k.kill, 'outsider kills the mark'); assert.equal(k.bounty, 0, "outsider can't collect a directed contract in its window");
+assert.equal((await meOf(vito.token)).cash, vitoPreBurn + 4000, "the poster's escrow is REFUNDED, not burned, on an outsider kill");
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${wanted.id}'`)).rows[0].n), 0, 'the directed pot is settled');
+
+// audit L1 / anti-abuse: an AGENT tallies kills but earns NO feared-rep and is off BOTH boards
+const agent = await mk('Agent Smith');
+await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${agent.id}')`);
+const donGun = (await pool.query(`SELECT gun FROM characters WHERE id='${don.id}'`)).rows[0].gun;
+await seedCh(agent.id, `gun='${donGun}', muscle=500, speed=500, energy=200, ammo=8000, respect=400, loc='docks'`);
+const aMark = await mk('Agent Mark'); await seedCh(aMark.id, "respect=400, muscle=1, hosp_until=NULL, loc='docks'"); // level 11
+await call('POST', `/v1/streets/${aMark.id}/search`, { token: agent.token });
+k = (await call('POST', `/v1/streets/${aMark.id}/fire`, { token: agent.token, body: { rounds: 6000 } })).body;
+assert(k.kill, 'agent whacks a qualifying mark'); assert.equal(k.hitman.repGain, 0, 'an agent earns NO feared-rep');
+const aAcct = (await pool.query(`SELECT hitman_rep, kills FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${agent.id}')`)).rows[0];
+assert.equal(Number(aAcct.kills), 1, 'but the agent tallies the kill for its own stats');
+assert.equal(Number(aAcct.hitman_rep), 0, 'zero rep on the account');
+const lb2 = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
+assert(!lb2.legend.some((e) => e.name === 'Agent Smith') && !lb2.season.some((e) => e.name === 'Agent Smith'), 'agent absent from both boards');
 
 console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
 await app.close();
