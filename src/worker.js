@@ -8,7 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { levelOf, dayOf } from './rules.js';
+import { levelOf, dayOf, CONSTANTS } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties } from './social.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
@@ -53,10 +53,18 @@ export async function runBuyback(pool, opts = {}) {
     if (!(bought > 0)) { await client.query('COMMIT'); return null; }
     await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + cashPool, o - bought]);
 
-    // 50% pro-rata to the top-25 families by standing; the rest (plus any
+    // Phase 4 (backed emission): carve a STAKE_POOL_BPS slice of the buyback off the top to fund
+    // staking yield — so cash sinks (street tax) pay stakers via redistribution, not a new mint.
+    // A bucket transfer within the §10.4 $OMR set (amm reserve → stake_pool); conserves, no ledger.
+    const stakeShare = bought * (CONSTANTS.STAKE_POOL_BPS || 0) / 10000;
+    if (stakeShare > 0)
+      await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [stakeShare]);
+    const forSplit = bought - stakeShare;
+
+    // remaining: 50% pro-rata to the top-25 families by standing; the rest (plus any
     // undistributed remainder) rolls to the event fund.
-    const clanShare = bought / 2;
-    let toFund = bought / 2, distributed = 0;
+    const clanShare = forSplit / 2;
+    let toFund = forSplit / 2, distributed = 0;
     const totalStanding = ranked.reduce((a, g) => a + Number(g.lifetime_tribute) + 10000 * Number(g.wars_won), 0);
     if (totalStanding > 0) {
       for (const g of ranked) {
@@ -66,7 +74,7 @@ export async function runBuyback(pool, opts = {}) {
       }
       toFund += clanShare - distributed;
     } else {
-      toFund = bought; // no eligible families yet: whole buyback to the event fund
+      toFund = forSplit; // no eligible families yet: the non-stake remainder to the event fund
     }
     await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
     await client.query('COMMIT');

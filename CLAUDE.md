@@ -386,8 +386,26 @@ pure ownership move (DELETE+INSERT, count conserved); the in-memory `h.victimOwn
 are kept honest so the estate report + killer effStat stay right; test forces the roll via env.
 **Design note:** gear IS the tradeable on-chain NFT (GearVault, already delivered in M6); territory
 rackets are intentionally NOT independently tradeable NFTs — that would conflict with in-game seizure,
-so they stay seizable in-game capital (the two asset types serve different Risk-to-Earn roles). Phase 4
-(backed emission) remains design-only.
+so they stay seizable in-game capital (the two asset types serve different Risk-to-Earn roles).
+
+**Phase 4 (Backed emission) — BUILT** (`src/economy.js`, `src/worker.js`, `test/economy.js`;
+design `omerta-phase4-emission-design.md`). Closes the audit's #1 finding — the fixed 14% staking
+APY was the only unbounded $OMR mint. Now staking rewards are **paid from a funded pool, not
+minted**: a new soft-$OMR singleton `stake_pool` (in the §10.4 $OMR set) that the 12h buyback funds
+with a `STAKE_POOL_BPS` (30%) slice of what it buys off the AMM — so cash sinks (street tax → buyback)
+pay staker yield by REDISTRIBUTION, bounded by economic activity. `claimRewards`/`unstake` pay
+`min(rewards, pool)` from the pool (a §10.4 TRANSFER `stake:reward`, **removed from the mint term**);
+the unpaid remainder stays pending (no forfeit), payable when the buyback refills; **principal always
+returns whole** (never pool-gated). A dry pool throttles yield (`pool` error) — `APY` is now the
+CEILING on a backed rate, not an unbounded promise. `invariants.js`: `stake_pool` added to `omrBuckets`,
+`stake:reward` dropped from `omrMints` → staking contributes **zero** to net supply. Ops: `GET
+/v1/mod/emission` (pool gauge + backed ratio), `POST /v1/mod/emission/fund` (moves event-fund $OMR →
+pool, a §10.4 transfer, never a mint). `test/economy.js` proves the empty-pool throttle, the buyback's
+30% funding, a claim paid from the pool (balance drops by exactly what paid), principal-whole unstake,
+and `$OMR conservation` holding with `stake:reward` as a transfer. Deferred (sim-gated) Phase-4
+option: territory rent as a recurring $OMR sink (`TERRITORY_RENT_OMR`, ship-at-0). Numbers
+(`STAKE_POOL_BPS`, the APY ceiling) are founder sign-off levers. **The Risk-to-Earn pivot's four
+pillars are now all built** (off-chain; chain layer dormant, gated on legal + third-party audit).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

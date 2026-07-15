@@ -446,11 +446,21 @@ CREATE TABLE IF NOT EXISTS street_tax (
   fund NUMERIC NOT NULL DEFAULT 0,
   last_buyback TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Risk-to-Earn Phase 4: BACKED EMISSION. The soft-$OMR pool staking rewards are paid FROM (a
+-- transfer, not a mint) — funded by a slice of the 12h buyback (cash sinks → $OMR → yield), so
+-- staking stops being an unbounded mint and becomes redistribution bounded by economic activity.
+CREATE TABLE IF NOT EXISTS stake_pool (
+  id INT PRIMARY KEY,
+  balance NUMERIC NOT NULL DEFAULT 0,   -- soft $OMR available to pay staking rewards
+  lifetime_funded NUMERIC NOT NULL DEFAULT 0,
+  lifetime_paid NUMERIC NOT NULL DEFAULT 0
+);
 -- Seed the singletons once (idempotent; virtual pool ≈ $500 / $OMR).
 INSERT INTO amm_pool (id, cash_reserve, omr_reserve)
   SELECT 1, 10000000, 20000 WHERE NOT EXISTS (SELECT 1 FROM amm_pool);
 INSERT INTO street_tax (id, pool, fund)
   SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
+INSERT INTO stake_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM stake_pool);
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   at TIMESTAMPTZ NOT NULL DEFAULT now(),

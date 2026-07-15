@@ -601,6 +601,34 @@ export async function buildServer() {
     Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth }));
   app.post('/v1/mod/vig/prizes', { preHandler: modAuth }, async (req) => Vig.payPrizes(pool, req.body?.winners));
 
+  // ── Risk-to-Earn Phase 4: BACKED EMISSION (the staking reward pool) ──
+  // Gauge: pool balance + effective-APY runway; and an ops/test top-up (the buyback funds it live).
+  app.get('/v1/mod/emission', { preHandler: modAuth }, async () => {
+    const sp = (await pool.query('SELECT balance, lifetime_funded, lifetime_paid FROM stake_pool WHERE id=1')).rows[0] || {};
+    const staked = Number((await pool.query('SELECT COALESCE(SUM(staked),0) s FROM account_persistent')).rows[0].s);
+    const pending = Number((await pool.query('SELECT COALESCE(SUM(rewards),0) s FROM account_persistent')).rows[0].s);
+    return { poolBalance: Number(sp.balance || 0), lifetimeFunded: Number(sp.lifetime_funded || 0),
+      lifetimePaid: Number(sp.lifetime_paid || 0), totalStaked: staked, pendingRewards: pending,
+      backed: pending > 0 ? Math.min(1, Number(sp.balance || 0) / pending) : 1 };
+  });
+  // Ops top-up: MOVE $OMR from the event fund into the staking pool (a §10.4 transfer, both
+  // buckets inside the $OMR conservation set — never a mint). The buyback funds the pool live;
+  // this is the manual twin for moving surplus event-fund $OMR into staker yield.
+  app.post('/v1/mod/emission/fund', { preHandler: modAuth }, async (req) => {
+    const amt = Number(req.body?.amount);
+    if (!(amt > 0)) throw new G.GameError('amount', 'Positive amounts only.');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const f = (await client.query('SELECT fund FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+      if (Number(f.fund) < amt) throw new G.GameError('fund', `The event fund holds ${Math.floor(Number(f.fund))} $OMR — not ${amt}.`);
+      await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [amt]);
+      await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [amt]);
+      await client.query('COMMIT');
+      return { ok: true, funded: amt, fromEventFund: true };
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {
     const block = priceBlock();

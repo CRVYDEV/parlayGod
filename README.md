@@ -63,6 +63,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
+## Risk-to-Earn Phase 4 — backed emission (staking pays from a funded pool, not a mint)
+Staking rewards are paid from a `stake_pool` the 12h buyback funds with a 30% (`STAKE_POOL_BPS`) slice of what it buys — so cash sinks pay staker yield by redistribution, and staking mints nothing. `POST /claim-rewards` / `POST /unstake` pay `min(rewards, pool)` (transfer `stake:reward`, no mint); unpaid rewards stay pending; **principal always returns whole**; a dry pool throttles yield (the APY is now a ceiling). Ops: `GET /mod/emission` (pool gauge), `POST /mod/emission/fund` (event-fund → pool transfer). Design: `omerta-phase4-emission-design.md`.
+
 ## Risk-to-Earn Phase 3 — territory rackets (productive, seizable capital)
 `POST /territory/:districtId/establish` (boss/underboss; one operation per district you hold; cost from treasury — Numbers $50k / Protection $200k / Smuggling $750k) · `POST /territory/:districtId/upgrade` (next tier; collects pending first) · `POST /territory/collect` (any member banks the family's territory income to the treasury; lazy, capped 24h) · `GET /territory` (your family's operations). On a `POST /districts/:id/seize` the operation TRANSFERS to the victor with the turf — wars fight over income now. Surfaced on `GET /gangs/:id` (`territory`). Design: `omerta-risk-to-earn-design.md` (Pillar 2).
 

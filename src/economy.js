@@ -318,21 +318,36 @@ export function stake(ch, amount, client, h) {
   h.acct.staked = Number(h.acct.staked) + a;
   return { ok: true, staked: a }; // internal move, no faucet/sink
 }
+// Phase 4 (backed emission): staking rewards are paid FROM the funded stake_pool (a transfer, no
+// longer a mint), capped by the pool balance; the unpaid remainder stays PENDING (no forfeit),
+// payable once the buyback refills the pool. Returns the amount actually paid.
+async function payStakeRewards(client, h, rewards) {
+  if (!(rewards > 0)) return 0;
+  const p = (await client.query('SELECT balance FROM stake_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const paid = Math.floor(Math.min(rewards, Number(p.balance)) * 1e6) / 1e6;
+  if (!(paid > 0)) return 0;
+  await client.query('UPDATE stake_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [paid]);
+  h.acct.omr = Number(h.acct.omr) + paid;
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: paid, reason: 'stake:reward' }); // transfer (pool→acct), not a mint
+  return paid;
+}
 export async function unstake(ch, client, h) {
   const staked = Number(h.acct.staked), rewards = Number(h.acct.rewards);
   if (staked <= 0 && rewards <= 0) throw new GameError('none', 'Nothing staked.');
-  h.acct.omr = Number(h.acct.omr) + staked + rewards;
-  h.acct.staked = 0; h.acct.rewards = 0;
-  if (rewards > 0) await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: rewards, reason: 'stake:reward' });
-  return { ok: true, returned: staked, rewards };
+  // principal ALWAYS returns whole — it's the player's own $OMR, a bucket move, never pool-gated.
+  h.acct.omr = Number(h.acct.omr) + staked;
+  h.acct.staked = 0;
+  const paid = await payStakeRewards(client, h, rewards);
+  h.acct.rewards = rewards - paid; // keep the unpaid remainder pending for the next refill
+  return { ok: true, returned: staked, rewards: paid, stillPending: rewards - paid };
 }
 export async function claimRewards(ch, client, h) {
   const rewards = Number(h.acct.rewards);
   if (!(rewards > 0)) throw new GameError('none', 'No rewards to claim.');
-  h.acct.omr = Number(h.acct.omr) + rewards;
-  h.acct.rewards = 0;
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: rewards, reason: 'stake:reward' });
-  return { ok: true, claimed: rewards };
+  const paid = await payStakeRewards(client, h, rewards);
+  if (!(paid > 0)) throw new GameError('pool', 'The reward pool is dry — staking yield is throttled until the buyback refills it. Your rewards stay pending.');
+  h.acct.rewards = rewards - paid;
+  return { ok: true, claimed: paid, stillPending: rewards - paid };
 }
 
 // ═══════════════════ THE ARMORY (§5.2) ═══════════════════
