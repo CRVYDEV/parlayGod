@@ -75,10 +75,13 @@ export async function runLedgerInvariants(pool) {
   const omrBuckets = await one(pool, 'SELECT COALESCE(SUM(omr+staked),0) s FROM account_persistent')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM amm_pool')
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
-    + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs');
+    + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs')
+    + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM stake_pool');   // Phase 4 backed-emission pool
   // prize:omr is a Phase-2 mint: an in-game $OMR credit BACKED by hard $OMR the Vig moved into the
   // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
-  const omrMints = await sum(pool, "currency='omr' AND (reason='stake:reward' OR reason LIKE 'mission:%' OR reason='prize:omr')");
+  // Phase 4: stake:reward is NO LONGER a mint — rewards are paid from stake_pool (a transfer, both
+  // sides inside omrBuckets), so staking contributes zero to net supply. It's out of the mint term.
+  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr')");
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
   const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason='respec' OR reason LIKE 'plex:%')"));

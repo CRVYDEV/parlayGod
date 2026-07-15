@@ -466,6 +466,11 @@ export const CONSTANTS = {
   // so an uncollected operation can't hoard unlimited income; uncollected income is forfeited to
   // the void when the district is seized (collect before you lose the turf).
   TERRITORY_CAP_MS: 24*3600*1000,
+  // Risk-to-Earn Phase 4 — BACKED EMISSION. STAKE_POOL_BPS of every 12h buyback's bought $OMR is
+  // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
+  // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin
+  // pool only throttles it down). New/tunable — sim + founder sign-off.
+  STAKE_POOL_BPS: 3000,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;

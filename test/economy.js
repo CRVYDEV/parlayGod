@@ -1,6 +1,7 @@
 // M2 economy smoke test: deterministic market, garage, workshop, goods, rackets,
 // assets, swap, staking, gear, buyback worker — plus the §10.4 cash-ledger and
 // car-conservation invariants. Runs on pg-mem — zero infra.
+process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mod-gated
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
@@ -21,8 +22,9 @@ import { CARS, carVal, carMelt } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
-const call = async (method, url, { token, body } = {}) => {
-  const res = await app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload: body });
+const call = async (method, url, { token, body, headers } = {}) => {
+  const res = await app.inject({ method, url,
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(headers || {}) }, payload: body });
   return { code: res.statusCode, body: res.json() };
 };
 const meOf = async (token) => (await call('GET', '/v1/me', { token })).body.character;
@@ -144,17 +146,16 @@ assert(Number(ammMid.cash_reserve) > Number(ammPre.cash_reserve), 'pool cash gre
 r = await call('POST', '/v1/swap', { token, body: { direction: 'sell', amount: Math.floor(omrHeld / 2) } });
 assert.equal(r.code, 200, 'swap sell'); assert(r.body.gotCash > 0, 'sold $OMR for cash');
 
-// ── staking (§7.1): stake, accrue real APY, claim, unstake ──
+// ── staking (§7.1 + Phase 4 backed emission): rewards PAID FROM a funded pool, not minted ──
+const modH = { 'x-mod-key': 'test-mod-key' };
 r = await call('POST', '/v1/stake', { token, body: { amount: 5 } });
 assert.equal(r.code, 200, 'stake'); assert(r.body.character.staked >= 5, 'omr staked');
 await seed("last_accrued_at = now() - interval '365 days'"); // a full year at 14% APY
 me = await meOf(token);
 assert(me.rewards > 0, 'staking rewards accrued lazily');
-const omrBeforeClaim = me.omr;
-r = await call('POST', '/v1/claim-rewards', { token });
-assert.equal(r.code, 200, 'claim rewards'); assert(r.body.character.omr > omrBeforeClaim, 'rewards → omr');
-r = await call('POST', '/v1/unstake', { token });
-assert.equal(r.code, 200, 'unstake'); assert.equal(r.body.character.staked, 0, 'nothing left staked');
+// Phase 4: an EMPTY pool throttles the yield — the reward stays pending, nothing pays (no mint)
+assert.equal((await call('POST', '/v1/claim-rewards', { token })).body.error, 'pool', 'a dry reward pool throttles the payout (rewards stay pending, no mint)');
+// (the buyback below funds the pool from the AMM — the real production funding path; then we claim)
 
 // ── NFT gear mint (§5.4): $OMR burn → account-side gear ──
 r = await call('POST', '/v1/gear/brasspin/mint', { token });
@@ -165,11 +166,31 @@ assert.equal((await call('POST', '/v1/gear/brasspin/mint', { token })).code, 400
 // ── §7.12 buyback worker: fences + swaps + trades filled the street-tax pool ──
 const taxPre = (await pool.query('SELECT * FROM street_tax WHERE id=1')).rows[0];
 assert(Number(taxPre.pool) > 0, 'street tax accumulated from house takes');
+const stakePoolPre = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
 const bb = await runBuyback(pool, { force: true });
 assert(bb && bb.boughtOmr > 0, 'buyback bought $OMR through the curve');
 const taxPost = (await pool.query('SELECT * FROM street_tax WHERE id=1')).rows[0];
 assert.equal(Number(taxPost.pool), 0, 'pool drained by buyback');
 assert(Number(taxPost.fund) > 0, 'event fund funded');
+// Phase 4: the buyback carves a 30% slice to the staking reward pool (cash sinks → yield)
+const stakePoolPost = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+assert(Math.abs((stakePoolPost - stakePoolPre) - bb.boughtOmr * 0.30) < 1e-6, 'the buyback funded the stake pool with its STAKE_POOL_BPS (30%) slice');
+// NOW the pool is funded (by the buyback) → the staker can claim, paid FROM the pool (a transfer)
+const emPre = (await call('GET', '/v1/mod/emission', { headers: modH })).body;
+const omrBeforeClaim = (await meOf(token)).omr;
+r = await call('POST', '/v1/claim-rewards', { token });
+assert.equal(r.code, 200, 'claim rewards'); assert(r.body.claimed > 0, 'the pool paid the reward');
+assert((await meOf(token)).omr > omrBeforeClaim, 'rewards → omr, paid FROM the pool');
+const emPost = (await call('GET', '/v1/mod/emission', { headers: modH })).body;
+assert(Math.abs((emPre.poolBalance - emPost.poolBalance) - r.body.claimed) < 1e-6, 'the pool dropped by exactly what was paid (a transfer, not a mint)');
+// ops top-up moves event-fund $OMR into the pool (a §10.4 transfer, never a mint)
+const fundPre = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
+if (fundPre > 1) {
+  assert.equal((await call('POST', '/v1/mod/emission/fund', { headers: modH, body: { amount: 1 } })).code, 200, 'ops moved 1 $OMR fund→pool');
+  assert.equal(Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund), fundPre - 1, 'the event fund paid for it (transfer)');
+}
+r = await call('POST', '/v1/unstake', { token });
+assert.equal(r.code, 200, 'unstake'); assert.equal(r.body.character.staked, 0, 'principal returned whole (never pool-gated)');
 assert.equal(await runBuyback(pool, { force: true }), null, 'nothing to buy back twice');
 
 // ══════════ §10.4 INVARIANTS ══════════
@@ -216,9 +237,13 @@ const held = await pool.query('SELECT COUNT(*) n FROM cars WHERE character_id=$1
 const faucet = Number(boosts.rows[0].n), sinks = Number(melts.rows[0].n) + Number(fences.rows[0].n);
 assert.equal(Number(held.rows[0].n), faucet - sinks, `car conservation: ${faucet} boosted − ${sinks} destroyed == ${held.rows[0].n} held`);
 
-// (c) $OMR conservation across the swap curve: nothing minted outside faucets.
-//     account omr + staked + rewards + AMM omr_reserve + fund should equal the seed
-//     (20,000 pool) + staking-reward faucet. We assert the pool never went negative.
+// (c) $OMR conservation — run the real §10.4 job and assert the $OMR check holds after Phase 4:
+//     staking rewards are now a stake_pool TRANSFER (not a mint), the buyback funded the pool, and
+//     the whole $OMR total is still genesis 20,000 (no mint from staking). (Only the $OMR check —
+//     the cash check is intentionally broken by this file's SQL cash-seeds.)
+const { runLedgerInvariants } = await import('../src/invariants.js');
+const omrCheck = (await runLedgerInvariants(pool)).checks.find((x) => x.name === '$OMR conservation');
+assert(omrCheck.ok, `$OMR conservation holds with the stake pool + stake:reward-as-transfer (drift ${omrCheck.drift})`);
 const ammFinal = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
 assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'AMM reserves stay positive');
 
