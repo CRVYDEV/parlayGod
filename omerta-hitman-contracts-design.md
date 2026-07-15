@@ -1,6 +1,17 @@
-# Contracts & Hitmen — design proposal (M7 candidate)
+# Contracts & Hitmen — design proposal (M7)
 
-**Status:** design draft. Not built. This is the keystone the core-loop audit
+**Build status:** **Phase 1 (Contract Board) — BUILT** (browsable board, hospitalize/kill
+split, reason/expiry/anon, cancel + expiry refund, target-notified). **Phase 2 (Player-hitmen
++ assassin reputation) — BUILT**: directed contracts (name a hitman, exclusive window → auto-opens),
+the hybrid legend (account-level lifetime `hitman_rep` + `kills`, surviving death) + per-season
+`season_kills` streak, the Button Man→Undertaker rank ladder, `GET /leaderboard/hitmen`, with
+anti-abuse (level floor, repeat-bloodline diminishing, agents earn kills but not leaderboard rep).
+Rep is a **status axis only** (no gameplay power → no §10.4 / balance impact). Phases 3 (NPC-hitmen)
+and 4 (earnable defense + interlocks) remain design-only below.
+
+---
+
+**Status:** design draft. This is the keystone the core-loop audit
 (`AUDIT-core-loop.md`) points at: one system that supplies the three things the game is
 missing at once — an endgame **cash sink**, a **status ladder**, and a **reason to fight**.
 It *extends* the M3 primitives (hits, bounties, escrow, the estate) rather than replacing

@@ -302,5 +302,55 @@ assert(wsMessages.some((m) => m.channel === 'hello'), 'ws handshake');
 assert(wsMessages.some((m) => m.channel === 'me' && m.type === 'attack'), 'attack pushed live over the socket');
 ws.close();
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, war (+spoils), armory, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants');
+// ── M7 Phase 2: the assassin's reputation ladder ──
+// Don already whacked Rocco (a level-11 mark) above → his first kill: +33 rep (11×3).
+let donMe = await meOf(don.token);
+const donName = donMe.name;
+assert.equal(donMe.kills, 1, 'lifetime kill counted on the account legend');
+assert.equal(donMe.seasonKills, 1, "this street's season streak counted");
+assert.equal(donMe.hitmanRep, 33, 'feared-rep = vicLvl(11) × 3 on the first kill of a bloodline');
+assert.equal(donMe.hitmanTitle, 'Associate', 'rank reflects rep (33 < 50)');
+
+// a controlled kill: search (SEARCH_MS=0) then empty a magazine — btk is easily cleared
+const whack = async (tid, rounds = 6000) => {
+  await seedCh(don.id, "energy=200, ammo=8000, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
+  await seedCh(tid, "hosp_until=NULL, jail_until=NULL, loc='docks'");
+  await call('POST', `/v1/streets/${tid}/search`, { token: don.token });
+  return (await call('POST', `/v1/streets/${tid}/fire`, { token: don.token, body: { rounds } })).body;
+};
+
+// anti-farm floor: a sub-level-5 rookie counts as a kill but pays ZERO rep
+const rookie = await mk('Rookie Ricky');
+let k = await whack(rookie.id);
+assert(k.kill, 'rookie whacked'); assert.equal(k.hitman.repGain, 0, 'no rep for a rookie (below the level floor)');
+donMe = await meOf(don.token);
+assert.equal(donMe.kills, 2, 'the kill still counts'); assert.equal(donMe.hitmanRep, 33, 'but rep is unchanged');
+
+// directed contract: Vito names Don as the hitman → exclusive window + a 1.5x rep bonus on the kill
+const marked = await mk('Marked Mario'); await seedCh(marked.id, 'respect=400'); // level 11
+r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id, reason: 'Make it clean.' } });
+assert.equal(r.code, 200, 'directed contract posted'); assert.equal(r.body.hitman, don.id, 'named hitman recorded');
+const dc = (await call('GET', '/v1/contracts', { token: don.token })).body.contracts.find((c) => c.target.id === marked.id);
+assert.equal(dc.directedTo, donName, 'the board shows the named hitman during the exclusive window');
+assert(dc.opensInSeconds > 0, 'and when it opens to everyone');
+k = await whack(marked.id);
+assert(k.kill && k.bounty === 3000, 'the named hitman collects the directed contract');
+assert.equal(k.hitman.repGain, 49, 'directed kill pays the 1.5x bonus: floor(11×3×1.5)');
+assert.equal((await meOf(don.token)).hitmanRep, 82, 'rep 33 + 49');
+
+// repeat-bloodline diminishing: whacking Marked's HEIR (same account) pays half — and no bonus
+const heir2 = await meOf(marked.token); await seedCh(heir2.id, 'respect=400'); // the heir, level 11
+k = await whack(heir2.id);
+assert(k.kill, 'the heir is whacked too');
+assert.equal(k.hitman.repGain, 16, 'a repeat kill of the same bloodline is diminished: floor(11×3 / 2)');
+donMe = await meOf(don.token);
+assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16'); assert.equal(donMe.kills, 4, 'four lifetime kills');
+assert.equal(donMe.hitmanTitle, 'Button Man', '98 rep → Button Man');
+
+// the feared-assassin leaderboard: the lifetime legend + this season's streak
+const lb = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
+assert(lb.legend.some((e) => e.name === donName && e.rep === 98 && e.title === 'Button Man'), 'Don leads the legend board');
+assert(lb.season.some((e) => e.name === donName && e.kills === donMe.seasonKills), 'Don on the season board');
+
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 Phase 2 assassin rep (rep/kills/streak, level floor, directed bonus, bloodline diminishing, leaderboard)');
 await app.close();

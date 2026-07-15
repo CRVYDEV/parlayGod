@@ -530,4 +530,18 @@ export const M3 = {
   BOUNTY_MIN: 500, BUST_FAIL_JAIL_S: 180,
   BOUNTY_DEFAULT_TTL_H: 72, BOUNTY_MAX_TTL_H: 168, // contract board: default 3d, max 7d
   WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
+  // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
+  // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at
+  // or above MIN_TARGET_LVL, diminished 1/(priorBloodlineKills+1). Directed-contract kills add
+  // a BONUS multiplier. Numbers are cosmetic-tunable (no economy effect).
+  HITMAN_MIN_TARGET_LVL: 5, HITMAN_REP_PER_LVL: 3, HITMAN_DIRECTED_BONUS: 1.5,
 };
+// M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
+export const HITMAN_RANKS = [
+  { at: 0, title: 'Associate' },      // hasn't made his bones yet
+  { at: 50, title: 'Button Man' },
+  { at: 250, title: 'Mechanic' },
+  { at: 1000, title: 'Ghost' },
+  { at: 5000, title: 'The Undertaker' },
+];
+export const hitmanRankOf = (rep = 0) => { let r = HITMAN_RANKS[0]; for (const h of HITMAN_RANKS) if (rep >= h.at) r = h; return r; };

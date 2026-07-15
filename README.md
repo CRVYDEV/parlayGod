@@ -24,7 +24,7 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 - `src/accrual.js` — spec §7.1 lazy accrual: regen (turf-aware), bank interest, racket/asset income, staking rewards, heat decay (the no-global-tick design)
 - `src/game.js` — shared txn machinery: `withCharacter` (locks character + account), `withTwoCharacters` (locks both parties in stable order, §10.1), notifications + the websocket event bus, weekly family contracts
 - `src/economy.js` — M2 actions: garage (melt tithes to the family), workshop, goods (turf prices), rackets/assets, swap, staking, gear, armory
-- `src/social.js` — M3 actions: gangs, tribute, wars (+lazy resolution), turf seizure, jumps, bounties, hit contracts, death/estate, busting, the escrowed Exchange
+- `src/social.js` — M3 actions: gangs, tribute, wars (+lazy resolution), turf seizure, jumps, hit contracts, death/estate, busting, the escrowed Exchange; M7 the Contract Board (hospitalize/kill contracts, directed hits, reason/expiry/refund) + the assassin reputation ladder (legend + season streak, ranks, leaderboard)
 - `src/kitchen.js` — M4 §7.10: makings, the lab ladder, cook/collect, deal, crew, laylow, clean papers
 - `src/growth.js` — M4 growth: paths, the Daily Score, missions, daily contracts, First Week claims, wallet link
 - `src/verify.js` — §4 social verification (SOCIAL_VERIFY_MODE: off | trust | live)
@@ -53,6 +53,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 
 ## M3 endpoints
 `POST /gangs` · `POST /gangs/:id/join` · `POST /gangs/leave|kick|promote|tribute` · `POST /gangs/war/:targetGangId` · `POST /districts/:id/seize` · `GET /gangs`, `GET /gangs/:id`, `GET /districts` · `GET /streets` · `POST /streets/:id/jump|bounty|search|fire|bust` · `DELETE /streets/search` · `GET|POST /exchange…` · `GET /notifications` · `POST /armory/gun/:id/buy|equip`, `/armory/vest/:id`, `/armory/ammo` · `GET /v1/ws?token=` (websocket)
+
+## M7 endpoints (Contracts & Hitmen)
+`POST /streets/:id/bounty` (kind hospitalize|kill, reason, hours, anon, hitman, exclusiveHours) · `GET /contracts` (the board) · `POST /contracts/:targetId/:kind/cancel` · `GET /leaderboard/hitmen` (legend + season)
 
 ## M4 endpoints
 `POST /kitchen/makings/:drugId` · `POST /kitchen/lab/upgrade` · `POST /kitchen/cook|collect|deal` · `POST /kitchen/crew/hire` · `POST /kitchen/laylow|cleanpapers` · `POST /path` · `POST /heist` · `POST /missions/:id` · `GET /daily`, `POST /daily/:id/claim` · `POST /onboard/:taskId/claim` · `POST /wallet` · mod (X-Mod-Key): `POST /mod/ban|kill|confiscate`, `GET /mod/audit`
