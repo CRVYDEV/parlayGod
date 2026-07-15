@@ -5,10 +5,11 @@
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
-  DISTRICTS, CONSUMABLES, M3,
+  DISTRICTS, CONSUMABLES, M3, M8,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf,
 } from './rules.js';
+import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -314,6 +315,10 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (live) {
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
   } else {
+    // M8: keeping your name off the board costs $OMR — charged only when the flag takes effect
+    // (a fresh pot; top-ups inherit the standing pot's anonymity and are never charged). An
+    // insufficient balance throws here and rolls the whole post back, cash included.
+    if (opts.anon) await spendOmr(client, h, M8.BOARD_ANON_OMR, 'intel:anon');
     const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
     await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, hitman, opens_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
       [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), hitmanId, opensAt, expiresAt]);
@@ -426,6 +431,9 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   if (live) {
     await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
   } else {
+    // M8: family anonymity costs the same as anyone's — the BOSS pays it personally (the
+    // treasury holds cash, not $OMR; discretion is the officer's own expense).
+    if (opts.anon) await spendOmr(client, h, M8.BOARD_ANON_OMR, 'intel:anon');
     const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
     await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, posted_by_gang, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
       [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), gangId, expiresAt]);
@@ -496,6 +504,36 @@ export async function listContracts(pool) {
       expiresInSeconds: secsTo(r.expires_at),
     };
   });
+}
+
+// M8 — COUNTER-INTELLIGENCE: "who wants me dead?" The mark pays $OMR to read every funder on
+// every open pot on their own head — names, shares, reasons, the named hitman — INCLUDING
+// anonymous posters. Anonymity is purchasable (the anon fee), and so is piercing it: the two
+// sinks feed each other, and neither moves a dollar of the escrow itself. Free when there is
+// nothing to learn — the ear to the ground only charges when it hears something.
+export async function peekContracts(ch, client, h) {
+  const pots = (await client.query(
+    `SELECT b.kind, b.amount, b.reason, b.expires_at, hm.name AS hitman_name
+       FROM bounties b LEFT JOIN characters hm ON hm.id = b.hitman
+      WHERE b.target_character=$1 AND (b.expires_at IS NULL OR b.expires_at > now())`, [ch.id])).rows;
+  if (!pots.length) throw new GameError('no_contracts', 'Your ear to the ground hears nothing. Nobody has paper on you — today.');
+  await spendOmr(client, h, M8.INTEL_PEEK_OMR, 'intel:peek');
+  const funders = (await client.query(
+    `SELECT bc.kind, bc.amount, bc.funder_gang, c.name AS char_name, g.name AS gang_name
+       FROM bounty_contributors bc
+       LEFT JOIN characters c ON c.id = bc.contributor
+       LEFT JOIN gangs g ON g.id = bc.contributor
+      WHERE bc.target_character=$1`, [ch.id])).rows;
+  await h.track(client, ch.account_id, 'intel_peek', { pots: pots.length });
+  return { ok: true, contracts: pots.map((p) => ({
+    kind: p.kind, pot: Math.floor(Number(p.amount)), reason: p.reason || null,
+    hitman: p.hitman_name || null,
+    expiresInSeconds: p.expires_at ? Math.max(0, Math.ceil((new Date(p.expires_at) - Date.now()) / 1000)) : null,
+    funders: funders.filter((f) => f.kind === p.kind).map((f) => ({
+      name: f.funder_gang ? `${f.gang_name} (family)` : (f.char_name || 'a dead man'),
+      amount: Math.floor(Number(f.amount)),
+    })),
+  })) };
 }
 
 // Refund one pot to its funders and delete it — shared by the expiry sweep and a repost that

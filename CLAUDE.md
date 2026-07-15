@@ -250,8 +250,23 @@ an account-bucket debit ledgered `vanity:*` (cleanpapers/path pattern) — vocab
 in `invariants.js` extended. Routes: `POST /v1/vanity/name|title`, `/v1/vanity/plate/:carId`,
 `/v1/gangs/vanity/color|name`. `test/social.js` covers prices, uniqueness rejections, rank
 gates, uppercase plates, view/board surfacing, free title-clear, and spends==ledgered-burns.
-Prices are new/tunable — founder sign-off before production. Recommended next sinks (designed,
-not built): contract-board anonymity fee + counter-intel peek, stat respec, family seals; the
+Prices are new/tunable — founder sign-off before production.
+
+M8's second drop tied sinks into the game's loops (constants in the `M8` rules.js tail block,
+all through vanity.js's exported `spendOmr` till): **board anonymity** — `anon` on a FRESH
+contract pot (player `postBounty` or family `postFamilyContract` — the boss pays personally;
+the treasury holds cash, not $OMR) burns 3 $OMR as `intel:anon`; top-ups inherit the pot's
+flag and are never charged; an insufficient balance rolls the whole post back. **Counter-intel
+peek** (`POST /v1/contracts/peek`, `social.js:peekContracts`) — the mark burns 5 $OMR
+(`intel:peek`) to read every funder (names + shares, families as "X (family)", the named
+hitman) on every open pot on their own head — it PIERCES anonymity, so the two sinks feed
+each other; free (`no_contracts`, checked before charging) when nothing's posted. **Stat
+respec** (`POST /v1/respec`, `growth.js:respec`) — 15 $OMR (`respec`) redistributes
+muscle/cunning/speed with the total conserved exactly, each ≥ RESPEC_STAT_MIN (5, the creation
+base), no-ops refused unpaid — convenience-not-power, the path-switch precedent. Vocabulary +
+omrBurns extended (`intel:`, `respec`). Tests: social (anon fee/rollback/top-up-free,
+peek pierce + family attribution + free-silence), growth (sum/floor/same gates, ledgered burn).
+Prices new/tunable — founder sign-off. Remaining designed-not-built sink: family seals; the
 14% staking APY remains the deepest lever (standing sign-off item).
 
 Content: the car catalog was expanded 40→60 via the prototype + re-extract (ground rule #2 —

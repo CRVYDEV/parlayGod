@@ -613,6 +613,42 @@ const vanityLedger = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s
 assert.equal(vanitySpent, 5 + 10 + 2 + 10 + 25, 'the shop charged exactly its price list');
 assert.equal(vanityLedger, vanitySpent, 'every $OMR the Tailor took is a ledgered vanity:* burn');
 
+// ── M8: board anonymity fee + counter-intelligence peek (the two sinks feed each other) ──
+const seedOmr = (id, omr) => pool.query(`UPDATE account_persistent SET omr = ${omr} WHERE account_id = (SELECT account_id FROM characters WHERE id='${id}')`);
+await seedCh(frank.id, 'cash=100000'); await seedOmr(frank.id, 0);
+// no $OMR → no anonymity, and the WHOLE post rolls back (cash untouched, no pot)
+const frankCash0 = (await meOf(frank.token)).cash;
+r = await call('POST', `/v1/streets/${barry.id}/bounty`, { token: frank.token, body: { amount: 1000, kind: 'kill', anon: true } });
+assert.equal(r.body.error, 'omr', 'anonymity has a price');
+assert.equal((await meOf(frank.token)).cash, frankCash0, 'the failed anon post rolled back in full (cash untouched)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${barry.id}'`)).rows[0].n), 0, 'no pot was opened');
+await seedOmr(frank.id, 20);
+assert.equal((await call('POST', `/v1/streets/${barry.id}/bounty`, { token: frank.token, body: { amount: 1000, kind: 'kill', anon: true } })).code, 200, 'anon contract posted');
+assert.equal((await meOf(frank.token)).omr, 17, 'the anon fee burned 3 $OMR');
+const anonRow = (await call('GET', '/v1/contracts', { token: mook.token })).body.contracts.find((c) => c.target.id === barry.id);
+assert(anonRow && anonRow.poster === null, 'the board shows no poster');
+// a top-up of a LIVE pot inherits its anonymity — the flag has no effect, so it is never charged
+const donOmrPre = (await meOf(don.token)).omr;
+assert.equal((await call('POST', `/v1/streets/${barry.id}/bounty`, { token: don.token, body: { amount: 600, kind: 'kill', anon: true } })).code, 200, 'top-up joined the pot');
+assert.equal((await meOf(don.token)).omr, donOmrPre, 'no anon charge on a top-up (the flag took no effect)');
+// the peek: the MARK reads every funder — including the anon poster. Charged only when there is something to hear.
+assert.equal((await call('POST', '/v1/contracts/peek', { token: barry.token })).body.error, 'omr', 'intel has a price too');
+await seedOmr(barry.id, 10);
+r = await call('POST', '/v1/contracts/peek', { token: barry.token });
+assert.equal(r.code, 200, 'barry bought the whisper');
+assert.equal((await meOf(barry.token)).omr, 5, 'the peek burned 5 $OMR');
+let names = r.body.contracts.find((c) => c.kind === 'kill').funders.map((f) => f.name);
+assert(names.includes('Freelance Frank'), 'the peek PIERCES anonymity — the anon poster is named');
+assert(names.includes('Don Fabrizio II'), 'every funder is named with their share');
+// a family-funded pot shows the FAMILY as the funder
+assert.equal((await call('POST', `/v1/gangs/contract/${barry.id}`, { token: don.token, body: { amount: 500, kind: 'hospitalize' } })).code, 200, 'the family put paper on barry too');
+r = await call('POST', '/v1/contracts/peek', { token: barry.token });
+assert.equal(r.code, 200, 'barry pays again (each whisper costs)');
+names = r.body.contracts.find((c) => c.kind === 'hospitalize').funders.map((f) => f.name);
+assert(names.includes('The New Fabrizi (family)'), 'a family stake is attributed to the family');
+// nothing on your head → no charge, just the good news
+assert.equal((await call('POST', '/v1/contracts/peek', { token: gina.token })).body.error, 'no_contracts', 'silence is free (checked before any charge)');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
