@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { levelOf, dayOf } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
+import { sweepExpiredBounties } from './social.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -98,6 +99,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
       const s = await runSeasonRollover(pool);
       if (s.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
+      const sw = await sweepExpiredBounties(pool);
+      if (sw.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
       if (dayOf() !== lastInvariantDay) {
         lastInvariantDay = dayOf();
         // prune idempotency keys older than a day (incl. any reservation orphaned by a

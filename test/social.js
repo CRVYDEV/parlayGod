@@ -109,14 +109,40 @@ assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.to
 const roccoNotes = (await call('GET', '/v1/notifications', { token: rocco.token })).body.notifications;
 assert(roccoNotes.some((n) => n.type === 'attack'), 'victim notified');
 
-// ── bounty (§5.2): Mook posts on Rocco with earned money; Don collects on the next jump ──
-r = await call('POST', `/v1/streets/${rocco.id}/bounty`, { token: mook.token, body: { amount: 1000 } });
-assert.equal(r.code, 200, 'bounty posted');
+// ── bounty (§5.2): Mook posts a HOSPITALIZE contract on Rocco; Don collects on the next jump ──
+r = await call('POST', `/v1/streets/${rocco.id}/bounty`, { token: mook.token, body: { amount: 1000, kind: 'hospitalize' } });
+assert.equal(r.code, 200, 'hospitalize contract posted');
 await seedCh(rocco.id, 'hosp_until=NULL');
 await seedCh(don.id, 'energy=200');
 r = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token });
-assert(r.body.win && r.body.bounty === 1000, 'bounty paid to the hospitalizer');
-assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM bounties')).rows[0].n), 0, 'bounty cleared');
+assert(r.body.win && r.body.bounty === 1000, 'hospitalize contract paid to the hospitalizer');
+assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM bounties')).rows[0].n), 0, 'contract cleared');
+
+// ── the contract board (M7 Phase 1): kill contracts, the board, cancel/refund ──
+// A paying client (Vito, not in the §10.4 Mook check) posts a KILL contract on Rocco — a jump
+// must NOT collect it (only a completed hit will); Don (not a funder) collects it on the kill.
+const vito = await mk('Vito the Client');
+await seedCh(vito.id, 'cash=100000');
+r = await call('POST', `/v1/streets/${rocco.id}/bounty`, { token: vito.token, body: { amount: 5000, kind: 'kill', reason: 'He talked to the wrong people.' } });
+assert.equal(r.code, 200, 'kill contract posted'); assert.equal(r.body.kind, 'kill');
+await seedCh(rocco.id, 'hosp_until=NULL'); await seedCh(don.id, 'energy=200');
+r = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token });
+assert.equal(r.body.bounty, 0, 'a jump does NOT collect a kill contract');
+// the board surfaces it (reason, poster, expiry), richest first
+const openContracts = (await call('GET', '/v1/contracts', { token: don.token })).body.contracts;
+const kc = openContracts.find((c) => c.target.id === rocco.id && c.kind === 'kill');
+assert(kc && kc.pot === 5000, 'kill contract on the board');
+assert.equal(kc.reason, 'He talked to the wrong people.', 'board shows the reason');
+assert(kc.poster && kc.expiresInSeconds > 0, 'board shows poster + time remaining');
+// cancel/refund: Vito posts a hospitalize contract then withdraws his own stake (2% take kept)
+r = await call('POST', `/v1/streets/${rocco.id}/bounty`, { token: vito.token, body: { amount: 800, kind: 'hospitalize' } });
+assert.equal(r.code, 200, 'hospitalize contract posted for cancel test');
+const vitoPre = (await meOf(vito.token)).cash;
+r = await call('POST', `/v1/contracts/${rocco.id}/hospitalize/cancel`, { token: vito.token });
+assert.equal(r.code, 200, 'contract cancelled'); assert.equal(r.body.refunded, 800, 'own stake refunded');
+assert.equal((await meOf(vito.token)).cash, vitoPre + 800, 'refund returned to the funder');
+assert.equal((await call('POST', `/v1/contracts/${rocco.id}/hospitalize/cancel`, { token: vito.token })).code, 400, 'nothing left to cancel');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${rocco.id}' AND kind='hospitalize'`)).rows[0].n), 0, 'empty pot removed');
 
 // ── war (§5.5): declare, score via jumps, resolve with spoils ──
 r = await call('POST', `/v1/gangs/war/${gangB}`, { token: don.token });
@@ -177,6 +203,7 @@ r = await call('POST', `/v1/streets/${rocco.id}/fire`, { token: don.token, body:
 assert.equal(r.code, 200, 'shots fired');
 assert(r.body.kill, `level-11 target with 2200 rounds is a kill (eff vs btk: ${JSON.stringify(r.body)})`);
 assert.equal(r.body.chop, Math.floor(900 * 0.4), 'chop = 40% of the real fleet value');
+assert.equal(r.body.bounty, 5000, "the completed hit collects Mook's open kill contract");
 
 // estate: heir stands up on the same account; the street died with the man
 const heir = await meOf(rocco.token);

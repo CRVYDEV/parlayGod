@@ -249,7 +249,7 @@ export async function jump(ch, victim, client, h) {
       await client.query('UPDATE gangs SET war_score_us = war_score_us + 1 WHERE id=$1', [h.owned.gangId]);
       await client.query('UPDATE gangs SET war_score_them = war_score_them + 1 WHERE id=$1', [h.victimOwned.gangId]);
     }
-    const bounty = await claimBounty(client, h, ch, victim.id);
+    const bounty = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
@@ -261,47 +261,143 @@ export async function jump(ch, victim, client, h) {
   return { ok: true, win: false, dmg };
 }
 
-// ═══════════════════ BOUNTIES (§5.2) ═══════════════════
-// Escrowed at post time (a §10.4 escrow bucket); paid to the hospitalizer/killer,
-// never the poster. 2% house take on top.
-export async function postBounty(ch, targetCharacterId, amount, client, h) {
+// ═══════════════════ BOUNTIES / THE CONTRACT BOARD (§5.2, M7 Phase 1) ═══════════════════
+// Escrowed at post time (a §10.4 escrow bucket); paid to the fulfiller, NEVER a funder. 2%
+// house take on top. One pot per (target, kind): a 'hospitalize' pot pays on a winning jump
+// or a kill; a premium 'kill' pot pays ONLY on a completed hit. Contracts carry a reason +
+// expiry; a funder can cancel their own share, and expired pots refund every funder.
+const BKINDS = new Set(['hospitalize', 'kill']);
+const bountyReason = (r) => (r ? String(r).replace(/\s+/g, ' ').trim().slice(0, 140) || null : null);
+
+export async function postBounty(ch, targetCharacterId, amount, client, h, opts = {}) {
   if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
+  const kind = opts.kind || 'kill';
+  if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
   const t = (await client.query('SELECT id, name FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
+  // Omertà: no open contracts on your own family (parity with searches/hits)
+  const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
+  if (tg?.gang_id && tg.gang_id === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
   const amt = Math.floor(Number(amount) || 0);
-  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum bounty is $${M3.BOUNTY_MIN}.`);
+  if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
   const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
-  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That bounty costs $${amt + fee + tax} with the 2% take.`);
+  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs $${amt + fee + tax} with the 2% take.`);
+  const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
   ch.cash = Number(ch.cash) - amt - fee - tax;
-  const cur = (await client.query('SELECT * FROM bounties WHERE target_character=$1 FOR UPDATE', [targetCharacterId])).rows[0];
-  // keep the FIRST poster as posted_by (do NOT overwrite on top-up); record EVERY
-  // funder in bounty_contributors so none of them can collect the pot — otherwise a
-  // poster funds a hit then tops it up via a confederate to flip the lock-out target
-  if (cur) await client.query('UPDATE bounties SET amount = amount + $2 WHERE target_character=$1', [targetCharacterId, amt]);
-  else await client.query('INSERT INTO bounties (target_character, amount, posted_by) VALUES ($1,$2,$3)', [targetCharacterId, amt, ch.id]);
-  await client.query('INSERT INTO bounty_contributors (target_character, contributor) VALUES ($1,$2) ON CONFLICT (target_character, contributor) DO NOTHING', [targetCharacterId, ch.id]);
-  // two rows so the §10.4 job can reconcile the escrow bucket exactly:
-  // the escrowed amount vs the 2% house take
+
+  // upsert the pot (SELECT-then-write — pg-mem's ON CONFLICT is unreliable). Keep the FIRST
+  // poster/reason/expiry on a top-up; the expiry does NOT extend (no grief-forever contracts).
+  // top up only a LIVE pot; an expired-but-unswept pot is treated as gone (a fresh pot is made,
+  // resetting expiry) so money never lands on a contract that's about to refund.
+  const cur = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [targetCharacterId, kind])).rows[0];
+  if (cur) {
+    await client.query('UPDATE bounties SET amount = amount + $3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, kind, amt]);
+  } else {
+    const expiresAt = new Date(Date.now() + ttlH * 3600 * 1000);
+    await client.query('INSERT INTO bounties (target_character, kind, amount, posted_by, anon, reason, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [targetCharacterId, kind, amt, ch.id, !!opts.anon, bountyReason(opts.reason), expiresAt]);
+  }
+  // track EVERY funder's share: none can collect (anti-self-pay), and a cancel/expiry refunds
+  // each exactly what they put in.
+  const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, ch.id])).rows[0];
+  if (mine) await client.query('UPDATE bounty_contributors SET amount = amount + $4 WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, ch.id, amt]);
+  else await client.query('INSERT INTO bounty_contributors (target_character, kind, contributor, amount) VALUES ($1,$2,$3,$4)', [targetCharacterId, kind, ch.id, amt]);
+
+  // two ledger rows so §10.4 reconciles the escrow bucket vs the 2% house take separately
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'bounty:post', counterparty: targetCharacterId });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(fee + tax), reason: 'bounty:take', counterparty: targetCharacterId });
   await takeHouse(client, tax);
-  bus.emit('streets', { type: 'bounty', on: t.name, amount: amt });
-  return { ok: true, total: Number(cur?.amount || 0) + amt };
+  bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind });
+  await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt }); // the mark can react (lay low, etc.)
+  return { ok: true, kind, total: Number(cur?.amount || 0) + amt, expiresHours: ttlH };
 }
 
-async function claimBounty(client, h, ch, victimId) {
-  const b = (await client.query('SELECT * FROM bounties WHERE target_character=$1 FOR UPDATE', [victimId])).rows[0];
-  if (!b) return 0;
-  // no funder of the pot may collect it — checked against EVERY contributor, not just
-  // the (overwriteable) posted_by. The contract stands for others; the bounty remains.
-  const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND contributor=$2', [victimId, ch.id])).rows.length;
-  if (contributed) return 0;
-  await client.query('DELETE FROM bounties WHERE target_character=$1', [victimId]);
-  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victimId]);
-  const amt = Math.floor(Number(b.amount));
-  ch.cash = Number(ch.cash) + amt;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: amt, reason: 'bounty:claim', counterparty: victimId });
-  return amt;
+// Collect every claimable pot on the victim: `kinds` is what this takedown fulfils — a jump
+// pays ['hospitalize']; a kill pays ['hospitalize','kill']. A pot the collector funded is
+// skipped (lock-out) and an expired pot is left for the refund sweep.
+async function claimBounty(client, h, ch, victimId, kinds) {
+  // only LIVE pots — an expired pot is left untouched for the worker sweep to refund. Excluding
+  // them from the FOR UPDATE also keeps claim + sweep on disjoint rows (no deadlock on a funder
+  // who is also the killer).
+  const pots = (await client.query('SELECT kind, amount FROM bounties WHERE target_character=$1 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [victimId])).rows;
+  let total = 0;
+  for (const p of pots) {
+    if (!kinds.includes(p.kind)) continue;
+    const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [victimId, p.kind, ch.id])).rows.length;
+    if (contributed) continue; // a funder never collects; the pot stands (dies with the target)
+    await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
+    await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
+    total += Math.floor(Number(p.amount));
+  }
+  if (total > 0) {
+    ch.cash = Number(ch.cash) + total;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: total, reason: 'bounty:claim', counterparty: victimId });
+  }
+  return total;
+}
+
+// A funder withdraws their own share of a contract (the 2% take is non-refundable).
+export async function cancelBounty(ch, targetCharacterId, kind, client, h) {
+  const k = kind || 'kill';
+  if (!BKINDS.has(k)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
+  const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3 FOR UPDATE', [targetCharacterId, k, ch.id])).rows[0];
+  if (!mine || !(Number(mine.amount) > 0)) throw new GameError('no_contract', "You haven't funded that contract.");
+  const refund = Math.floor(Number(mine.amount));
+  await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, k, ch.id]);
+  const pot = (await client.query('SELECT amount FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, k])).rows[0];
+  const remaining = Number(pot?.amount || 0) - refund;
+  if (remaining > 0) await client.query('UPDATE bounties SET amount=$3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, k, remaining]);
+  else await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [targetCharacterId, k]);
+  ch.cash = Number(ch.cash) + refund;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: refund, reason: 'bounty:refund', counterparty: targetCharacterId });
+  return { ok: true, refunded: refund, potRemaining: Math.max(0, remaining) };
+}
+
+// The public board — open (non-expired) contracts, richest first.
+export async function listContracts(pool) {
+  const rows = (await pool.query(
+    `SELECT b.target_character, b.kind, b.amount, b.anon, b.reason, b.expires_at,
+            t.name AS target_name, p.name AS poster_name
+       FROM bounties b
+       JOIN characters t ON t.id = b.target_character
+       LEFT JOIN characters p ON p.id = b.posted_by
+      WHERE b.expires_at IS NULL OR b.expires_at > now()
+      ORDER BY b.amount DESC LIMIT 100`)).rows;
+  return rows.map((r) => ({
+    target: { id: r.target_character, name: r.target_name },
+    kind: r.kind, pot: Math.floor(Number(r.amount)), reason: r.reason || null,
+    poster: r.anon ? null : (r.poster_name || null),
+    expiresInSeconds: r.expires_at ? Math.max(0, Math.ceil((new Date(r.expires_at) - Date.now()) / 1000)) : null,
+  }));
+}
+
+// Worker sweep: refund every funder of an expired pot their tracked share (ledgered), then
+// drop the pot. Idempotent-safe: a pot is deleted in the same txn it's refunded.
+export async function sweepExpiredBounties(pool) {
+  const client = await pool.connect();
+  let pots = 0, refunded = 0;
+  try {
+    await client.query('BEGIN');
+    const expired = (await client.query("SELECT target_character, kind FROM bounties WHERE expires_at IS NOT NULL AND expires_at <= now() FOR UPDATE")).rows;
+    for (const b of expired) {
+      const funders = (await client.query('SELECT contributor, amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind])).rows;
+      for (const f of funders) {
+        const amt = Math.floor(Number(f.amount));
+        if (amt <= 0) continue;
+        // refund to the funder's character row (keeps the escrow invariant exact even if the
+        // funder has since died — a dead street's refund is a wash, not a mint)
+        await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [f.contributor, amt]);
+        await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: b.target_character });
+        refunded += amt;
+      }
+      await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind]);
+      await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [b.target_character, b.kind]);
+      pots++;
+    }
+    await client.query('COMMIT');
+    return { pots, refunded };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
 }
 
 // ═══════════════════ HIT CONTRACTS (§7.7) ═══════════════════
@@ -387,7 +483,7 @@ export async function fire(ch, victim, client, h, rounds) {
       ch.cash = Number(ch.cash) + chop;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: chop, reason: 'whack:chop', counterparty: victim.id });
     }
-    const bounty = await claimBounty(client, h, ch, victim.id);
+    const bounty = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     await h.notify(client, victim.id, 'whacked', { from: ch.name });
     // witnesses: 3 random living characters saw something (§7.7)
     const wits = (await client.query('SELECT id FROM characters WHERE alive AND id<>$1 AND id<>$2 LIMIT 20', [ch.id, victim.id])).rows;
@@ -435,10 +531,10 @@ export async function runEstate(client, h, victim, killerName) {
   for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
-  // an unclaimed bounty dies with its target — ledgered so the escrow bucket reconciles
-  const openBounty = (await client.query('SELECT amount FROM bounties WHERE target_character=$1', [victim.id])).rows[0];
-  if (openBounty && Number(openBounty.amount) > 0)
-    await h.ledger(client, { currency: 'cash', amount: -Number(openBounty.amount), reason: 'death:bounty', counterparty: victim.id });
+  // any unclaimed contracts (all kinds) die with the target — ledgered so escrow reconciles
+  const openBounty = Number((await client.query('SELECT COALESCE(SUM(amount),0) s FROM bounties WHERE target_character=$1', [victim.id])).rows[0].s);
+  if (openBounty > 0)
+    await h.ledger(client, { currency: 'cash', amount: -openBounty, reason: 'death:bounty', counterparty: victim.id });
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victim.id]);
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victim.id]);
   // Exchange escrow forfeits with the man (v24 rule) — bucket rows keep cb/ammo conservation exact

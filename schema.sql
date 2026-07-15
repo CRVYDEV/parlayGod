@@ -160,19 +160,29 @@ INSERT INTO districts (id) SELECT 'foundry'   WHERE NOT EXISTS (SELECT 1 FROM di
 INSERT INTO districts (id) SELECT 'brick'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='brick');
 INSERT INTO districts (id) SELECT 'canal'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='canal');
 INSERT INTO districts (id) SELECT 'cathedral' WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='cathedral');
+-- Contract board (M7 Phase 1). One escrow pot per (target, kind):
+--   'hospitalize' — collectible by a winning jump OR a completed kill
+--   'kill'        — collectible ONLY by a completed hit (fire); a premium contract
+-- reason + expiry are surfaced on the board; expired pots are refunded to their funders.
 CREATE TABLE IF NOT EXISTS bounties (
-  target_character TEXT PRIMARY KEY,
+  target_character TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'kill',
   amount NUMERIC NOT NULL,
   posted_by TEXT NOT NULL,                       -- character id of the FIRST poster (display only)
+  anon BOOLEAN NOT NULL DEFAULT false,           -- hide the poster on the board
   reason TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (target_character, kind)
 );
--- Every account that ever funded a bounty on a target; none of them can collect it
--- (audit: closes the top-up-overwrites-posted_by self-pay bypass).
+-- Every account that funded a pot + how much (so a cancel/expiry refunds each fairly, and
+-- none of them can collect it — closes the top-up-overwrites-posted_by self-pay bypass).
 CREATE TABLE IF NOT EXISTS bounty_contributors (
   target_character TEXT NOT NULL,
-  contributor TEXT NOT NULL,                     -- poster's character id
-  PRIMARY KEY (target_character, contributor)
+  kind TEXT NOT NULL DEFAULT 'kill',
+  contributor TEXT NOT NULL,                     -- funder's character id
+  amount NUMERIC NOT NULL DEFAULT 0,             -- their tracked share of the pot (for refunds)
+  PRIMARY KEY (target_character, kind, contributor)
 );
 CREATE TABLE IF NOT EXISTS searches (
   hunter TEXT PRIMARY KEY,                       -- one active contract each (§5.2)

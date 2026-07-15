@@ -90,18 +90,43 @@ const addsNoDrift = async (name, action, label) => {
   await seedCh(A.id, 'cash = 50000, muscle = 500, speed = 500, energy = 200');
   await seedCh(C.id, 'cash = 50000');
   await seedCh(B.id, 'respect = 400, muscle = 1, speed = 1');
-  assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: A.token, body: { amount: 2000 } })).code, 200, 'A posts');
-  assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: C.token, body: { amount: 500 } })).code, 200, 'C tops up');
+  assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: A.token, body: { amount: 2000, kind: 'hospitalize' } })).code, 200, 'A posts');
+  assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: C.token, body: { amount: 500, kind: 'hospitalize' } })).code, 200, 'C tops up');
   const r = await call('POST', `/v1/streets/${B.id}/jump`, { token: A.token });
   assert.equal(r.code, 200, 'A jumps B'); assert(r.body.win, 'A wins the jump');
   assert.equal(r.body.bounty, 0, 'A (a funder) collects NOTHING from the pot');
-  assert(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${B.id}'`)).rows[0].amount) >= 2500, 'the contract stands for others');
+  assert(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${B.id}' AND kind='hospitalize'`)).rows[0].amount) >= 2500, 'the contract stands for others');
   // a non-funder CAN collect: C's confederate D whacks B and takes the pot
   const D = await mk('Collector D');
   await seedCh(D.id, 'muscle = 500, speed = 500, energy = 200');
   await seedCh(B.id, 'hosp_until = NULL, respect = 400, muscle = 1, speed = 1');
   const r2 = await call('POST', `/v1/streets/${B.id}/jump`, { token: D.token });
   assert(r2.body.win && r2.body.bounty >= 2500, 'a non-funder collects the full pot');
+}
+
+// ═══ FINDING (contract-board): post/cancel/expiry all keep the §10.4 escrow bucket exact ═══
+{
+  const { sweepExpiredBounties } = await import('../src/social.js');
+  const escrowDrift = async () => (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'bounty escrow').drift;
+  const P = await mk('Contractor P'); const T = await mk('Mark T');
+  await seedCh(P.id, 'cash = 50000');
+  const d0 = await escrowDrift();
+  // post → escrow grows, drift unchanged (a ledgered move into the bucket)
+  assert.equal((await call('POST', `/v1/streets/${T.id}/bounty`, { token: P.token, body: { amount: 3000, kind: 'kill' } })).code, 200, 'contract posted');
+  assert.equal(await escrowDrift(), d0, 'escrow reconciles after a post');
+  // cancel → funder refunded, drift unchanged
+  const pCash = (await meOf(P.token)).cash;
+  assert.equal((await call('POST', `/v1/contracts/${T.id}/kill/cancel`, { token: P.token })).body.refunded, 3000, 'own stake refunded');
+  assert.equal((await meOf(P.token)).cash, pCash + 3000, 'refund landed');
+  assert.equal(await escrowDrift(), d0, 'escrow reconciles after a cancel/refund');
+  // expiry sweep → all funders refunded, drift unchanged
+  await call('POST', `/v1/streets/${T.id}/bounty`, { token: P.token, body: { amount: 1500, kind: 'kill' } });
+  await pool.query(`UPDATE bounties SET expires_at = now() - interval '1 hour' WHERE target_character='${T.id}'`);
+  const beforeSweep = (await meOf(P.token)).cash;
+  const sw = await sweepExpiredBounties(pool);
+  assert(sw.pots === 1 && sw.refunded === 1500, 'expired pot swept + refunded');
+  assert.equal((await meOf(P.token)).cash, beforeSweep + 1500, 'expiry refund landed');
+  assert.equal(await escrowDrift(), d0, 'escrow reconciles after an expiry refund');
 }
 
 // ═══ FINDING (kitchen-2): mission $OMR pays once per ACCOUNT, not per character ═══
