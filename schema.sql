@@ -385,6 +385,38 @@ CREATE TABLE IF NOT EXISTS chain_cursor (
   last_block BIGINT NOT NULL DEFAULT 0
 );
 
+-- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
+-- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
+-- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in
+-- ETH / $OMR units (not wei) to stay inside JS-safe-integer range for the accounting math; the
+-- real bot does the actual DEX swap on mainnet, this mirrors it. The invariant (src/vig.js
+-- runVigInvariants) proves "extraction ≤ inflow": funded reserve + prize pool ≤ $OMR bought ≤
+-- revenue-backed. Dormant until the chain is wired (M6 pattern) — nothing extracts here.
+CREATE TABLE IF NOT EXISTS vig_revenue (
+  source TEXT NOT NULL,               -- 'fee' (mint/respawn); later 'cosmetic' | 'rent' | 'pass'
+  ref TEXT NOT NULL,                  -- idempotency key within source (the fee nonce, …)
+  kind TEXT,                          -- 'mint' | 'respawn' | …
+  gross_eth NUMERIC NOT NULL,         -- the full real-ETH payment
+  vig_eth NUMERIC NOT NULL,           -- the Vig's share (gross × VIG_BPS); the rest is dev revenue
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, ref)
+);
+CREATE TABLE IF NOT EXISTS vig_buyback (
+  id TEXT PRIMARY KEY,
+  eth_spent NUMERIC NOT NULL,         -- ETH the bot spent buying $OMR (≤ unspent Vig revenue)
+  omr_bought NUMERIC NOT NULL,        -- hard $OMR acquired on the DEX
+  price_omr_per_eth NUMERIC NOT NULL, -- the execution price (test: a param; mainnet: TWAP)
+  to_reserve NUMERIC NOT NULL,        -- $OMR routed to the withdrawal reserve (funds extraction)
+  to_prize NUMERIC NOT NULL,          -- $OMR routed to the season prize pool
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS vig_prize_pool (
+  id INT PRIMARY KEY,
+  balance NUMERIC NOT NULL DEFAULT 0, -- unpaid hard $OMR available for season prizes
+  paid_total NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO vig_prize_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM vig_prize_pool);
+
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.
 CREATE TABLE IF NOT EXISTS amm_pool (

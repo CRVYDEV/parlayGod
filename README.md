@@ -63,6 +63,9 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ## M8 endpoints (loop sinks — anonymity, counter-intel, respec)
 `anon: true` on `POST /streets/:id/bounty` or `/gangs/contract/:targetId` (3 $OMR on a FRESH pot; top-ups inherit free) · `POST /contracts/peek` (5 $OMR — the mark reads every funder on their own head, pierces anon; free when nothing's posted) · `POST /respec` `{muscle,cunning,speed}` (15 $OMR — total conserved, each stat ≥ 5)
 
+## Risk-to-Earn Phase 2 — the Vig (off-chain core; chain dormant, no mainnet extraction)
+`POST /plex/mint` · `POST /plex/respawn` (pay a real-money fee from EARNED $OMR — burns `plex:*`, grants the same mint credit / respawn token an ETH payer gets; the EVE PLEX bridge) · mod/ops: `GET /mod/vig` (status + the extraction-≤-inflow invariant) · `POST /mod/vig/buyback` `{priceOmrPerEth}` (the DEX bot's manual/test twin — spends only unspent Vig revenue) · `POST /mod/vig/prizes` `{winners:[{accountId,omr}]}` (pay season prizes, backed by hard $OMR moved to the reserve). Real ETH fees route their `VIG_BPS` (60%) share into the pool; the reserve that backs every withdrawal is now fed only by revenue buybacks, so extraction ≤ inflow holds by construction. Design: `omerta-phase2-vig-design.md`.
+
 ## Risk-to-Earn Phase 1 (off-chain rebalance — no new routes, changed behavior)
 Loot on a player fire-kill (killer takes 25% of victim pocket cash + 20% of liquid $OMR; `whack:loot` transfers; response adds `loot`/`omrLoot`) · `POST /swap` `direction:buy` (laundering) now requires a wash-house district (docks/canal) or your family's turf, draws +15 heat, and is blocked from a safehouse (sell is ungated) · a safe-housed player can't `fire`/`jump`/`deal`/launder (shield, not bunker) · bodyguard floor $1k→$10k, guard hospital 2h→4h · bank interest capped by a daily bucket (no ~4%/day risk-free). Numbers are founder sign-off levers. Design: `omerta-phase1-riskpay-design.md`.
 

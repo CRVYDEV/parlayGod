@@ -12,6 +12,7 @@ import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
 import * as V from './vanity.js';
+import * as Vig from './vig.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -570,6 +571,21 @@ export async function buildServer() {
   app.post('/v1/mod/fees/record', { preHandler: modAuth }, async (req) =>
     Fees.recordFeePayment(pool, { nonce: req.body?.nonce, kind: req.body?.kind,
       payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: req.body?.txHash }));
+
+  // ── Risk-to-Earn Phase 2: THE VIG (off-chain core) ──
+  // PLEX bridge — pay a real-money fee from EARNED $OMR instead of ETH (burns $OMR → the same
+  // entitlement). A skilled player funds their own play; a whale pays ETH (which funds the Vig).
+  app.post('/v1/plex/mint', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'mint', client, h)));
+  app.post('/v1/plex/respawn', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'respawn', client, h)));
+  // Mod/ops: the Vig gauge + the extraction-≤-inflow invariant, and the buyback trigger (on
+  // mainnet the DEX bot runs this with a TWAP price; here it's the manual/test path).
+  app.get('/v1/mod/vig', { preHandler: modAuth }, async () =>
+    ({ status: await Vig.vigStatus(pool), invariants: await Vig.runVigInvariants(pool) }));
+  app.post('/v1/mod/vig/buyback', { preHandler: modAuth }, async (req) =>
+    Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth }));
+  app.post('/v1/mod/vig/prizes', { preHandler: modAuth }, async (req) => Vig.payPrizes(pool, req.body?.winners));
 
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {

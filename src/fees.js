@@ -12,6 +12,7 @@
 // `transactions` — real ETH is out-of-band value, outside the §10.4 in-game conservation set.
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
+import { recordVigRevenue } from './vig.js';
 
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
 // A payment only grants an entitlement if it actually carried value — belt-and-suspenders
@@ -50,6 +51,9 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
       await client.query('COMMIT');
       return { recorded: false, duplicate: true };
     }
+    // Phase 2: route this payment's Vig share into the redistribution pool (same txn). The ETH
+    // itself still went to the dev wallet on-chain; this only records the accounting split.
+    await recordVigRevenue(client, { source: 'fee', ref: n, kind, amountWei });
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let credited = false;
     if (acct) {
