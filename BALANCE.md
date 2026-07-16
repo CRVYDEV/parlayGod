@@ -119,7 +119,31 @@ peek 5 · respec 15 (all $OMR burns, display-only) — **KEEP**; respec has no c
 
 ---
 
-## 11. The DECIDE list (ranked)
+## 11. The DECIDE list (ranked) — **SIGNED 2026-07-16: founder approved all recommendations**
+
+Resolution of each item (all recs implemented same day; suite 10/10 + sim drift-0):
+- **D1 — SIGNED AS-IS**: killing stays "hunt whales" (break-even ≈ $344k liquid prey); revisit
+  with live data. No change.
+- **D2 — BUILT**: bank deposits, business collection, and territory collection are now EXPOSED
+  acts — blocked from a safehouse (`safe` error). Income accrues while hidden; banking it means
+  surfacing. Withdrawals (cash to hand) stay legal.
+- **D3 — BUILT**: the public wash route (swap buy) now carries a per-account daily token bucket,
+  `PUBLIC_WASH_CAP_DAY` $2.6M (= the top business tier's launderCapDay) — private infra is the
+  best rail, no longer the only sane one.
+- **D4 — BUILT**: `NPC_HIT_TARGET_CD_MS` 24h per (payer, target) pair (`npc_hits` table, stamped
+  win or lose) — no repeat-resetting one rival.
+- **D5 — BUILT** (explicit founder override of the prototype rate): bank interest tapers above
+  `BANK_TAPER_ABOVE` $10M — full rate on the first $10M, `BANK_TAPER_KEEP` 10% of the rate
+  beyond. The vault stops being the game's only unbounded exponential.
+- **D6 — SIGNED AS-IS**: kitchen entry margin ($327/cycle + corner premium) — watch in alpha.
+- **D7 — BUILT**: `RESPEC_CD_MS` 24h between respecs; failed attempts never arm the clock.
+- **D8 — remains documented** (turf goods arbitrage, dice daily contracts, per-IP throttle,
+  `GET /v1/me` accrual outside the guard, `payPrizes` batch-id, seizure-loser notification) —
+  accepted as-is for alpha, revisit with live data.
+
+**Status: every KEEP row above is production balance. The economy is signed.**
+
+## Appendix — the original DECIDE list (for the record)
 
 - **D1 — Should killing pay against mid-tier marks?** Today a kill costs $67k–$390k in ammo
   (PROTOTYPE prices), so only marks worth ≥ ~$344k liquid are +EV prey. This reads as "assassins

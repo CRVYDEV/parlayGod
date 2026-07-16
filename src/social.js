@@ -1010,6 +1010,12 @@ export async function npcHit(ch, victim, client, h, tierId) {
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (safeHoused(victim)) throw new GameError('safe', "The contractor can't find them — they've gone to ground.");
   if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
+  // BALANCE D4 — per-TARGET cooldown: a whale could repeat-reset ONE rival every 6h by cycling
+  // the payer cooldown; now each (payer, target) pair rests NPC_HIT_TARGET_CD_MS between attempts
+  // (stamped win or lose — the griefing is the attempt cadence, not the kill).
+  const pair = (await client.query('SELECT last_at FROM npc_hits WHERE payer=$1 AND target=$2', [ch.id, victim.id])).rows[0];
+  if (pair && Date.now() - new Date(pair.last_at).getTime() < M3.NPC_HIT_TARGET_CD_MS)
+    throw new GameError('target_cd', 'The contractors already went at them for you — pick another mark or wait a day.');
   if (Number(ch.cash) < tier.cost) throw new GameError('cash', `${tier.name} charges $${tier.cost}.`);
 
   // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
@@ -1017,6 +1023,8 @@ export async function npcHit(ch, victim, client, h, tierId) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.cost, reason: 'npchit:hire', counterparty: victim.id });
   ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
   ch.npchit_at = new Date(Date.now() + M3.NPC_HIT_CD_MS);
+  if (pair) await client.query('UPDATE npc_hits SET last_at=now() WHERE payer=$1 AND target=$2', [ch.id, victim.id]);
+  else await client.query('INSERT INTO npc_hits (payer, target) VALUES ($1,$2)', [ch.id, victim.id]);
 
   const success = Math.min(M3.NPC_MAX_SUCCESS, Math.max(M3.NPC_MIN_SUCCESS, tier.base - vicLvl * M3.NPC_DEF_PER_LVL));
   const roll = Math.random();

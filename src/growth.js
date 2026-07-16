@@ -45,7 +45,12 @@ export async function respec(ch, alloc, client, h) {
     throw new GameError('alloc', `Redistribute exactly what you trained: ${total} points.`);
   if (want.muscle === Number(ch.muscle) && want.cunning === Number(ch.cunning) && want.speed === Number(ch.speed))
     throw new GameError('same', "That's already you.");
+  // BALANCE D7 — opposed rolls (shakedowns, jumps) are shape-sensitive: no re-shaping between
+  // fights. One respec a day; failed attempts above never arm the clock.
+  if (ch.respec_at && Date.now() - new Date(ch.respec_at).getTime() < M8.RESPEC_CD_MS)
+    throw new GameError('cooldown', 'The trainer works miracles, not shift changes — one re-shaping a day.');
   await spendOmr(client, h, M8.RESPEC_OMR, 'respec');
+  ch.respec_at = new Date();
   ch.muscle = want.muscle; ch.cunning = want.cunning; ch.speed = want.speed;
   await h.track(client, ch.account_id, 'respec', want);
   return { ok: true, stats: want };

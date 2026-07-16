@@ -64,6 +64,9 @@ export async function upgradeRacket(ch, districtId, client, h) {
 // (the income is the family's); gang locked first (global order characters → accounts → gangs).
 export async function collectTerritory(ch, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
+  // BALANCE D2 — shield, not bunker: walking the district to collect is an exposed act
+  if (ch.safe_until && new Date(ch.safe_until) > new Date())
+    throw new GameError('safe', 'The runners report to a man on the street, not a ghost — collection waits until you surface.');
   const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const rackets = (await client.query('SELECT * FROM territory_rackets WHERE owner_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;
   let total = 0;

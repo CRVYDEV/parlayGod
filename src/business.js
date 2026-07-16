@@ -112,6 +112,9 @@ export async function buyBusiness(ch, kind, client, h) {
 // Collect the accrued income from EVERY front you own → pocket cash (lazy, capped, clock reset).
 // Each row resolves its scrutiny window first — a raided front's pending is seized, not banked.
 export async function collectBusiness(ch, client, h) {
+  // BALANCE D2 — shield, not bunker: collecting the take is an EXPOSED act (you show up at your
+  // own fronts). Income keeps accruing while you hide; you just can't bank it from the bunker.
+  if (safeHoused(ch)) throw new GameError('safe', "Nobody hands the take to a ghost — collection waits until you surface.");
   const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
   let total = 0, rakeback = 0; const raids = [];
   for (const r of rows) {

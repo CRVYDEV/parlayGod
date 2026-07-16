@@ -513,6 +513,14 @@ export const CONSTANTS = {
   // quantities move at street prices. Phases out automatically at trade-rank 1, so it subsidizes
   // the on-ramp without touching the sim-audited mid/endgame deal curve. Founder sign-off lever.
   KITCHEN_ONRAMP_BONUS: 0.5,
+  // BALANCE.md sign-off (founder-approved recs, 2026-07-16):
+  // D3 — the PUBLIC wash route gets a per-account daily token bucket (= the top business tier's
+  // launderCapDay): private infra is the best extraction rail, no longer the only sane one.
+  PUBLIC_WASH_CAP_DAY: 2600000,
+  // D5 — bank interest TAPERS above a threshold: full rate on the first BANK_TAPER_ABOVE, then
+  // BANK_TAPER_KEEP of the rate beyond — the game's only exponential now flattens at whale scale.
+  // (An explicit founder override of the prototype's flat 2%/12h.)
+  BANK_TAPER_ABOVE: 10000000, BANK_TAPER_KEEP: 0.10,
 };
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
 // regulatory line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
@@ -636,6 +644,8 @@ export const M3 = {
   // paying more buys a better base, a higher-level mark defends it down — so the weak can buy a
   // CHANCE at the strong, never a certainty. Fee burns win or lose; heat + a cooldown throttle it.
   NPC_HIT_HEAT: 25, NPC_HIT_CD_MS: 6 * 3600 * 1000, NPC_MIN_TARGET_LVL: 5,
+  NPC_HIT_TARGET_CD_MS: 24 * 3600 * 1000, // D4: per (payer, target) — no repeat-resetting one rival
+
   // NPC_MAX_SUCCESS is headroom for future high-base tiers (today's top base 0.55 < 0.60, so the
   // floor is the clamp that bites); NPC_MIN_SUCCESS keeps even a whale at a small standing risk.
   NPC_DEF_PER_LVL: 0.005, NPC_MAX_SUCCESS: 0.60, NPC_MIN_SUCCESS: 0.02,
@@ -691,6 +701,7 @@ export const M8 = {
   INTEL_PEEK_OMR: 5,   // "who wants me dead?" — funder names + shares on every open pot on you
   RESPEC_OMR: 15,      // redistribute muscle/cunning/speed; sum must match, each ≥ RESPEC_STAT_MIN
   RESPEC_STAT_MIN: 5,  // the creation base — respec never drops a stat below the man you started as
+  RESPEC_CD_MS: 24 * 3600 * 1000, // D7: opposed rolls are shape-sensitive — no re-shaping between fights
   TRIBUTE_OMR_MIN: 1,  // minimum $OMR tribute into the family reserve
 };
 // M8 — FAMILY SEALS: the gang-prestige ladder, the family-level $OMR sink. Pure STATUS (a badge
