@@ -321,6 +321,18 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.playNumbers(ch, req.body?.pick, req.body?.amount, client, h)));
   app.post('/v1/casino/numbers/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimNumbers(ch, client, h)));
+  // step two: back-room PvP dice (consent-by-listing), the weekly fight book + the neon fix
+  app.post('/v1/casino/fade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch) => Casino.setFadeLimit(ch, req.body?.limit)));
+  app.post('/v1/casino/dice/:targetId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, fader, client, h) =>
+      Casino.pvpDice(ch, fader, req.body?.amount, client, h)));
+  app.post('/v1/casino/fight', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.betFight(ch, req.body?.side, req.body?.amount, client, h)));
+  app.post('/v1/casino/fight/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimFight(ch, client, h)));
+  app.post('/v1/casino/fight/fix', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.fixFight(ch, req.body?.winner, client, h)));
   app.get('/v1/casino', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     if (!cid) throw new G.GameError('no_character', 'Create a character first.');

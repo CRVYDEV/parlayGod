@@ -5,7 +5,7 @@
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { CASINO, numbersDrawOf, dayOf } from '../src/rules.js';
+import { CASINO, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -91,14 +91,108 @@ await pool.query(`UPDATE numbers_tickets SET day=${yesterday} WHERE character_id
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.body.settled, 1, 'the loser settled'); assert.equal(rr.body.won, 0, 'and paid nothing');
 
+// ══════════ STEP TWO: back-room PvP dice, the weekly fight + the neon fix, rakeback ══════════
+let seededCash = 1000000; // every later seed is a tracked RELATIVE bump so the identity check stays exact
+
+// ── back-room dice: consent-by-listing, symmetric roll, winner takes pot − 5% rake ──
+const { body: { token: t2 } } = await call('POST', '/v1/auth/guest');
+await call('POST', '/v1/character', { token: t2, body: { name: 'Dice Danny' } });
+const did = (await meOf(t2)).id;
+await pool.query(`UPDATE characters SET cash=100000, loc='neon', nerve=50 WHERE id='${did}'`);
+assert.equal((await call('POST', `/v1/casino/dice/${did}`, { token, body: { amount: 1000 } })).body.error, 'not_fading', 'no action without a listing');
+assert.equal((await call('POST', '/v1/casino/fade', { token: t2, body: { limit: 50 } })).body.error, 'limit', 'fade limits respect the table');
+rr = await call('POST', '/v1/casino/fade', { token: t2, body: { limit: 20000 } });
+assert.equal(rr.code, 200, 'danny lists an open fade'); assert.equal(rr.body.character.fadeLimit, 20000, 'surfaced in the view');
+assert((await call('GET', '/v1/casino', { token })).body.backroom.faders.some((f) => f.id === did), 'danny is on the den board');
+assert.equal((await call('POST', `/v1/casino/dice/${did}`, { token, body: { amount: 50000 } })).body.error, 'limit', 'the fade limit binds');
+// play until both outcomes seen; verify the exact transfer + rake every round
+let pvpW = 0, pvpL = 0;
+for (let i = 0; i < 30 && (pvpW === 0 || pvpL === 0); i++) {
+  await seed("nerve=50");
+  const louPre = (await meOf(token)).cash, danPre = (await meOf(t2)).cash;
+  const taxP = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+  const g = await call('POST', `/v1/casino/dice/${did}`, { token, body: { amount: 2000 } });
+  assert.equal(g.code, 200, `backroom round resolves (${JSON.stringify(g.body)})`);
+  const rake = g.body.rake;
+  assert.equal(rake, Math.ceil(4000 * 0.05), 'the rake is 5% of the pot');
+  if (g.body.win) { pvpW++;
+    assert.equal((await meOf(token)).cash, louPre + 2000 - rake, 'winner nets stake − rake');
+    assert.equal((await meOf(t2)).cash, danPre - 2000, 'loser pays the stake');
+  } else { pvpL++;
+    assert.equal((await meOf(token)).cash, louPre - 2000, 'loser pays the stake');
+    assert.equal((await meOf(t2)).cash, danPre + 2000 - rake, 'winner nets stake − rake');
+  }
+  assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool) - taxP,
+    Math.floor(rake / 2), 'half the rake to the street, the rest burns');
+}
+assert(pvpW > 0 && pvpL > 0, `both sides won at least once (${pvpW}/${pvpL})`);
+
+// ── the fight: one capped bet a week; the family holding neon can buy the result ──
+assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'x', amount: 500 } })).body.error, 'side', "back 'a' or 'b'");
+assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 50000 } })).body.error, 'max', 'fight bets cap small — the fix stays bounded');
+rr = await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 5000 } });
+assert.equal(rr.code, 200, 'backed the dog'); assert(rr.body.a && rr.body.b, 'the bout card names the fighters');
+assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'a', amount: 500 } })).body.error, 'bet', 'one bet a bout');
+assert.equal((await call('POST', '/v1/casino/fight/claim', { token })).body.settled, 0, 'the bout has not gone off yet');
+// the fix: boss-only, neon-holders-only, once, treasury-funded
+assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } })).body.error, 'rank', 'no family, no fix');
+await seed(`respect=${4 * 57 * 57}`); // level 58 — founding, the high-stakes room, and the casino front below
+const gangId = (await call('POST', '/v1/gangs', { token, body: { name: 'Neon Kings', tag: 'NKG' } })).body.gangId;
+assert(gangId, 'lou founded a family'); seededCash -= 0; // founding is ledgered, not seeded
+assert.equal((await call('POST', '/v1/gangs/tribute', { token, body: { amount: 100000 } })).code, 200, 'war chest funded');
+assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } })).body.error, 'turf', 'the fix belongs to whoever runs neon');
+assert.equal((await call('POST', '/v1/districts/neon/seize', { token })).code, 200, 'the Kings took the Mile');
+const treasuryPreFix = (await call('GET', `/v1/gangs/${gangId}`, {})).body.gang.treasury;
+rr = await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } });
+assert.equal(rr.code, 200, 'the referee is bought'); assert.equal(rr.body.cost, CASINO.FIGHT_FIX_COST, 'for the listed price');
+assert.equal((await call('GET', `/v1/gangs/${gangId}`, {})).body.gang.treasury, treasuryPreFix - CASINO.FIGHT_FIX_COST, 'paid from the treasury');
+assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'a' } })).body.error, 'fixed', 'one fix a bout');
+// roll the bout into the past: the FIXED result pays the dog backer at 2.6
+const wk = weekOf();
+await pool.query(`UPDATE fight_bets SET week=${wk - 1} WHERE character_id='${cid}'`);
+await pool.query(`UPDATE fight_fixes SET week=${wk - 1} WHERE week=${wk}`);
+const cashPreFight = (await meOf(token)).cash;
+rr = await call('POST', '/v1/casino/fight/claim', { token });
+assert.equal(rr.body.settled, 1, 'the bout settled');
+assert.equal(rr.body.won, Math.floor(5000 * CASINO.FIGHT_DOG_PAYS), 'the fixed dog paid 2.6');
+assert.equal((await meOf(token)).cash, cashPreFight + 13000, 'the payout landed');
+// an UNFIXED bout resolves off the seed draw
+rr = await call('POST', '/v1/casino/fight', { token, body: { side: 'a', amount: 1000 } });
+assert.equal(rr.code, 200, 'a fresh bet on the new bout');
+await pool.query(`UPDATE fight_bets SET week=${wk - 2} WHERE character_id='${cid}'`);
+const drawWinner = hash01(`fight:${wk - 2}:${MARKET_SEED}`) < CASINO.FIGHT_FAV_P ? 'a' : 'b';
+rr = await call('POST', '/v1/casino/fight/claim', { token });
+assert.equal(rr.body.settled, 1, 'unfixed bout settled');
+assert.equal(rr.body.results[0].winner, drawWinner, 'the seed draw decided it');
+assert.equal(rr.body.won, drawWinner === 'a' ? Math.floor(1000 * CASINO.FIGHT_FAV_PAYS) : 0, 'paid iff the pick hit');
+
+// ── rakeback: a casino-front owner earns a cut of den volume at business collect ──
+await seed("cash = cash + 8000000"); seededCash += 8000000;
+rr = await call('POST', '/v1/business/casino/buy', { token });
+assert.equal(rr.code, 200, 'lou bought the casino front');
+const volAtBuy = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
+assert.equal(Number((await pool.query("SELECT rake_cursor FROM businesses WHERE character_id=$1 AND kind='casino'", [cid])).rows[0].rake_cursor),
+  volAtBuy, 'the rakeback cursor starts at today — no claiming history');
+await seed("nerve=50");
+assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 100000 } })).code, 200, 'a big roll after the buy');
+rr = await call('POST', '/v1/business/collect', { token });
+assert.equal(rr.code, 200, 'collected');
+assert.equal(rr.body.rakeback, Math.floor(100000 * CASINO.RAKEBACK_BPS / 10000), 'the owner raked 1% of the new volume');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:rakeback' AND character_id='${cid}'`)).rows[0].s),
+  rr.body.rakeback, 'the rakeback is a ledgered casino: faucet');
+assert.equal((await call('POST', '/v1/business/collect', { token })).body.rakeback, undefined, 'no double-claim — the cursor advanced');
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
 const me = await meOf(token);
 const ledgerAll = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND character_id='${cid}'`)).rows[0].s);
-assert(Math.abs((me.cash + me.bank - 1000000) - ledgerAll) <= 1, `every gambled dollar reconciles (drift ${(me.cash + me.bank - 1000000) - ledgerAll})`);
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+assert(Math.abs((me.cash + me.bank - seededCash) - ledgerAll) <= 1, `every gambled dollar reconciles (drift ${(me.cash + me.bank - seededCash) - ledgerAll})`);
+const inv = await runLedgerInvariants(pool);
+const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `casino:* reasons are in the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
+const treas = inv.checks.find((c) => c.name === 'gang treasuries');
+assert(treas.ok, `the treasury check reconciles the casino:fix sink (drift ${treas.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/1% street cut exact), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), §10.4 identity + vocabulary hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/1% street cut exact), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury, fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
 await app.close();

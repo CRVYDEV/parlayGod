@@ -9,7 +9,7 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { CONSTANTS, M3, BUSINESSES, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
+import { CONSTANTS, M3, CASINO, BUSINESSES, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -98,6 +98,12 @@ export async function buyBusiness(ch, kind, client, h) {
   ch.cash = Number(ch.cash) - tier.cost;
   const id = uid();
   await client.query('INSERT INTO businesses (id, character_id, kind, tier) VALUES ($1,$2,$3,1)', [id, ch.id, kind]);
+  // Den rakeback (casino kind): the cursor starts at TODAY's den volume — a new owner earns
+  // against future action, not history
+  if (kind === 'casino') {
+    const vol = (await client.query('SELECT total FROM den_volume WHERE id=1')).rows[0];
+    await client.query('UPDATE businesses SET rake_cursor=$2 WHERE id=$1', [id, Number(vol?.total || 0)]);
+  }
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.cost, reason: 'business:buy' });
   h.owned.businesses = await businessesOf(client, ch.id); // keep the returned view fresh
   return { ok: true, id, kind, name: cat.name, tier: 1 };
@@ -107,20 +113,37 @@ export async function buyBusiness(ch, kind, client, h) {
 // Each row resolves its scrutiny window first — a raided front's pending is seized, not banked.
 export async function collectBusiness(ch, client, h) {
   const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
-  let total = 0; const raids = [];
+  let total = 0, rakeback = 0; const raids = [];
   for (const r of rows) {
     const res = await resolveScrutiny(ch, r, client, h);
     if (res.raided) { raids.push(res); continue; }
     const inc = accrued(r);
     if (inc > 0) { total += inc; await client.query('UPDATE businesses SET last_collect_at=now() WHERE id=$1', [r.id]); }
+    // Den RAKEBACK (casino kind): owners split RAKEBACK_BPS of the den's stake volume since their
+    // cursor — the split is by the CURRENT owner count, so total rakeback per unit of volume is
+    // bounded by RAKEBACK_BPS however many fronts exist. A raided casino forfeits with the rest.
+    if (r.kind === 'casino') {
+      const vol = Number((await client.query('SELECT total FROM den_volume WHERE id=1')).rows[0]?.total || 0);
+      const owners = Number((await client.query("SELECT COUNT(*) n FROM businesses WHERE kind='casino'")).rows[0].n) || 1;
+      const share = Math.floor(Math.max(0, vol - Number(r.rake_cursor)) * (CASINO.RAKEBACK_BPS || 0) / 10000 / owners);
+      if (share > 0) {
+        rakeback += share;
+        await client.query('UPDATE businesses SET rake_cursor=$2 WHERE id=$1', [r.id, vol]);
+      }
+    }
   }
   if (total > 0) {
     ch.cash = Number(ch.cash) + total;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: total, reason: 'business:income' });
   }
-  if (total <= 0 && !raids.length) return { ok: true, collected: 0 };
+  if (rakeback > 0) {
+    ch.cash = Number(ch.cash) + rakeback;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: rakeback, reason: 'casino:rakeback' });
+  }
+  if (total <= 0 && rakeback <= 0 && !raids.length) return { ok: true, collected: 0 };
   h.owned.businesses = await businessesOf(client, ch.id);
-  return { ok: true, collected: total, businesses: rows.length, ...(raids.length ? { raids } : {}) };
+  return { ok: true, collected: total, businesses: rows.length,
+    ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}) };
 }
 
 // Upgrade a front to the next tier — collects the pending income at the OLD rate first (so an

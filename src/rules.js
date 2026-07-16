@@ -524,6 +524,22 @@ export const CASINO = {
   DISTRICT: 'neon',            // the vice district — travel there to play
   MIN_BET: 100, MAX_BET: 250000, DICE_NERVE: 1,
   NUMBERS_MIN: 10, NUMBERS_MAX: 1000, NUMBERS_PAYOUT: 600,
+  // ── step two (all founder sign-off levers) ──
+  // The HIGH-STAKES ROOM: past HIGH_LVL the PvE dice table takes up to HIGH_MAX per roll, and
+  // pots ≥ HIGH_FEED hit the public streets feed (whale theater).
+  HIGH_LVL: 30, HIGH_MAX: 2000000, HIGH_FEED: 250000,
+  // BACK-ROOM DICE (PvP): consent-by-listing (a fader posts an open limit, the fadeDice pattern
+  // = the bodyguard market); one symmetric 2d6 hi-roll, ties reroll; the winner takes the pot
+  // minus PVP_RAKE_BPS (half the rake → street tax, half burns — the exchange pattern, scaled).
+  PVP_RAKE_BPS: 500,
+  // THE FIGHT (weekly bout): one bet per street per week, capped small — the cap is the fix's
+  // abuse bound (a fixed fight can mint at most FIGHT_MAX × payout per bettor). Favorite wins at
+  // FAV_P off the seed draw; decimal payouts carry a ~6-9% book edge. The family holding neon can
+  // FIX the result once a week for FIX_COST from the treasury — a turf perk with teeth.
+  FIGHT_MAX: 5000, FIGHT_FAV_P: 0.65, FIGHT_FAV_PAYS: 1.45, FIGHT_DOG_PAYS: 2.6, FIGHT_FIX_COST: 50000,
+  // RAKEBACK: owners of a casino BUSINESS split RAKEBACK_BPS of den stake volume (claimed at
+  // business collect, cursor-tracked) — the Den feeds the Business Empire layer.
+  RAKEBACK_BPS: 100,
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)

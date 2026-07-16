@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS characters (
   npchit_at TIMESTAMPTZ,                          -- M7 Phase 3: NPC-hitman hire cooldown
   safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
   guard_price NUMERIC,                             -- M7 Phase 4: bodyguard-for-hire listing (NULL = not offering)
+  fade_limit NUMERIC,                              -- Den step 2: open back-room dice challenge limit (NULL = not fading)
   guarded_by TEXT,                                 -- M7 Phase 4: my hired bodyguard's character id
   guarded_until TIMESTAMPTZ,                       -- M7 Phase 4: protection window (one absorb, then consumed)
 
@@ -429,6 +430,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   scrutiny NUMERIC NOT NULL DEFAULT 0,
   scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   shakedown_at TIMESTAMPTZ,
+  rake_cursor NUMERIC NOT NULL DEFAULT 0,           -- Den step 2: den volume already rakeback-claimed (casino kind only)
   acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (character_id, kind)
 );
@@ -445,6 +447,27 @@ CREATE TABLE IF NOT EXISTS numbers_tickets (
   stake INT NOT NULL,
   PRIMARY KEY (character_id, day)
 );
+-- Den step two: the weekly FIGHT book (one bet per street per week; resolves lazily at week end
+-- against the seed draw — unless the family holding neon FIXED it) and the fix record itself.
+CREATE TABLE IF NOT EXISTS fight_bets (
+  character_id TEXT NOT NULL,
+  week INT NOT NULL,
+  side TEXT NOT NULL,               -- 'a' (the favorite) | 'b' (the dog)
+  stake INT NOT NULL,
+  PRIMARY KEY (character_id, week)
+);
+CREATE TABLE IF NOT EXISTS fight_fixes (
+  week INT PRIMARY KEY,
+  gang_id TEXT NOT NULL,
+  winner TEXT NOT NULL
+);
+-- Den step two: lifetime den stake volume (a COUNTER, not a money bucket — no §10.4 impact).
+-- Casino-business owners earn rakeback against the volume that flowed since their cursor.
+CREATE TABLE IF NOT EXISTS den_volume (
+  id INT PRIMARY KEY,
+  total NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
 
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the

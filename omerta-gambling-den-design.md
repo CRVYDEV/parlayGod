@@ -61,12 +61,26 @@ the table limits.
   strongly negative).
 - All numbers (`CASINO` block in the rules tail) are founder sign-off levers.
 
-## 5. Step two (deferred by design)
-- **Player-vs-player dice** (`withTwoCharacters`, both stakes escrowed, 5% rake) — the back-room
-  game; a pure transfer with a house take, same class as the exchange.
-- **Fight fixing** — bet on the weekly NPC bout; city-event tie-in; a family holding neon can
-  *fix* it once a season (turf perk with teeth).
-- **Casino-business rakeback** — a player who owns the `casino` BUSINESS at the Neon Mile earns
-  a % of den volume as business income (ties the Den into the Business Empire layer).
-- **High-stakes room** — bigger limits gated on level/seal, visible on the streets feed (whale
-  theater).
+## 5. Step two (BUILT)
+- **Back-room dice (PvP)** — consent-by-listing, the bodyguard-market pattern: a fader posts an
+  open limit (`POST /v1/casino/fade {limit}`, 0 clears; surfaced on the den board + their view),
+  a challenger at the den rolls against them (`POST /v1/casino/dice/:targetId {amount}`, runs
+  under `withTwoCharacters` — no escrow, one atomic transaction). One symmetric 2d6 hi-roll,
+  ties reroll (a fair 50/50); the winner takes the pot minus `PVP_RAKE_BPS` (5%) — half the rake
+  to the street-tax pool, half burns. Ledger: loser −stake / winner +(stake − rake), both
+  `casino:pvp` with counterparties — a pure transfer with a house take, §10.4-exact. A jailed,
+  hospitalized, or away-from-neon fader is `unavailable`.
+- **The fight** — a weekly NPC bout (fighters drawn per week from the seed): one bet per street
+  per week, **capped at `FIGHT_MAX` ($5k)** — the cap is the fix's structural abuse bound.
+  Favorite wins at `FIGHT_FAV_P` (65%) off the seed draw; payouts `FIGHT_FAV_PAYS` 1.45 /
+  `FIGHT_DOG_PAYS` 2.6 (a ~6–9% book edge). Bets settle lazily (`POST /v1/casino/fight/claim`).
+  **THE FIX**: the boss/underboss of the family holding the Neon Mile buys the result once a
+  week (`POST /v1/casino/fight/fix {winner}`) for `FIGHT_FIX_COST` ($50k) from the TREASURY (a
+  §10.4 treasury sink, `casino:fix`, reconciled in the treasury check) — a turf perk with teeth,
+  bounded by the bet cap (a fixed bout mints at most stake × payout per conspirator).
+- **Casino-front rakeback** — owners of a `casino` BUSINESS split `RAKEBACK_BPS` (1%) of den
+  stake volume (dice + numbers + fight + PvP pots), claimed at business collect, cursor-tracked
+  per front (`rake_cursor` — a new owner earns against future action, not history; ledgered
+  `casino:rakeback`). The Den feeds the Business Empire layer.
+- **The high-stakes room** — at level `HIGH_LVL` (30) the PvE table takes up to `HIGH_MAX` ($2M)
+  a roll; pots ≥ `HIGH_FEED` ($250k) hit the public streets feed (whale theater).
