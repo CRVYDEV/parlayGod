@@ -154,6 +154,34 @@ shrinks everyone's take), the stake is sunk at execution, and the rat payout is 
 `HEIST_LEADER_WEIGHT`, `HEIST_PLAN_TTL_MS`. **DECIDE at next sim pass** — run `node tools/sim.js`
 and compare the crime-curve rows before tuning.
 
+## Post-signing addendum — step-two content (convoys / heists / Commission), sign-off pending
+
+All three are extensions of already-signed systems; every new number is a lever.
+- **Convoy tolls** (`TOLL_BPS` 5%): a pure TRANSFER (shipper → destination holder's treasury),
+  clamped to pocket. Makes turf tax the trade routes — no new emission. Watch: routes may avoid
+  held docks entirely if raised much above ~10%.
+- **Degrading multi-ambush** (`MAX_AMBUSHES` 3, `GUARD_WEAR_BPS` 25%): raises convoy risk for
+  the shipper (three shots at the manifest instead of one) — heavy guards still repel most
+  attempts even worn twice (60 → 33.75 base at the third fight). Pure risk redistribution.
+- **Freight insurance** (`INSURE_BPS` 10% premium, `INSURE_PAYOUT_BPS` 50% of lost value):
+  payouts are CAPPED AT THE POOL (premiums minus prior payouts), so the product is zero-sum
+  among shippers BY CONSTRUCTION — the §10.4 check `convoy insurance pool` proves it.
+  Collusion (insure → friend hijacks → claim) redistributes premiums, never mints. Honest
+  early-alpha behavior: a thin pool underpays claims; that is the design, not a bug.
+- **Heist roles** (`HEIST_ROLES`, role stat ×3): same P ceiling/floor as step one, same clamp
+  [.15,.92] — a full specialist crew equals a full generalist crew, so the signed heist EV is
+  UNCHANGED at the top; mixed crews get there cheaper. Not a rebalance, a build-diversity knob.
+- **The Inside Job** (`inside`: crew 2, lvl 12, base .55, stake $15k, `rateBps` 60%,
+  `HEIST_INSIDE_CD_MS` 24h): NOT new emission — it redirects the mark's pending business income
+  (the shakedown argument; the venue clock advances by only the stolen share). Max damage to an
+  owner: 60% of one day's pending per venue per day, on a 55–92% roll, stake at risk. Compare
+  shakedown: 30% at 8h cadence but solo. Watch the stack (shakedown + inside job on the same
+  venue = up to ~72% of a day's pending lost) — if live data shows fronts turning -EV, put the
+  two on a shared per-venue cooldown.
+- **Commission weights + veto**: zero money. Weighted ballots concentrate decree power in the
+  head seat (5 of 15 total weight vs 1/5 of votes before); the veto concentrates more. Both are
+  status-axis politics — outside the signed economy by construction.
+
 ## Post-signing addendum — the Commission (weekly decree modifiers, sign-off pending)
 
 The Commission moves NO money (no faucet, no sink — §10.4 untouched). Its decrees are temporary

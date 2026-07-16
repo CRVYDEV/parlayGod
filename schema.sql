@@ -435,6 +435,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   scrutiny NUMERIC NOT NULL DEFAULT 0,
   scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   shakedown_at TIMESTAMPTZ,
+  inside_at TIMESTAMPTZ,                            -- Heist step 2: per-venue INSIDE JOB cooldown (stamped win or lose)
   rake_cursor NUMERIC NOT NULL DEFAULT 0,           -- Den step 2: den volume already rakeback-claimed (casino kind only)
   acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (character_id, kind)
@@ -494,13 +495,14 @@ CREATE TABLE IF NOT EXISTS crew_heists (
   id TEXT PRIMARY KEY,
   job TEXT NOT NULL,
   leader_character TEXT NOT NULL,
+  target_business TEXT,                      -- step two: the INSIDE JOB's mark (a player's front)
   status TEXT NOT NULL DEFAULT 'planning',   -- planning | done | abandoned
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS crew_heist_members (
   heist_id TEXT NOT NULL,
   character_id TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'crew',         -- leader | crew (flavor in step one)
+  role TEXT NOT NULL DEFAULT 'crew',         -- step two: the JOB role (brains/muscle/wheelman/gun) — each claimed once
   ratted BOOLEAN NOT NULL DEFAULT false,     -- the silent flag — never surfaced by name
   PRIMARY KEY (heist_id, character_id)
 );
@@ -517,7 +519,13 @@ CREATE TABLE IF NOT EXISTS convoys (
   destination TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'loading',     -- loading | transit | done | lost
   guards INT NOT NULL DEFAULT 0,              -- the tier's defense value (fee already sunk)
-  ambushed BOOLEAN NOT NULL DEFAULT false,    -- one attempt per convoy, win or lose
+  ambushed BOOLEAN NOT NULL DEFAULT false,    -- true once any attempt happened
+  -- step two: up to MAX_AMBUSHES attempts per convoy (each fight WEARS the guards down for the
+  -- next); insured freight stamps the base value LOST to hijacks here and the owner claims the
+  -- pool-capped payout lazily at collect (the owner's row is never touched by an ambush).
+  ambushes INT NOT NULL DEFAULT 0,
+  insured BOOLEAN NOT NULL DEFAULT false,
+  insured_loss NUMERIC NOT NULL DEFAULT 0,
   departed_at TIMESTAMPTZ,
   arrives_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -529,6 +537,20 @@ CREATE TABLE IF NOT EXISTS convoy_cargo (
   qty INT NOT NULL DEFAULT 0,
   PRIMARY KEY (convoy_id, good_id)
 );
+-- step two: one ambush attempt per CHARACTER per convoy (the convoy-wide cap is convoys.ambushes)
+CREATE TABLE IF NOT EXISTS convoy_ambushes (
+  convoy_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  PRIMARY KEY (convoy_id, character_id)
+);
+-- step two: the freight-insurance pool — a zero-sum cash bucket (premiums in `convoy:insure`,
+-- payouts out `convoy:payout`, payouts CAPPED at the pool so collusion can only redistribute
+-- what shippers paid in — the stake_pool precedent). §10.4 check: pool = premiums − payouts.
+CREATE TABLE IF NOT EXISTS convoy_insurance (
+  id INT PRIMARY KEY,
+  pool NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO convoy_insurance (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM convoy_insurance);
 
 -- THE COMMISSION: the top-5 families vote weekly on a city decree (active the FOLLOWING week,
 -- tallied lazily). One vote per family per week, changeable; votes are public. No money moves.
@@ -536,7 +558,15 @@ CREATE TABLE IF NOT EXISTS commission_votes (
   week INT NOT NULL,
   gang_id TEXT NOT NULL,
   decree TEXT NOT NULL,
+  weight INT NOT NULL DEFAULT 1,   -- step two: seat weight at cast time (head of the table = SEATS .. last seat = 1); re-casting refreshes it
   PRIMARY KEY (week, gang_id)
+);
+-- Commission step two: the head of the table (seat 1's BOSS) may kill the sitting decree once
+-- per week. Public record — the veto and who cast it show on the board. No money moves.
+CREATE TABLE IF NOT EXISTS commission_vetoes (
+  week INT PRIMARY KEY,
+  gang_id TEXT NOT NULL,
+  decree TEXT NOT NULL
 );
 
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale

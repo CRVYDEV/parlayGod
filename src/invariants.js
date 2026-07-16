@@ -55,8 +55,11 @@ export async function runLedgerInvariants(pool) {
   const territoryOut = -(await sum(pool, "currency='cash' AND reason='territory:establish'"));
   // Den step 2: the neon family's fight fix is a treasury sink (character_id NULL, like gang:war)
   const fixOut = -(await sum(pool, "currency='cash' AND reason='casino:fix'"));
+  // Convoy step 2: the destination toll is a TRANSFER — the shipper's negative row mirrors the
+  // holder treasury's credit (the gang:tribute pattern).
+  const tollIn = -(await sum(pool, "currency='cash' AND reason='convoy:toll'"));
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + tollIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.
@@ -110,6 +113,13 @@ export async function runLedgerInvariants(pool) {
     const start = cur === 'ammo' ? 25 * charCount : 0;
     push(`${cur} conservation`, held + inEscrow + banked, start + ledgered);
   }
+
+  // (f2) CONVOY INSURANCE POOL (step two): a zero-sum cash bucket — premiums in
+  // ('convoy:insure', negative character rows), pool-capped payouts out ('convoy:payout').
+  const insurancePool = await one(pool, 'SELECT COALESCE(SUM(pool),0) s FROM convoy_insurance');
+  const premiumsIn = -(await sum(pool, "currency='cash' AND reason='convoy:insure'"));
+  const payoutsOut = await sum(pool, "currency='cash' AND reason='convoy:payout'");
+  push('convoy insurance pool', insurancePool, premiumsIn - payoutsOut);
 
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];

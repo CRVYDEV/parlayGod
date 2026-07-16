@@ -593,8 +593,17 @@ in-memory — no clobber). Estate: memberships wiped, dead-leader plans abandone
 stale plans (per-heist txn, leader-before-heist lock order). The board uses two flat queries
 (pg-mem can't parse correlated subqueries — the /v1/gangs precedent). NEW FAUCET: numbers are
 sign-off levers (BALANCE.md addendum); per-member EV ~1.3–2.1× solo heist at the same cadence.
-Step two (deferred): role-specific checks, timed windows, inside jobs vs player businesses, a
-fence phase. Suite 11/11 + sim drift-0.
+Suite 11/11 + sim drift-0. **Step two — BUILT**: every crew slot is a named ROLE (`HEIST_ROLES`
+brains/muscle/wheelman/gun → stats; crew == roles length; plan/join take `role`, default first
+open seat, `bad_role`/`role_taken` gates) and the success roll reads each member's stat FOR
+THEIR ROLE (×3 — specialist crews match generalists, cheaper; respec gets a use). **The Inside
+Job** (`inside`, crew 2 lvl 12, `crew_heists.target_business`): a co-op raid on a PLAYER's
+business — pot = `rateBps` (60%) of the front's PENDING income redirected (`heist:inside`,
+rides the `heist` cash prefix; the shakedown argument — owner keeps the rest, venue clock
+advances by only the stolen share, NOT a new faucet); mark can't crew, family fronts omertà,
+`businesses.inside_at` 24h venue lockdown win or lose (`HEIST_INSIDE_CD_MS`), mark notified
+both ways. Lock order: members → heist row → business row (terminal — the mark's CHARACTER row
+is never locked, the convoy-manifest discipline). Deferred: timed windows, the fence phase.
 
 **Smuggling convoys (step one) — BUILT** (`src/convoy.js`, `test/convoy.js` — the 12th suite file;
 design `omerta-convoys-design.md`). Bulk goods on a real clock: `POST /v1/convoy` opens a shipment
@@ -613,10 +622,22 @@ trunk-capacity at a time. The ambush never touches the OWNER's character row (th
 contested object) — locks are characters → convoys, acyclic. Estate: a dead shipper's freight
 scatters (`status='lost'`, cargo deleted). **pg-mem quirk discovered here: arithmetic UPDATEs on
 INT columns (`SET qty = qty - $n`) mis-evaluate to `0 − n` — use absolute writes computed in JS
-(the setCargo DELETE+INSERT precedent); NUMERIC columns are fine.** Only new money flow:
-`convoy:guards` (cash vocabulary). Numbers are sign-off levers. Step two (deferred): destination
-tolls to the holder's treasury, degrading multi-ambush, insured freight, NPC trucking. Suite
-12/12 + sim drift-0.
+(the setCargo DELETE+INSERT precedent); NUMERIC columns are fine.** Numbers are sign-off levers.
+Suite 12/12 + sim drift-0. **Step two — BUILT**: **destination tolls** — collecting at docks
+held by ANOTHER family pays `TOLL_BPS` (5%) of the collected goods' base value from the
+shipper's pocket to the holder's treasury (`convoy:toll`, a ledgered transfer on the tribute
+pattern; treasury check (b) gained the term; clamped to pocket, never gates the freight);
+**degrading multi-ambush** — up to `MAX_AMBUSHES` (3) per convoy, ONE per character
+(`convoy_ambushes` PK), each prior fight wears `GUARD_WEAR_BPS` (25%) off the guard tier's
+defense (turf/lockdown never wear; wear visible in the rng-audit outcome; errors `once`/`spent`);
+**insured freight** — `depart {insure:true}` pays `INSURE_BPS` (10%) of manifest value into the
+`convoy_insurance` pool singleton (`convoy:insure`); a hijack stamps the lost value on
+`convoys.insured_loss` and the OWNER claims `INSURE_PAYOUT_BPS` (50%) of it lazily AT COLLECT,
+**capped at the pool** (stake_pool precedent — zero-sum among shippers, collusion can only
+redistribute premiums; new §10.4 check `convoy insurance pool` = premiums − payouts; the claim
+settles in the owner's txn because an ambush never touches the owner's row). Lock order:
+characters → convoys → gangs → singletons. Deferred: NPC trucking. Step-two numbers are
+sign-off levers.
 
 **The Commission (step one) — BUILT** (`src/commission.js`, `test/commission.js` — the 13th suite
 file; design `omerta-commission-design.md`). Server-wide player politics with ZERO money flows —
@@ -635,8 +656,15 @@ decree book. Decree modifiers are NEW founder sign-off levers — they're tempor
 ON signed BALANCE.md levers, not retunes. Tests: seat order + the sixth family shut out, vote gates
 (rank/no_seat/bad_decree), cast + public change, majority tally + tie deadlock, all four touchpoints
 (safehouse halved, war blocked, laylow half-price ledger-exact, lockdown visible in the audit trail),
-vocabulary closed. Step two (deferred): seat-weighted votes, proposals with deposits, veto, a
-Commission tax. Suite 13/13 + sim drift-0.
+vocabulary closed. Suite 13/13 + sim drift-0. **Step two — BUILT**: **seat-weighted ballots** —
+a vote carries the family's current seat weight (head = SEATS … last = 1), stamped at CAST
+(`commission_votes.weight`; re-casting refreshes; the tally freezes with the week — no mid-week
+decree flips), `activeDecree` tallies SUM(weight), weighted ties deadlock; **the veto** — the
+head seat's BOSS (only; not the underboss) kills the decree in force once per week
+(`commission_vetoes` week-PK; `POST /v1/commission/veto`; errors rank/head/no_decree/vetoed),
+public on the board (`veto`) + the streets feed, and the dead decree's touchpoints go inert
+immediately (activeDecree returns null for a vetoed week). Zero money, §10.4 untouched.
+Deferred: proposals with deposits, the Commission tax.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

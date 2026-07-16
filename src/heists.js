@@ -3,14 +3,21 @@
 // the job for everyone — shared take, shared jail, and the rat option. §10.4: the stake is a
 // cash sink (heist:crew:stake, refunded only on pre-execution disband), every share/informant
 // payout a per-character faucet (heist:crew / heist:crew:rat) riding the existing 'heist'
-// vocabulary prefix. Lock discipline: leader (withCharacter) → member character rows in sorted
-// id order → the heist row; one-active-heist-per-character makes concurrent executes disjoint,
-// so the order is acyclic. Members are paid/jailed by direct row updates under lock (they are
-// never in-memory in the leader's transaction — no persistCharacter clobber).
+// vocabulary prefix. Step two: every crew slot is a ROLE (the success roll reads each member's
+// stat FOR THEIR ROLE), and the INSIDE JOB raids a PLAYER's business — its pot is rateBps of
+// the front's PENDING income redirected to the crew ('heist:inside', the shakedown argument:
+// bounded by incomePerHr either way, the owner keeps the rest and the clock advances by only
+// the stolen share — NOT a new faucet). Lock discipline: leader (withCharacter) → member
+// character rows in sorted id order → the heist row → the target business row (terminal; the
+// MARK's character row is never locked — the venue is the contested object, not the man);
+// one-active-heist-per-character makes concurrent executes disjoint, so the order is acyclic.
+// Members are paid/jailed by direct row updates under lock (they are never in-memory in the
+// leader's transaction — no persistCharacter clobber).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { HEIST_JOBS, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
-         M4, levelOf } from './rules.js';
+import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
+         HEIST_INSIDE_CD_MS, CONSTANTS, M4, levelOf } from './rules.js';
+import { accrued } from './business.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -32,35 +39,60 @@ function gateJoiner(ch, job) {
   if (levelOf(Number(ch.respect)) < job.lvl) throw new GameError('level', `${job.name} wants made players — level ${job.lvl}.`);
 }
 
+// step two: every slot is a ROLE — pick one or take the first open seat; each claimed once.
+function pickRole(job, want, taken) {
+  if (want && !job.roles.includes(want))
+    throw new GameError('bad_role', `${job.name} needs: ${job.roles.join(', ')}.`);
+  const open = job.roles.filter((r) => !taken.includes(r));
+  if (want && !open.includes(want)) throw new GameError('role_taken', `Someone already has the ${want} seat.`);
+  return want || open[0];
+}
+
 // PLAN — the leader picks the job and fronts the stake (tools & bribes; sunk once you go).
-export async function planHeist(ch, jobId, client, h) {
+// Step two: `role` claims the leader's seat; the INSIDE JOB takes a `businessId` mark.
+export async function planHeist(ch, jobId, opts, client, h) {
+  const { role: wantRole, businessId } = opts || {};
   const job = heistJobOf(jobId);
   if (!job) throw new GameError('bad_job', 'No such job on the books.');
   gateJoiner(ch, job);
   if (await activeMembership(client, ch.id)) throw new GameError('busy', "You're already on a job.");
   if (Number(ch.cash) < job.stake) throw new GameError('cash', `${job.name} takes $${job.stake} up front — tools and bribes.`);
+  let target = null;
+  if (job.rateBps) { // the inside job wants a mark — a PLAYER's front (light checks now, the real gates at execute)
+    if (!businessId) throw new GameError('no_mark', 'An inside job needs a mark — name the front.');
+    const biz = (await client.query('SELECT character_id FROM businesses WHERE id=$1', [businessId])).rows[0];
+    if (!biz) throw new GameError('no_mark', 'No such front in town.');
+    if (biz.character_id === ch.id) throw new GameError('own_mark', "Robbing your own till isn't a job, it's an accounting problem.");
+    target = businessId;
+  }
+  const role = pickRole(job, wantRole, []);
   ch.cash = Number(ch.cash) - job.stake;
   const id = uid();
-  await client.query('INSERT INTO crew_heists (id, job, leader_character) VALUES ($1,$2,$3)', [id, job.id, ch.id]);
-  await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [id, ch.id, 'leader']);
+  await client.query('INSERT INTO crew_heists (id, job, leader_character, target_business) VALUES ($1,$2,$3,$4)', [id, job.id, ch.id, target]);
+  await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [id, ch.id, role]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -job.stake, reason: 'heist:crew:stake' });
   await h.track(client, ch.account_id, 'heist_plan', { job: job.id });
-  return { ok: true, id, job: job.id, name: job.name, crewNeeded: job.crew - 1, stake: job.stake };
+  return { ok: true, id, job: job.id, name: job.name, role, crewNeeded: job.crew - 1, stake: job.stake };
 }
 
-// JOIN — off the open board; the job's gates apply to every member.
-export async function joinHeist(ch, heistId, client, h) {
+// JOIN — off the open board; the job's gates apply to every member. `role` picks your seat.
+export async function joinHeist(ch, heistId, wantRole, client, h) {
   const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
   if (!row) throw new GameError('no_heist', 'That job is gone.');
   if (stale(row)) throw new GameError('stale', 'That plan went cold.');
   const job = heistJobOf(row.job);
   gateJoiner(ch, job);
   if (await activeMembership(client, ch.id)) throw new GameError('busy', "You're already on a job.");
-  const n = Number((await client.query('SELECT COUNT(*) n FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows[0].n);
-  if (n >= job.crew) throw new GameError('full', 'The crew is set.');
-  await client.query('INSERT INTO crew_heist_members (heist_id, character_id) VALUES ($1,$2)', [heistId, ch.id]);
+  const taken = (await client.query('SELECT role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows.map((r) => r.role);
+  if (taken.length >= job.crew) throw new GameError('full', 'The crew is set.');
+  if (row.target_business) { // nobody robs their own till from the inside of the crew
+    const biz = (await client.query('SELECT character_id FROM businesses WHERE id=$1', [row.target_business])).rows[0];
+    if (biz && biz.character_id === ch.id) throw new GameError('own_mark', "That's YOUR front they're casing.");
+  }
+  const role = pickRole(job, wantRole, taken);
+  await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [heistId, ch.id, role]);
   await h.track(client, ch.account_id, 'heist_join', { job: job.id });
-  return { ok: true, id: heistId, job: job.id, crew: n + 1, crewNeeded: job.crew - n - 1 };
+  return { ok: true, id: heistId, job: job.id, role, crew: taken.length + 1, crewNeeded: job.crew - taken.length - 1 };
 }
 
 // LEAVE — a member walks; the LEADER walking disbands the job and takes the stake back whole.
@@ -98,7 +130,7 @@ export async function executeHeist(ch, heistId, client, h) {
   if (row.leader_character !== ch.id) throw new GameError('not_leader', 'The leader calls the go.');
   if (stale(row)) throw new GameError('stale', 'That plan went cold — walk away and start fresh.');
   const job = heistJobOf(row.job);
-  const members = (await client.query('SELECT character_id, ratted FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  const members = (await client.query('SELECT character_id, ratted, role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
   if (members.length < job.crew) throw new GameError('crew_short', `${job.name} needs ${job.crew} — you have ${members.length}.`);
   // lock every OTHER member's character row in sorted id order (the leader is already held by
   // withCharacter; one-active-heist keeps concurrent executes disjoint, so this can't cycle)
@@ -113,6 +145,26 @@ export async function executeHeist(ch, heistId, client, h) {
     if (jailed(m) || hospitalized(m) || (m.id !== ch.id && cooling(m)))
       throw new GameError('crew_not_ready', 'The whole crew shows up clean, healthy, and rested — or nobody goes.');
   if (cooling(ch)) throw new GameError('cooldown', 'Your next job lines up later.');
+
+  // INSIDE JOB gates — validated (and the venue locked) BEFORE the job fires, so a failed gate
+  // leaves the plan intact. Lock order: member characters → heist row → the business row
+  // (terminal — the MARK's character row is never locked; the venue is the contested object).
+  let biz = null;
+  if (row.target_business) {
+    biz = (await client.query('SELECT * FROM businesses WHERE id=$1 FOR UPDATE', [row.target_business])).rows[0];
+    if (!biz) throw new GameError('mark_gone', 'The mark folded — that front is no more. Walk away.');
+    if (members.some((m) => m.character_id === biz.character_id))
+      throw new GameError('own_mark', "The mark is standing IN your crew.");
+    if (biz.inside_at && Date.now() - new Date(biz.inside_at).getTime() < HEIST_INSIDE_CD_MS)
+      throw new GameError('mark_hot', 'That front just got hit — the books are locked down. Give it a day.');
+    const ownerGang = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [biz.character_id])).rows[0]?.gang_id;
+    if (ownerGang) {
+      const ids = members.map((m) => m.character_id);
+      const inList = ids.map((_, i) => `$${i + 2}`).join(','); // explicit placeholders — pg-mem can't bind ANY(array)
+      if ((await client.query(`SELECT 1 FROM gang_members WHERE gang_id=$1 AND character_id IN (${inList})`, [ownerGang, ...ids])).rows[0])
+        throw new GameError('family', "That front flies the crew's own flag. Omertà.");
+    }
+  }
 
   const doneAt = new Date(Date.now() + M4.HEIST_CD_MS);
   const setMember = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
@@ -142,37 +194,55 @@ export async function executeHeist(ch, heistId, client, h) {
     return { ok: true, blown: true, job: job.id, message: 'The law was waiting. Somebody talked.' };
   }
 
-  // the roll — crew stats move the needle, the job sets the floor
-  const avgStats = crewRows.reduce((a, m) => a + Number(m.muscle) + Number(m.cunning) + Number(m.speed), 0) / crewRows.length;
-  const p = Math.min(0.92, Math.max(0.15, job.base + (avgStats - 30) / 1000));
+  // the roll — the job sets the floor; step two reads each member's stat FOR THEIR ROLE (x3, so
+  // a crew of true specialists matches a crew of all-rounders — they just got there cheaper)
+  const roleOf = Object.fromEntries(members.map((m) => [m.character_id, m.role]));
+  const avgRoleStat = crewRows.reduce((a, m) => a + Number(m[HEIST_ROLES[roleOf[m.id]] || 'muscle']), 0) / crewRows.length;
+  const p = Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000));
   const roll = Math.random();
   await h.rngLog(client, ch.id, `heist:${job.id}`, roll, `${roll < p ? 'score' : 'bust'} (P ${p.toFixed(3)}, crew ${crewRows.length})`);
+  // an INSIDE JOB marks the venue win or lose — the attempt is what locks the books down
+  if (biz) await client.query('UPDATE businesses SET inside_at=now() WHERE id=$1', [biz.id]);
 
   if (roll < p) {
-    const avgLvl = crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length;
-    const pot = Math.floor(rand(job.takePerLvl[0], job.takePerLvl[1]) * avgLvl);
+    let pot;
+    if (biz) {
+      // the pot is the front's PENDING income redirected (rateBps of it) — the owner keeps the
+      // rest pending, the clock advances by only the stolen share (the shakedown discipline)
+      const pending = accrued(biz);
+      pot = Math.floor(pending * job.rateBps / 10000);
+      const elapsed = Math.min(Date.now() - new Date(biz.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
+      await client.query('UPDATE businesses SET last_collect_at=$2 WHERE id=$1',
+        [biz.id, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - job.rateBps / 10000)))]);
+      await h.notify(client, biz.character_id, 'inside_job', { kind: biz.kind, pot });
+    } else {
+      const avgLvl = crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length;
+      pot = Math.floor(rand(job.takePerLvl[0], job.takePerLvl[1]) * avgLvl);
+    }
     const unit = pot / (HEIST_LEADER_WEIGHT + (crewRows.length - 1));
     const shares = {};
     for (const m of crewRows) shares[m.id] = Math.floor(unit * (m.id === ch.id ? HEIST_LEADER_WEIGHT : 1));
+    const reason = biz ? 'heist:inside' : 'heist:crew';
     for (const m of crewRows) {
       if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + job.rep; ch.heist_at = doneAt; }
       else {
         await setMember(m.id, 'cash = cash + $2, respect = respect + $3, heist_at=$4', [shares[m.id], job.rep, doneAt]);
         await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id] });
       }
-      await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason: 'heist:crew' });
+      await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
     }
     await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length });
     bus.emit('streets', { type: 'heist_score', job: job.name, pot, crew: crewRows.length });
     return { ok: true, score: true, job: job.id, pot, share: shares[ch.id], rep: job.rep };
   }
 
-  // the bust — the whole crew goes down together
+  // the bust — the whole crew goes down together (an inside-job mark hears about the attempt)
   const jailTo = new Date(Date.now() + job.jailS * 1000);
   for (const m of crewRows) {
     if (m.id === ch.id) { ch.jail_until = jailTo; ch.heist_at = doneAt; }
     else { await setMember(m.id, 'jail_until=$2, heist_at=$3', [jailTo, doneAt]); await h.notify(client, m.id, 'heist_bust', { job: job.name, jailS: job.jailS }); }
   }
+  if (biz) await h.notify(client, biz.character_id, 'inside_job_failed', { kind: biz.kind });
   bus.emit('streets', { type: 'heist_bust', job: job.name, crew: crewRows.length });
   return { ok: true, score: false, job: job.id, jailSeconds: job.jailS };
 }
@@ -185,11 +255,12 @@ export async function heistBoard(pool, characterId) {
     `SELECT ch.id, ch.job, ch.created_at, c.name AS leader
        FROM crew_heists ch JOIN characters c ON c.id = ch.leader_character
       WHERE ch.status='planning' ORDER BY ch.created_at DESC LIMIT 30`)).rows;
-  const counts = (await pool.query('SELECT heist_id, COUNT(*) n FROM crew_heist_members GROUP BY heist_id')).rows;
-  const nOf = Object.fromEntries(counts.map((r) => [r.heist_id, Number(r.n)]));
+  const memberRows = (await pool.query('SELECT heist_id, role FROM crew_heist_members')).rows;
+  const rolesOf = {};
+  for (const r of memberRows) (rolesOf[r.heist_id] = rolesOf[r.heist_id] || []).push(r.role);
   const open = openRows.filter((r) => !stale(r))
-    .map((r) => { const j = heistJobOf(r.job); return { id: r.id, job: r.job, name: j.name, leader: r.leader,
-      crew: nOf[r.id] || 0, crewNeeded: j.crew - (nOf[r.id] || 0), lvl: j.lvl, stake: j.stake }; });
+    .map((r) => { const j = heistJobOf(r.job); const taken = rolesOf[r.id] || []; return { id: r.id, job: r.job, name: j.name, leader: r.leader,
+      crew: taken.length, crewNeeded: j.crew - taken.length, rolesOpen: j.roles.filter((x) => !taken.includes(x)), lvl: j.lvl, stake: j.stake }; });
   const mine = (await pool.query(
     `SELECT ch.id, ch.job, ch.leader_character FROM crew_heists ch
        JOIN crew_heist_members m ON m.heist_id = ch.id
@@ -203,7 +274,8 @@ export async function heistBoard(pool, characterId) {
       crew: crew.map((c) => ({ name: c.name, role: c.role })), crewNeeded: j.crew - crew.length };
   }
   return { jobs: HEIST_JOBS.map((j) => ({ id: j.id, name: j.name, crew: j.crew, lvl: j.lvl, stake: j.stake,
-    base: j.base, takePerLvl: j.takePerLvl, jailS: j.jailS })), open, mine: my };
+    base: j.base, takePerLvl: j.takePerLvl || null, rateBps: j.rateBps || null, roles: j.roles, jailS: j.jailS })),
+    roleStats: HEIST_ROLES, open, mine: my };
 }
 
 // Worker sweep: stale plans are abandoned and a LIVING leader takes the stake back (per-heist

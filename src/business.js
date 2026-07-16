@@ -17,8 +17,9 @@ const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
-// accrued income for one business up to the cap, in whole dollars
-function accrued(row) {
+// accrued income for one business up to the cap, in whole dollars (exported for the heist
+// INSIDE JOB, which redirects the same bounded pending-income bucket — the shakedown argument)
+export function accrued(row) {
   const tier = businessTierOf(row.kind, row.tier);
   if (!tier) return 0;
   const elapsed = Math.min(Date.now() - new Date(row.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);

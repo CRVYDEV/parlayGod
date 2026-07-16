@@ -56,10 +56,13 @@ assert.equal(r.body.votes.length, 1, 'one vote per family');
 assert.equal(r.body.votes[0].decree, 'open_season', 'the change stuck — and the vote is PUBLIC');
 
 // ── the tally: majority governs; a tie deadlocks ──
+// entries are 'decree' (weight 1) or ['decree', weight] — step two's seat-weighted ballots
 const setLastWeek = async (...decrees) => {
   await pool.query(`DELETE FROM commission_votes WHERE week=${week - 1}`);
-  for (let i = 0; i < decrees.length; i++)
-    await pool.query(`INSERT INTO commission_votes (week, gang_id, decree) VALUES (${week - 1}, '${bosses[i].gang}', '${decrees[i]}')`);
+  for (let i = 0; i < decrees.length; i++) {
+    const [d, w] = Array.isArray(decrees[i]) ? decrees[i] : [decrees[i], 1];
+    await pool.query(`INSERT INTO commission_votes (week, gang_id, decree, weight) VALUES (${week - 1}, '${bosses[i].gang}', '${d}', ${w})`);
+  }
 };
 await setLastWeek('open_season', 'open_season', 'open_season', 'pax', 'pax');
 r = await call('GET', '/v1/commission');
@@ -105,9 +108,37 @@ assert.equal((await call('POST', `/v1/convoy/${r.body.id}/ambush`, { token: band
 const audit = (await pool.query("SELECT outcome FROM rng_audit WHERE action LIKE 'convoy:ambush:%' ORDER BY at DESC LIMIT 1")).rows[0];
 assert(audit.outcome.includes('lockdown'), `the +${COMMISSION.LOCKDOWN_DEF} lockdown defense is in the audit trail (${audit.outcome})`);
 
+// ── STEP TWO: seat-weighted ballots — the head of the table outweighs the tail ──
+r = await call('POST', '/v1/commission/vote', { token: bosses[0].token, body: { decree: 'pax' } });
+assert.equal(r.body.weight, COMMISSION.SEATS, 'the head family casts full weight');
+assert.equal((await call('POST', '/v1/commission/vote', { token: bosses[4].token, body: { decree: 'pax' } })).body.weight, 1, 'the last seat casts one');
+await setLastWeek(['pax', 5], ['open_season', 1], ['open_season', 1], ['open_season', 2]);
+assert.equal((await call('GET', '/v1/commission')).body.decree.id, 'pax', 'one heavy voice beats three light ones (5 vs 4)');
+await setLastWeek(['pax', 5], ['open_season', 2], ['open_season', 2], ['open_season', 1]);
+assert.equal((await call('GET', '/v1/commission')).body.decree, null, 'a weighted tie (5 vs 5) still deadlocks');
+
+// ── STEP TWO: the veto — the head seat's boss kills the sitting decree, once, publicly ──
+await setLastWeek(); // empty chamber first: nothing in force to kill
+assert.equal((await call('POST', '/v1/commission/veto', { token: bosses[0].token })).body.error, 'no_decree', 'nothing in force');
+await setLastWeek('amnesty', 'amnesty', 'amnesty');
+assert.equal((await call('POST', '/v1/commission/veto', { token: civilian.token })).body.error, 'rank', 'no family, no veto');
+assert.equal((await call('POST', '/v1/commission/veto', { token: bosses[1].token })).body.error, 'head', 'only the head of the table');
+r = await call('POST', '/v1/commission/veto', { token: bosses[0].token });
+assert.equal(r.code, 200, 'the head of the table speaks'); assert.equal(r.body.vetoed, 'amnesty', 'and the decree dies');
+r = await call('GET', '/v1/commission');
+assert.equal(r.body.decree, null, 'nothing is in force after the veto');
+assert.equal(r.body.veto.decree, 'amnesty', 'the veto is on the public record');
+assert.equal(r.body.veto.family, 'Family Number 1', 'with the name on it');
+// the killed decree's touchpoint is dead too: laylow is FULL price under a vetoed amnesty
+await seedCh(civilian.id, 'heat=50, cash=50000, energy=200, safe_until=NULL');
+r = await call('POST', '/v1/kitchen/laylow', { token: civilian.token });
+assert.equal(r.code, 200, 'laid low under the veto');
+assert(!r.body.amnesty && r.body.cost === M4.LAYLOW_CASH, 'FULL price — the touchpoint died with the decree');
+assert.equal((await call('POST', '/v1/commission/veto', { token: bosses[0].token })).body.error, 'vetoed', 'one veto a week');
+
 // ── no decree moves money: the vocabulary stays closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `no new reasons (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Commission test passed — five seats by standing, public cast-and-change votes, lazy majority tally + tie deadlock, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail), vocabulary closed');
+console.log('✅ Commission test passed — five seats by standing, public cast-and-change votes, lazy majority tally + tie deadlock, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO: seat-weighted ballots (5 beats 3x light, weighted ties deadlock), the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed');
 await app.close();
