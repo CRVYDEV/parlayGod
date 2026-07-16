@@ -74,17 +74,21 @@ assert(vig.invariants.ok, 'invariant still holds — the reserve is backed by th
 r = await call('POST', '/v1/mod/vig/prizes', { headers: modH, body: { winners: [{ accountId: acctId, omr: 1000 }] } });
 assert(near(r.body.paid, 0), 'an over-pool prize pays nothing');
 
-// ── (5) the PLEX bridge: pay real-money fees from EARNED $OMR (burn) instead of ETH ──
+// ── (5) the PLEX bridge — MARKET-LINKED: fee-ETH × the latest buyback's price × 1.2 premium ──
+// (sim-audit F3: the static 5 $OMR was minutes of play vs 0.01 ETH real money — the Vig starved)
+r = await call('GET', '/v1/plex/price');
+assert.equal(Number(r.body.mint.oracle), 2000, 'the oracle is the latest buyback price (2000 $OMR/ETH)');
+assert(near(r.body.mint.price, 24), `mint quote = 0.01 ETH × 2000 × 1.2 = 24 $OMR (got ${r.body.mint.price})`);
+assert(near(r.body.respawn.price, 240), 'respawn quote = 0.10 ETH × 2000 × 1.2 = 240 $OMR');
 r = await call('POST', '/v1/plex/mint', { token });
-assert.equal(r.code, 200); assert.equal(r.body.omrSpent, 5, 'PLEX mint burns 5 $OMR');
-assert(near((await meOf(token)).omr, 55), 'earner spent 5 of 60 $OMR');
+assert.equal(r.code, 200); assert(near(r.body.omrSpent, 24), 'PLEX mint burns the MARKET price (24), not the static floor');
+assert(near((await meOf(token)).omr, 36), 'earner spent 24 of 60 $OMR');
 r = await call('POST', '/v1/character/mint', { token });
 assert.equal(r.body.minted, true, 'the burned $OMR bought a mint credit → made, without touching ETH');
 assert.equal((await call('POST', '/v1/plex/mint', { token })).body.error, 'minted', 'already made — no second PLEX mint');
-r = await call('POST', '/v1/plex/respawn', { token });
-assert.equal(r.body.omrSpent, 50, 'PLEX respawn burns 50 $OMR');
-assert.equal((await call('GET', '/v1/fees/status', { token })).body.respawnTokens, 1, 'granted a respawn token');
-assert(near((await meOf(token)).omr, 5), 'earner down to 5 $OMR (60 − 5 − 50)');
+// the market-priced respawn (240) is beyond the earner's 36 — $OMR stays the PREMIUM rail, ETH the
+// economical one (that asymmetry is the point: ETH funds the Vig, $OMR burns at a markup)
+assert.equal((await call('POST', '/v1/plex/respawn', { token })).body.error, 'omr', 'market-priced respawn gates on the real rate');
 
 // ── (6) end-to-end extraction: the earner withdraws Vig-funded $OMR (a REAL living, not charity) ──
 r = await call('POST', '/v1/wallet/challenge', { token });

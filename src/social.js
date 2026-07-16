@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
-  DISTRICTS, CONSUMABLES, M3, M8,
+  DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf,
 } from './rules.js';
@@ -807,16 +807,30 @@ export async function fire(ch, victim, client, h, rounds) {
     // (reduce victim.cash first → its death:estate burn shrinks by exactly the loot), the looted $OMR
     // moves account→account (the heir keeps the rest). Only a PLAYER fire-kill reaches here — NPC/mod
     // kills call runEstate directly and don't loot, so skill + risk is what earns.
-    const loot = Math.floor(Number(victim.cash) * M3.CASH_LOOT_RATE);
+    // Make-Risk-Pay: the loot base is pocket PLUS the victim's IN-TRANSIT bank deposits (fresh
+    // deposits within BANK_CLEAR_MS — the courier was hit on the way to the vault). Cleared bank
+    // stays out of reach. One ledger pair covers both legs (the character-cash check spans
+    // cash+bank, so a single whack:loot row per side stays exact).
+    const inTransit = Math.min(Math.floor(Number(victim.bank_intransit || 0)), Math.floor(Number(victim.bank)));
+    const pocketLoot = Math.floor(Number(victim.cash) * M3.CASH_LOOT_RATE);
+    const transitLoot = Math.floor(inTransit * M3.CASH_LOOT_RATE);
+    const loot = pocketLoot + transitLoot;
     if (loot > 0) {
-      victim.cash = Number(victim.cash) - loot; // the estate now burns only the remainder
+      victim.cash = Number(victim.cash) - pocketLoot;      // the estate now burns only the remainder
+      victim.bank = Number(victim.bank) - transitLoot;
+      victim.bank_intransit = 0;
       ch.cash = Number(ch.cash) + loot;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: loot, reason: 'whack:loot', counterparty: victim.id });
       await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -loot, reason: 'whack:loot', counterparty: ch.id });
     }
-    const omrLoot = Math.floor(Number(h.victimAcct.omr) * M3.OMR_LOOT_RATE);
+    // …and liquid $OMR PLUS unbonding principal (the unstake exposure window). Staked stays the
+    // untouchable safe harbour; extraction is what crosses the street.
+    const liquid = Number(h.victimAcct.omr), unbonding = Number(h.victimAcct.unbonding || 0);
+    const omrLoot = Math.floor((liquid + unbonding) * M3.OMR_LOOT_RATE);
     if (omrLoot > 0) {
-      h.victimAcct.omr = Number(h.victimAcct.omr) - omrLoot; // staked untouched; the heir keeps the rest
+      const fromLiquid = Math.min(omrLoot, liquid);
+      h.victimAcct.omr = liquid - fromLiquid;
+      h.victimAcct.unbonding = unbonding - (omrLoot - fromLiquid);
       h.acct.omr = Number(h.acct.omr) + omrLoot;
       await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrLoot, reason: 'whack:loot', counterparty: victim.id });
       await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -omrLoot, reason: 'whack:loot', counterparty: ch.id });
@@ -886,12 +900,18 @@ export async function fire(ch, victim, client, h, rounds) {
 export async function enterSafehouse(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No safehouse reaches into lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You're already off the grid.");
-  if (Number(ch.cash) < M3.SAFEHOUSE_COST) throw new GameError('cash', `A safehouse runs $${M3.SAFEHOUSE_COST}.`);
-  ch.cash = Number(ch.cash) - M3.SAFEHOUSE_COST;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -M3.SAFEHOUSE_COST, reason: 'safehouse' });
+  // Make-Risk-Pay: total immunity is priced as a share of the LIQUID WEALTH it protects —
+  // max(flat floor, cash+bank × SAFEHOUSE_NW_BPS). The flat $25k was ~0.25%/day for an endgame
+  // landlord (the audit's safehoused-landlord stack); a % keeps the shield real for street
+  // players and expensive for whales. Paid from pocket — going to ground takes walking money.
+  const cost = Math.max(M3.SAFEHOUSE_COST,
+    Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000));
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
+  ch.cash = Number(ch.cash) - cost;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'safehouse' });
   ch.safe_until = new Date(Date.now() + M3.SAFEHOUSE_MS);
-  await h.track(client, ch.account_id, 'safehouse', {});
-  return { ok: true, safeUntil: ch.safe_until };
+  await h.track(client, ch.account_id, 'safehouse', { cost });
+  return { ok: true, safeUntil: ch.safe_until, cost };
 }
 
 // ═══════════════════ BODYGUARDS — TWO-PARTY PROTECTION (M7 Phase 4) ═══════════════════

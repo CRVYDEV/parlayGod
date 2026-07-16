@@ -493,6 +493,21 @@ export const CONSTANTS = {
   BUSINESS_SCRUTINY_PER_CAP: 45, BUSINESS_SCRUTINY_DECAY_HR: 1, BUSINESS_SCRUTINY_MAX: 100,
   BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.0005, BUSINESS_RAID_FINE_RATE: 0.10,
   SHAKEDOWN_RATE: 0.30, SHAKEDOWN_CD_MS: 8*3600*1000, SHAKEDOWN_ENERGY: 15, SHAKEDOWN_HEAT: 10,
+  // MAKE RISK PAY (sim-audit package, founder-approved direction; numbers are sign-off levers).
+  // BANK_CLEAR_MS: a fresh deposit stays "in transit" for this window — a fire-kill loots
+  // CASH_LOOT_RATE of in-transit deposits too, so banking is a timed act, not an instant vault.
+  // UNSTAKE_CD_MS: unstaked principal UNBONDS (no yield, lootable) before it's liquid — the
+  // stake → extract path always crosses an exposure window; staking itself stays instant.
+  BANK_CLEAR_MS: 2*3600*1000, UNSTAKE_CD_MS: 6*3600*1000,
+  // WEALTH-SCALED SAFEHOUSE: cost = max(M3.SAFEHOUSE_COST, liquid wealth × NW_BPS/10000) per stay
+  // — total immunity priced as a % of what it protects (the $25k flat fee was ~0.25%/day for an
+  // endgame landlord). 100 bps = 1% of cash+bank per 4h stay.
+  SAFEHOUSE_NW_BPS: 100,
+  // ORGANIC AMM DEPTH: each 12h buyback carves this share of the street-tax pool into PROTOCOL-
+  // OWNED LIQUIDITY — cash paired with event-fund $OMR at spot, deposited into BOTH reserves
+  // (a §10.4 bucket transfer, fund → amm; nothing minted, price unmoved, depth compounds with
+  // real activity). Skipped (falls through to the buyback) when the fund can't match the pair.
+  AMM_LP_BPS: 2500,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;

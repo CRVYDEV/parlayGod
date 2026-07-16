@@ -191,7 +191,44 @@ if (fundPre > 1) {
 }
 r = await call('POST', '/v1/unstake', { token });
 assert.equal(r.code, 200, 'unstake'); assert.equal(r.body.character.staked, 0, 'principal returned whole (never pool-gated)');
+// Make Risk Pay: the principal UNBONDS (lootable, no yield) before it's liquid — then releases whole
+assert(r.body.character.unbonding > 0, 'principal is in the unbonding window, not instant-liquid');
+const unbondingAmt = r.body.character.unbonding;
+const omrPreRelease = (await meOf(token)).omr;
+await pool.query(`UPDATE account_persistent SET unbond_at = now() - interval '1 minute' WHERE account_id = (SELECT account_id FROM characters WHERE id='${cid}')`);
+const released = await meOf(token);
+assert.equal(released.unbonding, 0, 'the unbond window passed — released');
+assert(released.omr >= omrPreRelease + unbondingAmt - 1e-6, 'principal whole, now liquid');
 assert.equal(await runBuyback(pool, { force: true }), null, 'nothing to buy back twice');
+
+// Make Risk Pay: fresh deposits ride IN TRANSIT for BANK_CLEAR_MS (lootable), then clear
+await seed("cash=50000, bank=0, bank_intransit=0");
+r = await call('POST', '/v1/bank/deposit', { token, body: { amount: 30000 } });
+assert.equal(r.code, 200, 'deposited');
+assert.equal((await meOf(token)).bankInTransit, 30000, 'the deposit rides in transit');
+await seed("bank_intransit_at = now() - interval '3 hours'");
+assert.equal((await meOf(token)).bankInTransit, 0, 'cleared after the window — out of loot reach');
+
+// ORGANIC AMM DEPTH: with the event fund now holding $OMR, the next buyback carves AMM_LP_BPS of
+// the tax pool into protocol-owned liquidity — cash paired with fund-$OMR at spot, both reserves
+// grow, nothing minted (the file-end $OMR conservation check proves it)
+await seed("cash=4000000, loc='docks', heat=0, safe_until=NULL");
+// prime the event fund: a big taxed wash + a buyback whose LP slice is still unaffordable (all →
+// fund), so the NEXT cycle's fund can pair the $OMR side of the LP deposit
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 1000000 } })).code, 200, 'a big wash to prime the fund');
+await runBuyback(pool, { force: true });
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 100000 } })).code, 200, 'a wash to refill the tax pool');
+const fundPreLp = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
+const ammPreLp = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+const bb2 = await runBuyback(pool, { force: true });
+assert(bb2 && bb2.lpCash > 0 && bb2.lpOmr > 0, `the buyback carved protocol-owned liquidity (${JSON.stringify(bb2)})`);
+assert(Math.abs(bb2.lpCash - bb2.spentCash * 0.25) < 1e-6, 'the LP slice is AMM_LP_BPS (25%) of the tax pool');
+const ammPostLp = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+assert(Number(ammPostLp.cash_reserve) > Number(ammPreLp.cash_reserve), 'cash reserve deepened');
+const fundPostLp = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
+assert(Math.abs((fundPostLp - fundPreLp) - (bb2.toFund - bb2.lpOmr)) < 1e-6, 'the fund paid the $OMR side of the pair (net of its buyback share)');
+assert(Number(ammPostLp.cash_reserve) * Number(ammPostLp.omr_reserve) > Number(ammPreLp.cash_reserve) * Number(ammPreLp.omr_reserve) * 0.999,
+  'k (depth) grew — slippage falls with real activity');
 
 // ══════════ §10.4 INVARIANTS ══════════
 // (a) cash ledger: a SECOND character that only ever EARNS its cash (never SQL-seeded)

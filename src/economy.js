@@ -334,12 +334,18 @@ async function payStakeRewards(client, h, rewards) {
 export async function unstake(ch, client, h) {
   const staked = Number(h.acct.staked), rewards = Number(h.acct.rewards);
   if (staked <= 0 && rewards <= 0) throw new GameError('none', 'Nothing staked.');
-  // principal ALWAYS returns whole — it's the player's own $OMR, a bucket move, never pool-gated.
-  h.acct.omr = Number(h.acct.omr) + staked;
+  // Make-Risk-Pay: principal still ALWAYS returns whole (a bucket move, never pool-gated) — but it
+  // UNBONDS for UNSTAKE_CD_MS first: no yield, and LOOTABLE (whack:loot reaches liquid + unbonding)
+  // until the window passes and accrual releases it to `omr`. The stake→extract path now always
+  // crosses an exposure window; staking in stays instant (the safe harbour is entered freely,
+  // exited deliberately). A repeat unstake stacks and resets the clock.
+  h.acct.unbonding = Number(h.acct.unbonding || 0) + staked;
+  h.acct.unbond_at = new Date(Date.now() + CONSTANTS.UNSTAKE_CD_MS);
   h.acct.staked = 0;
   const paid = await payStakeRewards(client, h, rewards);
   h.acct.rewards = rewards - paid; // keep the unpaid remainder pending for the next refill
-  return { ok: true, returned: staked, rewards: paid, stillPending: rewards - paid };
+  return { ok: true, unbonding: staked, unbondSeconds: Math.ceil(CONSTANTS.UNSTAKE_CD_MS / 1000),
+    rewards: paid, stillPending: rewards - paid };
 }
 export async function claimRewards(ch, client, h) {
   const rewards = Number(h.acct.rewards);

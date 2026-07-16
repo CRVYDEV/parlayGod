@@ -468,6 +468,27 @@ loop), kill EV measured NEGATIVE even vs careless marks (−$75k), PLEX pricing 
 AMM depth vs endgame faucets, territory ROI/seizure snowball, business/racket bucket additivity,
 directed-contract squatting, kitchen on-ramp margin.
 
+**Make-Risk-Pay package (founder-approved from the sim audit; numbers are sign-off levers).**
+Four levers, all built + tested: **(1) loot surfaces** — bank deposits ride IN TRANSIT for
+`BANK_CLEAR_MS` (2h; stacking deposits reset the clock, withdrawals clamp the marker) and unstaked
+principal UNBONDS for `UNSTAKE_CD_MS` (6h, no yield; staking in stays instant) — a fire-kill's
+`whack:loot` now takes `CASH_LOOT_RATE` of pocket + in-transit (one ledger pair spans cash+bank)
+and `OMR_LOOT_RATE` of liquid + unbonding (liquid drained first), so banking is a timed act and
+the stake→extract path always crosses an exposure window. New columns `characters.bank_intransit/
+_at`, `account_persistent.unbonding/unbond_at`; releases run on the WALL CLOCK above accrual's
+1-second early-return; `unbonding` joined the §10.4 omr bucket sum. **(2) wealth-scaled safehouse**
+— cost = max($25k, cash+bank × `SAFEHOUSE_NW_BPS`/10⁴ (1%)) per 4h stay; live quote in the view
+(`safehouseCost`). **(3) market-linked PLEX** — `plexQuote`: fee-ETH (`MINT_FEE_ETH`/`RESPAWN_FEE_ETH`)
+× the latest vig buyback's `price_omr_per_eth` (mainnet: the DEX TWAP) × `PLEX_PREMIUM_BPS` (1.2),
+static `PLEX_*_OMR` as the pre-market floor; `GET /v1/plex/price` is the public quote — $OMR stays
+the premium rail, ETH the economical one (that asymmetry feeds the vig). **(4) organic AMM depth** —
+each 12h buyback carves `AMM_LP_BPS` (25%) of the tax pool into PROTOCOL-OWNED LIQUIDITY: cash
+paired with event-fund $OMR at spot into BOTH reserves (a §10.4 bucket transfer, nothing minted,
+price unmoved, k grows with real activity); skipped (falls through to the buyback) when the fund
+can't match the pair. Tests: social (in-transit + unbonding looted on a kill, release after the
+window, scaled safehouse quote+charge), economy (unbond→release whole, deposit clears, LP carve +
+fund pairing + k growth), vig (market quotes, mint at 24 not 5, respawn gated at 240).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

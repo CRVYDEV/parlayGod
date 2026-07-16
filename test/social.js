@@ -773,6 +773,42 @@ assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token 
 // §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
 assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
 
+// ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
+// ══ the safehouse is priced off the wealth it protects
+const vault = await mk('Vinnie Vault');
+await seedCh(vault.id, "cash=100000, loc='docks'");
+r = await call('POST', '/v1/bank/deposit', { token: vault.token, body: { amount: 80000 } });
+assert.equal(r.code, 200, 'deposited');
+let vm = await meOf(vault.token);
+assert.equal(vm.bankInTransit, 80000, 'the deposit rides IN TRANSIT (the courier is on the street)');
+assert(vm.bankClearSeconds > 0, 'with a clearing clock');
+// unstake → the unbonding window: no instant liquidity on the stake→extract path
+await seedOmr(vault.id, 50);
+assert.equal((await call('POST', '/v1/stake', { token: vault.token, body: { amount: 50 } })).code, 200, 'staked 50 (instant — the harbour is entered freely)');
+r = await call('POST', '/v1/unstake', { token: vault.token });
+assert.equal(r.code, 200, 'unstaked');
+vm = await meOf(vault.token);
+assert.equal(vm.staked, 0, 'principal left the stake whole');
+assert.equal(vm.unbonding, 50, '…into the UNBONDING window, not liquid');
+assert.equal(Math.floor(vm.omr), 0, 'not liquid yet — extraction crosses an exposure window');
+// the kill: loot reaches 25% of (pocket + in-transit) and 20% of (liquid + unbonding)
+const kv = await whack(vault.id);
+assert.equal(kv.kill, true, 'vinnie got clipped mid-transfer');
+assert.equal(kv.loot, Math.floor(20000 * 0.25) + Math.floor(80000 * 0.25), 'loot took 25% of pocket AND 25% of the in-transit deposit');
+assert.equal(kv.omrLoot, Math.floor(50 * 0.20), 'loot took 20% of the UNBONDING $OMR');
+// the survivor's account: the rest of the unbonding releases to liquid once the window passes
+await pool.query(`UPDATE account_persistent SET unbond_at = now() - interval '1 minute' WHERE account_id = (SELECT account_id FROM characters WHERE id='${vault.id}')`);
+vm = await meOf(vault.token);
+assert.equal(vm.unbonding, 0, 'the unbond window passed — released');
+assert.equal(Math.floor(vm.omr), 40, 'principal (50 − 10 looted) is liquid on the heir\'s account');
+// wealth-scaled safehouse: 1% of liquid wealth, $25k floor — priced off what it protects
+const rich = await mk('Richie Reserves');
+await seedCh(rich.id, "cash=6000000, bank=14000000");
+assert.equal((await meOf(rich.token)).safehouseCost, 200000, 'the view quotes 1% of cash+bank ($200k)');
+r = await call('POST', '/v1/safehouse', { token: rich.token });
+assert.equal(r.code, 200, 'the whale went to ground'); assert.equal(r.body.cost, 200000, 'and paid the scaled rate');
+assert.equal((await meOf(rich.token)).cash, 6000000 - 200000, 'charged from pocket, ledgered safehouse sink');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);

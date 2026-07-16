@@ -619,6 +619,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'mint', client, h)));
   app.post('/v1/plex/respawn', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Vig.payPlex(ch, 'respawn', client, h)));
+  // the live market-linked quote (fee-ETH × latest buyback price × premium; static floor pre-market)
+  app.get('/v1/plex/price', async () => ({
+    mint: await Vig.plexQuote(pool, 'mint'), respawn: await Vig.plexQuote(pool, 'respawn') }));
   // Mod/ops: the Vig gauge + the extraction-≤-inflow invariant, and the buyback trigger (on
   // mainnet the DEX bot runs this with a TWAP price; here it's the manual/test path).
   app.get('/v1/mod/vig', { preHandler: modAuth }, async () =>

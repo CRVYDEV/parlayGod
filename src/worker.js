@@ -49,10 +49,30 @@ export async function runBuyback(pool, opts = {}) {
     const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
     const cashPool = Number(tax.pool);
     if (cashPool <= 0) { await client.query('COMMIT'); return null; }
-    const c = Number(amm.cash_reserve), o = Number(amm.omr_reserve), k = c * o;
-    const bought = o - k / (c + cashPool);
-    if (!(bought > 0)) { await client.query('COMMIT'); return null; }
-    await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + cashPool, o - bought]);
+    let c = Number(amm.cash_reserve), o = Number(amm.omr_reserve);
+
+    // ORGANIC AMM DEPTH (sim-audit F4): carve AMM_LP_BPS of the tax pool into PROTOCOL-OWNED
+    // LIQUIDITY — the cash slice paired with event-fund $OMR at the CURRENT spot price, deposited
+    // into BOTH reserves. Nothing mints (fund → amm is a bucket transfer inside the §10.4 $OMR
+    // set), the price doesn't move (deposited at ratio), and k grows — slippage falls with real
+    // economic activity. If the fund can't match the pair this cycle, the slice falls through to
+    // the buyback (depth when we can afford it, yield-backing otherwise).
+    let lpCash = 0, lpOmr = 0;
+    const lpWant = cashPool * (CONSTANTS.AMM_LP_BPS || 0) / 10000;
+    if (lpWant > 0) {
+      const spot = c / o;
+      const omrWant = lpWant / spot;
+      if (Number(tax.fund) >= omrWant) {
+        lpCash = lpWant; lpOmr = omrWant;
+        c += lpCash; o += lpOmr;
+        await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [lpOmr]);
+      }
+    }
+    const spendable = cashPool - lpCash;
+    const k = c * o;
+    const bought = o - k / (c + spendable);
+    if (!(bought > 0) && lpCash <= 0) { await client.query('COMMIT'); return null; }
+    await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + spendable, o - bought]);
 
     // Phase 4 (backed emission): carve a STAKE_POOL_BPS slice of the buyback off the top to fund
     // staking yield — so cash sinks (street tax) pay stakers via redistribution, not a new mint.
@@ -79,7 +99,8 @@ export async function runBuyback(pool, opts = {}) {
     }
     await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
     await client.query('COMMIT');
-    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: ranked.length };
+    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: ranked.length,
+      lpCash, lpOmr };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

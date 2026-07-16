@@ -10,6 +10,20 @@ const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 // ctx carries the owned racket/asset id lists (income) and ctx.held — the district
 // ids the character's gang holds (turf perks: cathedral nerve, neon income).
 export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
+  // Make-Risk-Pay releases run on the WALL CLOCK, not the accrual delta — they sit above the
+  // 1-second early return so a rapid re-touch still clears a lapsed window.
+  // Fresh bank deposits clear once BANK_CLEAR_MS passes (the courier reached the vault):
+  if (Number(ch.bank_intransit) > 0 && ch.bank_intransit_at
+      && now - new Date(ch.bank_intransit_at) >= CONSTANTS.BANK_CLEAR_MS) {
+    ch.bank_intransit = 0; ch.bank_intransit_at = null;
+  }
+  // Unbonded stake principal goes liquid once its window passes (a move within the same account
+  // bucket — omr + staked + unbonding are all in the §10.4 sum, so no ledger row):
+  if (acct && Number(acct.unbonding) > 0 && acct.unbond_at && now >= new Date(acct.unbond_at)) {
+    acct.omr = Number(acct.omr) + Number(acct.unbonding);
+    acct.unbonding = 0; acct.unbond_at = null;
+  }
+
   const last = new Date(ch.last_accrued_at);
   const dtMs = Math.max(0, now - last);
   if (dtMs < 1000) return ch;
