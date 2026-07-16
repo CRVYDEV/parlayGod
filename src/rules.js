@@ -486,8 +486,12 @@ export const CONSTANTS = {
   // (clamped to pocket cash). SHAKEDOWN: a rival extorts SHAKEDOWN_RATE of a front's pending
   // income in a muscle/cunning contest — per-venue cooldown, energy cost, heat either way.
   // All new/tunable — sim + founder sign-off before production (ground rule #1).
-  BUSINESS_SCRUTINY_PER_CAP: 25, BUSINESS_SCRUTINY_DECAY_HR: 2,
-  BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.002, BUSINESS_RAID_FINE_RATE: 0.10,
+  // SIM-AUDIT RETUNE: the original 25/2hr/60 triple made raids UNREACHABLE (max accrual +25/day
+  // vs decay 48/day — the risk layer was dead code). Now a full day-cap wash adds 45 while only
+  // 24 decays off, so sustained max-throughput extraction crosses the threshold in ~3 days and
+  // sits hot (scrutiny caps at 100); moderate washing (≤ half cap/day) still never raids.
+  BUSINESS_SCRUTINY_PER_CAP: 45, BUSINESS_SCRUTINY_DECAY_HR: 1, BUSINESS_SCRUTINY_MAX: 100,
+  BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.0005, BUSINESS_RAID_FINE_RATE: 0.10,
   SHAKEDOWN_RATE: 0.30, SHAKEDOWN_CD_MS: 8*3600*1000, SHAKEDOWN_ENERGY: 15, SHAKEDOWN_HEAT: 10,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);

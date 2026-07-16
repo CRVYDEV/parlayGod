@@ -32,6 +32,13 @@ assert.equal((await call('POST', '/v1/path', { token: chef.token, body: { path: 
 let r = await call('POST', '/v1/path', { token: chef.token, body: { path: 'kitchen' } });
 assert.equal(r.code, 200, 'path declared'); assert.equal(r.body.character.path, 'kitchen');
 assert.equal((await call('POST', '/v1/path', { token: chef.token, body: { path: 'gun' } })).code, 400, 'switch needs 25 $OMR');
+// sim-audit regression: the $10k first pick ledgers cash reason 'path:<id>' — it was missing from
+// the §10.4 cash vocabulary, so EVERY production account tripped a permanent false drift alarm
+{
+  const { runLedgerInvariants } = await import('../src/invariants.js');
+  const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+  assert(vocab.ok, `a path pick must not trip the vocabulary alarm (${JSON.stringify(vocab.unknown || [])})`);
+}
 
 // ── lab ladder: sequential tiers ──
 r = await call('POST', '/v1/kitchen/lab/upgrade', { token: chef.token });

@@ -180,6 +180,12 @@ export async function runVigInvariants(pool) {
   // (3) the reserve holds ONLY Vig-bought $OMR — the buyback's reserve share plus any prize $OMR
   // moved from the pool to back a prize withdrawal. No unbacked (team-charity) funding.
   push('reserve fully backed', funded <= toReserve + prizePaid + eps, { funded, toReserve, prizePaid });
+  // (3b) …and holds ALL of it: fundReserve runs post-commit (it opens its own txn), so a crash
+  // between the buyback/prize COMMIT and the reserve top-up would leave the intended funding
+  // recorded but never applied — winners' withdrawals queue forever with every one-sided check
+  // green. Under-funding is a LOST-FUNDING alarm (re-fund the difference); over-funding stays
+  // check (3)'s charity alarm. (Audit: the invariant was one-sided.)
+  push('reserve not under-funded', funded >= toReserve + prizePaid - eps, { funded, toReserve, prizePaid });
   // (4) extraction never exceeds the funded reserve (the queue guarantees this live; assert it)
   push('extraction ≤ reserve', extracted <= funded + eps, { extracted, funded });
   // (5) prizes paid + still pooled never exceed what the Vig bought for prizes

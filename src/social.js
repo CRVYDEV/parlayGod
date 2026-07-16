@@ -271,8 +271,13 @@ export async function jump(ch, victim, client, h) {
       await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -crates, reason: 'jump:stolen', counterparty: ch.id });
     }
     if (war) {
-      await client.query('UPDATE gangs SET war_score_us = war_score_us + 1 WHERE id=$1', [h.owned.gangId]);
-      await client.query('UPDATE gangs SET war_score_them = war_score_them + 1 WHERE id=$1', [h.victimOwned.gangId]);
+      // both score updates in ONE statement (the fire-kill pattern) — two separate "my gang first"
+      // UPDATEs acquire the rows unsorted, so simultaneous cross-jumps between the two warring
+      // families AB-BA deadlock on real Postgres (invisible on pg-mem).
+      await client.query(
+        `UPDATE gangs SET war_score_us = war_score_us + CASE WHEN id=$1 THEN 1 ELSE 0 END,
+                          war_score_them = war_score_them + CASE WHEN id=$2 THEN 1 ELSE 0 END
+          WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
     const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
@@ -443,12 +448,15 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   // A live pot is topped up; an expired-unswept pot is refunded (skipId = the posting BOSS: if
   // they personally funded the old pot, their refund must land in-memory or persistCharacter
   // clobbers the SQL credit).
-  const existing = (await client.query('SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
+  const existing = (await client.query('SELECT amount, expires_at, anon FROM bounties WHERE target_character=$1 AND kind=$2 FOR UPDATE', [targetCharacterId, kind])).rows[0];
   const live = existing && !(existing.expires_at && new Date(existing.expires_at) <= new Date());
   if (existing && !live) {
     const { selfRefund } = await refundPot(client, targetCharacterId, kind, ch.id);
     ch.cash = Number(ch.cash) + selfRefund;
   }
+  // a top-up inherits the standing pot's anonymity — the public emit below must respect the POT's
+  // flag, not just this post's option, or topping up an anon pot would out the family
+  const potAnon = live ? !!existing.anon : !!opts.anon;
   // gang row AFTER the pot (and after character/account rows) — the global lock order
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [gangId])).rows[0];
   if (Number(g.treasury) < amt + fee + tax) throw new GameError('treasury', `That contract takes $${amt + fee + tax} from the treasury (2% take included).`);
@@ -471,7 +479,9 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   await h.ledger(client, { currency: 'cash', amount: -(fee + tax), reason: 'gang:contract:take', counterparty: targetCharacterId });
   await takeHouse(client, tax);
   await h.track(client, ch.account_id, 'family_contract', { target: targetCharacterId, kind, amount: amt });
-  bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind, family: g.name });
+  // an anon pot must not leak the family on the PUBLIC streets feed — the 3 $OMR bought silence
+  // (the board already hides it; the private gang: channel emit below may still name it)
+  bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind, ...(potAnon ? {} : { family: g.name }) });
   bus.emit(`gang:${gangId}`, { type: 'family_contract', on: t.name, amount: amt, kind });
   await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt });
   // fresh read: an expired-repost may have refunded the old pot's gang share mid-flight
@@ -607,19 +617,46 @@ async function refundPot(client, target, kind, skipId = null) {
   return { refunded, selfRefund };
 }
 
-// Worker sweep: refund every funder of an expired pot, then drop the pot. Idempotent-safe:
-// a pot is deleted in the same txn it's refunded.
+// Worker sweep: refund every funder of an expired pot, then drop the pot. ONE POT PER TRANSACTION,
+// funder character rows locked in sorted order BEFORE the pot row — the global lock order every
+// player path follows (characters → pots → gangs). The old version locked all expired pots first
+// and then wrote funder character rows (pots → characters), AB-BA deadlocking against a fire-kill
+// or cancel that holds character locks and wants the same pot (invisible on pg-mem). If the funder
+// set changes between the unlocked read and the pot lock (a racing top-up), retry once; a pot that
+// won't settle keeps to the next sweep. Idempotent-safe: a pot is deleted in the txn it's refunded.
 export async function sweepExpiredBounties(pool) {
   const client = await pool.connect();
   let pots = 0, refunded = 0;
   try {
-    await client.query('BEGIN');
-    const expired = (await client.query("SELECT target_character, kind FROM bounties WHERE expires_at IS NOT NULL AND expires_at <= now() FOR UPDATE")).rows;
-    for (const b of expired) { refunded += (await refundPot(client, b.target_character, b.kind)).refunded; pots++; }
-    await client.query('COMMIT');
+    const expired = (await client.query(
+      'SELECT target_character, kind FROM bounties WHERE expires_at IS NOT NULL AND expires_at <= now()')).rows;
+    for (const b of expired) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await client.query('BEGIN');
+        try {
+          const readFunders = async () => (await client.query(
+            'SELECT contributor FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND funder_gang IS NULL',
+            [b.target_character, b.kind])).rows.map((r) => r.contributor).sort();
+          const funderIds = await readFunders();
+          for (const id of funderIds)
+            await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [id]);
+          // now the pot — and re-verify it's still there and still expired (a claim/cancel may
+          // have raced us before we held any locks; then there's nothing left to refund)
+          const pot = (await client.query(
+            'SELECT 1 FROM bounties WHERE target_character=$1 AND kind=$2 AND expires_at IS NOT NULL AND expires_at <= now() FOR UPDATE',
+            [b.target_character, b.kind])).rows[0];
+          if (!pot) { await client.query('COMMIT'); break; }
+          const now2 = await readFunders();
+          if (JSON.stringify(now2) !== JSON.stringify(funderIds)) { await client.query('ROLLBACK'); continue; }
+          refunded += (await refundPot(client, b.target_character, b.kind)).refunded;
+          pots++;
+          await client.query('COMMIT');
+          break;
+        } catch (e) { await client.query('ROLLBACK'); throw e; }
+      }
+    }
     return { pots, refunded };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
-  finally { client.release(); }
+  } finally { client.release(); }
 }
 
 // ═══════════════════ THE ASSASSIN'S REPUTATION (M7 Phase 2) ═══════════════════
@@ -883,10 +920,16 @@ export async function hireBodyguard(ch, guard, client, h) {
     throw new GameError('guarded', 'You already have a shadow. One bullet-catcher at a time.');
   if (jailed(guard) || hospitalized(guard)) throw new GameError('unavailable', "They can't watch your back from where they are.");
   if (Number(ch.cash) < price) throw new GameError('cash', `Their rate is $${price}.`);
+  // the standard 2% house take (1% dev off-ledger + 1% street tax → buyback), at parity with the
+  // exchange and the AMM — an untaxed unlimited P2P transfer was the cheapest value pipe in the
+  // game (alt consolidation / referral net-worth pumping at 0%, audit F5). The guard nets 98%.
+  const fee = Math.ceil(price * 0.01), tax = Math.ceil(price * 0.01);
+  const net = price - fee - tax;
   ch.cash = Number(ch.cash) - price;
-  guard.cash = Number(guard.cash) + price;
+  guard.cash = Number(guard.cash) + net;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'bodyguard:hire', counterparty: guard.id });
-  await h.ledger(client, { characterId: guard.id, currency: 'cash', amount: price, reason: 'bodyguard:hire', counterparty: ch.id });
+  await h.ledger(client, { characterId: guard.id, currency: 'cash', amount: net, reason: 'bodyguard:hire', counterparty: ch.id });
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
   ch.guarded_by = guard.id;
   ch.guarded_until = new Date(Date.now() + M3.BODYGUARD_MS);
   await h.notify(client, guard.id, 'bodyguard_hired', { by: ch.name, price, hours: M3.BODYGUARD_MS / 3600000 });
@@ -998,6 +1041,15 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
 
   for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
+  // a dead guard's principals are released: bodyguardAbsorbs already refuses a dead guard, but the
+  // stale pointer also BLOCKED hiring a replacement for the rest of the window (paid, unprotected,
+  // locked out — audit F8). One principal row may be IN-MEMORY in this very transaction: the
+  // killer, if they'd hired their own victim as guard (betrayal beats protection) — mirror the
+  // clear on that object or persistCharacter clobbers the SQL update back to the dead guard.
+  await client.query('UPDATE characters SET guarded_by=NULL, guarded_until=NULL WHERE guarded_by=$1', [victim.id]);
+  if (opts.killerCh && opts.killerCh.guarded_by === victim.id) {
+    opts.killerCh.guarded_by = null; opts.killerCh.guarded_until = null;
+  }
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
   // M7: a directed contract still in its EXCLUSIVE window is REFUNDED, not burned — an outsider
   // killing the mark first shouldn't torch the poster's stake (the named hitman never got their
