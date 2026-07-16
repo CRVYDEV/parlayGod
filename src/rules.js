@@ -751,6 +751,23 @@ export const CONVOY = {
   FAIL_HOSP_MS: 30 * 60 * 1000, TURF_DEF: 15,
 };
 export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) || null;
+// THE COMMISSION — the top-SEATS families vote weekly on a city decree (majority of last week's
+// votes governs this week; ties deadlock). Effects are bounded one-week MODIFIERS on signed
+// levers — the modifiers are founder sign-off levers themselves. No decree moves money (§10.4
+// untouched by construction). Design: omerta-commission-design.md.
+export const COMMISSION = {
+  SEATS: 5,
+  OPEN_SEASON_MULT: 0.5,  // safehouse stays halved
+  AMNESTY_MULT: 0.5,      // laylow at half price
+  LOCKDOWN_DEF: 20,       // every convoy fights +20 defense
+  DECREES: [
+    { id: 'open_season', name: 'Open Season', desc: 'Safehouse stays are halved city-wide. The knives come out.' },
+    { id: 'pax',         name: 'The Pax',     desc: 'No new wars may be declared. Consolidation week.' },
+    { id: 'amnesty',     name: 'Amnesty',     desc: 'Laying low costs half. The Commission paid the judges.' },
+    { id: 'lockdown',    name: 'Lockdown',    desc: 'Every convoy rides with extra guns. The freight is protected.' },
+  ],
+};
+export const decreeOf = (id) => COMMISSION.DECREES.find((d) => d.id === id) || null;
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to

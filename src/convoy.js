@@ -7,7 +7,8 @@
 // manifest is the contested object, not the man).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { CONVOY, guardTierOf, DISTRICTS, GOODS, goodPriceOf, cargoCapacity } from './rules.js';
+import { CONVOY, COMMISSION, guardTierOf, DISTRICTS, GOODS, goodPriceOf, cargoCapacity } from './rules.js';
+import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (n) => Math.random() * n;
@@ -140,9 +141,12 @@ export async function ambushConvoy(ch, convoyId, client, h) {
     const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [c.owner_gang])).rows.map((d) => d.id);
     if (held.includes(c.origin) || held.includes(c.destination)) turfDef = CONVOY.TURF_DEF;
   }
+  // Commission decree: LOCKDOWN — every convoy on the road fights with extra guns this week
+  const lockdown = (await activeDecree(client))?.id === 'lockdown' ? COMMISSION.LOCKDOWN_DEF : 0;
   const atk = Number(ch.muscle) + Number(ch.speed) * 0.5 + rand(30);
-  const def = Number(c.guards) + turfDef + rand(30);
-  await h.rngLog(client, ch.id, `convoy:ambush:${convoyId}`, Math.round(atk * 100) / 100, atk > def ? 'hijacked' : 'repelled');
+  const def = Number(c.guards) + turfDef + lockdown + rand(30);
+  await h.rngLog(client, ch.id, `convoy:ambush:${convoyId}`,
+    Math.round(atk * 100) / 100, `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''})`);
 
   if (atk > def) {
     // take what the trunk holds — a pure ownership transfer; the rest rolls on to the docks
