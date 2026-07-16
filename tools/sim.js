@@ -200,6 +200,46 @@ if (killed) {
 }
 note('kill', 'kill EV (rational mark)', `−$${fmt(rounds * perRound)}`, 'a banked victim loots $0 pocket — pure ammo loss + heat');
 
+// MAKE-RISK-PAY CHECK: a mark caught MID-DEPOSIT — the in-transit window is the new loot surface.
+// The mark banks their whole roll; the killer strikes inside BANK_CLEAR_MS.
+const mark2 = await newChar('Sim Courier');
+await warp(mark2.id, `respect=${lvlRespect(12)}, muscle=5, speed=5`);
+guard = 0;
+while ((await meOf(mark2.token)).cash < 40000 && guard++ < 200) {
+  await warp(mark2.id, "nerve=50, energy=200, jail_until=NULL, heat=0");
+  await call('POST', '/v1/crimes/poker', { token: mark2.token });
+}
+const m2cash = (await meOf(mark2.token)).cash;
+await call('POST', '/v1/bank/deposit', { token: mark2.token, body: { amount: m2cash } }); // all of it, in transit
+const m2 = await meOf(mark2.token);
+const btk2 = btkOf(m2.level, 5);
+const volley2 = Math.ceil(btk2 / ((0.7 + (gun.fp || 0) / 50) * 0.75)) + 50;
+let killed2 = false, rounds2 = 0, loot2 = 0, tries2 = 0;
+while (!killed2 && tries2++ < 8) {
+  guard = 0;
+  while ((await meOf(hunter.token)).ammo < volley2 && guard++ < 300) {
+    const a = await call('POST', '/v1/armory/ammo', { token: hunter.token });
+    if (a.code !== 200) { await warp(hunter.id, "nerve=50, energy=200, jail_until=NULL, heat=0"); await call('POST', '/v1/crimes/payroll', { token: hunter.token }); }
+  }
+  await warp(hunter.id, "energy=200, jail_until=NULL, shoot_cd_until=NULL, heat=0, loc='docks'");
+  await warp(mark2.id, "hosp_until=NULL, jail_until=NULL, loc='docks'");
+  await call('POST', `/v1/streets/${mark2.id}/search`, { token: hunter.token });
+  const f = await call('POST', `/v1/streets/${mark2.id}/fire`, { token: hunter.token, body: { rounds: volley2 } });
+  if (f.code !== 200) continue;
+  rounds2 += volley2;
+  if (f.body.kill) { killed2 = true; loot2 = f.body.loot || 0; }
+}
+if (killed2) {
+  note('kill', 'kill EV (mark mid-deposit)', `$${fmt(loot2 - rounds2 * perRound)}`,
+    `looted $${fmt(loot2)} incl. the IN-TRANSIT deposit ($${fmt(m2cash)} banked) − ammo $${fmt(rounds2 * perRound)} — the timed-hit surface works`);
+}
+
+// wealth-scaled safehouse: the rich pay for what they protect
+const richQuote = (await meOf(g.token)).safehouseCost;
+const poorQuote = (await meOf(mark.token) || {}).safehouseCost; // mark is dead — heir is poor
+note('defense', 'safehouse quote (grinder, rich)', `$${fmt(richQuote)}`, '1% of liquid wealth per 4h stay');
+note('defense', 'safehouse quote (fresh heir, poor)', `$${fmt(poorQuote || 25000)}`, 'the $25k floor holds for street players');
+
 // ════════════════ P5: EXTRACTION — private laundering, AMM depth, raids ════════════════
 phase('P5 extraction — washes, slippage, scrutiny, raids (honest money)');
 const amm0 = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
@@ -289,6 +329,29 @@ if (gOmr >= 5) {
   const mint = px.code === 200 ? await call('POST', '/v1/character/mint', { token: g.token }) : { code: px.code };
   note('vig', 'PLEX mint (5 earned $OMR → minted account)', String(mint.code === 200), 'the extraction gate opens without ETH');
 }
+
+// ════════════════ P9.5: THE DEN — realized house edge + street cut ════════════════
+phase('P9.5 den — realized craps edge over a 150-roll session (honest money)');
+await warp(g.id, "loc='neon', jail_until=NULL");
+let denStaked = 0, denNet = 0, denOk = 0;
+const taxPreDen = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+for (let i = 0; i < 150; i++) {
+  await warp(g.id, 'nerve=50');
+  const gm = await meOf(g.token);
+  if (gm.cash < 1000) break;
+  const d = await call('POST', '/v1/casino/dice', { token: g.token, body: { amount: 1000 } });
+  if (d.code !== 200) break;
+  denOk++; denStaked += 1000; denNet += d.body.net;
+}
+const taxPostDen = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+note('den', 'craps session', `${denOk} rolls, staked $${fmt(denStaked)}, net ${denNet >= 0 ? '+' : ''}$${fmt(denNet)}`,
+  `realized edge ${fmt(-100 * denNet / Math.max(1, denStaked))}% (theoretical 1.41%); street cut +$${fmt(taxPostDen - taxPreDen)}`);
+// extraction-risk analytics at current constants (no RNG — the founder's raid dial, computed)
+const scrPerDay = CONSTANTS.BUSINESS_SCRUTINY_PER_CAP - 24 * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR;
+const daysToHot = (CONSTANTS.BUSINESS_RAID_THRESHOLD / Math.max(1e-9, scrPerDay)).toFixed(1);
+const pDayHot = 1 - Math.pow(1 - CONSTANTS.BUSINESS_RAID_P_PER_MIN, 1440);
+note('den', 'extraction risk (analytic)', `full-cap washing goes raid-eligible in ~${daysToHot} days; P(raid)/day at max scrutiny ≈ ${fmt(100 * pDayHot)}%`,
+  `net scrutiny +${scrPerDay}/day at cap; fine 10% of tier cost reaches pocket+bank`);
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

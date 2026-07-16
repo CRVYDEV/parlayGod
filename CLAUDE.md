@@ -540,6 +540,16 @@ both directions, fight side/cap/one-per-week gates, fix rank/turf/once/treasury 
 seed-drawn settlements, rakeback cursor exactness + no-double-claim, and the treasury §10.4 check
 reconciling `casino:fix`. All step-two numbers are founder sign-off levers.
 
+**Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
+The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,
+analytic extraction risk) and re-run: §10.4 drift-0; the Make-Risk-Pay surfaces verified live
+(in-transit deposits ARE looted; kill break-even ≈ victim liquid ≥ kill-cost ÷ CASH_LOOT_RATE ≈
+$344k for a mid mark — "hunt whales" economics). BALANCE.md tables every PROPOSED lever with its
+measurement and a KEEP recommendation, and ranks the open items as D1–D8 (kill prey threshold,
+safehoused collection D2-(b) rec, public-wash cap, NPC per-target cd, bank taper, kitchen margin
+watch, respec cd, leftovers). Founder signing = KEEP rows are production balance; only the DECIDE
+list remains open. After ANY retune: `node tools/sim.js` + `npm test` must stay green.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
