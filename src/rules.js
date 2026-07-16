@@ -471,6 +471,13 @@ export const CONSTANTS = {
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin
   // pool only throttles it down). New/tunable — sim + founder sign-off.
   STAKE_POOL_BPS: 3000,
+  // Business Empire — a personal front's income accrues lazily up to this bound (collected on
+  // demand → pocket cash), so an uncollected business can't hoard unbounded income (the
+  // territory-racket pattern). Private laundering at your own front draws BUSINESS_LAUNDER_HEAT,
+  // LOWER than the street's LAUNDER_HEAT (your own books are safer than a public wash house) —
+  // gated by the front's per-tier daily capacity, not the wash-house district. New/tunable — sim
+  // + founder sign-off before production (ground rule #1).
+  BUSINESS_CAP_MS: 24*3600*1000, BUSINESS_LAUNDER_HEAT: 8,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
@@ -637,6 +644,43 @@ export const TERRITORY_RACKETS = [
   { tier: 3, name: 'Smuggling Front',   cost: 750000, incomePerHr: 60000 },
 ];
 export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tier === Number(tier)) || null;
+// Business Empire — the PREMIUM, acquired-later personal front layer (distinct from the flat
+// mid-game ASSETS/RACKETS). Each kind is level-gated ("acquired later"), with a tier ladder:
+//   cost          — cash to BUY tier 1 / UPGRADE to the next tier
+//   incomePerHr   — lazy cash income (→ pocket, capped at BUSINESS_CAP_MS between collects)
+//   launderCapDay — private cash→$OMR laundering capacity per 24h window at this tier
+// A bigger, higher-tier empire = more passive cash AND more (safer) extraction throughput — the
+// endgame engine of the Risk-to-Earn loop. Numbers are proposed defaults — sim + founder sign-off
+// before production (ground rule #1). Step-two scrutiny/raid/extortion risk is deferred by design.
+export const BUSINESSES = [
+  { kind: 'laundromat', name: 'Laundromat', lvl: 15, tiers: [
+    { tier: 1, cost: 250000,   incomePerHr: 12000,  launderCapDay: 20000 },
+    { tier: 2, cost: 600000,   incomePerHr: 28000,  launderCapDay: 50000 },
+    { tier: 3, cost: 1500000,  incomePerHr: 65000,  launderCapDay: 120000 },
+  ] },
+  { kind: 'restaurant', name: 'Restaurant', lvl: 22, tiers: [
+    { tier: 1, cost: 500000,   incomePerHr: 22000,  launderCapDay: 40000 },
+    { tier: 2, cost: 1200000,  incomePerHr: 52000,  launderCapDay: 95000 },
+    { tier: 3, cost: 3000000,  incomePerHr: 125000, launderCapDay: 230000 },
+  ] },
+  { kind: 'nightclub', name: 'Nightclub', lvl: 30, tiers: [
+    { tier: 1, cost: 1200000,  incomePerHr: 48000,  launderCapDay: 90000 },
+    { tier: 2, cost: 2800000,  incomePerHr: 110000, launderCapDay: 210000 },
+    { tier: 3, cost: 6500000,  incomePerHr: 260000, launderCapDay: 480000 },
+  ] },
+  { kind: 'hotel', name: 'Hotel', lvl: 42, tiers: [
+    { tier: 1, cost: 3000000,  incomePerHr: 110000, launderCapDay: 200000 },
+    { tier: 2, cost: 7000000,  incomePerHr: 255000, launderCapDay: 460000 },
+    { tier: 3, cost: 16000000, incomePerHr: 600000, launderCapDay: 1050000 },
+  ] },
+  { kind: 'casino', name: 'Casino', lvl: 58, tiers: [
+    { tier: 1, cost: 8000000,  incomePerHr: 280000,  launderCapDay: 500000 },
+    { tier: 2, cost: 18000000, incomePerHr: 640000,  launderCapDay: 1150000 },
+    { tier: 3, cost: 40000000, incomePerHr: 1500000, launderCapDay: 2600000 },
+  ] },
+];
+export const businessOf = (kind) => BUSINESSES.find((b) => b.kind === kind) || null;
+export const businessTierOf = (kind, tier = 1) => businessOf(kind)?.tiers.find((t) => t.tier === Number(tier)) || null;
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet

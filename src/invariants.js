@@ -12,7 +12,7 @@ const KNOWN_REASONS = {
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
-    'gang:contract', 'bodyguard:', 'territory:'],
+    'gang:contract', 'bodyguard:', 'territory:', 'business:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr'],

@@ -407,6 +407,31 @@ option: territory rent as a recurring $OMR sink (`TERRITORY_RENT_OMR`, ship-at-0
 (`STAKE_POOL_BPS`, the APY ceiling) are founder sign-off levers. **The Risk-to-Earn pivot's four
 pillars are now all built** (off-chain; chain layer dormant, gated on legal + third-party audit).
 
+**Business Empire (step one) — BUILT** (`src/business.js`, `test/economy.js`; design
+`omerta-business-empire-design.md`). The PREMIUM, acquired-later personal front layer — distinct from
+the flat mid-game `ASSETS`/`RACKETS` (buy-once, drip-forever): level-gated, UPGRADEABLE venues
+(`BUSINESSES` catalog in rules.js tail — laundromat lvl15 → casino lvl58, each a 3-tier ladder of
+`{cost, incomePerHr, launderCapDay}`) that farm pocket cash AND double as PRIVATE laundering infra —
+the endgame engine of the Risk-to-Earn loop. Per-INSTANCE state in the new `businesses` table (one row
+per owned front, `UNIQUE(character_id, kind)`), loaded into `h.owned.businesses` and surfaced in the
+character view. Three actions (the territory-racket lazy-income pattern): **buyBusiness** (level-gated,
+one per kind, cash sink `business:buy`), **collectBusiness** (lazy income → pocket cash, capped at
+`BUSINESS_CAP_MS` 24h, faucet `business:income`), **upgradeBusiness** (collects pending at the OLD rate
+first, then pays the next tier, sink `business:upgrade`). **launderAtBusiness** is the integration: cash→$OMR
+through the SAME AMM as Phase-1's public wash house (rides the existing `swap:buy` ledger, no new reason),
+but gated by the front's per-tier DAILY capacity (`launderCapDay`, a rolling 24h window on `launder_used`)
+instead of the wash-house district, and drawing LESS heat (`BUSINESS_LAUNDER_HEAT` 8 < street `LAUNDER_HEAT`
+15) — your own books are safer than the street; still an extraction act, so blocked from a safehouse (P1.3).
+§10.4: all three cash reasons carry a `character_id`, so the per-character cash check reconciles them (the
+`business:` prefix joined the cash vocabulary). Routes: `GET /v1/catalog` (public discoverable catalog —
+also closes the audit's API-discoverability gap), `POST /v1/business/:kind/buy|/:id/upgrade|/:id/launder`,
+`POST /v1/business/collect`, `GET /v1/business`. `test/economy.js` covers the catalog, the level gate, buy/
+collect/upgrade with the income cap, private lower-heat laundering + the daily cap + window reset + safehouse
+block, and the faucet/sink ledgering. All numbers (catalog costs, income curves, `launderCapDay`,
+`BUSINESS_CAP_MS`, `BUSINESS_LAUNDER_HEAT`, level gates) are proposed defaults — sim + founder sign-off
+before production (ground rule #1). **Step two (deferred by design):** the scrutiny/raid/extortion risk
+layer (passive income you must protect) — built separately so step one ships the cash+launder loop cleanly.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
