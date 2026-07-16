@@ -9,7 +9,7 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { CONSTANTS, BUSINESSES, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
+import { CONSTANTS, M3, BUSINESSES, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -52,18 +52,26 @@ async function resolveScrutiny(ch, row, client, h) {
   const scr = Math.max(0, scr0 - elapsedHrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR);
   if (scr0 >= CONSTANTS.BUSINESS_RAID_THRESHOLD) {
     // roll over the minutes the front actually SAT above the threshold this window — it may have
-    // cooled below since the last touch, but the hot stretch still gets its roll (min 1 minute,
-    // so spam-washing while hot keeps rolling; capped at 24h so the exponent stays bounded)
+    // cooled below since the last touch, but the hot stretch still gets its roll. The exponent is
+    // the UNFLOORED minute count (capped at 24h): flooring let a 2-minute touch cadence count only
+    // 1 minute per 2 elapsed, halving cumulative raid probability (audit MED-2) — with the real
+    // number, N touches over T minutes total exactly 1−(1−p)^T however you pace them.
     const hrsAbove = Math.min(elapsedHrs, (scr0 - CONSTANTS.BUSINESS_RAID_THRESHOLD) / CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR);
-    const minAbove = Math.max(1, Math.min(1440, Math.floor(hrsAbove * 60)));
+    const minAbove = Math.min(1440, hrsAbove * 60);
     const p = Number(process.env.BUSINESS_RAID_P ?? CONSTANTS.BUSINESS_RAID_P_PER_MIN);
     const pWindow = 1 - Math.pow(1 - p, minAbove);
     const roll = Math.random();
     if (roll < pWindow) {
       const seized = accrued(row);
       const tier = businessTierOf(row.kind, row.tier);
-      const fine = Math.min(Math.floor(tier.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE), Math.max(0, Math.floor(Number(ch.cash))));
-      ch.cash = Number(ch.cash) - fine;
+      // the fine reaches the BANK once the pocket is empty (audit F7: raids were trivially dodged
+      // by banking before touching a hot front — the §10.4 character-cash check covers cash+bank,
+      // so the single ledger row stays exact)
+      const fine = Math.min(Math.floor(tier.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE),
+        Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
+      const fromPocket = Math.min(fine, Math.max(0, Math.floor(Number(ch.cash))));
+      ch.cash = Number(ch.cash) - fromPocket;
+      ch.bank = Number(ch.bank) - (fine - fromPocket);
       row.scrutiny = 0; row.scrutiny_at = new Date(now); row.last_collect_at = new Date(now);
       await client.query('UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at=now() WHERE id=$1', [row.id]);
       if (fine > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fine, reason: 'business:raid' });
@@ -118,8 +126,8 @@ export async function collectBusiness(ch, client, h) {
 // Upgrade a front to the next tier — collects the pending income at the OLD rate first (so an
 // upgrade never wipes uncollected earnings), then pays the next tier's cost and resets the clock.
 export async function upgradeBusiness(ch, businessId, client, h) {
-  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 FOR UPDATE', [businessId])).rows[0];
-  if (!r || r.character_id !== ch.id) throw new GameError('not_yours', "That's not your business.");
+  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
+  if (!r) throw new GameError('not_yours', "That's not your business.");
   const cat = businessOf(r.kind);
   const next = businessTierOf(r.kind, Number(r.tier) + 1);
   if (!next) throw new GameError('maxed', `Your ${cat.name} already runs at full strength.`);
@@ -145,16 +153,18 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
   const amt = Math.floor(Number(amount));
   if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
   if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum wash is $${CONSTANTS.SWAP_MIN}.`);
-  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 FOR UPDATE', [businessId])).rows[0];
-  if (!r || r.character_id !== ch.id) throw new GameError('not_yours', "That's not your business.");
+  // lock scoped to the owner so a rival can't even briefly hold your row (audit LOW-3)
+  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
+  if (!r) throw new GameError('not_yours', "That's not your business.");
   // resolve the scrutiny window first — a raid seizes pending income + fines (the wash itself
   // still proceeds, the §7.1 kitchen precedent: the Bureau's visit doesn't undo your next move)
   const raid = await resolveScrutiny(ch, r, client, h);
   const tier = businessTierOf(r.kind, r.tier);
-  // roll the daily window if it has lapsed, then check remaining capacity
-  const windowOpen = new Date(r.launder_at).getTime();
-  const fresh = Date.now() - windowOpen >= 24 * 3600 * 1000;
-  const usedBefore = fresh ? 0 : Number(r.launder_used);
+  // capacity is a TOKEN BUCKET refilling launderCapDay per 24h continuously — the old fixed
+  // window reset in full at its boundary, letting ~2× the "daily" cap through in minutes at every
+  // boundary straddle (audit MED-1); a bucket bounds any rolling day at cap + refill, no cliff
+  const refill = (Date.now() - new Date(r.launder_at).getTime()) / (24 * 3600 * 1000) * tier.launderCapDay;
+  const usedBefore = Math.max(0, Number(r.launder_used) - Math.max(0, refill));
   const remaining = tier.launderCapDay - usedBefore;
   if (amt > remaining) throw new GameError('capacity', `This ${businessOf(r.kind).name} can wash $${Math.max(0, Math.floor(remaining))} more today.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
@@ -168,14 +178,15 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   ch.heat = Number(ch.heat || 0) + CONSTANTS.BUSINESS_LAUNDER_HEAT; // washing draws the law — but less at your own front
   h.acct.omr = Number(h.acct.omr) + out;
-  // advance the daily window: keep the window start if still open, reset it if it had lapsed
-  await client.query('UPDATE businesses SET launder_used=$2, launder_at=$3 WHERE id=$1',
-    [businessId, usedBefore + amt, fresh ? new Date() : r.launder_at]);
+  // settle the bucket: store the post-refill usage + stamp the refill clock
+  await client.query('UPDATE businesses SET launder_used=$2, launder_at=now() WHERE id=$1',
+    [businessId, usedBefore + amt]);
   // step two: washing draws Bureau SCRUTINY onto the front, pro-rated by how hard you push its
-  // capacity (a full day-cap = BUSINESS_SCRUTINY_PER_CAP points) — resolveScrutiny just stamped
-  // the decay clock, so this bump starts a fresh window
+  // capacity (a full day-cap = BUSINESS_SCRUTINY_PER_CAP points), capped like heat —
+  // resolveScrutiny just stamped the decay clock, so this bump starts a fresh window
   const scrAdd = amt / tier.launderCapDay * CONSTANTS.BUSINESS_SCRUTINY_PER_CAP;
-  await client.query('UPDATE businesses SET scrutiny = scrutiny + $2 WHERE id=$1', [businessId, scrAdd]);
+  await client.query('UPDATE businesses SET scrutiny = LEAST($3, scrutiny + $2) WHERE id=$1',
+    [businessId, scrAdd, CONSTANTS.BUSINESS_SCRUTINY_MAX]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });
   await takeHouse(client, tax);
@@ -195,6 +206,8 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
 export async function shakedownBusiness(ch, victim, businessId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "Can't run extortion while you're to ground — a safehouse is a shield, not a bunker.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', 'No leaning on anyone from a hospital bed.');
+  if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape to lean on anyone.");
   if (Number(ch.energy) < CONSTANTS.SHAKEDOWN_ENERGY) throw new GameError('energy', `Need ${CONSTANTS.SHAKEDOWN_ENERGY} energy to lean on a front.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
@@ -238,8 +251,9 @@ export async function businessesOf(pool, characterId) {
   const rows = (await pool.query('SELECT * FROM businesses WHERE character_id=$1 ORDER BY acquired_at', [characterId])).rows;
   return rows.map((r) => {
     const cat = businessOf(r.kind), tier = businessTierOf(r.kind, r.tier);
-    const fresh = Date.now() - new Date(r.launder_at).getTime() >= 24 * 3600 * 1000;
-    const usedToday = fresh ? 0 : Number(r.launder_used);
+    // mirror launderAtBusiness's token-bucket math so the displayed headroom is what a wash would see
+    const refill = (Date.now() - new Date(r.launder_at).getTime()) / (24 * 3600 * 1000) * (tier?.launderCapDay || 0);
+    const usedToday = Math.max(0, Number(r.launder_used) - Math.max(0, refill));
     return {
       id: r.id, kind: r.kind, name: cat?.name || r.kind, tier: Number(r.tier),
       incomePerHr: tier?.incomePerHr || 0, pending: accrued(r),

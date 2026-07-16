@@ -54,7 +54,9 @@ export async function checkRateLimit({ accountId, agent, path }) {
     ? await take(`a:${accountId}`, AGENT_RATE, AGENT_BURST)
     : await take(`h:${accountId}`, humanRate, humanBurst);
   if (!main.ok) return { retryAfter: main.retryAfter };
-  if (path === '/v1/swap') {
+  // the swap bucket covers EVERY route that drives the AMM curve — business laundering rides the
+  // same pool, so it gets the same 6/min manipulation guard (audit: the launder route bypassed it)
+  if (path === '/v1/swap' || /^\/v1\/business\/[^/]+\/launder$/.test(path)) {
     const swap = await take(`s:${accountId}`, SWAP_RATE, SWAP_BURST);
     if (!swap.ok) return { retryAfter: swap.retryAfter };
   }

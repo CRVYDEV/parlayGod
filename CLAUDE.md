@@ -448,6 +448,26 @@ joined the runEstate wipe). Owner view surfaces `scrutiny`/`raidRisk`/`shakedown
 scrutiny accrual/decay, the threshold gate, a forced raid (seize + ledgered fine), shakedown gates/contest/
 cooldown, and the owner's ~70% remainder. Step-two numbers are founder sign-off levers too.
 
+**Full sim audit (`AUDIT-sim.md`)** — four red-team lenses + a real simulation harness
+(`tools/sim.js`: drives the live server through the public API only, seeds NO value, warps clocks,
+asserts the full §10.4 sweep at the end — run it after any economy change; non-zero exit on drift).
+Result: 8/8 §10.4 checks drift-0 over an entirely earned economy. Fixed in-commit (regressions
+added): jump war-score AB-BA deadlock (the fire fix had missed jump), bounty-sweep lock inversion
+(now per-pot txns, characters-before-pot), anon family contract leaking the family on the streets
+feed (incl. top-ups), dead-code Bureau raids (scrutiny retuned PER_CAP 45 / decay 1hr / cap 100 /
+p .0005 — the risk layer is now reachable; founder lever), raid fine now reaches bank after pocket,
+launder cap now a continuous token bucket (was 2× at every window boundary), raid window
+pacing-neutral (unfloored exponent), `path:` added to the cash vocabulary (every player tripped a
+permanent false §10.4 alarm), launder route joined the swap rate bucket, dead bodyguard now
+releases principals at estate (in-memory killer-as-principal handled), bodyguard hires carry the
+standard 2% house take (was the game's only untaxed unlimited transfer), vig invariant two-sided
+(`reserve not under-funded` catches a crash-lost fundReserve), worker sweep re-reconciles stranded
+fee credits, shakedown hospitalized/health gates, ownership-scoped business locks. NOT patched
+(founder sign-off, ranked in the report): the safehoused-landlord passive stack (~25× the riskiest
+loop), kill EV measured NEGATIVE even vs careless marks (−$75k), PLEX pricing starving the vig,
+AMM depth vs endgame faucets, territory ROI/seizure snowball, business/racket bucket additivity,
+directed-contract squatting, kitchen on-ramp margin.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

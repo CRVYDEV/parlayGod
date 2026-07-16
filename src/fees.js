@@ -69,6 +69,21 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
   finally { client.release(); }
 }
 
+// Worker sweep (audit: link-vs-fee TOCTOU): a fee whose wallet links in the same instant the fee
+// row commits can land uncredited with NO later trigger — event re-delivery is a nonce no-op and
+// the player only re-heals by re-running SIWE. Periodically re-run the reconcile for every
+// uncredited payment whose payer is a linked wallet; reconcileFees's claim-then-credit makes the
+// sweep race-safe and idempotent.
+export async function sweepUncreditedFees(pool) {
+  const rows = (await pool.query(
+    `SELECT DISTINCT f.payer_address, a.account_id FROM fee_payments f
+       JOIN account_persistent a ON lower(a.wallet_address) = lower(f.payer_address)
+      WHERE NOT f.credited`)).rows;
+  let credited = 0;
+  for (const r of rows) credited += (await reconcileFees(pool, r.account_id, r.payer_address)).credited;
+  return { credited };
+}
+
 // Called right after a wallet links (SIWE): sweep any payments this wallet made BEFORE it was
 // linked and grant the entitlements now. Each becomes credited exactly once (the flag guards it).
 export async function reconcileFees(pool, accountId, address) {

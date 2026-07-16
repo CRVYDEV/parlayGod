@@ -309,15 +309,16 @@ assert.equal(bizUp, -600000, 'business:upgrade is a ledgered cash sink');
 assert.equal(bizInc, col1 + colCap + colUp, 'business:income is a ledgered cash faucet (all three collects)');
 
 // ══════════ BUSINESS EMPIRE step two — the risk layer (scrutiny, raids, shakedowns) ══════════
-// the washes above (40k + 10k + 30k against a 50k/day tier-2 cap) drew ~40 scrutiny onto the front
+// the washes above (40k + 10k + 30k against a 50k/day tier-2 cap) drew (0.8+0.2+0.6)×45 = 72
+// scrutiny onto the front — sim-audit retune: max-throughput washing now CROSSES the threshold
 r = await call('GET', '/v1/business', { token });
 let lm = r.body.businesses.find((b) => b.id === bizId);
-assert(lm.scrutiny >= 35 && lm.scrutiny <= 45, `laundering drew scrutiny onto the front (got ${lm.scrutiny})`);
-assert.equal(lm.raidRisk, false, 'still below the raid threshold');
-// scrutiny decays ~2/hr while the front lies quiet
+assert(lm.scrutiny >= 65 && lm.scrutiny <= 75, `laundering drew scrutiny onto the front (got ${lm.scrutiny})`);
+assert.equal(lm.raidRisk, true, 'hard washing puts the front above the raid threshold (the risk layer is ALIVE)');
+// scrutiny decays ~1/hr while the front lies quiet
 await pool.query(`UPDATE businesses SET scrutiny=50, scrutiny_at = now() - interval '10 hours' WHERE id='${bizId}'`);
 lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
-assert(Math.abs(lm.scrutiny - 30) <= 1, `scrutiny decays ~2/hr (50 − 20 ≈ ${lm.scrutiny})`);
+assert(Math.abs(lm.scrutiny - 40) <= 1, `scrutiny decays ~1/hr (50 − 10 ≈ ${lm.scrutiny})`);
 // below the threshold, even a FORCED roll never raids (BUSINESS_RAID_P is the test-only env knob)
 process.env.BUSINESS_RAID_P = '1';
 await pool.query(`UPDATE businesses SET scrutiny=30, scrutiny_at=now(), last_collect_at = now() - interval '2 hours' WHERE id='${bizId}'`);
@@ -338,7 +339,15 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
   -60000, 'business:raid is a ledgered §10.4 cash sink');
 lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
 assert.equal(lm.scrutiny, 0, 'the raid cleared the scrutiny (the heat is off)');
+// the fine reaches the BANK once the pocket is empty (audit F7: banking no longer dodges it)
+await seed("cash=100, bank=1000000");
+await pool.query(`UPDATE businesses SET scrutiny=100, scrutiny_at = now() - interval '1 hour' WHERE id='${bizId}'`);
+r = await call('POST', '/v1/business/collect', { token });
+assert.equal(r.body.raids?.[0]?.fine, 60000, 'second raid fined the full 10% despite an empty pocket');
+const afterBankFine = await meOf(token);
+assert(afterBankFine.cash === 0 && Math.abs(afterBankFine.bank - (1000000 - 59900)) < 2, 'pocket drained first, the bank covered the rest');
 delete process.env.BUSINESS_RAID_P;
+await seed("cash=2000000"); // restore the pocket for the gang-founding + shakedown blocks below
 
 // ── shakedown: a rival extorts a front for 30% of its PENDING income (PvP, two-party) ──
 await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '10 hours', shakedown_at=NULL WHERE id='${bizId}'`);

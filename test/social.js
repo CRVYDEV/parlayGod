@@ -554,7 +554,9 @@ const barryCash0 = (await meOf(barry.token)).cash;
 r = await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token });
 assert.equal(r.code, 200, 'paula hired protection');
 assert.equal((await meOf(paula.token)).cash, 85000, 'paula paid the listed rate');
-assert.equal((await meOf(barry.token)).cash, barryCash0 + 15000, 'barry pocketed it up front (a ledgered transfer)');
+// sim-audit fix: hires now carry the standard 2% house take (1% dev + 1% street tax) — an untaxed
+// unlimited P2P transfer was the cheapest value pipe in the game. Barry nets 98%.
+assert.equal((await meOf(barry.token)).cash, barryCash0 + 14700, 'barry pocketed 98% up front (2% house take, a ledgered transfer)');
 assert((await meOf(paula.token)).guardSeconds > 0, 'under protection');
 assert.equal((await call('POST', `/v1/bodyguard/hire/${barry.id}`, { token: paula.token })).body.error, 'guarded', 'one bullet-catcher at a time');
 // the earnable shield burns BEFORE real-ETH insurance — and one contract stops ONE bullet
@@ -590,6 +592,16 @@ for (let i = 0; i < 40 && !npcAbsorbed; i++) {
 }
 assert(npcAbsorbed, "gina took the contractor's bullet");
 assert((await meOf(gina.token)).hospSeconds > 0, 'gina is in the hospital, carla is not in the ground');
+// sim-audit regression (F8): a DEAD guard releases his principals — protection was already void,
+// but the stale pointer also blocked a replacement hire for the rest of the paid window
+const doug = await mk('Doomed Doug');
+assert.equal((await call('POST', '/v1/bodyguard/offer', { token: doug.token, body: { price: 15000 } })).code, 200, 'doug lists himself');
+await seedCh(carla.id, "hosp_until=NULL, cash=100000, loc='docks'");
+assert.equal((await call('POST', `/v1/bodyguard/hire/${doug.id}`, { token: carla.token })).code, 200, 'carla hired doug');
+assert.equal((await whack(doug.id)).kill, true, 'doug got clipped');
+assert.equal((await meOf(carla.token)).guardedBy, null, "the dead guard's contract is released at the estate");
+await seedCh(gina.id, 'hosp_until=NULL');
+assert.equal((await call('POST', `/v1/bodyguard/hire/${gina.id}`, { token: carla.token })).code, 200, 'carla can hire a live guard immediately');
 
 // ── M8: the Tailor & Engraver — vanity/identity $OMR sinks (display-only, ledgered burns) ──
 await pool.query(`UPDATE account_persistent SET omr = 100 WHERE account_id = (SELECT account_id FROM characters WHERE id='${don.id}')`);
@@ -664,6 +676,22 @@ r = await call('POST', '/v1/contracts/peek', { token: barry.token });
 assert.equal(r.code, 200, 'barry pays again (each whisper costs)');
 names = r.body.contracts.find((c) => c.kind === 'hospitalize').funders.map((f) => f.name);
 assert(names.includes('The New Fabrizi (family)'), 'a family stake is attributed to the family');
+// sim-audit regression (F2): an ANON family contract must not name the family on the PUBLIC
+// streets feed either — the emit outed what the 3 $OMR bought (the board already hid it)
+{
+  const { bus } = await import('../src/game.js');
+  const feed = [];
+  const spy = (e) => feed.push(e);
+  bus.on('streets', spy);
+  const anonMark = await mk('Anon Mark');
+  await seedCh(don.id, 'cash=100000');
+  assert.equal((await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 50000 } })).code, 200, 'don topped up the treasury');
+  await seedOmr(don.id, 10);
+  assert.equal((await call('POST', `/v1/gangs/contract/${anonMark.id}`, { token: don.token, body: { amount: 600, kind: 'kill', anon: true } })).code, 200, 'anon family contract posted');
+  bus.off('streets', spy);
+  const evt = feed.find((e) => e.type === 'bounty' && e.on === 'Anon Mark');
+  assert(evt && !('family' in evt), 'the public streets feed does NOT name the family behind an anon pot');
+}
 // nothing on your head → no charge, just the good news
 assert.equal((await call('POST', '/v1/contracts/peek', { token: gina.token })).body.error, 'no_contracts', 'silence is free (checked before any charge)');
 
