@@ -487,6 +487,25 @@ CREATE TABLE IF NOT EXISTS vendettas (
   PRIMARY KEY (avenger_account, target_account)
 );
 
+-- CREW HEISTS (THE BIG SCORE): the game's first co-op content. One row per job; members join
+-- off the open board; the leader executes when full. The stake is sunk at plan (refunded only
+-- on pre-execution disband); the take/jail/rat outcomes are ledgered per member (heist:crew*).
+CREATE TABLE IF NOT EXISTS crew_heists (
+  id TEXT PRIMARY KEY,
+  job TEXT NOT NULL,
+  leader_character TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'planning',   -- planning | done | abandoned
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS crew_heist_members (
+  heist_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'crew',         -- leader | crew (flavor in step one)
+  ratted BOOLEAN NOT NULL DEFAULT false,     -- the silent flag — never surfaced by name
+  PRIMARY KEY (heist_id, character_id)
+);
+CREATE INDEX IF NOT EXISTS ix_heist_members_char ON crew_heist_members (character_id);
+
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).
 CREATE TABLE IF NOT EXISTS npc_hits (
