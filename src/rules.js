@@ -723,6 +723,19 @@ export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tie
 // still applies under the bonus, so a FIRST revenge nets exactly full base rep (2x / 2 priors)
 // and mutual kill-trading decays — the anti-farm is arithmetic, not a special case.
 export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
+// CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
+// alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
+// Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —
+// a NEW faucet: numbers are founder sign-off levers (BALANCE.md addendum) — sim before retuning.
+export const HEIST_JOBS = [
+  { id: 'payroll',  name: 'The Payroll Office', crew: 2, lvl: 8,  base: 0.65, stake: 10000, takePerLvl: [4400, 7000],   jailS: 120, rep: 30 },
+  { id: 'vault',    name: 'The Bank Vault',     crew: 3, lvl: 20, base: 0.50, stake: 30000, takePerLvl: [11000, 17000], jailS: 240, rep: 80 },
+  { id: 'fedtrain', name: 'The Reserve Train',  crew: 4, lvl: 40, base: 0.38, stake: 80000, takePerLvl: [26000, 37000], jailS: 420, rep: 200 },
+];
+export const heistJobOf = (id) => HEIST_JOBS.find((j) => j.id === id) || null;
+export const HEIST_PLAN_TTL_MS = 6 * 3600 * 1000;  // a plan goes stale after 6h (sweep refunds a living leader)
+export const HEIST_RAT_BPS = 5000;                  // the informant's payout: 50% of the stake (self-rat is -EV)
+export const HEIST_LEADER_WEIGHT = 1.2;             // the leader's split weight (fronted the stake)
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to

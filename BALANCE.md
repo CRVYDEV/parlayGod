@@ -143,6 +143,17 @@ Resolution of each item (all recs implemented same day; suite 10/10 + sim drift-
 
 **Status: every KEEP row above is production balance. The economy is signed.**
 
+## Post-signing addendum — Crew Heists (new faucet, sign-off pending)
+
+`HEIST_JOBS` (rules tail) adds the game's first co-op faucet: per-member EV targets ~1.3–2.1× the
+solo heist (the `1200×lvl`/8h anchor) with real jail risk, sharing the solo `heist_at` cooldown so
+total Score throughput per player is unchanged in FREQUENCY — only the per-window EV rises with
+coordination + risk. Anti-abuse by construction: pot scales with AVERAGE crew level (alt-dragging
+shrinks everyone's take), the stake is sunk at execution, and the rat payout is half the stake
+(self-ratting is −EV). Levers: per-job `base/stake/takePerLvl/jailS`, `HEIST_RAT_BPS`,
+`HEIST_LEADER_WEIGHT`, `HEIST_PLAN_TTL_MS`. **DECIDE at next sim pass** — run `node tools/sim.js`
+and compare the crime-curve rows before tuning.
+
 ## Appendix — the original DECIDE list (for the record)
 
 - **D1 — Should killing pay against mid-tier marks?** Today a kill costs $67k–$390k in ammo

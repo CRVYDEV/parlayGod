@@ -12,6 +12,7 @@ import { levelOf, dayOf, CONSTANTS } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
+import { sweepStaleHeists } from './heists.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -148,6 +149,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       if (fs.credited > 0) console.log(`💳 fees: reconciled ${fs.credited} stranded payment(s) to linked wallets`);
       // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
       await pool.query('DELETE FROM vendettas WHERE expires_at <= now()');
+      const hs = await sweepStaleHeists(pool);
+      if (hs.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
       if (dayOf() !== lastInvariantDay) {
         lastInvariantDay = dayOf();
         // prune idempotency keys older than a day (incl. any reservation orphaned by a

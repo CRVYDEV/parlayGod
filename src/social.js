@@ -1105,8 +1105,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
+  // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds)
+  await client.query("UPDATE crew_heists SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [victim.id]);
   // a dead guard's principals are released: bodyguardAbsorbs already refuses a dead guard, but the
   // stale pointer also BLOCKED hiring a replacement for the rest of the window (paid, unprotected,
   // locked out — audit F8). One principal row may be IN-MEMORY in this very transaction: the

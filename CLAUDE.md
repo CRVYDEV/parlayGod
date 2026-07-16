@@ -573,6 +573,29 @@ active vendettas both directions). Worker sweeps lapsed rows (reads filter anywa
 inheritance + notification, ledger, waiver, 66-rep settlement (2× with 0 priors), the reverse debt,
 lapsed-grants-nothing. TTL/bonus are cosmetic-axis founder levers (outside the signed economy).
 
+**Crew heists (THE BIG SCORE, step one) — BUILT** (`src/heists.js`, `test/heists.js` — the 11th
+suite file; design `omerta-crew-heists-design.md`). The game's first CO-OP content: a leader picks
+a job off `HEIST_JOBS` (rules tail: payroll 2-crew lvl8 → vault 3 lvl20 → fedtrain 4 lvl40) and
+fronts the STAKE (`heist:crew:stake` sink, refunded whole only on pre-execution disband/stale-sweep
+to a LIVING leader — corpse stakes stay sunk); crew joins off the open board (`GET /v1/heists`;
+level-gated, one active heist per character, shares the solo `heist_at` cooldown); leader-only
+execute rolls ONCE for everyone — `P = base + (avg crew stats − 30)/1000` clamp [.15,.92],
+rng-audited. Success: pot = `rand(takePerLvl) × AVG crew level` (alt-dragging shrinks everyone's
+take), split evenly with `HEIST_LEADER_WEIGHT` 1.2× to the leader, each share a per-character
+`heist:crew` faucet (rides the existing `heist` cash-vocabulary prefix — check (a) reconciles);
+fail: the WHOLE crew eats `jailS` together. **THE RAT**: any member silently flags during planning
+(`POST /v1/heists/:id/rat`) — a ratted job auto-blows: the rat walks with `HEIST_RAT_BPS` (50% of
+the stake, `heist:crew:rat` faucet — self-ratting is −EV by construction), the rest eat DOUBLE
+jail, and the feed only ever says "somebody talked" (the rat is never named). Lock discipline:
+leader (withCharacter) → member rows sorted → heist row; one-active-heist makes concurrent
+executes disjoint (acyclic); members are paid/jailed by direct row updates under lock (never
+in-memory — no clobber). Estate: memberships wiped, dead-leader plans abandoned. Worker sweeps
+stale plans (per-heist txn, leader-before-heist lock order). The board uses two flat queries
+(pg-mem can't parse correlated subqueries — the /v1/gangs precedent). NEW FAUCET: numbers are
+sign-off levers (BALANCE.md addendum); per-member EV ~1.3–2.1× solo heist at the same cadence.
+Step two (deferred): role-specific checks, timed windows, inside jobs vs player businesses, a
+fence phase. Suite 11/11 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

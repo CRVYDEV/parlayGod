@@ -16,6 +16,7 @@ import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Business from './business.js';
 import * as Casino from './casino.js';
+import * as Heists from './heists.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -313,6 +314,23 @@ export async function buildServer() {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
   });
+
+  // CREW HEISTS — THE BIG SCORE: plan, crew up off the board, execute together (or rat).
+  app.get('/v1/heists', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
+    return Heists.heistBoard(pool, cid);
+  });
+  app.post('/v1/heists/plan', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.planHeist(ch, req.body?.job, client, h)));
+  app.post('/v1/heists/:id/join', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, client, h)));
+  app.post('/v1/heists/:id/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.leaveHeist(ch, req.params.id, client, h)));
+  app.post('/v1/heists/:id/rat', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.ratHeist(ch, req.params.id, client, h)));
+  app.post('/v1/heists/:id/execute', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.executeHeist(ch, req.params.id, client, h)));
 
   // THE GAMBLING DEN (Neon Mile, cash only — never $OMR): street craps + the daily Numbers.
   app.post('/v1/casino/dice', { preHandler: auth }, async (req) =>
