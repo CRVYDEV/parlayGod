@@ -514,6 +514,20 @@ export const CONSTANTS = {
   // the on-ramp without touching the sim-audited mid/endgame deal curve. Founder sign-off lever.
   KITCHEN_ONRAMP_BONUS: 0.5,
 };
+// THE GAMBLING DEN — player-vs-house games at the Neon Mile. CASH ONLY (never $OMR — the
+// regulatory line), server-rolled + rng_audit'd, every stake/payout ledgered casino:* so §10.4
+// reconciles per character; 1% of every stake goes to the street-tax pool (the buyback loop),
+// the rest of the house edge burns. Dice = the real pass-line (edge ~1.41%, entertainment-thin);
+// the Numbers pays the historically accurate 600:1 on 999:1 odds (~40% edge — a daily flutter).
+// All numbers are founder sign-off levers. Design: omerta-gambling-den-design.md.
+export const CASINO = {
+  DISTRICT: 'neon',            // the vice district — travel there to play
+  MIN_BET: 100, MAX_BET: 250000, DICE_NERVE: 1,
+  NUMBERS_MIN: 10, NUMBERS_MAX: 1000, NUMBERS_PAYOUT: 600,
+};
+// the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
+// unpredictable without the seed, verifiable after the fact)
+export const numbersDrawOf = (day = dayOf()) => Math.floor(hash01(`numbers:${day}:${MARKET_SEED}`) * 1000);
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
 export const trimOf=(id)=>TRIMS.find(t=>t.id===id)||TRIMS[1];

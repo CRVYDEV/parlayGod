@@ -506,6 +506,25 @@ trade-rank 1 so the sim-audited mid/endgame deal curve is untouched. Tests updat
 social (directed floor + window cap + outsider-collects + seize premium) and growth (corner
 premium). Suite 9/9 + sim drift-0.
 
+**The Gambling Den (step one) — BUILT** (`src/casino.js`, `test/casino.js`; design
+`omerta-gambling-den-design.md`). Player-vs-house games at the Neon Mile — the recurring,
+voluntary, entertainment-priced cash sink the genre demanded. HARD RULES baked in: **CASH ONLY,
+never $OMR** (the regulatory line — no den route touches `account_persistent.omr`); every roll
+server-side + `rng_audit`'d; every stake a §10.4 sink (`casino:bet:<game>`), every payout a faucet
+(`casino:win:<game>`), both character_id'd so check (a) reconciles; 1% of every stake → street-tax
+pool via takeHouse (the buyback/yield loop), the rest of the edge burns. Games: **street craps**
+(`POST /v1/casino/dice` — the full pass line resolved in ONE stateless call, pays 1:1, edge ~1.41%,
+costs 1 nerve, $100–$250k table) and **the Numbers** (`POST /v1/casino/numbers` — pick 0–999,
+$10–$1k, ONE ticket per street per day in `numbers_tickets`, drawn from
+`hash01('numbers:'+day+':'+MARKET_SEED)` — the §7.11 machinery — pays the historically accurate
+600:1 ≈ 40% edge; `POST /v1/casino/numbers/claim` settles matured tickets lazily + idempotently;
+`GET /v1/casino` is the front window). `CASINO` block in the rules tail = founder sign-off levers.
+`test/casino.js` (10th suite file, wired into npm test) proves: district/limit/jail gates, a
+60-round craps session with stakes/payouts/1%-street-cut ledgered EXACTLY, $OMR untouched across
+the session, ticket lifecycle (one/day, early-claim refused, 600:1 hit, losing settle, idempotent),
+and the per-character §10.4 identity + vocabulary. Step two (deferred): PvP dice (escrowed,
+5% rake), fight fixing (city-event tie-in), casino-business rakeback, the high-stakes room.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
