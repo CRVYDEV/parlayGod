@@ -508,6 +508,11 @@ export const CONSTANTS = {
   // (a §10.4 bucket transfer, fund → amm; nothing minted, price unmoved, depth compounds with
   // real activity). Skipped (falls through to the buyback) when the fund can't match the pair.
   AMM_LP_BPS: 2500,
+  // KITCHEN ON-RAMP (sim-audit): the entry-tier margin measured ~$243/cycle — the first risky
+  // loop barely beat petty crime. Rank-0 dealers get the CORNER PREMIUM on gross (+50%): small
+  // quantities move at street prices. Phases out automatically at trade-rank 1, so it subsidizes
+  // the on-ramp without touching the sim-audited mid/endgame deal curve. Founder sign-off lever.
+  KITCHEN_ONRAMP_BONUS: 0.5,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
@@ -581,6 +586,15 @@ export const M3 = {
   FIRE_ENERGY: 40, KILL_HOSP_MS: 5*60*1000, CHOP_RATE: 0.40,
   BOUNTY_MIN: 500, BUST_FAIL_JAIL_S: 180,
   BOUNTY_DEFAULT_TTL_H: 72, BOUNTY_MAX_TTL_H: 168, // contract board: default 3d, max 7d
+  // sim-audit F1 (directed squatting): exclusivity is a PREMIUM product — a directed pot takes a
+  // real stake (DIRECTED_MIN, 20× the open-pot minimum) and the window caps at DIRECTED_MAX_H
+  // (was the full 7-day TTL). Combined with kill-pays-any-killer (claimBounty), a $500 friendly
+  // squat on your own head is dead: it now takes $10k+ and FUNDS whoever actually lands the kill.
+  DIRECTED_MIN: 10000, DIRECTED_MAX_H: 24,
+  // sim-audit F5 (seizure snowball): taking a district WITH a productive operation costs a war
+  // premium scaled to what's being taken — TERRITORY_SEIZE_BPS of the operation's cumulative
+  // build cost (seizing a maxed racket is no longer ~18× cheaper than building one).
+  TERRITORY_SEIZE_BPS: 5000,
   WEEKLY_STANDING: 15000, WEEKLY_OMR: 5,
   // M7 Phase 2 assassin rep (a STATUS ladder — no gameplay power, so it doesn't touch
   // sim-audited balance): a kill earns vicLvl × REP_PER_LVL feared-rep, only from targets at
@@ -668,12 +682,18 @@ export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tie
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to
 // the victor when the district is seized — so families fight wars over income streams, not just a
 // one-time treasury cut. New/tunable numbers — sim + founder sign-off before production.
+// sim-audit F5 retune: marginal ROI now TAPERS up the ladder (t1 ~192%/day → t2 ~115% → t3 ~106%)
+// instead of staying flat — max-tier-everything is no longer strictly correct, and the entry tier
+// stays the hook. Founder sign-off levers, like everything on this ladder.
 export const TERRITORY_RACKETS = [
-  { tier: 1, name: 'Numbers Racket',    cost: 50000,  incomePerHr: 4000 },
-  { tier: 2, name: 'Protection Racket', cost: 200000, incomePerHr: 16000 },
-  { tier: 3, name: 'Smuggling Front',   cost: 750000, incomePerHr: 60000 },
+  { tier: 1, name: 'Numbers Racket',    cost: 50000,   incomePerHr: 4000 },
+  { tier: 2, name: 'Protection Racket', cost: 250000,  incomePerHr: 16000 },
+  { tier: 3, name: 'Smuggling Front',   cost: 1000000, incomePerHr: 60000 },
 ];
 export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tier === Number(tier)) || null;
+// cumulative build cost of an operation at `tier` — the basis for the seizure war premium
+export const territoryBuildCost = (tier = 0) =>
+  TERRITORY_RACKETS.filter((t) => t.tier <= Number(tier)).reduce((a, t) => a + t.cost, 0);
 // Business Empire — the PREMIUM, acquired-later personal front layer (distinct from the flat
 // mid-game ASSETS/RACKETS). Each kind is level-gated ("acquired later"), with a tier ladder:
 //   cost          — cash to BUY tier 1 / UPGRADE to the next tier

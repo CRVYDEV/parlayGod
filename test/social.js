@@ -340,13 +340,18 @@ assert.equal(donMe.hitmanRep, 33, 'and rep is unchanged');
 
 // directed contract: Vito names Don as the hitman → exclusive window + a 1.5x rep bonus on the kill
 const marked = await mk('Marked Mario'); await seedCh(marked.id, 'respect=400'); // level 11
-r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id, reason: 'Make it clean.' } });
+await seedCh(vito.id, 'cash=200000');
+// sim-audit F1: exclusivity takes a real stake — below DIRECTED_MIN the direction is refused
+r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id } });
+assert.equal(r.body.error, 'directed_min', 'a cheap pot cannot reserve a mark ($10k floor)');
+r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'kill', hitman: don.id, reason: 'Make it clean.', exclusiveHours: 999 } });
 assert.equal(r.code, 200, 'directed contract posted'); assert.equal(r.body.hitman, don.id, 'named hitman recorded');
 const dc = (await call('GET', '/v1/contracts', { token: don.token })).body.contracts.find((c) => c.target.id === marked.id);
 assert.equal(dc.directedTo, donName, 'the board shows the named hitman during the exclusive window');
 assert(dc.opensInSeconds > 0, 'and when it opens to everyone');
+assert(dc.opensInSeconds <= 24 * 3600, 'the exclusive window caps at DIRECTED_MAX_H (24h), not the full TTL');
 k = await whack(marked.id);
-assert(k.kill && k.bounty === 3000, 'the named hitman collects the directed contract');
+assert(k.kill && k.bounty === 12000, 'the named hitman collects the directed contract');
 assert.equal(k.hitman.repGain, 49, 'directed kill pays the 1.5x bonus: floor(11×3×1.5)');
 assert.equal((await meOf(don.token)).hitmanRep, 82, 'rep 33 + 49');
 
@@ -368,19 +373,23 @@ assert(lb.season.some((e) => e.name === donName && e.kills === donMe.seasonKills
 // audit M2: a directed post onto an EXISTING live pot is rejected (direction is the first poster's)
 r = await call('POST', `/v1/streets/${don.id}/bounty`, { token: vito.token, body: { amount: 1000, kind: 'kill' } }); // open pot on Don
 assert.equal(r.code, 200, 'open contract on Don');
-r = await call('POST', `/v1/streets/${don.id}/bounty`, { token: vito.token, body: { amount: 1000, kind: 'kill', hitman: mook.id } });
+r = await call('POST', `/v1/streets/${don.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'kill', hitman: mook.id } });
 assert.equal(r.code, 400, 'cannot direct a mark that already has a standing contract');
 assert.equal(r.body.error, 'directed_exists', 'clear error, not a silent drop');
 await call('POST', `/v1/contracts/${don.id}/kill/cancel`, { token: vito.token }); // clean up
 
-// audit M3: an OUTSIDER killing the mark inside the exclusive window REFUNDS the poster (not a burn)
+// sim-audit F1 (squat resistance): an OUTSIDER killing the mark inside the exclusive window now
+// COLLECTS the kill pot — the mark is dead, the pot pays whoever did the job (the named hitman
+// keeps only the rep bonus). A confederate's cheap pot on your own head now FUNDS your enemies.
 const wanted = await mk('Wanted Wally'); await seedCh(wanted.id, 'respect=400'); // level 11
-r = await call('POST', `/v1/streets/${wanted.id}/bounty`, { token: vito.token, body: { amount: 4000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } });
+await seedCh(vito.id, 'cash=100000');
+r = await call('POST', `/v1/streets/${wanted.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } });
 assert.equal(r.code, 200, 'directed at Mook');
 const vitoPreBurn = (await meOf(vito.token)).cash;
 k = await whack(wanted.id); // DON (not the named Mook) kills Wally while the window is open
-assert(k.kill, 'outsider kills the mark'); assert.equal(k.bounty, 0, "outsider can't collect a directed contract in its window");
-assert.equal((await meOf(vito.token)).cash, vitoPreBurn + 4000, "the poster's escrow is REFUNDED, not burned, on an outsider kill");
+assert(k.kill, 'outsider kills the mark');
+assert.equal(k.bounty, 12000, 'the outsider COLLECTS the kill pot (kill trumps courtesy — squatting pays your enemies)');
+assert.equal((await meOf(vito.token)).cash, vitoPreBurn, "the poster's stake went to the killer, not back to the poster");
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${wanted.id}'`)).rows[0].n), 0, 'the directed pot is settled');
 
 // audit L1 / anti-abuse: an AGENT tallies kills but earns NO feared-rep and is off BOTH boards
@@ -447,7 +456,7 @@ assert.equal((await meOf(insured.token)).respawnTokens, 0, 'the token was consum
 // kill — else refundPot's SQL credit is clobbered by persistCharacter (§10.4 drift + stolen escrow)
 const rival = await mk('Rival Rick'); await seedCh(rival.id, 'respect=100'); // level ~6
 await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
-assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: hirer.token, body: { amount: 3000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } })).code, 200, 'hirer funds a directed contract on the rival');
+assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: hirer.token, body: { amount: 12000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } })).code, 200, 'hirer funds a directed contract on the rival');
 let refundOk = false;
 for (let i = 0; i < 40 && !refundOk; i++) {
   await seedCh(hirer.id, 'npchit_at=NULL'); // let cash ride (do NOT re-seed) so the kill-shot delta is measurable
@@ -455,7 +464,7 @@ for (let i = 0; i < 40 && !refundOk; i++) {
   const before = (await meOf(hirer.token)).cash;
   const res = (await call('POST', `/v1/streets/${rival.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   if (res.killed) {
-    assert.equal((await meOf(hirer.token)).cash, before - 1000000 + 3000, 'the $1M fee burned AND the $3000 exclusive escrow refunded (no clobber)');
+    assert.equal((await meOf(hirer.token)).cash, before - 1000000 + 12000, 'the $1M fee burned AND the $12000 exclusive escrow refunded (no clobber)');
     refundOk = true;
   }
 }
@@ -764,7 +773,9 @@ const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name:
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: 300000 } })).code, 200, 'raider funds the war chest');
 r = await call('POST', '/v1/districts/docks/seize', { token: raider.token });
 assert.equal(r.code, 200, 'the raider seized the docks');
-const raiderSeize = r.body.garrison;
+// sim-audit F5: the seizure carried a war premium of 50% of the t2 operation's build cost
+assert.equal(r.body.premium, Math.floor((50000 + 250000) * 0.5), 'seizing a built district costs the operation premium');
+const raiderSeize = r.body.cost;
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE district_id='docks' AND owner_gang='${rg}'`)).rows[0].n), 1, 'the operation transferred to the victor with the turf');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM territory_rackets WHERE owner_gang='${gangA}'`)).rows[0].n), 0, 'the loser no longer owns it');
 // the victor now earns the operation's income at the tier-2 rate

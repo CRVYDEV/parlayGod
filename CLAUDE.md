@@ -489,6 +489,23 @@ can't match the pair. Tests: social (in-transit + unbonding looted on a kill, re
 window, scaled safehouse quote+charge), economy (unbond→release whole, deposit clears, LP carve +
 fund pairing + k growth), vig (market quotes, mint at 24 not 5, respawn gated at 240).
 
+**Sim-audit balance drop 2 (founder-directed; numbers are sign-off levers).** Three fixes from the
+audit's ranked list: **(1) directed-contract squatting** — naming a hitman now takes `DIRECTED_MIN`
+($10k, 20× the open floor) and the exclusive window caps at `DIRECTED_MAX_H` (24h, was the full
+7-day TTL); decisively, `claimBounty` now pays a completed KILL to *whoever* did the job even inside
+the window (`p.kind !== 'kill'` guards the skip — hospitalize pots stay exclusive; the named hitman
+keeps the 1.5× rep bonus; runEstate's exclusive-refund still covers NPC/mod deaths where no player
+claimed). A friendly squat pot now funds the mark's enemies. **(2) territory ROI taper + seizure
+premium** — `TERRITORY_RACKETS` t2 $250k / t3 $1M (marginal ROI 192%→115%→106%/day instead of flat),
+`territoryBuildCost` helper, and `seizeDistrict` adds a war premium of `TERRITORY_SEIZE_BPS` (50%)
+of the operation's cumulative build cost on top of the garrison outbid (ledgered in the same
+`turf:seize:` sink; only the garrison part becomes the new defense budget; response now
+`{garrison, premium, cost}`). **(3) kitchen on-ramp** — rank-0 dealers get `KITCHEN_ONRAMP_BONUS`
+(+50%) on deal gross (the "corner premium", response flag `cornerPremium`), phasing out at
+trade-rank 1 so the sim-audited mid/endgame deal curve is untouched. Tests updated/added across
+social (directed floor + window cap + outsider-collects + seize premium) and growth (corner
+premium). Suite 9/9 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
