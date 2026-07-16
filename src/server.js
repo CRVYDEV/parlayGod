@@ -17,6 +17,7 @@ import * as Territory from './territory.js';
 import * as Business from './business.js';
 import * as Casino from './casino.js';
 import * as Heists from './heists.js';
+import * as Convoy from './convoy.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -314,6 +315,25 @@ export async function buildServer() {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
   });
+
+  // SMUGGLING CONVOYS — bulk goods in transit: load, guard, ship; ambush someone else's.
+  app.get('/v1/convoys', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
+    return Convoy.convoyBoard(pool, cid);
+  });
+  app.post('/v1/convoy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.openConvoy(ch, req.body?.to, req.body?.goodId, req.body?.qty, client, h)));
+  app.post('/v1/convoy/load', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.loadConvoy(ch, req.body?.goodId, req.body?.qty, client, h)));
+  app.post('/v1/convoy/depart', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.departConvoy(ch, req.body?.guards, client, h)));
+  app.post('/v1/convoy/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.cancelConvoy(ch, client, h)));
+  app.post('/v1/convoy/:id/ambush', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.ambushConvoy(ch, req.params.id, client, h)));
+  app.post('/v1/convoy/:id/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.collectConvoy(ch, req.params.id, client, h)));
 
   // CREW HEISTS — THE BIG SCORE: plan, crew up off the board, execute together (or rat).
   app.get('/v1/heists', { preHandler: auth }, async (req) => {

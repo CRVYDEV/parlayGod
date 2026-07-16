@@ -596,6 +596,28 @@ sign-off levers (BALANCE.md addendum); per-member EV ~1.3–2.1× solo heist at 
 Step two (deferred): role-specific checks, timed windows, inside jobs vs player businesses, a
 fence phase. Suite 11/11 + sim drift-0.
 
+**Smuggling convoys (step one) — BUILT** (`src/convoy.js`, `test/convoy.js` — the 12th suite file;
+design `omerta-convoys-design.md`). Bulk goods on a real clock: `POST /v1/convoy` opens a shipment
+at your district loading FROM the trunk (then `/load` — refill from the market between loads: the
+manifest beats the trunk cap, the bulk unlock), `POST /v1/convoy/depart {guards}` picks a
+`CONVOY.GUARD_TIERS` tier (none/crew $5k/heavy $20k — `convoy:guards` cash sink; the tier is never
+public) and rides for `CONVOY.MS` (30 min; `CONVOY_MS` env is TEST-ONLY, the SEARCH_MS pattern).
+The streets feed + `GET /v1/convoys` announce route + a VALUE BAND (never the manifest). ONE
+ambush per convoy (win or lose): `POST /v1/convoy/:id/ambush` — energy + ammo (`convoy:` joined
+the ammo vocabulary) + heat; owner/family/safehoused/jailed/hospitalized blocked; contest
+`muscle + speed/2 + rand(30)` vs `guards + CONVOY.TURF_DEF (route touches the owner family's
+turf) + rand(30)`; win takes goods up to the HIJACKER's trunk capacity (a pure ownership
+transfer — goods aren't §10.4 currency; the remainder rolls on), lose = guards hospitalize the
+attacker (`FAIL_HOSP_MS`). Arrival is lazy (`arrives_at`); the owner collects AT the destination,
+trunk-capacity at a time. The ambush never touches the OWNER's character row (the manifest is the
+contested object) — locks are characters → convoys, acyclic. Estate: a dead shipper's freight
+scatters (`status='lost'`, cargo deleted). **pg-mem quirk discovered here: arithmetic UPDATEs on
+INT columns (`SET qty = qty - $n`) mis-evaluate to `0 − n` — use absolute writes computed in JS
+(the setCargo DELETE+INSERT precedent); NUMERIC columns are fine.** Only new money flow:
+`convoy:guards` (cash vocabulary). Numbers are sign-off levers. Step two (deferred): destination
+tolls to the holder's treasury, degrading multi-ambush, insured freight, NPC trucking. Suite
+12/12 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

@@ -1109,6 +1109,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds)
   await client.query("UPDATE crew_heists SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [victim.id]);
+  // a dead shipper's freight is scattered on the highway — goods die with the street
+  await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
+  await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);
   // a dead guard's principals are released: bodyguardAbsorbs already refuses a dead guard, but the
   // stale pointer also BLOCKED hiring a replacement for the rest of the window (paid, unprotected,
   // locked out — audit F8). One principal row may be IN-MEMORY in this very transaction: the
