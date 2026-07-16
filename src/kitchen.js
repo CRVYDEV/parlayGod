@@ -119,8 +119,13 @@ export async function deal(ch, drugId, qty, client, h) {
   const nerveCost = Math.max(1, Math.ceil(n / 10));
   if (Number(ch.nerve) < nerveCost) throw new GameError('nerve', `Moving ${n} units takes ${nerveCost} nerve.`);
   const ev = cityEventOf(dayOf());
+  // sim-audit KITCHEN ON-RAMP: rank-0 dealers earn the CORNER PREMIUM on gross (+50%) — small
+  // quantities move at street prices, so the first risky loop beats petty crime. Phases out
+  // automatically at trade-rank 1; the sim-audited mid/endgame deal curve is untouched.
+  const rankIdx = tradeRankIdx(Number(ch.trade_rep || 0));
+  const cornerPremium = rankIdx === 0 ? (CONSTANTS.KITCHEN_ONRAMP_BONUS || 0) : 0;
   const unit = d.base * demandOf(drugId, ch.loc) * Number(s.quality || 1) * (ev.drugDemand || 1)
-    * (1 + TRADE_RANKS[tradeRankIdx(Number(ch.trade_rep || 0))].bonus);
+    * (1 + TRADE_RANKS[rankIdx].bonus) * (1 + cornerPremium);
   const gross = Math.floor(unit * n);
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
@@ -136,6 +141,7 @@ export async function deal(ch, drugId, qty, client, h) {
   await h.bumpDaily(client, ch.id, 'deal');
   await bumpFamilyTask(client, h, 'deal', n);
   return { ok: true, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
+    cornerPremium: cornerPremium > 0,
     tradeRank: tradeRankIdx(Number(ch.trade_rep)) };
 }
 

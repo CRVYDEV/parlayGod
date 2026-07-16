@@ -77,6 +77,8 @@ const repBefore = me.tradeRep, heatBefore = me.heat;
 r = await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 10 } });
 assert.equal(r.code, 200, 'deal closed');
 assert(r.body.earned > 0, 'the street pays');
+// sim-audit kitchen on-ramp: a rank-0 dealer earns the +50% corner premium (phases out at rank 1)
+assert.equal(r.body.cornerPremium, true, 'the corner premium applied to the entry-rank deal');
 me = await meOf(chef.token);
 assert(me.tradeRep > repBefore, 'trade rep climbs on gross');
 assert(me.heat >= heatBefore, 'heat follows product');

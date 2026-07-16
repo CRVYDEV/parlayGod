@@ -7,7 +7,7 @@ import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
-  gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf,
+  gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -207,19 +207,26 @@ export async function seizeDistrict(ch, districtId, client, h) {
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
   const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
   if (d.holder_gang === h.owned.gangId) throw new GameError('held', 'You already hold that district.');
-  const cost = d.holder_gang ? Math.max(M3.SEIZE_BASE, Math.floor(Number(d.garrison) * M3.SEIZE_OUTBID)) : M3.SEIZE_BASE;
+  const base = d.holder_gang ? Math.max(M3.SEIZE_BASE, Math.floor(Number(d.garrison) * M3.SEIZE_OUTBID)) : M3.SEIZE_BASE;
+  // sim-audit F5: a district with a PRODUCTIVE OPERATION costs a war premium scaled to what's
+  // being taken — TERRITORY_SEIZE_BPS of the operation's cumulative build cost. Seizing a maxed
+  // Smuggling Front is no longer ~18× cheaper than building one; the snowball pays freight.
+  const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
+  const premium = op ? Math.floor(territoryBuildCost(op.tier) * M3.TERRITORY_SEIZE_BPS / 10000) : 0;
+  const cost = base + premium;
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `Seizing that district takes $${cost} from the treasury.`);
-  // the garrison burns — turf costs the family real money (§10.4 sink)
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `Seizing that district takes $${cost} from the treasury${premium ? ` ($${premium} of it the war premium on its operation)` : ''}.`);
+  // the garrison burns — turf costs the family real money (§10.4 sink); only the garrison part
+  // becomes the new defense budget (the premium burned taking the operation)
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
-  await client.query('UPDATE districts SET holder_gang=$2, garrison=$3, seized_at=$4 WHERE id=$1', [districtId, h.owned.gangId, cost, now()]);
+  await client.query('UPDATE districts SET holder_gang=$2, garrison=$3, seized_at=$4 WHERE id=$1', [districtId, h.owned.gangId, base, now()]);
   await h.ledger(client, { currency: 'cash', amount: -cost, reason: `turf:seize:${districtId}`, counterparty: h.owned.gangId });
   // Phase 3: the district's productive operation (if any) transfers to the victor with the turf —
   // wars are now fought over income, not just a treasury cut. Uncollected income forfeits (clock resets).
   await seizeTerritoryRackets(client, districtId, h.owned.gangId);
   if (!h.owned.held.includes(districtId)) h.owned.held.push(districtId);
   bus.emit('streets', { type: 'seize', district: districtId, gang: g.name });
-  return { ok: true, district: districtId, garrison: cost };
+  return { ok: true, district: districtId, garrison: base, premium, cost };
 }
 
 // ═══════════════════ JUMPS (§7.6) ═══════════════════
@@ -321,8 +328,11 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     if (opts.hitman === ch.id) throw new GameError('bad_hitman', "Name someone else — you can't collect your own contract anyway.");
     const hm = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [opts.hitman])).rows[0];
     if (!hm) throw new GameError('no_hitman', 'No such hitman on the streets.');
+    // sim-audit F1 (squat resistance): exclusivity takes a real stake and a bounded window —
+    // a $500 pot can't reserve a mark, and no window outlives DIRECTED_MAX_H
+    if (amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
-    const exH = Math.min(ttlH, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
+    const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
     opensAt = new Date(Date.now() + exH * 3600 * 1000);
   }
   ch.cash = Number(ch.cash) - amt - fee - tax;
@@ -377,8 +387,12 @@ async function claimBounty(client, h, ch, victimId, kinds) {
   let total = 0, directed = false;
   for (const p of pots) {
     if (!kinds.includes(p.kind)) continue;
-    // directed contract still in its exclusive window → only the named hitman may collect
-    if (p.hitman && p.opens_at && new Date(p.opens_at) > new Date() && p.hitman !== ch.id) continue;
+    // directed contract still in its exclusive window → only the named hitman may collect —
+    // EXCEPT on a completed KILL: the mark is dead, and the pot pays whoever did the job (the
+    // named hitman keeps the exclusive 1.5× rep bonus, not the corpse). Without this, a mark's
+    // confederate could squat a cheap directed pot on a friendly alt and every enemy kill would
+    // refund instead of pay (sim-audit F1). Hospitalize pots (non-terminal) stay exclusive.
+    if (p.kind !== 'kill' && p.hitman && p.opens_at && new Date(p.opens_at) > new Date() && p.hitman !== ch.id) continue;
     // a funder never collects; the pot stands (dies with the target). A family-funded share
     // (contributor = gang id) locks out EVERY member of that family — the family ordered the
     // job, so doing it is your duty, not a payday (and the boss can't pay himself from the pot).
