@@ -262,14 +262,15 @@ async function persistCharacter(client, ch) {
       lab=$27, crew=$28, heist_at=$29, title=$30,
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
       guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
-      bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42 WHERE id=$1`,
+      bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
      ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
      ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
-     ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null]);
+     ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null,
+     ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -430,6 +431,10 @@ export async function bank(ch, dir, amount, client, h) {
   amount = Math.floor(Number(amount));
   if (!(amount > 0)) throw new GameError('amount', 'Positive amounts only.');
   if (dir === 'deposit') {
+    // BALANCE D2 — shield, not bunker: banking is an EXPOSED act (the courier walks). You can't
+    // move money into the vault from inside a safehouse; withdrawing (bringing cash to hand) is fine.
+    if (ch.safe_until && new Date(ch.safe_until) > new Date())
+      throw new GameError('safe', "The courier won't come to a safehouse — banking waits until you surface.");
     if (Number(ch.cash) < amount) throw new GameError('cash', 'Not that much in pocket.');
     ch.cash = Number(ch.cash) - amount; ch.bank = Number(ch.bank) + amount;
     // Make-Risk-Pay: the deposit rides "in transit" for BANK_CLEAR_MS — lootable on a fire-kill

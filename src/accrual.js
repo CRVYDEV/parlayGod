@@ -54,7 +54,12 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   bankCredit -= bankEligibleMs;
   ch.bank_credit_ms = Math.round(bankCredit);
   const bankBefore = Number(ch.bank);
-  ch.bank = bankBefore * (1 + CONSTANTS.BANK_RATE * (bankEligibleMs / CONSTANTS.BANK_PERIOD_MS));
+  // BALANCE D5 (founder override of the prototype flat rate): interest TAPERS at whale scale —
+  // the full rate on the first BANK_TAPER_ABOVE, BANK_TAPER_KEEP of it beyond. The bank stops
+  // being the game's only unbounded exponential; street money out-earns vault money at the top.
+  const effPrincipal = Math.min(bankBefore, CONSTANTS.BANK_TAPER_ABOVE)
+    + Math.max(0, bankBefore - CONSTANTS.BANK_TAPER_ABOVE) * CONSTANTS.BANK_TAPER_KEEP;
+  ch.bank = bankBefore + effPrincipal * CONSTANTS.BANK_RATE * (bankEligibleMs / CONSTANTS.BANK_PERIOD_MS);
   ch._bankInterest = Number(ch.bank) - bankBefore;
 
   // §7.1 racket + front income — capped at the 8h offline window, never minted

@@ -280,6 +280,15 @@ export async function swap(ch, direction, amount, client, h) {
     if (!CONSTANTS.LAUNDER_DISTRICTS.includes(ch.loc) && !onTurf)
       throw new GameError('district', `Cash is washed at a wash house (${CONSTANTS.LAUNDER_DISTRICTS.join(', ')}) or on your family's turf — not here.`);
     if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum swap is $${CONSTANTS.SWAP_MIN}.`);
+    // BALANCE D3 — the public route gets a per-account daily token bucket (= the top business
+    // tier's launderCapDay): heat decays in minutes, so it never bounded volume; now private
+    // infra is the BEST rail instead of the only sane one. Refills continuously over 24h.
+    const washRefill = ch.wash_at ? (Date.now() - new Date(ch.wash_at).getTime()) / 86400000 * CONSTANTS.PUBLIC_WASH_CAP_DAY : CONSTANTS.PUBLIC_WASH_CAP_DAY;
+    const washUsed = Math.max(0, Number(ch.wash_used || 0) - Math.max(0, washRefill));
+    if (washUsed + amt > CONSTANTS.PUBLIC_WASH_CAP_DAY)
+      throw new GameError('wash_cap', `The wash house handles $${CONSTANTS.PUBLIC_WASH_CAP_DAY} a day per face — $${Math.max(0, Math.floor(CONSTANTS.PUBLIC_WASH_CAP_DAY - washUsed))} left. Your own front takes the rest.`);
+    ch.wash_used = washUsed + amt;
+    ch.wash_at = new Date();
     if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
     const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01), netIn = amt - fee - tax;
     const out = o - k / (c + netIn);

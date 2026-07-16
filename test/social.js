@@ -427,7 +427,7 @@ assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hire
 const kt = await mk('Killable Kelly'); await seedCh(kt.id, 'respect=100'); // level ~6 → professional ≈ 0.52
 let killed = false;
 for (let i = 0; i < 80 && !killed; i++) {
-  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
   await seedCh(kt.id, "hosp_until=NULL, respect=100");
   const res = (await call('POST', `/v1/streets/${kt.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   killed = !!res.killed;
@@ -442,7 +442,7 @@ const insured = await mk('Insured Izzy'); await seedCh(insured.id, 'respect=100'
 await pool.query(`UPDATE account_persistent SET respawn_tokens=1 WHERE account_id=(SELECT account_id FROM characters WHERE id='${insured.id}')`);
 let absorbed = false;
 for (let i = 0; i < 60 && !absorbed; i++) {
-  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+  await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
   await seedCh(insured.id, 'hosp_until=NULL');
   const res = (await call('POST', `/v1/streets/${insured.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   assert(!res.killed, 'an insured target is never killed by an NPC hit');
@@ -455,11 +455,11 @@ assert.equal((await meOf(insured.token)).respawnTokens, 0, 'the token was consum
 // audit HIGH: a payer who funded an EXCLUSIVE directed pot on the victim is REFUNDED on the NPC
 // kill — else refundPot's SQL credit is clobbered by persistCharacter (§10.4 drift + stolen escrow)
 const rival = await mk('Rival Rick'); await seedCh(rival.id, 'respect=100'); // level ~6
-await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
+await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
 assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: hirer.token, body: { amount: 12000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } })).code, 200, 'hirer funds a directed contract on the rival');
 let refundOk = false;
 for (let i = 0; i < 40 && !refundOk; i++) {
-  await seedCh(hirer.id, 'npchit_at=NULL'); // let cash ride (do NOT re-seed) so the kill-shot delta is measurable
+  await seedCh(hirer.id, 'npchit_at=NULL'); await pool.query('DELETE FROM npc_hits'); // let cash ride (do NOT re-seed) so the kill-shot delta is measurable
   await seedCh(rival.id, 'hosp_until=NULL');
   const before = (await meOf(hirer.token)).cash;
   const res = (await call('POST', `/v1/streets/${rival.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
@@ -483,7 +483,7 @@ await seedCh(dave.id, "loc='docks'"); // same district — but he's in the safeh
 await call('POST', `/v1/streets/${dave.id}/search`, { token: don.token });
 const blocked = await call('POST', `/v1/streets/${dave.id}/fire`, { token: don.token, body: { rounds: 6000 } });
 assert.equal(blocked.code, 400, 'a fire on a safe-housed target is blocked'); assert.equal(blocked.body.error, 'safe', 'because they went to ground');
-await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL');
+await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
 const npcBlocked = await call('POST', `/v1/streets/${dave.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } });
 assert.equal(npcBlocked.code, 400, 'an NPC hit on a safe-housed target is blocked'); assert.equal(npcBlocked.body.error, 'safe', 'the contractor can\'t find them');
 // Risk-to-Earn P1.3 — SHIELD, NOT BUNKER: while safe, DAVE himself can't do offense or extraction.
@@ -590,10 +590,10 @@ const gina = await mk('Guardian Gina');
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: gina.token, body: { price: 15000 } })).code, 200, 'gina lists herself');
 await seedCh(carla.id, "hosp_until=NULL, cash=50000, loc='docks'");
 assert.equal((await call('POST', `/v1/bodyguard/hire/${gina.id}`, { token: carla.token })).code, 200, 'carla hired gina');
-await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL');
+await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
 let npcAbsorbed = false;
 for (let i = 0; i < 40 && !npcAbsorbed; i++) {
-  await seedCh(hirer.id, 'npchit_at=NULL');
+  await seedCh(hirer.id, 'npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
   await seedCh(carla.id, 'hosp_until=NULL');
   const res = (await call('POST', `/v1/streets/${carla.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   assert(!res.killed, 'a guarded target is never killed by an NPC hit');
@@ -601,6 +601,14 @@ for (let i = 0; i < 40 && !npcAbsorbed; i++) {
 }
 assert(npcAbsorbed, "gina took the contractor's bullet");
 assert((await meOf(gina.token)).hospSeconds > 0, 'gina is in the hospital, carla is not in the ground');
+// BALANCE D4: the per-TARGET cooldown — resetting the payer clock no longer lets a whale
+// repeat-reset ONE rival; the (payer, target) pair rests a day between attempts
+await seedCh(hirer.id, 'npchit_at=NULL');
+assert.equal((await call('POST', `/v1/streets/${carla.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body.error,
+  'target_cd', 'the same mark cannot be hit again for a day');
+const otherMark = await mk('Other Mark'); await seedCh(otherMark.id, 'respect=400');
+const om = await call('POST', `/v1/streets/${otherMark.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } });
+assert.equal(om.code, 200, 'a DIFFERENT mark is fair game immediately');
 // sim-audit regression (F8): a DEAD guard releases his principals — protection was already void,
 // but the stale pointer also blocked a replacement hire for the rest of the paid window
 const doug = await mk('Doomed Doug');
@@ -783,6 +791,10 @@ await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'the new owner earns the tier-2 rate ($16k/hr)');
 // §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
 assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
+// BALANCE D2: collecting the district take is an exposed act — not from a safehouse
+await seedCh(raider.id, "safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.error, 'safe', 'no collecting territory income from a safehouse');
+await seedCh(raider.id, 'safe_until=NULL');
 
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
 // ══ the safehouse is priced off the wealth it protects

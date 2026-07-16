@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS characters (
   safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
   guard_price NUMERIC,                             -- M7 Phase 4: bodyguard-for-hire listing (NULL = not offering)
   fade_limit NUMERIC,                              -- Den step 2: open back-room dice challenge limit (NULL = not fading)
+  -- D3: per-account daily cap on the PUBLIC wash route (a token bucket, like a business front's
+  -- launderCapDay — heat was the only brake and it decays in minutes)
+  wash_used NUMERIC NOT NULL DEFAULT 0,
+  wash_at TIMESTAMPTZ,
+  respec_at TIMESTAMPTZ,                           -- D7: 24h between stat respecs (opposed rolls are shape-sensitive)
   guarded_by TEXT,                                 -- M7 Phase 4: my hired bodyguard's character id
   guarded_until TIMESTAMPTZ,                       -- M7 Phase 4: protection window (one absorb, then consumed)
 
@@ -468,6 +473,15 @@ CREATE TABLE IF NOT EXISTS den_volume (
   total NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
+
+-- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
+-- cycling their payer cooldown (each attempt stamps the pair, win or lose).
+CREATE TABLE IF NOT EXISTS npc_hits (
+  payer TEXT NOT NULL,
+  target TEXT NOT NULL,
+  last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (payer, target)
+);
 
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the

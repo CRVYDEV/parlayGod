@@ -547,8 +547,15 @@ analytic extraction risk) and re-run: §10.4 drift-0; the Make-Risk-Pay surfaces
 $344k for a mid mark — "hunt whales" economics). BALANCE.md tables every PROPOSED lever with its
 measurement and a KEEP recommendation, and ranks the open items as D1–D8 (kill prey threshold,
 safehoused collection D2-(b) rec, public-wash cap, NPC per-target cd, bank taper, kitchen margin
-watch, respec cd, leftovers). Founder signing = KEEP rows are production balance; only the DECIDE
-list remains open. After ANY retune: `node tools/sim.js` + `npm test` must stay green.
+watch, respec cd, leftovers). **SIGNED 2026-07-16 — founder approved all recs, all built same
+day**: D2 safehouse now blocks bank deposits + business/territory collection (exposed acts; the
+`safe` error), D3 `PUBLIC_WASH_CAP_DAY` $2.6M/day token bucket on swap-buy (columns
+`characters.wash_used/wash_at`), D4 `NPC_HIT_TARGET_CD_MS` 24h per (payer,target) (`npc_hits`
+table), D5 bank interest tapers above `BANK_TAPER_ABOVE` $10M to `BANK_TAPER_KEEP` 10% of the rate
+(an explicit founder override of the prototype flat rate), D7 `RESPEC_CD_MS` 24h
+(`characters.respec_at`); D1 (whale-hunting kill economics) + D6 (kitchen margin) signed as-is;
+D8 leftovers accepted for alpha. THE ECONOMY IS SIGNED — every KEEP row in BALANCE.md is
+production balance. After ANY retune: `node tools/sim.js` + `npm test` must stay green.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

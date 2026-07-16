@@ -433,5 +433,24 @@ const afterCap = await meOf(token); // any action triggers accrual; interest is 
 assert(afterCap.bank > 1003000 && afterCap.bank < 1004000,
   `bank interest capped to ~2h of a 4h gap (~+0.33%, got +${afterCap.bank - 1000000}); uncapped 4h would be ~+6667`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%)');
+// ══════════ BALANCE.md sign-off (founder-approved recs) ══════════
+// D2 — shield, not bunker: banking and collecting the take are EXPOSED acts
+await seed("cash=100000, safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/bank/deposit', { token, body: { amount: 1000 } })).body.error, 'safe', 'no deposits from a safehouse (the courier walks)');
+assert.equal((await call('POST', '/v1/business/collect', { token })).body.error, 'safe', 'no collecting the take from a safehouse');
+await seed("safe_until=NULL");
+// D3 — the public wash route is a per-account daily token bucket ($2.6M/day, = the top front tier)
+await seed("cash=5000000, heat=0, loc='docks', wash_used=0, wash_at=NULL");
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 2000000 } })).code, 200, 'a big wash inside the daily cap clears');
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 700000 } })).body.error, 'wash_cap', 'the public route caps per face per day');
+await seed("wash_at = now() - interval '25 hours'");
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 700000 } })).code, 200, 'the bucket refills over a day');
+// D5 — bank interest TAPERS above $10M: full rate on the first $10M, 10% of the rate beyond
+await seed("cash=0, bank=30000000, bank_credit_ms=0, last_accrued_at = now() - interval '4 hours', safe_until=NULL");
+const taperMe = await meOf(token);
+// 2h eligible (the B2 bucket) → effective principal 10M + 20M×0.1 = 12M → +$40k (untapered: +$100k)
+assert(taperMe.bank > 30030000 && taperMe.bank < 30050000,
+  `whale interest tapered (+$${Math.round(taperMe.bank - 30000000)}; untapered 4h-gap would be ~+$100k)`);
+
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper)');
 await app.close();
