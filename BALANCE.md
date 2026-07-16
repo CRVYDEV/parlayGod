@@ -151,8 +151,11 @@ total Score throughput per player is unchanged in FREQUENCY — only the per-win
 coordination + risk. Anti-abuse by construction: pot scales with AVERAGE crew level (alt-dragging
 shrinks everyone's take), the stake is sunk at execution, and the rat payout is half the stake
 (self-ratting is −EV). Levers: per-job `base/stake/takePerLvl/jailS`, `HEIST_RAT_BPS`,
-`HEIST_LEADER_WEIGHT`, `HEIST_PLAN_TTL_MS`. **DECIDE at next sim pass** — run `node tools/sim.js`
-and compare the crime-curve rows before tuning.
+`HEIST_LEADER_WEIGHT`, `HEIST_PLAN_TTL_MS`. **DECIDED (sim pass 2026-07-16)** — the sim's P9.7
+probe (30 payroll runs at lvl 25, honest money): 67% score rate, crew-wide EV +$87.4k/run →
+per-member ≈ $43.7k/8h window vs the solo heist's guaranteed $30k = **1.46× solo, inside the
+1.3–2.1× design band**, with 1-in-3 runs ending in shared jail. §10.4 drift-0 with the faucet
+live. **KEEP as proposed.**
 
 ## Post-signing addendum — step-two content (convoys / heists / Commission), sign-off pending
 
