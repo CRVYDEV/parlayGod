@@ -718,6 +718,11 @@ export const GANG_SEALS = [
   { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 1500 },
 ];
 export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tier)) || null;
+// VENDETTAS — a status axis (no gameplay power beyond the rep multiplier + the directed-floor
+// waiver, no money flows): the TTL and the settlement bonus. The bloodline-diminishing rule
+// still applies under the bonus, so a FIRST revenge nets exactly full base rep (2x / 2 priors)
+// and mutual kill-trading decays — the anti-farm is arithmetic, not a special case.
+export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to

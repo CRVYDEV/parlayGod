@@ -832,6 +832,55 @@ r = await call('POST', '/v1/safehouse', { token: rich.token });
 assert.equal(r.code, 200, 'the whale went to ground'); assert.equal(r.body.cost, 200000, 'and paid the scaled rate');
 assert.equal((await meOf(rich.token)).cash, 6000000 - 200000, 'charged from pocket, ledgered safehouse sink');
 
+// ══ VENDETTAS & BLOOD FEUDS: every death gets a story hook ══
+const kane = await mk('Kane Killer');
+const vitoB = await mk('Vito Vendetta');
+await seedCh(vitoB.id, "respect=400, muscle=1, loc='docks', hosp_until=NULL");
+await seedCh(kane.id, "respect=400, muscle=1, cash=100000, cb=5, energy=200, ammo=8000, loc='docks'");
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: kane.token })).code, 200, 'kane armed');
+assert.equal((await call('POST', `/v1/streets/${vitoB.id}/search`, { token: kane.token })).code, 200, 'kane hunts');
+k = (await call('POST', `/v1/streets/${vitoB.id}/fire`, { token: kane.token, body: { rounds: 6000 } })).body;
+assert.equal(k.kill, true, 'first blood'); assert.equal(k.vendetta, false, 'no debt settled — this kill STARTS one');
+// the heir is born owing blood
+let vHeir = await meOf(vitoB.token);
+assert.equal(vHeir.generation, 2, 'the heir stands up');
+assert.equal(vHeir.vendettas.length, 1, 'sworn to vengeance');
+assert.equal(vHeir.vendettas[0].target, 'Kane Killer', 'against the killer bloodline\'s current street');
+assert.equal(vHeir.vendettas[0].sworn, 'Vito Vendetta', 'for the man they took');
+assert(vHeir.vendettas[0].expiresSeconds > 6 * 86400, 'a seven-day window');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE character_id='${vHeir.id}' AND type='vendetta'`)).rows[0].n), 1, 'the heir was told at birth');
+// the blood-feud ledger
+let feud = (await call('GET', `/v1/feud/${(await meOf(kane.token)).id}`, { token: vitoB.token })).body;
+assert.equal(feud.kills.theirs, 1, 'they took one of ours');
+assert.equal(feud.bloodOwed, 1, 'they owe us a body');
+assert.equal(feud.myVendetta.sworn, 'Vito Vendetta', 'our vendetta is on the ledger');
+// vengeance posts at street rates: the DIRECTED_MIN floor is waived against a vendetta target
+await seedCh(vHeir.id, 'cash=20000');
+r = await call('POST', `/v1/streets/${(await meOf(kane.token)).id}/bounty`, { token: vitoB.token, body: { amount: 600, kind: 'kill', hitman: mook.id } });
+assert.equal(r.code, 200, 'a $600 directed revenge contract clears (the $10k floor is waived for a vendetta)');
+await call('POST', `/v1/contracts/${(await meOf(kane.token)).id}/kill/cancel`, { token: vitoB.token }); // clean the board
+// SETTLEMENT: the heir collects the debt personally — vengeance pays 2x rep
+await seedCh(vHeir.id, "respect=400, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: vitoB.token })).code, 200, 'the heir armed');
+const kaneStreet = (await meOf(kane.token)).id;
+await seedCh(kaneStreet, "muscle=1, loc='docks', hosp_until=NULL");
+assert.equal((await call('POST', `/v1/streets/${kaneStreet}/search`, { token: vitoB.token })).code, 200, 'the heir hunts');
+k = (await call('POST', `/v1/streets/${kaneStreet}/fire`, { token: vitoB.token, body: { rounds: 6000 } })).body;
+assert.equal(k.kill, true, 'the debt is collected');
+assert.equal(k.vendetta, true, 'the vendetta is SETTLED');
+assert.equal(k.hitman.repGain, 66, 'vengeance pays 2x feared-rep (floor(11×3×2), no prior bloodline kills)');
+assert.equal((await meOf(vitoB.token)).vendettas.length, 0, 'the debt is off the books');
+// the cycle turns: Kane's heir is born owing US blood — and a lapsed vendetta grants nothing
+feud = (await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token })).body;
+assert.equal(feud.bloodOwed, 0, 'a body for a body — the ledger is square');
+assert.equal(feud.theirVendetta, true, 'but their heir has sworn the next round');
+await pool.query(`UPDATE vendettas SET expires_at = now() - interval '1 minute' WHERE target_account = (SELECT account_id FROM characters WHERE id='${vHeir.id}')`);
+assert.equal((await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token })).body.theirVendetta, false, 'a lapsed vendetta is no vendetta');
+const kaneHeir = await meOf(kane.token);
+await pool.query(`UPDATE characters SET cash=20000 WHERE id='${kaneHeir.id}'`);
+r = await call('POST', `/v1/streets/${(await meOf(vitoB.token)).id}/bounty`, { token: kane.token, body: { amount: 600, kind: 'kill', hitman: mook.id } });
+assert.equal(r.body.error, 'directed_min', 'no waiver on a lapsed vendetta — the floor is back');
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
@@ -839,5 +888,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
 await app.close();
