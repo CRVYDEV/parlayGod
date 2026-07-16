@@ -506,6 +506,30 @@ CREATE TABLE IF NOT EXISTS crew_heist_members (
 );
 CREATE INDEX IF NOT EXISTS ix_heist_members_char ON crew_heist_members (character_id);
 
+-- SMUGGLING CONVOYS: bulk goods in transit — visible, ambushable, turf-sheltered. One active
+-- convoy per character; the manifest lives in convoy_cargo (goods are ownership, not §10.4
+-- currency); the only money flow is the convoy:guards cash sink. Design: omerta-convoys-design.md.
+CREATE TABLE IF NOT EXISTS convoys (
+  id TEXT PRIMARY KEY,
+  owner_character TEXT NOT NULL,
+  owner_gang TEXT,                            -- snapshot at depart (turf defense bonus)
+  origin TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'loading',     -- loading | transit | done | lost
+  guards INT NOT NULL DEFAULT 0,              -- the tier's defense value (fee already sunk)
+  ambushed BOOLEAN NOT NULL DEFAULT false,    -- one attempt per convoy, win or lose
+  departed_at TIMESTAMPTZ,
+  arrives_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_convoys_owner ON convoys (owner_character);
+CREATE TABLE IF NOT EXISTS convoy_cargo (
+  convoy_id TEXT NOT NULL,
+  good_id TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (convoy_id, good_id)
+);
+
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).
 CREATE TABLE IF NOT EXISTS npc_hits (

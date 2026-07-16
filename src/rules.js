@@ -736,6 +736,21 @@ export const heistJobOf = (id) => HEIST_JOBS.find((j) => j.id === id) || null;
 export const HEIST_PLAN_TTL_MS = 6 * 3600 * 1000;  // a plan goes stale after 6h (sweep refunds a living leader)
 export const HEIST_RAT_BPS = 5000;                  // the informant's payout: 50% of the stake (self-rat is -EV)
 export const HEIST_LEADER_WEIGHT = 1.2;             // the leader's split weight (fronted the stake)
+// SMUGGLING CONVOYS — bulk goods on a real clock: visible, ambushable, turf-sheltered. The only
+// new money flow is the guard fee (a cash sink); an ambush is a pure goods TRANSFER (trunk-capped)
+// and goods aren't a §10.4 currency. Numbers are founder sign-off levers. TEST-ONLY: CONVOY_MS
+// env shrinks the transit clock (the SEARCH_MS pattern — never set in production).
+export const CONVOY = {
+  MIN_QTY: 5, MS: 30 * 60 * 1000,
+  GUARD_TIERS: [
+    { id: 'none',  fee: 0,     def: 10 },
+    { id: 'crew',  fee: 5000,  def: 35 },
+    { id: 'heavy', fee: 20000, def: 60 },
+  ],
+  AMBUSH_ENERGY: 20, AMBUSH_AMMO: 10, AMBUSH_HEAT: 15,
+  FAIL_HOSP_MS: 30 * 60 * 1000, TURF_DEF: 15,
+};
+export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) || null;
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to
