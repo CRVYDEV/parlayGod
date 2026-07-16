@@ -718,10 +718,12 @@ export const GANG_SEALS = [
   { tier: 5, id: 'obsidian', name: 'Obsidian Seal', omr: 1500 },
 ];
 export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tier)) || null;
-// VENDETTAS — a status axis (no gameplay power beyond the rep multiplier + the directed-floor
-// waiver, no money flows): the TTL and the settlement bonus. The bloodline-diminishing rule
-// still applies under the bonus, so a FIRST revenge nets exactly full base rep (2x / 2 priors)
-// and mutual kill-trading decays — the anti-farm is arithmetic, not a special case.
+// VENDETTAS — a status axis (no gameplay power beyond the rep multiplier + the KILL-only
+// directed-floor waiver, no money flows): the TTL and the settlement bonus. The diminishing
+// divisor counts the avenger's own prior kills of that bloodline (0 on a first revenge), so a
+// first revenge pays a ONE-TIME 2x base per feud direction and repeat trading decays 2/k —
+// bounded by the decay + the economics (level floor, ammo, searches). Founder dial: divide by
+// priors+2 on vendetta kills to make revenge rep-neutral.
 export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
@@ -773,7 +775,9 @@ export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) |
 export const COMMISSION = {
   SEATS: 5,
   // step two: votes are SEAT-WEIGHTED — the head of the table casts SEATS points, the last seat 1.
-  // Weight is stamped at CAST time (re-casting refreshes it); the tally is frozen when the week is.
+  // A ballot stamps the family's STANDING at cast (re-cast refreshes); the tally ranks the week's
+  // frozen ballots by the stamp, counts only the top SEATS of them, and derives weights from the
+  // rank (audit-hardened: the electorate is bounded, transit/stale ballots rank where they belong).
   // The head seat's BOSS can also VETO the sitting decree, once per week, on the public record.
   OPEN_SEASON_MULT: 0.5,  // safehouse stays halved
   AMNESTY_MULT: 0.5,      // laylow at half price

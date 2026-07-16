@@ -504,7 +504,8 @@ CREATE TABLE IF NOT EXISTS crew_heist_members (
   character_id TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'crew',         -- step two: the JOB role (brains/muscle/wheelman/gun) — each claimed once
   ratted BOOLEAN NOT NULL DEFAULT false,     -- the silent flag — never surfaced by name
-  PRIMARY KEY (heist_id, character_id)
+  PRIMARY KEY (heist_id, character_id),
+  UNIQUE (heist_id, role)                    -- defense in depth: a seat can never double even if a future writer skips the heist row lock
 );
 CREATE INDEX IF NOT EXISTS ix_heist_members_char ON crew_heist_members (character_id);
 
@@ -558,7 +559,11 @@ CREATE TABLE IF NOT EXISTS commission_votes (
   week INT NOT NULL,
   gang_id TEXT NOT NULL,
   decree TEXT NOT NULL,
-  weight INT NOT NULL DEFAULT 1,   -- step two: seat weight at cast time (head of the table = SEATS .. last seat = 1); re-casting refreshes it
+  -- step two (audit-hardened): the family's STANDING at cast time (re-casting refreshes it).
+  -- The tally ranks the week's frozen ballots by this stamp and derives weights SEATS..1 from
+  -- the rank, counting only the top SEATS ballots — so the electorate is bounded at the seat
+  -- count and stale "I held the head seat for a minute" ballots rank where they belong.
+  standing NUMERIC NOT NULL DEFAULT 0,
   PRIMARY KEY (week, gang_id)
 );
 -- Commission step two: the head of the table (seat 1's BOSS) may kill the sitting decree once

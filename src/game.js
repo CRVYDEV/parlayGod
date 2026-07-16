@@ -12,6 +12,12 @@ import { businessesOf } from './business.js';
 const uid = () => crypto.randomUUID();
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
+// Postgres resolves a rare lock-order cycle (e.g. a crew execute racing a member's own PvP
+// action) by aborting one transaction with SQLSTATE 40P01. Nothing committed — surface it as a
+// clean retryable error instead of a raw 500. pg-mem never deadlocks, so tests can't hit this.
+const deadlockToRetry = (e) =>
+  e?.code === '40P01' ? new GameError('contention', 'The streets got crowded for a second — try that again.') : e;
+
 // In-process pub/sub feeding the websocket gateway (§5.6): 'me:{characterId}'
 // for notifications, 'streets' for the public kill/bust feed, 'gang:{id}' updates.
 export const bus = new EventEmitter();
@@ -192,7 +198,7 @@ export async function withCharacter(pool, accountId, fn) {
     // account; it runs in its OWN transaction so its two-party locks stay sorted.
     if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
     return { character: view(ch, acct, owned), events: h.events, ...result };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
 
@@ -255,7 +261,7 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     await client.query('COMMIT');
     if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
     return { character: view(ch, acct, owned), events: h.events, ...result };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
 

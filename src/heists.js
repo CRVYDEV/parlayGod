@@ -17,12 +17,13 @@ import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, CONSTANTS, M4, levelOf } from './rules.js';
-import { accrued } from './business.js';
+import { accrued, decayedScrutiny } from './business.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const cooling = (ch) => ch.heist_at && new Date(ch.heist_at) > new Date();
 const stale = (row) => Date.now() - new Date(row.created_at).getTime() > HEIST_PLAN_TTL_MS;
 
@@ -35,6 +36,8 @@ async function activeMembership(client, characterId) {
 function gateJoiner(ch, job) {
   if (jailed(ch)) throw new GameError('jailed', 'Nobody plans a score from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "Not in your condition. See the Doc first.");
+  // P1.3/D2 (audit H1): a safehouse is a shield, not a base of operations — no crew work from it
+  if (safeHoused(ch)) throw new GameError('safe', "No jobs from a safehouse — a shield, not a bunker.");
   if (cooling(ch)) throw new GameError('cooldown', 'Your next job lines up later — one Score per window.');
   if (levelOf(Number(ch.respect)) < job.lvl) throw new GameError('level', `${job.name} wants made players — level ${job.lvl}.`);
 }
@@ -124,26 +127,38 @@ export async function ratHeist(ch, heistId, client, h) {
 }
 
 // EXECUTE — leader-only, crew full, everyone ready. One roll for everyone.
+// Lock order (audit M1): leader (withCharacter) → member character rows SORTED → the heist row
+// → the target business row. The heist row is read UNLOCKED first to learn the crew, then
+// re-read under its lock — if the crew shifted in between, the call retries cleanly. This keeps
+// characters-before-pots global order (leave/join lock own char → heist row).
 export async function executeHeist(ch, heistId, client, h) {
-  const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
-  if (!row) throw new GameError('no_heist', 'That job is gone.');
-  if (row.leader_character !== ch.id) throw new GameError('not_leader', 'The leader calls the go.');
-  if (stale(row)) throw new GameError('stale', 'That plan went cold — walk away and start fresh.');
-  const job = heistJobOf(row.job);
-  const members = (await client.query('SELECT character_id, ratted, role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
-  if (members.length < job.crew) throw new GameError('crew_short', `${job.name} needs ${job.crew} — you have ${members.length}.`);
-  // lock every OTHER member's character row in sorted id order (the leader is already held by
-  // withCharacter; one-active-heist keeps concurrent executes disjoint, so this can't cycle)
+  if (safeHoused(ch)) throw new GameError('safe', "No jobs from a safehouse — a shield, not a bunker.");
+  const pre = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning'", [heistId])).rows[0];
+  if (!pre) throw new GameError('no_heist', 'That job is gone.');
+  if (pre.leader_character !== ch.id) throw new GameError('not_leader', 'The leader calls the go.');
+  if (stale(pre)) throw new GameError('stale', 'That plan went cold — walk away and start fresh.');
+  const job = heistJobOf(pre.job);
+  const preIds = (await client.query('SELECT character_id FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows
+    .map((r) => r.character_id);
+  // member character rows first, sorted (the leader is already held by withCharacter;
+  // one-active-heist keeps concurrent executes disjoint, so this can't cycle among executes)
   const others = {};
-  for (const id of members.map((m) => m.character_id).filter((id) => id !== ch.id).sort()) {
+  for (const id of preIds.filter((id) => id !== ch.id).sort()) {
     const r = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
     if (!r) throw new GameError('crew_not_ready', 'One of the crew is in the ground. Recrew.');
     others[id] = r;
   }
+  // NOW the heist row — and verify the crew we locked is still the crew
+  const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
+  if (!row) throw new GameError('no_heist', 'That job is gone.');
+  const members = (await client.query('SELECT character_id, ratted, role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  if (members.map((m) => m.character_id).sort().join() !== [...preIds].sort().join())
+    throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
+  if (members.length < job.crew) throw new GameError('crew_short', `${job.name} needs ${job.crew} — you have ${members.length}.`);
   const crewRows = [ch, ...Object.values(others)];
   for (const m of crewRows)
-    if (jailed(m) || hospitalized(m) || (m.id !== ch.id && cooling(m)))
-      throw new GameError('crew_not_ready', 'The whole crew shows up clean, healthy, and rested — or nobody goes.');
+    if (jailed(m) || hospitalized(m) || safeHoused(m) || (m.id !== ch.id && cooling(m)))
+      throw new GameError('crew_not_ready', 'The whole crew shows up clean, healthy, rested, and OUT of hiding — or nobody goes.');
   if (cooling(ch)) throw new GameError('cooldown', 'Your next job lines up later.');
 
   // INSIDE JOB gates — validated (and the venue locked) BEFORE the job fires, so a failed gate
@@ -157,6 +172,10 @@ export async function executeHeist(ch, heistId, client, h) {
       throw new GameError('own_mark', "The mark is standing IN your crew.");
     if (biz.inside_at && Date.now() - new Date(biz.inside_at).getTime() < HEIST_INSIDE_CD_MS)
       throw new GameError('mark_hot', 'That front just got hit — the books are locked down. Give it a day.');
+    // audit H2: a raid-eligible front can't be crewed to spirit the pending income away from
+    // the Bureau — the owner must touch it (and eat the raid roll) before anyone can rob it
+    if (decayedScrutiny(biz) >= CONSTANTS.BUSINESS_RAID_THRESHOLD)
+      throw new GameError('feds_watching', 'The Bureau is parked outside that front. No crew goes near it.');
     const ownerGang = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [biz.character_id])).rows[0]?.gang_id;
     if (ownerGang) {
       const ids = members.map((m) => m.character_id);
@@ -176,18 +195,22 @@ export async function executeHeist(ch, heistId, client, h) {
   if (rats.length) {
     const payoutTotal = Math.floor(job.stake * HEIST_RAT_BPS / 10000);
     const share = Math.floor(payoutTotal / rats.length);
+    // EVERYONE eats the double stretch — the informer included: the law hauls the whole crew
+    // in, so the public jail roster can't out the rat (audit M3 — the only un-jailed member
+    // was trivially identified). The informer's pay lands quietly all the same.
+    const jailTo = new Date(Date.now() + job.jailS * 2 * 1000);
     for (const m of crewRows) {
       const isRat = rats.includes(m.id);
-      if (isRat && share > 0) {
-        if (m.id === ch.id) ch.cash = Number(ch.cash) + share;
-        else await setMember(m.id, 'cash = cash + $2, heist_at=$3', [share, doneAt]);
-        await h.ledger(client, { characterId: m.id, currency: 'cash', amount: share, reason: 'heist:crew:rat' });
+      const pay = isRat && share > 0 ? share : 0;
+      if (m.id === ch.id) {
+        ch.heist_at = doneAt; ch.jail_until = jailTo;
+        if (pay) ch.cash = Number(ch.cash) + pay;
+      } else {
+        // absolute writes off the locked row (the pg-mem arithmetic discipline)
+        await setMember(m.id, 'cash=$2, jail_until=$3, heist_at=$4', [Number(m.cash) + pay, jailTo, doneAt]);
+        await h.notify(client, m.id, 'heist_blown', { job: job.name });
       }
-      const jailTo = new Date(Date.now() + job.jailS * 2 * 1000);
-      if (m.id === ch.id) { ch.heist_at = doneAt; if (!isRat) ch.jail_until = jailTo; }
-      else if (isRat) { if (share <= 0) await setMember(m.id, 'heist_at=$2', [doneAt]); }
-      else await setMember(m.id, 'jail_until=$2, heist_at=$3', [jailTo, doneAt]);
-      if (m.id !== ch.id) await h.notify(client, m.id, 'heist_blown', { job: job.name });
+      if (pay) await h.ledger(client, { characterId: m.id, currency: 'cash', amount: pay, reason: 'heist:crew:rat' });
     }
     await h.rngLog(client, ch.id, `heist:${job.id}`, 0, 'blown — somebody talked');
     bus.emit('streets', { type: 'heist_blown', job: job.name });
@@ -223,10 +246,15 @@ export async function executeHeist(ch, heistId, client, h) {
     const shares = {};
     for (const m of crewRows) shares[m.id] = Math.floor(unit * (m.id === ch.id ? HEIST_LEADER_WEIGHT : 1));
     const reason = biz ? 'heist:inside' : 'heist:crew';
+    // an inside job that cracked an EMPTY till earns nothing to brag about (audit L4 —
+    // zero-pot rep farming); standard jobs always carry a pot
+    const rep = biz && pot === 0 ? 0 : job.rep;
     for (const m of crewRows) {
-      if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + job.rep; ch.heist_at = doneAt; }
+      if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
       else {
-        await setMember(m.id, 'cash = cash + $2, respect = respect + $3, heist_at=$4', [shares[m.id], job.rep, doneAt]);
+        // absolute writes off the locked row (the pg-mem arithmetic discipline)
+        await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
+          [Number(m.cash) + shares[m.id], Number(m.respect) + rep, doneAt]);
         await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id] });
       }
       await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
@@ -255,7 +283,9 @@ export async function heistBoard(pool, characterId) {
     `SELECT ch.id, ch.job, ch.created_at, c.name AS leader
        FROM crew_heists ch JOIN characters c ON c.id = ch.leader_character
       WHERE ch.status='planning' ORDER BY ch.created_at DESC LIMIT 30`)).rows;
-  const memberRows = (await pool.query('SELECT heist_id, role FROM crew_heist_members')).rows;
+  const memberRows = (await pool.query(
+    `SELECT m.heist_id, m.role FROM crew_heist_members m
+       JOIN crew_heists ch2 ON ch2.id = m.heist_id AND ch2.status='planning'`)).rows;
   const rolesOf = {};
   for (const r of memberRows) (rolesOf[r.heist_id] = rolesOf[r.heist_id] || []).push(r.role);
   const open = openRows.filter((r) => !stale(r))

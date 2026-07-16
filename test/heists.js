@@ -96,8 +96,10 @@ const caraPreRat = (await meOf(cara.token)).cash;
 r = await call('POST', `/v1/heists/${h2}/execute`, { token: hank.token });
 assert.equal(r.body.blown, true, 'the law was waiting');
 assert((await meOf(hank.token)).jailSeconds > payroll.jailS, 'the leader eats DOUBLE time');
-assert.equal((await meOf(cara.token)).jailSeconds, 0, 'the rat walks');
-assert.equal((await meOf(cara.token)).cash, caraPreRat + Math.floor(payroll.stake * 0.5), 'the informant is paid half the stake');
+// audit M3: the informer is hauled in WITH the crew — the public jail roster used to out the
+// rat as the only member walking free; now everyone sits the same stretch, the pay lands quietly
+assert((await meOf(cara.token)).jailSeconds > payroll.jailS, 'the rat sits the double stretch with everyone (no jail-roster tell)');
+assert.equal((await meOf(cara.token)).cash, caraPreRat + Math.floor(payroll.stake * 0.5), 'the informant is still paid half the stake');
 assert.equal(await sum('heist:crew:rat', cara.id), Math.floor(payroll.stake * 0.5), 'the payout is a ledgered faucet');
 assert(!JSON.stringify(r.body).includes('Cara'), 'the rat is never named');
 
@@ -120,6 +122,11 @@ assert.equal((await call('POST', `/v1/heists/${h4}/join`, { token: cara.token })
 const hankPreSweep = (await meOf(hank.token)).cash;
 assert.equal((await sweepStaleHeists(pool)).swept, 1, 'the sweep found it');
 assert.equal((await meOf(hank.token)).cash, hankPreSweep + payroll.stake, 'the sweep refunded the living leader');
+
+// ── P1.3/D2 (audit H1): a safehouse is a shield, not a base of operations ──
+await seedCh(hank.id, "cash=200000, heist_at=NULL, jail_until=NULL, safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } })).body.error, 'safe', 'no planning jobs from a safehouse');
+await seedCh(hank.id, 'safe_until=NULL');
 
 // ── STEP TWO: roles — every slot is a seat, each claimed once, and the roll reads YOUR stat ──
 await seedCh(hank.id, 'cash=200000, heist_at=NULL, jail_until=NULL');
@@ -192,11 +199,14 @@ r = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'ins
 const h6 = r.body.id;
 await call('POST', `/v1/heists/${h6}/join`, { token: cara.token });
 assert.equal((await call('POST', `/v1/heists/${h6}/execute`, { token: hank.token })).body.error, 'mark_hot', 'the books are locked down for a day');
+// audit H2: a raid-eligible front can't be crewed to spirit the income away from the Bureau
+await pool.query(`UPDATE businesses SET inside_at=NULL, scrutiny=100, scrutiny_at=now() WHERE id='${frontId}'`);
+assert.equal((await call('POST', `/v1/heists/${h6}/execute`, { token: hank.token })).body.error, 'feds_watching', 'a hot front is off the menu — the owner eats the raid first');
+await pool.query(`UPDATE businesses SET scrutiny=0 WHERE id='${frontId}'`);
 // family marks are off-limits: marco joins hank's new family → omertà
 const famId = (await call('POST', '/v1/gangs', { token: hank.token, body: { name: 'Inside Men', tag: 'INS' } })).body.gangId;
 assert(famId, 'hank founded a family');
 assert.equal((await call('POST', `/v1/gangs/${famId}/join`, { token: marco.token })).code, 200, 'marco joined it');
-await pool.query(`UPDATE businesses SET inside_at=NULL WHERE id='${frontId}'`);
 assert.equal((await call('POST', `/v1/heists/${h6}/execute`, { token: hank.token })).body.error, 'family', "the crew doesn't raid its own flag");
 
 // ── §10.4: the vocabulary knows every heist reason ──
