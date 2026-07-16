@@ -3,10 +3,11 @@
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask } from './game.js';
 import {
-  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4,
+  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat,
 } from './rules.js';
+import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -160,13 +161,16 @@ export async function hireCrew(ch, client, h) {
 // ── HEAT MANAGEMENT (§5.3) ──
 export async function layLow(ch, client, h) {
   if (Number(ch.heat || 0) < 5) throw new GameError('cold', "You're already a ghost.");
-  if (Number(ch.cash) < M4.LAYLOW_CASH) throw new GameError('cash', `Laying low takes $${M4.LAYLOW_CASH}.`);
+  // Commission decree: AMNESTY — the judges are paid, laying low costs half this week
+  const amnesty = (await activeDecree(client))?.id === 'amnesty';
+  const cost = Math.floor(M4.LAYLOW_CASH * (amnesty ? COMMISSION.AMNESTY_MULT : 1));
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes $${cost}.`);
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
-  ch.cash = Number(ch.cash) - M4.LAYLOW_CASH;
+  ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - M4.LAYLOW_ENERGY;
   ch.heat = Math.max(0, Number(ch.heat) - M4.LAYLOW_COOL);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -M4.LAYLOW_CASH, reason: 'laylow' });
-  return { ok: true, heat: Math.round(Number(ch.heat)) };
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'laylow' });
+  return { ok: true, heat: Math.round(Number(ch.heat)), cost, ...(amnesty ? { amnesty: true } : {}) };
 }
 
 export async function cleanPapers(ch, client, h) {

@@ -154,6 +154,15 @@ shrinks everyone's take), the stake is sunk at execution, and the rat payout is 
 `HEIST_LEADER_WEIGHT`, `HEIST_PLAN_TTL_MS`. **DECIDE at next sim pass** — run `node tools/sim.js`
 and compare the crime-curve rows before tuning.
 
+## Post-signing addendum — the Commission (weekly decree modifiers, sign-off pending)
+
+The Commission moves NO money (no faucet, no sink — §10.4 untouched). Its decrees are temporary
+one-week MODIFIERS on levers this document already signed: `OPEN_SEASON_MULT` 0.5 (× SAFEHOUSE_MS),
+`AMNESTY_MULT` 0.5 (× LAYLOW_CASH — the discounted cost is what's ledgered), `LOCKDOWN_DEF` +20
+(added to convoy defense), and the Pax (blocks NEW `declareWar`; running wars finish). Because a
+decree needs a MAJORITY of the top-5 families and lasts one week, abuse is self-limited by politics
+— but the multipliers themselves are founder levers: sign the three numbers before production.
+
 ## Appendix — the original DECIDE list (for the record)
 
 - **D1 — Should killing pay against mid-tier marks?** Today a kill costs $67k–$390k in ammo

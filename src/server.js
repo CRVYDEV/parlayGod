@@ -18,6 +18,7 @@ import * as Business from './business.js';
 import * as Casino from './casino.js';
 import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
+import * as Commission from './commission.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -315,6 +316,11 @@ export async function buildServer() {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
   });
+
+  // THE COMMISSION — the top families' weekly city decree (votes public, effect next week).
+  app.get('/v1/commission', async () => Commission.commissionBoard(pool));
+  app.post('/v1/commission/vote', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castVote(ch, req.body?.decree, client, h)));
 
   // SMUGGLING CONVOYS — bulk goods in transit: load, guard, ship; ambush someone else's.
   app.get('/v1/convoys', { preHandler: auth }, async (req) => {

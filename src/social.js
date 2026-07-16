@@ -8,10 +8,11 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA,
+  VENDETTA, COMMISSION,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
+import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -183,6 +184,9 @@ export async function resolveWarIfDue(client, gangId) {
 export async function declareWar(ch, targetGangId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss declares war.');
   if (targetGangId === h.owned.gangId) throw new GameError('self', 'A family war with yourself is called Tuesday.');
+  // Commission decree: THE PAX — no new wars this week (running wars still resolve)
+  if ((await activeDecree(client))?.id === 'pax')
+    throw new GameError('pax', 'The Commission has declared the Pax — no new wars this week.');
   await resolveWarIfDue(client, h.owned.gangId);
   await resolveWarIfDue(client, targetGangId);
   const [id1, id2] = [h.owned.gangId, targetGangId].sort();
@@ -947,9 +951,12 @@ export async function enterSafehouse(ch, client, h) {
   if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'safehouse' });
-  ch.safe_until = new Date(Date.now() + M3.SAFEHOUSE_MS);
+  // Commission decree: OPEN SEASON halves every stay — the knives are out this week
+  const decree = await activeDecree(client);
+  const ms = Math.floor(M3.SAFEHOUSE_MS * (decree?.id === 'open_season' ? COMMISSION.OPEN_SEASON_MULT : 1));
+  ch.safe_until = new Date(Date.now() + ms);
   await h.track(client, ch.account_id, 'safehouse', { cost });
-  return { ok: true, safeUntil: ch.safe_until, cost };
+  return { ok: true, safeUntil: ch.safe_until, cost, ...(decree?.id === 'open_season' ? { openSeason: true } : {}) };
 }
 
 // ═══════════════════ BODYGUARDS — TWO-PARTY PROTECTION (M7 Phase 4) ═══════════════════

@@ -530,6 +530,15 @@ CREATE TABLE IF NOT EXISTS convoy_cargo (
   PRIMARY KEY (convoy_id, good_id)
 );
 
+-- THE COMMISSION: the top-5 families vote weekly on a city decree (active the FOLLOWING week,
+-- tallied lazily). One vote per family per week, changeable; votes are public. No money moves.
+CREATE TABLE IF NOT EXISTS commission_votes (
+  week INT NOT NULL,
+  gang_id TEXT NOT NULL,
+  decree TEXT NOT NULL,
+  PRIMARY KEY (week, gang_id)
+);
+
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).
 CREATE TABLE IF NOT EXISTS npc_hits (

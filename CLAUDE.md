@@ -618,6 +618,26 @@ INT columns (`SET qty = qty - $n`) mis-evaluate to `0 − n` — use absolute wr
 tolls to the holder's treasury, degrading multi-ambush, insured freight, NPC trucking. Suite
 12/12 + sim drift-0.
 
+**The Commission (step one) — BUILT** (`src/commission.js`, `test/commission.js` — the 13th suite
+file; design `omerta-commission-design.md`). Server-wide player politics with ZERO money flows —
+pure status + rule modifiers, so §10.4 is untouched by construction. The top `COMMISSION.SEATS` (5)
+families by standing (`lifetime_tribute + 10000×wars_won`) hold seats — seats are recomputed live
+on every read, never stored. Each seated family's boss/underboss casts ONE PUBLIC vote per week
+(`POST /v1/commission/vote`, upsert on `commission_votes (week, gang_id)` — changeable all week,
+visible on the board). The decree governing week W is the MAJORITY of week W−1's votes, tallied
+LAZILY on read (`activeDecree` — the §7.1 pattern, no cron); a tie or silence deadlocks (no decree).
+Four decrees, each exactly ONE touchpoint: **open_season** (safehouse stays ×`OPEN_SEASON_MULT` 0.5
+in `enterSafehouse`), **pax** (`declareWar` throws `'pax'` — existing wars run on), **amnesty**
+(`layLow` cost ×`AMNESTY_MULT` 0.5, the discounted number is what's ledgered), **lockdown**
+(`ambushConvoy` defense +`LOCKDOWN_DEF` 20, surfaced in the rng_audit outcome string).
+`GET /v1/commission` is public: seats, this week's votes, the active decree (+`lapsesSeconds`), the
+decree book. Decree modifiers are NEW founder sign-off levers — they're temporary weekly modifiers
+ON signed BALANCE.md levers, not retunes. Tests: seat order + the sixth family shut out, vote gates
+(rank/no_seat/bad_decree), cast + public change, majority tally + tie deadlock, all four touchpoints
+(safehouse halved, war blocked, laylow half-price ledger-exact, lockdown visible in the audit trail),
+vocabulary closed. Step two (deferred): seat-weighted votes, proposals with deposits, veto, a
+Commission tax. Suite 13/13 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
