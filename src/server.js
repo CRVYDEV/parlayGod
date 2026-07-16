@@ -14,6 +14,7 @@ import * as Fees from './fees.js';
 import * as V from './vanity.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
+import * as Business from './business.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -285,6 +286,23 @@ export async function buildServer() {
   app.get('/v1/territory', { preHandler: auth }, async (req) => {
     const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
     return { territory: gid ? await Territory.territoryOf(pool, gid) : [] };
+  });
+
+  // Business Empire — the premium, acquired-later personal front layer: buy/upgrade venues that
+  // farm pocket cash and double as private, lower-heat laundering. GET /v1/catalog is the public
+  // discoverable catalog (also closes the audit's API-discoverability gap).
+  app.get('/v1/catalog', async () => ({ businesses: Business.catalog() }));
+  app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
+  app.post('/v1/business/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.collectBusiness(ch, client, h)));
+  app.post('/v1/business/:id/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.upgradeBusiness(ch, req.params.id, client, h)));
+  app.post('/v1/business/:id/launder', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.launderAtBusiness(ch, req.params.id, req.body?.amount, client, h)));
+  app.get('/v1/business', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
   });
 
   app.get('/v1/gangs', async () => {

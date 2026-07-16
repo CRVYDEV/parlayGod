@@ -400,6 +400,25 @@ CREATE TABLE IF NOT EXISTS territory_rackets (
 );
 CREATE INDEX IF NOT EXISTS ix_territory_owner ON territory_rackets (owner_gang);
 
+-- ── Business Empire (late-game, personal, upgradeable, launder-capable) ──
+-- Per-INSTANCE character property (unlike the flat character_assets one-row-per-id): a premium
+-- legit front with its own tier, a lazy income clock (last_collect_at) capped at BUSINESS_CAP_MS,
+-- and a per-day private-laundering window (launder_used within launder_at + 24h). One row per owned
+-- front; one front per (character, kind). Income → pocket cash (business:income); buy/upgrade are
+-- cash sinks (business:buy / business:upgrade). Laundering rides the existing swap:buy ledger.
+CREATE TABLE IF NOT EXISTS businesses (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  tier INT NOT NULL DEFAULT 1,
+  last_collect_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  launder_used NUMERIC NOT NULL DEFAULT 0,
+  launder_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (character_id, kind)
+);
+CREATE INDEX IF NOT EXISTS ix_businesses_character ON businesses (character_id);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in

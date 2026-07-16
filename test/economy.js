@@ -5,7 +5,7 @@ process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mo
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
-import { CARS, carVal, carMelt } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS } from '../src/rules.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
 {
@@ -247,6 +247,67 @@ assert(omrCheck.ok, `$OMR conservation holds with the stake pool + stake:reward-
 const ammFinal = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
 assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'AMM reserves stay positive');
 
+// ══════════ BUSINESS EMPIRE (premium, acquired-later personal fronts) ══════════
+// Buy/upgrade venues that farm pocket cash + double as private, lower-heat laundering. Exercised on
+// the SQL-seeded `cid` (level ~250), so the global cash-ledger identity isn't asserted here — the
+// focused checks below prove each faucet/sink is ledgered under the right §10.4 reason instead.
+let cat = await call('GET', '/v1/catalog');
+assert.equal(cat.code, 200, 'catalog is public'); assert(cat.body.businesses.find((b) => b.kind === 'laundromat')?.tiers.length === 3, 'catalog lists the laundromat + its tier ladder');
+// level gate — a low-level man can't open a front
+await seed("respect=100"); // level ~6, below the laundromat's level-15 gate
+assert.equal((await call('POST', '/v1/business/laundromat/buy', { token })).body.error, 'level', 'a business is level-gated ("acquired later")');
+await seed("respect=250000, cash=2000000, loc='docks', heat=0");
+// buy
+let bizCashPre = (await meOf(token)).cash;
+r = await call('POST', '/v1/business/laundromat/buy', { token });
+assert.equal(r.code, 200, 'bought a laundromat'); assert.equal(r.body.tier, 1, 'opens at tier 1');
+const bizId = r.body.id;
+assert(r.body.character.businesses.find((b) => b.kind === 'laundromat'), 'the front shows in the character view');
+assert(bizCashPre - (await meOf(token)).cash >= 250000 - 60, 'the $250k setup cost left the pocket');
+assert.equal((await call('POST', '/v1/business/laundromat/buy', { token })).body.error, 'exists', 'one laundromat per character');
+// collect — lazy income to pocket cash (tier-1 laundromat = $12k/hr). Tolerances absorb the
+// few-ms drift between pg-mem's now() (last_collect_at) and the JS Date.now() at accrual.
+await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '2 hours' WHERE character_id='${cid}'`);
+r = await call('POST', '/v1/business/collect', { token });
+assert.equal(r.code, 200, 'collected'); const col1 = r.body.collected;
+assert(Math.abs(col1 - 24000) <= 60, `banked ~2h of tier-1 income ($24k, got $${col1})`);
+// income is capped at BUSINESS_CAP_MS (24h) — an uncollected front can't hoard unbounded cash.
+// The cap is a fixed constant (min(elapsed, 24h)), so this collect is exact — no clock drift.
+await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '48 hours' WHERE character_id='${cid}'`);
+const colCap = (await call('POST', '/v1/business/collect', { token })).body.collected;
+assert.equal(colCap, 288000, 'income capped at 24h ($288k), not 48h');
+// upgrade — collects pending at the OLD rate first, then pays the next tier's cost
+await seed("cash=2000000");
+await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '1 hour', tier=1 WHERE character_id='${cid}'`);
+bizCashPre = (await meOf(token)).cash;
+r = await call('POST', `/v1/business/${bizId}/upgrade`, { token });
+assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.tier, 2, 'now tier 2'); const colUp = r.body.collected;
+assert(Math.abs(colUp - 12000) <= 60, `pending banked at the OLD rate before the upgrade (got $${colUp})`);
+assert(Math.abs(((await meOf(token)).cash - bizCashPre) - (colUp - 600000)) <= 60, 'net cash = +pending − the $600k tier-2 cost');
+// private laundering — NOT district-gated (works from neon, a non-wash-house), LOWER heat than the street
+await seed("cash=2000000, heat=0, safe_until=NULL, loc='neon'");
+r = await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 40000 } });
+assert.equal(r.code, 200, 'washed cash at your own front, off a wash-house district'); assert(r.body.gotOmr > 0, 'got $OMR');
+const meL = await meOf(token);
+assert(meL.heat >= 8 && meL.heat < CONSTANTS.LAUNDER_HEAT, `own-front laundering draws LESS heat than the street (${meL.heat} < ${CONSTANTS.LAUNDER_HEAT})`);
+// per-tier daily launder cap — tier 2 washes $50k/day, $40k used → only $10k headroom left
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 20000 } })).body.error, 'capacity', 'daily launder capacity is enforced');
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 10000 } })).code, 200, 'washing the remaining headroom clears');
+// the window resets after 24h
+await pool.query(`UPDATE businesses SET launder_at = now() - interval '25 hours' WHERE character_id='${cid}'`);
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 30000 } })).code, 200, 'the daily launder window rolls over after 24h');
+// still an extraction act — blocked from a safehouse (P1.3 shield-not-bunker)
+await seed("safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 1000 } })).body.error, 'safe', "can't wash money while to ground");
+await seed("safe_until=NULL");
+// §10.4: each movement is ledgered under the right reason (spends == sinks, income == faucet)
+const bizBuys = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:buy' AND character_id=$1", [cid])).rows[0].s);
+const bizUp = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:upgrade' AND character_id=$1", [cid])).rows[0].s);
+const bizInc = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:income' AND character_id=$1", [cid])).rows[0].s);
+assert.equal(bizBuys, -250000, 'business:buy is a ledgered cash sink');
+assert.equal(bizUp, -600000, 'business:upgrade is a ledgered cash sink');
+assert.equal(bizInc, col1 + colCap + colUp, 'business:income is a ledgered cash faucet (all three collects)');
+
 // ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──
 // An empty bucket over a 4h gap refills only ~2h of interest-eligibility (BANK_DAILY_CAP_MS 12h/day
 // → 0.5 ms credit per ms), so a continuously-online player banks HALF the raw 4h they'd otherwise
@@ -257,5 +318,5 @@ const afterCap = await meOf(token); // any action triggers accrual; interest is 
 assert(afterCap.bank > 1003000 && afterCap.bank < 1004000,
   `bank interest capped to ~2h of a 4h gap (~+0.33%, got +${afterCap.bank - 1000000}); uncapped 4h would be ~+6667`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering)');
 await app.close();

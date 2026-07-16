@@ -7,6 +7,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf } from './rules.js';
 import { accrue } from './accrual.js';
+import { businessesOf } from './business.js';
 
 const uid = () => crypto.randomUUID();
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -99,7 +100,9 @@ export async function loadOwned(client, ch) {
     gang = (await client.query('SELECT * FROM gangs WHERE id=$1', [gangId])).rows[0] || null;
     held = idList((await client.query('SELECT id FROM districts WHERE holder_gang=$1', [gangId])).rows, 'id');
   }
+  const businesses = await businessesOf(client, ch.id); // late-game personal fronts (usually empty)
   return {
+    businesses,
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
@@ -289,7 +292,7 @@ export function view(ch, acct = {}, owned = {}) {
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
     maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
     cargoCap: cargoCapacity(assets),
-    rackets: owned.rackets || [], assets, cargo: owned.cargo || {}, items: owned.items || {}, gear,
+    rackets: owned.rackets || [], assets, businesses: owned.businesses || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
