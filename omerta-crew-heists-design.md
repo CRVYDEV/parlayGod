@@ -50,6 +50,21 @@ scales with the AVERAGE crew level, so a low alt shrinks everyone's take.
   leader's transaction — no persistCharacter clobber); the leader's effects are in-memory.
 - A dead member voids readiness (`crew_not_ready`); the estate deletes the corpse's memberships
   and abandons heists they led (the stake is sunk — no corpse refunds).
-- Step two (deferred): role-specific checks (wheelman needs a fast car, boxman cunning gates),
-  timed execution windows, inside-job variants against player businesses, and a fence phase
-  (hot goods that need laundering before they're cash).
+
+## Step two — BUILT (roles + the Inside Job)
+- **Roles**: every crew slot is a named seat (`roles` per job; `HEIST_ROLES` maps
+  brains→cunning, muscle→muscle, wheelman→speed, gun→muscle), each claimed exactly once
+  (crew size == roles length; plan/join take `role`, default = first open seat). The success
+  roll now reads each member's stat FOR THEIR ROLE (×3), so a crew of true specialists matches
+  a crew of all-rounders stat-for-stat — specialists just get there cheaper, and the M8 respec
+  finally has a crew-composition use.
+- **The Inside Job** (`inside`, crew 2, lvl 12): the co-op raid on a PLAYER's business. Plan
+  names a `businessId` mark; the pot is `rateBps` (60%) of the front's PENDING income
+  redirected to the crew (`heist:inside` — the shakedown argument: bounded by incomePerHr
+  either way; the owner keeps the rest and the venue clock advances by only the stolen share —
+  NOT a new faucet). Gates: the mark can't be in the crew, family fronts are omertà, and the
+  venue locks down for `HEIST_INSIDE_CD_MS` (24h) win or lose. The mark is notified either way.
+  Lock order: members → heist row → the business row (terminal; the mark's CHARACTER row is
+  never locked — the venue is the contested object, the convoy-manifest discipline).
+- Deferred: timed execution windows, the fence phase (hot goods needing laundering).
+- New numbers (job entry + `HEIST_INSIDE_CD_MS`) are founder sign-off levers.

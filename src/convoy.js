@@ -1,10 +1,16 @@
 // SMUGGLING CONVOYS (design: omerta-convoys-design.md). Bulk goods on a real clock — visible on
-// the streets, ambushable once, turf-sheltered. Goods are OWNERSHIP, not §10.4 currency (an
-// ambush is a pure transfer, trunk-capped; scattered remainder rolls on); the only money flow is
-// the guard fee (`convoy:guards` cash sink) and the ambusher's ammo (`convoy:ambush` ammo sink).
+// the streets, ambushable, turf-sheltered. Goods are OWNERSHIP, not §10.4 currency (an
+// ambush is a pure transfer, trunk-capped; scattered remainder rolls on). Money flows:
+// `convoy:guards` (cash sink), `convoy:ambush` (ammo sink), and step two's `convoy:toll`
+// (a TRANSFER — shipper → the destination holder's treasury, the tribute pattern),
+// `convoy:insure` (premium → the insurance pool) and `convoy:payout` (pool → shipper, CAPPED
+// at the pool: zero-sum among shippers, the stake_pool precedent — collusion can only
+// redistribute what premiums funded). Step two also allows up to MAX_AMBUSHES attempts per
+// convoy (one per character), each fight WEARING the guard tier down for the next.
 // Lock notes: every action locks the convoy row FOR UPDATE under the actor's withCharacter lock
-// (characters → convoys, acyclic — the OWNER's character row is never touched by an ambush; the
-// manifest is the contested object, not the man).
+// (characters → convoys → gangs → singletons, acyclic — the OWNER's character row is never
+// touched by an ambush; the manifest is the contested object, not the man. The insurance CLAIM
+// therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { CONVOY, COMMISSION, guardTierOf, DISTRICTS, GOODS, goodPriceOf, cargoCapacity } from './rules.js';
@@ -75,7 +81,10 @@ export async function loadConvoy(ch, goodId, qty, client, h) {
 }
 
 // DEPART — pick the guard tier (the fee is the sink; the tier is never public) and hit the road.
-export async function departConvoy(ch, guardTier, client, h) {
+// Step two: `insure` buys freight insurance — a premium of INSURE_BPS of the manifest's base
+// value into the shared pool (`convoy:insure`); a hijack later pays INSURE_PAYOUT_BPS of the
+// LOST value back at collect, capped at whatever the pool holds. Insurance is never public.
+export async function departConvoy(ch, guardTier, insure, client, h) {
   const convoy = await myActive(client, ch.id);
   if (!convoy || convoy.status !== 'loading') throw new GameError('no_convoy', 'No shipment loading.');
   const tier = guardTierOf(guardTier || 'none');
@@ -83,18 +92,27 @@ export async function departConvoy(ch, guardTier, client, h) {
   const manifest = await manifestOf(client, convoy.id);
   const units = manifest.reduce((a, r) => a + Number(r.qty), 0);
   if (units < CONVOY.MIN_QTY) throw new GameError('light', `A convoy is for BULK — ${CONVOY.MIN_QTY} units minimum.`);
-  if (Number(ch.cash) < tier.fee) throw new GameError('cash', `${tier.id} guards run $${tier.fee}.`);
+  const value = manifestValue(manifest, convoy.destination);
+  const premium = insure ? Math.ceil(value * CONVOY.INSURE_BPS / 10000) : 0;
+  if (Number(ch.cash) < tier.fee + premium)
+    throw new GameError('cash', `${tier.id} guards run $${tier.fee}${premium ? ` and the policy $${premium}` : ''}.`);
   if (tier.fee > 0) {
     ch.cash = Number(ch.cash) - tier.fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'convoy:guards' });
   }
+  if (premium > 0) {
+    ch.cash = Number(ch.cash) - premium;
+    const pool = (await client.query('SELECT pool FROM convoy_insurance WHERE id=1 FOR UPDATE')).rows[0];
+    await client.query('UPDATE convoy_insurance SET pool=$1 WHERE id=1', [Number(pool.pool) + premium]);
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -premium, reason: 'convoy:insure' });
+  }
   const arrivesAt = new Date(Date.now() + convoyMs());
-  await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, departed_at=now(), arrives_at=$4 WHERE id=$1",
-    [convoy.id, tier.def, h.owned.gangId || null, arrivesAt]);
-  const band = valueBand(manifestValue(manifest, convoy.destination));
+  await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, insured=$4, departed_at=now(), arrives_at=$5 WHERE id=$1",
+    [convoy.id, tier.def, h.owned.gangId || null, !!premium, arrivesAt]);
+  const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
-  await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id });
-  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(convoyMs() / 1000), units, band };
+  await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id, insured: !!premium });
+  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(convoyMs() / 1000), units, band, premium };
 }
 
 // CANCEL while loading — the goods come back to the trunk (they must fit).
@@ -127,13 +145,20 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   if (arrived(c)) throw new GameError('arrived', 'It already reached the docks.');
   if (c.owner_character === ch.id) throw new GameError('own', "It's your own truck.");
   if (c.owner_gang && h.owned.gangId === c.owner_gang) throw new GameError('family', "That's the family's freight. Omertà.");
-  if (c.ambushed) throw new GameError('spent', 'Someone already tried — the guards are wide awake now.');
+  // step two: up to MAX_AMBUSHES attempts per convoy, ONE per character — each fight wears
+  // the guards down for the next crew (the tier's defense only; turf + lockdown never wear).
+  const prior = Number(c.ambushes || 0);
+  if (prior >= CONVOY.MAX_AMBUSHES) throw new GameError('spent', 'That road has seen enough — the law is thick out there now.');
+  const mine = (await client.query('SELECT 1 FROM convoy_ambushes WHERE convoy_id=$1 AND character_id=$2', [convoyId, ch.id])).rows[0];
+  if (mine) throw new GameError('once', 'You already made your play on that run.');
 
   ch.energy = Number(ch.energy) - CONVOY.AMBUSH_ENERGY;
   ch.ammo = Number(ch.ammo) - CONVOY.AMBUSH_AMMO;
   ch.heat = Math.min(100, Number(ch.heat || 0) + CONVOY.AMBUSH_HEAT);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -CONVOY.AMBUSH_AMMO, reason: 'convoy:ambush' });
-  await client.query('UPDATE convoys SET ambushed=true WHERE id=$1', [convoyId]);
+  await client.query('INSERT INTO convoy_ambushes (convoy_id, character_id) VALUES ($1,$2)', [convoyId, ch.id]);
+  // absolute write (pg-mem INT arithmetic quirk) — safe under the convoy row lock
+  await client.query('UPDATE convoys SET ambushed=true, ambushes=$2 WHERE id=$1', [convoyId, prior + 1]);
 
   // turf shelters its own: a run touching the owner family's districts fights harder
   let turfDef = 0;
@@ -143,25 +168,33 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   }
   // Commission decree: LOCKDOWN — every convoy on the road fights with extra guns this week
   const lockdown = (await activeDecree(client))?.id === 'lockdown' ? COMMISSION.LOCKDOWN_DEF : 0;
+  const wear = Math.min(1, prior * CONVOY.GUARD_WEAR_BPS / 10000);
+  const guardDef = Number(c.guards) * (1 - wear);
   const atk = Number(ch.muscle) + Number(ch.speed) * 0.5 + rand(30);
-  const def = Number(c.guards) + turfDef + lockdown + rand(30);
+  const def = guardDef + turfDef + lockdown + rand(30);
   await h.rngLog(client, ch.id, `convoy:ambush:${convoyId}`,
-    Math.round(atk * 100) / 100, `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''})`);
+    Math.round(atk * 100) / 100,
+    `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''}${prior ? `, guards worn ${prior}` : ''})`);
 
   if (atk > def) {
     // take what the trunk holds — a pure ownership transfer; the rest rolls on to the docks
     const manifest = await manifestOf(client, convoyId);
     const cap = cargoCapacity(h.owned.assets);
     let space = Math.max(0, cap - cargoCount(h.owned.cargo));
-    let taken = 0;
+    let taken = 0, lossValue = 0;
     for (const m of manifest) {
       if (space <= 0) break;
       const grab = Math.min(Number(m.qty), space);
       space -= grab; taken += grab;
+      lossValue += goodPriceOf(m.good_id, c.destination) * grab;
       h.owned.cargo[m.good_id] = (h.owned.cargo[m.good_id] || 0) + grab;
       await setCargo(client, ch.id, m.good_id, h.owned.cargo[m.good_id]);
       await client.query('UPDATE convoy_cargo SET qty = $3 WHERE convoy_id=$1 AND good_id=$2', [convoyId, m.good_id, Number(m.qty) - grab]);
     }
+    // insured freight: stamp the base value lost — the OWNER claims lazily at collect (their
+    // own transaction; an ambush never touches the owner's character row). No money moves here.
+    if (c.insured && lossValue > 0)
+      await client.query('UPDATE convoys SET insured_loss=$2 WHERE id=$1', [convoyId, Number(c.insured_loss || 0) + lossValue]);
     await h.notify(client, c.owner_character, 'convoy_hit', { from: c.origin, to: c.destination, taken });
     bus.emit('streets', { type: 'convoy_hijacked', by: ch.name, from: c.origin, to: c.destination });
     await h.track(client, ch.account_id, 'convoy_ambush', { win: true, taken });
@@ -175,7 +208,11 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   return { ok: true, win: false, hospSeconds: Math.ceil(CONVOY.FAIL_HOSP_MS / 1000) };
 }
 
-// COLLECT — after arrival, at the destination, trunk-capacity at a time.
+// COLLECT — after arrival, at the destination, trunk-capacity at a time. Step two settles the
+// money here, in the OWNER's own transaction (lock order characters → convoys → gangs →
+// singletons): the destination TOLL (holder family's cut of what lands on their docks — a
+// ledgered transfer, clamped to pocket, never a gate on the freight) and the INSURANCE claim
+// (payout for hijacked value, capped at whatever the pool holds — insurers' risk).
 export async function collectConvoy(ch, convoyId, client, h) {
   const c = (await client.query('SELECT * FROM convoys WHERE id=$1 FOR UPDATE', [convoyId])).rows[0];
   if (!c || c.owner_character !== ch.id) throw new GameError('no_convoy', 'Not your shipment.');
@@ -185,18 +222,43 @@ export async function collectConvoy(ch, convoyId, client, h) {
   const manifest = await manifestOf(client, convoyId);
   const cap = cargoCapacity(h.owned.assets);
   let space = Math.max(0, cap - cargoCount(h.owned.cargo));
-  let taken = 0, left = 0;
+  let taken = 0, left = 0, collectedValue = 0;
   for (const m of manifest) {
     const grab = Math.min(Number(m.qty), space);
     space -= grab; taken += grab; left += Number(m.qty) - grab;
     if (grab > 0) {
+      collectedValue += goodPriceOf(m.good_id, c.destination) * grab;
       h.owned.cargo[m.good_id] = (h.owned.cargo[m.good_id] || 0) + grab;
       await setCargo(client, ch.id, m.good_id, h.owned.cargo[m.good_id]);
       await client.query('UPDATE convoy_cargo SET qty = $3 WHERE convoy_id=$1 AND good_id=$2', [convoyId, m.good_id, Number(m.qty) - grab]);
     }
   }
+  // the destination toll: the family holding these docks takes its cut of what YOU collect
+  // (own turf and unheld docks are free). Clamped to pocket — the freight is never held hostage.
+  let toll = 0;
+  const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [c.destination])).rows[0]?.holder_gang;
+  if (holder && holder !== h.owned.gangId && collectedValue > 0) {
+    toll = Math.min(Math.floor(collectedValue * CONVOY.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash))));
+    if (toll > 0) {
+      ch.cash = Number(ch.cash) - toll;
+      await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'convoy:toll' });
+    }
+  }
+  // the insurance claim: pay out the hijacked value's share, capped at the pool (zero-sum)
+  let insurance = 0;
+  if (c.insured && Number(c.insured_loss) > 0) {
+    const pool = Number((await client.query('SELECT pool FROM convoy_insurance WHERE id=1 FOR UPDATE')).rows[0].pool);
+    insurance = Math.min(Math.floor(Number(c.insured_loss) * CONVOY.INSURE_PAYOUT_BPS / 10000), Math.max(0, Math.floor(pool)));
+    if (insurance > 0) {
+      ch.cash = Number(ch.cash) + insurance;
+      await client.query('UPDATE convoy_insurance SET pool=$1 WHERE id=1', [pool - insurance]);
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: insurance, reason: 'convoy:payout' });
+    }
+    await client.query('UPDATE convoys SET insured_loss=0 WHERE id=$1', [convoyId]);
+  }
   if (left === 0) await client.query("UPDATE convoys SET status='done' WHERE id=$1", [convoyId]);
-  return { ok: true, collected: taken, remaining: left };
+  return { ok: true, collected: taken, remaining: left, toll, insurance };
 }
 
 // The road board: everything in transit (value BAND only — scouting the tier is the gamble),
@@ -211,7 +273,7 @@ export async function convoyBoard(pool, characterId) {
   for (const r of cargo) (byConvoy[r.convoy_id] = byConvoy[r.convoy_id] || []).push(r);
   const inTransit = rows.map((c) => ({ id: c.id, owner: c.owner, from: c.origin, to: c.destination,
     band: valueBand(manifestValue(byConvoy[c.id] || [], c.destination)),
-    ambushed: c.ambushed,
+    ambushed: c.ambushed, ambushes: Number(c.ambushes || 0), ambushesLeft: Math.max(0, CONVOY.MAX_AMBUSHES - Number(c.ambushes || 0)),
     arrivesSeconds: Math.max(0, Math.ceil((new Date(c.arrives_at) - Date.now()) / 1000)) }));
   const mine = (await pool.query(
     "SELECT * FROM convoys WHERE owner_character=$1 AND status IN ('loading','transit')", [characterId])).rows[0] || null;
@@ -220,7 +282,12 @@ export async function convoyBoard(pool, characterId) {
     const m = (byConvoy[mine.id]) || (await pool.query('SELECT good_id, qty FROM convoy_cargo WHERE convoy_id=$1 AND qty > 0', [mine.id])).rows;
     my = { id: mine.id, status: arrived(mine) ? 'arrived' : mine.status, from: mine.origin, to: mine.destination,
       manifest: m.map((x) => ({ good: x.good_id, qty: Number(x.qty) })), ambushed: mine.ambushed,
+      ambushes: Number(mine.ambushes || 0), insured: mine.insured,
+      insuranceDue: mine.insured ? Math.floor(Number(mine.insured_loss || 0) * CONVOY.INSURE_PAYOUT_BPS / 10000) : 0,
       arrivesSeconds: mine.arrives_at ? Math.max(0, Math.ceil((new Date(mine.arrives_at) - Date.now()) / 1000)) : null };
   }
-  return { guardTiers: CONVOY.GUARD_TIERS, minQty: CONVOY.MIN_QTY, inTransit, mine: my };
+  return { guardTiers: CONVOY.GUARD_TIERS, minQty: CONVOY.MIN_QTY,
+    maxAmbushes: CONVOY.MAX_AMBUSHES, tollBps: CONVOY.TOLL_BPS,
+    insureBps: CONVOY.INSURE_BPS, insurePayoutBps: CONVOY.INSURE_PAYOUT_BPS,
+    inTransit, mine: my };
 }

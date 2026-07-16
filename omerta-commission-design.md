@@ -37,7 +37,14 @@ the ledger records as always).
 (and when it lapses), and the decree book. Votes notify the family channel; the active decree is
 visible to everyone (it governs them).
 
-## 4. Step two (deferred)
-Seat-weighted votes, decree proposals with treasury deposits (skin in the game), a NO-DECREE
-veto option, city-event interactions, and a Commission tax (one basis point of the buyback to
-the seated families — would need §10.4 terms, hence deferred).
+## 4. Step two — BUILT (weighted seats + the veto)
+- **Seat-weighted ballots**: a vote carries the family's CURRENT seat weight (head of the
+  table = SEATS points … last seat = 1), stamped at CAST time — re-casting refreshes it, and
+  the tally freezes when the week does (no mid-week decree flips; timing games are just
+  politics, on the public record). Weighted ties still deadlock.
+- **The veto**: the head seat's BOSS (and nobody else — not the underboss) may kill the decree
+  in force, once per week (`commission_vetoes`, week PK). The veto is public (board `veto`
+  field + a streets-feed event) and the dead decree's touchpoints go inert immediately. Pure
+  politics — no money, no §10.4 surface.
+- Deferred: decree proposals with treasury deposits, city-event interactions, and the
+  Commission tax (would need §10.4 terms).

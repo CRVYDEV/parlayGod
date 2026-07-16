@@ -321,6 +321,8 @@ export async function buildServer() {
   app.get('/v1/commission', async () => Commission.commissionBoard(pool));
   app.post('/v1/commission/vote', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castVote(ch, req.body?.decree, client, h)));
+  app.post('/v1/commission/veto', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.vetoDecree(ch, client, h)));
 
   // SMUGGLING CONVOYS — bulk goods in transit: load, guard, ship; ambush someone else's.
   app.get('/v1/convoys', { preHandler: auth }, async (req) => {
@@ -333,7 +335,7 @@ export async function buildServer() {
   app.post('/v1/convoy/load', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.loadConvoy(ch, req.body?.goodId, req.body?.qty, client, h)));
   app.post('/v1/convoy/depart', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.departConvoy(ch, req.body?.guards, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.departConvoy(ch, req.body?.guards, !!req.body?.insure, client, h)));
   app.post('/v1/convoy/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.cancelConvoy(ch, client, h)));
   app.post('/v1/convoy/:id/ambush', { preHandler: auth }, async (req) =>
@@ -348,9 +350,10 @@ export async function buildServer() {
     return Heists.heistBoard(pool, cid);
   });
   app.post('/v1/heists/plan', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.planHeist(ch, req.body?.job, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) =>
+      Heists.planHeist(ch, req.body?.job, { role: req.body?.role, businessId: req.body?.businessId }, client, h)));
   app.post('/v1/heists/:id/join', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, req.body?.role, client, h)));
   app.post('/v1/heists/:id/leave', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.leaveHeist(ch, req.params.id, client, h)));
   app.post('/v1/heists/:id/rat', { preHandler: auth }, async (req) =>

@@ -727,15 +727,24 @@ export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —
 // a NEW faucet: numbers are founder sign-off levers (BALANCE.md addendum) — sim before retuning.
+// Step two: every crew slot is a ROLE (each claimed exactly once — crew size == roles length) and
+// the success roll reads each member's stat FOR THEIR ROLE (x3, so a full specialist crew matches
+// a full generalist crew stat-for-stat; specialists get there cheaper — respec has a use). The
+// INSIDE JOB is the co-op raid on a PLAYER's business: the pot is rateBps of the front's PENDING
+// income redirected to the crew (the shakedown argument — bounded by incomePerHr either way, the
+// owner keeps the rest and the clock advances by only the stolen share). NOT a new faucet.
+export const HEIST_ROLES = { brains: 'cunning', muscle: 'muscle', wheelman: 'speed', gun: 'muscle' };
 export const HEIST_JOBS = [
-  { id: 'payroll',  name: 'The Payroll Office', crew: 2, lvl: 8,  base: 0.65, stake: 10000, takePerLvl: [4400, 7000],   jailS: 120, rep: 30 },
-  { id: 'vault',    name: 'The Bank Vault',     crew: 3, lvl: 20, base: 0.50, stake: 30000, takePerLvl: [11000, 17000], jailS: 240, rep: 80 },
-  { id: 'fedtrain', name: 'The Reserve Train',  crew: 4, lvl: 40, base: 0.38, stake: 80000, takePerLvl: [26000, 37000], jailS: 420, rep: 200 },
+  { id: 'payroll',  name: 'The Payroll Office', crew: 2, lvl: 8,  base: 0.65, stake: 10000, takePerLvl: [4400, 7000],   jailS: 120, rep: 30,  roles: ['muscle', 'wheelman'] },
+  { id: 'inside',   name: 'The Inside Job',     crew: 2, lvl: 12, base: 0.55, stake: 15000, rateBps: 6000,              jailS: 180, rep: 40,  roles: ['brains', 'muscle'] },
+  { id: 'vault',    name: 'The Bank Vault',     crew: 3, lvl: 20, base: 0.50, stake: 30000, takePerLvl: [11000, 17000], jailS: 240, rep: 80,  roles: ['brains', 'muscle', 'wheelman'] },
+  { id: 'fedtrain', name: 'The Reserve Train',  crew: 4, lvl: 40, base: 0.38, stake: 80000, takePerLvl: [26000, 37000], jailS: 420, rep: 200, roles: ['brains', 'muscle', 'gun', 'wheelman'] },
 ];
 export const heistJobOf = (id) => HEIST_JOBS.find((j) => j.id === id) || null;
 export const HEIST_PLAN_TTL_MS = 6 * 3600 * 1000;  // a plan goes stale after 6h (sweep refunds a living leader)
 export const HEIST_RAT_BPS = 5000;                  // the informant's payout: 50% of the stake (self-rat is -EV)
 export const HEIST_LEADER_WEIGHT = 1.2;             // the leader's split weight (fronted the stake)
+export const HEIST_INSIDE_CD_MS = 24 * 3600 * 1000; // per-VENUE inside-job cooldown (win or lose)
 // SMUGGLING CONVOYS — bulk goods on a real clock: visible, ambushable, turf-sheltered. The only
 // new money flow is the guard fee (a cash sink); an ambush is a pure goods TRANSFER (trunk-capped)
 // and goods aren't a §10.4 currency. Numbers are founder sign-off levers. TEST-ONLY: CONVOY_MS
@@ -749,6 +758,12 @@ export const CONVOY = {
   ],
   AMBUSH_ENERGY: 20, AMBUSH_AMMO: 10, AMBUSH_HEAT: 15,
   FAIL_HOSP_MS: 30 * 60 * 1000, TURF_DEF: 15,
+  // ── step two (all founder sign-off levers) ──
+  TOLL_BPS: 500,            // 5% of collected goods' base value → the DESTINATION holder's treasury (a transfer; own turf/unheld = free)
+  MAX_AMBUSHES: 3,          // attempts per convoy (one per character); each fight WEARS the guards
+  GUARD_WEAR_BPS: 2500,     // each prior fight strips 25% off the GUARD tier's defense (turf/lockdown never wear)
+  INSURE_BPS: 1000,         // premium at depart: 10% of the manifest's base value (convoy:insure → the pool)
+  INSURE_PAYOUT_BPS: 5000,  // claim at collect: 50% of the base value LOST to hijacks, CAPPED at the pool
 };
 export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) || null;
 // THE COMMISSION — the top-SEATS families vote weekly on a city decree (majority of last week's
@@ -757,6 +772,9 @@ export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) |
 // untouched by construction). Design: omerta-commission-design.md.
 export const COMMISSION = {
   SEATS: 5,
+  // step two: votes are SEAT-WEIGHTED — the head of the table casts SEATS points, the last seat 1.
+  // Weight is stamped at CAST time (re-casting refreshes it); the tally is frozen when the week is.
+  // The head seat's BOSS can also VETO the sitting decree, once per week, on the public record.
   OPEN_SEASON_MULT: 0.5,  // safehouse stays halved
   AMNESTY_MULT: 0.5,      // laylow at half price
   LOCKDOWN_DEF: 20,       // every convoy fights +20 defense

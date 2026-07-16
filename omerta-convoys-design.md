@@ -40,5 +40,22 @@ Numbers (`CONVOY` block in the rules tail) are founder sign-off levers.
 ## 3. Edges
 - Estate: a dead owner's convoy is lost with the street (scattered on the highway).
 - `CONVOY_MS` env override is TEST-ONLY (the SEARCH_MS pattern).
-- Step two: destination tolls to the district holder's treasury (turf income), multi-ambush
-  with degrading guards, insured freight (an ETH/premium product), NPC trucking for a fee.
+## 4. Step two — BUILT (tolls, multi-ambush, insured freight)
+- **Destination tolls**: collecting at docks HELD by another family pays `TOLL_BPS` (5%) of the
+  collected goods' base value from the shipper's pocket to the holder's treasury — a ledgered
+  TRANSFER (`convoy:toll`, the tribute pattern; the §10.4 treasury check gained the term). Own
+  turf and unheld docks are free; the toll clamps to pocket and never holds the freight hostage.
+  Turf finally taxes the trade routes that cross it.
+- **Degrading multi-ambush**: up to `MAX_AMBUSHES` (3) attempts per convoy, ONE per character
+  (`convoy_ambushes`); each prior fight wears `GUARD_WEAR_BPS` (25%) off the GUARD tier's
+  defense (turf + lockdown never wear). The wear is visible in the rng-audit outcome.
+- **Insured freight**: `depart {insure:true}` pays a premium of `INSURE_BPS` (10%) of the
+  manifest's base value into a shared pool (`convoy_insurance` singleton, `convoy:insure`); a
+  hijack stamps the LOST base value on the policy and the owner claims `INSURE_PAYOUT_BPS`
+  (50%) of it lazily AT COLLECT — **capped at the pool** (the stake_pool precedent), so the
+  product is zero-sum among shippers by construction: collusion (insure → friend hijacks →
+  claim) can only redistribute premiums, never mint. §10.4 check: pool = premiums − payouts.
+  The claim settles in the OWNER's transaction (an ambush never touches the owner's row).
+- Deferred: NPC trucking for a fee.
+- New numbers (`TOLL_BPS`/`MAX_AMBUSHES`/`GUARD_WEAR_BPS`/`INSURE_BPS`/`INSURE_PAYOUT_BPS`)
+  are founder sign-off levers.
