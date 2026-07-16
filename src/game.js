@@ -262,14 +262,14 @@ async function persistCharacter(client, ch) {
       lab=$27, crew=$28, heist_at=$29, title=$30,
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
       guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
-      bank_intransit=$40, bank_intransit_at=$41 WHERE id=$1`,
+      bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
      ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
      ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
-     ch.bank_intransit ?? 0, ch.bank_intransit_at]);
+     ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -297,6 +297,7 @@ export function view(ch, acct = {}, owned = {}) {
     shootCdSeconds: ch.shoot_cd_until ? Math.max(0, Math.ceil((new Date(ch.shoot_cd_until) - Date.now()) / 1000)) : 0,
     safeSeconds: ch.safe_until ? Math.max(0, Math.ceil((new Date(ch.safe_until) - Date.now()) / 1000)) : 0,
     guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
+    fadeLimit: ch.fade_limit != null ? Math.floor(Number(ch.fade_limit)) : null,
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,

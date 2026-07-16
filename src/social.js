@@ -1073,7 +1073,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead guard's principals are released: bodyguardAbsorbs already refuses a dead guard, but the
   // stale pointer also BLOCKED hiring a replacement for the rest of the window (paid, unprotected,

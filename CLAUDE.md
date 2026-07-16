@@ -522,8 +522,23 @@ $10–$1k, ONE ticket per street per day in `numbers_tickets`, drawn from
 `test/casino.js` (10th suite file, wired into npm test) proves: district/limit/jail gates, a
 60-round craps session with stakes/payouts/1%-street-cut ledgered EXACTLY, $OMR untouched across
 the session, ticket lifecycle (one/day, early-claim refused, 600:1 hit, losing settle, idempotent),
-and the per-character §10.4 identity + vocabulary. Step two (deferred): PvP dice (escrowed,
-5% rake), fight fixing (city-event tie-in), casino-business rakeback, the high-stakes room.
+and the per-character §10.4 identity + vocabulary. **Step two — BUILT**: **back-room PvP dice**
+(consent-by-listing via `characters.fade_limit` — the bodyguard-market pattern; challenger rolls a
+fader under withTwoCharacters, symmetric 2d6 ties-reroll, winner takes pot − `PVP_RAKE_BPS` 5%,
+half the rake → street tax + half burns; ledgered `casino:pvp` ±, a pure §10.4 transfer with a
+take; no escrow — one atomic txn), **the weekly fight** (`fight_bets` one capped bet/street/week —
+`FIGHT_MAX` $5k is the fix's structural abuse bound; favorite at `FIGHT_FAV_P` .65 off the seed
+draw, pays 1.45/2.6; lazy claim) **+ THE FIX** (`fight_fixes`: the boss of the family holding neon
+buys the result once/week for `FIGHT_FIX_COST` $50k from the TREASURY — `casino:fix`, a
+character_id-NULL treasury sink added to invariant check (b)), **casino-front rakeback** (owners of
+a `casino` business split `RAKEBACK_BPS` 1% of den stake volume — `den_volume` counter singleton +
+per-front `rake_cursor` stamped at buy so new owners never claim history; paid at business collect,
+ledgered `casino:rakeback`), and **the high-stakes room** (level ≥ `HIGH_LVL` 30 raises the PvE
+table to `HIGH_MAX` $2M; pots ≥ `HIGH_FEED` $250k hit the streets feed). `numbers_tickets` +
+`fight_bets` joined the runEstate wipe. Tests: fade gates/board, exact PvP transfer + rake split
+both directions, fight side/cap/one-per-week gates, fix rank/turf/once/treasury paths, fixed +
+seed-drawn settlements, rakeback cursor exactness + no-double-claim, and the treasury §10.4 check
+reconciling `casino:fix`. All step-two numbers are founder sign-off levers.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

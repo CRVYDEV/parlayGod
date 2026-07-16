@@ -53,8 +53,10 @@ export async function runLedgerInvariants(pool) {
   // Phase 3 territory rackets: `territory:income` is a treasury FAUCET, `territory:establish` a SINK.
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
   const territoryOut = -(await sum(pool, "currency='cash' AND reason='territory:establish'"));
+  // Den step 2: the neon family's fight fix is a treasury sink (character_id NULL, like gang:war)
+  const fixOut = -(await sum(pool, "currency='cash' AND reason='casino:fix'"));
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome - warOut - seizeOut - dissolvedCash - contractOut - territoryOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.
