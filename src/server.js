@@ -408,6 +408,25 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
   // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
   app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
+  // THE BLOOD-FEUD LEDGER: the public tally between MY bloodline and theirs — kills each way
+  // (from kill_log), net bloodOwed (positive = they owe us bodies), and any active vendetta in
+  // either direction. Pure reader; vendettas themselves are created by the estate.
+  app.get('/v1/feud/:characterId', { preHandler: auth }, async (req) => {
+    const myAcct = req.user.sub;
+    const theirs = (await pool.query('SELECT account_id, name FROM characters WHERE id=$1', [req.params.characterId])).rows[0];
+    if (!theirs) throw new G.GameError('no_target', 'Nobody by that name, living or dead.');
+    const count = async (killer, victim) => Number((await pool.query(
+      'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2', [killer, victim])).rows[0].n);
+    const oursDown = await count(theirs.account_id, myAcct);   // bodies they took from us
+    const theirsDown = await count(myAcct, theirs.account_id); // bodies we took from them
+    const vend = async (a, b) => (await pool.query(
+      'SELECT sworn, expires_at FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()', [a, b])).rows[0] || null;
+    const mineV = await vend(myAcct, theirs.account_id), theirsV = await vend(theirs.account_id, myAcct);
+    return { bloodline: theirs.name, kills: { ours: theirsDown, theirs: oursDown },
+      bloodOwed: oursDown - theirsDown, // positive: they owe us bodies
+      myVendetta: mineV ? { sworn: mineV.sworn, expiresSeconds: Math.max(0, Math.ceil((new Date(mineV.expires_at) - Date.now()) / 1000)) } : null,
+      theirVendetta: !!theirsV };
+  });
   // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
   app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier)));

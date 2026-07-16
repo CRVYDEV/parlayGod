@@ -474,6 +474,19 @@ CREATE TABLE IF NOT EXISTS den_volume (
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
 
+-- VENDETTAS: a player fire-kill swears the victim's bloodline (ACCOUNT) against the killer's —
+-- surviving both sides' deaths until settled (a revenge fire-kill, 2x rep) or lapsed. One active
+-- vendetta per pair (a repeat kill refreshes the clock). Zero money flows — pure status + the
+-- directed-floor waiver. Design: omerta-vendetta-design.md.
+CREATE TABLE IF NOT EXISTS vendettas (
+  avenger_account TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  sworn TEXT NOT NULL,                 -- the dead street's name (who this is for)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (avenger_account, target_account)
+);
+
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).
 CREATE TABLE IF NOT EXISTS npc_hits (

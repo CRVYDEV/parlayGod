@@ -557,6 +557,22 @@ table), D5 bank interest tapers above `BANK_TAPER_ABOVE` $10M to `BANK_TAPER_KEE
 D8 leftovers accepted for alpha. THE ECONOMY IS SIGNED — every KEEP row in BALANCE.md is
 production balance. After ANY retune: `node tools/sim.js` + `npm test` must stay green.
 
+**Vendettas & blood feuds — BUILT** (`omerta-vendetta-design.md`; social.js/estate + `vendettas`
+table, account×account, PK pair, sworn = the dead street's name). A player FIRE-kill (never NPC/mod)
+makes `runEstate` swear the victim's bloodline against the killer's for `VENDETTA.TTL_MS` (7d; a
+repeat kill refreshes; the heir is notified at birth; active vendettas ride the view via loadOwned,
+joined to the target bloodline's CURRENT street). Grants (status + access, ZERO money flows — §10.4
+untouched): (1) settlement — a revenge fire-kill inside the window closes the row, feeds the streets
+(`vendetta_settled`), returns `vendetta: true`, and pays `VENDETTA.REP_BONUS` (2×) feared-rep, where
+the bloodline-diminishing rule STILL divides — so a first revenge nets exactly full base rep (2×/2)
+and mutual kill-trading decays (the anti-farm is arithmetic; max(directed 1.5×, vendetta 2×), never
+a stack); (2) the `DIRECTED_MIN` floor is WAIVED posting a directed contract on your vendetta target
+(vengeance at street rates; squat-safe because a vendetta only exists when they actually killed you).
+`GET /v1/feud/:characterId` is the public blood-feud ledger (kill_log both ways, net `bloodOwed`,
+active vendettas both directions). Worker sweeps lapsed rows (reads filter anyway). Tests: heir
+inheritance + notification, ledger, waiver, 66-rep settlement (2× with 0 priors), the reverse debt,
+lapsed-grants-nothing. TTL/bonus are cosmetic-axis founder levers (outside the signed economy).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

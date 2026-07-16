@@ -101,8 +101,14 @@ export async function loadOwned(client, ch) {
     held = idList((await client.query('SELECT id FROM districts WHERE holder_gang=$1', [gangId])).rows, 'id');
   }
   const businesses = await businessesOf(client, ch.id); // late-game personal fronts (usually empty)
+  // active vendettas this bloodline holds — joined to the target bloodline's CURRENT street
+  const vendettas = (await client.query(
+    `SELECT v.sworn, v.expires_at, c.name AS target_name, c.id AS target_id
+       FROM vendettas v LEFT JOIN characters c ON c.account_id = v.target_account AND c.alive
+      WHERE v.avenger_account=$1 AND v.expires_at > now()`, [ch.account_id])).rows;
   return {
     businesses,
+    vendettas,
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
@@ -299,6 +305,8 @@ export function view(ch, acct = {}, owned = {}) {
     safeSeconds: ch.safe_until ? Math.max(0, Math.ceil((new Date(ch.safe_until) - Date.now()) / 1000)) : 0,
     guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
     fadeLimit: ch.fade_limit != null ? Math.floor(Number(ch.fade_limit)) : null,
+    vendettas: (owned.vendettas || []).map((v) => ({ target: v.target_name || null, targetId: v.target_id || null,
+      sworn: v.sworn, expiresSeconds: Math.max(0, Math.ceil((new Date(v.expires_at) - Date.now()) / 1000)) })),
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,

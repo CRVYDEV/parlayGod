@@ -8,6 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
+  VENDETTA,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -310,7 +311,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
   const kind = opts.kind || 'kill';
   if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
-  const t = (await client.query('SELECT id, name FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  const t = (await client.query('SELECT id, name, account_id FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
   // Omertà: no open contracts on your own family (parity with searches/hits)
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
@@ -329,8 +330,14 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     const hm = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [opts.hitman])).rows[0];
     if (!hm) throw new GameError('no_hitman', 'No such hitman on the streets.');
     // sim-audit F1 (squat resistance): exclusivity takes a real stake and a bounded window —
-    // a $500 pot can't reserve a mark, and no window outlives DIRECTED_MAX_H
-    if (amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
+    // a $500 pot can't reserve a mark, and no window outlives DIRECTED_MAX_H. EXCEPTION: an
+    // active VENDETTA against the target's bloodline waives the floor — vengeance posts at
+    // street rates (your money, your blood debt; squatting isn't a risk because a vendetta
+    // only exists when the target's bloodline actually killed yours).
+    const vendetta = (await client.query(
+      'SELECT 1 FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()',
+      [ch.account_id, t.account_id])).rows[0];
+    if (!vendetta && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
     opensAt = new Date(Date.now() + exH * 3600 * 1000);
@@ -681,7 +688,7 @@ export async function sweepExpiredBounties(pool) {
 // nothing on any board. Rep additionally: diminished 1/(prior REP-earning kills of that bloodline)
 // to blunt bloodline farming, excluded for agents (they still tally kills, just not the feared
 // board — like referral payouts), and ×HITMAN_DIRECTED_BONUS on a directed hit.
-async function awardHitmanRep(client, h, ch, victim, vicLvl, directed) {
+async function awardHitmanRep(client, h, ch, victim, vicLvl, directed, vendetta = false) {
   const qualifies = vicLvl >= M3.HITMAN_MIN_TARGET_LVL; // a real target, not rookie/alt farming
   let repGain = 0;
   if (qualifies) {
@@ -690,7 +697,11 @@ async function awardHitmanRep(client, h, ch, victim, vicLvl, directed) {
     if (!h.acct.agent_flag) {
       const prior = Number((await client.query(
         'SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1 AND victim_account=$2 AND rep > 0', [ch.account_id, victim.account_id])).rows[0].n);
-      repGain = Math.max(1, Math.floor(vicLvl * M3.HITMAN_REP_PER_LVL * (directed ? M3.HITMAN_DIRECTED_BONUS : 1) / (prior + 1)));
+      // a settled VENDETTA pays 2x, a directed contract 1.5x — the LARGER applies, never a stack.
+      // The bloodline diminishing below still divides it, which is the vendetta anti-farm: a
+      // first revenge (1 prior against you) nets exactly full base rep; kill-trading decays.
+      const mult = Math.max(directed ? M3.HITMAN_DIRECTED_BONUS : 1, vendetta ? VENDETTA.REP_BONUS : 1);
+      repGain = Math.max(1, Math.floor(vicLvl * M3.HITMAN_REP_PER_LVL * mult / (prior + 1)));
       const before = Number(h.acct.hitman_rep || 0);
       h.acct.hitman_rep = before + repGain;
       if (hitmanRankOf(before + repGain).title !== hitmanRankOf(before).title)
@@ -871,8 +882,20 @@ export async function fire(ch, victim, client, h, rounds) {
     // ground rule #3: log EVERY roll (pass or fail), not just the ones that strip gear
     await h.rngLog(client, ch.id, `gearloot:${victim.id}`, gearRoll, gearLoot ? `looted ${gearLoot}` : 'none');
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
-    // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a bonus
-    const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed);
+    // VENDETTA SETTLEMENT — if this kill answers a blood debt (my bloodline sworn against
+    // theirs, inside the window), the vendetta is settled: the row closes, the street hears,
+    // and the rep multiplier below pays vengeance rates.
+    const vend = (await client.query(
+      'SELECT sworn FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()',
+      [ch.account_id, victim.account_id])).rows[0];
+    if (vend) {
+      await client.query('DELETE FROM vendettas WHERE avenger_account=$1 AND target_account=$2', [ch.account_id, victim.account_id]);
+      await h.notify(client, ch.id, 'vendetta_settled', { for: vend.sworn, killed: victim.name });
+      bus.emit('streets', { type: 'vendetta_settled', by: ch.name, on: victim.name, for: vend.sworn });
+    }
+    // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a
+    // bonus, a settled vendetta a bigger one
+    const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed, !!vend);
     // war interlock: a kill on a family you're at war with scores war points (worth more than a
     // jump's 1) — the lethal layer finally decides wars, not just jump-spam. Done BEFORE the
     // estate vacates the victim's gang seat, while h.victimOwned.gangId is still known.
@@ -895,9 +918,10 @@ export async function fire(ch, victim, client, h, rounds) {
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
-    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch });
+    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, bounty, jammed, warKill, hitman: hit, estate: { heirId: estate.heirId } };
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, bounty, jammed, warKill, hitman: hit,
+      vendetta: !!vend, estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
@@ -1128,6 +1152,20 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
   await h.notify(client, heirId, 'estate', report);
+  // VENDETTA — a player fire-kill swears the bloodline against the killer's (NPC/mod deaths
+  // don't: no street to swear against). One active vendetta per account pair; a repeat kill
+  // refreshes the clock. The heir is born owing blood.
+  if (opts.vendetta && opts.killerCh) {
+    const until = new Date(Date.now() + VENDETTA.TTL_MS);
+    const existing = (await client.query('SELECT 1 FROM vendettas WHERE avenger_account=$1 AND target_account=$2',
+      [victim.account_id, opts.killerCh.account_id])).rows[0];
+    if (existing) await client.query('UPDATE vendettas SET sworn=$3, expires_at=$4 WHERE avenger_account=$1 AND target_account=$2',
+      [victim.account_id, opts.killerCh.account_id, victim.name, until]);
+    else await client.query('INSERT INTO vendettas (avenger_account, target_account, sworn, expires_at) VALUES ($1,$2,$3,$4)',
+      [victim.account_id, opts.killerCh.account_id, victim.name, until]);
+    await h.notify(client, heirId, 'vendetta', { against: killerName, for: victim.name,
+      days: Math.round(VENDETTA.TTL_MS / 86400000) });
+  }
   // §12 + §10.4: the death event carries the destroyed fleet size for car conservation
   await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
     [uid(), victim.account_id, 'death', JSON.stringify({ by: killerName, cars: h.victimOwned.cars.length, lvl })]);
