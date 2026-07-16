@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   omr NUMERIC NOT NULL DEFAULT 0,
   staked NUMERIC NOT NULL DEFAULT 0,
   rewards NUMERIC NOT NULL DEFAULT 0,
+  -- Make-Risk-Pay: unstaked principal UNBONDS for UNSTAKE_CD_MS before it is liquid — during the
+  -- window it earns no yield and IS lootable (whack:loot), so the stake→extract path always has
+  -- an exposure window. Released to `omr` lazily on accrual once unbond_at passes.
+  unbonding NUMERIC NOT NULL DEFAULT 0,
+  unbond_at TIMESTAMPTZ,
   wallet_address TEXT,
   recruits INT NOT NULL DEFAULT 0,
   onboard TEXT NOT NULL DEFAULT '{}',
@@ -87,6 +92,10 @@ CREATE TABLE IF NOT EXISTS characters (
   -- Seeded at OFFLINE_CAP_MS so a first collect still yields the normal 8h burst.
   racket_credit_ms BIGINT NOT NULL DEFAULT 28800000,
   bank_credit_ms BIGINT NOT NULL DEFAULT 28800000,   -- Risk-to-Earn B2: daily bank-interest budget (seeded at OFFLINE_CAP_MS)
+  -- Make-Risk-Pay: fresh deposits stay "in transit" for BANK_CLEAR_MS — the courier hasn't reached
+  -- the vault, so a fire-kill loots CASH_LOOT_RATE of them too (cleared lazily on accrual).
+  bank_intransit NUMERIC NOT NULL DEFAULT 0,
+  bank_intransit_at TIMESTAMPTZ,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

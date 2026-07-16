@@ -194,10 +194,12 @@ async function persistAccount(client, accountId, a) {
   await client.query(
     `UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6,
       recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11,
-      minted=$12, mint_credits=$13, respawn_tokens=$14, hitman_rep=$15, kills=$16 WHERE account_id=$1`,
+      minted=$12, mint_credits=$13, respawn_tokens=$14, hitman_rep=$15, kills=$16,
+      unbonding=$17, unbond_at=$18 WHERE account_id=$1`,
     [accountId, a.omr, a.staked, a.rewards, a.prestige, a.deaths,
      a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address,
-     a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0, a.hitman_rep ?? 0, a.kills ?? 0]);
+     a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0, a.hitman_rep ?? 0, a.kills ?? 0,
+     a.unbonding ?? 0, a.unbond_at ?? null]);
 }
 
 // Two-party actions (§10.1): lock BOTH character rows in stable id order, then both
@@ -259,13 +261,15 @@ async function persistCharacter(client, ch) {
       gun=$22, vest=$23, shoot_cd_until=$24, busts=$25, hosp_until=$26,
       lab=$27, crew=$28, heist_at=$29, title=$30,
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
-      guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39 WHERE id=$1`,
+      guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
+      bank_intransit=$40, bank_intransit_at=$41 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
      ch.gun, ch.vest, ch.shoot_cd_until, ch.busts, ch.hosp_until,
      ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
-     ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at]);
+     ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
+     ch.bank_intransit ?? 0, ch.bank_intransit_at]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -277,6 +281,12 @@ export function view(ch, acct = {}, owned = {}) {
     respect: Number(ch.respect), energy: Math.floor(Number(ch.energy)), nerve: Math.floor(Number(ch.nerve)),
     health: Math.floor(Number(ch.health)), cash: Math.floor(Number(ch.cash)), bank: Math.floor(Number(ch.bank)),
     omr: Number(acct.omr || 0), staked: Number(acct.staked || 0), rewards: Number(acct.rewards || 0),
+    unbonding: Number(acct.unbonding || 0),
+    unbondSeconds: (Number(acct.unbonding || 0) > 0 && acct.unbond_at) ? Math.max(0, Math.ceil((new Date(acct.unbond_at) - Date.now()) / 1000)) : 0,
+    bankInTransit: Math.min(Math.floor(Number(ch.bank_intransit || 0)), Math.floor(Number(ch.bank))),
+    bankClearSeconds: (Number(ch.bank_intransit || 0) > 0 && ch.bank_intransit_at)
+      ? Math.max(0, Math.ceil((new Date(ch.bank_intransit_at).getTime() + CONSTANTS.BANK_CLEAR_MS - Date.now()) / 1000)) : 0,
+    safehouseCost: Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000)),
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
     ammo: Number(ch.ammo || 0), cb: Number(ch.cb || 0), heat: Math.round(Number(ch.heat || 0)),
@@ -421,9 +431,16 @@ export async function bank(ch, dir, amount, client, h) {
   if (dir === 'deposit') {
     if (Number(ch.cash) < amount) throw new GameError('cash', 'Not that much in pocket.');
     ch.cash = Number(ch.cash) - amount; ch.bank = Number(ch.bank) + amount;
+    // Make-Risk-Pay: the deposit rides "in transit" for BANK_CLEAR_MS — lootable on a fire-kill
+    // until it clears (lazily, in accrual). A follow-up deposit joins the courier: the amounts
+    // stack and the clock resets, so split deposits can't shave the window.
+    ch.bank_intransit = Number(ch.bank_intransit || 0) + amount;
+    ch.bank_intransit_at = new Date();
   } else {
     if (Number(ch.bank) < amount) throw new GameError('bank', 'Not that much banked.');
     ch.bank = Number(ch.bank) - amount; ch.cash = Number(ch.cash) + amount;
+    // a withdrawal can't leave the in-transit marker above the remaining balance
+    ch.bank_intransit = Math.min(Number(ch.bank_intransit || 0), Number(ch.bank));
   }
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: 0, reason: `bank:${dir}:${amount}` });
   return { ok: true };

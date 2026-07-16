@@ -28,6 +28,26 @@ const VIG_BPS = Number(process.env.VIG_BPS || 6000);         // 60% to the Vig
 const RESERVE_BPS = Number(process.env.VIG_RESERVE_BPS || 5000); // 50% of bought $OMR to the reserve
 export const PLEX_MINT_OMR = Number(process.env.PLEX_MINT_OMR || 5);
 export const PLEX_RESPAWN_OMR = Number(process.env.PLEX_RESPAWN_OMR || 50);
+// MARKET-LINKED PLEX (sim-audit F3): a static 5 $OMR was minutes of play vs 0.01 ETH real money —
+// nobody would ever pay ETH, starving the Vig at the source. The $OMR price now tracks the REAL
+// exchange rate: fee-in-ETH × the latest Vig buyback's price (the actual OMR/ETH the Vig paid —
+// on mainnet the DEX TWAP) × a premium ≥ 1 so the ETH rail stays the economical one (ETH funds
+// the pool; $OMR burns supply at a markup). Static PLEX_*_OMR is the pre-market fallback floor.
+const PLEX_PREMIUM_BPS = Number(process.env.PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
+const MINT_FEE_ETH = Number(process.env.MINT_FEE_ETH || 0.01);
+const RESPAWN_FEE_ETH = Number(process.env.RESPAWN_FEE_ETH || 0.10);
+
+// The live quote: {price, oracle} — oracle null (static floor) until a first buyback prints a price.
+export async function plexQuote(db, kind) {
+  const feeEth = kind === 'mint' ? MINT_FEE_ETH : RESPAWN_FEE_ETH;
+  const fallback = kind === 'mint' ? PLEX_MINT_OMR : PLEX_RESPAWN_OMR;
+  const last = (await db.query(
+    'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  if (!last) return { price: fallback, oracle: null };
+  const oracle = Number(last.price_omr_per_eth);
+  const price = Math.max(fallback, round6(feeEth * oracle * PLEX_PREMIUM_BPS / 10000));
+  return { price, oracle };
+}
 
 // ── revenue ingestion (called inside recordFeePayment's txn; idempotent on source+ref) ──
 // Records the Vig's share of one real-ETH payment. `client` is the caller's open transaction so
@@ -94,8 +114,8 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
 export async function payPlex(ch, kind, client, h) {
   if (kind !== 'mint' && kind !== 'respawn') throw new GameError('bad_kind', "PLEX pays a 'mint' or a 'respawn'.");
   if (kind === 'mint' && h.acct.minted) throw new GameError('minted', 'This account is already made.');
-  const price = kind === 'mint' ? PLEX_MINT_OMR : PLEX_RESPAWN_OMR;
-  if (Number(h.acct.omr) < price) throw new GameError('omr', `That costs ${price} $OMR — earn it, or pay the ETH fee.`);
+  const { price } = await plexQuote(client, kind); // market-linked: fee-ETH × latest buyback price × premium
+  if (Number(h.acct.omr) < price) throw new GameError('omr', `That costs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
   h.acct.omr = Number(h.acct.omr) - price;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -price, reason: `plex:${kind}` });
   if (kind === 'mint') h.acct.mint_credits = Number(h.acct.mint_credits || 0) + 1;

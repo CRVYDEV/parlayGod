@@ -72,7 +72,8 @@ export async function runLedgerInvariants(pool) {
   // Legal burns: vests, clean papers, lab tiers, gear mints, path switches,
   // dissolution. Swaps, buybacks, and fund-sourced payouts are transfers — they
   // move between buckets and cancel inside the total.
-  const omrBuckets = await one(pool, 'SELECT COALESCE(SUM(omr+staked),0) s FROM account_persistent')
+  // (unbonding = unstaked principal in its exposure window — same account bucket, still conserved)
+  const omrBuckets = await one(pool, 'SELECT COALESCE(SUM(omr+staked+unbonding),0) s FROM account_persistent')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM amm_pool')
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs')
