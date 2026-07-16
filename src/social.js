@@ -76,6 +76,10 @@ export async function removeMember(client, gangId, characterId) {
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0 WHERE holder_gang=$1', [gangId]);
     await releaseTerritoryRackets(client, gangId); // Phase 3: the operations die with the family (turf released)
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
+    // the Commission forgets a dead family: its ballots die with it (audit H1 — a dissolved
+    // gang's frozen vote must not govern next week from beyond the grave, invisible to the
+    // board's join). Its VETO record stays — the decree it killed was killed while it lived.
+    await client.query('DELETE FROM commission_votes WHERE gang_id=$1', [gangId]);
     await client.query('DELETE FROM gangs WHERE id=$1', [gangId]);
     return { dissolved: true };
   }
@@ -335,12 +339,14 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     if (!hm) throw new GameError('no_hitman', 'No such hitman on the streets.');
     // sim-audit F1 (squat resistance): exclusivity takes a real stake and a bounded window —
     // a $500 pot can't reserve a mark, and no window outlives DIRECTED_MAX_H. EXCEPTION: an
-    // active VENDETTA against the target's bloodline waives the floor — vengeance posts at
-    // street rates (your money, your blood debt; squatting isn't a risk because a vendetta
-    // only exists when the target's bloodline actually killed yours).
-    const vendetta = (await client.query(
+    // active VENDETTA against the target's bloodline waives the floor for KILL pots only —
+    // vengeance posts at street rates (your money, your blood debt). Hospitalize pots never
+    // get the waiver (audit F2: kill pots pay ANY killer inside the window so they can't be
+    // squatted, but hospitalize pots stay exclusive — a manufactured vendetta + a $500
+    // friendly hospitalize pot would re-open exactly the squat DIRECTED_MIN priced out).
+    const vendetta = kind === 'kill' ? (await client.query(
       'SELECT 1 FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()',
-      [ch.account_id, t.account_id])).rows[0];
+      [ch.account_id, t.account_id])).rows[0] : null;
     if (!vendetta && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
@@ -659,8 +665,10 @@ export async function sweepExpiredBounties(pool) {
       for (let attempt = 0; attempt < 2; attempt++) {
         await client.query('BEGIN');
         try {
+          // NOT funder_gang — the column is NOT NULL, so the old `IS NULL` matched nothing and
+          // silently pre-locked zero funders (audit: the pots→characters inversion was still live)
           const readFunders = async () => (await client.query(
-            'SELECT contributor FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND funder_gang IS NULL',
+            'SELECT contributor FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND NOT funder_gang',
             [b.target_character, b.kind])).rows.map((r) => r.contributor).sort();
           const funderIds = await readFunders();
           for (const id of funderIds)
@@ -1114,8 +1122,13 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
 
   for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
-  // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds)
+  // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
+  // stranded crew hear about it instead of finding an empty board (audit L5)
+  const orphaned = (await client.query(
+    `SELECT m.character_id, ch.job FROM crew_heists ch JOIN crew_heist_members m ON m.heist_id = ch.id
+      WHERE ch.leader_character=$1 AND ch.status='planning' AND m.character_id != $1`, [victim.id])).rows;
   await client.query("UPDATE crew_heists SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [victim.id]);
+  for (const o of orphaned) await h.notify(client, o.character_id, 'heist_abandoned', { job: o.job, reason: 'leader_dead' });
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);
@@ -1169,11 +1182,13 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // refreshes the clock. The heir is born owing blood.
   if (opts.vendetta && opts.killerCh) {
     const until = new Date(Date.now() + VENDETTA.TTL_MS);
-    const existing = (await client.query('SELECT 1 FROM vendettas WHERE avenger_account=$1 AND target_account=$2',
-      [victim.account_id, opts.killerCh.account_id])).rows[0];
-    if (existing) await client.query('UPDATE vendettas SET sworn=$3, expires_at=$4 WHERE avenger_account=$1 AND target_account=$2',
+    // UPDATE-first, INSERT on zero rows (audit F3): the hourly sweep can DELETE an expired row
+    // between a SELECT and its UPDATE, silently losing the refreshed vendetta while the heir is
+    // still told they owe blood. UPDATE either locks the row (the sweep's re-check then skips
+    // it — no longer expired) or touches nothing and the INSERT writes fresh.
+    const upd = await client.query('UPDATE vendettas SET sworn=$3, expires_at=$4 WHERE avenger_account=$1 AND target_account=$2',
       [victim.account_id, opts.killerCh.account_id, victim.name, until]);
-    else await client.query('INSERT INTO vendettas (avenger_account, target_account, sworn, expires_at) VALUES ($1,$2,$3,$4)',
+    if (!upd.rowCount) await client.query('INSERT INTO vendettas (avenger_account, target_account, sworn, expires_at) VALUES ($1,$2,$3,$4)',
       [victim.account_id, opts.killerCh.account_id, victim.name, until]);
     await h.notify(client, heirId, 'vendetta', { against: killerName, for: victim.name,
       days: Math.round(VENDETTA.TTL_MS / 86400000) });

@@ -34,7 +34,7 @@ async function takeHouse(client, tax) {
 // ── step two: the RISK layer — scrutiny + Bureau raids (lazy, the §7.1 kitchen-raid pattern) ──
 // Only LAUNDERING draws scrutiny onto a front; it decays hourly. Income-only fronts never get
 // raided — their risk is rival shakedowns (PvP), so PvE risk tracks extraction, PvP tracks wealth.
-function decayedScrutiny(row, now = Date.now()) {
+export function decayedScrutiny(row, now = Date.now()) {
   const hrs = Math.max(0, now - new Date(row.scrutiny_at).getTime()) / 3600000;
   return Math.max(0, Number(row.scrutiny) - hrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR);
 }

@@ -75,6 +75,7 @@ async function loadConvoyRow(ch, convoy, goodId, qty, client, h) {
 
 // LOAD MORE — trunk → manifest while still loading (refill the trunk from the market between loads).
 export async function loadConvoy(ch, goodId, qty, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No shipping from lockup.');
   const convoy = await myActive(client, ch.id);
   if (!convoy || convoy.status !== 'loading') throw new GameError('no_convoy', 'No shipment loading.');
   return loadConvoyRow(ch, convoy, goodId, qty, client, h);
@@ -85,6 +86,7 @@ export async function loadConvoy(ch, goodId, qty, client, h) {
 // value into the shared pool (`convoy:insure`); a hijack later pays INSURE_PAYOUT_BPS of the
 // LOST value back at collect, capped at whatever the pool holds. Insurance is never public.
 export async function departConvoy(ch, guardTier, insure, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No shipping from lockup.');
   const convoy = await myActive(client, ch.id);
   if (!convoy || convoy.status !== 'loading') throw new GameError('no_convoy', 'No shipment loading.');
   const tier = guardTierOf(guardTier || 'none');
@@ -145,9 +147,11 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   if (arrived(c)) throw new GameError('arrived', 'It already reached the docks.');
   if (c.owner_character === ch.id) throw new GameError('own', "It's your own truck.");
   if (c.owner_gang && h.owned.gangId === c.owner_gang) throw new GameError('family', "That's the family's freight. Omertà.");
-  // step two: up to MAX_AMBUSHES attempts per convoy, ONE per character — each fight wears
-  // the guards down for the next crew (the tier's defense only; turf + lockdown never wear).
-  const prior = Number(c.ambushes || 0);
+  // step two (audit-hardened): up to MAX_AMBUSHES HIJACKS per convoy, ONE attempt per character.
+  // Only a WIN consumes the convoy-wide cap and wears the guards — a deliberate loss by a
+  // throwaway alt buys the shipper nothing (slot-exhaustion, audit HIGH-2) and strips no
+  // defense for the next bandit. A loss still spends the loser's one play on the run.
+  const prior = Number(c.ambushes || 0); // = prior HIJACKS
   if (prior >= CONVOY.MAX_AMBUSHES) throw new GameError('spent', 'That road has seen enough — the law is thick out there now.');
   const mine = (await client.query('SELECT 1 FROM convoy_ambushes WHERE convoy_id=$1 AND character_id=$2', [convoyId, ch.id])).rows[0];
   if (mine) throw new GameError('once', 'You already made your play on that run.');
@@ -157,8 +161,7 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   ch.heat = Math.min(100, Number(ch.heat || 0) + CONVOY.AMBUSH_HEAT);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -CONVOY.AMBUSH_AMMO, reason: 'convoy:ambush' });
   await client.query('INSERT INTO convoy_ambushes (convoy_id, character_id) VALUES ($1,$2)', [convoyId, ch.id]);
-  // absolute write (pg-mem INT arithmetic quirk) — safe under the convoy row lock
-  await client.query('UPDATE convoys SET ambushed=true, ambushes=$2 WHERE id=$1', [convoyId, prior + 1]);
+  await client.query('UPDATE convoys SET ambushed=true WHERE id=$1', [convoyId]);
 
   // turf shelters its own: a run touching the owner family's districts fights harder
   let turfDef = 0;
@@ -177,6 +180,8 @@ export async function ambushConvoy(ch, convoyId, client, h) {
     `${atk > def ? 'hijacked' : 'repelled'} (def ${Math.round(def * 100) / 100}${lockdown ? ', lockdown' : ''}${prior ? `, guards worn ${prior}` : ''})`);
 
   if (atk > def) {
+    // the WIN consumes a convoy hijack slot and wears the guards for the next crew
+    await client.query('UPDATE convoys SET ambushes=$2 WHERE id=$1', [convoyId, prior + 1]);
     // take what the trunk holds — a pure ownership transfer; the rest rolls on to the docks
     const manifest = await manifestOf(client, convoyId);
     const cap = cargoCapacity(h.owned.assets);
@@ -214,6 +219,9 @@ export async function ambushConvoy(ch, convoyId, client, h) {
 // ledgered transfer, clamped to pocket, never a gate on the freight) and the INSURANCE claim
 // (payout for hijacked value, capped at whatever the pool holds — insurers' risk).
 export async function collectConvoy(ch, convoyId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No collecting from lockup.');
+  // D2: collection is an EXPOSED act (freight, toll, insurance settlement) — not from a safehouse
+  if (safeHoused(ch)) throw new GameError('safe', "Nobody signs for freight from a safehouse — come out first.");
   const c = (await client.query('SELECT * FROM convoys WHERE id=$1 FOR UPDATE', [convoyId])).rows[0];
   if (!c || c.owner_character !== ch.id) throw new GameError('no_convoy', 'Not your shipment.');
   if (c.status !== 'transit') throw new GameError('no_convoy', 'Nothing to collect.');
@@ -234,22 +242,43 @@ export async function collectConvoy(ch, convoyId, client, h) {
     }
   }
   // the destination toll: the family holding these docks takes its cut of what YOU collect
-  // (own turf and unheld docks are free). Clamped to pocket — the freight is never held hostage.
+  // (unheld docks — and the family you SHIPPED UNDER (the depart snapshot, so a last-minute
+  // join can't dodge it) — are free). The toll reaches pocket THEN bank (the raid-fine
+  // precedent — banking before collect doesn't dodge it), never gates the freight, and is
+  // charged only if the treasury credit actually lands (a holder dissolving this instant
+  // must not leave a ledgered credit no treasury received — §10.4 check (b) stays exact).
   let toll = 0;
   const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [c.destination])).rows[0]?.holder_gang;
-  if (holder && holder !== h.owned.gangId && collectedValue > 0) {
-    toll = Math.min(Math.floor(collectedValue * CONVOY.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash))));
+  if (holder && holder !== c.owner_gang && collectedValue > 0) {
+    toll = Math.min(Math.floor(collectedValue * CONVOY.TOLL_BPS / 10000),
+      Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
     if (toll > 0) {
-      ch.cash = Number(ch.cash) - toll;
-      await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
-      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'convoy:toll' });
+      const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
+      if (upd.rowCount) {
+        const fromPocket = Math.min(toll, Math.max(0, Math.floor(Number(ch.cash))));
+        ch.cash = Number(ch.cash) - fromPocket;
+        ch.bank = Number(ch.bank) - (toll - fromPocket);
+        await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'convoy:toll' });
+      } else toll = 0;
     }
   }
-  // the insurance claim: pay out the hijacked value's share, capped at the pool (zero-sum)
+  // the insurance claim: pay out the hijacked value's share — capped at the pool AND at the
+  // account's own lifetime net premiums (the UNDERWRITING LIMIT, audit HIGH-1: you can never
+  // claim more than your bloodline ever paid in, so a colluding ring's net extraction from
+  // the pool is ≤ 0 BY CONSTRUCTION; honest shippers pay premiums every run and claim rarely,
+  // so the limit never binds on them).
   let insurance = 0;
   if (c.insured && Number(c.insured_loss) > 0) {
     const pool = Number((await client.query('SELECT pool FROM convoy_insurance WHERE id=1 FOR UPDATE')).rows[0].pool);
-    insurance = Math.min(Math.floor(Number(c.insured_loss) * CONVOY.INSURE_PAYOUT_BPS / 10000), Math.max(0, Math.floor(pool)));
+    const paid = -Number((await client.query(
+      `SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c2 ON c2.id = t.character_id
+        WHERE c2.account_id=$1 AND t.reason='convoy:insure'`, [ch.account_id])).rows[0].s);
+    const got = Number((await client.query(
+      `SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c2 ON c2.id = t.character_id
+        WHERE c2.account_id=$1 AND t.reason='convoy:payout'`, [ch.account_id])).rows[0].s);
+    const coverage = Math.max(0, Math.floor(paid - got));
+    insurance = Math.min(Math.floor(Number(c.insured_loss) * CONVOY.INSURE_PAYOUT_BPS / 10000),
+      Math.max(0, Math.floor(pool)), coverage);
     if (insurance > 0) {
       ch.cash = Number(ch.cash) + insurance;
       await client.query('UPDATE convoy_insurance SET pool=$1 WHERE id=1', [pool - insurance]);

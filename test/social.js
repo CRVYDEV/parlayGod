@@ -855,9 +855,14 @@ assert.equal(feud.kills.theirs, 1, 'they took one of ours');
 assert.equal(feud.bloodOwed, 1, 'they owe us a body');
 assert.equal(feud.myVendetta.sworn, 'Vito Vendetta', 'our vendetta is on the ledger');
 // vengeance posts at street rates: the DIRECTED_MIN floor is waived against a vendetta target
+// — for KILL pots ONLY (audit F2: a hospitalize pot stays exclusive to its named hitman, so a
+// manufactured vendetta + a cheap directed hospitalize pot would re-open the squat the floor
+// was built to price out; vengeance means a body, not a hospital bill)
 await seedCh(vHeir.id, 'cash=20000');
+r = await call('POST', `/v1/streets/${(await meOf(kane.token)).id}/bounty`, { token: vitoB.token, body: { amount: 600, kind: 'hospitalize', hitman: mook.id } });
+assert.equal(r.body.error, 'directed_min', 'NO waiver for a directed hospitalize pot — kill contracts only');
 r = await call('POST', `/v1/streets/${(await meOf(kane.token)).id}/bounty`, { token: vitoB.token, body: { amount: 600, kind: 'kill', hitman: mook.id } });
-assert.equal(r.code, 200, 'a $600 directed revenge contract clears (the $10k floor is waived for a vendetta)');
+assert.equal(r.code, 200, 'a $600 directed revenge KILL contract clears (the $10k floor is waived for a vendetta)');
 await call('POST', `/v1/contracts/${(await meOf(kane.token)).id}/kill/cancel`, { token: vitoB.token }); // clean the board
 // SETTLEMENT: the heir collects the debt personally — vengeance pays 2x rep
 await seedCh(vHeir.id, "respect=400, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");

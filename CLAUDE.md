@@ -563,11 +563,14 @@ makes `runEstate` swear the victim's bloodline against the killer's for `VENDETT
 repeat kill refreshes; the heir is notified at birth; active vendettas ride the view via loadOwned,
 joined to the target bloodline's CURRENT street). Grants (status + access, ZERO money flows — §10.4
 untouched): (1) settlement — a revenge fire-kill inside the window closes the row, feeds the streets
-(`vendetta_settled`), returns `vendetta: true`, and pays `VENDETTA.REP_BONUS` (2×) feared-rep, where
-the bloodline-diminishing rule STILL divides — so a first revenge nets exactly full base rep (2×/2)
-and mutual kill-trading decays (the anti-farm is arithmetic; max(directed 1.5×, vendetta 2×), never
-a stack); (2) the `DIRECTED_MIN` floor is WAIVED posting a directed contract on your vendetta target
-(vengeance at street rates; squat-safe because a vendetta only exists when they actually killed you).
+(`vendetta_settled`), returns `vendetta: true`, and pays `VENDETTA.REP_BONUS` (2×) feared-rep; the
+diminishing divisor counts the AVENGER's own prior kills of that bloodline (0 on a first revenge),
+so a first revenge pays a ONE-TIME 2× base per feud direction and repeat trading decays 2/k —
+audit-corrected description (founder dial: `priors+2` on vendetta kills makes revenge rep-neutral);
+max(directed 1.5×, vendetta 2×), never a stack; (2) the `DIRECTED_MIN` floor is WAIVED posting a
+directed KILL contract on your vendetta target (kill-ONLY per the audit — a waived hospitalize pot
+would re-open the exclusivity squat; vengeance means a body). Refresh is UPDATE-then-INSERT (sweep-
+race-proof).
 `GET /v1/feud/:characterId` is the public blood-feud ledger (kill_log both ways, net `bloodOwed`,
 active vendettas both directions). Worker sweeps lapsed rows (reads filter anyway). Tests: heir
 inheritance + notification, ledger, waiver, 66-rep settlement (2× with 0 priors), the reverse debt,
@@ -602,7 +605,16 @@ business — pot = `rateBps` (60%) of the front's PENDING income redirected (`he
 rides the `heist` cash prefix; the shakedown argument — owner keeps the rest, venue clock
 advances by only the stolen share, NOT a new faucet); mark can't crew, family fronts omertà,
 `businesses.inside_at` 24h venue lockdown win or lose (`HEIST_INSIDE_CD_MS`), mark notified
-both ways. Lock order: members → heist row → business row (terminal — the mark's CHARACTER row
+both ways. Audit-hardened: safehouse blocks plan/join/execute AND crew readiness (P1.3/D2); a
+raid-eligible front (`scrutiny ≥ threshold`) refuses the job (`feds_watching` — no alt-crew
+laundering of a hot front's pending income past the Bureau); execute locks member characters
+SORTED **before** the heist row (re-verifying the crew under the lock, `crew_changed` on a
+race) so characters-before-pots holds vs leave/join; the residual leader-first-vs-pairwise-PvP
+deadlock maps 40P01 → a clean retryable `contention` error (game.js); THE RAT is now hauled in
+WITH the crew (same double stretch — the public jail roster no longer outs the only free man;
+the pay still lands); zero-pot inside jobs pay zero rep; the board joins `status='planning'`;
+`UNIQUE(heist_id, role)`; member writes are absolute; a dead leader's stranded crew is
+notified. Lock order: members → heist row → business row (terminal — the mark's CHARACTER row
 is never locked, the convoy-manifest discipline). Deferred: timed windows, the fence phase.
 
 **Smuggling convoys (step one) — BUILT** (`src/convoy.js`, `test/convoy.js` — the 12th suite file;
@@ -627,17 +639,22 @@ Suite 12/12 + sim drift-0. **Step two — BUILT**: **destination tolls** — col
 held by ANOTHER family pays `TOLL_BPS` (5%) of the collected goods' base value from the
 shipper's pocket to the holder's treasury (`convoy:toll`, a ledgered transfer on the tribute
 pattern; treasury check (b) gained the term; clamped to pocket, never gates the freight);
-**degrading multi-ambush** — up to `MAX_AMBUSHES` (3) per convoy, ONE per character
-(`convoy_ambushes` PK), each prior fight wears `GUARD_WEAR_BPS` (25%) off the guard tier's
-defense (turf/lockdown never wear; wear visible in the rng-audit outcome; errors `once`/`spent`);
-**insured freight** — `depart {insure:true}` pays `INSURE_BPS` (10%) of manifest value into the
-`convoy_insurance` pool singleton (`convoy:insure`); a hijack stamps the lost value on
-`convoys.insured_loss` and the OWNER claims `INSURE_PAYOUT_BPS` (50%) of it lazily AT COLLECT,
-**capped at the pool** (stake_pool precedent — zero-sum among shippers, collusion can only
-redistribute premiums; new §10.4 check `convoy insurance pool` = premiums − payouts; the claim
-settles in the owner's txn because an ambush never touches the owner's row). Lock order:
-characters → convoys → gangs → singletons. Deferred: NPC trucking. Step-two numbers are
-sign-off levers.
+**degrading multi-ambush** — up to `MAX_AMBUSHES` (3) HIJACKS per convoy, ONE attempt per
+character (`convoy_ambushes` PK); only a WIN consumes a slot or wears `GUARD_WEAR_BPS` (25%)
+off the guard tier's defense (audit: deliberate losses by throwaway alts must neither exhaust
+the slots for real bandits nor strip the guards; turf/lockdown never wear; wear visible in the
+rng-audit outcome; errors `once`/`spent`); **insured freight** — `depart {insure:true}` pays
+`INSURE_BPS` (10%) of manifest value into the `convoy_insurance` pool singleton
+(`convoy:insure`); a hijack stamps the lost value on `convoys.insured_loss` and the OWNER
+claims `INSURE_PAYOUT_BPS` (50%) of it lazily AT COLLECT, capped at the pool AND at **the
+UNDERWRITING LIMIT** — the account's lifetime premiums minus payouts (audit HIGH: pool-capping
+alone let alt-hijack collusion skim honest premiums at 80%/cycle; with the limit a ring's net
+extraction is ≤ 0 BY CONSTRUCTION; new §10.4 check `convoy insurance pool` = premiums −
+payouts; the claim settles in the owner's txn because an ambush never touches the owner's row).
+The toll reaches pocket THEN bank (banking doesn't dodge it), exempts by the DEPART snapshot,
+and is charged only if the treasury credit lands (dissolution race). Jail gates
+load/depart/collect; D2 blocks collect from a safehouse. Lock order: characters → convoys →
+gangs → singletons. Deferred: NPC trucking. Step-two numbers are sign-off levers.
 
 **The Commission (step one) — BUILT** (`src/commission.js`, `test/commission.js` — the 13th suite
 file; design `omerta-commission-design.md`). Server-wide player politics with ZERO money flows —
@@ -656,15 +673,38 @@ decree book. Decree modifiers are NEW founder sign-off levers — they're tempor
 ON signed BALANCE.md levers, not retunes. Tests: seat order + the sixth family shut out, vote gates
 (rank/no_seat/bad_decree), cast + public change, majority tally + tie deadlock, all four touchpoints
 (safehouse halved, war blocked, laylow half-price ledger-exact, lockdown visible in the audit trail),
-vocabulary closed. Suite 13/13 + sim drift-0. **Step two — BUILT**: **seat-weighted ballots** —
-a vote carries the family's current seat weight (head = SEATS … last = 1), stamped at CAST
-(`commission_votes.weight`; re-casting refreshes; the tally freezes with the week — no mid-week
-decree flips), `activeDecree` tallies SUM(weight), weighted ties deadlock; **the veto** — the
-head seat's BOSS (only; not the underboss) kills the decree in force once per week
-(`commission_vetoes` week-PK; `POST /v1/commission/veto`; errors rank/head/no_decree/vetoed),
-public on the board (`veto`) + the streets feed, and the dead decree's touchpoints go inert
-immediately (activeDecree returns null for a vetoed week). Zero money, §10.4 untouched.
-Deferred: proposals with deposits, the Commission tax.
+vocabulary closed. Suite 13/13 + sim drift-0. **Step two — BUILT (audit-hardened)**:
+**standing-ranked ballots** — a vote stamps the family's STANDING at cast
+(`commission_votes.standing`; re-cast refreshes; the tally freezes with the week); `activeDecree`
+ranks the week's frozen ballots by the stamp, counts only the top SEATS of them, and derives
+weights 5..1 from the rank — the electorate is BOUNDED at the seat count (audit: weight-at-cast
+let transit families keep counted ballots and leapfrogging stack multiple 5s), stale head
+ballots rank where they belong, weighted ties deadlock; a DISSOLVED family's ballots are deleted
+with it (no ghost governance; the board and tally always agree); seat sort tiebreaks on id;
+vote/veto upserts race-safe (clean `again`/`vetoed`, no PK 500s); **the veto** — the head seat's
+BOSS (only; not the underboss) kills the decree in force once per week (`commission_vetoes`
+week-PK; `POST /v1/commission/veto`; errors rank/head/no_decree/vetoed), public on the board
+(`veto`, LEFT JOIN — a vetoing family that later dissolves stays on the record) + the streets
+feed, and the dead decree's touchpoints go inert immediately. Zero money, §10.4 untouched.
+Founder flag (audit): standing = lifetime tribute is purchasable at ~zero net cost and never
+decays — the head seat + veto monopoly are a wealth ladder. Deferred: proposals with deposits,
+the Commission tax.
+
+**Content-drop audit (`AUDIT-content-drops.md`)** — five red-team lenses over everything shipped
+after AUDIT-sim (vendettas, heists, convoys, Commission + step twos, cross-system). Fixed
+in-commit (regressions added): Commission ghost votes + unbounded electorate (→ the
+standing-ranked tally above), convoy insurance collusion (→ the underwriting limit), ambush
+slot-exhaustion (→ wins-only cap/wear), toll bank-dodge + dissolution-race drift + snapshot
+exemption, heist safehouse gates + `feds_watching` + execute lock order + rat anonymity
+(jailed with the crew) + zero-pot rep, vendetta waiver kill-only + sweep-race refresh, and the
+bounty sweep's dead funder-pre-lock predicate (`funder_gang IS NULL` on a NOT NULL column —
+the pots→characters inversion was still live). 40P01 now maps to a clean retryable
+`contention` error in both game.js wrappers. NOT patched (founder calls, ranked in the
+report): purchasable Commission standing, vendetta first-revenge 2× (docs corrected to match
+code; dial = priors+2), insurance remainder forfeiture, omertà gang-churn, open-season
+entry-time semantics, leader-rat griefing. The sim's P9.7 heist probe measured the co-op
+faucet at 1.46× solo per member (design band 1.3–2.1×) — BALANCE.md marked KEEP. `forge test`
+STILL never executed (Foundry hosts 403-blocked here) — must run before the third-party audit.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

@@ -115,19 +115,28 @@ assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM tra
 const checks1 = (await runLedgerInvariants(pool)).checks;
 assert(checks1.find((c) => c.name === 'gang treasuries').ok, 'the treasury §10.4 check reconciles the toll');
 
-// ── STEP TWO: insured freight + degrading multi-ambush (one per character, three per convoy) ──
-const b1 = await mk('Bandit Bruno'), b2 = await mk('Bandit Benny');
+// ── STEP TWO: insured freight + degrading multi-ambush (only WINS spend the convoy's slots) ──
+const b1 = await mk('Bandit Bruno'), b2 = await mk('Bandit Benny'), b3 = await mk('Bandit Bobby');
 r = await call('POST', '/v1/convoy', { token: sam.token, body: { to: 'neon', goodId: 'gin', qty: 10 } });
 assert.equal(r.code, 200, 'the insured run opened');
+await seedCh(sam.id, 'cash=100000');
 const samPreIns = (await meOf(sam.token)).cash;
-r = await call('POST', '/v1/convoy/depart', { token: sam.token, body: { guards: 'none', insure: true } });
-assert.equal(r.code, 200, 'departed with a policy'); const cid3 = r.body.id;
+r = await call('POST', '/v1/convoy/depart', { token: sam.token, body: { guards: 'heavy', insure: true } });
+assert.equal(r.code, 200, 'departed heavy, with a policy'); const cid3 = r.body.id;
 const value = 10 * goodPriceOf('gin', 'neon');
 const premium = Math.ceil(value * CONVOY.INSURE_BPS / 10000);
 assert.equal(r.body.premium, premium, `the policy runs ${CONVOY.INSURE_BPS / 100}% of the manifest ($${premium})`);
-assert.equal((await meOf(sam.token)).cash, samPreIns - premium, 'the premium left the pocket');
+assert.equal((await meOf(sam.token)).cash, samPreIns - 20000 - premium, 'the guards and the premium left the pocket');
 assert.equal(Number((await pool.query('SELECT pool FROM convoy_insurance WHERE id=1')).rows[0].pool), premium, 'the premium sits in the pool');
-// attempt 1: overwhelming muscle takes EVERYTHING — the insured loss is stamped
+// a deliberate LOSS spends only the loser's play — never the convoy's slots (audit HIGH-2:
+// three throwaway alts could otherwise make any convoy unambushable)
+await seedCh(willy.id, 'energy=200, ammo=100, muscle=1, speed=1, hosp_until=NULL, safe_until=NULL');
+r = await call('POST', `/v1/convoy/${cid3}/ambush`, { token: willy.token });
+assert.equal(r.body.win, false, 'a weakling bounces off heavy guards');
+assert.equal(Number((await pool.query(`SELECT ambushes FROM convoys WHERE id='${cid3}'`)).rows[0].ambushes), 0, "willy's sacrifice consumed NO hijack slot");
+await seedCh(willy.id, 'hosp_until=NULL, energy=200, ammo=100');
+assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: willy.token })).body.error, 'once', 'but his own play is spent');
+// hijack 1 takes EVERYTHING — the insured loss is stamped; hijacks 2+3 fight worn guards
 await seedCh(b1.id, 'energy=200, ammo=100, muscle=500, speed=500');
 r = await call('POST', `/v1/convoy/${cid3}/ambush`, { token: b1.token });
 assert.equal(r.body.win, true, 'bruno takes the lot'); assert.equal(r.body.taken, 10, 'the whole manifest');
@@ -135,23 +144,30 @@ assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: b1.token 
 assert.equal(Number((await pool.query(`SELECT insured_loss FROM convoys WHERE id='${cid3}'`)).rows[0].insured_loss), value, 'the lost value is on the policy');
 assert.equal((await call('GET', '/v1/convoys', { token: sam.token })).body.mine.insuranceDue,
   Math.floor(value * CONVOY.INSURE_PAYOUT_BPS / 10000), 'the shipper sees the claim due');
-// attempts 2 + 3 burn the remaining plays (empty truck — outcome irrelevant), then the cap
-await seedCh(willy.id, 'energy=200, ammo=100, hosp_until=NULL, safe_until=NULL');
-assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: willy.token })).code, 200, 'attempt two resolves');
-await seedCh(b2.id, 'energy=200, ammo=100, hosp_until=NULL');
-assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: b2.token })).code, 200, 'attempt three resolves');
+await seedCh(b2.id, 'energy=200, ammo=100, muscle=500, speed=500');
+assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: b2.token })).body.win, true, 'hijack two (empty truck, worn guards)');
+await seedCh(b3.id, 'energy=200, ammo=100, muscle=500, speed=500');
+assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: b3.token })).body.win, true, 'hijack three');
 await seedCh(harry.id, 'energy=200, ammo=100, hosp_until=NULL, safe_until=NULL');
-assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: harry.token })).body.error, 'spent', `${CONVOY.MAX_AMBUSHES} attempts and the road is done`);
+assert.equal((await call('POST', `/v1/convoy/${cid3}/ambush`, { token: harry.token })).body.error, 'spent', `${CONVOY.MAX_AMBUSHES} hijacks and the road is done`);
 assert((await pool.query("SELECT outcome FROM rng_audit WHERE action LIKE 'convoy:ambush:%' AND outcome LIKE '%guards worn%'")).rows.length >= 1, 'the wear shows in the audit trail');
-// the claim settles at collect — pool-capped (the claim wants 50% of value; the pool holds 10%)
+// a second shipper's premium fattens the pool — sam's claim must NOT reach it (the
+// UNDERWRITING LIMIT: you never claim past your own lifetime premiums — audit HIGH-1)
+await seedCh(harry.id, "loc='docks', cash=100000");
+assert.equal((await call('POST', '/v1/convoy', { token: harry.token, body: { to: 'neon', goodId: 'gin', qty: 10 } })).code, 200, "harry ships his stolen gin");
+const hPremium = (await call('POST', '/v1/convoy/depart', { token: harry.token, body: { guards: 'none', insure: true } })).body.premium;
+assert(hPremium > 0, 'harry paid a premium too');
+// D2: collecting (freight + toll + claim) is an EXPOSED act — not from a safehouse
 await pool.query(`UPDATE convoys SET arrives_at = now() - interval '1 minute' WHERE id='${cid3}'`);
-await seedCh(sam.id, "loc='neon'");
+await seedCh(sam.id, "loc='neon', safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/convoy/${cid3}/collect`, { token: sam.token })).body.error, 'safe', 'nobody signs for freight from a safehouse');
+await seedCh(sam.id, 'safe_until=NULL');
 const samPreClaim = (await meOf(sam.token)).cash;
 r = await call('POST', `/v1/convoy/${cid3}/collect`, { token: sam.token });
 assert.equal(r.code, 200, 'the empty run settles'); assert.equal(r.body.collected, 0, 'nothing survived');
-assert.equal(r.body.insurance, premium, 'the payout is CAPPED at the pool (insurers only pay what premiums funded)');
+assert.equal(r.body.insurance, premium, 'the payout is CAPPED at his own lifetime premiums — not the fattened pool');
 assert.equal((await meOf(sam.token)).cash, samPreClaim + premium, 'the claim landed');
-assert.equal(Number((await pool.query('SELECT pool FROM convoy_insurance WHERE id=1')).rows[0].pool), 0, 'the pool is drained');
+assert.equal(Number((await pool.query('SELECT pool FROM convoy_insurance WHERE id=1')).rows[0].pool), hPremium, "harry's premium is untouched — colluders can't drain other shippers");
 const checks2 = (await runLedgerInvariants(pool)).checks;
 assert(checks2.find((c) => c.name === 'convoy insurance pool').ok, 'the insurance-pool §10.4 check reconciles (premiums − payouts)');
 
