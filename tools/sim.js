@@ -353,6 +353,39 @@ const pDayHot = 1 - Math.pow(1 - CONSTANTS.BUSINESS_RAID_P_PER_MIN, 1440);
 note('den', 'extraction risk (analytic)', `full-cap washing goes raid-eligible in ~${daysToHot} days; P(raid)/day at max scrutiny ≈ ${fmt(100 * pDayHot)}%`,
   `net scrutiny +${scrPerDay}/day at cap; fine 10% of tier cost reaches pocket+bank`);
 
+// ════════════════ P9.7: CREW HEISTS — the co-op faucet under honest money ════════════════
+// BALANCE.md addendum: the HEIST_JOBS faucet must be sim-checked before tuning. The leader's
+// stakes are paid from EARNED cash (the sim rule); crew EV is measured against the stake flow.
+phase('P9.7 crew heists — payroll EV over 30 runs (honest money)');
+await warp(g.id, `respect=${lvlRespect(25)}, jail_until=NULL, hosp_until=NULL, heist_at=NULL, safe_until=NULL`);
+await warp(alt.id, `respect=${lvlRespect(25)}, jail_until=NULL, hosp_until=NULL, heist_at=NULL, energy=200`);
+let hRuns = 0, hWins = 0, hStaked = 0, hReturned = 0, hJails = 0;
+for (let i = 0; i < 30; i++) {
+  // refill the leader's pocket HONESTLY if the stakes ran him dry (depository crimes)
+  let gm = await meOf(g.token);
+  let refill = 0;
+  while (gm.cash < 12000 && refill++ < 40) {
+    await warp(g.id, "nerve=50, energy=200, jail_until=NULL, heat=0");
+    await call('POST', '/v1/crimes/depository', { token: g.token });
+    gm = await meOf(g.token);
+  }
+  if (gm.cash < 12000) break;
+  await warp(g.id, 'heist_at=NULL, jail_until=NULL, hosp_until=NULL');
+  await warp(alt.id, 'heist_at=NULL, jail_until=NULL, hosp_until=NULL');
+  const plan = await call('POST', '/v1/heists/plan', { token: g.token, body: { job: 'payroll' } });
+  if (plan.code !== 200) break;
+  hStaked += 10000;
+  const join = await call('POST', `/v1/heists/${plan.body.id}/join`, { token: alt.token });
+  if (join.code !== 200) { await call('POST', `/v1/heists/${plan.body.id}/leave`, { token: g.token }); hStaked -= 10000; break; }
+  const ex = await call('POST', `/v1/heists/${plan.body.id}/execute`, { token: g.token });
+  if (ex.code !== 200) break;
+  hRuns++;
+  if (ex.body.score) { hWins++; hReturned += ex.body.pot; } else hJails++;
+}
+const hEv = hRuns ? (hReturned - hStaked) / hRuns : 0;
+note('heists', 'payroll co-op (2-crew, lvl 25)', `${hRuns} runs, ${hWins} scores, ${hJails} shared jails`,
+  `pot−stake EV ${hEv >= 0 ? '+' : ''}$${fmt(hEv)}/run CREW-WIDE (split 1.2:1); stakes $${fmt(hStaked)} vs takes $${fmt(hReturned)}`);
+
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
