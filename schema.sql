@@ -434,6 +434,18 @@ CREATE TABLE IF NOT EXISTS businesses (
 );
 CREATE INDEX IF NOT EXISTS ix_businesses_character ON businesses (character_id);
 
+-- ── The Gambling Den: the Numbers (daily lottery tickets; dice are stateless) ──
+-- One ticket per street per day; resolves lazily against the day's seed-drawn number when
+-- claimed. CASH ONLY (stake ledgered casino:bet:numbers, a win casino:win:numbers) — the Den
+-- never touches $OMR by design (see omerta-gambling-den-design.md §1).
+CREATE TABLE IF NOT EXISTS numbers_tickets (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  pick INT NOT NULL,
+  stake INT NOT NULL,
+  PRIMARY KEY (character_id, day)
+);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in

@@ -15,6 +15,7 @@ import * as V from './vanity.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Business from './business.js';
+import * as Casino from './casino.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -311,6 +312,19 @@ export async function buildServer() {
   app.get('/v1/business', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
+  });
+
+  // THE GAMBLING DEN (Neon Mile, cash only — never $OMR): street craps + the daily Numbers.
+  app.post('/v1/casino/dice', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.playDice(ch, req.body?.amount, client, h)));
+  app.post('/v1/casino/numbers', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.playNumbers(ch, req.body?.pick, req.body?.amount, client, h)));
+  app.post('/v1/casino/numbers/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimNumbers(ch, client, h)));
+  app.get('/v1/casino', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
+    return Casino.denInfo(pool, cid);
   });
 
   app.get('/v1/gangs', async () => {
