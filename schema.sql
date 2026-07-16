@@ -414,6 +414,12 @@ CREATE TABLE IF NOT EXISTS businesses (
   last_collect_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   launder_used NUMERIC NOT NULL DEFAULT 0,
   launder_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- step two (risk layer): laundering draws Bureau SCRUTINY (decays hourly off scrutiny_at);
+  -- past the threshold a lazy raid roll can seize pending income + levy a fine. shakedown_at
+  -- is the per-venue cooldown on rival extortion attempts.
+  scrutiny NUMERIC NOT NULL DEFAULT 0,
+  scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  shakedown_at TIMESTAMPTZ,
   acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (character_id, kind)
 );

@@ -1,8 +1,8 @@
 # OMERTÀ — Business Empire (detailed design)
 
-**Status: STEP ONE BUILT** (`src/business.js`, `test/economy.js`). The cash-farming + private-laundering
-loop ships; the step-two risk layer (§5) is deferred by design. A late-game, upgradeable, launder-capable
-business layer:
+**Status: STEPS ONE + TWO BUILT** (`src/business.js`, `test/economy.js`). The cash-farming +
+private-laundering loop ships with its risk layer (§5): scrutiny, Bureau raids, rival shakedowns.
+A late-game, upgradeable, launder-capable business layer:
 own restaurants, laundromats, clubs and other **legit fronts** that farm in-game cash *and* serve
 as your private money-laundering infrastructure — the endgame extraction pipe.
 
@@ -73,12 +73,31 @@ vocabulary; net worth includes owned businesses' resale value.
   `POST /v1/business/:id/launder` `{amount}`, `GET /v1/business` (your empire + pending income +
   launder headroom). Surfaced in the character view.
 
-## 5. Step two (deferred): the risk layer
-Once the income curves are validated in play: fronts accrue **scrutiny**; past a threshold a Bureau
-**raid** can seize a chunk of accrued income or levy a fine (reuse the kitchen heat/raid machinery),
-and a rival can **shake down** a front for a cut (a PvP hook, `withTwoCharacters`). Passive income you
-must protect — the Risk-to-Earn framing applied to the business layer. Built separately so step one
-ships the cash-farming + laundering loop cleanly first.
+## 5. Step two — the risk layer (BUILT)
+Passive income you must protect — the Risk-to-Earn framing applied to the business layer.
+
+- **Scrutiny** (per-front, `scrutiny`/`scrutiny_at`): only **laundering** draws the Bureau's eyes —
+  `BUSINESS_SCRUTINY_PER_CAP` (25) points per full day-capacity washed, decaying
+  `BUSINESS_SCRUTINY_DECAY_HR` (2)/hour. Income-only fronts never get raided; their risk is PvP
+  shakedowns — so PvE risk tracks *extraction*, PvP risk tracks *wealth*.
+- **Bureau raid** (lazy, resolved whenever the owner touches the row — collect/upgrade/launder, the
+  §7.1 kitchen-raid pattern): while the front sat above `BUSINESS_RAID_THRESHOLD` (60), one roll over
+  those minutes at `BUSINESS_RAID_P_PER_MIN` (0.002). A raid **seizes all pending uncollected income**
+  (clock reset — never minted, no ledger row; the territory-seizure precedent) and levies a fine of
+  `BUSINESS_RAID_FINE_RATE` (10%) × the current tier's cost, clamped to pocket cash — a ledgered
+  §10.4 sink `business:raid`. Scrutiny resets to 0 (the heat's off). `BUSINESS_RAID_P` is a
+  test-only env knob (the GEAR_LOOT_CHANCE precedent) — never set it in production.
+- **Shakedown** (`POST /v1/business/:id/shakedown`, `withTwoCharacters`): a rival extorts
+  `SHAKEDOWN_RATE` (30%) of a front's **pending** income in a muscle/cunning contest. The cut is the
+  same bounded income faucet as a collect (`business:shakedown`, attacker's character_id), just
+  redirected; the owner keeps the rest pending (the clock advances by only the stolen share).
+  Per-venue cooldown `SHAKEDOWN_CD_MS` (8h), `SHAKEDOWN_ENERGY` (15), `SHAKEDOWN_HEAT` (10) on the
+  attacker win or lose (extortion is exposure). Family fronts are off-limits; a safehouse blocks the
+  *attacker* (P1.3 — offense) but not the venue (a street address, not the man); a hospitalized
+  owner is off-limits (the jump mercy rule). A failed attempt costs the attacker health.
+- Fronts die with the street: `businesses` joined the `runEstate` property wipe.
+
+All step-two numbers are founder sign-off levers (ground rule #1).
 
 ## 6. Numbers (all founder sign-off levers)
 Catalog costs, per-tier income curves, `launderCapDay`, `BUSINESS_CAP_MS` (income accrual cap),

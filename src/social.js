@@ -996,7 +996,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
   // M7: a directed contract still in its EXCLUSIVE window is REFUNDED, not burned — an outsider

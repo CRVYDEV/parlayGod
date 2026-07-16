@@ -308,6 +308,75 @@ assert.equal(bizBuys, -250000, 'business:buy is a ledgered cash sink');
 assert.equal(bizUp, -600000, 'business:upgrade is a ledgered cash sink');
 assert.equal(bizInc, col1 + colCap + colUp, 'business:income is a ledgered cash faucet (all three collects)');
 
+// ══════════ BUSINESS EMPIRE step two — the risk layer (scrutiny, raids, shakedowns) ══════════
+// the washes above (40k + 10k + 30k against a 50k/day tier-2 cap) drew ~40 scrutiny onto the front
+r = await call('GET', '/v1/business', { token });
+let lm = r.body.businesses.find((b) => b.id === bizId);
+assert(lm.scrutiny >= 35 && lm.scrutiny <= 45, `laundering drew scrutiny onto the front (got ${lm.scrutiny})`);
+assert.equal(lm.raidRisk, false, 'still below the raid threshold');
+// scrutiny decays ~2/hr while the front lies quiet
+await pool.query(`UPDATE businesses SET scrutiny=50, scrutiny_at = now() - interval '10 hours' WHERE id='${bizId}'`);
+lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert(Math.abs(lm.scrutiny - 30) <= 1, `scrutiny decays ~2/hr (50 − 20 ≈ ${lm.scrutiny})`);
+// below the threshold, even a FORCED roll never raids (BUSINESS_RAID_P is the test-only env knob)
+process.env.BUSINESS_RAID_P = '1';
+await pool.query(`UPDATE businesses SET scrutiny=30, scrutiny_at=now(), last_collect_at = now() - interval '2 hours' WHERE id='${bizId}'`);
+r = await call('POST', '/v1/business/collect', { token });
+assert(!r.body.raids, 'no raid below the scrutiny threshold');
+assert(r.body.collected > 0, 'income still collects normally');
+// above it, the Bureau's raid seizes ALL pending income + levies a 10%-of-tier-cost fine
+await seed("cash=1000000");
+await pool.query(`UPDATE businesses SET scrutiny=100, scrutiny_at = now() - interval '1 hour', last_collect_at = now() - interval '3 hours' WHERE id='${bizId}'`);
+const cashPreRaid = (await meOf(token)).cash;
+r = await call('POST', '/v1/business/collect', { token });
+assert.equal(r.body.raids?.length, 1, 'the Bureau raided the hot front');
+assert.equal(r.body.raids[0].fine, 60000, 'fined 10% of the tier-2 cost ($60k)');
+assert(r.body.raids[0].seized > 0, 'pending income was seized (never banked, never minted)');
+assert.equal(r.body.collected, 0, 'nothing collected from the raided front');
+assert.equal((await meOf(token)).cash, cashPreRaid - 60000, 'the fine left the pocket');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:raid' AND character_id=$1", [cid])).rows[0].s),
+  -60000, 'business:raid is a ledgered §10.4 cash sink');
+lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert.equal(lm.scrutiny, 0, 'the raid cleared the scrutiny (the heat is off)');
+delete process.env.BUSINESS_RAID_P;
+
+// ── shakedown: a rival extorts a front for 30% of its PENDING income (PvP, two-party) ──
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '10 hours', shakedown_at=NULL WHERE id='${bizId}'`);
+// gates: no extortion from a safehouse; a hospitalized owner is off-limits; family is omertà
+await seed2("energy=200, jail_until=NULL, hosp_until=NULL, safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/business/${bizId}/shakedown`, { token: t2 })).body.error, 'safe', 'no extortion from a safehouse');
+await seed2("safe_until=NULL");
+await seed("hosp_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/business/${bizId}/shakedown`, { token: t2 })).body.error, 'hosp', 'a hospitalized owner is off-limits');
+await seed("hosp_until=NULL");
+r = await call('POST', '/v1/gangs', { token, body: { name: 'Front Runners', tag: 'FRUN' } });
+assert.equal(r.code, 200, 'owner founded a family');
+assert.equal((await call('POST', `/v1/gangs/${r.body.gangId}/join`, { token: t2 })).code, 200, 'the rival joined it');
+assert.equal((await call('POST', `/v1/business/${bizId}/shakedown`, { token: t2 })).body.error, 'family', "family fronts are off-limits — omertà");
+assert.equal((await call('POST', '/v1/gangs/leave', { token: t2 })).code, 200, 'rival left the family');
+// the contest: an overwhelming rival vs a soft owner — loop the roll (clamped odds, never certain)
+await seed2("muscle=2000, cunning=2000, energy=200, heat=0");
+await seed("muscle=5, cunning=5");
+let win = null;
+for (let i = 0; i < 60 && !win; i++) {
+  await seed2("energy=200, jail_until=NULL");
+  await pool.query(`UPDATE businesses SET shakedown_at=NULL WHERE id='${bizId}'`);
+  const s = await call('POST', `/v1/business/${bizId}/shakedown`, { token: t2 });
+  assert.equal(s.code, 200, 'shakedown attempt resolves');
+  if (s.body.win) win = s.body;
+}
+assert(win, 'a 2000-muscle rival eventually cracks a 5-muscle owner');
+assert(win.cut > 0, 'took a cut of the pending income');
+assert((await meOf(t2)).heat >= 10, 'extortion drew heat on the attacker');
+assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:shakedown' AND character_id=$1", [c2])).rows[0].s) >= win.cut,
+  'the cut is a ledgered faucet on the attacker (§10.4 reconciles — same bounded income, redirected)');
+// per-venue cooldown armed by the visit
+assert.equal((await call('POST', `/v1/business/${bizId}/shakedown`, { token: t2 })).body.error, 'cooldown', 'per-venue cooldown after a visit');
+// the owner kept the other ~70% pending (the clock advanced by only the stolen share)
+r = await call('POST', '/v1/business/collect', { token });
+assert(Math.abs(r.body.collected - Math.round(win.cut * 7 / 3)) <= 300,
+  `owner kept ~70% of the pending (cut $${win.cut}, owner collected $${r.body.collected})`);
+
 // ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──
 // An empty bucket over a 4h gap refills only ~2h of interest-eligibility (BANK_DAILY_CAP_MS 12h/day
 // → 0.5 ms credit per ms), so a continuously-online player banks HALF the raw 4h they'd otherwise
@@ -318,5 +387,5 @@ const afterCap = await meOf(token); // any action triggers accrual; interest is 
 assert(afterCap.bank > 1003000 && afterCap.bank < 1004000,
   `bank interest capped to ~2h of a 4h gap (~+0.33%, got +${afterCap.bank - 1000000}); uncapped 4h would be ~+6667`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering)');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%)');
 await app.close();

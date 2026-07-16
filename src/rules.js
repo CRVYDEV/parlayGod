@@ -478,6 +478,17 @@ export const CONSTANTS = {
   // gated by the front's per-tier daily capacity, not the wash-house district. New/tunable — sim
   // + founder sign-off before production (ground rule #1).
   BUSINESS_CAP_MS: 24*3600*1000, BUSINESS_LAUNDER_HEAT: 8,
+  // Business Empire step two — the RISK layer (passive income you must protect). SCRUTINY: only
+  // LAUNDERING draws the Bureau's eyes onto a front (PER_CAP points per full day-capacity washed,
+  // decaying DECAY_HR/hour) — income-only fronts never get raided; their risk is rival shakedowns.
+  // RAID: past the threshold, a lazy roll per elapsed minute (the §7.1 kitchen-raid pattern) can
+  // seize ALL pending uncollected income + levy a fine of FINE_RATE × the current tier's cost
+  // (clamped to pocket cash). SHAKEDOWN: a rival extorts SHAKEDOWN_RATE of a front's pending
+  // income in a muscle/cunning contest — per-venue cooldown, energy cost, heat either way.
+  // All new/tunable — sim + founder sign-off before production (ground rule #1).
+  BUSINESS_SCRUTINY_PER_CAP: 25, BUSINESS_SCRUTINY_DECAY_HR: 2,
+  BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.002, BUSINESS_RAID_FINE_RATE: 0.10,
+  SHAKEDOWN_RATE: 0.30, SHAKEDOWN_CD_MS: 8*3600*1000, SHAKEDOWN_ENERGY: 15, SHAKEDOWN_HEAT: 10,
 };
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;

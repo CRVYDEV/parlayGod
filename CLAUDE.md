@@ -429,8 +429,24 @@ also closes the audit's API-discoverability gap), `POST /v1/business/:kind/buy|/
 collect/upgrade with the income cap, private lower-heat laundering + the daily cap + window reset + safehouse
 block, and the faucet/sink ledgering. All numbers (catalog costs, income curves, `launderCapDay`,
 `BUSINESS_CAP_MS`, `BUSINESS_LAUNDER_HEAT`, level gates) are proposed defaults — sim + founder sign-off
-before production (ground rule #1). **Step two (deferred by design):** the scrutiny/raid/extortion risk
-layer (passive income you must protect) — built separately so step one ships the cash+launder loop cleanly.
+before production (ground rule #1). **Step two (risk layer) — BUILT**: passive income you must protect.
+**Scrutiny** (`scrutiny`/`scrutiny_at` on the row) comes ONLY from laundering (`BUSINESS_SCRUTINY_PER_CAP`
+25/day-cap washed, decays `BUSINESS_SCRUTINY_DECAY_HR` 2/hr) — income-only fronts never get raided (their
+risk is PvP), so PvE risk tracks extraction, PvP tracks wealth. **Bureau raids** resolve lazily on owner
+touch (`resolveScrutiny` in collect/upgrade/launder — the §7.1 kitchen pattern): above
+`BUSINESS_RAID_THRESHOLD` (60), one roll over the minutes-above at `BUSINESS_RAID_P_PER_MIN` (0.002);
+a raid seizes ALL pending income (clock reset, never minted — no ledger row, the territory-seizure
+precedent) + fines `BUSINESS_RAID_FINE_RATE` (10%) of the tier cost clamped to pocket (`business:raid`,
+a ledgered §10.4 sink), then scrutiny→0. `BUSINESS_RAID_P` is a TEST-ONLY env knob (GEAR_LOOT_CHANCE
+precedent) — never set in production. **Shakedowns** (`shakedownBusiness`, `POST /v1/business/:id/shakedown`,
+withTwoCharacters): a rival extorts `SHAKEDOWN_RATE` (30%) of a front's PENDING income in a muscle/cunning
+contest — the cut is the same bounded income faucet redirected (`business:shakedown`, attacker character_id;
+owner keeps the rest pending, clock advances by only the stolen share); per-venue `SHAKEDOWN_CD_MS` (8h)
+cooldown, `SHAKEDOWN_ENERGY` (15), `SHAKEDOWN_HEAT` (10) win or lose, family/hospitalized-owner blocked,
+attacker safehouse-blocked (P1.3), failed attempts cost health. Fronts die with the street (`businesses`
+joined the runEstate wipe). Owner view surfaces `scrutiny`/`raidRisk`/`shakedownCdSeconds`. Tests cover
+scrutiny accrual/decay, the threshold gate, a forced raid (seize + ledgered fine), shakedown gates/contest/
+cooldown, and the owner's ~70% remainder. Step-two numbers are founder sign-off levers too.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

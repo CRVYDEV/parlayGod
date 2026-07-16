@@ -300,6 +300,14 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.upgradeBusiness(ch, req.params.id, client, h)));
   app.post('/v1/business/:id/launder', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.launderAtBusiness(ch, req.params.id, req.body?.amount, client, h)));
+  // step two (risk layer): a rival extorts a front for a cut of its pending income — two-party,
+  // so the owner lookup happens first and withTwoCharacters locks both sides in sorted order.
+  app.post('/v1/business/:id/shakedown', { preHandler: auth }, async (req) => {
+    const owner = (await pool.query('SELECT character_id FROM businesses WHERE id=$1', [req.params.id])).rows[0];
+    if (!owner) throw new G.GameError('bad_business', 'No such front.');
+    return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
+      Business.shakedownBusiness(ch, victim, req.params.id, client, h));
+  });
   app.get('/v1/business', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
