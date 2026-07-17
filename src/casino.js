@@ -196,13 +196,21 @@ export async function fixFight(ch, winner, client, h) {
   if (!holder || holder.holder_gang !== h.owned.gangId)
     throw new GameError('turf', `The fix belongs to whoever runs the ${CASINO.DISTRICT}.`);
   const week = weekOf();
+  // audit (race → raw 500): the once-a-week check runs UNDER the gang lock (a boss/underboss
+  // double-submit serializes there), and the week-PK insert is the true arbiter — a loser
+  // crossing gangs (neon seized between checks) gets a clean 'fixed', not a 23505 500.
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const existing = (await client.query('SELECT 1 FROM fight_fixes WHERE week=$1', [week])).rows[0];
   if (existing) throw new GameError('fixed', "This bout's already been bought.");
-  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (Number(g.treasury) < CASINO.FIGHT_FIX_COST)
     throw new GameError('treasury', `A referee costs $${CASINO.FIGHT_FIX_COST} from the treasury.`);
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, CASINO.FIGHT_FIX_COST]);
-  await client.query('INSERT INTO fight_fixes (week, gang_id, winner) VALUES ($1,$2,$3)', [week, h.owned.gangId, winner]);
+  try {
+    await client.query('INSERT INTO fight_fixes (week, gang_id, winner) VALUES ($1,$2,$3)', [week, h.owned.gangId, winner]);
+  } catch (e) {
+    if (e?.code === '23505') throw new GameError('fixed', "This bout's already been bought.");
+    throw e;
+  }
   await h.ledger(client, { currency: 'cash', amount: -CASINO.FIGHT_FIX_COST, reason: 'casino:fix', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - CASINO.FIGHT_FIX_COST;
   // RIVALRY #3 (Underworld step five): nobody fixes HER book — the buying boss wears it
