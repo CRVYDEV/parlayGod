@@ -730,6 +730,34 @@ heat clamp). NOT patched (founder calls, ranked): purchasable standing × family
 Sybil-scalable fight fix, SIWE/X replay surface. `forge test` STILL not run (Foundry egress-blocked)
 — must pass before the third-party audit. Suite 13/13 + sim drift-0.
 
+**The Black Market (step one) — BUILT** (`src/market.js`, `test/market.js` — the 14th suite file;
+design `omerta-market-design.md`). P2P trade at last: **cars by AUCTION** (one standing bid per
+listing, raises beat it by `MIN_RAISE_BPS` 5%, optional buy-now instant settle; the outbid player
+is refunded inline via the heist-execute lock pattern — counterparty read-unlocked → locked →
+re-verified under the listing lock, `again` on a race) and **trade goods FIXED-PRICE with
+DISTRICT-PINNED pickup** (buyer must stand at the listing's dock with trunk space, partial buys —
+the market must NOT teleport freight past the convoy game). GEAR deliberately excluded (its market
+IS the on-chain GearVault rail); cb/ammo stay on the M3 Exchange. Escrow: cars flag `cars.listed`
+(the ROW stays — car conservation counts rows; melt/fence/repair refuse listed iron via findCar;
+CHOP still values it, else a marked man warehouses his fleet pre-hit); goods deduct from the trunk
+into the listing (the freed space is priced by the `LIST_FEE_BPS` 1% listing fee and bounded by
+`MAX_LISTINGS` 3; reclaim is trunk-space-gated, the convoy-cancel rule). §10.4: `market:` cash
+vocabulary (`list` sink; `bid` in; `refund`/`sale`/`take`/`death` out) + the new **market escrow**
+check — standing bids on live listings == posted − refunded − sales − takes − deaths; the 2% take
+is carved FROM the hammer (half street tax, half burns, ONE character_id-NULL `market:take` row)
+— never minted on top (the audited casino pattern is the anti-precedent). Death: `voidListingsAtDeath`
+(bids refunded; killer-as-bidder threads killerCh — the refundPot discipline) + `burnBidsAtDeath`
+(`market:death` NULL rows, the dead-funder precedent) in runEstate. Worker `sweepMarket` hammers
+expired auctions (chars sorted → listing, per-listing txn) and lapses the rest for pull-based
+reclaim. Routes: `GET /v1/market` (public), `POST /v1/market`, `/v1/market/:id/bid|buy|cancel`.
+Jail gates all mutations; no safehouse gate (shopping is neither offense nor extraction — P1.3/D2
+untouched). `BLACK_MARKET` rules-tail block (NOT `MARKET` — that's the generated goods catalog);
+all numbers founder sign-off levers. Tests: gates/fees/floors, escrow guards, full auction
+lifecycle (floor/raise/outbid-refund-exact/self-raise-diff/buy-now/expiry-hammer), goods
+dock+clamp+partial+reclaim, death both sides, escrow check + vocabulary. Step two (deferred):
+goods auctions with warehouse claim, reserve prices, anti-snipe, buy orders, the gear-market
+design call. Suite 14/14 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

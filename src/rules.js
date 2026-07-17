@@ -790,6 +790,19 @@ export const COMMISSION = {
   ],
 };
 export const decreeOf = (id) => COMMISSION.DECREES.find((d) => d.id === id) || null;
+// THE BLACK MARKET — P2P trade: cars by AUCTION (single standing bid, min-raise, optional
+// buy-now), goods FIXED-PRICE with district-pinned pickup (the market must not teleport freight
+// past the convoy game). The 2% take is carved FROM the hammer (half street tax, half burns) —
+// never minted on top. Gear deliberately excluded (its market IS the on-chain rail). All
+// numbers are founder sign-off levers. Design: omerta-market-design.md.
+export const BLACK_MARKET = {           // (MARKET is the generated §5 goods catalog — hands off)
+  LIST_FEE_BPS: 100, LIST_FEE_MIN: 10,  // 1% of the ask (min $10) to list — prices the "free warehouse" angle
+  MIN_PRICE: 50,                         // no penny listings
+  MIN_RAISE_BPS: 500,                    // a new bid beats the standing one by ≥5%
+  TAKE_BPS: 200,                         // 2% of the hammer: half → street tax, half burns
+  MAX_TTL_H: 48,                         // listings run at most two days
+  MAX_LISTINGS: 3,                       // live listings per character (bounds warehouse storage)
+};
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
 // capped at TERRITORY_CAP_MS so it can't hoard unboundedly), and the whole operation transfers to

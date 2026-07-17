@@ -157,6 +157,21 @@ per-member ≈ $43.7k/8h window vs the solo heist's guaranteed $30k = **1.46× s
 1.3–2.1× design band**, with 1-in-3 runs ending in shared jail. §10.4 drift-0 with the faucet
 live. **KEEP as proposed.**
 
+## Post-signing addendum — the Black Market (P2P trade, sign-off pending)
+
+Structurally a TRANSFER layer, not a faucet: every sale moves cash player→player minus the 2%
+take carved FROM the hammer (half street tax → the buyback, half burns) — net supply impact is
+mildly deflationary, and wash-trading an alt costs 2% + listing fees for nothing (no volume
+counter reads market activity). Levers (`BLACK_MARKET` rules tail): `LIST_FEE_BPS` 100 / min
+$10 (prices the freed-trunk "warehouse" angle), `MAX_LISTINGS` 3 (bounds it), `MIN_RAISE_BPS`
+500 (anti-penny-sniping), `TAKE_BPS` 200, `MAX_TTL_H` 48, `MIN_PRICE` 50. Watch in alpha:
+(1) car prices vs the 50% fence floor — if market clears far above fence, GTA farming EV rises
+(the faucet itself is unchanged; volume is the thing to watch); (2) goods listings as cheap
+cross-district ARBITRAGE storage — pickup is district-pinned so the BUYER carries the transport
+leg, but a seller listing at a high-price district they visited once effectively banks goods
+there; if live data shows convoys losing volume to pre-positioned listings, pin goods listings
+to the seller's CURRENT district at sale-time too, or cap goods listing size at trunk capacity.
+
 ## Post-signing addendum — step-two content (convoys / heists / Commission), sign-off pending
 
 All three are extensions of already-signed systems; every new number is a lever.

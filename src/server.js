@@ -19,6 +19,7 @@ import * as Casino from './casino.js';
 import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
 import * as Commission from './commission.js';
+import * as Market from './market.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -329,6 +330,17 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castVote(ch, req.body?.decree, client, h)));
   app.post('/v1/commission/veto', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.vetoDecree(ch, client, h)));
+
+  // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
+  app.get('/v1/market', async () => Market.marketBoard(pool));
+  app.post('/v1/market', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.listItem(ch, req.body || {}, client, h)));
+  app.post('/v1/market/:id/bid', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.bidListing(ch, req.params.id, req.body?.amount, client, h)));
+  app.post('/v1/market/:id/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.buyListing(ch, req.params.id, req.body?.qty, client, h)));
+  app.post('/v1/market/:id/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.cancelListing(ch, req.params.id, client, h)));
 
   // SMUGGLING CONVOYS — bulk goods in transit: load, guard, ship; ambush someone else's.
   app.get('/v1/convoys', { preHandler: auth }, async (req) => {

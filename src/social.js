@@ -13,6 +13,7 @@ import {
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
 import { activeDecree } from './commission.js';
+import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -1176,6 +1177,12 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   for (const e of escrowed)
     await h.ledger(client, { currency: e.item_kind, amount: -Number(e.q), reason: 'death:escrow', counterparty: victim.id });
   await client.query('DELETE FROM listings WHERE seller_character=$1', [victim.id]);
+  // Black Market: the dead man's LISTINGS void with standing bids refunded (a killer who held
+  // the bid takes it in-memory via killerCh — the refundPot discipline, no persist clobber);
+  // his own standing BIDS burn (the dead-funder precedent) and those auctions reopen.
+  const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh);
+  if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
+  await burnBidsAtDeath(client, victim.id);
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
   victim.alive = false;
