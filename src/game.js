@@ -6,7 +6,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf,
-         crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive } from './rules.js';
+         crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
+         cityHourOf, cityLawEventOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -427,8 +428,8 @@ async function persistCharacter(client, ch) {
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
       guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
       bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45,
-      crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51
-      WHERE id=$1`,
+      crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
+      world_raid_at=$52 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -437,7 +438,8 @@ async function persistCharacter(client, ch) {
      ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
      ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null,
      ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null, ch.crew_paid_at ?? null,
-     ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null]);
+     ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null,
+     ch.world_raid_at ?? null]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -506,7 +508,11 @@ export function view(ch, acct = {}, owned = {}) {
     hitmanTitle: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
     onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
-    cityEvent: cityEventOf(dayOf()).id };
+    cityEvent: cityEventOf(dayOf()).id,
+    // THE LIVING WORLD — the city at a glance: the two event tracks + the intraday clock (GET /v1/city
+    // is the full forecast). Kept beside the legacy `cityEvent` id (unchanged for back-compat).
+    city: (() => { const ev = cityEventOf(dayOf()), law = cityLawEventOf(dayOf()), hr = cityHourOf();
+      return { event: ev.id, name: ev.name, lawEvent: law.id, hour: hr.hour, phase: hr.phase, patrol: hr.patrol }; })() };
 }
 
 // ── §7.2 CRIME ──

@@ -23,10 +23,12 @@ import * as Market from './market.js';
 import * as Skills from './skills.js';
 import * as Underworld from './underworld.js';
 import * as Law from './law.js';
+import * as World from './world.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf } from './rules.js';
+         levelOf, GOODS, DRUGS, DISTRICTS, sealOf,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -858,7 +860,24 @@ export async function buildServer() {
     };
   });
 
-  app.get('/v1/city', async () => ({ day: dayOf(), event: cityEventOf(dayOf()) }));
+  // THE LIVING WORLD — the city you can SEE: today's two event tracks, the intraday clock, the
+  // per-district economic weather, and a 7-day forecast (all pure functions of the day, so players
+  // can plan). Public, no auth.
+  app.get('/v1/city', async () => {
+    const day = dayOf(), block = priceBlock(), hr = cityHourOf();
+    return {
+      day, event: cityEventOf(day), lawEvent: cityLawEventOf(day),
+      clock: hr,
+      forecast: cityForecast(day),
+      // each district's current goods-shock (mean-neutral daily weather) — the arbitrage map
+      weather: Object.fromEntries(DISTRICTS.map((d) => [d.id, Math.round(regionShockOf(d.id, Math.floor(block / 6)) * 1000) / 1000])),
+    };
+  });
+  // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
+  app.get('/v1/world', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));
+  app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
   return app;
 }
 

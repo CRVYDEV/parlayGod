@@ -18,7 +18,7 @@
 import crypto from 'node:crypto';
 import { GameError, ledger, rngLog, notify, track, bus } from './game.js';
 import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, bustProbOf,
-         cityEventOf, dayOf } from './rules.js';
+         cityEventOf, dayOf, cityHourOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
@@ -54,6 +54,9 @@ export function lawBoard(ch, h) {
       available: !!acct.rat && !ch.witpro_until },
     // the weather that drives the pressure (crackdown builds the case faster, a visit bleeds it)
     cityEvent: { id: ev.id, name: ev.name, exposureMult: LAW.EXPOSURE_EVENT[ev.id] ?? 1 },
+    // THE LIVING WORLD P4: the Bureau works business hours — a trial/bust in the patrol window
+    // convicts a touch harder (already folded into convictionOdds above).
+    patrol: cityHourOf().patrol,
   };
 }
 

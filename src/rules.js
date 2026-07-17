@@ -584,7 +584,10 @@ export const dayOf=(t=Date.now())=>Math.floor(t/86400000);
 export const MARKET_SEED = process.env.MARKET_SEED || 'omerta-server-seed';
 export const hash01=(s)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%1000)/1000;};
 export const priceBlock=(t=Date.now())=>Math.floor(t/(4*3600*1000));
-export const goodPriceOf=(goodId,districtId,blk=priceBlock())=>{const g=GOODS.find(x=>x.id===goodId);if(!g)return 0;return Math.max(10,Math.round(g.base*(0.6+hash01(goodId+':'+districtId+':'+blk+':'+MARKET_SEED))));};
+// THE LIVING WORLD P3 — each district's daily supply SHOCK (regionShockOf, mean-neutral, defined in
+// the tail) folds into the deterministic price so every reader (the prices board, buy/sell, convoy
+// value) sees ONE consistent shocked surface. Keyed on the block's day (6 four-hour blocks/day).
+export const goodPriceOf=(goodId,districtId,blk=priceBlock())=>{const g=GOODS.find(x=>x.id===goodId);if(!g)return 0;const shock=regionShockOf(districtId,Math.floor(blk/6));return Math.max(10,Math.round(g.base*(0.6+hash01(goodId+':'+districtId+':'+blk+':'+MARKET_SEED))*shock));};
 export const demandOf=(drugId,districtId,blk=priceBlock())=>0.7+hash01(drugId+'@'+districtId+':'+blk+':'+MARKET_SEED)*0.8;
 export const makingsPriceOf=(drugId,blk=priceBlock())=>Math.max(5,Math.round((drugOf(drugId)?.mk||0)*(0.75+hash01('mk:'+drugId+':'+blk+':'+MARKET_SEED)*0.5)));
 
@@ -804,11 +807,68 @@ export const retainerActive = (ch, now = Date.now()) => !!ch.retainer_until && n
 export const witproActive = (ch, now = Date.now()) => !!ch.witpro_until && new Date(ch.witpro_until).getTime() > now;
 // conviction probability for the current case (Phase 2/3): scales with exposure over the
 // indictment threshold, softened by an active lawyer retainer and (once) a bought jury.
-export const bustProbOf = (ch) => {
+export const bustProbOf = (ch, now = Date.now()) => {
   let p = LAW.BUST_P_MIN + Math.max(0, Number(ch.heat_exposure || 0) - LAW.INDICT_AT) * LAW.BUST_P_PER;
   if (retainerActive(ch)) p *= LAW.RETAINER_BUST_MULT;
   if (ch.jury_bought) p *= LAW.JURY_BUST_MULT;
+  if (cityHourOf(now).patrol) p *= LIVING.PATROL_BUST_MULT; // THE LIVING WORLD P4: the Bureau works business hours
   return Math.min(LAW.BUST_P_MAX, Math.max(LAW.BUST_P_MIN * LAW.RETAINER_BUST_MULT * LAW.JURY_BUST_MULT, p));
+};
+
+// ═══════════════════ THE LIVING WORLD (design omerta-living-world-design.md) ═══════════════════
+// CITY_EVENTS + cityEventOf already drive every economy loop. This layers what the design calls for:
+// VISIBLE forecasts, a SECOND event track, per-district economic WEATHER, an intraday CLOCK, and
+// (src/world.js) NPC RIVAL FAMILIES. CITY_EVENTS is GENERATED (extract-rules.js) — everything new
+// keys off the event id here, never a new field on the table (ground rule #2). Numbers are founder
+// sign-off levers (ground rule #1).
+export const LIVING = {
+  FORECAST_DAYS: 7,          // the city board publishes a week ahead (cityEventOf is a pure fn of the day)
+  LAW_TRACK_OFFSET: 8,       // the second "law" event track is cityEventOf(day + this) — a distinct daily draw
+  // Phase 3 — regional economic weather: each district draws its own daily goods SHOCK band,
+  // amplifying the existing per-district variance. MEAN-NEUTRAL (0.9–1.1, avg 1.0) so it adds only
+  // texture, not inflation — and deliberately NARROW so it can't widen the audited trade-goods
+  // arbitrage. Deterministic (§7.11 hash), no state. Sim sign-off lever.
+  REGION_SHOCK_LO: 0.9, REGION_SHOCK_HI: 1.1,
+  // Phase 4 — the intraday clock. Small, symmetric, texture-not-power: applied ONLY to NEW levers
+  // (the Law bust "patrol" + the NPC raid), never a signed BALANCE surface. PATROL_HOURS (UTC) are
+  // the Bureau's business hours; the small hours favour a raid. Sign-off levers.
+  PATROL_HOURS: [13, 22], PATROL_BUST_MULT: 1.15, NIGHT_RAID_MULT: 0.9,
+};
+// the intraday clock — a pure function of the UTC hour (the cityEventOf shape). No state.
+export const cityHourOf = (t = Date.now()) => {
+  const h = new Date(t).getUTCHours();
+  const patrol = h >= LIVING.PATROL_HOURS[0] && h < LIVING.PATROL_HOURS[1];
+  return { hour: h, patrol, phase: patrol ? 'day' : 'night' };
+};
+// the second daily event track (Phase 1 layering) — an independent draw, so the city runs two dials
+export const cityLawEventOf = (day = dayOf()) => cityEventOf(day + LIVING.LAW_TRACK_OFFSET);
+// Phase 3 — the per-district daily goods shock (a deterministic mean-neutral band). Keyed on the
+// block's DAY so it's stable across a day's four-hour price blocks. Folded into goodPriceOf below.
+export const regionShockOf = (districtId, day = dayOf()) =>
+  LIVING.REGION_SHOCK_LO + hash01('region:' + districtId + ':' + day + ':' + MARKET_SEED) * (LIVING.REGION_SHOCK_HI - LIVING.REGION_SHOCK_LO);
+// the 7-day forecast — both tracks, pure functions of the day (knowable, so players can plan)
+export const cityForecast = (day = dayOf()) => Array.from({ length: LIVING.FORECAST_DAYS }, (_, i) => ({
+  day: day + i, city: cityEventOf(day + i).id, law: cityLawEventOf(day + i).id }));
+
+// NPC RIVAL FAMILIES (Phase 2) — a server-wide common enemy (positive-sum co-op). `strength` is a
+// shared CASH RESERVOIR (dollars) that regenerates lazily toward its max; a raid loots a bounded
+// slice (GRAB_BPS of the reservoir, capped) and drains it — so total emission is bounded by REGEN,
+// a metered world quantity (§10.4-safe: `world:raid` is a ledgered faucet, capped by real activity).
+// The whole server grinds the same pool; routing it (strength → floor) pays a one-time bonus + a
+// streets event. Numbers are founder SIM sign-off levers (the only emission surface in this pillar).
+export const WORLD_NPCS = [
+  { id: 'zappa',  name: 'The Zappa Crew',      minLvl: 8,  max: 400000,  regenPerHr: 12000, base: 0.55, def: 40,  routBonus: 15000 },
+  { id: 'kryl',   name: 'The Kryl Syndicate',  minLvl: 20, max: 1500000, regenPerHr: 40000, base: 0.45, def: 90,  routBonus: 60000 },
+  { id: 'moreau', name: 'The Moreau Cartel',   minLvl: 40, max: 5000000, regenPerHr: 90000, base: 0.35, def: 150, routBonus: 200000 },
+];
+export const worldNpcOf = (id) => WORLD_NPCS.find((n) => n.id === id) || null;
+export const WORLD = {
+  RAID_ENERGY: 30, RAID_AMMO: 15, RAID_HEAT: 12,   // a raid costs energy + ammo (a §10.4 ammo sink) + heat
+  RAID_CD_MS: 2 * 3600 * 1000,                     // per-character cooldown between raids
+  GRAB_BPS: 500,                                   // a landed raid takes 5% of the reservoir…
+  GRAB_MAX: 250000,                                // …capped per raid (so a whale can't one-shot a full cartel)
+  FAIL_HOSP_MS: 20 * 60 * 1000,                    // a repelled raid hospitalizes
+  ROUT_FLOOR_BPS: 200,                             // "routed" once the reservoir is drained below 2% of max
 };
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
