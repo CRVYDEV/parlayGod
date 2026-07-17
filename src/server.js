@@ -309,6 +309,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
   app.post('/v1/business/collect', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.collectBusiness(ch, client, h)));
+  // recurring sinks: pay the pad (protection + wages) on your fronts — a front unpaid past the
+  // cold window produces nothing until squared
+  app.post('/v1/business/upkeep', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.payBusinessUpkeep(ch, client, h)));
   app.post('/v1/business/:id/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.upgradeBusiness(ch, req.params.id, client, h)));
   app.post('/v1/business/:id/launder', { preHandler: auth }, async (req) =>

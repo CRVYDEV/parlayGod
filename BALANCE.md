@@ -357,3 +357,23 @@ the balance/design findings. All BUILT; suite 16/16 + sim drift-0. New levers:
   new kill-economics number.
 Founder call this pass: the two new numbers (200 order cap, +25/day standing) plus the decision to
 reuse `CASH_LOOT_RATE` for order loot. Everything else in the audit was a code-correctness fix.
+
+## Post-signing addendum — recurring sinks: "the pad" (business upkeep, sign-off levers)
+
+The economy's first RECURRING, wealth-scaling sink, closing this document's own flagged
+safehoused-landlord passive-stack (the deepest un-drained late-game faucet). Every business front
+owes protection + wages proportional to its income; the bagman comes whether or not you collect.
+Levers (`CONSTANTS`, `omerta-recurring-sinks-design.md`):
+- **`BUSINESS_UPKEEP_BPS` 2000** — upkeep = 20% of the tier's `incomePerHr`. A daily-tending owner
+  pays ~20% of gross as a recurring tax (the sink); the front stays net-positive. This is the
+  primary dial: raise it to drain harder, lower it to soften.
+- **`BUSINESS_UPKEEP_CAP_MS` 7d / `BUSINESS_UPKEEP_COLD_MS` 3d** — upkeep accrues on its own clock
+  (distinct from the 24h income cap) up to a week; a front unpaid past 3 days goes COLD (no income
+  / no launder / no upgrade) until squared. The asymmetry (earn ≤24h, owe ≤7d) is what makes
+  neglect a net loss — an absent landlord's empire bleeds and freezes. Numbers chosen so an active
+  player never freezes (pay every few days) while a truly absent one pays a real penalty.
+§10.4: one sink reason (`business:upkeep`) already inside the `business:` vocabulary — no invariant
+change; sim stays drift-0. Economic effect measured directionally: at 20%, business net EV drops
+~20% and the passive-stack advantage the sim audit flagged shrinks toward the active loops — watch
+in the next sim pass whether 20% is enough to close the gap or wants to climb. Roadmap (deferred,
+same pattern): territory-racket upkeep (gang treasury), crew wages, the heat-scaled city pad.
