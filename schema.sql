@@ -582,14 +582,16 @@ CREATE TABLE IF NOT EXISTS commission_vetoes (
 -- bid, reconciled by the §10.4 `market escrow` check. Design: omerta-market-design.md.
 CREATE TABLE IF NOT EXISTS market_listings (
   id TEXT PRIMARY KEY,
-  seller_character TEXT NOT NULL,
-  kind TEXT NOT NULL,                 -- 'car' | 'good'
+  seller_character TEXT NOT NULL,     -- the POSTER (for kind='order' that's the buyer)
+  kind TEXT NOT NULL,                 -- 'car' | 'good' | 'order' (step two: standing WTB)
   car_id TEXT,                        -- kind='car'
-  good_id TEXT,                       -- kind='good'
-  qty INT NOT NULL DEFAULT 0,         -- kind='good': units escrowed OUT of the trunk (absolute writes — pg-mem INT quirk)
-  district TEXT,                      -- kind='good': the pickup dock (buyer must stand there)
-  price NUMERIC NOT NULL,             -- goods: unit price; cars: the minimum bid
+  good_id TEXT,                       -- kind='good' | 'order'
+  qty INT NOT NULL DEFAULT 0,         -- good: units escrowed OUT of the trunk; order: units still WANTED (absolute writes — pg-mem INT quirk)
+  filled_qty INT NOT NULL DEFAULT 0,  -- order: units delivered by sellers, sitting in the warehouse until the buyer claims
+  district TEXT,                      -- good/order: the dock (buyer/seller must stand there)
+  price NUMERIC NOT NULL,             -- goods/orders: unit price; cars: the minimum bid
   buy_now NUMERIC,                    -- cars: optional instant price
+  reserve NUMERIC,                    -- cars (step two): hidden reserve — under it the hammer never falls
   bid NUMERIC,                        -- the single standing bid (cars; NULL = open)
   bidder TEXT,                        -- who holds it (their cash is escrowed via market:bid)
   status TEXT NOT NULL DEFAULT 'live',-- live | sold | cancelled | expired

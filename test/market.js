@@ -184,9 +184,106 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
 const esc = await escrowOk();
 assert(esc.ok, `§10.4 market escrow reconciles through death (${JSON.stringify(esc)})`);
 
+// ══════════════ STEP TWO: reserve prices, anti-snipe, standing buy orders ══════════════
+
+// ── RESERVE: a bid under the hidden reserve never hammers — the bidder is refunded ──
+let car5 = null; guard = 0;
+while (!car5 && guard++ < 60) {
+  await seedCh(sal.id, 'gta_at=NULL, energy=200, jail_until=NULL, heat=0');
+  await call('POST', '/v1/garage/boost', { token: sal.token });
+  car5 = ((await meOf(sal.token)).cars || []).find((c) => !c.listed && c.id !== car4)?.id || null;
+}
+assert(car5, 'sal boosted a fifth car');
+assert.equal((await call('POST', '/v1/market', { token: sal.token, body: { carId: car5, minBid: 1000, reserve: 500 } })).body.error, 'bad_reserve', 'a reserve under the minimum bid is refused');
+r = await call('POST', '/v1/market', { token: sal.token, body: { carId: car5, minBid: 1000, reserve: 8000 } });
+assert.equal(r.code, 200, 'listed with a hidden reserve'); const L7 = r.body.id;
+assert.equal((await call('POST', `/v1/market/${L7}/bid`, { token: rex.token, body: { amount: 2000 } })).code, 200, 'rex bids under the reserve');
+r = await call('GET', '/v1/market');
+const bL7 = r.body.listings.find((x) => x.id === L7);
+assert.equal(bL7.reserveMet, false, 'the board says the hammer would not fall');
+assert.equal(bL7.reserve, undefined, 'but the reserve AMOUNT stays hidden');
+await pool.query(`UPDATE market_listings SET expires_at = now() - interval '1 minute' WHERE id='${L7}'`);
+const rexCash2 = (await meOf(rex.token)).cash;
+r = await sweepMarket(pool);
+assert(r.lapsed >= 1, 'the sweep lapses the reserve-not-met auction');
+assert.equal((await meOf(rex.token)).cash, rexCash2 + 2000, 'rex refunded — the reserve protected the seller, not the house');
+assert.equal((await call('POST', `/v1/market/${L7}/cancel`, { token: sal.token })).code, 200, 'sal reclaims the unsold iron');
+assert((await escrowOk()).ok, '§10.4 escrow reconciles through the reserve lapse');
+
+// ── ANTI-SNIPE: a bid inside the last window resets the clock (soft close) ──
+r = await call('POST', '/v1/market', { token: sal.token, body: { carId: car5, minBid: 1000 } });
+const L8 = r.body.id;
+await pool.query(`UPDATE market_listings SET expires_at = now() + interval '2 minutes' WHERE id='${L8}'`);
+r = await call('POST', `/v1/market/${L8}/bid`, { token: rex.token, body: { amount: 1200 } });
+assert.equal(r.body.extended, true, 'a buzzer-beater bid soft-closes');
+const exp8 = new Date((await pool.query(`SELECT expires_at FROM market_listings WHERE id='${L8}'`)).rows[0].expires_at).getTime();
+assert(exp8 - Date.now() > 4 * 60 * 1000, 'the clock reset to a full snipe window');
+// clean up: hammer it so the escrow drains
+await pool.query(`UPDATE market_listings SET expires_at = now() - interval '1 minute' WHERE id='${L8}'`);
+assert.equal((await sweepMarket(pool)).settled, 1, 'and the hammer falls at the reset clock');
+
+// ── BUY ORDERS: post escrows cash; fills pay the seller on the spot; the buyer claims ──
+await seedCh(gus.id, "cash=500000, loc='canal'");
+r = await call('POST', '/v1/market/order', { token: gus.token, body: { goodId: 'gin', qty: 10, price: 600 } });
+assert.equal(r.code, 200, 'gus posts WTB 10 gin @ $600 at the canal'); const O1 = r.body.id;
+assert.equal(r.body.escrow, 6000, 'the order escrows qty × price');
+const orderFee = Math.max(MARKET.LIST_FEE_MIN, Math.ceil(6000 * MARKET.LIST_FEE_BPS / 10000));
+assert.equal(r.body.fee, orderFee, 'plus the 1% listing fee');
+r = await call('GET', '/v1/market');
+const bO1 = r.body.listings.find((x) => x.id === O1);
+assert(bO1 && bO1.kind === 'order' && bO1.wanted === 10 && bO1.unitPrice === 600 && bO1.district === 'canal', 'the WTB shows on the public board');
+// fills: wrong district refused; the right one pays the seller minus the take
+await seedCh(rex.id, "loc='docks'");
+assert.equal((await call('POST', '/v1/goods/buy', { token: rex.token, body: { goodId: 'gin', qty: 6 } })).code, 200, 'rex stocks gin');
+assert.equal((await call('POST', `/v1/market/${O1}/fill`, { token: rex.token, body: { qty: 6 } })).body.error, 'district', 'delivery is at the canal — be there');
+await seedCh(rex.id, "loc='canal'");
+assert.equal((await call('POST', `/v1/market/${O1}/fill`, { token: gus.token, body: { qty: 1 } })).body.error, 'own', 'no filling your own order');
+const rexCash3 = (await meOf(rex.token)).cash;
+r = await call('POST', `/v1/market/${O1}/fill`, { token: rex.token, body: { qty: 6 } });
+assert.equal(r.code, 200, 'rex delivers six'); assert.equal(r.body.remaining, 4, 'four still wanted');
+const fillTake = Math.ceil(6 * 600 * MARKET.TAKE_BPS / 10000);
+assert.equal(r.body.earned, 6 * 600 - fillTake, 'paid from the escrow minus the 2% take');
+assert.equal((await meOf(rex.token)).cash, rexCash3 + 6 * 600 - fillTake, 'and it landed in-memory (no clobber)');
+assert(!(await meOf(rex.token)).cargo.gin, 'the gin left his trunk for the warehouse');
+assert((await escrowOk()).ok, '§10.4 escrow reconciles mid-order (bids + order balances)');
+// claim: wrong district refused; the right one pulls into trunk space
+await seedCh(gus.id, "loc='docks'");
+assert.equal((await call('POST', `/v1/market/${O1}/claim`, { token: gus.token })).body.error, 'district', 'the warehouse is at the canal');
+await seedCh(gus.id, "loc='canal'");
+const gusGinPre = (await meOf(gus.token)).cargo.gin || 0;
+r = await call('POST', `/v1/market/${O1}/claim`, { token: gus.token });
+assert.equal(r.code, 200, 'gus claims'); assert.equal(r.body.claimed, 6, 'all six delivered units');
+assert.equal((await meOf(gus.token)).cargo.gin, gusGinPre + 6, 'in the trunk');
+// cancel refunds only the UN-FILLED escrow (4 × 600)
+const gusCash1 = (await meOf(gus.token)).cash;
+r = await call('POST', `/v1/market/${O1}/cancel`, { token: gus.token });
+assert.equal(r.code, 200, 'gus pulls the rest of the order'); assert.equal(r.body.refunded, 2400, 'the un-filled escrow comes back');
+assert.equal((await meOf(gus.token)).cash, gusCash1 + 2400, 'to the cent');
+assert((await escrowOk()).ok, '§10.4 escrow reconciles after the order closes');
+
+// ── order EXPIRY refunds the poster; a dead poster's escrow burns ──
+r = await call('POST', '/v1/market/order', { token: gus.token, body: { goodId: 'shine', qty: 5, price: 400 } });
+const O2 = r.body.id;
+await pool.query(`UPDATE market_listings SET expires_at = now() - interval '1 minute' WHERE id='${O2}'`);
+const gusCash2 = (await meOf(gus.token)).cash;
+assert((await sweepMarket(pool)).lapsed >= 1, 'the sweep lapses the order');
+assert.equal((await meOf(gus.token)).cash, gusCash2 + 2000, 'the whole un-filled escrow refunds on expiry');
+const doom2 = await mk('Doomed Duke');
+await seedCh(doom2.id, "cash=100000, loc='canal'");
+r = await call('POST', '/v1/market/order', { token: doom2.token, body: { goodId: 'gin', qty: 4, price: 500 } });
+const O3 = r.body.id;
+const deadPre = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s);
+const kill2 = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: doom2.id },
+  headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal(kill2.statusCode, 200, 'the Commission retires duke');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s), deadPre - 2000, "the dead poster's order escrow burned (dead-funder precedent)");
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM market_listings WHERE id='${O3}'`)).rows[0].n), 0, 'and the order died with him');
+const esc2 = await escrowOk();
+assert(esc2.ok, `§10.4 market escrow reconciles through order death (${JSON.stringify(esc2)})`);
+
 // ── the vocabulary stays closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `market:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Black Market test passed — listing gates (fee/floor/escrow guards: melt+fence refuse listed iron), car auction (bid floor, 5% min-raise, outbid refund exact, self-raise diff-only, buy-now instant settle, 2% take carved FROM the hammer as one NULL row), goods district-pinned partial buys + trunk-space reclaim, worker expiry settle + lapse, death (seller listings void with bids refunded, dead man\'s bids burn), §10.4 market escrow + vocabulary');
+console.log('✅ Black Market test passed — listing gates (fee/floor/escrow guards: melt+fence refuse listed iron), car auction (bid floor, 5% min-raise, outbid refund exact, self-raise diff-only, buy-now instant settle, 2% take carved FROM the hammer as one NULL row), goods district-pinned partial buys + trunk-space reclaim, worker expiry settle + lapse, death (seller listings void with bids refunded, dead man\'s bids burn) + STEP TWO: hidden reserves (board flags met/not, under-reserve lapse refunds the bidder), anti-snipe soft close, standing BUY ORDERS (escrow at post, dock-pinned fills paid minus the take, warehouse claim, un-filled cancel/expiry refunds, dead-poster burn), §10.4 market escrow + vocabulary');
 await app.close();

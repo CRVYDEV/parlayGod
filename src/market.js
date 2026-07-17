@@ -35,11 +35,14 @@ const listFee = (ask) => Math.max(MARKET.LIST_FEE_MIN, Math.ceil(ask * MARKET.LI
 
 // settle the money side of a sale: seller nets hammer − take; take half → street tax, half
 // burns — the NULL `market:take` row is what closes the §10.4 escrow identity exactly.
-async function paySeller(client, h, sellerId, hammer) {
+// `inMemoryCh`: when the payee IS the transaction's actor (an order FILL pays the seller who is
+// the withCharacter subject), credit in-memory — a SQL write would be clobbered by persist.
+async function paySeller(client, h, sellerId, hammer, { reason = 'market:sale', inMemoryCh = null } = {}) {
   const take = Math.ceil(hammer * MARKET.TAKE_BPS / 10000);
   const net = hammer - take;
-  await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [sellerId, net]);
-  await h.ledger(client, { characterId: sellerId, currency: 'cash', amount: net, reason: 'market:sale' });
+  if (inMemoryCh && inMemoryCh.id === sellerId) inMemoryCh.cash = Number(inMemoryCh.cash) + net;
+  else await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [sellerId, net]);
+  await h.ledger(client, { characterId: sellerId, currency: 'cash', amount: net, reason });
   await h.ledger(client, { currency: 'cash', amount: -take, reason: 'market:take' });
   await takeHouse(client, Math.floor(take / 2));
   return { net, take };
@@ -63,16 +66,21 @@ export async function listItem(ch, opts, client, h) {
     if (minBid < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE}.`);
     const buyNow = opts.buyNow != null ? Math.floor(Number(opts.buyNow)) : null;
     if (buyNow != null && buyNow < minBid) throw new GameError('bad_buy_now', 'Buy-now under the minimum bid makes no sense.');
-    const fee = listFee(buyNow ?? minBid);
+    // step two: an optional HIDDEN reserve — bids under it never hammer (the auction lapses and
+    // the seller reclaims). Must sit between the minimum bid and buy-now to be coherent.
+    const reserve = opts.reserve != null ? Math.floor(Number(opts.reserve)) : null;
+    if (reserve != null && (reserve < minBid || (buyNow != null && reserve > buyNow)))
+      throw new GameError('bad_reserve', 'A reserve sits between the minimum bid and buy-now.');
+    const fee = listFee(buyNow ?? reserve ?? minBid);
     if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
     ch.cash = Number(ch.cash) - fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
     await client.query('UPDATE cars SET listed=true WHERE id=$1', [opts.carId]);
     car.listed = true; // keep the in-memory fleet honest (persist doesn't own car rows, but the view does)
     await client.query(
-      'INSERT INTO market_listings (id, seller_character, kind, car_id, price, buy_now, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [id, ch.id, 'car', opts.carId, minBid, buyNow, expiresAt]);
-    return { ok: true, id, kind: 'car', minBid, buyNow, fee, expiresSeconds: hours * 3600 };
+      'INSERT INTO market_listings (id, seller_character, kind, car_id, price, buy_now, reserve, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [id, ch.id, 'car', opts.carId, minBid, buyNow, reserve, expiresAt]);
+    return { ok: true, id, kind: 'car', minBid, buyNow, reserve, fee, expiresSeconds: hours * 3600 };
   }
 
   // ── goods go FIXED-PRICE, pinned to this dock ──
@@ -128,7 +136,92 @@ export async function bidListing(ch, listingId, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'market:bid' });
   await client.query('UPDATE market_listings SET bid=$2, bidder=$3 WHERE id=$1', [listingId, amt, ch.id]);
-  return { ok: true, id: listingId, bid: amt };
+  // step two — ANTI-SNIPE soft close: a bid inside the last window resets the clock to a full
+  // window, so the last word goes to whoever wants it most, not whoever times the buzzer.
+  let extended = false;
+  if (new Date(l.expires_at).getTime() - Date.now() < MARKET.SNIPE_WINDOW_MS) {
+    await client.query('UPDATE market_listings SET expires_at=$2 WHERE id=$1',
+      [listingId, new Date(Date.now() + MARKET.SNIPE_WINDOW_MS)]);
+    extended = true;
+  }
+  return { ok: true, id: listingId, bid: amt, extended };
+}
+
+// ── STEP TWO: standing BUY ORDERS (WTB) — the inverted listing ──
+// The buyer escrows cash at THEIR dock; sellers standing there fill it from the trunk and are
+// paid on the spot; the goods wait in the order's WAREHOUSE until the buyer claims them into
+// trunk space. Lock shape is the simplest on the board: a fill touches ONLY the actor (seller,
+// in-memory) and the order row — the buyer's character is never locked (their cash left at post).
+export async function postOrder(ch, opts, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
+  const live = Number((await client.query(
+    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [ch.id])).rows[0].n);
+  if (live >= MARKET.MAX_LISTINGS) throw new GameError('max_listings', `The Market floors you at ${MARKET.MAX_LISTINGS} live listings.`);
+  if (!GOODS.find((g) => g.id === opts.goodId)) throw new GameError('bad_good', 'No such good.');
+  const qty = Math.floor(Number(opts.qty) || 0);
+  const price = Math.floor(Number(opts.price) || 0);
+  if (qty < 1) throw new GameError('qty', 'Order at least one unit.');
+  if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
+  const escrow = qty * price;
+  if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
+  const fee = listFee(escrow);
+  if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
+  const hours = Math.min(MARKET.MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
+  ch.cash = Number(ch.cash) - fee;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
+  ch.cash = Number(ch.cash) - escrow;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -escrow, reason: 'market:order' });
+  const id = uid();
+  await client.query(
+    'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+    [id, ch.id, 'order', opts.goodId, qty, ch.loc, price, new Date(Date.now() + hours * 3600 * 1000)]);
+  return { ok: true, id, kind: 'order', good: opts.goodId, wanted: qty, price, district: ch.loc, escrow, fee, expiresSeconds: hours * 3600 };
+}
+
+// FILL — a seller at the dock delivers into the order and is paid from its escrow, minus the take.
+export async function fillOrder(ch, listingId, qty, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
+  const l = (await client.query(
+    "SELECT * FROM market_listings WHERE id=$1 AND kind='order' AND status='live' FOR UPDATE", [listingId])).rows[0];
+  if (!l || expired(l)) throw new GameError('no_order', 'No such order on the board.');
+  if (l.seller_character === ch.id) throw new GameError('own', 'Filling your own order is just feeding the house 2%.');
+  if (ch.loc !== l.district) throw new GameError('district', `Delivery is at ${l.district} — be there.`);
+  const have = h.owned.cargo[l.good_id] || 0;
+  const n = Math.min(Math.max(1, Math.floor(Number(qty) || have)), Number(l.qty), have);
+  if (n <= 0) throw new GameError('qty', 'Nothing to deliver.');
+  const gross = n * Number(l.price);
+  h.owned.cargo[l.good_id] = have - n; // trunk → the order's warehouse
+  await setCargo(client, ch.id, l.good_id, have - n);
+  const { net } = await paySeller(client, h, ch.id, gross, { reason: 'market:fill', inMemoryCh: ch });
+  // absolute writes (the pg-mem INT quirk); the row stays live at qty=0 until the buyer claims
+  await client.query('UPDATE market_listings SET qty=$2, filled_qty=$3 WHERE id=$1',
+    [listingId, Number(l.qty) - n, Number(l.filled_qty) + n]);
+  await h.notify(client, l.seller_character, 'order_filled', { listing: l.id, good: l.good_id, qty: n });
+  bus.emit('streets', { type: 'market_sale', kind: 'order' });
+  return { ok: true, delivered: n, earned: net, remaining: Number(l.qty) - n };
+}
+
+// CLAIM — the buyer collects delivered goods from the warehouse, at the dock, into trunk space.
+// Claimable even after cancel/expiry (the goods were bought and paid for — they never vanish
+// while the street lives; they scatter only with the estate).
+export async function claimOrder(ch, listingId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
+  const l = (await client.query(
+    "SELECT * FROM market_listings WHERE id=$1 AND kind='order' AND seller_character=$2 FOR UPDATE", [listingId, ch.id])).rows[0];
+  if (!l) throw new GameError('no_order', 'Not your order.');
+  if (ch.loc !== l.district) throw new GameError('district', `The warehouse is at ${l.district} — be there.`);
+  const avail = Number(l.filled_qty);
+  if (avail <= 0) throw new GameError('empty', 'Nothing delivered yet.');
+  const space = Math.max(0, cargoCapacity(h.owned.assets) - cargoCount(h.owned.cargo));
+  const n = Math.min(avail, space);
+  if (n <= 0) throw new GameError('cargo', 'No room in the trunk.');
+  h.owned.cargo[l.good_id] = (h.owned.cargo[l.good_id] || 0) + n;
+  await setCargo(client, ch.id, l.good_id, h.owned.cargo[l.good_id]);
+  const left = avail - n;
+  await client.query('UPDATE market_listings SET filled_qty=$2 WHERE id=$1', [listingId, left]);
+  if (l.status === 'live' && Number(l.qty) === 0 && left === 0)
+    await client.query("UPDATE market_listings SET status='sold' WHERE id=$1", [listingId]);
+  return { ok: true, claimed: n, awaiting: left };
 }
 
 // ── BUY — cars at buy-now (instant settle); goods at the dock (partial, trunk-clamped) ──
@@ -194,7 +287,8 @@ export async function buyListing(ch, listingId, qty, client, h) {
   return { ok: true, bought: l.good_id, qty: n, paid: gross, remaining: left };
 }
 
-// ── CANCEL / RECLAIM — seller only, never over a standing bid; goods need trunk space ──
+// ── CANCEL / RECLAIM — poster only, never over a standing bid; goods need trunk space;
+// an order refunds its REMAINING escrow (delivered goods stay claimable — they're paid for) ──
 export async function cancelListing(ch, listingId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
   const l = (await client.query(
@@ -205,6 +299,16 @@ export async function cancelListing(ch, listingId, client, h) {
     await client.query('UPDATE cars SET listed=false WHERE id=$1', [l.car_id]);
     const car = h.owned.cars.find((c) => c.id === l.car_id);
     if (car) car.listed = false;
+  } else if (l.kind === 'order') {
+    // the poster IS the actor — refund the un-filled escrow in-memory (only 'live' still holds
+    // escrow; an 'expired' order was already refunded by the sweep)
+    const remaining = l.status === 'live' ? Number(l.qty) * Number(l.price) : 0;
+    if (remaining > 0) {
+      ch.cash = Number(ch.cash) + remaining;
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: remaining, reason: 'market:refund' });
+    }
+    await client.query("UPDATE market_listings SET qty=0, status='cancelled' WHERE id=$1", [listingId]);
+    return { ok: true, cancelled: l.id, refunded: remaining, awaiting: Number(l.filled_qty) };
   } else {
     const back = (h.owned.cargo[l.good_id] || 0) + Number(l.qty);
     if (cargoCount(h.owned.cargo) + Number(l.qty) > cargoCapacity(h.owned.assets))
@@ -236,8 +340,11 @@ export async function marketBoard(pool) {
           : null,
         minBid: Number(l.price), buyNow: l.buy_now != null ? Number(l.buy_now) : null,
         bid: l.bid != null ? Number(l.bid) : null, // the standing bid is PUBLIC; the bidder is not
+        // the reserve AMOUNT stays hidden — the board only says whether the hammer would fall
+        reserveMet: l.reserve == null ? null : (l.bid != null && Number(l.bid) >= Number(l.reserve)),
       } : {}),
       ...(l.kind === 'good' ? { good: l.good_id, qty: Number(l.qty), unitPrice: Number(l.price), district: l.district } : {}),
+      ...(l.kind === 'order' ? { good: l.good_id, wanted: Number(l.qty), unitPrice: Number(l.price), district: l.district } : {}),
       expiresSeconds: Math.max(0, Math.ceil((new Date(l.expires_at) - Date.now()) / 1000)),
     })),
   };
@@ -260,7 +367,35 @@ export async function sweepMarket(pool) {
           "SELECT * FROM market_listings WHERE id=$1 AND status='live' AND expires_at <= now() FOR UPDATE", [d.id])).rows[0];
         if (!l) { await client.query('COMMIT'); continue; } // raced a buy/cancel — nothing to do
         const h = { ledger, notify };
-        if (l.kind === 'car' && l.bidder && Number(l.bid) > 0) {
+        if (l.kind === 'order') {
+          // an expired order refunds its un-filled escrow to a LIVING poster (a dead poster's
+          // escrow already burned in the estate — this is only a race guard); deliveries stay
+          // claimable, so the row flips to 'expired' rather than vanishing.
+          const remaining = Number(l.qty) * Number(l.price);
+          if (remaining > 0) {
+            const poster = (await client.query('SELECT 1 FROM characters WHERE id=$1 AND alive', [l.seller_character])).rows[0];
+            if (poster) {
+              await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [l.seller_character, remaining]);
+              await ledger(client, { characterId: l.seller_character, currency: 'cash', amount: remaining, reason: 'market:refund' });
+            } else await ledger(client, { currency: 'cash', amount: -remaining, reason: 'market:death' });
+          }
+          await client.query("UPDATE market_listings SET qty=0, status='expired' WHERE id=$1", [l.id]);
+          await notify(client, l.seller_character, 'order_expired', { listing: l.id, refunded: remaining, awaiting: Number(l.filled_qty) });
+          lapsed++;
+        } else if (l.kind === 'car' && l.bidder && Number(l.bid) > 0 &&
+                   l.reserve != null && Number(l.bid) < Number(l.reserve)) {
+          // step two: the RESERVE was never met — the hammer stays up; the bidder is refunded
+          // (or burned if the estate is racing us) and the seller reclaims via cancel.
+          const bidderAlive = (await client.query('SELECT 1 FROM characters WHERE id=$1 AND alive', [l.bidder])).rows[0];
+          if (bidderAlive) {
+            await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [l.bidder, Number(l.bid)]);
+            await ledger(client, { characterId: l.bidder, currency: 'cash', amount: Number(l.bid), reason: 'market:refund' });
+            await notify(client, l.bidder, 'market_reserve', { listing: l.id, bid: Number(l.bid) });
+          } else await ledger(client, { currency: 'cash', amount: -Number(l.bid), reason: 'market:death' });
+          await client.query("UPDATE market_listings SET status='expired', bid=NULL, bidder=NULL WHERE id=$1", [l.id]);
+          await notify(client, l.seller_character, 'market_reserve', { listing: l.id, seller: true });
+          lapsed++;
+        } else if (l.kind === 'car' && l.bidder && Number(l.bid) > 0) {
           // the hammer falls: highest bid wins
           const seller = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [l.seller_character])).rows[0];
           const winner = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [l.bidder])).rows[0];
@@ -306,7 +441,12 @@ export async function voidListingsAtDeath(client, victimId, killerCh) {
   const rows = (await client.query(
     "SELECT * FROM market_listings WHERE seller_character=$1 AND status IN ('live','expired') FOR UPDATE", [victimId])).rows;
   for (const l of rows) {
-    if (l.bidder && Number(l.bid) > 0) {
+    if (l.kind === 'order') {
+      // the dead poster's un-filled escrow BURNS (the dead-funder precedent); undelivered
+      // warehouse goods scatter with the row (the estate-freight precedent)
+      const remaining = l.status === 'live' ? Number(l.qty) * Number(l.price) : 0;
+      if (remaining > 0) await ledger(client, { currency: 'cash', amount: -remaining, reason: 'market:death' });
+    } else if (l.bidder && Number(l.bid) > 0) {
       if (killerCh && l.bidder === killerCh.id) selfRefund += Number(l.bid);
       else await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [l.bidder, Number(l.bid)]);
       await ledger(client, { characterId: l.bidder, currency: 'cash', amount: Number(l.bid), reason: 'market:refund' });

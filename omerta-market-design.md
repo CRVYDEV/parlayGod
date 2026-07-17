@@ -65,7 +65,21 @@ every existing path; 40P01 falls back to the global `contention` retry.
 `MARKET`: `LIST_FEE_BPS` 100 (min $10) · `MIN_PRICE` 50 · `MIN_RAISE_BPS` 500 · `TAKE_BPS` 200
 · `MAX_TTL_H` 48 · `MAX_LISTINGS` 3.
 
-## 8. Step two (deferred)
-Goods auctions with a warehouse-claim flow, reserve prices, anti-snipe extensions, buy orders
-(standing WTB), and a gear-market design call if the founder ever wants in-game gear trade to
-coexist with the on-chain rail.
+## 8. Step two — BUILT (reserves, anti-snipe, buy orders)
+- **Hidden reserves** (cars): an optional reserve between minBid and buyNow — under it the
+  hammer never falls (the sweep refunds the bidder and lapses the listing for reclaim). The
+  board shows only `reserveMet` true/false, never the amount.
+- **Anti-snipe soft close**: a bid inside the last `SNIPE_WINDOW_MS` (5 min) resets the clock
+  to a full window — the last word goes to whoever wants it most, not whoever times the buzzer.
+- **Standing buy orders (WTB)** — the inverted listing: the buyer escrows `qty × price` at
+  THEIR dock (plus the 1% fee; orders share the MAX_LISTINGS cap); sellers standing there fill
+  from the trunk and are paid on the spot (`market:fill`, minus the same 2% take); delivered
+  goods wait in the order's WAREHOUSE until the buyer claims them into trunk space (claimable
+  even after cancel/expiry — they're paid for; they scatter only with the estate). Cancel and
+  expiry refund the UN-FILLED escrow; a dead poster's escrow burns (`market:death`). The fill
+  path locks only the actor + the order row — the buyer's character is never touched.
+- §10.4: the `market escrow` check gained the order side — live bids + live order balances ==
+  posted (`market:bid`+`market:order`) − refunds − nets (`market:sale`+`market:fill`) − takes −
+  deaths.
+- Still deferred: goods auctions proper, and the gear-market design call (in-game gear trade
+  vs the on-chain rail).
