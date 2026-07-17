@@ -706,6 +706,30 @@ entry-time semantics, leader-rat griefing. The sim's P9.7 heist probe measured t
 faucet at 1.46× solo per member (design band 1.3–2.1×) — BALANCE.md marked KEEP. `forge test`
 STILL never executed (Foundry hosts 403-blocked here) — must run before the third-party audit.
 
+**Full-system max-effort audit (`AUDIT-full-system.md`)** — six independent red-team lenses over
+the ENTIRE codebase (§10.4/economy, PvP/death/locks, income loops/casino, chain+contracts,
+auth/infra/limits, cross-system exploit chains). No §10.4 drift, no auth bypass, no injection, no
+reserve double-spend, no forgeable voucher; extraction ≤ inflow holds. Fixed in-commit (regressions
+added): **zombie gang** (`removeMember` now `SELECT … FROM gangs FOR UPDATE` before the last-member
+check — concurrent 2-member departures could orphan a family: stranded treasury/turf/territory,
+never `gang:dissolved`-ledgered = permanent treasury drift); **expired-voucher reclaim**
+(`reclaimExpiredVouchers`, a worker sweep — refunds a signed-unclaimed OMR voucher's burned $OMR and
+frees its permanently-stuck reserve capacity, and restores optimistically-removed gear to play;
+grace window > watcher lag, `markClaimed` guards `status<>'expired'`, `+withdraw:omr` reverses the
+burn net-0); **post-commit referral masking** (`maybeQualifyReferral` wrapped so a post-commit throw
+can't surface a non-2xx after the action committed → idempotency-release → retry double-spend);
+**`mod/confiscate` negative-amount mint** (clamped `[0,pocket]`; §10.4-invisible into the unaudited
+`street_tax.pool`); **worker per-job isolation** (`safe()` — a poison row no longer starves the
+nightly §10.4 drift monitor); **mod-kill 40P01→contention** (`deadlockToRetry` exported + applied to
+the hand-rolled txn, matching the war-partner AB-BA the wrapped paths already handle); **estate
+floored cash+bank** (now ledgers the EXACT `cash+bank` — the sub-cent bank-interest drift class,
+reintroduced at the death boundary; sim is the regression); plus LOWs (timing-safe `MOD_KEY`,
+per-pot bounty-sweep isolation, `walletVerify` uniqueness→clean `wallet_taken`, launder/shakedown
+heat clamp). NOT patched (founder calls, ranked): purchasable standing × family-contract cashout
+(~2% cost for head-seat/veto), casino unbacked faucets (street-tax mint-on-top + rakeback), the
+Sybil-scalable fight fix, SIWE/X replay surface. `forge test` STILL not run (Foundry egress-blocked)
+— must pass before the third-party audit. Suite 13/13 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

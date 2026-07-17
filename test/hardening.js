@@ -81,9 +81,27 @@ assert.equal((await call('POST', '/v1/stake', { token: boss.token, body: { amoun
 await seedCh(boss.id, 'muscle=100');
 assert.equal((await call('POST', '/v1/missions/m1', { token: boss.token })).code, 200);
 
-// death path: the Commission retires the rival (open bounty clears, estate burns)
+// death path: the Commission retires the rival (open bounty clears, estate burns).
+// audit H1: the estate now ledgers the EXACT cash+bank (not a floored integer), so fractional
+// bank interest isn't destroyed unledgered at death. tools/sim.js is the end-to-end regression —
+// it kills characters holding interest-accrued (ledgered) fractional bank and asserts drift-0.
 assert.equal((await call('POST', '/v1/mod/kill', { body: { characterId: rival.id }, headers: modH })).code, 200);
 assert.equal((await meOf(rival.token)).generation, 2, 'heir stood up');
+
+// audit M2: mod/confiscate clamps to [0, pocket] — a NEGATIVE amount must not mint cash or drain
+// the street-tax pool (it was truthy, so `cash - (-x)` credited the player). Tested against the
+// boss's REAL earned cash (no unledgered SQL seed) so the §10.4 sweep below stays meaningful.
+const bossCashPre = Number((await meOf(boss.token)).cash);
+const poolPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+let cf = await call('POST', '/v1/mod/confiscate', { body: { characterId: boss.id, amount: -100000 }, headers: modH });
+assert.equal(cf.body.confiscated, 0, 'a negative confiscation is clamped to zero — no mint');
+assert.equal(Number((await meOf(boss.token)).cash), bossCashPre, 'the player gained nothing');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolPre, 'the street-tax pool was not drained');
+if (bossCashPre >= 100) { // a normal (ledgered) confiscation still works
+  cf = await call('POST', '/v1/mod/confiscate', { body: { characterId: boss.id, amount: 100 }, headers: modH });
+  assert.equal(cf.body.confiscated, 100, 'a normal confiscation seizes the amount');
+  assert.equal(Number((await meOf(boss.token)).cash), bossCashPre - 100, 'debited from pocket');
+}
 
 // the sweep: every bucket reconciles to the ledger exactly
 let inv = await runLedgerInvariants(pool);

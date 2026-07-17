@@ -49,9 +49,15 @@ export async function buildServer() {
     if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
   };
   // Mod endpoints (§10.3) authenticate with the MOD_KEY header, never a player JWT.
+  // Constant-time compare (audit L1) — the one secret-equality check on the mod perimeter.
+  const modKeyOk = (given) => {
+    const key = process.env.MOD_KEY;
+    if (!key || typeof given !== 'string') return false;
+    const a = Buffer.from(given), b = Buffer.from(key);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  };
   const modAuth = async (req, reply) => {
-    if (!process.env.MOD_KEY || req.headers['x-mod-key'] !== process.env.MOD_KEY)
-      return reply.code(401).send({ error: 'mod_auth' });
+    if (!modKeyOk(req.headers['x-mod-key'])) return reply.code(401).send({ error: 'mod_auth' });
   };
 
   // ── M5 hardening hooks: §10.2 rate limits + §5 idempotency keys ──
@@ -632,7 +638,9 @@ export async function buildServer() {
       if (reason) await G.track(client, victim.account_id, 'mod_kill_reason', { reason });
       await client.query('COMMIT');
       return { ok: true, heirId: estate.heirId };
-    } catch (e) { await client.query('ROLLBACK'); throw e; }
+    // runEstate → removeMember can hit a war-partner AB-BA (40P01); this hand-rolled txn isn't
+    // wrapped by withCharacter, so map it to a clean retry here too (audit MED) instead of a 500.
+    } catch (e) { await client.query('ROLLBACK'); throw G.deadlockToRetry(e); }
     finally { client.release(); }
   });
   app.post('/v1/mod/confiscate', { preHandler: modAuth }, async (req) => {
@@ -643,7 +651,15 @@ export async function buildServer() {
       await client.query('BEGIN');
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [characterId])).rows[0];
       if (!ch) throw new G.GameError('no_target', 'No living character by that id.');
-      const amt = Math.min(Math.floor(Number(amount) || 0) || Math.floor(Number(ch.cash)), Math.floor(Number(ch.cash)));
+      // clamp to [0, pocket] (audit M2): a negative `amount` was truthy, so `cash - (-x)` MINTED
+      // cash to the player and drained the street-tax pool below zero (a §10.4-invisible mint into
+      // an unaudited buffer). A MISSING amount keeps the documented "confiscate all" default;
+      // an explicit invalid/negative amount confiscates NOTHING (never mints, never "all" on a typo).
+      const pocket = Math.max(0, Math.floor(Number(ch.cash)));
+      let want;
+      if (amount === undefined || amount === null || amount === '') want = pocket; // "confiscate all"
+      else { const n = Number(amount); want = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; }
+      const amt = Math.max(0, Math.min(want, pocket));
       await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [characterId, amt]);
       await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
       await G.ledger(client, { characterId, currency: 'cash', amount: -amt, reason: 'mod:confiscate' });
