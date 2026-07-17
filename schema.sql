@@ -633,7 +633,19 @@ CREATE TABLE IF NOT EXISTS npc_grudges (
   character_id TEXT NOT NULL,
   npc_id TEXT NOT NULL,
   count INT NOT NULL DEFAULT 0,
+  since TIMESTAMPTZ NOT NULL DEFAULT now(), -- step five: the healing clock — one grudge fades per GRUDGE_DECAY_DAYS; any write restarts it
   PRIMARY KEY (character_id, npc_id)
+);
+
+-- Underworld step five: the ERRAND CHAIN — a fixture's storyline: do their drawn daily task
+-- on CHAIN_STEPS separate days for a big standing jump. One active chain per street
+-- (character PK); starting a new one replaces the old (the half-done job is dropped).
+CREATE TABLE IF NOT EXISTS npc_errands (
+  character_id TEXT PRIMARY KEY,
+  npc_id TEXT NOT NULL,
+  step INT NOT NULL DEFAULT 0,
+  started_day INT NOT NULL,
+  last_day INT
 );
 
 -- Underworld step four: the weekly FAVOR — one per street per week, claimed from any

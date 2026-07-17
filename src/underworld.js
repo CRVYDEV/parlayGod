@@ -34,7 +34,14 @@ export async function underworldBoard(ch, client, h) {
     : undefined;
   // step four: the weekly favor (taken or standing), and each fixture's open grudge count
   const favorTaken = !!(await client.query('SELECT 1 FROM npc_favors WHERE character_id=$1 AND week=$2', [ch.id, weekOf()])).rowCount;
+  // step five: the active errand chain, if any
+  const er = (await client.query('SELECT * FROM npc_errands WHERE character_id=$1', [ch.id])).rows[0];
+  const errand = er ? {
+    npc: er.npc_id, step: Number(er.step), of: UNDERWORLD.STEP5.CHAIN_STEPS,
+    task: leadTaskOf(dayOf(), er.npc_id), doneToday: Number(er.last_day ?? -1) === dayOf(),
+  } : null;
   return {
+    errand,
     thresholds: UNDERWORLD.THRESHOLDS,
     gift: { cost: UNDERWORLD.GIFT_COST, standing: UNDERWORLD.GIFT_STANDING, cap: UNDERWORLD.GIFT_CAP },
     decay: { graceDays: UNDERWORLD.STEP2.DECAY_GRACE_DAYS, perDay: UNDERWORLD.STEP2.DECAY_PER_DAY, floor: UNDERWORLD.STEP2.DECAY_FLOOR },
@@ -120,8 +127,10 @@ export async function payPenance(ch, npcId, client, h) {
   if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring it with ${n.name} runs $${cost}.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'underworld:penance' });
-  // absolute write (pg-mem INT-arithmetic quirk); the in-memory map keeps npcTier honest now
-  await client.query('UPDATE npc_grudges SET count=$3 WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId, count - 1]);
+  // absolute write from the EFFECTIVE count (pg-mem INT-arithmetic quirk + step-five healing
+  // materializes here); the write restarts the healing clock, and the in-memory map keeps
+  // npcTier honest within this transaction
+  await client.query('UPDATE npc_grudges SET count=$3, since=now() WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId, count - 1]);
   if (count - 1 > 0) h.owned.grudges[npcId] = count - 1; else delete h.owned.grudges[npcId];
   await h.track(client, ch.account_id, 'underworld_penance', { npc: npcId, remaining: count - 1 });
   return { ok: true, npc: npcId, cost, remaining: count - 1, squared: count - 1 === 0 };
@@ -162,4 +171,23 @@ export async function claimFavor(ch, npcId, client, h) {
   await client.query('INSERT INTO npc_favors (character_id, week, npc_id) VALUES ($1,$2,$3)', [ch.id, week, npcId]);
   await h.track(client, ch.account_id, 'underworld_favor', { npc: npcId, ...favor });
   return { ok: true, npc: npcId, ...favor };
+}
+
+// THE ERRAND CHAIN (step five) — a fixture's storyline: do their DRAWN daily task on
+// CHAIN_STEPS separate days and the relationship jumps CHAIN_BONUS. Tier 1+ with the fixture
+// to be trusted with the work; one active chain per street — starting another replaces the
+// half-done job (progress dropped, no penalty: walking off an errand costs the errand).
+// Steps advance inside game.js bumpStanding when the day's matching action lands.
+export async function startErrand(ch, npcId, client, h) {
+  const n = npcOf(npcId);
+  if (!n) throw new GameError('bad_npc', 'Nobody by that name works this town.');
+  if (jailed(ch)) throw new GameError('jailed', 'No running errands from lockup.');
+  if (npcTier(h, npcId) < 1) throw new GameError('stranger', `${n.name} doesn't hand work to strangers.`);
+  const existing = (await client.query('SELECT npc_id, step FROM npc_errands WHERE character_id=$1', [ch.id])).rows[0];
+  const day = dayOf();
+  if (existing) await client.query('UPDATE npc_errands SET npc_id=$2, step=0, started_day=$3, last_day=NULL WHERE character_id=$1', [ch.id, npcId, day]);
+  else await client.query('INSERT INTO npc_errands (character_id, npc_id, step, started_day) VALUES ($1,$2,0,$3)', [ch.id, npcId, day]);
+  await h.track(client, ch.account_id, 'underworld_errand', { npc: npcId, replaced: existing?.npc_id });
+  return { ok: true, npc: npcId, steps: UNDERWORLD.STEP5.CHAIN_STEPS, bonus: UNDERWORLD.STEP5.CHAIN_BONUS,
+    task: leadTaskOf(day, npcId), ...(existing ? { replaced: existing.npc_id } : {}) };
 }

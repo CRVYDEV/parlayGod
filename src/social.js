@@ -1145,10 +1145,11 @@ async function bearGrudges(client, h, killerCh, victimNpc) {
   for (const [npcId, s] of Object.entries(victimNpc || {})) {
     if (Number(s) >= UNDERWORLD.STEP3.GRUDGE_MIN) {
       await bumpStanding(client, h, killerCh, npcId, -UNDERWORLD.STEP3.GRUDGE_LOSS);
-      const row = (await client.query('SELECT count FROM npc_grudges WHERE character_id=$1 AND npc_id=$2', [killerCh.id, npcId])).rows[0];
-      const count = (row ? Number(row.count) : 0) + 1;
-      if (row) await client.query('UPDATE npc_grudges SET count=$3 WHERE character_id=$1 AND npc_id=$2', [killerCh.id, npcId, count]);
-      else await client.query('INSERT INTO npc_grudges (character_id, npc_id, count) VALUES ($1,$2,$3)', [killerCh.id, npcId, count]);
+      // absolute-from-EFFECTIVE (step five: healed grudges materialize here) + a fresh offense
+      // restarts the healing clock (since=now)
+      const count = Number(h.owned?.grudges?.[npcId] || 0) + 1;
+      const upd = await client.query('UPDATE npc_grudges SET count=$3, since=now() WHERE character_id=$1 AND npc_id=$2', [killerCh.id, npcId, count]);
+      if (!upd.rowCount) await client.query('INSERT INTO npc_grudges (character_id, npc_id, count) VALUES ($1,$2,$3)', [killerCh.id, npcId, count]);
       if (h.owned?.grudges) h.owned.grudges[npcId] = count; // the cap bites within this very transaction
       grudges.push(npcId);
     }
@@ -1194,7 +1195,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = (await client.query('SELECT npc_id, standing FROM npc_standing WHERE character_id=$1', [victim.id])).rows
     .map((r) => ({ npc: r.npc_id, s: Math.floor(Number(r.standing) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)

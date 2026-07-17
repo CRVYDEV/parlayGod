@@ -368,6 +368,55 @@ const doCap = () => sTask === 'craft'
 assert.equal((await doCap()).code, 200, "cal's tenth straight day");
 assert.equal((await standingOf(cap.token, 'armorer')).standing, 30 + 1 + UNDERWORLD.STEP2.LEAD_BONUS + UNDERWORLD.STEP4.STREAK_BONUS_CAP, 'the streak bonus caps at +5 extra (day 6+ pays +10)');
 
+// ── STEP FIVE: GRUDGE DECAY — time heals what money can't, one per two weeks ──
+const olga = await mk('Old-Grudge Olga');
+await seedCh(olga.id, 'cash=100000');
+await seedNpc(olga.id, 'doc', 95);
+await seedNpc(olga.id, 'harbor', 95);
+await pool.query(`INSERT INTO npc_grudges (character_id, npc_id, count, since) VALUES ('${olga.id}','doc',2,'${daysAgo(15)}')`);
+await pool.query(`INSERT INTO npc_grudges (character_id, npc_id, count, since) VALUES ('${olga.id}','harbor',1,'${daysAgo(30)}')`);
+r = await call('GET', '/v1/underworld', { token: olga.token });
+assert.equal(r.body.npcs.find((n) => n.id === 'doc').grudge, 1, 'fifteen idle days healed one of two grudges');
+assert.equal(r.body.npcs.find((n) => n.id === 'doc').tier, 2, 'the remaining one still caps the tier');
+assert.equal(r.body.npcs.find((n) => n.id === 'harbor').grudge, 0, 'a month healed the single grudge entirely');
+assert.equal(r.body.npcs.find((n) => n.id === 'harbor').tier, 3, 'Big Tuna forgot all about it');
+r = await call('POST', '/v1/underworld/doc/penance', { token: olga.token });
+assert.equal(r.code, 200, 'penance on the EFFECTIVE count');
+assert.equal(r.body.remaining, 0, 'one payment squares what time left');
+assert.equal(Number((await pool.query(`SELECT count FROM npc_grudges WHERE character_id='${olga.id}' AND npc_id='doc'`)).rows[0].count), 0, 'the healing materialized in the stored row');
+assert.equal((await call('POST', '/v1/underworld/harbor/penance', { token: olga.token })).body.error, 'clean', 'no paying for what time already healed');
+
+// ── STEP FIVE: THE ERRAND CHAIN — a fixture's storyline, one drawn task a day, three days ──
+const erin = await mk('Errand Erin');
+await seedCh(erin.id, "cash=20000, cb=10, loc='docks'");
+await seedNpc(erin.id, 'armorer', 30);
+assert.equal((await call('POST', '/v1/underworld/madame/errand', { token: erin.token })).body.error, 'stranger', 'no work for strangers');
+r = await call('POST', '/v1/underworld/armorer/errand', { token: erin.token });
+assert.equal(r.code, 200, 'Bella hands over a job');
+assert.equal(r.body.task, sTask, "the errand rides the day's drawn task");
+const doErin = () => sTask === 'craft'
+  ? call('POST', '/v1/workshop/craft/espresso', { token: erin.token })
+  : call('POST', '/v1/armory/ammo', { token: erin.token });
+assert.equal((await doErin()).code, 200, 'day one of the job');
+assert.equal((await standingOf(erin.token, 'armorer')).standing, 36, 'step one pays the normal bump + the lead (+1+5)');
+r = await call('GET', '/v1/underworld', { token: erin.token });
+assert.deepEqual(r.body.errand, { npc: 'armorer', step: 1, of: UNDERWORLD.STEP5.CHAIN_STEPS, task: sTask, doneToday: true }, 'the board tracks the chain');
+assert.equal((await doErin()).code, 200, 'more of the same, same day');
+assert.equal((await standingOf(erin.token, 'armorer')).standing, 37, 'no double-step in a day (+1 flat)');
+assert.equal((await call('GET', '/v1/underworld', { token: erin.token })).body.errand.step, 1, 'still step one');
+await pool.query(`UPDATE npc_errands SET last_day=${dayOf() - 1} WHERE character_id='${erin.id}'`); // the sun sets
+assert.equal((await doErin()).code, 200, 'day two');
+assert.equal((await call('GET', '/v1/underworld', { token: erin.token })).body.errand.step, 2, 'step two');
+await pool.query(`UPDATE npc_errands SET last_day=${dayOf() - 1} WHERE character_id='${erin.id}'`);
+assert.equal((await doErin()).code, 200, 'day three — the job is done');
+assert.equal((await standingOf(erin.token, 'armorer')).standing, 38 + 1 + UNDERWORLD.STEP5.CHAIN_BONUS, 'the finished chain pays +15 on top of the bump');
+assert.equal((await call('GET', '/v1/underworld', { token: erin.token })).body.errand, null, 'the slate is clear');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE character_id='${erin.id}' AND type='errand_done'`)).rows[0].n), 1, 'and she heard about it');
+r = await call('POST', '/v1/underworld/armorer/errand', { token: erin.token });
+assert.equal(r.code, 200, 'a new job');
+r = await call('POST', '/v1/underworld/armorer/errand', { token: erin.token });
+assert.equal(r.body.replaced, 'armorer', 'starting another replaces the half-done one');
+
 // ── the estate: BLOODLINE MEMORY — the heir inherits 25% of each standing, floored ──
 const preDeath = (await call('GET', '/v1/underworld', { token: ted.token })).body.npcs;
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ted.id },
@@ -386,5 +435,5 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_standing WHERE
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `underworld:* rides the vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Underworld test passed — five-fixture board, actor-side bumps (heal+2/gun+3/craft+1/ammo+1/listing+1), gifts ($5k sink, capped at 50, refused above), DOC heal ×0.9 + discharge $150/min (T2 half stay, T3 walk-out), VINNIE NPC-hit ×0.9 + waived post fee (tax stands) + ~9s search, BELLA gun ×0.9 cash + craft ×0.9 + 30% buyback (row gone, no double-sell), BIG TUNA guards ×0.9 + 72h listings + a fourth slot (fifth refused) + STEP TWO: the MADAME (den bumps, T1 comped nerve, T2 velvet rope at any level, T3 whispers count hunters — never names), the daily LEAD (+5 on first business with your best, gifts never claim it, once a day, strangers get none), DECAY (1/day past a week idle, floored at tier 1, materializes on the next bump), RIVALRY (an NPC hire costs the Doc −2), BLOODLINE MEMORY (the heir inherits floor(25%) of every standing; the dead street\'s rows are gone) + STEP THREE: rotating lead TASKS (seed-drawn per day, off-task business pays flat, the drawn job claims +5), RIVALRY #2 (an ambush attempt: Bella +2 / Big Tuna −2, win or lose), GRUDGES (whacking a T2+ friend of a fixture docks the killer 5 with that fixture — acquaintances forgive, strangers floor at 0, Vinnie never grudges) + STEP FOUR: grudges with TEETH (open grudge caps the tier at 2 — standing 95 reads tier 2, no favors — until a $25k ledgered penance squares it, once per grudge, clean refused), the WEEKLY FAVOR (one per street per week from any un-grudged T3 fixture: Doc patch-up, Madame nerve, Big Tuna energy, Bella repairs the worst iron — a refused errand never burns the week; Vinnie deals in debts, not gifts), and lead STREAKS (consecutive days pay +1 each on the +5, capped at +10 — streak rows advance, day 10 pays the cap), vocabulary closed');
+console.log('✅ Underworld test passed — five-fixture board, actor-side bumps (heal+2/gun+3/craft+1/ammo+1/listing+1), gifts ($5k sink, capped at 50, refused above), DOC heal ×0.9 + discharge $150/min (T2 half stay, T3 walk-out), VINNIE NPC-hit ×0.9 + waived post fee (tax stands) + ~9s search, BELLA gun ×0.9 cash + craft ×0.9 + 30% buyback (row gone, no double-sell), BIG TUNA guards ×0.9 + 72h listings + a fourth slot (fifth refused) + STEP TWO: the MADAME (den bumps, T1 comped nerve, T2 velvet rope at any level, T3 whispers count hunters — never names), the daily LEAD (+5 on first business with your best, gifts never claim it, once a day, strangers get none), DECAY (1/day past a week idle, floored at tier 1, materializes on the next bump), RIVALRY (an NPC hire costs the Doc −2), BLOODLINE MEMORY (the heir inherits floor(25%) of every standing; the dead street\'s rows are gone) + STEP THREE: rotating lead TASKS (seed-drawn per day, off-task business pays flat, the drawn job claims +5), RIVALRY #2 (an ambush attempt: Bella +2 / Big Tuna −2, win or lose), GRUDGES (whacking a T2+ friend of a fixture docks the killer 5 with that fixture — acquaintances forgive, strangers floor at 0, Vinnie never grudges) + STEP FOUR: grudges with TEETH (open grudge caps the tier at 2 — standing 95 reads tier 2, no favors — until a $25k ledgered penance squares it, once per grudge, clean refused), the WEEKLY FAVOR (one per street per week from any un-grudged T3 fixture: Doc patch-up, Madame nerve, Big Tuna energy, Bella repairs the worst iron — a refused errand never burns the week; Vinnie deals in debts, not gifts), and lead STREAKS (consecutive days pay +1 each on the +5, capped at +10 — streak rows advance, day 10 pays the cap) + STEP FIVE: GRUDGE DECAY (one grudge heals per 14 idle days — 2@15d reads 1, 1@30d reads 0 and the tier uncaps; penance settles the EFFECTIVE count and materializes it; no paying for what time healed), the ERRAND CHAIN (tier-1+ fixture hands a storyline: the drawn task on 3 separate days → +15; no double-step in a day; the board tracks step/task; done → notify + clean slate; restarting replaces the half-done job; strangers refused), vocabulary closed');
 await app.close();

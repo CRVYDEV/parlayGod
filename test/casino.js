@@ -5,7 +5,7 @@
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { CASINO, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
+import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -143,9 +143,13 @@ assert.equal((await call('POST', '/v1/gangs/tribute', { token, body: { amount: 1
 assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } })).body.error, 'turf', 'the fix belongs to whoever runs neon');
 assert.equal((await call('POST', '/v1/districts/neon/seize', { token })).code, 200, 'the Kings took the Mile');
 const treasuryPreFix = (await call('GET', `/v1/gangs/${gangId}`, {})).body.gang.treasury;
+const madamePreFix = (await call('GET', '/v1/underworld', { token })).body.npcs.find((n) => n.id === 'madame').standing;
 rr = await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } });
 assert.equal(rr.code, 200, 'the referee is bought'); assert.equal(rr.body.cost, CASINO.FIGHT_FIX_COST, 'for the listed price');
 assert.equal((await call('GET', `/v1/gangs/${gangId}`, {})).body.gang.treasury, treasuryPreFix - CASINO.FIGHT_FIX_COST, 'paid from the treasury');
+// Underworld step five, rivalry #3: nobody fixes HER book — the buying boss wears it
+assert.equal((await call('GET', '/v1/underworld', { token })).body.npcs.find((n) => n.id === 'madame').standing,
+  Math.max(0, madamePreFix - UNDERWORLD.STEP5.FIX_LOSS), 'the Madame heard who bought the referee (−5)');
 assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'a' } })).body.error, 'fixed', 'one fix a bout');
 // roll the bout into the past: the FIXED result pays the dog backer at 2.6
 const wk = weekOf();
@@ -194,5 +198,5 @@ assert(vocab.ok, `casino:* reasons are in the §10.4 vocabulary (${JSON.stringif
 const treas = inv.checks.find((c) => c.name === 'gang treasuries');
 assert(treas.ok, `the treasury check reconciles the casino:fix sink (drift ${treas.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/1% street cut exact), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury, fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/1% street cut exact), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
 await app.close();

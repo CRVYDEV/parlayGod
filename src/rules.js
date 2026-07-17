@@ -870,6 +870,13 @@ export const UNDERWORLD = {
     STREAK_BONUS_CAP: 5,              // lead streak: +1/consecutive day on the +5, capped (day 6+ pays +10)
     FAVOR_WEEKLY: 1,                  // one favor a week per street, from any UN-grudged tier-3 fixture
   },
+  // step five (all founder sign-off levers): time heals what money can't, storylines arrive,
+  // and the Madame learns who bought her referee.
+  STEP5: {
+    GRUDGE_DECAY_DAYS: 14,            // one grudge forgiven per 14 days without a fresh offense
+    CHAIN_STEPS: 3, CHAIN_BONUS: 15,  // the errand chain: the fixture's drawn task on 3 separate days → +15
+    FIX_LOSS: 5,                      // rivalry #3: buying the fight referee costs the Madame's book its pride
+  },
 };
 export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
 // The daily lead TASK for a fixture — deterministic off the §7.11 seed machinery, same for

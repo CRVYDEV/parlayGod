@@ -101,7 +101,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
     client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
     client.query('SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]),
-    client.query('SELECT npc_id, count FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
+    client.query('SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -129,8 +129,19 @@ export async function loadOwned(client, ch) {
     // who you know — dies with the street. Idle friendships COOL (Underworld step two): the
     // EFFECTIVE standing is what everyone reads; the stored row catches up on the next bump.
     npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, decayedStanding(Number(r.standing), r.touched_at)])),
-    grudges: Object.fromEntries(grudge.rows.map((r) => [r.npc_id, Number(r.count)])), // step four: open grudges cap the tier
+    // step four: open grudges cap the tier; step five: time heals them — the EFFECTIVE count
+    // is what everything reads, the stored row catches up on the next write
+    grudges: Object.fromEntries(grudge.rows
+      .map((r) => [r.npc_id, decayedGrudges(Number(r.count), r.since)])
+      .filter(([, c]) => c > 0)),
   };
+}
+
+// Lazy grudge healing (step five, §7.1 pattern): one grudge is forgiven per GRUDGE_DECAY_DAYS
+// since the last write (a fresh offense — or a penance — restarts the clock).
+function decayedGrudges(count, since) {
+  const days = (Date.now() - new Date(since).getTime()) / 86400000;
+  return Math.max(0, count - Math.floor(days / UNDERWORLD.STEP5.GRUDGE_DECAY_DAYS));
 }
 
 // Lazy standing decay (§7.1 pattern — no cron): after DECAY_GRACE_DAYS without business, a
@@ -177,16 +188,33 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
   const cur = Number(h.owned.npc[npcId] || 0);
   let lead = false, streak = 0, bonus = 0;
   const day = dayOf();
-  if (business && pts > 0 && bestNpc(h) === npcId && action && action === leadTaskOf(day, npcId)) {
-    const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
-    if (!claimed.rowCount) {
-      // step four: STREAKS — consecutive claimed days sweeten the bonus (+1/day, capped)
-      const y = (await client.query('SELECT streak FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day - 1])).rows[0];
-      streak = (y ? Number(y.streak) : 0) + 1;
-      bonus = UNDERWORLD.STEP2.LEAD_BONUS + Math.min(streak - 1, UNDERWORLD.STEP4.STREAK_BONUS_CAP);
-      await client.query('INSERT INTO npc_leads (character_id, day, npc_id, streak) VALUES ($1,$2,$3,$4)', [ch.id, day, npcId, streak]);
-      pts += bonus;
-      lead = true;
+  if (business && pts > 0 && action && action === leadTaskOf(day, npcId)) {
+    if (bestNpc(h) === npcId) {
+      const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
+      if (!claimed.rowCount) {
+        // step four: STREAKS — consecutive claimed days sweeten the bonus (+1/day, capped)
+        const y = (await client.query('SELECT streak FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day - 1])).rows[0];
+        streak = (y ? Number(y.streak) : 0) + 1;
+        bonus = UNDERWORLD.STEP2.LEAD_BONUS + Math.min(streak - 1, UNDERWORLD.STEP4.STREAK_BONUS_CAP);
+        await client.query('INSERT INTO npc_leads (character_id, day, npc_id, streak) VALUES ($1,$2,$3,$4)', [ch.id, day, npcId, streak]);
+        pts += bonus;
+        lead = true;
+      }
+    }
+    // step five: the ERRAND CHAIN — the fixture's drawn task advances an active chain with
+    // THAT fixture (best or not), one step per day; the last step pays the chain bonus.
+    const er = (await client.query('SELECT * FROM npc_errands WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId])).rows[0];
+    if (er && Number(er.last_day ?? -1) < day) {
+      const step = Number(er.step) + 1;
+      if (step >= UNDERWORLD.STEP5.CHAIN_STEPS) {
+        await client.query('DELETE FROM npc_errands WHERE character_id=$1', [ch.id]);
+        pts += UNDERWORLD.STEP5.CHAIN_BONUS;
+        await notify(client, ch.id, 'errand_done', { npc: npcId, bonus: UNDERWORLD.STEP5.CHAIN_BONUS });
+        bus.emit('streets', { type: 'errand_done', who: ch.name, npc: npcId }); // the town hears who did right by whom
+      } else {
+        await client.query('UPDATE npc_errands SET step=$2, last_day=$3 WHERE character_id=$1', [ch.id, step, day]);
+        await notify(client, ch.id, 'errand_step', { npc: npcId, step, of: UNDERWORLD.STEP5.CHAIN_STEPS });
+      }
     }
   }
   const next = Math.max(0, Math.min(100, cur + pts));
