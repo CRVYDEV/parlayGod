@@ -862,6 +862,14 @@ export const UNDERWORLD = {
     GRUDGE_MIN: 60, GRUDGE_LOSS: 5,   // whack a T2+ friend of the house → that fixture docks the killer 5
     AMBUSH_ARMORER: 2, AMBUSH_HARBOR: 2, // an ambush (win or lose): Bella +2, Big Tuna −2
   },
+  // step four (all founder sign-off levers): grudges get TEETH (and a way out), loyalty gets
+  // a streak, and the top of a relationship finally gives something back.
+  STEP4: {
+    GRUDGE_TIER_CAP: 2,               // a grudged fixture still does business — but no tier-3 favors
+    PENANCE_COST: 25000,              // squaring ONE grudge ($ sink, underworld:penance)
+    STREAK_BONUS_CAP: 5,              // lead streak: +1/consecutive day on the +5, capped (day 6+ pays +10)
+    FAVOR_WEEKLY: 1,                  // one favor a week per street, from any UN-grudged tier-3 fixture
+  },
 };
 export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
 // The daily lead TASK for a fixture — deterministic off the §7.11 seed machinery, same for

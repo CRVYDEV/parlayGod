@@ -87,7 +87,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -101,6 +101,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
     client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
     client.query('SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]),
+    client.query('SELECT npc_id, count FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -128,6 +129,7 @@ export async function loadOwned(client, ch) {
     // who you know — dies with the street. Idle friendships COOL (Underworld step two): the
     // EFFECTIVE standing is what everyone reads; the stored row catches up on the next bump.
     npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, decayedStanding(Number(r.standing), r.touched_at)])),
+    grudges: Object.fromEntries(grudge.rows.map((r) => [r.npc_id, Number(r.count)])), // step four: open grudges cap the tier
   };
 }
 
@@ -143,9 +145,12 @@ function decayedStanding(s, touchedAt) {
 }
 
 // Underworld touchpoint helpers — perks are NEW single-touchpoint modifiers (sign-off levers).
+// Step four: an OPEN GRUDGE caps the tier a fixture will serve you at (they still do business
+// — they just won't do favors) until it's squared by penance. Every perk site inherits this.
 export const npcTier = (h, npcId) => {
   const s = Number(h?.owned?.npc?.[npcId] || 0);
-  return UNDERWORLD.THRESHOLDS.filter((t) => s >= t).length; // 0..3
+  const t = UNDERWORLD.THRESHOLDS.filter((x) => s >= x).length; // 0..3
+  return (h?.owned?.grudges?.[npcId] > 0) ? Math.min(t, UNDERWORLD.STEP4.GRUDGE_TIER_CAP) : t;
 };
 export const npcMult = (h, npcId, tier, mult) => (npcTier(h, npcId) >= tier ? mult : 1);
 
@@ -170,13 +175,17 @@ export function bestNpc(h) {
 // Gifts (business:false) and rivalry/grudge losses (pts<0) never trigger it.
 export async function bumpStanding(client, h, ch, npcId, pts, { business = true, action = null } = {}) {
   const cur = Number(h.owned.npc[npcId] || 0);
-  let lead = false;
+  let lead = false, streak = 0, bonus = 0;
   const day = dayOf();
   if (business && pts > 0 && bestNpc(h) === npcId && action && action === leadTaskOf(day, npcId)) {
     const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
     if (!claimed.rowCount) {
-      await client.query('INSERT INTO npc_leads (character_id, day, npc_id) VALUES ($1,$2,$3)', [ch.id, day, npcId]);
-      pts += UNDERWORLD.STEP2.LEAD_BONUS;
+      // step four: STREAKS — consecutive claimed days sweeten the bonus (+1/day, capped)
+      const y = (await client.query('SELECT streak FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day - 1])).rows[0];
+      streak = (y ? Number(y.streak) : 0) + 1;
+      bonus = UNDERWORLD.STEP2.LEAD_BONUS + Math.min(streak - 1, UNDERWORLD.STEP4.STREAK_BONUS_CAP);
+      await client.query('INSERT INTO npc_leads (character_id, day, npc_id, streak) VALUES ($1,$2,$3,$4)', [ch.id, day, npcId, streak]);
+      pts += bonus;
       lead = true;
     }
   }
@@ -190,7 +199,7 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
     }
     h.owned.npc[npcId] = next;
   }
-  if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus: UNDERWORLD.STEP2.LEAD_BONUS });
+  if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus, streak });
 }
 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).

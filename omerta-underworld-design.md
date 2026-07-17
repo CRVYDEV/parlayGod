@@ -82,6 +82,29 @@ untouched by construction.
   cover is a real, earnable defense layer that costs the attacker STATUS, never money (§10.4
   untouched by construction, like all of steps two and three).
 
-## 7. Step four (deferred)
-NPC gifts back (the Madame sends work), a den-comp ladder, grudge FORGIVENESS (pay penance /
-run an errand to square a grudge), more rivalry pairs, lead STREAKS (consecutive days).
+## 7. Step four — BUILT (levers in `UNDERWORLD.STEP4`)
+- **Grudges with TEETH**: a grudge is now recorded state (`npc_grudges`, count per fixture),
+  not just a standing loss. While a fixture holds one, your tier with them CAPS at
+  GRUDGE_TIER_CAP 2 — they still do business, they just won't do favors (standing 95 reads
+  tier 2; every T3 perk site inherits the cap through `npcTier`). Grudges die with the street
+  (the fixtures forgive the dead — the standing loss still echoes via bloodline memory).
+- **PENANCE**: `POST /underworld/:npc/penance` squares ONE grudge for PENANCE_COST $25k — a
+  ledgered `underworld:penance` cash sink (rides the existing vocabulary prefix). Squaring
+  buys back SERVICE, never friendship: no standing moves. 'clean' when nothing is held.
+- **The WEEKLY FAVOR**: `POST /underworld/:npc/favor` — one per street per week
+  (`npc_favors`), from any UN-grudged tier-3 fixture. Every favor is a RESOURCE package,
+  never money and never a §10.4 currency: the Doc patches you to 100, the Madame refills
+  nerve, Big Tuna refills energy, Bella's boys repair your worst car overnight ('nothing' if
+  the garage is clean — a refused errand doesn't burn the week). Vinnie deals in debts, not
+  gifts ('debts'). This absorbs the old "den-comp ladder / Madame sends work" ideas.
+- **Lead STREAKS**: consecutive claimed lead days sweeten the bonus — +1 per prior day on the
+  +5, capped at STREAK_BONUS_CAP +5 (day 6+ pays +10). The streak lives on the `npc_leads`
+  row (yesterday's streak + 1); a missed day resets to 1.
+
+Money in step four: ONE new legible cash sink (penance). Everything else is status, access,
+and resources — §10.4 untouched beyond the vocabulary the prefix already covers.
+
+## 8. Step five (deferred)
+More rivalry pairs, grudge decay (time heals what money can't), favor CHOICE menus per
+fixture, NPC storylines (multi-day errand chains), a fixture REFUSING service during an
+active vendetta against their other friend.

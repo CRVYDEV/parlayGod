@@ -219,6 +219,18 @@ economics are untouched (no cash surface moved), but watch whether well-connecte
 fixture standing as a soft shield; the counterweight is that standing is earned by ACTIVITY,
 and active players are already the exposed ones.
 
+**Step four** (levers in `UNDERWORLD.STEP4`): `GRUDGE_TIER_CAP` 2 (an open grudge withholds
+tier-3 service until squared — the grudge now COSTS something concrete: walk-outs, buybacks,
+the fourth slot, whispers); `PENANCE_COST` $25k per grudge (the ONE new money flow in steps
+two–four — a clean, legible cash sink, `underworld:penance`, priced roughly at half a
+safehouse stay so a working killer squares up without it being trivial: a five-grudge spree
+costs $125k in bridges); `STREAK_BONUS_CAP` +5 (daily-lead streaks raise the standing ceiling
+to +10/day for perfect attendance — velocity ×2 for the most engaged, still zero money);
+`FAVOR_WEEKLY` 1 (the weekly favor is RESOURCES only — health/nerve/energy/repairs, worth
+roughly $1–3k in avoided sink spend per week at endgame perk levels; it slightly softens four
+small sinks, bounded at one claim/street/week — watch alongside the other T3 conveniences,
+and note the elegant interlock: a grudge suspends exactly this).
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,
