@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS cars (
   trim_id TEXT NOT NULL,
   dmg INT NOT NULL DEFAULT 0,
   plate TEXT,                                    -- M8 vanity plate (display only, $OMR sink)
+  listed BOOLEAN NOT NULL DEFAULT false,         -- Black Market escrow: the row STAYS (car conservation counts rows); melt/fence/repair reject it
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS character_items (
@@ -573,6 +574,30 @@ CREATE TABLE IF NOT EXISTS commission_vetoes (
   gang_id TEXT NOT NULL,
   decree TEXT NOT NULL
 );
+
+-- THE BLACK MARKET: P2P trade for cars (auction — single standing bid, optional buy-now) and
+-- trade goods (fixed-price, district-pinned pickup so the market can't teleport freight past
+-- the convoy game). Items escrow at list (cars flag `cars.listed`, the row stays for the
+-- conservation count; goods deduct from the trunk into the row). Cash escrow = the standing
+-- bid, reconciled by the §10.4 `market escrow` check. Design: omerta-market-design.md.
+CREATE TABLE IF NOT EXISTS market_listings (
+  id TEXT PRIMARY KEY,
+  seller_character TEXT NOT NULL,
+  kind TEXT NOT NULL,                 -- 'car' | 'good'
+  car_id TEXT,                        -- kind='car'
+  good_id TEXT,                       -- kind='good'
+  qty INT NOT NULL DEFAULT 0,         -- kind='good': units escrowed OUT of the trunk (absolute writes — pg-mem INT quirk)
+  district TEXT,                      -- kind='good': the pickup dock (buyer must stand there)
+  price NUMERIC NOT NULL,             -- goods: unit price; cars: the minimum bid
+  buy_now NUMERIC,                    -- cars: optional instant price
+  bid NUMERIC,                        -- the single standing bid (cars; NULL = open)
+  bidder TEXT,                        -- who holds it (their cash is escrowed via market:bid)
+  status TEXT NOT NULL DEFAULT 'live',-- live | sold | cancelled | expired
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_market_seller ON market_listings (seller_character);
+CREATE INDEX IF NOT EXISTS ix_market_status ON market_listings (status);
 
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).

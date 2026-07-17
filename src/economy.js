@@ -64,6 +64,10 @@ export async function boostCar(ch, client, h) {
 function findCar(h, carId) {
   const car = h.owned.cars.find((c) => c.id === carId);
   if (!car) throw new GameError('no_car', 'No such car in the garage.');
+  // Black Market escrow: a listed car is on the block — melt/fence/repair keep hands off until
+  // the listing settles or is cancelled. (Chop still VALUES it: a hit crew knows your assets,
+  // and excluding listed iron would let a marked man warehouse his fleet pre-hit.)
+  if (car.listed) throw new GameError('listed', "It's on the block — cancel the listing first.");
   return car;
 }
 async function removeCar(client, h, carId) {
