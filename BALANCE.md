@@ -170,6 +170,25 @@ item); executioner (−20% search) raises assassin throughput ~25% for a 6-point
 the deepest PvP lever here, flag for the whale-hunt economics; everything else is QoL/pacing.
 Respec cadence shares the daily M8 cooldown so build-swapping around fights stays impossible.
 
+## Post-signing addendum — the Underworld (named NPCs, sign-off pending)
+
+Relationship perks as NEW single-touchpoint modifiers, same discipline as skills — nothing
+signed was retuned, and the cast deliberately avoids $OMR burns, ammo prices (the D1 kill-EV
+anchor), heat deterrents, loot-exposure windows, extraction caps, and income curves. Levers
+(`UNDERWORLD` rules tail): tier thresholds 25/60/90; gifts `GIFT_COST` $5k / `GIFT_STANDING` +5 /
+`GIFT_CAP` 50 (money only opens doors — the top tiers are earned, answering the audit's
+purchasable-standing critique structurally); `DISCHARGE_PER_MIN` $150; `GUN_BUYBACK` 30%; the
+eight FX (heal ×0.9, NPC hit ×0.9, search ×0.9, guns ×0.9 cash, crafts ×0.9, guard fees ×0.9,
+72h listings, +1 listing slot). Economy notes for the sim pass: **`underworld:gunsale` is the
+only new FAUCET** — 30% of a gun's sticker, once per owned gun, requires standing 90 (≈30 gun
+purchases at full price to reach honestly), so the round trip is −61% (buy ×0.9, sell 0.3) and
+unfarmable; **fixer T3 × executioner stacks to a 0.72 search clock** — the assassin-throughput
+watch item from the skills addendum compounds here, flag both together for the whale-hunt
+economics; **Vinnie T2's waived post fee** halves the contract board's friction for regulars
+(the tax half of the 2% stands — escrow reconciliation unchanged); everything else is
+QoL-priced discounting on sinks (discounted numbers are what's ledgered, so §10.4 stays exact
+by construction). Two cash sinks join the vocabulary (`underworld:gift`, `underworld:discharge`).
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,

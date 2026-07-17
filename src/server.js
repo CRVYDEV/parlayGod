@@ -21,6 +21,7 @@ import * as Convoy from './convoy.js';
 import * as Commission from './commission.js';
 import * as Market from './market.js';
 import * as Skills from './skills.js';
+import * as Underworld from './underworld.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -339,6 +340,16 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
   app.post('/v1/skills/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.learnSkill(ch, req.params.id, client, h)));
+
+  // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
+  app.get('/v1/underworld', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, h)));
+  app.post('/v1/underworld/discharge', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.discharge(ch, client, h)));
+  app.post('/v1/underworld/gun/:gunId/sell', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.sellGunBack(ch, req.params.gunId, client, h)));
+  app.post('/v1/underworld/:npc/gift', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.giftNpc(ch, req.params.npc, client, h)));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));

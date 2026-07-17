@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -87,7 +87,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -100,6 +100,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
     client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
+    client.query('SELECT npc_id, standing FROM npc_standing WHERE character_id=$1', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -124,7 +125,31 @@ export async function loadOwned(client, ch) {
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
     skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
+    npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, Number(r.standing)])), // who you know — dies with the street
   };
+}
+
+// Underworld touchpoint helpers — perks are NEW single-touchpoint modifiers (sign-off levers).
+export const npcTier = (h, npcId) => {
+  const s = Number(h?.owned?.npc?.[npcId] || 0);
+  return UNDERWORLD.THRESHOLDS.filter((t) => s >= t).length; // 0..3
+};
+export const npcMult = (h, npcId, tier, mult) => (npcTier(h, npcId) >= tier ? mult : 1);
+
+// Standing bumps are earned actor-side at the loop's touchpoints (design §3). Standing is a
+// pure status axis — no §10.4 surface — so the write is a plain upsert under the actor's lock.
+// Lives here (not underworld.js) because game.js's own heal() bumps the Doc.
+export async function bumpStanding(client, h, ch, npcId, pts) {
+  const cur = Number(h.owned.npc[npcId] || 0);
+  const next = Math.min(100, cur + pts);
+  if (next === cur) return;
+  const upd = await client.query('UPDATE npc_standing SET standing=$3 WHERE character_id=$1 AND npc_id=$2',
+    [ch.id, npcId, next]);
+  if (!upd.rowCount) {
+    await client.query('INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,$2,$3)',
+      [ch.id, npcId, next]);
+  }
+  h.owned.npc[npcId] = next;
 }
 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).
@@ -438,13 +463,16 @@ export async function train(ch, stat, client, h) {
 // ── §5.1 HEAL ──
 export async function heal(ch, client, h) {
   const lvl = levelOf(Number(ch.respect));
-  // THE DOC'S FRIEND (skills): the enforcer heals cheaper — a new modifier, sign-off lever
+  // THE DOC'S FRIEND (skills) and DOC MORETTI T1 (underworld) both discount the bill —
+  // new modifiers stacking multiplicatively (0.75 × 0.9), both sign-off levers
   const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
-    * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT));
+    * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT)
+    * npcMult(h, 'doc', 1, UNDERWORLD.FX.DOC_MULT));
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);
   ch.cash = Number(ch.cash) - cost; ch.health = 100;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'heal' });
+  await bumpStanding(client, h, ch, 'doc', 2); // doing business with the Doc
   return { ok: true, cost };
 }
 

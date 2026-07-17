@@ -464,7 +464,9 @@ for (let i = 0; i < 40 && !refundOk; i++) {
   const before = (await meOf(hirer.token)).cash;
   const res = (await call('POST', `/v1/streets/${rival.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   if (res.killed) {
-    assert.equal((await meOf(hirer.token)).cash, before - 1000000 + 12000, 'the $1M fee burned AND the $12000 exclusive escrow refunded (no clobber)');
+    // res.cost, not a hard $1M: hiram's looped hits earned him Vinnie-the-Match standing (the
+    // Underworld T1 discount) — the invariant under test is fee-burn + refund, not the sticker
+    assert.equal((await meOf(hirer.token)).cash, before - res.cost + 12000, 'the fee burned AND the $12000 exclusive escrow refunded (no clobber)');
     refundOk = true;
   }
 }

@@ -2,9 +2,9 @@
 // Every formula cites spec §7 / prototype v24. Actions receive the locked character
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import {
-  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS,
+  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf,
 } from './rules.js';
@@ -137,8 +137,10 @@ export async function fenceCar(ch, carId, client, h) {
 export async function craft(ch, itemId, client, h) {
   const c = CONSUMABLES.find((x) => x.id === itemId);
   if (!c) throw new GameError('bad_item', 'No such craftable.');
-  // Old Foundry turf: crafts cost 25% less cash for the holding family
-  const cost = (h.owned.held || []).includes('foundry') ? Math.floor(c.cost * 0.75) : c.cost;
+  // Old Foundry turf: crafts cost 25% less cash for the holding family.
+  // BELLA T2 (underworld) stacks ×0.9 on top — both discounts are what's ledgered.
+  const cost = Math.floor(c.cost * ((h.owned.held || []).includes('foundry') ? 0.75 : 1)
+    * npcMult(h, 'armorer', 2, UNDERWORLD.FX.CRAFT_MULT));
   if (Number(ch.cb || 0) < c.cb) throw new GameError('cb', `Need ${c.cb} crates of contraband.`);
   if (Number(ch.cash) < cost) throw new GameError('cash', 'Not enough pocket cash for materials.');
   ch.cb = Number(ch.cb) - c.cb;
@@ -148,6 +150,7 @@ export async function craft(ch, itemId, client, h) {
   await setItem(client, ch.id, itemId, have);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: `craft:${itemId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -c.cb, reason: `craft:${itemId}` });
+  await bumpStanding(client, h, ch, 'armorer', 1); // workshop business is Bella's business
   await h.bumpDaily(client, ch.id, 'craft');
   return { ok: true, item: itemId };
 }
@@ -378,16 +381,20 @@ export async function buyGun(ch, gunId, client, h) {
   const g = GUNS.find((x) => x.id === gunId);
   if (!g) throw new GameError('bad_gun', 'No such piece.');
   if (h.owned.guns.includes(gunId)) throw new GameError('owned', 'You already own that piece.');
-  if (Number(ch.cash) < g.cash) throw new GameError('cash', 'The dealer doesn\'t extend credit.');
+  // BELLA T1 (underworld): friends buy iron at a discount — cash only, the crates stand.
+  // The discounted price is what's ledgered (decree/skill precedent). Sign-off lever.
+  const price = Math.floor(g.cash * npcMult(h, 'armorer', 1, UNDERWORLD.FX.GUN_MULT));
+  if (Number(ch.cash) < price) throw new GameError('cash', 'The dealer doesn\'t extend credit.');
   if ((Number(ch.cb) || 0) < g.crates) throw new GameError('cb', `The dealer wants ${g.crates} crates on top of the cash.`);
-  ch.cash = Number(ch.cash) - g.cash;
+  ch.cash = Number(ch.cash) - price;
   ch.cb = Number(ch.cb) - g.crates;
   await client.query('INSERT INTO character_guns (character_id, gun_id) VALUES ($1,$2)', [ch.id, gunId]);
   h.owned.guns.push(gunId);
   if (!ch.gun) ch.gun = gunId; // first iron auto-equips (v24)
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -g.cash, reason: `gun:buy:${gunId}` });
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: `gun:buy:${gunId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -g.crates, reason: `gun:buy:${gunId}` });
-  return { ok: true, gun: gunId, equipped: ch.gun === gunId };
+  await bumpStanding(client, h, ch, 'armorer', 3); // Bella remembers a customer
+  return { ok: true, gun: gunId, price, equipped: ch.gun === gunId };
 }
 
 export function equipGun(ch, gunId, client, h) {
@@ -414,6 +421,8 @@ export async function buyAmmo(ch, client, h) {
   ch.ammo = Number(ch.ammo) + 50;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -2000, reason: 'ammo:buy' });
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: 50, reason: 'ammo:buy' });
+  // ammo PRICE is the D1-signed kill-EV anchor — Bella never discounts it, only remembers you
+  await bumpStanding(client, h, ch, 'armorer', 1);
   return { ok: true, ammo: 50 };
 }
 

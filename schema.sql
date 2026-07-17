@@ -604,6 +604,16 @@ CREATE INDEX IF NOT EXISTS ix_market_status ON market_listings (status);
 -- SKILLS & SPECIALIZATIONS: the character build layer. Points derive from level (never stored —
 -- no currency, no §10.4 surface); owned skills die with the street (estate wipe). Design:
 -- omerta-skills-design.md.
+-- THE UNDERWORLD: per-character standing (0-100) with the named NPC cast. A pure status axis
+-- (no §10.4 surface); earned actor-side at each loop's touchpoints, gift-greasable only below
+-- GIFT_CAP. Dies with the street. Design: omerta-underworld-design.md.
+CREATE TABLE IF NOT EXISTS npc_standing (
+  character_id TEXT NOT NULL,
+  npc_id TEXT NOT NULL,
+  standing NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, npc_id)
+);
+
 CREATE TABLE IF NOT EXISTS character_skills (
   character_id TEXT NOT NULL,
   skill_id TEXT NOT NULL,

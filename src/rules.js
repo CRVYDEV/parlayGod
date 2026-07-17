@@ -821,6 +821,30 @@ export const SKILLS = {
         FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8 },
 };
 export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
+// THE UNDERWORLD — the named NPC cast (design: omerta-underworld-design.md). Standing 0-100
+// per character per NPC, earned by doing business (actor-side bumps), gift-greasable only
+// below GIFT_CAP — top tiers are EARNED. Perks are NEW single-touchpoint modifiers (the
+// skills/decree precedent), deliberately off $OMR burns, ammo prices, and every audit-locked
+// surface. ALL numbers are founder sign-off levers.
+export const UNDERWORLD = {
+  THRESHOLDS: [25, 60, 90],           // standing for tier 1 / 2 / 3
+  GIFT_COST: 5000, GIFT_STANDING: 5, GIFT_CAP: 50,
+  DISCHARGE_PER_MIN: 150,             // the Doc's early-discharge rate ($/remaining minute)
+  GUN_BUYBACK: 0.3,                   // the Armorer's buy-back (share of the gun's cash price)
+  NPCS: [
+    { id: 'doc',     name: 'Doc Moretti',      earn: 'heals + discharges',
+      perks: ['House rates — healing ×0.9', 'Early discharge — pay to HALVE a hospital stay', 'Walk-outs — discharges release in full'] },
+    { id: 'fixer',   name: 'Vinnie the Match', earn: 'contracts posted + NPC hits + confirmed kills',
+      perks: ['NPC hitmen ×0.9', 'Your contract-post fee is waived (the street tax stands)', 'Your searches place ×0.9 faster'] },
+    { id: 'armorer', name: 'Bella Bang-Bang',  earn: 'guns + crafts + ammo boxes',
+      perks: ['Guns ×0.9 cash', 'Workshop crafts ×0.9 cash', 'She buys guns back at 30%'] },
+    { id: 'harbor',  name: 'Big Tuna',         earn: 'convoys + market listings',
+      perks: ['Guard fees ×0.9', 'Your listings run 72h', 'A fourth market listing slot'] },
+  ],
+  FX: { DOC_MULT: 0.9, NPCHIT_MULT: 0.9, SEARCH_MULT: 0.9, GUN_MULT: 0.9, CRAFT_MULT: 0.9,
+        GUARD_MULT: 0.9, TTL_H: 72, EXTRA_LISTING: 1 },
+};
+export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
 export const BLACK_MARKET = {           // (MARKET is the generated §5 goods catalog — hands off)
   LIST_FEE_BPS: 100, LIST_FEE_MIN: 10,  // 1% of the ask (min $10) to list — prices the "free warehouse" angle
   MIN_PRICE: 50,                         // no penny listings
