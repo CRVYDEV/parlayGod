@@ -118,7 +118,7 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
     [convoy.id, tier.def, h.owned.gangId || null, !!premium, arrivesAt]);
   const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
-  await bumpStanding(client, h, ch, 'harbor', 2); // freight on the water is Big Tuna's business
+  await bumpStanding(client, h, ch, 'harbor', 2, { action: 'depart' }); // freight on the water is Big Tuna's business
   await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id, insured: !!premium });
   return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(rideMs / 1000), units, band, premium };
 }
@@ -166,6 +166,10 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   ch.ammo = Number(ch.ammo) - CONVOY.AMBUSH_AMMO;
   ch.heat = Math.min(100, Number(ch.heat || 0) + CONVOY.AMBUSH_HEAT);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -CONVOY.AMBUSH_AMMO, reason: 'convoy:ambush' });
+  // RIVALRY pair #2 (Underworld step three): road piracy picks a side — win or lose, the
+  // ATTEMPT is what the town hears. Bella loves the chaos; the Harbor Master does not.
+  await bumpStanding(client, h, ch, 'armorer', UNDERWORLD.STEP3.AMBUSH_ARMORER, { action: 'ambush' });
+  await bumpStanding(client, h, ch, 'harbor', -UNDERWORLD.STEP3.AMBUSH_HARBOR);
   await client.query('INSERT INTO convoy_ambushes (convoy_id, character_id) VALUES ($1,$2)', [convoyId, ch.id]);
   await client.query('UPDATE convoys SET ambushed=true WHERE id=$1', [convoyId]);
 
@@ -293,7 +297,7 @@ export async function collectConvoy(ch, convoyId, client, h) {
     await client.query('UPDATE convoys SET insured_loss=0 WHERE id=$1', [convoyId]);
   }
   if (left === 0) await client.query("UPDATE convoys SET status='done' WHERE id=$1", [convoyId]);
-  if (taken > 0) await bumpStanding(client, h, ch, 'harbor', 3); // landed freight seals the relationship
+  if (taken > 0) await bumpStanding(client, h, ch, 'harbor', 3, { action: 'collect' }); // landed freight seals the relationship
   return { ok: true, collected: taken, remaining: left, toll, insurance };
 }
 

@@ -84,7 +84,7 @@ export async function listItem(ch, opts, client, h) {
     await client.query(
       'INSERT INTO market_listings (id, seller_character, kind, car_id, price, buy_now, reserve, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
       [id, ch.id, 'car', opts.carId, minBid, buyNow, reserve, expiresAt]);
-    await bumpStanding(client, h, ch, 'harbor', 1); // moving iron through the docks
+    await bumpStanding(client, h, ch, 'harbor', 1, { action: 'list' }); // moving iron through the docks
     return { ok: true, id, kind: 'car', minBid, buyNow, reserve, fee, expiresSeconds: hours * 3600 };
   }
 
@@ -105,7 +105,7 @@ export async function listItem(ch, opts, client, h) {
   await client.query(
     'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
     [id, ch.id, 'good', opts.goodId, qty, ch.loc, price, expiresAt]);
-  await bumpStanding(client, h, ch, 'harbor', 1); // moving freight through the docks
+  await bumpStanding(client, h, ch, 'harbor', 1, { action: 'list' }); // moving freight through the docks
   return { ok: true, id, kind: 'good', good: opts.goodId, qty, price, district: ch.loc, fee, expiresSeconds: hours * 3600 };
 }
 
@@ -181,7 +181,7 @@ export async function postOrder(ch, opts, client, h) {
   await client.query(
     'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
     [id, ch.id, 'order', opts.goodId, qty, ch.loc, price, new Date(Date.now() + hours * 3600 * 1000)]);
-  await bumpStanding(client, h, ch, 'harbor', 1); // standing paper at the docks is still dock business
+  await bumpStanding(client, h, ch, 'harbor', 1, { action: 'list' }); // standing paper at the docks is still dock business
   return { ok: true, id, kind: 'order', good: opts.goodId, wanted: qty, price, district: ch.loc, escrow, fee, expiresSeconds: hours * 3600 };
 }
 

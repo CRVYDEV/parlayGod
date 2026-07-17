@@ -150,7 +150,7 @@ export async function craft(ch, itemId, client, h) {
   await setItem(client, ch.id, itemId, have);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: `craft:${itemId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -c.cb, reason: `craft:${itemId}` });
-  await bumpStanding(client, h, ch, 'armorer', 1); // workshop business is Bella's business
+  await bumpStanding(client, h, ch, 'armorer', 1, { action: 'craft' }); // workshop business is Bella's business
   await h.bumpDaily(client, ch.id, 'craft');
   return { ok: true, item: itemId };
 }
@@ -393,7 +393,7 @@ export async function buyGun(ch, gunId, client, h) {
   if (!ch.gun) ch.gun = gunId; // first iron auto-equips (v24)
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: `gun:buy:${gunId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -g.crates, reason: `gun:buy:${gunId}` });
-  await bumpStanding(client, h, ch, 'armorer', 3); // Bella remembers a customer
+  await bumpStanding(client, h, ch, 'armorer', 3, { action: 'gun' }); // Bella remembers a customer
   return { ok: true, gun: gunId, price, equipped: ch.gun === gunId };
 }
 
@@ -422,7 +422,7 @@ export async function buyAmmo(ch, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -2000, reason: 'ammo:buy' });
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: 50, reason: 'ammo:buy' });
   // ammo PRICE is the D1-signed kill-EV anchor — Bella never discounts it, only remembers you
-  await bumpStanding(client, h, ch, 'armorer', 1);
+  await bumpStanding(client, h, ch, 'armorer', 1, { action: 'ammo' });
   return { ok: true, ammo: 50 };
 }
 

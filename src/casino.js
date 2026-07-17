@@ -69,7 +69,7 @@ export async function playDice(ch, amount, client, h) {
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:dice' });
   }
   await bumpVolume(client, amt);
-  await bumpStanding(client, h, ch, 'madame', 1); // action on her floor is business
+  await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // action on her floor is business
   await h.rngLog(client, ch.id, 'casino:dice', rolls[0], `${win ? 'win' : 'loss'} $${amt} [${rolls.join(',')}]`);
   await h.track(client, ch.account_id, 'casino', { game: 'dice', amt, win, rolls: rolls.length });
   if (amt >= CASINO.HIGH_FEED) bus.emit('streets', { type: 'highroller', who: ch.name, amount: amt, win }); // whale theater
@@ -121,7 +121,7 @@ export async function pvpDice(ch, fader, amount, client, h) {
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'casino:pvp', counterparty: loser.id });
   await takeHouse(client, Math.floor(rake / 2)); // half the rake to the street; the rest burns
   await bumpVolume(client, pot);
-  await bumpStanding(client, h, ch, 'madame', 3); // back-room action is her favorite kind
+  await bumpStanding(client, h, ch, 'madame', 3, { action: 'fade' }); // back-room action is her favorite kind
   await h.rngLog(client, ch.id, `casino:pvp:${fader.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, fader.id, 'backroom_dice', { from: ch.name, amount: amt, theyWon: !win });
   await h.track(client, ch.account_id, 'casino', { game: 'pvp', amt, win });
@@ -154,7 +154,7 @@ export async function betFight(ch, side, amount, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:fight' });
   await takeHouse(client, Math.ceil(amt * 0.01));
   await bumpVolume(client, amt);
-  await bumpStanding(client, h, ch, 'madame', 2); // she holds the book
+  await bumpStanding(client, h, ch, 'madame', 2, { action: 'fight' }); // she holds the book
   await h.track(client, ch.account_id, 'casino', { game: 'fight', amt, side });
   return { ok: true, game: 'fight', ...boutOf(week), side, stake: amt };
 }
@@ -223,7 +223,7 @@ export async function playNumbers(ch, pick, amount, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:numbers' });
   await takeHouse(client, tax);
   await bumpVolume(client, amt);
-  await bumpStanding(client, h, ch, 'madame', 1); // the runner reports who plays
+  await bumpStanding(client, h, ch, 'madame', 1, { action: 'numbers' }); // the runner reports who plays
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
   return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT };
 }

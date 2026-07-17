@@ -399,7 +399,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'bounty:post', counterparty: targetCharacterId });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(fee + tax), reason: 'bounty:take', counterparty: targetCharacterId });
   await takeHouse(client, tax);
-  await bumpStanding(client, h, ch, 'fixer', 3); // posting work is doing business with the Match
+  await bumpStanding(client, h, ch, 'fixer', 3, { action: 'post' }); // posting work is doing business with the Match
   bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind });
   await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt }); // the mark can react (lay low, etc.)
   if (hitmanId && !live) await h.notify(client, hitmanId, 'contract_offer', { target: t.name, kind, amount: amt }); // the named hitman is tapped
@@ -929,9 +929,14 @@ export async function fire(ch, victim, client, h, rounds) {
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a
     // bonus, a settled vendetta a bigger one
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed, !!vend);
-    await bumpStanding(client, h, ch, 'fixer', 5); // Vinnie hears about confirmed work
+    await bumpStanding(client, h, ch, 'fixer', 5, { action: 'kill' }); // Vinnie hears about confirmed work
     // RIVALRY (step two): the Doc took an oath — blood work costs his goodwill
     await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
+    // GRUDGES (step three): the names remember who you whack — every fixture the victim was a
+    // real friend of (standing ≥ GRUDGE_MIN) docks the KILLER. Read from the victim's loaded
+    // (effective) standings before runEstate wipes them; the loss echoes down the killer's
+    // bloodline like any standing (step-two memory). Pure status — no money moves.
+    const grudges = await bearGrudges(client, h, ch, h.victimOwned.npc);
     // war interlock: a kill on a family you're at war with scores war points (worth more than a
     // jump's 1) — the lethal layer finally decides wars, not just jump-spam. Done BEFORE the
     // estate vacates the victim's gang seat, while h.victimOwned.gangId is still known.
@@ -957,7 +962,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, bounty, jammed, warKill, hitman: hit,
-      vendetta: !!vend, estate: { heirId: estate.heirId } };
+      vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
@@ -1087,7 +1092,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'npchit:hire', counterparty: victim.id });
-  await bumpStanding(client, h, ch, 'fixer', 4); // arranged work is business with the Match
+  await bumpStanding(client, h, ch, 'fixer', 4, { action: 'hire' }); // arranged work is business with the Match
   // RIVALRY (step two): the Doc hears who sent the man with the bag
   await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
   ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
@@ -1115,13 +1120,32 @@ export async function npcHit(ch, victim, client, h, tierId) {
     await h.notify(client, victim.id, 'revived', { from: 'a hired gun' });
     return { ok: true, hit: true, revived: true, success, cost };
   }
+  // GRUDGES (step three): the fixtures know who sent the man with the bag — the PAYER wears
+  // the loss for every friend of the house the contractor drops (read before the estate wipe).
+  const grudges = await bearGrudges(client, h, ch, h.victimOwned.npc);
   // pass the PAYER as killerCh so that if THEY funded a still-exclusive directed pot on this
   // victim, refundPot's refund lands on their in-memory cash (else persistCharacter clobbers the
   // SQL credit → §10.4 drift + the payer loses their escrow). killerCh drives no chop/rep here.
   const estate = await runEstate(client, h, victim, 'A HIRED GUN', { killerCh: ch });
   await h.notify(client, victim.id, 'whacked', { from: 'a hired gun' });
   bus.emit('streets', { type: 'kill', by: 'a hired gun', victim: victim.name });
-  return { ok: true, hit: true, killed: true, success, cost, estate: { heirId: estate.heirId } };
+  return { ok: true, hit: true, killed: true, success, cost, ...(grudges.length ? { grudges } : {}),
+    estate: { heirId: estate.heirId } };
+}
+
+// Every fixture the victim was a REAL friend of (effective standing ≥ GRUDGE_MIN) docks the
+// killer GRUDGE_LOSS — whacking a connected man burns your own bridges. Shared by the player
+// kill (fire) and the arranged one (npcHit — the payer wears it); mod-kills have no killer and
+// bear no grudge. Returns the fixture ids that now hold one.
+async function bearGrudges(client, h, killerCh, victimNpc) {
+  const grudges = [];
+  for (const [npcId, s] of Object.entries(victimNpc || {})) {
+    if (Number(s) >= UNDERWORLD.STEP3.GRUDGE_MIN) {
+      await bumpStanding(client, h, killerCh, npcId, -UNDERWORLD.STEP3.GRUDGE_LOSS);
+      grudges.push(npcId);
+    }
+  }
+  return grudges;
 }
 
 // ═══════════════════ DEATH — THE ESTATE (§7.9, atomic) ═══════════════════

@@ -206,6 +206,19 @@ capping den bumps per day if live data shows madame tiers trivializing); **T3 wh
 before placement, softening the hunter's 3h investment; watch kill-completion rates and pair it
 with the fixer-T3×executioner stack already flagged above.
 
+**Step three** (levers in `UNDERWORLD.STEP3` + `tasks` on the cast; zero money flows): the lead
+became a rotating TASK (`leadTaskOf`, seed-drawn per day, town-wide — the same +5, now behind a
+specific job, so lead velocity is unchanged and gets a reason to touch varied loops); rivalry
+pair #2 `AMBUSH_ARMORER` 2 / `AMBUSH_HARBOR` 2 (an ambush attempt trades Bella up and Big Tuna
+down — a dedicated bandit slowly locks himself out of Tuna's T2/T3 market perks, a real build
+tradeoff); grudges `GRUDGE_MIN` 60 / `GRUDGE_LOSS` 5 (killing a T2+ friend of a fixture docks
+the killer — or the PAYER on an arranged hit — with that fixture). Economy note: grudges make
+high standing a mild PASSIVE DEFENSE (a connected mark is socially expensive to whack — the
+killer pays status, never money), which is deliberate Risk-to-Earn texture: the D1 whale-hunt
+economics are untouched (no cash surface moved), but watch whether well-connected whales use
+fixture standing as a soft shield; the counterweight is that standing is earned by ACTIVITY,
+and active players are already the exposed ones.
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,

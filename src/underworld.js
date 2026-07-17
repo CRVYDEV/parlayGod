@@ -13,7 +13,7 @@
 // anchor), heat deterrents, loot-exposure windows, extraction caps, income curves. All
 // numbers are founder sign-off levers.
 import { GameError, npcTier, bumpStanding, bestNpc } from './game.js';
-import { UNDERWORLD, npcOf, GUNS, dayOf } from './rules.js';
+import { UNDERWORLD, npcOf, GUNS, dayOf, leadTaskOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
@@ -23,8 +23,10 @@ const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 // names; the $OMR peek stays the only name-piercing intel).
 export async function underworldBoard(ch, client, h) {
   const best = bestNpc(h);
+  // step three: the lead is a rotating TASK — the same draw for the whole town, claimable
+  // only by doing THAT piece of business with your best fixture today
   const lead = best ? {
-    npc: best, bonus: UNDERWORLD.STEP2.LEAD_BONUS,
+    npc: best, task: leadTaskOf(dayOf(), best), bonus: UNDERWORLD.STEP2.LEAD_BONUS,
     done: !!(await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, dayOf()])).rowCount,
   } : null;
   const whispers = npcTier(h, 'madame') >= 3
@@ -76,7 +78,7 @@ export async function discharge(ch, client, h) {
   // T3: walk out now. T2: half the remaining stay is forgiven.
   ch.hosp_until = tier >= 3 ? new Date(now) : new Date(now + Math.floor(remainingMs / 2));
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'underworld:discharge' });
-  await bumpStanding(client, h, ch, 'doc', 2);
+  await bumpStanding(client, h, ch, 'doc', 2, { action: 'discharge' });
   await h.track(client, ch.account_id, 'underworld_discharge', { cost, full: tier >= 3 });
   return { ok: true, cost, full: tier >= 3,
     hospSeconds: Math.max(0, Math.ceil((new Date(ch.hosp_until).getTime() - now) / 1000)) };
@@ -95,7 +97,7 @@ export async function sellGunBack(ch, gunId, client, h) {
   if (ch.gun === gunId) ch.gun = h.owned.guns[0] || null; // she takes it off your hip
   ch.cash = Number(ch.cash) + price;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: price, reason: 'underworld:gunsale' });
-  await bumpStanding(client, h, ch, 'armorer', 1);
+  await bumpStanding(client, h, ch, 'armorer', 1, { action: 'sale' });
   await h.track(client, ch.account_id, 'underworld_gunsale', { gun: gunId, price });
   return { ok: true, gun: gunId, price, equipped: ch.gun };
 }
