@@ -111,3 +111,33 @@ Grudge-griefing (brief's worry) traced **inverted** — the killer is paid (+5 f
 climb) while the victim loses a whole street to inflict a $25k-or-wait-or-ignore choice; not an
 exploit. Respec-swapping around opposed contests is architecturally impossible (defenses read live
 base stats, not skills; shared 24h cooldown). Both are non-issues.
+
+## RESOLUTION — the five founder-call items, BUILT (founder-approved, numbers are new levers)
+
+The founder signed off on the recommended package. All five are fixed, with regressions; full
+suite 16/16 + sim drift-0.
+
+- **#5 reserve-lock grief** → a seller can now cancel a car when the only standing bid is BELOW an
+  unmet hidden reserve (the bidder is refunded). A bid that can win still holds the hammer. No new
+  number. Regression: an under-reserve min-bid no longer freezes the iron.
+- **#2 order warehouse** → `ORDER_MAX_QTY` 200 caps a buy-order's units, and the MAX_LISTINGS slot
+  count now includes cancelled/expired orders still holding undelivered warehouse goods
+  (`filled_qty > 0`) — so the warehouse is neither unbounded per-order nor free of the listing cap.
+  Regressions in the market suite.
+- **#3 standing velocity** → `STANDING_DAILY_CAP` 25: a per-fixture daily cap on the RAW actor-side
+  bumps (the spammable part), tracked in a new `npc_gain` table. The once-a-day lead/streak and
+  errand bonuses ride ON TOP, exempt — so an engaged player still collects engagement rewards while
+  a scripter caps out. Tier 3 now takes days of active play, not minutes. This also **dissolves #4
+  (whispers)**: madame 90 is no longer a $130 session grind, so the auto-safehouse poll loses its
+  cheap enabler — shipped without a separate whispers change.
+- **#1 buy-order loot vault** → **(a)** a PLAYER fire-kill now loots `CASH_LOOT_RATE` (25%) of the
+  victim's live un-filled order escrow to the killer (`whack:loot` credit + a NULL `market:loot`
+  escrow outflow; the un-looted remainder burns `market:death` — net 0, a new §10.4 term in the
+  market-escrow check). NPC/mod kills don't loot. **(b)** posting a buy-order is now
+  safehouse-blocked (an extraction-prep act, the D2 discipline). Parked liquid is no longer a
+  loot-proof vault — it's lootable like pocket cash, restoring the signed Make-Risk-Pay intent.
+  Regression in the social suite proves the 25% loot, the remainder burn, and the escrow check
+  staying exact; the sim confirms §10.4 over an earned economy.
+
+All numbers (`ORDER_MAX_QTY` 200, `STANDING_DAILY_CAP` 25, and the reuse of the signed
+`CASH_LOOT_RATE` for order loot) are founder sign-off levers per ground rule #1.

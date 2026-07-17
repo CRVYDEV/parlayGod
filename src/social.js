@@ -959,9 +959,9 @@ export async function fire(ch, victim, client, h, rounds) {
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
-    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
+    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, bounty, jammed, warKill, hitman: hit,
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
       vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
@@ -1200,7 +1200,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
@@ -1245,7 +1245,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // Black Market: the dead man's LISTINGS void with standing bids refunded (a killer who held
   // the bid takes it in-memory via killerCh — the refundPot discipline, no persist clobber);
   // his own standing BIDS burn (the dead-funder precedent) and those auctions reopen.
-  const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh);
+  // audit #1: a PLAYER fire-kill (opts.loot) loots CASH_LOOT_RATE of the victim's live order
+  // escrow to the killer — parked liquid is no longer a loot-proof vault. NPC/mod kills pass 0.
+  const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0);
   if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
   await burnBidsAtDeath(client, victim.id);
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
@@ -1286,7 +1288,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // §12 + §10.4: the death event carries the destroyed fleet size for car conservation
   await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
     [uid(), victim.account_id, 'death', JSON.stringify({ by: killerName, cars: h.victimOwned.cars.length, lvl })]);
-  return { heirId, report };
+  return { heirId, report, orderLoot: mkt.looted };
 }
 
 // ═══════════════════ BUSTING (§7.8) ═══════════════════

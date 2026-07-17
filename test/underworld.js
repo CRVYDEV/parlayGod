@@ -284,7 +284,7 @@ assert.deepEqual([...gRes.grudges].sort(), ['doc', 'madame'], 'both real friends
 assert.equal((await standingOf(gus.token, 'doc')).standing, 80 - UNDERWORLD.STEP2.RIVAL_LOSS * attempts - UNDERWORLD.STEP3.GRUDGE_LOSS,
   `the Doc: −2 rivalry per attempt (${attempts}) and −5 for killing his friend`);
 assert.equal((await standingOf(gus.token, 'madame')).standing, 0, 'her grudge lands on a stranger — standing floors at 0');
-assert.equal((await standingOf(gus.token, 'fixer')).standing, 4 * attempts, 'Vinnie holds no grudge even for a made friend — arranged work is arranged work (audit L3)');
+assert.equal((await standingOf(gus.token, 'fixer')).standing, Math.min(4 * attempts, UNDERWORLD.STANDING_DAILY_CAP), 'Vinnie holds no grudge even for a made friend — arranged work is arranged work (audit L3), raw gain daily-capped (audit #3)');
 assert.equal((await call('GET', '/v1/underworld', { token: gus.token })).body.npcs.find((n) => n.id === 'fixer').grudge, 0, 'no fixer grudge row was written');
 
 // ── STEP FOUR: grudges have TEETH — the tier caps at 2 until penance squares it ──

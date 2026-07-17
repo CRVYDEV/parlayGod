@@ -626,6 +626,16 @@ CREATE TABLE IF NOT EXISTS npc_leads (
   PRIMARY KEY (character_id, day)
 );
 
+-- Underworld audit #3: per-fixture per-day accumulated RAW-bump standing gain, for the daily
+-- cap (lead/errand bonuses are exempt and not counted here). Old rows are inert; wiped at death.
+CREATE TABLE IF NOT EXISTS npc_gain (
+  character_id TEXT NOT NULL,
+  npc_id TEXT NOT NULL,
+  day INT NOT NULL,
+  gained INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, npc_id, day)
+);
+
 -- Underworld step four: GRUDGES with teeth — a fixture holding one caps your tier with them
 -- (no tier-3 service) until squared by penance. Count > 0 = grudged. Dies with the street
 -- (the fixtures forgive the dead; the standing loss still echoes via bloodline memory).

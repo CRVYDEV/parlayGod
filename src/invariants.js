@@ -136,7 +136,11 @@ export async function runLedgerInvariants(pool) {
   const mSales = await sum(pool, "currency='cash' AND reason IN ('market:sale','market:fill')");
   const mTakes = -(await sum(pool, "currency='cash' AND reason='market:take'"));
   const mDead = -(await sum(pool, "currency='cash' AND reason='market:death'"));
-  push('market escrow', bidEscrow + orderEscrow, mPosted - mRefunded - mSales - mTakes - mDead);
+  // audit #1: a fire-kill LOOTS CASH_LOOT_RATE of the victim's live order escrow — the killer's
+  // matching +row is a `whack:loot` credit (in check (a)); this NULL-char `market:loot` row is
+  // the escrow-side outflow (the rest of the looted order burns as market:death). Net 0.
+  const mLoot = -(await sum(pool, "currency='cash' AND reason='market:loot'"));
+  push('market escrow', bidEscrow + orderEscrow, mPosted - mRefunded - mSales - mTakes - mDead - mLoot);
 
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];

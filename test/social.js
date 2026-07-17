@@ -9,7 +9,8 @@ process.env.SHOOT_CD_MS = '1000';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
-import { familyTaskOf, weekOf } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET } from '../src/rules.js';
+import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -887,6 +888,29 @@ const kaneHeir = await meOf(kane.token);
 await pool.query(`UPDATE characters SET cash=20000 WHERE id='${kaneHeir.id}'`);
 r = await call('POST', `/v1/streets/${(await meOf(vitoB.token)).id}/bounty`, { token: kane.token, body: { amount: 600, kind: 'kill', hitman: mook.id } });
 assert.equal(r.body.error, 'directed_min', 'no waiver on a lapsed vendetta — the floor is back');
+
+// ── AUDIT #1: a fire-kill LOOTS the victim's live buy-order escrow (no more loot-proof vault) ──
+const vvince = await mk('Vaulting Vince'); await seedCh(vvince.id, "cash=500000, respect=400, loc='docks'");
+r = await call('POST', '/v1/market/order', { token: vvince.token, body: { goodId: 'gin', qty: 100, price: 500 } }); // $50k parked
+assert.equal(r.code, 200, 'vince parks $50k in a buy-order'); assert.equal(r.body.escrow, 50000, 'the escrow is the vault');
+// #1(b): can't set up a fresh cash-park while hiding
+await seedCh(vvince.id, `safe_until = now() + interval '1 hour'`);
+assert.equal((await call('POST', '/v1/market/order', { token: vvince.token, body: { goodId: 'gin', qty: 10, price: 100 } })).body.error, 'safe', 'no parking cash from a safehouse');
+await seedCh(vvince.id, 'safe_until=NULL');
+const escLootPre = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'market escrow');
+assert(escLootPre.ok, 'market escrow starts reconciled with the parked order');
+const donPreLoot = (await meOf(don.token)).cash;
+const deathPre = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s);
+const kvo = await whack(vvince.id);
+assert.equal(kvo.kill, true, 'don whacks the vault-keeper');
+const expLoot = Math.floor(50000 * M3.CASH_LOOT_RATE);
+assert.equal(kvo.orderLoot, expLoot, `the killer loots CASH_LOOT_RATE of the parked escrow ($${expLoot})`);
+assert.equal((await meOf(don.token)).cash, donPreLoot + kvo.chop + kvo.loot + expLoot, "the order loot landed in don's pocket alongside chop + cash loot");
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s), deathPre - (50000 - expLoot), 'the un-looted remainder burned (dead-funder precedent)');
+const escLootPost = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'market escrow');
+assert(escLootPost.ok, `market escrow still exact after the loot+burn (${JSON.stringify(escLootPost)})`);
+const vocabLoot = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+assert(vocabLoot.ok, `market:loot rides the vocabulary (${JSON.stringify(vocabLoot.unknown || [])})`);
 
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
