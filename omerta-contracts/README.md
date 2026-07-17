@@ -11,11 +11,18 @@ Four contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 
 
 ## Test & deploy
 ```
+./run-forge-test.sh  # one-shot: installs Foundry + deps, builds, runs the suite (recommended)
+```
+or manually:
+```
 forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts   # first run only
-forge test           # 15 tests incl. fuzz (tranche invariant, tampering, replay, caps)
+forge test           # 29 tests incl. a 512-run fuzz (tranche invariant, tampering, replay, caps)
 export SAFE=0x... SIGNER=0x... RPC=https://robinhood-testnet.g.alchemy.com/v2/KEY
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $DEPLOYER_PK
 ```
+> `forge test` has never executed inside the sandboxed build environment (Foundry's install
+> hosts are egress-blocked there) — run it on any machine with open internet before the
+> third-party audit. The suite compiles clean (solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings).
 
 ## Server-side signing parity (for M6-B, viem)
 The chain service must produce signatures `VoucherClaim.claim` accepts:
