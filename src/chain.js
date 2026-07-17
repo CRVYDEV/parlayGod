@@ -29,6 +29,12 @@ export const VOUCHER_TYPES = {
 };
 const KIND_OMR = 0, KIND_GEAR = 1;
 const WITHDRAW_TTL_SEC = 24 * 3600;                 // short deadline, well under MAX_VOUCHER_TTL (30d)
+// A signed-but-unclaimed voucher whose deadline passed THIS long ago can never be claimed on-chain
+// (the contract requires block.timestamp ≤ deadline) and any valid claim is already processed by the
+// watcher — so it's safe to reverse. Must exceed the watcher's confirmation lag (CHAIN_CONFIRMATIONS
+// × block time + poll interval) so a claim landing right at the deadline can't be both claimed AND
+// reclaimed. 1h default is generously past any realistic lag.
+const RECLAIM_GRACE_SEC = Number(process.env.VOUCHER_RECLAIM_GRACE_SEC || 3600);
 
 // Chain config from env (never hardcode chainId — see the F-3 audit note).
 export function chainConfig() {
@@ -202,11 +208,52 @@ export async function reserveStatus(pool) {
     available: Math.max(0, funded - committed), reserveRatio: committed > 0 ? funded / committed : null };
 }
 
-// The Claimed(nonce,…) watcher marks a voucher claimed and frees its reserve. Needs a
-// live RPC (CHAIN_RPC_URL) — started by the worker; markClaimed is the unit-testable core.
+// The Claimed(nonce,…) watcher marks a voucher claimed. NB: a claim does NOT free signing room
+// (committed-ever ≤ funded is the honest model — the tokens physically left the tranche); it only
+// records that the withdrawal completed. `status <> 'expired'` guards the impossible race where a
+// voucher was reclaimed AND then a stale Claimed event arrives (grace window makes it impossible in
+// practice; the guard keeps the reclaimed refund as the record of truth). Unit-testable core.
 export async function markClaimed(pool, nonce) {
-  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain RETURNING id", [nonce]);
+  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain AND status<>'expired' RETURNING id", [nonce]);
   return { claimed: r.rowCount };
+}
+
+// Reverse expired-unclaimed vouchers (audit MED-1/MED-2). A signed voucher past `deadline + grace`
+// can never land on-chain, yet: an OMR voucher's $OMR was already BURNED (withdraw:omr) and its
+// amount permanently consumed `committedOutstanding` (funded_omr never decrements) — stranding both
+// the player's tokens AND honest withdrawers' reserve room; a gear voucher optimistically flipped
+// `minted_onchain` (removing the gear from play, loot-immune + unusable) with no path back. So:
+//   • OMR  → refund the $OMR (a +withdraw:omr row exactly reverses the burn: net 0, §10.4 exact),
+//            and status='expired' drops it out of committedOutstanding → the reserve room frees.
+//   • gear → restore `minted_onchain=false` (back into play), status='expired'.
+// Per-voucher txn, re-checked under lock (the watcher may have claimed it since the read).
+export async function reclaimExpiredVouchers(pool) {
+  const client = await pool.connect();
+  let omrReclaimed = 0, gearRestored = 0;
+  try {
+    const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
+    const expired = (await client.query(
+      "SELECT id, account_id, kind, amount, gear_id FROM vouchers WHERE status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
+    for (const v of expired) {
+      await client.query('BEGIN');
+      try {
+        const cur = (await client.query("SELECT status, claimed_onchain FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
+        if (!cur || cur.status !== 'signed' || cur.claimed_onchain) { await client.query('ROLLBACK'); continue; }
+        if (v.kind === 'omr') {
+          await client.query('SELECT 1 FROM account_persistent WHERE account_id=$1 FOR UPDATE', [v.account_id]);
+          await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [v.account_id, Number(v.amount)]);
+          await ledger(client, { accountId: v.account_id, currency: 'omr', amount: Number(v.amount), reason: 'withdraw:omr' }); // reverses the burn (net 0)
+          omrReclaimed += Number(v.amount);
+        } else {
+          await client.query('UPDATE account_gear SET minted_onchain=false WHERE account_id=$1 AND gear_id=$2', [v.account_id, v.gear_id]);
+          gearRestored++;
+        }
+        await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
+        await client.query('COMMIT');
+      } catch (e) { await client.query('ROLLBACK'); throw e; }
+    }
+    return { omrReclaimed, gearRestored };
+  } finally { client.release(); }
 }
 
 // ── SIWE wallet link (§4, EVM) — proves the player controls the address ──
@@ -231,7 +278,15 @@ export async function walletVerify(pool, accountId, address, signature) {
   const addr = getAddress(address);
   const taken = (await pool.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1 AND account_id<>$2', [addr, accountId])).rows[0];
   if (taken) throw new GameError('wallet_taken', 'That wallet is already linked to another account.');
-  await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [accountId, addr]);
+  // the SELECT above is a TOCTOU — two concurrent verifies of the same wallet both pass it, then
+  // race the UPDATE; the ux_wallet_address unique index rejects the loser. Catch that as a clean
+  // wallet_taken (audit LOW-1) instead of a raw 500. Data integrity was never at risk.
+  try {
+    await pool.query('UPDATE account_persistent SET wallet_address=$2 WHERE account_id=$1', [accountId, addr]);
+  } catch (e) {
+    if (e?.code === '23505') throw new GameError('wallet_taken', 'That wallet is already linked to another account.');
+    throw e;
+  }
   await pool.query('DELETE FROM wallet_challenges WHERE account_id=$1', [accountId]);
   // pay-before-link ordering: grant any fees this wallet paid before it was attributable
   const { credited } = await reconcileFees(pool, accountId, addr);

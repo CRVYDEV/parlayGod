@@ -164,5 +164,29 @@ const respAfter = Number((await pool.query(`SELECT respawn_tokens FROM account_p
 assert.equal(respAfter - respBefore, 1, 'one fee → exactly one token, even across concurrent reconciles (no double-credit)');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM fee_payments WHERE nonce=7777 AND credited`)).rows[0].n), 1, 'payment claimed exactly once');
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, §11 mint-gate + fee reconcile + concurrent-credit safety');
+// ── audit MED-1/MED-2: expired-unclaimed vouchers are RECLAIMED — burned $OMR refunded, the
+// permanently-stuck reserve capacity freed, optimistically-removed gear restored to play ──
+const { reclaimExpiredVouchers } = await import('../src/chain.js');
+const driftPreReclaim = await driftOf('$OMR conservation'); // baseline here (an earlier line raw-credits $OMR)
+await call('POST', '/v1/mod/reserve/fund', { headers: modH, body: { amount: 1000 } }); // fresh headroom
+const omrPreReclaim = (await meOf(token)).omr;
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 7 } });
+assert.equal(r.body.status, 'signed', 'the withdrawal signs against the fresh reserve');
+const expNonce = r.body.nonce;
+assert.equal((await meOf(token)).omr, omrPreReclaim - 7, 'the $OMR is burned at request');
+assert.equal((await reclaimExpiredVouchers(pool)).omrReclaimed, 0, 'a still-live voucher is NOT reclaimed');
+await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE nonce=${expNonce}`); // past deadline+grace
+const availPre = (await call('GET', '/v1/mod/reserve', { headers: modH })).body.available;
+assert.equal((await reclaimExpiredVouchers(pool)).omrReclaimed, 7, 'the expired voucher is reclaimed');
+assert.equal((await meOf(token)).omr, omrPreReclaim, 'the burned $OMR is refunded whole');
+assert.equal((await pool.query(`SELECT status FROM vouchers WHERE nonce=${expNonce}`)).rows[0].status, 'expired', 'the voucher is marked expired');
+assert.equal((await call('GET', '/v1/mod/reserve', { headers: modH })).body.available, availPre + 7, 'the stuck reserve capacity is freed');
+assert.equal(await driftOf('$OMR conservation'), driftPreReclaim, 'the refund reverses the burn — §10.4 $OMR conservation unmoved');
+await call('POST', '/v1/mod/reserve/claimed', { body: { nonce: expNonce }, headers: modH }); // a late Claimed event
+assert.equal((await pool.query(`SELECT status FROM vouchers WHERE nonce=${expNonce}`)).rows[0].status, 'expired', 'a stale Claimed event cannot un-expire a reclaimed voucher');
+await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE kind='gear' AND status='signed'`);
+assert.equal((await reclaimExpiredVouchers(pool)).gearRestored, 1, 'the expired gear voucher restores');
+assert.equal((await pool.query(`SELECT minted_onchain FROM account_gear WHERE gear_id='knuckles'`)).rows[0].minted_onchain, false, 'the gear is back in play — not lost to a failed claim');
+
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety');
 await app.close();

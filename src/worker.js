@@ -13,6 +13,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepStaleHeists } from './heists.js';
+import { reclaimExpiredVouchers } from './chain.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -137,29 +138,35 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   const pool = await makeDb();
   console.log('OMERTÀ worker up — hourly: buyback + season check; daily: §10.4 invariant sweep.');
   let lastInvariantDay = -1;
+  // Each job is individually transactional, so a failure in one must NOT starve the others —
+  // above all the nightly §10.4 drift monitor (a non-technical founder relies on that alarm).
+  // Isolate every job in its own try/catch so a poison row can't take the whole tick down.
+  const safe = async (label, fn) => { try { return await fn(); } catch (e) { console.error(`worker: ${label} failed`, e); return null; } };
   const tick = async () => {
-    try {
-      const r = await runBuyback(pool);
-      if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
-      const s = await runSeasonRollover(pool);
-      if (s.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
-      const sw = await sweepExpiredBounties(pool);
-      if (sw.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
-      const fs = await sweepUncreditedFees(pool);
-      if (fs.credited > 0) console.log(`💳 fees: reconciled ${fs.credited} stranded payment(s) to linked wallets`);
-      // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
-      await pool.query('DELETE FROM vendettas WHERE expires_at <= now()');
-      const hs = await sweepStaleHeists(pool);
-      if (hs.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
-      if (dayOf() !== lastInvariantDay) {
-        lastInvariantDay = dayOf();
-        // prune idempotency keys older than a day (incl. any reservation orphaned by a
-        // crash between reserve and response, which would otherwise 409 that key forever)
-        await pool.query("DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'");
-        const inv = await runLedgerInvariants(pool);
-        console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
-      }
-    } catch (e) { console.error('worker tick error', e); }
+    const r = await safe('buyback', () => runBuyback(pool));
+    if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
+    const s = await safe('season rollover', () => runSeasonRollover(pool));
+    if (s?.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
+    const sw = await safe('bounty sweep', () => sweepExpiredBounties(pool));
+    if (sw?.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
+    const fs = await safe('fee reconcile', () => sweepUncreditedFees(pool));
+    if (fs?.credited > 0) console.log(`💳 fees: reconciled ${fs.credited} stranded payment(s) to linked wallets`);
+    // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
+    await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
+    const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
+    if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
+    // §11: reverse expired-unclaimed withdrawal vouchers — refund the burned $OMR (freeing the
+    // otherwise-permanently-committed reserve capacity) and restore optimistically-removed gear.
+    const vr = await safe('voucher reclaim', () => reclaimExpiredVouchers(pool));
+    if (vr && (vr.omrReclaimed > 0 || vr.gearRestored > 0)) console.log(`♻️  vouchers: reclaimed ${vr.omrReclaimed.toFixed(3)} $OMR + restored ${vr.gearRestored} gear from expired claims`);
+    if (dayOf() !== lastInvariantDay) {
+      lastInvariantDay = dayOf();
+      // prune idempotency keys older than a day (incl. any reservation orphaned by a
+      // crash between reserve and response, which would otherwise 409 that key forever)
+      await safe('idempotency prune', () => pool.query("DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'"));
+      const inv = await safe('§10.4 invariants', () => runLedgerInvariants(pool));
+      if (inv) console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
+    }
   };
   await tick();
   setInterval(tick, 3600 * 1000);

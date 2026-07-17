@@ -15,7 +15,7 @@ export class GameError extends Error { constructor(code, msg) { super(msg); this
 // Postgres resolves a rare lock-order cycle (e.g. a crew execute racing a member's own PvP
 // action) by aborting one transaction with SQLSTATE 40P01. Nothing committed — surface it as a
 // clean retryable error instead of a raw 500. pg-mem never deadlocks, so tests can't hit this.
-const deadlockToRetry = (e) =>
+export const deadlockToRetry = (e) =>
   e?.code === '40P01' ? new GameError('contention', 'The streets got crowded for a second — try that again.') : e;
 
 // In-process pub/sub feeding the websocket gateway (§5.6): 'me:{characterId}'
@@ -194,9 +194,16 @@ export async function withCharacter(pool, accountId, fn) {
     await persistKitchen(client, ch, owned);
     await persistAccount(client, accountId, acct);
     await client.query('COMMIT');
-    // §7.13 — qualification is re-checked after any action by a referred, unpaid
-    // account; it runs in its OWN transaction so its two-party locks stay sorted.
-    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
+    // §7.13 — qualification is re-checked after any action by a referred, unpaid account; it runs
+    // in its OWN transaction so its two-party locks stay sorted. It is a POST-COMMIT side effect,
+    // so it must NEVER fail the request (audit M1): if it threw here — a 40P01 on street_tax under
+    // load, any DB error — the outer catch would surface a non-2xx AFTER the action already
+    // committed, and the idempotency hook would release the key → a retry re-executes the action
+    // (double-spend). It's idempotent (ref_paid-guarded, re-checks every gate), so swallow failures.
+    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) {
+      try { await maybeQualifyReferral(pool, accountId); }
+      catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
+    }
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }

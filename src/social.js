@@ -61,6 +61,13 @@ export async function joinGang(ch, gangId, client, h) {
 // Boss succession on departure: the underboss inherits, then seniority (v24 rule).
 // An emptied family dissolves — turf released, wars cleared.
 export async function removeMember(client, gangId, characterId) {
+  // LOCK THE GANG ROW FIRST (audit HIGH): the "last member" check below must be serialized, or two
+  // simultaneous departures from a 2-member family each see the OTHER still present (READ COMMITTED),
+  // neither runs dissolution, and the family is orphaned memberless forever — treasury/reserve/armory
+  // stranded (never `gang:dissolved`-ledgered → permanent §10.4 treasury drift), turf + territory held
+  // by a ghost. joinGang already locks the gang row for exactly this reason (the count invariant). The
+  // txn already holds the actor's character/account locks, so gangs-after-characters order is kept.
+  await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [gangId]);
   await client.query('DELETE FROM gang_members WHERE gang_id=$1 AND character_id=$2', [gangId, characterId]);
   const left = (await client.query(
     "SELECT character_id, role FROM gang_members WHERE gang_id=$1 ORDER BY CASE role WHEN 'underboss' THEN 0 WHEN 'capo' THEN 1 ELSE 2 END, character_id", [gangId])).rows;
@@ -685,7 +692,9 @@ export async function sweepExpiredBounties(pool) {
           pots++;
           await client.query('COMMIT');
           break;
-        } catch (e) { await client.query('ROLLBACK'); throw e; }
+        // isolate per pot (audit L2): one genuinely-erroring expired pot must not abort the whole
+        // batch and leave every OTHER expired pot unrefunded (a poison pot would block them forever)
+        } catch (e) { await client.query('ROLLBACK'); console.error('bounty sweep: pot failed', b.target_character, b.kind, e?.code || e); break; }
       }
     }
     return { pots, refunded };
@@ -1106,7 +1115,12 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   acct.prestige = Number(acct.prestige) + legacy;
   acct.deaths = Number(acct.deaths) + 1;
 
-  const lostCash = Math.floor(Number(victim.cash) + Number(victim.bank));
+  // burn the EXACT cash+bank (both NUMERIC — bank interest accrues fractionally), not a floored
+  // integer: the row is zeroed below, so flooring the ledger sink destroyed frac(cash+bank) ∈
+  // [0,1) unledgered on every death → a slow, permanent §10.4 check-(a) drift (the sub-cent bank
+  // interest bug, reintroduced at the estate boundary). Report keeps the whole-dollar figure.
+  const exactCash = Number(victim.cash) + Number(victim.bank);
+  const lostCash = Math.floor(exactCash);
   const report = {
     by: killerName, legacy,
     kept: { omr: Number(acct.omr), staked: Number(acct.staked), rewards: Number(acct.rewards),
@@ -1116,7 +1130,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   };
 
   // §10.4: the estate burns street value — every currency leaves through a ledgered sink
-  if (lostCash > 0) await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -lostCash, reason: 'death:estate' });
+  if (exactCash > 0) await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -exactCash, reason: 'death:estate' });
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 

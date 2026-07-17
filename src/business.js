@@ -203,7 +203,7 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
   if (!(out > 0)) throw new GameError('pool', "The pool couldn't fill that.");
   await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + netIn, o - out]);
   ch.cash = Number(ch.cash) - amt;
-  ch.heat = Number(ch.heat || 0) + CONSTANTS.BUSINESS_LAUNDER_HEAT; // washing draws the law — but less at your own front
+  ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.BUSINESS_LAUNDER_HEAT); // washing draws the law — but less at your own front (clamp 100, audit LOW-2)
   h.acct.omr = Number(h.acct.omr) + out;
   // settle the bucket: store the post-refill usage + stamp the refill clock
   await client.query('UPDATE businesses SET launder_used=$2, launder_at=now() WHERE id=$1',
@@ -243,7 +243,7 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
   if (r.shakedown_at && Date.now() - new Date(r.shakedown_at).getTime() < CONSTANTS.SHAKEDOWN_CD_MS)
     throw new GameError('cooldown', 'That front just had a visit — let the dust settle.');
   ch.energy = Number(ch.energy) - CONSTANTS.SHAKEDOWN_ENERGY;
-  ch.heat = Number(ch.heat || 0) + CONSTANTS.SHAKEDOWN_HEAT; // extortion is exposure, win or lose
+  ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.SHAKEDOWN_HEAT); // extortion is exposure, win or lose (clamp 100, audit LOW-2)
   await client.query('UPDATE businesses SET shakedown_at=now() WHERE id=$1', [businessId]);
 
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
