@@ -140,7 +140,10 @@ export async function loadOwned(client, ch) {
 // Lazy grudge healing (step five, §7.1 pattern): one grudge is forgiven per GRUDGE_DECAY_DAYS
 // since the last write (a fresh offense — or a penance — restarts the clock).
 function decayedGrudges(count, since) {
-  const days = (Date.now() - new Date(since).getTime()) / 86400000;
+  // clamp days at 0: `since` is stamped with DB now() but read against the JS clock — if the app
+  // clock lags the DB even a second, a fresh grudge would read `floor(negative)=-1` = count+1, a
+  // PHANTOM grudge that caps the tier and inflates a penance charge (audit M1).
+  const days = Math.max(0, (Date.now() - new Date(since).getTime()) / 86400000);
   return Math.max(0, count - Math.floor(days / UNDERWORLD.STEP5.GRUDGE_DECAY_DAYS));
 }
 
@@ -226,6 +229,11 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
         [ch.id, npcId, next]);
     }
     h.owned.npc[npcId] = next;
+  } else if (business && pts > 0) {
+    // a positive business bump that hit the 100 cap still counts as CONTACT — re-stamp the decay
+    // clock so a daily-active maxed player stays maxed (audit L1: else the clock ran from the day
+    // they capped, and the effective value dipped below 100 after the grace despite daily play).
+    await client.query('UPDATE npc_standing SET touched_at=now() WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId]);
   }
   if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus, streak });
 }

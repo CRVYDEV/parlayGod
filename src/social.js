@@ -1143,6 +1143,9 @@ export async function npcHit(ch, victim, client, h, tierId) {
 async function bearGrudges(client, h, killerCh, victimNpc) {
   const grudges = [];
   for (const [npcId, s] of Object.entries(victimNpc || {})) {
+    // Vinnie the Match brokers wet work — arranged or answered, a kill is business, never a
+    // grudge (docs + tests state this; the code now enforces it — audit L3).
+    if (npcId === 'fixer') continue;
     if (Number(s) >= UNDERWORLD.STEP3.GRUDGE_MIN) {
       await bumpStanding(client, h, killerCh, npcId, -UNDERWORLD.STEP3.GRUDGE_LOSS);
       // absolute-from-EFFECTIVE (step five: healed grudges materialize here) + a fresh offense

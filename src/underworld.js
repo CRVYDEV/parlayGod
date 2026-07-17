@@ -78,6 +78,7 @@ export async function giftNpc(ch, npcId, client, h) {
 // EARLY DISCHARGE — Doc T2 halves a hospital stay, T3 releases in full. Priced per remaining
 // minute (a cash sink); the Doc remembers the business (+2).
 export async function discharge(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'The Doc makes no house calls to lockup.');
   const tier = npcTier(h, 'doc');
   if (tier < 2) throw new GameError('standing', 'Doc Moretti signs early papers for friends, not customers.');
   const now = Date.now();
@@ -156,7 +157,9 @@ export async function claimFavor(ch, npcId, client, h) {
     ch.health = 100;
     favor = { health: 100 };
   } else if (npcId === 'armorer') {            // her boys fix your worst iron overnight
-    const worst = [...h.owned.cars].sort((a, b) => Number(b.dmg) - Number(a.dmg))[0];
+    // skip market-LISTED iron — repairing an auctioned car mid-bid changes what bidders bid on
+    // (melt/fence/repair all refuse listed cars; the favor honours the same escrow discipline)
+    const worst = h.owned.cars.filter((c) => !c.listed).sort((a, b) => Number(b.dmg) - Number(a.dmg))[0];
     if (!worst || !(Number(worst.dmg) > 0)) throw new GameError('nothing', 'Nothing in the garage needs her boys.');
     await client.query('UPDATE cars SET dmg=0 WHERE id=$1', [worst.id]);
     worst.dmg = 0;

@@ -75,7 +75,7 @@ export async function listItem(ch, opts, client, h) {
     const reserve = opts.reserve != null ? Math.floor(Number(opts.reserve)) : null;
     if (reserve != null && (reserve < minBid || (buyNow != null && reserve > buyNow)))
       throw new GameError('bad_reserve', 'A reserve sits between the minimum bid and buy-now.');
-    const fee = Math.max(1, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT))); // BROKER (skills) halves fees
+    const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT))); // BROKER (skills) halves fees
     if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
     ch.cash = Number(ch.cash) - fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -96,7 +96,7 @@ export async function listItem(ch, opts, client, h) {
   const price = Math.floor(Number(opts.price) || 0);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   if (qty * price < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = Math.max(1, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
+  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
   if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -142,10 +142,12 @@ export async function bidListing(ch, listingId, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'market:bid' });
   await client.query('UPDATE market_listings SET bid=$2, bidder=$3 WHERE id=$1', [listingId, amt, ch.id]);
-  // step two — ANTI-SNIPE soft close: a bid inside the last window resets the clock to a full
-  // window, so the last word goes to whoever wants it most, not whoever times the buzzer.
+  // step two — ANTI-SNIPE soft close: a GENUINE outbid inside the last window resets the clock
+  // to a full window, so the last word goes to whoever wants it most, not whoever times the
+  // buzzer. A self-raise by the current high bidder does NOT extend (audit M2: it's pointless
+  // griefing — there's no snipe to guard against when you already hold the lead).
   let extended = false;
-  if (new Date(l.expires_at).getTime() - Date.now() < MARKET.SNIPE_WINDOW_MS) {
+  if ((l.bidder || null) !== ch.id && new Date(l.expires_at).getTime() - Date.now() < MARKET.SNIPE_WINDOW_MS) {
     await client.query('UPDATE market_listings SET expires_at=$2 WHERE id=$1',
       [listingId, new Date(Date.now() + MARKET.SNIPE_WINDOW_MS)]);
     extended = true;
@@ -170,7 +172,7 @@ export async function postOrder(ch, opts, client, h) {
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   const escrow = qty * price;
   if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = Math.max(1, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
+  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
   if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
   const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   ch.cash = Number(ch.cash) - fee;
@@ -273,6 +275,11 @@ export async function buyListing(ch, listingId, qty, client, h) {
     return { ok: true, bought: 'car', carId: l.car_id, paid: price };
   }
 
+  // ONLY sale listings (kind='good') can be bought here. A buy-ORDER (kind='order') carries a
+  // qty of units WANTED backed by cash escrow, not goods — falling through to the goods branch
+  // would pay the order's poster AND mint the buyer un-escrowed units (audit C1). Orders are
+  // filled at the dock via fillOrder, never bought.
+  if (l.kind !== 'good') throw new GameError('not_for_sale', "That's a buy-order — fill it at the dock, you don't buy it.");
   // goods: stand at the dock, take what your trunk holds, pay unit price
   if (ch.loc !== l.district) throw new GameError('district', `Pickup is at ${l.district} — be there.`);
   const want = Math.max(1, Math.floor(Number(qty) || Number(l.qty)));
