@@ -411,6 +411,7 @@ CREATE TABLE IF NOT EXISTS territory_rackets (
   owner_gang TEXT NOT NULL,
   tier INT NOT NULL DEFAULT 1,
   last_income_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  upkeep_at TIMESTAMPTZ NOT NULL DEFAULT now(),      -- recurring sinks: the operation's pad accrues off this clock (treasury pays); reset on pay/upgrade/seizure
   established_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   minted_onchain BOOLEAN NOT NULL DEFAULT false
 );

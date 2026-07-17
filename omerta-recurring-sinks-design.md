@@ -39,11 +39,26 @@ nothing else changes. Numbers are founder sign-off levers (ground rule #1). Suit
 - **Clean** — separate clock from income, one sink reason, a boolean cold gate; no netting math,
   no negative-cash surprise, no §10.4 surface beyond the ledgered sink.
 
-## 4. Roadmap (the pattern generalizes — deferred)
-The same lazy-owed-debt + pay + cold-penalty pattern extends to:
-- **Territory racket upkeep** (gang treasury pays; a gang-level recurring drain on held rackets).
+## 4. Step two — territory-racket upkeep (BUILT)
+The same pattern at the GANG level: every territory racket owes a pad = `TERRITORY_UPKEEP_BPS`
+(2000 = 20%) of its `incomePerHr`, accrued lazily on its own clock (`territory_rackets.upkeep_at`)
+up to `TERRITORY_UPKEEP_CAP_MS` (7d). A boss/underboss pays it from the **treasury**
+(`POST /v1/territory/upkeep`, greedy per-operation) — a §10.4 treasury cash SINK
+`territory:upkeep` (character_id NULL, counterparty = the gang; the invariant treasury check
+subtracts it alongside `territory:establish`; `territory:` prefix already vocabularied — no
+change). Unpaid past `TERRITORY_UPKEEP_COLD_MS` (3d) an operation goes COLD:
+`collectTerritory` skips it (the take is lost, not banked), `upgradeRacket` throws `cold`, until
+the pad thaws it. Upgrade squares the clock; **seizure hands the victor a fresh clock** (a seized
+racket is never born cold, and the old owner's arrears don't follow the turf). View
+(`territoryOf`) surfaces `upkeepPerHr`/`upkeepOwed`/`cold`. `test/social.js`: rank gate, the
+view fields, a ledgered treasury pay resetting the clock, the cold gate (no income / no upgrade)
++ thaw, and the treasury §10.4 reconcile with `territory:upkeep` in the mix. Suite 16/16 + sim
+drift-0. Numbers are founder sign-off levers.
+
+## 5. Roadmap (the pattern generalizes — deferred)
+The same lazy-owed-debt + pay + cold-penalty pattern still extends to:
 - **Crew wages** (recurring payroll on the kitchen crew — unpaid crews defect/rat).
 - **The city pad / bribery** — a heat-scaled weekly protection payment (touches the D-signed heat
   surfaces, so a founder call).
-Each is a follow-up drop; step one proves the pattern on the cleanest surface (character-owned
-fronts, which already carry lazy income + scrutiny state).
+Steps one (business fronts, character cash) and two (territory rackets, gang treasury) prove the
+pattern on both the personal and the family economies.
