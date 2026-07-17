@@ -470,8 +470,19 @@ NULL, counterparty=gang; invariants treasury check subtracts it with `territory:
 `upgradeRacket` throws `cold`); upgrade squares the clock; **seizure resets it** (a seized racket
 is never born cold, old arrears don't follow the turf). `territoryOf` view surfaces
 `upkeepPerHr`/`upkeepOwed`/`cold`. `test/social.js`: rank gate, view fields, ledgered treasury pay
-resetting the clock, cold gate + thaw, treasury §10.4 reconcile. Roadmap (deferred): crew wages,
-the heat-scaled city pad/bribery. Suite 16/16 + sim drift-0.
+resetting the clock, cold gate + thaw, treasury §10.4 reconcile.
+**Step three — CREW WAGES ("the nut") — BUILT** (`src/kitchen.js`, `src/accrual.js`,
+`crewWageOwed`/`crewCold` in the rules tail): the pattern applied to the KITCHEN crew (the offline
+drug-selling workforce). Each member draws `CREW_WAGE_PER_HR` ($1,200) whether the stash moves or
+not, accrued on `characters.crew_paid_at` (stamped/reset on hire + on pay) up to `CREW_WAGE_CAP_MS`
+(7d). `payCrewWages` (`POST /v1/kitchen/crew/wages`) is all-or-nothing — a §10.4 cash sink
+`crew:wages` (added to the cash vocabulary). Unpaid past `CREW_WAGE_COLD_MS` (3d) the crew goes
+COLD: the §7.1 accrual crew-sales block skips them (`crewCold(ch)` gate — the ONLY recurring sink
+gating an OFFLINE/accrual faucet, not an on-demand collect); the stash sits untouched until the nut
+is paid. View surfaces `crewWagePerHr`/`crewWageOwed`/`crewCold`; persistCharacter carries
+`crew_paid_at` ($46). `test/growth.js`: view fields, ledgered pay resetting the clock, a cold crew
+moving NOTHING across a big accrual window + thaw. Roadmap (deferred): the heat-scaled city
+pad/bribery (a founder call — touches signed heat surfaces). Suite 16/16 + sim drift-0.
 
 **Full sim audit (`AUDIT-sim.md`)** — four red-team lenses + a real simulation harness
 (`tools/sim.js`: drives the live server through the public API only, seeds NO value, warps clocks,

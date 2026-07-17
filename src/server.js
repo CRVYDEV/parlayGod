@@ -636,6 +636,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.deal(ch, req.body?.drugId, req.body?.qty, client, h)));
   app.post('/v1/kitchen/crew/hire', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.hireCrew(ch, client, h)));
+  // recurring sinks: pay the crew's nut (wages) — an unpaid crew downs tools until covered
+  app.post('/v1/kitchen/crew/wages', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.payCrewWages(ch, client, h)));
   app.post('/v1/kitchen/laylow', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layLow(ch, client, h)));
   app.post('/v1/kitchen/cleanpapers', { preHandler: auth }, async (req) =>

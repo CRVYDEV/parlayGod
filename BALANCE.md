@@ -385,4 +385,15 @@ change beyond the invariant term). Same asymmetry (earn ≤24h, owe ≤7d) and c
 income / no upgrade); seizure hands the victor a fresh clock so a raided racket isn't born cold.
 This drains the gang-treasury side of the passive stack (territory income was pure treasury faucet
 with no recurring counter-flow). Numbers parallel the business pad for sign-off clarity; both dials
-are independent. Roadmap (deferred, same pattern): crew wages, the heat-scaled city pad.
+are independent.
+
+**Step three — crew wages ("the nut")**: `CREW_WAGE_PER_HR` $1,200 / `CREW_WAGE_CAP_MS` 7d /
+`CREW_WAGE_COLD_MS` 3d (M4). Each kitchen corner man draws $1,200/hr whether the stash moves or
+not — a flat wage (not a % of sales, since crew income depends on stash supply), owed even when
+idle, so it discourages keeping crew you don't supply. `crew:wages` is a cash sink (added to the
+vocabulary beside `crew:hire`). Unpaid past 3d the crew goes cold and the §7.1 accrual stops their
+offline sales. Economic note: this is the FIRST sink gating an OFFLINE faucet — a busy 5-crew
+grosses ~$48k/hr while the nut is $6k/hr (~12%), but an IDLE 5-crew (no stash) still owes $6k/hr
+for $0, so the drain is sharpest on hoarded-but-unsupplied crew (intended). The $1,200 flat is the
+primary dial — watch the next sim pass on both the busy-crew % and the idle-crew bleed. Roadmap
+(deferred, a founder design call — touches signed heat surfaces): the heat-scaled city pad/bribery.
