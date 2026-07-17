@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -165,13 +165,14 @@ export function bestNpc(h) {
 // Lives here (not underworld.js) because game.js's own heal() bumps the Doc.
 // Step two: the write is ABSOLUTE from the effective (decayed) value, so cooling materializes
 // on the next bump; every bump re-stamps touched_at (any contact, friendly or not, is contact).
-// The daily LEAD rides in here too: the FIRST business bump of the day with your BEST fixture
-// pays +LEAD_BONUS, once — gifts (business:false) and rivalry losses (pts<0) never trigger it.
-export async function bumpStanding(client, h, ch, npcId, pts, { business = true } = {}) {
+// The daily LEAD rides in here too — step three made it a rotating TASK: the bonus pays only
+// when today's drawn task for your BEST fixture matches the `action` this bump came from.
+// Gifts (business:false) and rivalry/grudge losses (pts<0) never trigger it.
+export async function bumpStanding(client, h, ch, npcId, pts, { business = true, action = null } = {}) {
   const cur = Number(h.owned.npc[npcId] || 0);
   let lead = false;
-  if (business && pts > 0 && bestNpc(h) === npcId) {
-    const day = dayOf();
+  const day = dayOf();
+  if (business && pts > 0 && bestNpc(h) === npcId && action && action === leadTaskOf(day, npcId)) {
     const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
     if (!claimed.rowCount) {
       await client.query('INSERT INTO npc_leads (character_id, day, npc_id) VALUES ($1,$2,$3)', [ch.id, day, npcId]);
@@ -512,7 +513,7 @@ export async function heal(ch, client, h) {
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);
   ch.cash = Number(ch.cash) - cost; ch.health = 100;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'heal' });
-  await bumpStanding(client, h, ch, 'doc', 2); // doing business with the Doc
+  await bumpStanding(client, h, ch, 'doc', 2, { action: 'heal' }); // doing business with the Doc
   return { ok: true, cost };
 }
 

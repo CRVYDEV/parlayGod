@@ -840,7 +840,21 @@ below tier 1). Board (`GET /v1/underworld`) gained `lead`, `decay`, and (Madame 
 `whispers.asking`. Tests: madame tiers, lead (gift-doesn't-claim, once/day, off-lead pays
 flat, strangers get none), decay (37/floor-25/below-floor-inert + materialize-on-bump),
 rivalry, memory (heir standings computed from pre-death board). Suite 16/16 + sim drift-0.
-Step three (deferred): rotating lead tasks, more rivalry pairs, grudge memory.
+**Step three — BUILT** (`UNDERWORLD.STEP3` + `tasks` on the cast; zero money, §10.4 untouched):
+**rotating lead TASKS** — the daily lead is a specific job drawn per day per fixture off the
+§7.11 seed (`leadTaskOf`, same draw town-wide); `bumpStanding` gained an `action` tag at every
+touchpoint call site and the bonus claims only when the bump's action matches the draw;
+task lists hold only always-repeatable actions (heal; post/hire; craft/ammo; depart/list;
+dice/numbers) so no day draws a dead lead; board `lead.task`. **Rivalry #2** — a convoy ambush
+ATTEMPT (win or lose) pays Bella +2 / costs Big Tuna −2 (`convoy.js:ambushConvoy`). **GRUDGES**
+— `social.js:bearGrudges`: killing a victim whose effective standing with a fixture ≥
+GRUDGE_MIN 60 docks the killer (fire) or the PAYER (npcHit) GRUDGE_LOSS 5 with that fixture
+(read from `h.victimOwned.npc` BEFORE the estate wipe; mod-kills bear none; `grudges` on the
+kill response; losses echo down the killer's bloodline via step-two memory). Tests: drawn-task
+lead (off-task pays flat, task claims, once/day), ambush rivalry both directions, grudge kill
+(friends ≥60 grudge / acquaintance forgives / stranger floors at 0 / Vinnie never grudges /
+exact −2×attempts−5 arithmetic). Suite 16/16 + sim drift-0. Step four (deferred): NPC gifts
+back, den-comp ladder, grudge forgiveness/penance, lead streaks.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

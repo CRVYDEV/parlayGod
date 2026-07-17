@@ -831,16 +831,18 @@ export const UNDERWORLD = {
   GIFT_COST: 5000, GIFT_STANDING: 5, GIFT_CAP: 50,
   DISCHARGE_PER_MIN: 150,             // the Doc's early-discharge rate ($/remaining minute)
   GUN_BUYBACK: 0.3,                   // the Armorer's buy-back (share of the gun's cash price)
+  // `tasks` are the daily-lead rotation (step three) — only actions a player can ALWAYS
+  // repeat (no finite purchases, no luck-gated windows), so no day draws a dead lead.
   NPCS: [
-    { id: 'doc',     name: 'Doc Moretti',      earn: 'heals + discharges',
+    { id: 'doc',     name: 'Doc Moretti',      earn: 'heals + discharges', tasks: ['heal'],
       perks: ['House rates — healing ×0.9', 'Early discharge — pay to HALVE a hospital stay', 'Walk-outs — discharges release in full'] },
-    { id: 'fixer',   name: 'Vinnie the Match', earn: 'contracts posted + NPC hits + confirmed kills',
+    { id: 'fixer',   name: 'Vinnie the Match', earn: 'contracts posted + NPC hits + confirmed kills', tasks: ['post', 'hire'],
       perks: ['NPC hitmen ×0.9', 'Your contract-post fee is waived (the street tax stands)', 'Your searches place ×0.9 faster'] },
-    { id: 'armorer', name: 'Bella Bang-Bang',  earn: 'guns + crafts + ammo boxes',
+    { id: 'armorer', name: 'Bella Bang-Bang',  earn: 'guns + crafts + ammo boxes', tasks: ['craft', 'ammo'],
       perks: ['Guns ×0.9 cash', 'Workshop crafts ×0.9 cash', 'She buys guns back at 30%'] },
-    { id: 'harbor',  name: 'Big Tuna',         earn: 'convoys + market listings',
+    { id: 'harbor',  name: 'Big Tuna',         earn: 'convoys + market listings', tasks: ['depart', 'list'],
       perks: ['Guard fees ×0.9', 'Your listings run 72h', 'A fourth market listing slot'] },
-    { id: 'madame',  name: 'The Madame',       earn: 'den play + back-room fades + fight bets',
+    { id: 'madame',  name: 'The Madame',       earn: 'den play + back-room fades + fight bets', tasks: ['dice', 'numbers'],
       perks: ['The house comps your seat — dice cost no nerve', 'The velvet rope — the high-stakes room opens at any level',
               "Pillow talk — she tells you how many hunters have been asking around about you"] },
   ],
@@ -854,8 +856,21 @@ export const UNDERWORLD = {
     MEMORY_BPS: 2500,                 // the heir inherits 25% of each standing (floored; <1 forgotten)
     RIVAL_LOSS: 2,                    // blood work (fire-kill, NPC hire) costs the Doc's goodwill
   },
+  // step three (all founder sign-off levers): the lead becomes a rotating TASK (drawn per day,
+  // above), road piracy picks a side, and killing a fixture's friend burns the killer's bridge.
+  STEP3: {
+    GRUDGE_MIN: 60, GRUDGE_LOSS: 5,   // whack a T2+ friend of the house → that fixture docks the killer 5
+    AMBUSH_ARMORER: 2, AMBUSH_HARBOR: 2, // an ambush (win or lose): Bella +2, Big Tuna −2
+  },
 };
 export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
+// The daily lead TASK for a fixture — deterministic off the §7.11 seed machinery, same for
+// everyone (the whole town hears what the Doc needs today).
+export const leadTaskOf = (day, npcId) => {
+  const n = npcOf(npcId);
+  if (!n?.tasks?.length) return null;
+  return n.tasks[Math.floor(hash01(`lead:${day}:${npcId}:${MARKET_SEED}`) * n.tasks.length) % n.tasks.length];
+};
 export const BLACK_MARKET = {           // (MARKET is the generated §5 goods catalog — hands off)
   LIST_FEE_BPS: 100, LIST_FEE_MIN: 10,  // 1% of the ask (min $10) to list — prices the "free warehouse" angle
   MIN_PRICE: 50,                         // no penny listings

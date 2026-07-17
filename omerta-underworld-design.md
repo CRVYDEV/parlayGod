@@ -62,7 +62,26 @@ Relationships that LIVE — they open, cool, feud, and outlive you a little:
 Zero new money flows in all of step two — every mechanic is status/access/pacing, §10.4
 untouched by construction.
 
-## 6. Step three (deferred)
-Rotating lead TASKS (not just "do business"), more rivalry pairs, NPC gifts back (the Madame
-sends work), a Madame den-comp ladder, memory of the KILLER's bloodline (grudges, not just
-friendships).
+## 6. Step three — BUILT (levers in `UNDERWORLD.STEP3` + `tasks` on the cast)
+- **Rotating lead TASKS**: the daily lead is now a specific job, drawn per day per fixture off
+  the §7.11 seed (`leadTaskOf` — the same draw for the whole town: "the Doc needs a hand at
+  the clinic today"). Off-task business with your best fixture pays flat; only the drawn task
+  claims the +5. Task lists hold only ALWAYS-repeatable actions (heal; post/hire; craft/ammo;
+  depart/list; dice/numbers) so no day draws a dead lead (the undrawable-daily-contract gap is
+  deliberately not reproduced here).
+- **Rivalry pair #2 — road piracy picks a side**: a convoy ambush ATTEMPT (win or lose — the
+  attempt is what the town hears) pays Bella +AMBUSH_ARMORER 2 and costs Big Tuna
+  −AMBUSH_HARBOR 2. The bandit build now trades against the shipper relationship it preys on.
+- **GRUDGES — the names remember who you whack**: killing a character who was a REAL friend of
+  a fixture (effective standing ≥ GRUDGE_MIN 60) docks the KILLER GRUDGE_LOSS 5 with that
+  fixture — a fire-kill charges the shooter, an NPC hit charges the PAYER, mod-kills have no
+  killer and bear no grudge. Read from the victim's loaded standings before the estate wipe;
+  returned as `grudges` on the kill response. Composes naturally: the loss echoes down the
+  killer's bloodline through step-two memory, and a doc-connected victim stacks with the Doc
+  rivalry (−2 attempt −5 grudge). Whacking a connected man now burns your own bridges — social
+  cover is a real, earnable defense layer that costs the attacker STATUS, never money (§10.4
+  untouched by construction, like all of steps two and three).
+
+## 7. Step four (deferred)
+NPC gifts back (the Madame sends work), a den-comp ladder, grudge FORGIVENESS (pay penance /
+run an errand to square a grudge), more rivalry pairs, lead STREAKS (consecutive days).
