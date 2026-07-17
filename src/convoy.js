@@ -12,8 +12,8 @@
 // touched by an ambush; the manifest is the contested object, not the man. The insurance CLAIM
 // therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
-import { GameError, bus, skillMult, trunkCap } from './game.js';
-import { CONVOY, COMMISSION, SKILLS, guardTierOf, DISTRICTS, GOODS, goodPriceOf } from './rules.js';
+import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
+import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, guardTierOf, DISTRICTS, GOODS, goodPriceOf } from './rules.js';
 import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
@@ -96,11 +96,14 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   if (units < CONVOY.MIN_QTY) throw new GameError('light', `A convoy is for BULK — ${CONVOY.MIN_QTY} units minimum.`);
   const value = manifestValue(manifest, convoy.destination);
   const premium = insure ? Math.ceil(value * CONVOY.INSURE_BPS / 10000) : 0;
-  if (Number(ch.cash) < tier.fee + premium)
-    throw new GameError('cash', `${tier.id} guards run $${tier.fee}${premium ? ` and the policy $${premium}` : ''}.`);
-  if (tier.fee > 0) {
-    ch.cash = Number(ch.cash) - tier.fee;
-    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'convoy:guards' });
+  // BIG TUNA T1 (underworld): the Harbor Master's friends hire guards at a discount — the
+  // muscle (tier.def) is unchanged, only the fee. Discounted amount is what's ledgered.
+  const guardFee = Math.floor(tier.fee * npcMult(h, 'harbor', 1, UNDERWORLD.FX.GUARD_MULT));
+  if (Number(ch.cash) < guardFee + premium)
+    throw new GameError('cash', `${tier.id} guards run $${guardFee}${premium ? ` and the policy $${premium}` : ''}.`);
+  if (guardFee > 0) {
+    ch.cash = Number(ch.cash) - guardFee;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -guardFee, reason: 'convoy:guards' });
   }
   if (premium > 0) {
     ch.cash = Number(ch.cash) - premium;
@@ -115,6 +118,7 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
     [convoy.id, tier.def, h.owned.gangId || null, !!premium, arrivesAt]);
   const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
+  await bumpStanding(client, h, ch, 'harbor', 2); // freight on the water is Big Tuna's business
   await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id, insured: !!premium });
   return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(rideMs / 1000), units, band, premium };
 }
@@ -289,6 +293,7 @@ export async function collectConvoy(ch, convoyId, client, h) {
     await client.query('UPDATE convoys SET insured_loss=0 WHERE id=$1', [convoyId]);
   }
   if (left === 0) await client.query("UPDATE convoys SET status='done' WHERE id=$1", [convoyId]);
+  if (taken > 0) await bumpStanding(client, h, ch, 'harbor', 3); // landed freight seals the relationship
   return { ok: true, collected: taken, remaining: left, toll, insurance };
 }
 

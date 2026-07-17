@@ -16,8 +16,8 @@
 // → market_listings (pot class) → street_tax singleton. Acyclic vs the global order; residual
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, skillMult, trunkCap } from './game.js';
-import { BLACK_MARKET as MARKET, GOODS, SKILLS } from './rules.js';
+import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding } from './game.js';
+import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -32,6 +32,10 @@ async function takeHouse(client, tax) {
   if (tax > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
 }
 const listFee = (ask) => Math.max(MARKET.LIST_FEE_MIN, Math.ceil(ask * MARKET.LIST_FEE_BPS / 10000));
+// BIG TUNA (underworld): T2 lets YOUR listings run the long TTL, T3 adds a listing slot —
+// both are per-seller reads of the poster's standing, sign-off levers.
+const maxTtlH = (h) => (npcTier(h, 'harbor') >= 2 ? UNDERWORLD.FX.TTL_H : MARKET.MAX_TTL_H);
+const maxListings = (h) => MARKET.MAX_LISTINGS + (npcTier(h, 'harbor') >= 3 ? UNDERWORLD.FX.EXTRA_LISTING : 0);
 
 // settle the money side of a sale: seller nets hammer − take; take half → street tax, half
 // burns — the NULL `market:take` row is what closes the §10.4 escrow identity exactly.
@@ -53,8 +57,8 @@ export async function listItem(ch, opts, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
   const live = Number((await client.query(
     "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [ch.id])).rows[0].n);
-  if (live >= MARKET.MAX_LISTINGS) throw new GameError('max_listings', `The Market floors you at ${MARKET.MAX_LISTINGS} live listings.`);
-  const hours = Math.min(MARKET.MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
+  if (live >= maxListings(h)) throw new GameError('max_listings', `The Market floors you at ${maxListings(h)} live listings.`);
+  const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   const expiresAt = new Date(Date.now() + hours * 3600 * 1000);
   const id = uid();
 
@@ -80,6 +84,7 @@ export async function listItem(ch, opts, client, h) {
     await client.query(
       'INSERT INTO market_listings (id, seller_character, kind, car_id, price, buy_now, reserve, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
       [id, ch.id, 'car', opts.carId, minBid, buyNow, reserve, expiresAt]);
+    await bumpStanding(client, h, ch, 'harbor', 1); // moving iron through the docks
     return { ok: true, id, kind: 'car', minBid, buyNow, reserve, fee, expiresSeconds: hours * 3600 };
   }
 
@@ -100,6 +105,7 @@ export async function listItem(ch, opts, client, h) {
   await client.query(
     'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
     [id, ch.id, 'good', opts.goodId, qty, ch.loc, price, expiresAt]);
+  await bumpStanding(client, h, ch, 'harbor', 1); // moving freight through the docks
   return { ok: true, id, kind: 'good', good: opts.goodId, qty, price, district: ch.loc, fee, expiresSeconds: hours * 3600 };
 }
 
@@ -156,7 +162,7 @@ export async function postOrder(ch, opts, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
   const live = Number((await client.query(
     "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [ch.id])).rows[0].n);
-  if (live >= MARKET.MAX_LISTINGS) throw new GameError('max_listings', `The Market floors you at ${MARKET.MAX_LISTINGS} live listings.`);
+  if (live >= maxListings(h)) throw new GameError('max_listings', `The Market floors you at ${maxListings(h)} live listings.`);
   if (!GOODS.find((g) => g.id === opts.goodId)) throw new GameError('bad_good', 'No such good.');
   const qty = Math.floor(Number(opts.qty) || 0);
   const price = Math.floor(Number(opts.price) || 0);
@@ -166,7 +172,7 @@ export async function postOrder(ch, opts, client, h) {
   if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
   const fee = Math.max(1, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
   if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
-  const hours = Math.min(MARKET.MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
+  const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
   ch.cash = Number(ch.cash) - escrow;
@@ -175,6 +181,7 @@ export async function postOrder(ch, opts, client, h) {
   await client.query(
     'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
     [id, ch.id, 'order', opts.goodId, qty, ch.loc, price, new Date(Date.now() + hours * 3600 * 1000)]);
+  await bumpStanding(client, h, ch, 'harbor', 1); // standing paper at the docks is still dock business
   return { ok: true, id, kind: 'order', good: opts.goodId, wanted: qty, price, district: ch.loc, escrow, fee, expiresSeconds: hours * 3600 };
 }
 

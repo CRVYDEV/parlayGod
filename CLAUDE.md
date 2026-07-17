@@ -796,6 +796,34 @@ founder sign-off levers — sim before production. Step two (deferred): ACTIVE a
 cooldowns, tier-4 capstones, prestige-carried skill slots (a founder call — it would soften
 death), per-skill respec. Suite 15/15 + sim drift-0.
 
+**The Underworld (step one) — BUILT** (`src/underworld.js`, `test/underworld.js` — the 16th suite
+file; design `omerta-underworld-design.md`). Named NPCs as RELATIONSHIPS — skills are what you are,
+the Underworld is who you know. Four fixtures, one per loop (`UNDERWORLD` rules tail: Doc Moretti /
+survival, Vinnie the Match / PvP-contracts, Bella Bang-Bang / gear, Big Tuna / trade). Per-character
+standing 0–100 (`npc_standing`, loaded into `h.owned.npc`), a pure STATUS axis earned ACTOR-SIDE at
+the loop's touchpoints via game.js `bumpStanding` (heal +2, gun +3, craft +1, ammo box +1, contract
+post +3, NPC hit +4, fire-kill +5, convoy depart +2 / collect +3, listing/order +1); **gifts**
+($5k `underworld:gift` sink, +5) work ONLY below GIFT_CAP 50 — the top tiers are earned (the
+purchasable-standing critique answered structurally). Tiers at 25/60/90 read via `npcTier`/`npcMult`;
+every perk is a NEW single-touchpoint modifier (skills/decree precedent), the DISCOUNTED number
+always the one ledgered: Doc T1 heal ×0.9 (stacks with doctors_friend ×0.75), T2 **early discharge**
+(`underworld:discharge` sink, remaining-minutes × $150, stay halved), T3 discharges release in full;
+Vinnie T1 NPC hitmen ×0.9, T2 contract-post FEE waived (street tax stands; postBounty line only,
+never postFamilyContract), T3 searches place ×0.9 (composed with executioner at BOTH clock sites via
+`hunterSearchMs` → 0.72 stack, flagged); Bella T1 guns ×0.9 cash (crates stand), T2 crafts ×0.9
+(stacks with foundry 0.75), T3 **gun buyback** at 30% of sticker (`underworld:gunsale` — the only
+new FAUCET, small + bounded (once per owned gun), flagged for the sim pass); Big Tuna T1 convoy
+guard fees ×0.9 (tier.def unchanged), T2 Black Market listings/orders run 72h (vs 48), T3 a fourth
+listing slot. Deliberately UNTOUCHED: $OMR burns, ammo prices (D1 kill-EV anchor), heat deterrents,
+loot-exposure windows, extraction caps, income curves. Standing DIES WITH THE STREET (`npc_standing`
+joined the estate wipe); `underworld:` joined the cash vocabulary (all rows character_id'd — check
+(a) reconciles). Routes: `GET /v1/underworld`, `POST /v1/underworld/:npc/gift`,
+`/v1/underworld/discharge`, `/v1/underworld/gun/:gunId/sell`. One pre-existing test rewired:
+social.js's looped NPC-hit refund probe now asserts `res.cost` (the hirer legitimately earned
+Vinnie T1 across ~100 hires). ALL numbers are founder sign-off levers — sim before production.
+Step two (deferred): the Madame (den/intel), bloodline memory, NPC leads, decay, rivalry.
+Suite 16/16 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

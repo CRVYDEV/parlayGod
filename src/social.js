@@ -3,12 +3,12 @@
 // Every formula cites spec §7 / prototype v24. Two-party actions run under
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, bus, ledger, skillMult } from './game.js';
+import { GameError, bumpFamilyTask, bus, ledger, skillMult, npcMult, npcTier, bumpStanding } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -335,8 +335,10 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (tg?.gang_id && tg.gang_id === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
   const amt = Math.floor(Number(amount) || 0);
   if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
-  const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
-  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs $${amt + fee + tax} with the 2% take.`);
+  // VINNIE T2 (underworld): the Match waives HIS 1% posting fee for friends — the street
+  // tax always stands. The discounted total is what's ledgered (decree/skill precedent).
+  const fee = npcTier(h, 'fixer') >= 2 ? 0 : Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01);
+  if (Number(ch.cash) < amt + fee + tax) throw new GameError('cash', `That contract costs $${amt + fee + tax} with the take.`);
   const ttlH = Math.min(M3.BOUNTY_MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || M3.BOUNTY_DEFAULT_TTL_H)));
   // directed contract: name a hitman who gets an exclusive window before it opens to all. Only
   // set on a FRESH pot (a top-up inherits the original's direction — you fund the standing job).
@@ -397,6 +399,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'bounty:post', counterparty: targetCharacterId });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(fee + tax), reason: 'bounty:take', counterparty: targetCharacterId });
   await takeHouse(client, tax);
+  await bumpStanding(client, h, ch, 'fixer', 3); // posting work is doing business with the Match
   bus.emit('streets', { type: 'bounty', on: t.name, amount: amt, kind });
   await h.notify(client, targetCharacterId, 'bounty_on_you', { kind, amount: amt }); // the mark can react (lay low, etc.)
   if (hitmanId && !live) await h.notify(client, hitmanId, 'contract_offer', { target: t.name, kind, amount: amt }); // the named hitman is tapped
@@ -766,14 +769,18 @@ export async function startSearch(ch, targetCharacterId, client, h) {
   const cur = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (cur) throw new GameError('searching', 'Your people are already out looking. Call them off first.');
   await client.query('INSERT INTO searches (hunter, target) VALUES ($1,$2)', [ch.id, targetCharacterId]);
-  // EXECUTIONER (skills): the assassin's people work faster — applied here AND at fire's
-  // readiness check (both read the HUNTER's build, so the two clocks agree). Sign-off lever.
-  return { ok: true, placedAt: new Date(Date.now() + Math.floor(searchMs() * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT))) };
+  // EXECUTIONER (skills) × VINNIE T3 (underworld): the assassin's people work faster —
+  // applied here AND at fire's readiness check via hunterSearchMs (both read the HUNTER's
+  // build+standing, so the two clocks agree). Stacking flagged; both sign-off levers.
+  return { ok: true, placedAt: new Date(Date.now() + hunterSearchMs(h)) };
 }
 
 // §9 production timers: search 3 h, failed-shot cooldown 2 h.
 // Tests may shrink them via env — never set these in production configs.
 const searchMs = () => Number(process.env.SEARCH_MS || (3 * 3600 * 1000));
+const hunterSearchMs = (h) => Math.floor(searchMs()
+  * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)
+  * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT));
 const shootCdMs = () => Number(process.env.SHOOT_CD_MS || (2 * 3600 * 1000));
 
 export async function callOffSearch(ch, client) {
@@ -784,8 +791,8 @@ export async function callOffSearch(ch, client) {
 export async function fire(ch, victim, client, h, rounds) {
   const s = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (!s || s.target !== victim.id) throw new GameError('no_search', 'Your people have no fix on them. Start a search.');
-  // EXECUTIONER (skills): same multiplier as startSearch — the hunter's two clocks agree
-  if (new Date(s.started_at).getTime() + Math.floor(searchMs() * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)) > Date.now())
+  // same clock as startSearch (executioner × fixer T3) — the hunter's two clocks agree
+  if (new Date(s.started_at).getTime() + hunterSearchMs(h) > Date.now())
     throw new GameError('searching', "They haven't been placed yet. Patience is a caliber.");
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
@@ -922,6 +929,7 @@ export async function fire(ch, victim, client, h, rounds) {
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a
     // bonus, a settled vendetta a bigger one
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed, !!vend);
+    await bumpStanding(client, h, ch, 'fixer', 5); // Vinnie hears about confirmed work
     // war interlock: a kill on a family you're at war with scores war points (worth more than a
     // jump's 1) — the lethal layer finally decides wars, not just jump-spam. Done BEFORE the
     // estate vacates the victim's gang seat, while h.victimOwned.gangId is still known.
@@ -1069,11 +1077,15 @@ export async function npcHit(ch, victim, client, h, tierId) {
   const pair = (await client.query('SELECT last_at FROM npc_hits WHERE payer=$1 AND target=$2', [ch.id, victim.id])).rows[0];
   if (pair && Date.now() - new Date(pair.last_at).getTime() < M3.NPC_HIT_TARGET_CD_MS)
     throw new GameError('target_cd', 'The contractors already went at them for you — pick another mark or wait a day.');
-  if (Number(ch.cash) < tier.cost) throw new GameError('cash', `${tier.name} charges $${tier.cost}.`);
+  // VINNIE T1 (underworld): the Match brokers contractor work at a friend's rate — the
+  // discounted fee is what's ledgered (decree/skill precedent). Sign-off lever.
+  const cost = Math.floor(tier.cost * npcMult(h, 'fixer', 1, UNDERWORLD.FX.NPCHIT_MULT));
+  if (Number(ch.cash) < cost) throw new GameError('cash', `${tier.name} charges $${cost}.`);
 
   // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
-  ch.cash = Number(ch.cash) - tier.cost;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.cost, reason: 'npchit:hire', counterparty: victim.id });
+  ch.cash = Number(ch.cash) - cost;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'npchit:hire', counterparty: victim.id });
+  await bumpStanding(client, h, ch, 'fixer', 4); // arranged work is business with the Match
   ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
   ch.npchit_at = new Date(Date.now() + M3.NPC_HIT_CD_MS);
   if (pair) await client.query('UPDATE npc_hits SET last_at=now() WHERE payer=$1 AND target=$2', [ch.id, victim.id]);
@@ -1085,19 +1097,19 @@ export async function npcHit(ch, victim, client, h, tierId) {
   await h.track(client, ch.account_id, 'npchit', { tier: tierId, target: victim.id, success: roll < success });
   if (roll >= success) {
     await h.notify(client, victim.id, 'npchit_survived', {}); // "you feel someone wants you dead" — nudge to insure
-    return { ok: true, hit: false, success, cost: tier.cost };
+    return { ok: true, hit: false, success, cost };
   }
   // ── the contractor lands the kill ──
   // the bodyguard steps in first (earnable shield before real-ETH insurance). The PAYER is the
   // attacker for the betrayal check: a guard who hires out the job on their own principal has
   // already stepped aside.
   const guard = await bodyguardAbsorbs(client, h, ch, victim);
-  if (guard) return { ok: true, hit: true, absorbed: true, guard: guard.name, success, cost: tier.cost };
+  if (guard) return { ok: true, hit: true, absorbed: true, guard: guard.name, success, cost };
   if (Number(h.victimAcct.respawn_tokens || 0) > 0) { // pre-paid insurance absorbs it (like a player hit)
     h.victimAcct.respawn_tokens = Number(h.victimAcct.respawn_tokens) - 1;
     victim.health = 100;
     await h.notify(client, victim.id, 'revived', { from: 'a hired gun' });
-    return { ok: true, hit: true, revived: true, success, cost: tier.cost };
+    return { ok: true, hit: true, revived: true, success, cost };
   }
   // pass the PAYER as killerCh so that if THEY funded a still-exclusive directed pot on this
   // victim, refundPot's refund lands on their in-memory cash (else persistCharacter clobbers the
@@ -1105,7 +1117,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   const estate = await runEstate(client, h, victim, 'A HIRED GUN', { killerCh: ch });
   await h.notify(client, victim.id, 'whacked', { from: 'a hired gun' });
   bus.emit('streets', { type: 'kill', by: 'a hired gun', victim: victim.name });
-  return { ok: true, hit: true, killed: true, success, cost: tier.cost, estate: { heirId: estate.heirId } };
+  return { ok: true, hit: true, killed: true, success, cost, estate: { heirId: estate.heirId } };
 }
 
 // ═══════════════════ DEATH — THE ESTATE (§7.9, atomic) ═══════════════════
@@ -1139,7 +1151,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
