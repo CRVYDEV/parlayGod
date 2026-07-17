@@ -269,7 +269,8 @@ const vip = await mk('Connected Carlo');
 await seedCh(vip.id, 'respect=100');
 await seedNpc(vip.id, 'doc', 70);     // a real friend of the Doc (≥ GRUDGE_MIN 60)
 await seedNpc(vip.id, 'madame', 60);  // and of the Madame (exactly at the line)
-await seedNpc(vip.id, 'fixer', 10);   // an acquaintance of Vinnie — no grudge for those
+await seedNpc(vip.id, 'harbor', 10);  // an acquaintance of Big Tuna — no grudge for those
+await seedNpc(vip.id, 'fixer', 90);   // audit L3: even a MADE friend of Vinnie earns no grudge — he brokers hits
 let attempts = 0, gRes = null;
 for (let i = 0; i < 80 && !gRes?.killed; i++) {
   await seedCh(gus.id, 'cash=5000000, npchit_at=NULL');
@@ -279,11 +280,12 @@ for (let i = 0; i < 80 && !gRes?.killed; i++) {
   attempts++;
 }
 assert(gRes?.killed, 'the contractor eventually lands it');
-assert.deepEqual([...gRes.grudges].sort(), ['doc', 'madame'], 'both real friends of the dead man hold a grudge — the acquaintance does not');
+assert.deepEqual([...gRes.grudges].sort(), ['doc', 'madame'], 'both real friends of the dead man hold a grudge — the acquaintance and Vinnie do not');
 assert.equal((await standingOf(gus.token, 'doc')).standing, 80 - UNDERWORLD.STEP2.RIVAL_LOSS * attempts - UNDERWORLD.STEP3.GRUDGE_LOSS,
   `the Doc: −2 rivalry per attempt (${attempts}) and −5 for killing his friend`);
 assert.equal((await standingOf(gus.token, 'madame')).standing, 0, 'her grudge lands on a stranger — standing floors at 0');
-assert.equal((await standingOf(gus.token, 'fixer')).standing, 4 * attempts, 'Vinnie holds no grudge — arranged work is arranged work');
+assert.equal((await standingOf(gus.token, 'fixer')).standing, 4 * attempts, 'Vinnie holds no grudge even for a made friend — arranged work is arranged work (audit L3)');
+assert.equal((await call('GET', '/v1/underworld', { token: gus.token })).body.npcs.find((n) => n.id === 'fixer').grudge, 0, 'no fixer grudge row was written');
 
 // ── STEP FOUR: grudges have TEETH — the tier caps at 2 until penance squares it ──
 r = await call('GET', '/v1/underworld', { token: gus.token });
@@ -345,6 +347,45 @@ assert.equal((await call('POST', '/v1/underworld/armorer/favor', { token: nod.to
 await seedNpc(nod.id, 'doc', 95);
 await seedCh(nod.id, 'health=50');
 assert.equal((await call('POST', '/v1/underworld/doc/favor', { token: nod.token })).code, 200, "the refused errand didn't burn the week");
+
+// ── AUDIT L2 regression: the armorer favor skips a market-LISTED car (escrow discipline) ──
+const les = await mk('Listed-car Les');
+await seedCh(les.id, "cash=500000, energy=200, gta_at=NULL, loc='docks'");
+let worseCar = null, betterCar = null, lg = 0;
+while ((!worseCar || !betterCar) && lg++ < 40) {
+  await seedCh(les.id, 'gta_at=NULL, energy=200, jail_until=NULL');
+  const b = (await call('POST', '/v1/garage/boost', { token: les.token })).body;
+  if (b.success) { if (!worseCar) worseCar = b.car.id; else if (!betterCar) betterCar = b.car.id; }
+}
+assert(worseCar && betterCar, 'les has two cars');
+await pool.query(`UPDATE cars SET dmg=60 WHERE id='${worseCar}'`);   // the WORST — but it goes on the block
+await pool.query(`UPDATE cars SET dmg=20 WHERE id='${betterCar}'`);  // less damaged, stays in the garage
+r = await call('POST', '/v1/market', { token: les.token, body: { carId: worseCar, minBid: 1000, hours: 48 } });
+assert.equal(r.code, 200, 'the worst car is listed on the block');
+await seedNpc(les.id, 'armorer', 95);
+r = await call('POST', '/v1/underworld/armorer/favor', { token: les.token });
+assert.equal(r.code, 200, "Bella's boys take the job");
+assert.equal(r.body.repaired, betterCar, 'she repairs the garaged car, not the auctioned one bidders are pricing');
+assert.equal(Number((await pool.query(`SELECT dmg FROM cars WHERE id='${worseCar}'`)).rows[0].dmg), 60, 'the listed car is untouched mid-auction');
+
+// ── AUDIT LOW-4 regression: even the Doc makes no discharge to a man in lockup ──
+const jed = await mk('Jailed Jed');
+await seedNpc(jed.id, 'doc', 95);
+await seedCh(jed.id, `cash=500000, jail_until = now() + interval '1 hour', hosp_until = now() + interval '30 minutes'`);
+assert.equal((await call('POST', '/v1/underworld/discharge', { token: jed.token })).body.error, 'jailed', 'no house calls to lockup, same as every sibling action');
+
+// ── AUDIT L1 regression: a capped bump still re-stamps the decay clock (else it runs from the
+// day they capped, and a within-grace maxed player dips below 100 after the grace despite play).
+// Scenario: armorer maxed at 100, touched 6 days ago (still within the 7-day grace → effective
+// 100), buy a GUN (action 'gun' — never a lead task, so no lead claim; next===cur=100 → the
+// else branch is the ONLY thing that can refresh the clock). Assert the stored touched_at moved.
+const cap100 = await mk('Capped Century');
+await seedCh(cap100.id, "cash=500000, cb=5, loc='docks'");
+await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ('${cap100.id}','armorer',100,'${daysAgo(6)}')`);
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: cap100.token })).code, 200, 'a gun buy at the armorer cap (never the lead task)');
+const stamp = new Date((await pool.query(`SELECT touched_at FROM npc_standing WHERE character_id='${cap100.id}' AND npc_id='armorer'`)).rows[0].touched_at).getTime();
+assert(Date.now() - stamp < 60000, 'the capped contact re-stamped the decay clock (touched_at is now, not 6 days ago)');
+assert.equal((await standingOf(cap100.token, 'armorer')).standing, 100, 'and the maxed player still reads 100');
 
 // ── STEP FOUR: lead STREAKS — consecutive days sweeten the bonus, capped ──
 const stan = await mk('Streaky Stan');

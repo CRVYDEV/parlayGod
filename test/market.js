@@ -281,9 +281,49 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM market_listings WH
 const esc2 = await escrowOk();
 assert(esc2.ok, `§10.4 market escrow reconciles through order death (${JSON.stringify(esc2)})`);
 
+// ── AUDIT C1 regression: you cannot BUY a buy-ORDER (it would mint un-escrowed goods) ──
+await seedCh(gus.id, "cash=500000, loc='canal'");
+r = await call('POST', '/v1/market/order', { token: gus.token, body: { goodId: 'gin', qty: 20, price: 500 } });
+const O4 = r.body.id;
+const alt = await mk('Alt Andy'); await seedCh(alt.id, "cash=500000, loc='canal'");
+const altGinPre = (await meOf(alt.token)).cargo.gin || 0;
+const escPreC1 = await escrowOk();
+r = await call('POST', `/v1/market/${O4}/buy`, { token: alt.token, body: { qty: 20 } });
+assert.equal(r.body.error, 'not_for_sale', 'a buy-order is filled at the dock, never bought — no minting goods from escrow');
+assert.equal((await meOf(alt.token)).cargo.gin || 0, altGinPre, 'no conjured units landed in the trunk');
+assert(escPreC1.ok && (await escrowOk()).ok, '§10.4 market escrow untouched by the rejected buy');
+await call('POST', `/v1/market/${O4}/cancel`, { token: gus.token });
+
+// ── AUDIT M2 regression: a self-raise by the current high bidder does NOT extend the auction ──
+let sniperCar = null, sg = 0;
+while (!sniperCar && sg++ < 60) {
+  await seedCh(sal.id, "gta_at=NULL, energy=200, jail_until=NULL");
+  const b = (await call('POST', '/v1/garage/boost', { token: sal.token })).body;
+  if (b.success) sniperCar = b.car.id;
+}
+assert(sniperCar, 'sal boosted a car for the snipe test');
+r = await call('POST', '/v1/market', { token: sal.token, body: { carId: sniperCar, minBid: 1000, hours: 48 } });
+const snipeId = r.body.id;
+r = await call('POST', `/v1/market/${snipeId}/bid`, { token: bea.token, body: { amount: 1000 } });
+assert.equal(r.code, 200, 'bea takes the lead');
+await pool.query(`UPDATE market_listings SET expires_at = now() + interval '2 minutes' WHERE id='${snipeId}'`); // inside the 5-min window
+r = await call('POST', `/v1/market/${snipeId}/bid`, { token: bea.token, body: { amount: 2000 } });
+assert.equal(r.code, 200, 'bea raises herself'); assert.equal(r.body.extended, false, 'a self-raise never resets the anti-snipe clock');
+r = await call('POST', `/v1/market/${snipeId}/bid`, { token: rex.token, body: { amount: 3000 } });
+assert.equal(r.code, 200, 'rex genuinely outbids inside the window'); assert.equal(r.body.extended, true, 'a real outbid DOES soft-close');
+await call('POST', `/v1/market/${snipeId}/cancel`, { token: sal.token }).catch(() => {}); // (bid stands → cancel refused; harmless)
+
+// ── AUDIT LOW-1 regression: the Broker discount never dips a fee below the LIST_FEE_MIN floor ──
+const brk = await mk('Broker Bob'); await seedCh(brk.id, "cash=500000, loc='docks'");
+for (const s of ['fast_talker', 'fence_network', 'broker']) await pool.query(`INSERT INTO character_skills (character_id, skill_id) VALUES ('${brk.id}','${s}')`);
+assert.equal((await call('POST', '/v1/goods/buy', { token: brk.token, body: { goodId: 'gin', qty: 2 } })).code, 200, 'bob stocks a little gin');
+r = await call('POST', '/v1/market', { token: brk.token, body: { goodId: 'gin', qty: 2, price: 100 } }); // $200 ask
+assert.equal(r.code, 200, 'a tiny goods listing');
+assert.equal(r.body.fee, MARKET.LIST_FEE_MIN, 'the broker halves the %, but the anti-spam floor still holds');
+
 // ── the vocabulary stays closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `market:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Black Market test passed — listing gates (fee/floor/escrow guards: melt+fence refuse listed iron), car auction (bid floor, 5% min-raise, outbid refund exact, self-raise diff-only, buy-now instant settle, 2% take carved FROM the hammer as one NULL row), goods district-pinned partial buys + trunk-space reclaim, worker expiry settle + lapse, death (seller listings void with bids refunded, dead man\'s bids burn) + STEP TWO: hidden reserves (board flags met/not, under-reserve lapse refunds the bidder), anti-snipe soft close, standing BUY ORDERS (escrow at post, dock-pinned fills paid minus the take, warehouse claim, un-filled cancel/expiry refunds, dead-poster burn), §10.4 market escrow + vocabulary');
+console.log('✅ Black Market test passed — listing gates (fee/floor/escrow guards: melt+fence refuse listed iron), car auction (bid floor, 5% min-raise, outbid refund exact, self-raise diff-only, buy-now instant settle, 2% take carved FROM the hammer as one NULL row), goods district-pinned partial buys + trunk-space reclaim, worker expiry settle + lapse, death (seller listings void with bids refunded, dead man\'s bids burn) + STEP TWO: hidden reserves (board flags met/not, under-reserve lapse refunds the bidder), anti-snipe soft close, standing BUY ORDERS (escrow at post, dock-pinned fills paid minus the take, warehouse claim, un-filled cancel/expiry refunds, dead-poster burn) + AUDIT: buying a buy-order rejected (no minting from escrow, C1), a self-raise never extends the clock (M2), the broker fee never dips below the floor (LOW-1), §10.4 market escrow + vocabulary');
 await app.close();
