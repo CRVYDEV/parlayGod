@@ -121,17 +121,22 @@ export async function runLedgerInvariants(pool) {
   const payoutsOut = await sum(pool, "currency='cash' AND reason='convoy:payout'");
   push('convoy insurance pool', insurancePool, premiumsIn - payoutsOut);
 
-  // (f3) BLACK MARKET ESCROW: standing bids on live listings == bids posted − refunds − seller
-  // nets ('market:sale') − takes (NULL 'market:take' rows: half street tax + half burn) − dead
-  // bidders' burns (NULL 'market:death'). The 'market:list' fee is a plain sink — NOT in here.
-  const marketEscrow = await one(pool,
+  // (f3) BLACK MARKET ESCROW: standing bids on live listings PLUS un-filled buy-order balances
+  // (step two: qty×price of live orders) == posted ('market:bid' + 'market:order') − refunds −
+  // seller nets ('market:sale' + 'market:fill') − takes (NULL 'market:take': half street tax +
+  // half burn) − dead-poster burns (NULL 'market:death'). The 'market:list' fee is a plain
+  // sink — NOT in here. Order balances summed in JS (pg-mem SUM over an expression is dicey).
+  const bidEscrow = await one(pool,
     "SELECT COALESCE(SUM(bid),0) s FROM market_listings WHERE status='live' AND bidder IS NOT NULL");
-  const mPosted = -(await sum(pool, "currency='cash' AND reason='market:bid'"));
+  const orderRows = (await pool.query(
+    "SELECT qty, price FROM market_listings WHERE status='live' AND kind='order'")).rows;
+  const orderEscrow = orderRows.reduce((a, r) => a + Number(r.qty) * Number(r.price), 0);
+  const mPosted = -(await sum(pool, "currency='cash' AND reason IN ('market:bid','market:order')"));
   const mRefunded = await sum(pool, "currency='cash' AND reason='market:refund'");
-  const mSales = await sum(pool, "currency='cash' AND reason='market:sale'");
+  const mSales = await sum(pool, "currency='cash' AND reason IN ('market:sale','market:fill')");
   const mTakes = -(await sum(pool, "currency='cash' AND reason='market:take'"));
   const mDead = -(await sum(pool, "currency='cash' AND reason='market:death'"));
-  push('market escrow', marketEscrow, mPosted - mRefunded - mSales - mTakes - mDead);
+  push('market escrow', bidEscrow + orderEscrow, mPosted - mRefunded - mSales - mTakes - mDead);
 
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];

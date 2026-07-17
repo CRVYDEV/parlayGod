@@ -341,6 +341,14 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.buyListing(ch, req.params.id, req.body?.qty, client, h)));
   app.post('/v1/market/:id/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.cancelListing(ch, req.params.id, client, h)));
+  // step two — standing buy orders (WTB): post escrows cash at your dock; sellers fill from the
+  // trunk and are paid on the spot; the buyer claims delivered goods into trunk space.
+  app.post('/v1/market/order', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.postOrder(ch, req.body || {}, client, h)));
+  app.post('/v1/market/:id/fill', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.fillOrder(ch, req.params.id, req.body?.qty, client, h)));
+  app.post('/v1/market/:id/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Market.claimOrder(ch, req.params.id, client, h)));
 
   // SMUGGLING CONVOYS — bulk goods in transit: load, guard, ship; ambush someone else's.
   app.get('/v1/convoys', { preHandler: auth }, async (req) => {

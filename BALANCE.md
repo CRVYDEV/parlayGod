@@ -157,7 +157,15 @@ per-member ≈ $43.7k/8h window vs the solo heist's guaranteed $30k = **1.46× s
 1.3–2.1× design band**, with 1-in-3 runs ending in shared jail. §10.4 drift-0 with the faucet
 live. **KEEP as proposed.**
 
-## Post-signing addendum — the Black Market (P2P trade, sign-off pending)
+## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
+
+Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,
+MAX_TTL_H 48, MIN_PRICE 50) founder-approved as production balance. Step two added (numbers
+sign-off pending): `SNIPE_WINDOW_MS` 5 min (soft close), hidden reserves (no new money surface —
+an unmet reserve refunds the bidder whole), and standing BUY ORDERS (escrow = qty×price under the
+same `market escrow` §10.4 check; fills pay sellers minus the same 2% take; a dead poster's
+escrow burns like any dead funder's). Orders share the MAX_LISTINGS cap so fake WTB walls are
+bounded and fee-priced. The two step-one alpha watch items below still stand.
 
 Structurally a TRANSFER layer, not a faucet: every sale moves cash player→player minus the 2%
 take carved FROM the hammer (half street tax → the buyback, half burns) — net supply impact is

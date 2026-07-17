@@ -754,9 +754,23 @@ Jail gates all mutations; no safehouse gate (shopping is neither offense nor ext
 untouched). `BLACK_MARKET` rules-tail block (NOT `MARKET` — that's the generated goods catalog);
 all numbers founder sign-off levers. Tests: gates/fees/floors, escrow guards, full auction
 lifecycle (floor/raise/outbid-refund-exact/self-raise-diff/buy-now/expiry-hammer), goods
-dock+clamp+partial+reclaim, death both sides, escrow check + vocabulary. Step two (deferred):
-goods auctions with warehouse claim, reserve prices, anti-snipe, buy orders, the gear-market
-design call. Suite 14/14 + sim drift-0.
+dock+clamp+partial+reclaim, death both sides, escrow check + vocabulary. Suite 14/14 + sim
+drift-0. **Step-one levers SIGNED 2026-07-17. Step two — BUILT**: **hidden reserves** (cars —
+between minBid and buyNow; under it the sweep refunds the bidder and lapses for reclaim; the
+board shows only `reserveMet`, never the amount), **anti-snipe soft close** (a bid inside
+`SNIPE_WINDOW_MS` 5 min resets the clock to a full window), and **standing BUY ORDERS** (WTB,
+kind='order' on the same table): the buyer escrows qty×price at THEIR dock (`market:order`, +
+the 1% fee; orders share MAX_LISTINGS), sellers standing there fill from the trunk and are paid
+on the spot (`market:fill` via paySeller's `inMemoryCh` — the seller IS the actor, an SQL credit
+would clobber), delivered goods wait in `filled_qty` (the WAREHOUSE) until the buyer claims into
+trunk space — claimable even after cancel/expiry (paid for; they scatter only with the estate).
+Cancel/expiry refund the UN-FILLED escrow (`market:refund`); a dead poster's escrow burns
+(`market:death`, voidListingsAtDeath). The escrow check gained the order side: live bids + live
+order balances (qty×price summed in JS — pg-mem SUM-over-expression is dicey) == posted
+(bid+order) − refunds − nets (sale+fill) − takes − deaths. Fill locks only actor + order row
+(the buyer's character is never touched). Routes: `POST /v1/market/order`,
+`/v1/market/:id/fill|claim`. Step-two numbers are sign-off levers. Still deferred: goods
+auctions proper, the gear-market design call. Suite 14/14 + sim drift-0.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

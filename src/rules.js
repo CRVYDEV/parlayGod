@@ -801,7 +801,9 @@ export const BLACK_MARKET = {           // (MARKET is the generated §5 goods ca
   MIN_RAISE_BPS: 500,                    // a new bid beats the standing one by ≥5%
   TAKE_BPS: 200,                         // 2% of the hammer: half → street tax, half burns
   MAX_TTL_H: 48,                         // listings run at most two days
-  MAX_LISTINGS: 3,                       // live listings per character (bounds warehouse storage)
+  MAX_LISTINGS: 3,                       // live listings per character — orders share the cap (bounds warehouse storage + fake WTB walls)
+  // step two (all founder sign-off levers):
+  SNIPE_WINDOW_MS: 5 * 60 * 1000,        // a bid inside the last 5 min soft-closes: the clock resets to +5 min
 };
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,
