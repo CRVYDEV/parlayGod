@@ -38,9 +38,10 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   hitman_rep BIGINT NOT NULL DEFAULT 0,
   kills INT NOT NULL DEFAULT 0,
   -- THE LAW Phase 4 — the informant's mark. Set the moment an account turns state's evidence
-  -- (`flip`): a permanent badge that FOLLOWS THE BLOODLINE (the heir carries it, like prestige),
-  -- forfeits family membership, and makes the account a contract magnet (the directed-floor
-  -- waiver in postBounty). Pure status — no §10.4 surface.
+  -- (`flip`): a permanent badge that FOLLOWS THE BLOODLINE (the heir carries it, like prestige) and
+  -- makes the account a contract magnet — it VOIDS FAMILY OMERTÀ (fire/npcHit/postBounty on a rat
+  -- ignore the family check, so even their own family — and the whole town, via the waived
+  -- directed-contract floor — can hunt them). Pure status — no §10.4 surface.
   rat BOOLEAN NOT NULL DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS characters (

@@ -8,7 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, witproActive,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -330,9 +330,11 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
   const t = (await client.query('SELECT id, name, account_id FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
-  // Omertà: no open contracts on your own family (parity with searches/hits)
+  // a rat forfeits family protection (audit): fetched once, reused for the omertà void + the waiver
+  const targetRat = !!(await client.query('SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;
+  // Omertà: no open contracts on your own family (parity with searches/hits) — VOID for a rat
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
-  if (tg?.gang_id && tg.gang_id === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !targetRat) throw new GameError('family', "They're family. Omertà.");
   const amt = Math.floor(Number(amount) || 0);
   if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
   // VINNIE T2 (underworld): the Match waives HIS 1% posting fee for friends — the street
@@ -360,8 +362,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
       [ch.account_id, t.account_id])).rows[0] : null;
     // THE LAW Phase 4: a RAT is fair game — the directed floor is waived on a KILL contract on an
     // informant, so the whole town can put a named gun on them cheaply (the vendetta-waiver twin).
-    const ratWaiver = kind === 'kill' && !!(await client.query(
-      'SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;
+    const ratWaiver = kind === 'kill' && targetRat;
     if (!vendetta && !ratWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
@@ -811,7 +812,10 @@ export async function fire(ch, victim, client, h, rounds) {
   if (safeHoused(victim)) throw new GameError('safe', "They've gone to ground — your people can't place them.");
   // THE LAW Phase 4: a rat in witness protection is beyond reach — the marshals have them.
   if (witproActive(victim)) throw new GameError('witpro', "The marshals have them. That one's untouchable for now.");
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) {
+  // family omertà — VOID for a rat (an informant has forfeited the family's protection; audit:
+  // the rat badge must actually make them fair game, or a rat hiding in a strong family defeats
+  // the contract-magnet the waiver promises).
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('family', "They've been made family since you took the contract. It's off.");
   }
@@ -1078,7 +1082,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   if (!tier) throw new GameError('bad_tier', 'No such contractor for hire.');
   if (jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat) throw new GameError('family', "They're family. Omertà."); // a rat forfeits family protection
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
@@ -1235,10 +1239,27 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // GREATEST statement is atomic), which drops their conviction odds / can keep them off an
   // indictment. His own file (if he was ALSO a named target) dies with him. Pure exposure — no §10.4.
   const seededByHim = (await client.query('SELECT target_character, seed FROM informants WHERE witness_character=$1', [victim.id])).rows;
-  for (const s of seededByHim)
-    await client.query('UPDATE characters SET heat_exposure = GREATEST(0, heat_exposure - $2) WHERE id=$1 AND alive', [s.target_character, Number(s.seed)]);
-  const witnessTargets = [...new Set(seededByHim.map((s) => s.target_character))];
-  for (const tid of witnessTargets) await h.notify(client, tid, 'witness_down', {});
+  const collapsed = [];
+  for (const s of seededByHim) {
+    // lift the seed AND clear the indictment IT caused (a self-earned indictment — exposure still
+    // ≥ INDICT after the seed comes off — survives; the CASE reads the pre-update row). Clearing
+    // the case is the marquee "kill the witness → the case collapses" mechanic (schema/design).
+    const upd = await client.query(
+      `UPDATE characters SET heat_exposure = GREATEST(0, heat_exposure - $2),
+         indicted_at = CASE WHEN heat_exposure - $2 < $3 THEN NULL ELSE indicted_at END,
+         jury_bought = CASE WHEN heat_exposure - $2 < $3 THEN false ELSE jury_bought END
+       WHERE id=$1 AND alive RETURNING id`, [s.target_character, Number(s.seed), LAW.INDICT_AT]);
+    // persist-clobber discipline: if the KILLER is the named target (the rat named YOU — the whole
+    // point of the waiver), the SQL write above would be clobbered by persistCharacter(killerCh).
+    // Mirror the relief onto the in-memory killer instead (the refundPot/guarded_by precedent).
+    if (opts.killerCh && s.target_character === opts.killerCh.id) {
+      const ex = Math.max(0, Number(opts.killerCh.heat_exposure || 0) - Number(s.seed));
+      opts.killerCh.heat_exposure = ex;
+      if (ex < LAW.INDICT_AT) { opts.killerCh.indicted_at = null; opts.killerCh.jury_bought = false; }
+    }
+    if (upd.rowCount) collapsed.push(s.target_character); // only LIVING targets got the update (AND alive)
+  }
+  for (const tid of [...new Set(collapsed)]) await h.notify(client, tid, 'witness_down', {});
   await client.query('DELETE FROM informants WHERE witness_character=$1 OR target_character=$1', [victim.id]);
   // M7: a directed contract still in its EXCLUSIVE window is REFUNDED, not burned — an outsider
   // killing the mark first shouldn't torch the poster's stake (the named hitman never got their

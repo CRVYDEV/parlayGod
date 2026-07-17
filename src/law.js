@@ -112,9 +112,12 @@ async function resolveBust(client, h, ch, { forced = false } = {}) {
   // FORFEITURE — FORFEIT_RATE of pocket+bank (a lawyer shrinks it), reaching pocket THEN bank, into
   // the confiscation buffer (the `mod:confiscate` §10.4 pattern). Staked $OMR + gear are untouched.
   const rate = LAW.FORFEIT_RATE * (retainerActive(ch) ? LAW.RETAINER_FORFEIT_MULT : 1);
-  const total = Math.floor((Number(ch.cash) + Number(ch.bank)) * rate);
-  const fromPocket = Math.min(total, Math.floor(Number(ch.cash)));
-  const fromBank = total - fromPocket;
+  const want = Math.floor((Number(ch.cash) + Number(ch.bank)) * rate);
+  // reach pocket THEN bank, each clamped to the floored balance so a fractional (NUMERIC) bank
+  // can't go negative; the ledgered amount is the ACTUAL seized total (audit LOW).
+  const fromPocket = Math.min(want, Math.floor(Number(ch.cash)));
+  const fromBank = Math.min(want - fromPocket, Math.floor(Number(ch.bank)));
+  const total = fromPocket + fromBank;
   if (total > 0) {
     ch.cash = Number(ch.cash) - fromPocket;
     ch.bank = Number(ch.bank) - fromBank;
@@ -134,9 +137,10 @@ async function resolveBust(client, h, ch, { forced = false } = {}) {
 // ── Phase 3 — plea: settle for a certain, smaller loss + a short stretch ──
 export async function plea(ch, client, h) {
   if (!ch.indicted_at) throw new GameError('not_indicted', 'No case to settle.');
-  const total = Math.floor((Number(ch.cash) + Number(ch.bank)) * LAW.PLEA_FORFEIT_RATE);
-  const fromPocket = Math.min(total, Math.floor(Number(ch.cash)));
-  const fromBank = total - fromPocket;
+  const want = Math.floor((Number(ch.cash) + Number(ch.bank)) * LAW.PLEA_FORFEIT_RATE);
+  const fromPocket = Math.min(want, Math.floor(Number(ch.cash)));
+  const fromBank = Math.min(want - fromPocket, Math.floor(Number(ch.bank))); // clamp so a fractional bank can't go negative
+  const total = fromPocket + fromBank;
   if (total > 0) {
     ch.cash = Number(ch.cash) - fromPocket;
     ch.bank = Number(ch.bank) - fromBank;

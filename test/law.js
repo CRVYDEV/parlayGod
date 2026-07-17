@@ -61,6 +61,23 @@ await meOf(dan.token);
 ch = await rawCh(dan.id);
 assert(Number(ch.heat_exposure) < 500, `a cold street's case bleeds off (${Number(ch.heat_exposure)} < 500)`);
 
+// AUDIT REGRESSION: the exposure GAIN is capped at the offline window (like income). A kitchen crew
+// re-adds heat DURING accrual, so without the cap an OFFLINE dealer built a case over the whole
+// multi-day gap and instant-indicted on login. Direct accrue() check (heat pins to 100 via the crew,
+// so the gain is deterministic regardless of the day's event): a 2-day gap builds no MORE than an
+// 8h one (gain capped — pre-fix it was ~6×), and a long AFK bleeds the case to nothing (bleed uncapped).
+{
+  const { accrue } = await import('../src/accrual.js');
+  const hot = (await import('../src/rules.js')).DRUGS.slice(-1)[0].id;
+  const run = (gapMs) => { const c = { respect: 2000, energy: 0, nerve: 0, health: 0, cash: 0, bank: 0, heat: 100,
+    heat_exposure: 0, crew: 5, crew_paid_at: new Date(Date.now() - 3600000), racket_credit_ms: 0, bank_credit_ms: 0,
+    last_accrued_at: new Date(Date.now() - gapMs), path: 'kitchen', loc: 'docks', indicted_at: null };
+    accrue(c, { staked: 0 }, { stash: [{ drug_id: hot, qty: 100000, quality: 1 }], rackets: [], assets: [], held: [] }); return c; };
+  const e8h = run(8 * 3600000).heat_exposure, e2d = run(2 * 86400000).heat_exposure, e30d = run(30 * 86400000).heat_exposure;
+  assert(e2d <= e8h + 1, `a 2-day offline gap builds no more case than 8h — the gain is capped (${Math.round(e2d)} ≤ ${Math.round(e8h)})`);
+  assert.equal(Math.round(e30d), 0, 'a long offline gap bleeds the case to nothing');
+}
+
 // the bribe — knock the case down a band (a wealth-scaled cash sink → the confiscation buffer)
 await seedCh(dan.id, 'heat_exposure=2000, heat=50, cash=1000000, bank=0');
 let pool0 = await poolCash();
@@ -164,18 +181,21 @@ assert.equal((await call('POST', '/v1/law/plea', { token: pab.token })).body.err
 // ─────────────────────────────────────────────────────────────────────────────
 const rat = await mk('Ratty Ray');       // will flip
 const named = await mk('Named Nick');     // the rival Ray names
-await seedCh(named.id, 'respect=200');    // over the NPC-hit floor for the witpro test later
+// seed the named rival just under the line so the FLIP_SEED tips them over → indicted by testimony
+await seedCh(named.id, `respect=200, heat_exposure=${LAW.INDICT_AT - LAW.FLIP_SEED + 200}`);
 const namedExp0 = Number((await rawCh(named.id)).heat_exposure);
 await seedCh(rat.id, 'indicted_at=now(), heat_exposure=4000, cash=100000');
 r = await call('POST', `/v1/law/flip/${named.id}`, { token: rat.token });
 assert.equal(r.code, 200, 'turned state');
 assert.equal(r.body.named, 'Named Nick', 'Ray names his rival');
+assert.equal(r.body.namedIndicted, true, 'the testimony indicts the named rival');
 let rch = await rawCh(rat.id);
 assert(!rch.indicted_at, "the rat's case is dropped");
 assert.equal((await meOf(rat.token)).law.rat, true, 'the rat badge is worn');
 assert(rch.jail_until && new Date(rch.jail_until) > new Date(), 'the rat does a soft stretch');
-const nch = await rawCh(named.id);
+let nch = await rawCh(named.id);
 assert.equal(Number(nch.heat_exposure) - namedExp0, LAW.FLIP_SEED, "the named rival's case grows by the seed");
+assert(!!nch.indicted_at, 'the seeded case latched an indictment on the named rival');
 const inf = (await pool.query(`SELECT * FROM informants WHERE witness_character='${rat.id}'`)).rows;
 assert.equal(inf.length, 1, 'an informant record is filed');
 await seedCh(rat.id, 'indicted_at=now()'); // even re-indicted, a rat has nothing left to trade
@@ -191,6 +211,20 @@ assert.equal(r.code, 200, 'a cheap named gun on a rat is allowed (floor waived)'
 // …but a non-rat still takes the full directed stake
 r = await call('POST', `/v1/streets/${named.id}/bounty`, { token: poster.token, body: { amount: 500, kind: 'kill', hitman: gun4hire.id } });
 assert.equal(r.body.error, 'directed_min', 'a non-rat directed contract still takes the serious stake');
+
+// AUDIT REGRESSION: a rat FORFEITS FAMILY OMERTÀ — even their own family can contract them, while a
+// loyal member is still protected. (Without the fix a rat hiding in a family defeats the magnet.)
+const capo = await mk('Capo Carl');
+const loyalist = await mk('Loyal Lou');
+await seedCh(capo.id, 'respect=2000, cash=100000, jail_until=NULL');
+await seedCh(rat.id, 'jail_until=NULL');
+const gid = (await call('POST', '/v1/gangs', { token: capo.token, body: { name: 'The Carls', tag: 'CARL' } })).body.gangId;
+assert.equal((await call('POST', `/v1/gangs/${gid}/join`, { token: rat.token })).code, 200, 'the rat is in the family');
+assert.equal((await call('POST', `/v1/gangs/${gid}/join`, { token: loyalist.token })).code, 200, 'the loyalist is in the family');
+r = await call('POST', `/v1/streets/${rat.id}/bounty`, { token: capo.token, body: { amount: 1000, kind: 'kill' } });
+assert.equal(r.code, 200, 'a family contract on the RAT is allowed — omertà is void for an informant');
+r = await call('POST', `/v1/streets/${loyalist.id}/bounty`, { token: capo.token, body: { amount: 1000, kind: 'kill' } });
+assert.equal(r.body.error, 'family', 'a loyal family member still has omertà');
 
 // witness protection — a one-time untargetable relocation window
 await seedCh(rat.id, 'jail_until=NULL');
@@ -209,7 +243,9 @@ assert.equal(hit.body.error, 'witpro', 'the marshals put the rat beyond a contra
 const namedExpPre = Number((await rawCh(named.id)).heat_exposure);
 r = await call('POST', '/v1/mod/kill', { mod: true, body: { characterId: rat.id, reason: 'witness eliminated' } });
 assert.equal(r.code, 200, 'the witness is down');
-assert.equal(Number((await rawCh(named.id)).heat_exposure), namedExpPre - LAW.FLIP_SEED, 'the seeded case collapses with the witness');
+nch = await rawCh(named.id);
+assert.equal(Number(nch.heat_exposure), namedExpPre - LAW.FLIP_SEED, 'the seeded case collapses with the witness');
+assert(!nch.indicted_at, 'AUDIT: killing the witness CLEARS the indictment his testimony caused (the case dies with him)');
 assert.equal((await pool.query(`SELECT COUNT(*) c FROM informants WHERE witness_character='${rat.id}'`)).rows[0].c, 0, 'the informant record dies with the witness');
 
 // ─────────────────────────────────────────────────────────────────────────────

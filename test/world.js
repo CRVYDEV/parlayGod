@@ -130,7 +130,18 @@ r = await call('POST', '/v1/world/zappa/raid', { token: raider.token });
 assert.equal(r.body.routed, true, 'draining the reservoir below the floor ROUTS the outfit');
 assert.equal(r.body.routBonus, worldNpcOf('zappa').routBonus, 'routing pays a one-time bonus');
 assert.equal(Number((await rawCh(raider.id)).cash) - Number(before.cash), r.body.loot + r.body.routBonus, 'the raider banks loot + the rout bonus');
+// AUDIT REGRESSION: the rout bonus fires only on the CROSSING — raiding an outfit ALREADY below
+// the floor pays loot but NOT another bonus (else a horde pinning a reservoir mints it every raid)
+await pool.query(`UPDATE world_npcs SET strength=${Math.round(floor - 50)}, strength_at=now() WHERE npc_id='zappa'`);
+await seedCh(raider.id, 'energy=200, ammo=100, world_raid_at=NULL, hosp_until=NULL, cash=1000');
+r = await call('POST', '/v1/world/zappa/raid', { token: raider.token });
+assert.equal(r.body.routed, false, 'an already-floored outfit does not re-rout');
+assert.equal(r.body.routBonus, 0, 'no repeat rout bonus while the reservoir sits below the floor');
 delete process.env.WORLD_RAID_P;
+// AUDIT REGRESSION: a raid is an armed op — a hospitalized raider is turned away (parity w/ convoy/heist)
+await seedCh(raider.id, "energy=200, ammo=100, world_raid_at=NULL, hosp_until = now() + interval '10 minutes'");
+assert.equal((await call('POST', '/v1/world/zappa/raid', { token: raider.token })).body.error, 'hosp', 'no raiding from a hospital bed');
+await seedCh(raider.id, 'hosp_until=NULL');
 
 // gates: level, energy, ammo
 const rookie = await mk('Rookie Ron');
