@@ -981,6 +981,37 @@ acquittal, plea, jury, the flip + rat waiver, witpro untargetability, the collap
 grace window, and the closed vocabulary. Suite 17/17 + sim drift-0. ALL numbers are founder sign-off
 levers — sim + sign-off into BALANCE.md before production.
 
+**THE LIVING WORLD — BUILT, all four phases** (`src/world.js`, `test/world.js` — the 18th suite file;
+design `omerta-living-world-design.md`). The city breathes. `CITY_EVENTS`/`cityEventOf` already drove
+every economy loop; the `LIVING`/`WORLD` rules-tail blocks layer everything the design called for, all
+keyed off the event id (CITY_EVENTS is GENERATED — hands off, ground rule #2). **Phase 1 — the city
+you can SEE**: `GET /v1/city` publishes today's TWO event tracks (`cityEventOf` + the independent
+`cityLawEventOf(day+OFFSET)`), the intraday clock, per-district weather, and a **7-day forecast** (all
+pure functions of the day — knowable, so players plan); the character `view` carries a `city` summary.
+**Phase 2 — NPC RIVAL FAMILIES** (the one emission surface, sim sign-off): `WORLD_NPCS` fixtures, each
+a SERVER-WIDE shared cash reservoir (`world_npcs.strength`) the whole base grinds down together
+(positive-sum co-op, distinct from zero-sum turf war), regenerating lazily toward its max; `raidNpc`
+(`POST /v1/world/:id/raid`) loots a bounded slice (`GRAB_BPS` capped) as a ledgered `world:raid` cash
+FAUCET (bounded by the reservoir/regen — a metered world quantity, §10.4-safe) + a `world:raid` ammo
+SINK, drains the reservoir, and on a rout (drained below the floor) pays a one-time bonus + a streets
+event; gated by level/energy/ammo + a per-character cooldown (`characters.world_raid_at`); repel →
+hospitalize. `GET /v1/world` is the level-gated odds board. **Phase 3 — economic weather**:
+`regionShockOf` (deterministic §7.11 hash, MEAN-NEUTRAL 0.9–1.1 so it adds texture not inflation, and
+deliberately NARROW so it can't widen the audited trade-goods arbitrage) folds INTO `goodPriceOf` — so
+the prices board, buy/sell, and convoy value all read ONE consistent shocked surface, per-district,
+stable within a day; surfaced as the `weather` map on `/v1/city` (the arbitrage map). **Phase 4 — the
+day/night clock**: `cityHourOf` (UTC-hour patrol window, no state); the Bureau works business hours so
+a trial/bust in the patrol window convicts harder (`bustProbOf` × `PATROL_BUST_MULT`), and the small
+hours ease an NPC raid's defense — both on NEW levers only (never a signed BALANCE surface); surfaced
+on `/v1/city`, `/v1/law`, the view. §10.4: `world:` joined the cash vocabulary (a bounded faucet,
+drift-0) + the ammo vocabulary (the raid sink); no other pillar moves value. `WORLD_RAID_P` is a
+TEST-ONLY roll knob (the LAW_BUST_P precedent). Deferred: the NPC-held-district "seizable frontier"
+(invasive — the raid loot + rout stand in) and a cross-process streets-weather emit (the board/view
+is the surface). `test/world.js` proves the forecast/clock/weather board, the mean-neutral shock (folded
+into the price, floor holds, per-district variance), the raid (bounded faucet, ammo sink, drain, regen,
+rout, all gates), the patrol conviction premium, and the closed vocabulary. Suite 18/18 + sim drift-0.
+ALL numbers are founder sim sign-off levers — sign into BALANCE.md before production.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

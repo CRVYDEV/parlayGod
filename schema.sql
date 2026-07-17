@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS characters (
   retainer_until TIMESTAMPTZ,
   jury_bought BOOLEAN NOT NULL DEFAULT false,
   witpro_until TIMESTAMPTZ,
+  world_raid_at TIMESTAMPTZ,                       -- THE LIVING WORLD P2: per-character NPC-raid cooldown
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -520,6 +521,16 @@ CREATE TABLE IF NOT EXISTS informants (
   target_account TEXT NOT NULL,
   seed NUMERIC NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a
+-- shared cash reservoir the whole player base grinds down together (positive-sum co-op); it
+-- regenerates lazily toward the fixture max on `strength_at`. A raid loots a bounded slice
+-- (world:raid — a ledgered cash faucet capped by the reservoir/regen). Seeded lazily on first touch.
+CREATE TABLE IF NOT EXISTS world_npcs (
+  npc_id TEXT PRIMARY KEY,
+  strength NUMERIC NOT NULL,
+  strength_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- CREW HEISTS (THE BIG SCORE): the game's first co-op content. One row per job; members join

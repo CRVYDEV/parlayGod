@@ -1,5 +1,12 @@
 # The Living World (design)
 
+> **STATUS: BUILT (all four phases) — `src/world.js`, `test/world.js` (the 18th suite), the `LIVING`
+> + `WORLD` rules-tail blocks.** Phase 2's `world:raid` is the one emission surface (a bounded cash
+> faucet — SIM sign-off before production, ground rule #1). Suite 18/18 + sim drift-0. Deferred:
+> the NPC-held-district "seizable frontier" (would require NPC turf ownership — invasive; the raid
+> loot + rout event stand in) and the cross-process streets-weather emit (surfaced on the board/view
+> instead). Implementation summary at the end.
+
 ## 1. Why
 The city already breathes — faintly. `CITY_EVENTS` (17 events in the rules tail) rotate daily via
 `cityEventOf(day)` and are ALREADY wired into every economy loop: crime `jobPay`/`jailMult`/`crimeRep`,
@@ -149,3 +156,25 @@ Every number here is a **founder sign-off lever** (ground rule #1). The existing
 and the §7.11 price hash are the sim-audited floor this builds ON, never over. `node tools/sim.js` +
 `npm test` gate every phase, and Phase 2's faucet specifically requires an extraction-vs-inflow sim pass
 before it reaches production.
+
+## 8. As built
+- **`src/rules.js` tail** — the `LIVING` block (`FORECAST_DAYS`, `LAW_TRACK_OFFSET`, the mean-neutral
+  `REGION_SHOCK_*` band, the `PATROL_*`/`NIGHT_RAID` clock levers) + `cityHourOf`, `cityLawEventOf`,
+  `regionShockOf`, `cityForecast`; the `WORLD_NPCS` fixtures + `WORLD` levers. **`goodPriceOf` folds
+  the per-district shock in** (one consistent surface for the prices board, buy/sell, and convoy
+  value). `bustProbOf` gained the patrol multiplier. CITY_EVENTS itself is untouched (generated).
+- **Phase 1** — `GET /v1/city` publishes both event tracks, the intraday clock, per-district weather,
+  and a 7-day forecast (pure functions of the day). The character `view` carries a `city` summary.
+- **Phase 2** — `src/world.js`: `worldBoard` (level-gated odds, status band) + `raidNpc` (a bounded
+  `world:raid` cash faucet + a `world:raid` ammo sink, draining a shared regenerating reservoir;
+  rout bonus + streets event; energy/ammo/level/cooldown gates). `world_npcs` table (server-wide,
+  lazy regen); `characters.world_raid_at` cooldown. WORLD_RAID_P is a TEST-ONLY roll knob.
+- **Phase 3** — `regionShockOf` (deterministic, mean-neutral, band-narrow so it can't widen the
+  audited arbitrage) folded into `goodPriceOf`; surfaced as the `weather` map on `GET /v1/city`.
+- **Phase 4** — `cityHourOf` (UTC-hour patrol window); the Bureau convicts harder on patrol
+  (`bustProbOf`), the small hours ease an NPC raid; surfaced on `/v1/city`, `/v1/law`, and the view.
+- **§10.4** — `world:` joins the cash vocabulary (a faucet bounded by the reservoir/regen — enrolled,
+  drift-0) and the ammo vocabulary (the raid's rounds sink). No other pillar touches value.
+- **`test/world.js`** proves the forecast/clock/weather board, the mean-neutral shock folded into the
+  price (deterministic + floor + per-district variance), the raid (bounded loot faucet, ammo sink,
+  reservoir drain, regen, rout, all gates), the patrol conviction premium, and the closed vocabulary.
