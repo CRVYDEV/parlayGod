@@ -21,6 +21,7 @@ import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const expired = (l) => new Date(l.expires_at) <= new Date();
 const cargoCount = (cargo) => Object.values(cargo).reduce((a, n) => a + (n || 0), 0);
 
@@ -56,7 +57,7 @@ async function paySeller(client, h, sellerId, hammer, { reason = 'market:sale', 
 export async function listItem(ch, opts, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
   const live = Number((await client.query(
-    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [ch.id])).rows[0].n);
+    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND (status='live' OR (kind='order' AND filled_qty > 0))", [ch.id])).rows[0].n); // audit #2: a cancelled order still holding warehouse goods keeps its slot
   if (live >= maxListings(h)) throw new GameError('max_listings', `The Market floors you at ${maxListings(h)} live listings.`);
   const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   const expiresAt = new Date(Date.now() + hours * 3600 * 1000);
@@ -162,13 +163,18 @@ export async function bidListing(ch, listingId, amount, client, h) {
 // in-memory) and the order row — the buyer's character is never locked (their cash left at post).
 export async function postOrder(ch, opts, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from lockup.');
+  // audit #1(b): posting a buy-order parks liquid in escrow — an extraction-prep act, so it's
+  // blocked from a safehouse (the D2 discipline: a safehouse is a shield, not a money bunker).
+  if (safeHoused(ch)) throw new GameError('safe', "No parking cash on the docks from a safehouse — come out first.");
   const live = Number((await client.query(
-    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [ch.id])).rows[0].n);
+    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND (status='live' OR (kind='order' AND filled_qty > 0))", [ch.id])).rows[0].n); // audit #2: a cancelled order still holding warehouse goods keeps its slot
   if (live >= maxListings(h)) throw new GameError('max_listings', `The Market floors you at ${maxListings(h)} live listings.`);
   if (!GOODS.find((g) => g.id === opts.goodId)) throw new GameError('bad_good', 'No such good.');
   const qty = Math.floor(Number(opts.qty) || 0);
   const price = Math.floor(Number(opts.price) || 0);
   if (qty < 1) throw new GameError('qty', 'Order at least one unit.');
+  // audit #2: cap the order size — an unbounded qty made the warehouse infinite off-trunk storage
+  if (qty > MARKET.ORDER_MAX_QTY) throw new GameError('qty', `An order tops out at ${MARKET.ORDER_MAX_QTY} units.`);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   const escrow = qty * price;
   if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
@@ -308,8 +314,18 @@ export async function cancelListing(ch, listingId, client, h) {
   const l = (await client.query(
     "SELECT * FROM market_listings WHERE id=$1 AND status IN ('live','expired') FOR UPDATE", [listingId])).rows[0];
   if (!l || l.seller_character !== ch.id) throw new GameError('no_listing', 'Not your listing.');
-  if (l.bidder) throw new GameError('bid_standing', 'Someone holds a bid — the hammer decides now.');
+  // audit #5 (reserve-lock grief): a standing bid holds the hammer — EXCEPT a bid that can never
+  // clear an unmet hidden reserve, which was only ever a lock on your iron. That one you can pull
+  // out from under (the bidder is refunded), so a $50 min-bid can't freeze a reserved car for the
+  // whole TTL. A bid that CAN win (no reserve, or ≥ reserve) still blocks — the hammer decides.
+  const belowUnmetReserve = l.kind === 'car' && l.reserve != null && l.bidder && Number(l.bid) < Number(l.reserve);
+  if (l.bidder && !belowUnmetReserve) throw new GameError('bid_standing', 'Someone holds a bid that can take it — the hammer decides now.');
   if (l.kind === 'car') {
+    if (l.bidder && Number(l.bid) > 0) { // refund the locked-out under-reserve bidder (third party → SQL)
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [l.bidder, Number(l.bid)]);
+      await h.ledger(client, { characterId: l.bidder, currency: 'cash', amount: Number(l.bid), reason: 'market:refund' });
+      await notify(client, l.bidder, 'market_outbid', { listing: l.id, cancelled: true });
+    }
     await client.query('UPDATE cars SET listed=false WHERE id=$1', [l.car_id]);
     const car = h.owned.cars.find((c) => c.id === l.car_id);
     if (car) car.listed = false;
@@ -330,7 +346,7 @@ export async function cancelListing(ch, listingId, client, h) {
     h.owned.cargo[l.good_id] = back;
     await setCargo(client, ch.id, l.good_id, back);
   }
-  await client.query("UPDATE market_listings SET status='cancelled' WHERE id=$1", [listingId]);
+  await client.query("UPDATE market_listings SET status='cancelled', bid=NULL, bidder=NULL WHERE id=$1", [listingId]);
   return { ok: true, cancelled: l.id };
 }
 
@@ -450,16 +466,28 @@ export async function sweepMarket(pool) {
 // runEstate hooks (called with the estate's client, chars already locked):
 // the dead man's LISTINGS die — standing bids refunded (killer-as-bidder threads in-memory via
 // killerCh, the refundPot discipline); goods scatter, cars fall with the fleet wipe anyway.
-export async function voidListingsAtDeath(client, victimId, killerCh) {
-  let selfRefund = 0;
+export async function voidListingsAtDeath(client, victimId, killerCh, lootRate = 0) {
+  let selfRefund = 0, looted = 0;
   const rows = (await client.query(
     "SELECT * FROM market_listings WHERE seller_character=$1 AND status IN ('live','expired') FOR UPDATE", [victimId])).rows;
   for (const l of rows) {
     if (l.kind === 'order') {
-      // the dead poster's un-filled escrow BURNS (the dead-funder precedent); undelivered
-      // warehouse goods scatter with the row (the estate-freight precedent)
+      // the dead poster's un-filled escrow leaves the market. On a PLAYER fire-kill (lootRate > 0)
+      // the killer takes CASH_LOOT_RATE of it — liquid parked in a WTB is lootable like pocket
+      // cash (audit #1: else it was a loot-proof vault). The rest BURNS (the dead-funder
+      // precedent); undelivered warehouse goods scatter with the row. NPC/mod kills don't loot.
       const remaining = l.status === 'live' ? Number(l.qty) * Number(l.price) : 0;
-      if (remaining > 0) await ledger(client, { currency: 'cash', amount: -remaining, reason: 'market:death' });
+      if (remaining > 0) {
+        const loot = killerCh && lootRate > 0 ? Math.floor(remaining * lootRate) : 0;
+        if (loot > 0) {
+          killerCh.cash = Number(killerCh.cash) + loot; // the killer is the in-memory actor — never SQL (persist clobber)
+          looted += loot;
+          await ledger(client, { characterId: killerCh.id, currency: 'cash', amount: loot, reason: 'whack:loot', counterparty: victimId });
+          await ledger(client, { currency: 'cash', amount: -loot, reason: 'market:loot', counterparty: victimId }); // escrow-side outflow
+        }
+        const burn = remaining - loot;
+        if (burn > 0) await ledger(client, { currency: 'cash', amount: -burn, reason: 'market:death', counterparty: victimId });
+      }
     } else if (l.bidder && Number(l.bid) > 0) {
       if (killerCh && l.bidder === killerCh.id) selfRefund += Number(l.bid);
       else await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [l.bidder, Number(l.bid)]);
@@ -468,7 +496,7 @@ export async function voidListingsAtDeath(client, victimId, killerCh) {
     }
   }
   await client.query("DELETE FROM market_listings WHERE seller_character=$1", [victimId]);
-  return { selfRefund };
+  return { selfRefund, looted };
 }
 // the dead man's standing BIDS burn (the dead-funder precedent) — the auctions reopen.
 export async function burnBidsAtDeath(client, victimId) {

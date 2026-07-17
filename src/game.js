@@ -189,9 +189,25 @@ export function bestNpc(h) {
 // Gifts (business:false) and rivalry/grudge losses (pts<0) never trigger it.
 export async function bumpStanding(client, h, ch, npcId, pts, { business = true, action = null } = {}) {
   const cur = Number(h.owned.npc[npcId] || 0);
-  let lead = false, streak = 0, bonus = 0;
   const day = dayOf();
-  if (business && pts > 0 && action && action === leadTaskOf(day, npcId)) {
+  // the intent to do positive business — drives the daily cap AND the once-daily bonuses below.
+  // Captured BEFORE the cap clips `pts`, so a capped-out bump still lets you claim the lead/errand.
+  const origPositive = business && pts > 0;
+  // audit #3: a per-fixture DAILY CAP on the RAW bump — the spammable part. The lead/streak and
+  // errand bonuses below ride on top, EXEMPT (they're already once-a-day bounded), so a scripter
+  // hits the cap while an engaged player still collects their engagement rewards.
+  if (origPositive) {
+    const g = (await client.query('SELECT gained FROM npc_gain WHERE character_id=$1 AND npc_id=$2 AND day=$3', [ch.id, npcId, day])).rows[0];
+    const gained = g ? Number(g.gained) : 0;
+    const capped = Math.min(pts, Math.max(0, UNDERWORLD.STANDING_DAILY_CAP - gained));
+    if (capped > 0) { // absolute write (pg-mem INT-arithmetic quirk)
+      if (g) await client.query('UPDATE npc_gain SET gained=$4 WHERE character_id=$1 AND npc_id=$2 AND day=$3', [ch.id, npcId, day, gained + capped]);
+      else await client.query('INSERT INTO npc_gain (character_id, npc_id, day, gained) VALUES ($1,$2,$3,$4)', [ch.id, npcId, day, capped]);
+    }
+    pts = capped; // the raw bump is now the daily allowance (may be 0)
+  }
+  let lead = false, streak = 0, bonus = 0;
+  if (origPositive && action && action === leadTaskOf(day, npcId)) {
     if (bestNpc(h) === npcId) {
       const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
       if (!claimed.rowCount) {
@@ -229,10 +245,11 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
         [ch.id, npcId, next]);
     }
     h.owned.npc[npcId] = next;
-  } else if (business && pts > 0) {
-    // a positive business bump that hit the 100 cap still counts as CONTACT — re-stamp the decay
-    // clock so a daily-active maxed player stays maxed (audit L1: else the clock ran from the day
-    // they capped, and the effective value dipped below 100 after the grace despite daily play).
+  } else if (origPositive) {
+    // a positive business contact that didn't move standing (hit the 100 cap, or capped-out on the
+    // daily allowance) still counts as CONTACT — re-stamp the decay clock so a daily-active maxed
+    // player stays maxed (audit L1: else the clock ran from the day they capped and dipped after
+    // the grace despite daily play).
     await client.query('UPDATE npc_standing SET touched_at=now() WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId]);
   }
   if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus, streak });

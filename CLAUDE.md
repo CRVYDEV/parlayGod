@@ -889,6 +889,27 @@ uncapped tier, penance-on-effective + materialized row, clean), errand (stranger
 match, no double-step/day, 3-day completion +15, notify, replace), fix rivalry (in
 test/casino.js, −5 exact). Suite 16/16 + sim drift-0.
 
+A four-lens red-team over the Black Market / Skills / Underworld drops
+(`AUDIT-market-skills-underworld.md`) then closed a CRITICAL (`buyListing` had no kind guard —
+buying a buy-ORDER fell into the goods-sale branch and MINTED un-escrowed goods + drifted the
+market-escrow check; now `kind!=='good'` throws `not_for_sale`) and six correctness fixes
+(`decayedGrudges` clock-skew phantom grudge → days clamped ≥0; Broker undercut `LIST_FEE_MIN` →
+floor re-asserted after the discount; `discharge` missing the jail gate; the armorer favor
+free-repairing a market-LISTED car; "Vinnie never grudges" was docs-only → `bearGrudges` skips
+`fixer`; a capped-100 bump not re-stamping `touched_at`). The ledger + concurrency lenses found no
+new HIGH/CRITICAL (market escrow, lock order, persist-clobber, death paths all verified clean).
+The founder then approved a five-item balance package (all BUILT, sign-off levers): **#5** a seller
+can cancel a car under an unmet-reserve bid (refunding the bidder — no more free TTL-lock grief);
+**#2** `BLACK_MARKET.ORDER_MAX_QTY` 200 + cancelled orders holding `filled_qty` count against
+`MAX_LISTINGS` (bounds the warehouse); **#3** `UNDERWORLD.STANDING_DAILY_CAP` 25 on RAW bumps via a
+new `npc_gain` table (lead/streak/errand bonuses exempt) — restores "top tiers are EARNED" and
+moots the whispers auto-safehouse worry; **#1** a fire-kill loots `CASH_LOOT_RATE` (25%) of the
+victim's live buy-order escrow (`whack:loot` + NULL `market:loot` outflow, remainder burns
+`market:death`, a new §10.4 market-escrow term) + posting an order is safehouse-blocked — closes
+the loot-proof cash vault that undercut Make-Risk-Pay. `npc_gain` joined the estate wipe. Fixes
+committed across `2caec07`/`a20954b`/`4ad4a18` + the package; regressions per fix; Suite 16/16 +
+sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

@@ -828,6 +828,11 @@ export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
 // surface. ALL numbers are founder sign-off levers.
 export const UNDERWORLD = {
   THRESHOLDS: [25, 60, 90],           // standing for tier 1 / 2 / 3
+  // audit #3: a per-fixture DAILY cap on RAW actor-side bumps (the spammable ones) — the
+  // once-a-day lead/streak and errand bonuses ride ON TOP, exempt (already daily-bounded). Set
+  // just above the honest lead+streak+errand ceiling so real play is never clipped but scripting
+  // to tier 3 in minutes is dead: 0→90 now takes days of active raw play, not a session.
+  STANDING_DAILY_CAP: 25,
   GIFT_COST: 5000, GIFT_STANDING: 5, GIFT_CAP: 50,
   DISCHARGE_PER_MIN: 150,             // the Doc's early-discharge rate ($/remaining minute)
   GUN_BUYBACK: 0.3,                   // the Armorer's buy-back (share of the gun's cash price)
@@ -895,6 +900,7 @@ export const BLACK_MARKET = {           // (MARKET is the generated §5 goods ca
   MAX_LISTINGS: 3,                       // live listings per character — orders share the cap (bounds warehouse storage + fake WTB walls)
   // step two (all founder sign-off levers):
   SNIPE_WINDOW_MS: 5 * 60 * 1000,        // a bid inside the last 5 min soft-closes: the clock resets to +5 min
+  ORDER_MAX_QTY: 200,                     // audit #2: a buy-order's units are capped so the warehouse can't be unbounded off-trunk storage
 };
 // Risk-to-Earn Phase 3 — TERRITORY RACKETS: productive, SEIZABLE capital anchored to a district.
 // Established on your own turf (cost from the treasury), income accrues to the treasury (lazy,

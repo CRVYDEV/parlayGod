@@ -337,3 +337,23 @@ decree needs a MAJORITY of the top-5 families and lasts one week, abuse is self-
 
 **Signing this document** = every KEEP row above is production balance; the DECIDE list is the
 complete set of open economy questions. Nothing else is pending.
+
+## Post-signing addendum — market/skills/underworld audit fixes (founder-approved, sign-off levers)
+
+The `AUDIT-market-skills-underworld.md` four-lens pass closed one CRITICAL code bug (buying a
+buy-order minted goods) + six correctness fixes, then the founder approved a five-item package for
+the balance/design findings. All BUILT; suite 16/16 + sim drift-0. New levers:
+- **`BLACK_MARKET.ORDER_MAX_QTY` 200** — a buy-order's units are capped (the warehouse was
+  unbounded off-trunk storage); cancelled orders still holding goods now also count against
+  `MAX_LISTINGS`. Bounds the trade-goods-arbitrage-vs-convoy concern (D8's turf-arbitrage cousin).
+- **`UNDERWORLD.STANDING_DAILY_CAP` 25** — a per-fixture daily cap on RAW actor-side standing bumps
+  (the spammable part), so tier 3 takes days of active play, not minutes; the once-a-day
+  lead/streak/errand bonuses ride on top, exempt. Restores the "top tiers are EARNED" invariant and
+  moots the whispers-vs-silent-hunt worry (madame 90 is no longer a cheap session grind).
+- **order-escrow loot** — a fire-kill loots the signed `CASH_LOOT_RATE` (25%) of a victim's live
+  buy-order escrow (ledgered `whack:loot` + `market:loot`, remainder burns; §10.4 exact), and
+  posting an order is safehouse-blocked. Closes the loot-proof cash vault that undercut
+  Make-Risk-Pay — parked liquid is now exposed like pocket cash. Reuses the signed loot rate; no
+  new kill-economics number.
+Founder call this pass: the two new numbers (200 order cap, +25/day standing) plus the decision to
+reuse `CASH_LOOT_RATE` for order loot. Everything else in the audit was a code-correctness fix.
