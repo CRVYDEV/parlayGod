@@ -104,7 +104,30 @@ untouched by construction.
 Money in step four: ONE new legible cash sink (penance). Everything else is status, access,
 and resources — §10.4 untouched beyond the vocabulary the prefix already covers.
 
-## 8. Step five (deferred)
-More rivalry pairs, grudge decay (time heals what money can't), favor CHOICE menus per
-fixture, NPC storylines (multi-day errand chains), a fixture REFUSING service during an
-active vendetta against their other friend.
+## 8. Step five — BUILT (levers in `UNDERWORLD.STEP5`)
+- **GRUDGE DECAY** — time heals what money can't: one grudge is forgiven per
+  GRUDGE_DECAY_DAYS 14 since the last write (`npc_grudges.since`); a fresh offense — or a
+  penance — restarts the clock. Lazy (§7.1): the EFFECTIVE count is what the tier cap and the
+  board read; the stored row materializes on the next write. Penance always settles the
+  effective count — you never pay for what time already healed.
+- **THE ERRAND CHAIN** (NPC storylines): `POST /underworld/:npc/errand` — a tier-1+ fixture
+  hands you a job: do their DRAWN daily task on CHAIN_STEPS 3 separate days and the
+  relationship jumps CHAIN_BONUS +15 (plus the streets hear about it). One step a day, one
+  active chain per street; starting another replaces the half-done job. Rides the step-three
+  task machinery inside `bumpStanding` — works for ANY fixture you took the job from, not
+  just your best (chains are how you BUILD a second relationship).
+- **RIVALRY #3** — nobody fixes HER book: buying the fight referee (`fixFight`) costs the
+  boss FIX_LOSS 5 with the Madame. A social tax on the Sybil-flagged fix surface — status,
+  never money, so the signed den economics are untouched.
+
+Design calls made honestly rather than built as filler: **favor menus** are ABSORBED — the
+step-four favor already IS a menu (you pick which tier-3 fixture to call on); adding second
+options per fixture produced only strict-upgrades or filler, so no fake choices shipped.
+**Vendetta-refusal** (a fixture refusing you while you hold a vendetta against their other
+friend) is DEFERRED with cause: it needs a vendettas→target-street→their-standings join on
+hot perk paths, and play-tests legibility poorly ("why won't the Doc talk to me?") — revisit
+if live data shows vendettas need more social weight.
+
+## 9. Step six (deferred)
+More rivalry pairs, favor menus with real tradeoffs (if any emerge), vendetta-refusal (see
+above), errand chains that cross fixtures (a story that passes you from the Doc to Vinnie).

@@ -231,6 +231,17 @@ roughly $1–3k in avoided sink spend per week at endgame perk levels; it slight
 small sinks, bounded at one claim/street/week — watch alongside the other T3 conveniences,
 and note the elegant interlock: a grudge suspends exactly this).
 
+**Step five** (levers in `UNDERWORLD.STEP5`; zero new money): `GRUDGE_DECAY_DAYS` 14 (time
+heals one grudge per two idle weeks — this SOFTENS the penance sink's demand: a patient
+killer waits instead of paying $25k; at 14 days the wait is long enough that active killers —
+who re-offend and reset the clock — still pay, while a one-time grudge on a reformed player
+fades; shorten it and penance revenue drops toward zero); `CHAIN_STEPS` 3 / `CHAIN_BONUS` +15
+(the errand chain adds ≤5/day standing velocity for a committed three-day arc — combined
+ceiling with lead+streak is now ~+20/day for perfect play, still a pure status axis);
+`FIX_LOSS` 5 (a status tax on the flagged fight-fix surface — the fixing boss slowly locks
+himself out of the Madame's velvet rope and whispers, a real cost for serial fixers, zero
+touch on the den's signed money).
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,

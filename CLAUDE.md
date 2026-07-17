@@ -871,7 +871,23 @@ STREAK_BONUS_CAP 5), so day 6+ pays +10; notify carries bonus+streak. Board gain
 `favor.taken`, per-fixture `grudge`. Tests: board grudge counts, tier-cap at 95, penance
 (ledgered/squared/clean), favor (all four packages, one-per-week, refused-errand keeps the
 week, debts, stranger gate), streak (+2 on day 3, capped +5 on day 10, row advance).
-Suite 16/16 + sim drift-0. Step five (deferred): grudge decay, favor menus, errand chains.
+Suite 16/16 + sim drift-0. **Step five — BUILT** (`UNDERWORLD.STEP5`; zero new money):
+**grudge decay** — `npc_grudges.since`; one grudge forgiven per GRUDGE_DECAY_DAYS 14 since the
+last write (fresh offense or penance restarts the clock); lazy — loadOwned computes the
+EFFECTIVE count (what the tier cap reads), writes materialize it, penance settles the
+effective count so you never pay for what time healed; **the errand chain**
+(`npc_errands` character-PK; `POST /v1/underworld/:npc/errand`, `startErrand`): a tier-1+
+fixture hands a storyline — do their DRAWN daily task on CHAIN_STEPS 3 separate days (one
+step/day via `last_day`, advanced inside `bumpStanding` for ANY fixture you took the job
+from, not just your best) → CHAIN_BONUS +15 + streets feed; one active chain per street,
+restarting replaces the half-done job; board `errand {npc, step, of, task, doneToday}`;
+**rivalry #3** — `fixFight` costs the boss FIX_LOSS 5 with the Madame (a status tax on the
+Sybil-flagged fix; den money untouched). Honest calls: favor MENUS absorbed (the step-four
+favor already is one — no fake strict-upgrade choices), vendetta-refusal deferred (hot-path
+join + poor legibility; documented in the design doc). Tests: decay (2@15d→1, 1@30d→0,
+uncapped tier, penance-on-effective + materialized row, clean), errand (stranger gate, task
+match, no double-step/day, 3-day completion +15, notify, replace), fix rivalry (in
+test/casino.js, −5 exact). Suite 16/16 + sim drift-0.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

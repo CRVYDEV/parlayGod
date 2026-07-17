@@ -205,6 +205,8 @@ export async function fixFight(ch, winner, client, h) {
   await client.query('INSERT INTO fight_fixes (week, gang_id, winner) VALUES ($1,$2,$3)', [week, h.owned.gangId, winner]);
   await h.ledger(client, { currency: 'cash', amount: -CASINO.FIGHT_FIX_COST, reason: 'casino:fix', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - CASINO.FIGHT_FIX_COST;
+  // RIVALRY #3 (Underworld step five): nobody fixes HER book — the buying boss wears it
+  await bumpStanding(client, h, ch, 'madame', -UNDERWORLD.STEP5.FIX_LOSS);
   await h.track(client, ch.account_id, 'casino', { game: 'fix', week, winner });
   return { ok: true, week, winner, cost: CASINO.FIGHT_FIX_COST };
 }
