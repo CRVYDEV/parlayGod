@@ -447,6 +447,22 @@ attacker safehouse-blocked (P1.3), failed attempts cost health. Fronts die with 
 joined the runEstate wipe). Owner view surfaces `scrutiny`/`raidRisk`/`shakedownCdSeconds`. Tests cover
 scrutiny accrual/decay, the threshold gate, a forced raid (seize + ledgered fine), shakedown gates/contest/
 cooldown, and the owner's ~70% remainder. Step-two numbers are founder sign-off levers too.
+**RECURRING SINKS — "the pad" (business upkeep) — BUILT** (`src/business.js`,
+`omerta-recurring-sinks-design.md`; the economy's first recurring, wealth-scaling drain, closing
+the sim-audit's safehoused-landlord passive-stack gap). Every front owes protection + wages =
+`BUSINESS_UPKEEP_BPS` (2000 = 20%) of its `incomePerHr`, accrued lazily on its OWN clock
+(`businesses.upkeep_at`) up to `BUSINESS_UPKEEP_CAP_MS` (7d) — distinct from the 24h income cap, so
+an ABSENT owner earns ≤24h but owes ≤7d (neglect bleeds). `payBusinessUpkeep`
+(`POST /v1/business/upkeep`) settles the pad on every front you can afford (greedy) — a §10.4 cash
+SINK `business:upkeep` riding the existing `business:` vocabulary (zero invariant changes,
+character_id reconciles check (a)) — resetting that front's clock. A front unpaid past
+`BUSINESS_UPKEEP_COLD_MS` (3d) goes COLD (`isCold`): `collectBusiness` skips it (withheld take lost
+to the 24h cap, not banked), `launder`/`upgrade` throw `cold`, until the pad thaws it; upgrade
+resets `upkeep_at` (squares the books, no retroactive rate bump). View surfaces `upkeepPerHr`/
+`upkeepOwed`/`cold`. `test/economy.js`: rate+owed in the view, ledgered pay resetting the clock,
+the cold gate (no income/launder/upgrade) + thaw. All numbers founder sign-off levers. Roadmap
+(deferred, same lazy-owed-debt+pay+cold pattern): territory-racket upkeep (gang treasury), crew
+wages, the heat-scaled city pad/bribery. Suite 16/16 + sim drift-0.
 
 **Full sim audit (`AUDIT-sim.md`)** — four red-team lenses + a real simulation harness
 (`tools/sim.js`: drives the live server through the public API only, seeds NO value, warps clocks,

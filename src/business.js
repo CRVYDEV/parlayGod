@@ -26,6 +26,19 @@ export function accrued(row) {
   return Math.floor(tier.incomePerHr * Math.max(0, elapsed) / 3600000);
 }
 
+// RECURRING SINKS ("the pad"): upkeep owed on one front, in whole dollars — BUSINESS_UPKEEP_BPS of
+// the tier's income per hour, accrued on its OWN clock (upkeep_at) up to BUSINESS_UPKEEP_CAP_MS.
+// Distinct from the 24h income cap: an absent owner owes up to a week while earning at most a day.
+export function upkeepOwed(row, now = Date.now()) {
+  const tier = businessTierOf(row.kind, row.tier);
+  if (!tier) return 0;
+  const elapsed = Math.min(now - new Date(row.upkeep_at).getTime(), CONSTANTS.BUSINESS_UPKEEP_CAP_MS);
+  return Math.floor(tier.incomePerHr * (CONSTANTS.BUSINESS_UPKEEP_BPS / 10000) * Math.max(0, elapsed) / 3600000);
+}
+// a front whose pad has gone unpaid past the cold window produces nothing until squared
+export const isCold = (row, now = Date.now()) =>
+  now - new Date(row.upkeep_at).getTime() >= CONSTANTS.BUSINESS_UPKEEP_COLD_MS;
+
 // The 1% street tax on the house-take feeds the 12h buyback (spec §7.12); mirrors economy.js.
 async function takeHouse(client, tax) {
   if (tax > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
@@ -118,9 +131,13 @@ export async function collectBusiness(ch, client, h) {
   if (safeHoused(ch)) throw new GameError('safe', "Nobody hands the take to a ghost — collection waits until you surface.");
   const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
   let total = 0, rakeback = 0; const raids = [];
+  let cold = 0;
   for (const r of rows) {
     const res = await resolveScrutiny(ch, r, client, h);
     if (res.raided) { raids.push(res); continue; }
+    // recurring sinks: a front whose pad went unpaid past the cold window produces nothing until
+    // squared — its income clock stays put (the withheld take is lost to the 24h cap, not banked).
+    if (isCold(r)) { cold++; continue; }
     const inc = accrued(r);
     if (inc > 0) { total += inc; await client.query('UPDATE businesses SET last_collect_at=now() WHERE id=$1', [r.id]); }
     // Den RAKEBACK (casino kind): owners split RAKEBACK_BPS of the den's stake volume since their
@@ -144,10 +161,36 @@ export async function collectBusiness(ch, client, h) {
     ch.cash = Number(ch.cash) + rakeback;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: rakeback, reason: 'casino:rakeback' });
   }
-  if (total <= 0 && rakeback <= 0 && !raids.length) return { ok: true, collected: 0 };
+  if (total <= 0 && rakeback <= 0 && !raids.length && !cold) return { ok: true, collected: 0 };
   h.owned.businesses = await businessesOf(client, ch.id);
   return { ok: true, collected: total, businesses: rows.length,
-    ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}) };
+    ...(rakeback > 0 ? { rakeback } : {}), ...(raids.length ? { raids } : {}),
+    ...(cold ? { cold } : {}) };
+}
+
+// PAY THE PAD (recurring sinks) — settle the upkeep owed on every front you can afford (greedy,
+// so a cash-strapped owner can reactivate what matters most first). A §10.4 cash sink
+// `business:upkeep` per front (rides the `business:` vocabulary — no invariant change);
+// paying resets that front's upkeep clock and thaws a cold one. Blocked from a safehouse only
+// insofar as it's just spending — no gate needed (paying protection isn't extraction or offense).
+export async function payBusinessUpkeep(ch, client, h) {
+  const rows = (await client.query('SELECT * FROM businesses WHERE character_id=$1 FOR UPDATE', [ch.id])).rows;
+  if (!rows.length) throw new GameError('none', 'You run no fronts — no pad to pay.');
+  let paid = 0; const settled = []; let stillOwed = 0;
+  for (const r of rows) {
+    const owed = upkeepOwed(r);
+    if (owed <= 0) continue;
+    if (Number(ch.cash) >= owed) {
+      ch.cash = Number(ch.cash) - owed;
+      paid += owed;
+      await client.query('UPDATE businesses SET upkeep_at=now() WHERE id=$1', [r.id]);
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'business:upkeep' });
+      settled.push({ kind: r.kind, paid: owed });
+    } else stillOwed += owed; // couldn't cover this one — it stays owed (and cold if past the window)
+  }
+  if (paid <= 0 && stillOwed <= 0) return { ok: true, paid: 0, message: 'The pad is square.' };
+  h.owned.businesses = await businessesOf(client, ch.id);
+  return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
 }
 
 // Upgrade a front to the next tier — collects the pending income at the OLD rate first (so an
@@ -158,12 +201,14 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   const cat = businessOf(r.kind);
   const next = businessTierOf(r.kind, Number(r.tier) + 1);
   if (!next) throw new GameError('maxed', `Your ${cat.name} already runs at full strength.`);
+  if (isCold(r)) throw new GameError('cold', `The ${cat.name} is dark — pay the pad before you pour money into it.`);
   const raid = await resolveScrutiny(ch, r, client, h); // a raid seizes the pending before it banks
   const pending = raid.raided ? 0 : accrued(r);
   if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `Upgrading the ${cat.name} costs $${next.cost}.`);
-  // bank the pending at the old rate, then debit the upgrade — net in one cash figure
+  // bank the pending at the old rate, then debit the upgrade — net in one cash figure. The upgrade
+  // also squares the pad (upkeep_at=now): a fresh clock at the new rate, no retroactive rate bump.
   ch.cash = Number(ch.cash) + pending - next.cost;
-  await client.query('UPDATE businesses SET tier=$2, last_collect_at=now() WHERE id=$1', [businessId, next.tier]);
+  await client.query('UPDATE businesses SET tier=$2, last_collect_at=now(), upkeep_at=now() WHERE id=$1', [businessId, next.tier]);
   if (pending > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pending, reason: 'business:income' });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: 'business:upgrade' });
   h.owned.businesses = await businessesOf(client, ch.id);
@@ -183,6 +228,7 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
   // lock scoped to the owner so a rival can't even briefly hold your row (audit LOW-3)
   const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
   if (!r) throw new GameError('not_yours', "That's not your business.");
+  if (isCold(r)) throw new GameError('cold', `The ${businessOf(r.kind).name} is dark — pay the pad before it'll wash a dime.`);
   // resolve the scrutiny window first — a raid seizes pending income + fines (the wash itself
   // still proceeds, the §7.1 kitchen precedent: the Bureau's visit doesn't undo your next move)
   const raid = await resolveScrutiny(ch, r, client, h);
@@ -285,6 +331,9 @@ export async function businessesOf(pool, characterId) {
     return {
       id: r.id, kind: r.kind, name: cat?.name || r.kind, tier: Number(r.tier),
       incomePerHr: tier?.incomePerHr || 0, pending: accrued(r),
+      // recurring sinks ("the pad"): what's owed, the hourly rate, and whether the front's gone cold
+      upkeepOwed: upkeepOwed(r), upkeepPerHr: Math.floor((tier?.incomePerHr || 0) * (CONSTANTS.BUSINESS_UPKEEP_BPS / 10000)),
+      cold: isCold(r),
       launderCapDay: tier?.launderCapDay || 0, launderHeadroom: Math.max(0, (tier?.launderCapDay || 0) - usedToday),
       scrutiny: Math.round(decayedScrutiny(r)), raidRisk: decayedScrutiny(r) >= CONSTANTS.BUSINESS_RAID_THRESHOLD,
       shakedownCdSeconds: r.shakedown_at ? Math.max(0, Math.ceil((new Date(r.shakedown_at).getTime() + CONSTANTS.SHAKEDOWN_CD_MS - Date.now()) / 1000)) : 0,

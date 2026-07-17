@@ -438,6 +438,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   shakedown_at TIMESTAMPTZ,
   inside_at TIMESTAMPTZ,                            -- Heist step 2: per-venue INSIDE JOB cooldown (stamped win or lose)
   rake_cursor NUMERIC NOT NULL DEFAULT 0,           -- Den step 2: den volume already rakeback-claimed (casino kind only)
+  upkeep_at TIMESTAMPTZ NOT NULL DEFAULT now(),     -- recurring sinks ("the pad"): upkeep accrues off this clock; pay resets it, upgrade squares it
   acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (character_id, kind)
 );

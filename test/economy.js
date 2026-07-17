@@ -423,6 +423,42 @@ r = await call('POST', '/v1/business/collect', { token });
 assert(Math.abs(r.body.collected - Math.round(win.cut * 7 / 3)) <= 300,
   `owner kept ~70% of the pending (cut $${win.cut}, owner collected $${r.body.collected})`);
 
+// ══════════ RECURRING SINKS — "the pad" (business upkeep) ══════════
+await seed("cash=2000000");
+await pool.query(`UPDATE businesses SET upkeep_at=now(), last_collect_at=now(), scrutiny=0, scrutiny_at=now() WHERE id='${bizId}'`);
+// the view surfaces the pad: an hourly rate (BUSINESS_UPKEEP_BPS of income), what's owed, cold?
+let biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+const upRate = biz.upkeepPerHr;
+assert(upRate > 0, `the front owes upkeep at $${upRate}/hr (a % of its income)`);
+assert.equal(biz.upkeepOwed, 0, 'a freshly-squared front owes nothing');
+assert.equal(biz.cold, false, 'and runs warm');
+// 5 hours of unpaid pad → owed ≈ rate × 5; paying is a ledgered cash sink that resets the clock
+await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '5 hours' WHERE id='${bizId}'`);
+biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert(Math.abs(biz.upkeepOwed - upRate * 5) <= upRate, `5h of pad owed (~$${upRate * 5}, got $${biz.upkeepOwed})`);
+const cashPrePad = (await meOf(token)).cash;
+r = await call('POST', '/v1/business/upkeep', { token });
+assert.equal(r.code, 200, 'the pad is paid'); assert(r.body.paid > 0, 'a bill came due');
+assert.equal((await meOf(token)).cash, cashPrePad - r.body.paid, 'the pad left the pocket exactly');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:upkeep' AND character_id=$1", [cid])).rows[0].s),
+  -r.body.paid, 'business:upkeep is a ledgered §10.4 cash sink');
+assert.equal((await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId).upkeepOwed, 0, 'paying squared the pad');
+// COLD: a front unpaid past the cold window (3d) produces nothing until squared
+await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '4 days', last_collect_at = now() - interval '2 hours' WHERE id='${bizId}'`);
+biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert.equal(biz.cold, true, 'four days unpaid → the front is COLD');
+r = await call('POST', '/v1/business/collect', { token });
+assert.equal(r.body.collected, 0, 'a cold front hands over no take');
+assert.equal(r.body.cold, 1, 'and reports itself cold');
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 20000 } })).body.error, 'cold', "a cold front won't wash");
+assert.equal((await call('POST', `/v1/business/${bizId}/upgrade`, { token })).body.error, 'cold', "and won't take an upgrade");
+// paying the pad THAWS it — income flows again (clock was reset by the seed, so a fresh 2h accrues)
+await call('POST', '/v1/business/upkeep', { token });
+await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '2 hours' WHERE id='${bizId}'`);
+biz = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert.equal(biz.cold, false, 'the pad squared → the front is warm again');
+assert(((await call('POST', '/v1/business/collect', { token })).body.collected) > 0, 'and the take flows again');
+
 // ── Risk-to-Earn B2: bank-interest daily cap (metered by a token bucket like racket income) ──
 // An empty bucket over a 4h gap refills only ~2h of interest-eligibility (BANK_DAILY_CAP_MS 12h/day
 // → 0.5 ms credit per ms), so a continuously-online player banks HALF the raw 4h they'd otherwise
@@ -452,5 +488,5 @@ const taperMe = await meOf(token);
 assert(taperMe.bank > 30030000 && taperMe.bank < 30050000,
   `whale interest tapered (+$${Math.round(taperMe.bank - 30000000)}; untapered 4h-gap would be ~+$100k)`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper)');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / won't wash / won't upgrade until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper)');
 await app.close();

@@ -478,6 +478,13 @@ export const CONSTANTS = {
   // gated by the front's per-tier daily capacity, not the wash-house district. New/tunable — sim
   // + founder sign-off before production (ground rule #1).
   BUSINESS_CAP_MS: 24*3600*1000, BUSINESS_LAUNDER_HEAT: 8,
+  // RECURRING SINKS — "the pad": every front owes protection + wages proportional to its income
+  // (BUSINESS_UPKEEP_BPS of incomePerHr — a ~20% recurring tax that scales with the empire).
+  // Upkeep accrues on its OWN clock up to BUSINESS_UPKEEP_CAP_MS (7d) — distinct from the 24h
+  // income cap, so an ABSENT owner earns ≤24h but owes ≤7d: neglect bleeds. A front unpaid past
+  // BUSINESS_UPKEEP_COLD_MS (3d) goes COLD (no income / no launder / no upgrade) until the pad is
+  // paid. New/tunable — sim + founder sign-off before production (ground rule #1).
+  BUSINESS_UPKEEP_BPS: 2000, BUSINESS_UPKEEP_CAP_MS: 7*24*3600*1000, BUSINESS_UPKEEP_COLD_MS: 3*24*3600*1000,
   // Business Empire step two — the RISK layer (passive income you must protect). SCRUTINY: only
   // LAUNDERING draws the Bureau's eyes onto a front (PER_CAP points per full day-capacity washed,
   // decaying DECAY_HR/hour) — income-only fronts never get raided; their risk is rival shakedowns.
