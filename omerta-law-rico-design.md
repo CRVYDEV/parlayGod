@@ -1,5 +1,9 @@
 # The Law / RICO / Informants (design)
 
+> **STATUS: BUILT (all four phases) — `src/law.js`, `test/law.js` (the 17th suite).** Numbers are
+> proposed defaults in the `LAW` rules-tail block — founder sim + sign-off before production (ground
+> rule #1). Suite 17/17 + sim drift-0. See the implementation summary at the end of §8.
+
 ## 1. Why
 Heat exists but the Law barely does. Today `characters.heat` is a single 0–100 number that
 decays lazily (§7.1, ~1/min), climbs on deals, `fire` (`FIRE_HEAT` 20), `npcHit` (`NPC_HIT_HEAT`),
@@ -175,3 +179,26 @@ Every number in this document is a **founder sign-off lever** (ground rule #1) �
 be sim-audited and signed into BALANCE.md before production, exactly like every economy drop. Nothing
 here retunes a signed lever; heat's ACCRUAL surfaces are untouched — the Law only adds consequences
 downstream of the number the game already tracks.
+
+## 9. As built
+- **`src/law.js`** — the isolated service: `lawBoard` (GET /v1/law), `bribe`, `retainer`, `plea`,
+  `buyJury`, `demandTrial`, `flip` (two-party), `enterWitpro`, the shared `resolveBust`
+  (LAW_BUST_P is a TEST-ONLY roll knob, the BUSINESS_RAID_P precedent), and `sweepLaw` (the worker's
+  force-bust of overdue-indicted players).
+- **`src/rules.js` tail** — the `LAW` block + `rapStageOf`/`bribeCostOf`/`retainerActive`/
+  `witproActive`/`bustProbOf` helpers. `EXPOSURE_RATE`/`EXPOSURE_DECAY` set so a case builds only
+  while heat is ACTIVELY high (accrual decays heat first, so a long offline gap builds ~nothing).
+- **`src/accrual.js`** — the §7.1 investigation meter: exposure += (heat − WATCH) × min × event-mult,
+  bleeds passively, files the indictment latch (surfaced as `ch._indicted`; game.js notifies).
+- **`src/social.js`** — `fire`/`npcHit` block a witpro'd target; `postBounty` waives the directed
+  floor on a KILL contract on a rat (the vendetta-waiver twin); `runEstate` collapses the cases a
+  dead witness seeded and clears the informant record.
+- **schema** — `characters.heat_exposure/indicted_at/retainer_until/jury_bought/witpro_until`,
+  `account_persistent.rat` (the bloodline badge), and the `informants` table.
+- **§10.4** — `law:` joins the cash vocabulary (bribe/retainer/forfeit/plea → `street_tax.pool`, the
+  `mod:confiscate` buffer); `law:jury` joins `omrBurns`. The Law only DRAINS — no new faucet.
+- **`test/law.js`** proves the meter (build + bleed), the bribe (+ clean/indicted/safehouse gates),
+  the retainer, indictment, the bust (conviction seizure as a scoped char==pool==−ledger transfer,
+  staked $OMR safe, not-death), acquittal, plea, jury, the flip + rat badge + directed-floor waiver,
+  witness protection (untargetable), the informant collapse, the worker sweep (+ grace window), and
+  the closed vocabulary.

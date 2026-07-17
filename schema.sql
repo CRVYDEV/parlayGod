@@ -36,7 +36,12 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- M7 Phase 2 — the assassin's LEGEND (account-level, survives death like prestige/$OMR):
   -- lifetime feared-reputation (the "most feared" ladder) + lifetime confirmed kills.
   hitman_rep BIGINT NOT NULL DEFAULT 0,
-  kills INT NOT NULL DEFAULT 0
+  kills INT NOT NULL DEFAULT 0,
+  -- THE LAW Phase 4 — the informant's mark. Set the moment an account turns state's evidence
+  -- (`flip`): a permanent badge that FOLLOWS THE BLOODLINE (the heir carries it, like prestige),
+  -- forfeits family membership, and makes the account a contract magnet (the directed-floor
+  -- waiver in postBounty). Pure status — no §10.4 surface.
+  rat BOOLEAN NOT NULL DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
@@ -103,6 +108,17 @@ CREATE TABLE IF NOT EXISTS characters (
   -- the vault, so a fire-kill loots CASH_LOOT_RATE of them too (cleared lazily on accrual).
   bank_intransit NUMERIC NOT NULL DEFAULT 0,
   bank_intransit_at TIMESTAMPTZ,
+  -- THE LAW — the rap sheet. `heat_exposure` is the investigation meter: heat sustained above
+  -- LAW.WATCH builds it lazily (§7.1, the business-scrutiny precedent), it bleeds passively, and
+  -- crossing LAW.INDICT_AT files an indictment (`indicted_at` latch). A lawyer `retainer_until`
+  -- softens the bust; `jury_bought` is a one-shot conviction-P cut for the current case; a rat's
+  -- `witpro_until` is a state-funded untargetable relocation window. All reset with the street
+  -- (the heir's row is fresh) — only the account-level `rat` badge follows the bloodline.
+  heat_exposure NUMERIC NOT NULL DEFAULT 0,
+  indicted_at TIMESTAMPTZ,
+  retainer_until TIMESTAMPTZ,
+  jury_bought BOOLEAN NOT NULL DEFAULT false,
+  witpro_until TIMESTAMPTZ,
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -490,6 +506,20 @@ CREATE TABLE IF NOT EXISTS vendettas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (avenger_account, target_account)
+);
+
+-- THE LAW Phase 4 — informants. A `flip` (turning state's evidence) creates a witness: the case
+-- they seed against `target_character` adds `seed` exposure to that mark. If the WITNESS is
+-- killed (a fire on the rat), the case collapses — runEstate subtracts the seed back off every
+-- target they named and clears any indictment it caused. Pure status/exposure — no §10.4 currency.
+CREATE TABLE IF NOT EXISTS informants (
+  id TEXT PRIMARY KEY,
+  witness_character TEXT NOT NULL,
+  witness_account TEXT NOT NULL,
+  target_character TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  seed NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- CREW HEISTS (THE BIG SCORE): the game's first co-op content. One row per job; members join

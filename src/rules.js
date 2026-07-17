@@ -753,6 +753,63 @@ export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tie
 // bounded by the decay + the economics (level floor, ammo, searches). Founder dial: divide by
 // priors+2 on vendetta kills to make revenge rep-neutral.
 export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
+// THE LAW / RICO / INFORMANTS — the state-run PvE antagonist (design omerta-law-rico-design.md).
+// Heat already ACCRUES all over the game (deals, fire, npchit, launder, shakedown); nothing about
+// that changes (sim-audited surfaces stay put, ground rule #1). THE LAW is everything DOWNSTREAM of
+// the number: an investigation meter that builds while heat is high, a bust that can reach BANKED
+// wealth (the safehoused-hoard the sim flagged), a courtroom, and the flip. Every value movement is
+// a SINK to the confiscation buffer (street_tax.pool — the `mod:confiscate` precedent); the Law only
+// DRAINS, never mints, so it's the counterweight to the Risk-to-Earn faucets. ALL numbers are
+// founder sign-off levers — proposed defaults, sim + sign-off before production.
+export const LAW = {
+  // ── Phase 1 — the investigation meter (heat_exposure) ──
+  WATCH: 40,                    // heat above this feeds the case; below it the meter bleeds off
+  // exposure builds only while heat is ACTIVELY high (accrual decays heat first, so a long offline
+  // gap builds ~nothing — you commit no crimes while away). At pinned heat 100 that's ~6/min net;
+  // WATCHED ~30min, INVESTIGATION ~3h, INDICT ~8h of reckless active play. Sign-off levers.
+  EXPOSURE_RATE: 0.1,           // exposure gained per (heat − WATCH) per minute above WATCH
+  EXPOSURE_DECAY: 0.1,          // exposure bled per minute, always (a spike-and-decay costs little)
+  EXPOSURE_EVENT: { crackdown: 1.5, sweep: 1.3, visit: 0.5, opencity: 0.5 }, // crackdown weather scales GAIN (CITY_EVENTS is generated — key on id here, hands off the table)
+  WATCHED_AT: 200, INVESTIGATE_AT: 1000, INDICT_AT: 3000, // stage thresholds on the meter
+  BRIBE_MIN: 25000, BRIBE_BPS: 2000,   // bribe cost = max(MIN, exposure × BPS/1e4) — wealth-scaled cash sink
+  BRIBE_CLEAR: 800,                    // exposure knocked down per bribe
+  RETAINER_COST: 150000, RETAINER_MS: 3 * 24 * 3600 * 1000, // the lawyer: a time-boxed retainer…
+  RETAINER_BUST_MULT: 0.6, RETAINER_FORFEIT_MULT: 0.7,      // …softens the bust P and the seizure
+  // ── Phase 2 — the RICO bust + asset forfeiture ──
+  BUST_P_MIN: 0.15, BUST_P_MAX: 0.85, BUST_P_PER: 0.0002,   // conviction P = MIN + (exposure − INDICT_AT) × PER
+  FORFEIT_RATE: 0.30,          // fraction of pocket+bank seized on conviction (staked $OMR + minted gear are SAFE)
+  BUST_JAIL_S: 600,            // lockup on a landed bust
+  INDICT_GRACE_MS: 6 * 3600 * 1000, // the worker force-busts an indicted player this long after the indictment (reaches the offline whale)
+  ACQUIT_TO: 1000,             // on acquittal the case collapses — exposure resets to this (not re-indicted next tick)
+  // ── Phase 3 — the courtroom ──
+  PLEA_FORFEIT_RATE: 0.15, PLEA_JAIL_S: 240, // settle: a certain, smaller loss + a short stretch
+  JURY_COST_OMR: 20, JURY_BUST_MULT: 0.5,    // buy the jury once → conviction P × this (a $OMR sink — the war chest beats the rap)
+  // ── Phase 4 — informants ──
+  FLIP_SEED: 1500,             // exposure the rat's testimony adds to the named target
+  FLIP_JAIL_S: 120,            // the rat does a short, soft stretch
+  WITPRO_MS: 48 * 3600 * 1000, // witness protection: a one-time (per street) untargetable relocation window
+};
+// the rap sheet's stage — a pure function of the meter, except INDICTED which LATCHES (an
+// indictment doesn't un-file when heat drops; only a bust/plea/flip clears it).
+export const rapStageOf = (exposure, indictedAt = null) => {
+  if (indictedAt) return 'indicted';
+  const e = Number(exposure || 0);
+  if (e >= LAW.INVESTIGATE_AT) return 'investigation';
+  if (e >= LAW.WATCHED_AT) return 'watched';
+  return 'clean';
+};
+// the bribe quote: wealth-scaled so the busiest (hottest) players pay most (a recurring drain)
+export const bribeCostOf = (exposure) => Math.max(LAW.BRIBE_MIN, Math.floor(Number(exposure || 0) * LAW.BRIBE_BPS / 10000));
+export const retainerActive = (ch, now = Date.now()) => !!ch.retainer_until && new Date(ch.retainer_until).getTime() > now;
+export const witproActive = (ch, now = Date.now()) => !!ch.witpro_until && new Date(ch.witpro_until).getTime() > now;
+// conviction probability for the current case (Phase 2/3): scales with exposure over the
+// indictment threshold, softened by an active lawyer retainer and (once) a bought jury.
+export const bustProbOf = (ch) => {
+  let p = LAW.BUST_P_MIN + Math.max(0, Number(ch.heat_exposure || 0) - LAW.INDICT_AT) * LAW.BUST_P_PER;
+  if (retainerActive(ch)) p *= LAW.RETAINER_BUST_MULT;
+  if (ch.jury_bought) p *= LAW.JURY_BUST_MULT;
+  return Math.min(LAW.BUST_P_MAX, Math.max(LAW.BUST_P_MIN * LAW.RETAINER_BUST_MULT * LAW.JURY_BUST_MULT, p));
+};
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —

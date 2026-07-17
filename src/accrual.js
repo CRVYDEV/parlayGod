@@ -1,7 +1,7 @@
 // §7.1 of the spec — lazy accrual. Runs inside the caller's transaction,
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
-import { CONSTANTS, RACKETS, levelOf, rankIdxOf, cityEventOf, dayOf,
+import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
          assetIncome, assetEnergyCap, drugOf, crewCold } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
@@ -136,6 +136,23 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
     }
   }
   ch.heat = Math.min(100, Number(ch.heat));
+
+  // §7.1 THE LAW — the investigation meter (heat_exposure). Heat sustained above LAW.WATCH builds
+  // a case lazily (the business-scrutiny precedent); a spike-and-decay costs little because the
+  // meter also bleeds passively toward 0. Crackdown weather (crackdown/sweep) builds it faster; a
+  // commissioner's visit / open city bleeds it (keyed on the event id — CITY_EVENTS is generated).
+  // Crossing LAW.INDICT_AT files an indictment (a latch); surfaced so the caller notifies the mark.
+  {
+    const hv = Number(ch.heat);
+    const evMult = LAW.EXPOSURE_EVENT[ev.id] ?? 1;
+    const gain = Math.max(0, hv - LAW.WATCH) * dtMin * LAW.EXPOSURE_RATE * evMult;
+    const bleed = dtMin * LAW.EXPOSURE_DECAY;
+    ch.heat_exposure = Math.max(0, Number(ch.heat_exposure || 0) + gain - bleed);
+    if (ch.heat_exposure >= LAW.INDICT_AT && !ch.indicted_at) {
+      ch.indicted_at = now;
+      ch._indicted = true; // caller notifies + telemeters (§10.4-free — no value moves at indictment)
+    }
+  }
 
   // §7.1 staking rewards — real 14% APY, accrued lazily on the account row
   if (acct && Number(acct.staked) > 0) {

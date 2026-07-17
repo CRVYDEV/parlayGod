@@ -8,7 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, witproActive,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -358,7 +358,11 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     const vendetta = kind === 'kill' ? (await client.query(
       'SELECT 1 FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()',
       [ch.account_id, t.account_id])).rows[0] : null;
-    if (!vendetta && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
+    // THE LAW Phase 4: a RAT is fair game — the directed floor is waived on a KILL contract on an
+    // informant, so the whole town can put a named gun on them cheaply (the vendetta-waiver twin).
+    const ratWaiver = kind === 'kill' && !!(await client.query(
+      'SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;
+    if (!vendetta && !ratWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
     opensAt = new Date(Date.now() + exH * 3600 * 1000);
@@ -805,6 +809,8 @@ export async function fire(ch, victim, client, h, rounds) {
   if ((Number(ch.ammo) || 0) < fired) throw new GameError('ammo', `Calling for ${fired} rounds with ${ch.ammo} on hand.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (safeHoused(victim)) throw new GameError('safe', "They've gone to ground — your people can't place them.");
+  // THE LAW Phase 4: a rat in witness protection is beyond reach — the marshals have them.
+  if (witproActive(victim)) throw new GameError('witpro', "The marshals have them. That one's untouchable for now.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('family', "They've been made family since you took the contract. It's off.");
@@ -1077,6 +1083,7 @@ export async function npcHit(ch, victim, client, h, tierId) {
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (safeHoused(victim)) throw new GameError('safe', "The contractor can't find them — they've gone to ground.");
+  if (witproActive(victim)) throw new GameError('witpro', "The marshals have them locked away — no contractor gets near.");
   if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
   // BALANCE D4 — per-TARGET cooldown: a whale could repeat-reset ONE rival every 6h by cycling
   // the payer cooldown; now each (payer, target) pair rests NPC_HIT_TARGET_CD_MS between attempts
@@ -1222,6 +1229,17 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     opts.killerCh.guarded_by = null; opts.killerCh.guarded_until = null;
   }
   await client.query('DELETE FROM searches WHERE hunter=$1 OR target=$1', [victim.id]);
+  // THE LAW Phase 4 — THE WITNESS IS DOWN. If the dead man was an informant, the cases his
+  // testimony built collapse: each target he named has the seed exposure lifted back off (a
+  // bounded NUMERIC update — no INT-arithmetic quirk; the target row isn't locked, but a single
+  // GREATEST statement is atomic), which drops their conviction odds / can keep them off an
+  // indictment. His own file (if he was ALSO a named target) dies with him. Pure exposure — no §10.4.
+  const seededByHim = (await client.query('SELECT target_character, seed FROM informants WHERE witness_character=$1', [victim.id])).rows;
+  for (const s of seededByHim)
+    await client.query('UPDATE characters SET heat_exposure = GREATEST(0, heat_exposure - $2) WHERE id=$1 AND alive', [s.target_character, Number(s.seed)]);
+  const witnessTargets = [...new Set(seededByHim.map((s) => s.target_character))];
+  for (const tid of witnessTargets) await h.notify(client, tid, 'witness_down', {});
+  await client.query('DELETE FROM informants WHERE witness_character=$1 OR target_character=$1', [victim.id]);
   // M7: a directed contract still in its EXCLUSIVE window is REFUNDED, not burned — an outsider
   // killing the mark first shouldn't torch the poster's stake (the named hitman never got their
   // shot). killerCh lets a killer who also funded such a pot take their own refund in-memory
