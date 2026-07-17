@@ -107,7 +107,20 @@ for (let d = 0; d < 3; d++) {
 }
 const bizPerDay = bizIncome / 3;
 note('passive', 'laundromat t1 business', `$${fmt(bizPerDay)}/day`, `payback ${fmt(250000 / (bizPerDay / 24))}h`);
-note('passive', 'business:racket dominance', `${fmt((bizPerDay / 250000) / (racketPerDay / 12500))}×`, 'daily-return-per-dollar ratio — >1 means businesses strictly dominate');
+note('passive', 'business:racket dominance (gross)', `${fmt((bizPerDay / 250000) / (racketPerDay / 12500))}×`, 'daily-return-per-dollar ratio — >1 means businesses strictly dominate');
+
+// RECURRING SINKS — "the pad": the sink exists to shrink exactly the passive stack measured
+// above. Accrue 3 days of upkeep on the laundromat and pay it, then report the NET passive
+// income + the net dominance ratio (does 20% actually close the gap?).
+await pool.query(`UPDATE businesses SET upkeep_at = now() - interval '72 hours' WHERE id='${bizId}'`);
+const upOwed = (await call('GET', '/v1/business', { token: g.token })).body.businesses.find((b) => b.id === bizId)?.upkeepOwed || 0;
+const upPay = await call('POST', '/v1/business/upkeep', { token: g.token });
+assert.equal(upPay.code, 200, `pay the pad: ${JSON.stringify(upPay.body)}`);
+const upkeepPerDay = (upPay.body.paid || 0) / 3;
+const netBizPerDay = bizPerDay - upkeepPerDay;
+note('passive', 'laundromat upkeep (the pad)', `$${fmt(upkeepPerDay)}/day`, `${fmt(upkeepPerDay / bizPerDay * 100)}% of gross (owed $${fmt(upOwed)} over 3d) — the recurring sink`);
+note('passive', 'laundromat NET of the pad', `$${fmt(netBizPerDay)}/day`, `payback ${fmt(250000 / (netBizPerDay / 24))}h net`);
+note('passive', 'business:racket dominance (NET of pad)', `${fmt((netBizPerDay / 250000) / (racketPerDay / 12500))}×`, 'after upkeep — >1 still means businesses win, but by less');
 
 // ════════════════ P3: THE KITCHEN — cook & deal ════════════════
 phase('P3 kitchen — cook/deal margin');
