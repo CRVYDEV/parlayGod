@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS characters (
   busts INT NOT NULL DEFAULT 0,
   lab TEXT,
   crew INT NOT NULL DEFAULT 0,
+  crew_paid_at TIMESTAMPTZ,                         -- recurring sinks: crew wages ("the nut") accrue off this clock; unpaid past the window the crew downs tools
   heist_at TIMESTAMPTZ,
   season INT NOT NULL,
   -- §11 two-tier: mirrors account_persistent.minted onto the living street (and its heirs)

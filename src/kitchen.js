@@ -5,7 +5,7 @@ import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
 import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
-  makingsPriceOf, demandOf, effStat,
+  makingsPriceOf, demandOf, effStat, crewWageOwed,
 } from './rules.js';
 import { activeDecree } from './commission.js';
 
@@ -154,8 +154,26 @@ export async function hireCrew(ch, client, h) {
   if (Number(ch.cash) < cost) throw new GameError('cash', `The next crew member wants $${cost} up front.`);
   ch.cash = Number(ch.cash) - cost;
   ch.crew = crew + 1;
+  // start (or reset) the wage clock on a hire — a fresh mouth doesn't retroactively raise the nut
+  // owed on the old crew; the up-front $50k×N covers the buy-in, wages start ticking now.
+  ch.crew_paid_at = new Date();
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'crew:hire' });
   return { ok: true, crew: ch.crew, cost };
+}
+
+// PAY THE NUT (recurring sinks) — cover the crew's wages, a §10.4 cash SINK `crew:wages` that
+// resets the clock and puts a downed crew back on the corner. All-or-nothing (a single crew, a
+// single obligation): if you can't cover the week, the corner stays quiet until you can.
+export async function payCrewWages(ch, client, h) {
+  const crew = Number(ch.crew || 0);
+  if (crew <= 0) throw new GameError('none', 'You run no crew — no nut to cover.');
+  const owed = crewWageOwed(ch);
+  if (owed <= 0) return { ok: true, paid: 0, message: 'The nut is covered.' };
+  if (Number(ch.cash) < owed) throw new GameError('cash', `The nut runs $${owed} — the corner's short, and so are you.`);
+  ch.cash = Number(ch.cash) - owed;
+  ch.crew_paid_at = new Date();
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'crew:wages' });
+  return { ok: true, paid: owed, crew };
 }
 
 // ── HEAT MANAGEMENT (§5.3) ──

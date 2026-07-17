@@ -5,7 +5,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf,
+         crewWageOwed, crewCold } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -417,7 +418,8 @@ async function persistCharacter(client, ch) {
       lab=$27, crew=$28, heist_at=$29, title=$30,
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
       guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
-      bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45 WHERE id=$1`,
+      bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45,
+      crew_paid_at=$46 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -425,7 +427,7 @@ async function persistCharacter(client, ch) {
      ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
      ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
      ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null,
-     ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null]);
+     ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null, ch.crew_paid_at ?? null]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -472,6 +474,8 @@ export function view(ch, acct = {}, owned = {}) {
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
     lab: ch.lab || null, crew: Number(ch.crew || 0),
+    // recurring sinks — the crew's nut: what's owed, the hourly rate, and whether they've downed tools
+    crewWageOwed: crewWageOwed(ch), crewWagePerHr: Number(ch.crew || 0) * M4.CREW_WAGE_PER_HR, crewCold: crewCold(ch),
     makings: owned.makings || {},
     stash: (owned.stash || []).filter((s) => Number(s.qty) > 0)
       .map((s) => ({ drug: s.drug_id, qty: Number(s.qty), quality: Math.round(Number(s.quality) * 100) / 100 })),

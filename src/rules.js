@@ -620,6 +620,11 @@ export const racketsValue=(ids=[])=>ids.reduce((a,id)=>a+(RACKETS.find(r=>r.id==
 export const dailyJobsOf=(day=dayOf())=>[0,1,2].map(i=>DAILY_POOL[(day+i*2)%DAILY_POOL.length]);
 export const M4 = {
   CREW_MAX: 5, CREW_COST_STEP: 50000,          // $50k × (crew+1)
+  // RECURRING SINKS — crew wages ("the nut"): each corner man draws CREW_WAGE_PER_HR whether the
+  // stash moves or not (you pay them to stand the corner). Wages accrue on their own clock up to
+  // CREW_WAGE_CAP_MS (7d); unpaid past CREW_WAGE_COLD_MS (3d) the crew DOWNS TOOLS (accrual stops
+  // their offline sales) until the nut is paid. New/tunable — sim + founder sign-off (ground rule #1).
+  CREW_WAGE_PER_HR: 1200, CREW_WAGE_CAP_MS: 7*24*3600*1000, CREW_WAGE_COLD_MS: 3*24*3600*1000,
   LAYLOW_CASH: 5000, LAYLOW_ENERGY: 25, LAYLOW_COOL: 25,
   CLEANPAPERS_OMR: 10,
   HEIST_CD_MS: 8*3600*1000,
@@ -629,6 +634,16 @@ export const M4 = {
   REF_FUND_OMR: 4, REF_RECRUITER_OMR: 3, REF_RECRUIT_OMR: 1,  // fund ≥4 → 3 + 1 split (v24)
   REF_GATES: { level: 8, jobs: 40, checkins: 3, netWorth: 25000 },
 };
+// crew wages ("the nut"): owed = crew × CREW_WAGE_PER_HR × elapsed-since-crew_paid_at (capped),
+// and the crew goes COLD (accrual stops their sales) once the nut is unpaid past the cold window.
+export const crewWageOwed = (ch, now = Date.now()) => {
+  const crew = Number(ch.crew || 0);
+  if (crew <= 0 || !ch.crew_paid_at) return 0; // no crew, or the clock was never started (hire stamps it)
+  const elapsed = Math.min(now - new Date(ch.crew_paid_at).getTime(), M4.CREW_WAGE_CAP_MS);
+  return Math.floor(crew * M4.CREW_WAGE_PER_HR * Math.max(0, elapsed) / 3600000);
+};
+export const crewCold = (ch, now = Date.now()) =>
+  Number(ch.crew || 0) > 0 && !!ch.crew_paid_at && now - new Date(ch.crew_paid_at).getTime() >= M4.CREW_WAGE_COLD_MS;
 export const M3 = {
   GANG_FOUND_COST: 25000, GANG_FOUND_LEVEL: 5, GANG_MAX_MEMBERS: 20, TRIBUTE_MIN: 100,
   WAR_COST: 10000, WAR_MS: 30*60*1000, WAR_SPOILS: 0.20,      // §5.5 (30 min pending design call, spec §9)

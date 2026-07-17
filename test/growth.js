@@ -102,6 +102,40 @@ assert(me.cash > cashBefore, 'crew sales paid');
 const crewLedger = await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='crew:sales' AND character_id='${chef.id}'`);
 assert(Number(crewLedger.rows[0].n) >= 1, 'crew sales ledgered');
 
+// ── RECURRING SINKS: crew wages ("the nut") — pay them or the corner goes quiet ──
+me = await meOf(chef.token);
+assert.equal(me.crewWagePerHr, 2 * 1200, 'the view shows the nut: 2 crew × $1,200/hr');
+assert.equal(me.crewCold, false, 'a freshly-hired crew is working'); assert.equal(me.crewWageOwed, 0, 'and the nut is square (hire stamped the clock)');
+// 5 hours on the payroll → owed ≈ 2 × $1,200 × 5; paying is a ledgered sink that resets the clock
+await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '5 hours' WHERE id='${chef.id}'`);
+me = await meOf(chef.token);
+assert(Math.abs(me.crewWageOwed - 2 * 1200 * 5) <= 2 * 1200, `5h of wages owed (~$${2 * 1200 * 5}, got $${me.crewWageOwed})`);
+await seedCh(chef.id, 'cash=500000');
+const cashPreNut = (await meOf(chef.token)).cash;
+r = await call('POST', '/v1/kitchen/crew/wages', { token: chef.token });
+assert.equal(r.code, 200); assert(r.body.paid > 0, 'the nut came due');
+assert.equal((await meOf(chef.token)).cash, cashPreNut - r.body.paid, 'the nut left the pocket exactly');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='crew:wages' AND character_id='${chef.id}'`)).rows[0].s),
+  -r.body.paid, 'crew:wages is a ledgered §10.4 cash sink');
+assert.equal((await meOf(chef.token)).crewWageOwed, 0, 'paying squared the nut');
+// COLD: an unpaid crew (past the 3-day window) DOWNS TOOLS — accrual stops their offline sales.
+// Make them cold FIRST, then stock the shelf (a cold crew won't touch it — a warm 2-crew would
+// eat the restock as fast as it's cooked). Stash isn't a §10.4 currency, so a direct seed is fine.
+await pool.query(`UPDATE characters SET crew_paid_at = now() - interval '4 days' WHERE id='${chef.id}'`);
+await pool.query(`DELETE FROM stash WHERE character_id='${chef.id}' AND drug_id='vim'`);
+await pool.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ('${chef.id}','vim',100,1.0)`);
+assert.equal((await meOf(chef.token)).crewCold, true, 'four days unpaid → the crew is cold');
+const coldStash = (await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty || 0;
+assert.equal(coldStash, 100, 'the shelf is stocked');
+await seedCh(chef.id, "last_accrued_at = now() - interval '30 minutes', heat=0"); // trigger a big accrual window
+assert.equal((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty || 0, coldStash, 'a cold crew moves NOTHING — the shelf sits untouched');
+// paying the nut puts them back on the corner
+await seedCh(chef.id, 'cash=2000000');
+await call('POST', '/v1/kitchen/crew/wages', { token: chef.token });
+assert.equal((await meOf(chef.token)).crewCold, false, 'the nut squared → the crew is back');
+await seedCh(chef.id, "last_accrued_at = now() - interval '30 minutes', heat=0");
+assert((((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty) || 0) < coldStash, 'and they move product again');
+
 // ── raid (§7.1): sustained heat past 60 draws the Bureau ──
 await call('POST', '/v1/kitchen/makings/vim', { token: chef.token, body: { qty: 60 } });
 await seedCh(chef.id, 'cb=20, energy=200, jail_until=NULL');

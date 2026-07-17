@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -94,7 +94,9 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const cappedMin = capped / 60000;
   const crew = Number(ch.crew || 0);
   const stashTotal = stash.reduce((a, s) => a + Number(s.qty), 0);
-  if (crew > 0 && stashTotal > 0) {
+  // recurring sinks: an unpaid crew (the nut past the cold window) DOWNS TOOLS — no offline sales
+  // until the wages are covered. The stash just sits (nothing minted, nothing lost but the sales).
+  if (crew > 0 && stashTotal > 0 && !crewCold(ch)) {
     let toSell = Math.min(stashTotal, Math.max(1, Math.round(crew * cappedMin)));
     let proceeds = 0, moved = 0, heatAdd = 0;
     const byPrice = [...stash].sort((a, b) => (drugOf(a.drug_id)?.base || 0) - (drugOf(b.drug_id)?.base || 0));

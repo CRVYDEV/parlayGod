@@ -55,10 +55,24 @@ view fields, a ledgered treasury pay resetting the clock, the cold gate (no inco
 + thaw, and the treasury §10.4 reconcile with `territory:upkeep` in the mix. Suite 16/16 + sim
 drift-0. Numbers are founder sign-off levers.
 
-## 5. Roadmap (the pattern generalizes — deferred)
-The same lazy-owed-debt + pay + cold-penalty pattern still extends to:
-- **Crew wages** (recurring payroll on the kitchen crew — unpaid crews defect/rat).
+## 5. Step three — crew wages ("the nut") — BUILT
+The pattern applied to the KITCHEN crew — the offline drug-selling workforce (each member moves
+~1 unit/min from the stash via §7.1 accrual). Each corner man draws `CREW_WAGE_PER_HR` ($1,200)
+whether the stash moves or not (you pay them to stand the corner), accrued on the crew's own clock
+(`characters.crew_paid_at`, stamped/reset on each hire and each payment) up to `CREW_WAGE_CAP_MS`
+(7d). `payCrewWages` (`POST /v1/kitchen/crew/wages`) covers the nut — a §10.4 cash SINK
+`crew:wages` (added to the cash vocabulary beside `crew:hire`/`crew:sales`) — all-or-nothing (a
+single crew is a single obligation). Unpaid past `CREW_WAGE_COLD_MS` (3d) the crew goes COLD:
+the accrual crew-sales block skips them (`crewCold(ch)` gate) — the stash just sits, nothing
+minted or lost but the sales — until the nut is paid. The view surfaces `crewWagePerHr`/
+`crewWageOwed`/`crewCold`. This is the only recurring sink that gates an OFFLINE (accrual) faucet
+rather than an on-demand collect. `test/growth.js`: the view fields, a ledgered pay resetting the
+clock, the cold gate (a cold crew moves NOTHING across a big accrual window) + thaw. Suite 16/16 +
+sim drift-0. Numbers are founder sign-off levers.
+
+## 6. Roadmap (the pattern generalizes — deferred)
+One recurring-sink candidate remains flagged:
 - **The city pad / bribery** — a heat-scaled weekly protection payment (touches the D-signed heat
-  surfaces, so a founder call).
-Steps one (business fronts, character cash) and two (territory rackets, gang treasury) prove the
-pattern on both the personal and the family economies.
+  surfaces, so a founder design call, not just a lever).
+Steps one (business fronts / character cash), two (territory rackets / gang treasury), and three
+(crew wages / offline kitchen faucet) now cover the personal, family, and passive-labor economies.
