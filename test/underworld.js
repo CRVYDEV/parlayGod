@@ -417,8 +417,12 @@ assert.equal(r.code, 200, 'a new job');
 r = await call('POST', '/v1/underworld/armorer/errand', { token: erin.token });
 assert.equal(r.body.replaced, 'armorer', 'starting another replaces the half-done one');
 
-// ── the estate: BLOODLINE MEMORY — the heir inherits 25% of each standing, floored ──
+// ── the estate: BLOODLINE MEMORY — the heir inherits 25% of each EFFECTIVE standing, floored ──
+// audit regression: a STALE stored row (90 @ 100 idle days → effective 25) must hand down
+// floor(25×25%)=6, not floor(90×25%)=22 — memory reads the decayed board value
+await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ('${ted.id}','madame',90,'${daysAgo(100)}')`);
 const preDeath = (await call('GET', '/v1/underworld', { token: ted.token })).body.npcs;
+assert.equal(preDeath.find((n) => n.id === 'madame').standing, 25, "ted's lapsed madame standing reads the floor");
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ted.id },
   headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(kill.statusCode, 200, 'the Commission retires ted');
