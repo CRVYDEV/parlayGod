@@ -799,6 +799,44 @@ await seedCh(raider.id, "safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.error, 'safe', 'no collecting territory income from a safehouse');
 await seedCh(raider.id, 'safe_until=NULL');
 
+// ── RECURRING SINKS: territory upkeep ("the pad" at the gang level, paid from the treasury) ──
+// docks is a tier-2 Numbers→Protection op owned by the raider's gang (rg): incomePerHr $16k →
+// upkeepPerHr = 20% = $3.2k. Fund the treasury via a LEDGERED tribute (so the §10.4 treasury
+// check stays exact — no SQL-seeded cash) to afford the pads below, then square + measure.
+await seedCh(raider.id, 'cash=5000000');
+assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: 4000000 } })).code, 200, 'the boss funds the war chest');
+await pool.query(`UPDATE territory_rackets SET upkeep_at=now(), last_income_at=now() WHERE district_id='docks'`);
+let terr = (await call('GET', '/v1/territory', { token: raider.token })).body.territory.find((t) => t.district === 'docks');
+assert.equal(terr.upkeepPerHr, 3200, 'the operation owes upkeep at 20% of its $16k/hr income');
+assert.equal(terr.upkeepOwed, 0, 'a squared op owes nothing'); assert.equal(terr.cold, false, 'and runs warm');
+// a soldier can't pay the pad (boss/underboss only, the establish gate)
+const grunt = await mk('Grunt Gary');
+assert.equal((await call('POST', `/v1/gangs/${rg}/join`, { token: grunt.token })).code, 200, 'gary joined the raiders');
+assert.equal((await call('POST', '/v1/territory/upkeep', { token: grunt.token })).body.error, 'rank', 'a soldier does not square the pad');
+// 5 hours of unpaid pad → owed ≈ $16k; paying is a ledgered treasury sink that resets the clock
+await pool.query(`UPDATE territory_rackets SET upkeep_at = now() - interval '5 hours' WHERE district_id='docks'`);
+const treaPrePad = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/upkeep', { token: raider.token });
+assert.equal(r.code, 200, 'the boss squares the pad'); assert.equal(r.body.paid, 3200 * 5, '5h × $3.2k paid from the treasury');
+assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, treaPrePad - 3200 * 5, 'the pad left the treasury exactly');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:upkeep'")).rows[0].s),
+  -(3200 * 5), 'territory:upkeep is a ledgered §10.4 treasury sink (character_id NULL)');
+// COLD: an operation unpaid past the cold window (3d) produces nothing until squared
+await pool.query(`UPDATE territory_rackets SET upkeep_at = now() - interval '4 days', last_income_at = now() - interval '2 hours' WHERE district_id='docks'`);
+terr = (await call('GET', '/v1/territory', { token: raider.token })).body.territory.find((t) => t.district === 'docks');
+assert.equal(terr.cold, true, 'four days unpaid → the operation is COLD');
+r = await call('POST', '/v1/territory/collect', { token: raider.token });
+assert.equal(r.body.collected, 0, 'a cold op hands the treasury nothing'); assert.equal(r.body.cold, 1, 'and reports itself cold');
+assert.equal((await call('POST', '/v1/territory/docks/upgrade', { token: raider.token })).body.error, 'cold', "and won't take an upgrade");
+// paying the pad THAWS it — income flows to the treasury again
+await call('POST', '/v1/territory/upkeep', { token: raider.token });
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '1 hour' WHERE district_id='docks'`);
+assert.equal((await call('GET', '/v1/territory', { token: raider.token })).body.territory.find((t) => t.district === 'docks').cold, false, 'the pad squared → warm again');
+assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'and the take flows to the treasury again');
+// §10.4: the treasury check still reconciles with the upkeep sink in the mix
+const terrTreas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert(terrTreas.ok, `the treasury check reconciles territory:upkeep (drift ${terrTreas.drift})`);
+
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
 // ══ the safehouse is priced off the wealth it protects
 const vault = await mk('Vinnie Vault');

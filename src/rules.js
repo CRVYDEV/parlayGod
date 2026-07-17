@@ -466,6 +466,12 @@ export const CONSTANTS = {
   // so an uncollected operation can't hoard unlimited income; uncollected income is forfeited to
   // the void when the district is seized (collect before you lose the turf).
   TERRITORY_CAP_MS: 24*3600*1000,
+  // RECURRING SINKS — territory upkeep: an operation owes protection + payroll = TERRITORY_UPKEEP_BPS
+  // of its income (the treasury pays), accrued on its OWN clock up to TERRITORY_UPKEEP_CAP_MS (7d) —
+  // distinct from the 24h income cap, so a neglected operation owes more than it earns. Unpaid past
+  // TERRITORY_UPKEEP_COLD_MS (3d) it goes COLD (no income / no upgrade) until squared; seizure hands
+  // the victor a fresh clock. New/tunable — sim + founder sign-off (ground rule #1).
+  TERRITORY_UPKEEP_BPS: 2000, TERRITORY_UPKEEP_CAP_MS: 7*24*3600*1000, TERRITORY_UPKEEP_COLD_MS: 3*24*3600*1000,
   // Risk-to-Earn Phase 4 — BACKED EMISSION. STAKE_POOL_BPS of every 12h buyback's bought $OMR is
   // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin

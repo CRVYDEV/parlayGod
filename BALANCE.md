@@ -375,5 +375,14 @@ Levers (`CONSTANTS`, `omerta-recurring-sinks-design.md`):
 §10.4: one sink reason (`business:upkeep`) already inside the `business:` vocabulary — no invariant
 change; sim stays drift-0. Economic effect measured directionally: at 20%, business net EV drops
 ~20% and the passive-stack advantage the sim audit flagged shrinks toward the active loops — watch
-in the next sim pass whether 20% is enough to close the gap or wants to climb. Roadmap (deferred,
-same pattern): territory-racket upkeep (gang treasury), crew wages, the heat-scaled city pad.
+in the next sim pass whether 20% is enough to close the gap or wants to climb.
+
+**Step two — territory-racket upkeep** (same pattern, gang level): `TERRITORY_UPKEEP_BPS` 2000 /
+`TERRITORY_UPKEEP_CAP_MS` 7d / `TERRITORY_UPKEEP_COLD_MS` 3d — every operation owes 20% of its
+income, paid from the TREASURY (`territory:upkeep`, a treasury sink already inside the `territory:`
+vocabulary — the invariant treasury check subtracts it with `territory:establish`; no schema/vocab
+change beyond the invariant term). Same asymmetry (earn ≤24h, owe ≤7d) and cold penalty (3d → no
+income / no upgrade); seizure hands the victor a fresh clock so a raided racket isn't born cold.
+This drains the gang-treasury side of the passive stack (territory income was pure treasury faucet
+with no recurring counter-flow). Numbers parallel the business pad for sign-off clarity; both dials
+are independent. Roadmap (deferred, same pattern): crew wages, the heat-scaled city pad.

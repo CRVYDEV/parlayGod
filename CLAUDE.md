@@ -460,9 +460,18 @@ character_id reconciles check (a)) — resetting that front's clock. A front unp
 to the 24h cap, not banked), `launder`/`upgrade` throw `cold`, until the pad thaws it; upgrade
 resets `upkeep_at` (squares the books, no retroactive rate bump). View surfaces `upkeepPerHr`/
 `upkeepOwed`/`cold`. `test/economy.js`: rate+owed in the view, ledgered pay resetting the clock,
-the cold gate (no income/launder/upgrade) + thaw. All numbers founder sign-off levers. Roadmap
-(deferred, same lazy-owed-debt+pay+cold pattern): territory-racket upkeep (gang treasury), crew
-wages, the heat-scaled city pad/bribery. Suite 16/16 + sim drift-0.
+the cold gate (no income/launder/upgrade) + thaw. All numbers founder sign-off levers.
+**Step two — TERRITORY-RACKET upkeep — BUILT** (`src/territory.js`): the same pattern at the GANG
+level — every operation owes `TERRITORY_UPKEEP_BPS` (20%) of its income, accrued on
+`territory_rackets.upkeep_at` up to 7d; a boss/underboss pays it from the TREASURY
+(`POST /v1/territory/upkeep`, greedy) — a §10.4 treasury sink `territory:upkeep` (character_id
+NULL, counterparty=gang; invariants treasury check subtracts it with `territory:establish`;
+`territory:` prefix already vocabularied). Unpaid past 3d → COLD (`collectTerritory` skips it,
+`upgradeRacket` throws `cold`); upgrade squares the clock; **seizure resets it** (a seized racket
+is never born cold, old arrears don't follow the turf). `territoryOf` view surfaces
+`upkeepPerHr`/`upkeepOwed`/`cold`. `test/social.js`: rank gate, view fields, ledgered treasury pay
+resetting the clock, cold gate + thaw, treasury §10.4 reconcile. Roadmap (deferred): crew wages,
+the heat-scaled city pad/bribery. Suite 16/16 + sim drift-0.
 
 **Full sim audit (`AUDIT-sim.md`)** — four red-team lenses + a real simulation harness
 (`tools/sim.js`: drives the live server through the public API only, seeds NO value, warps clocks,
