@@ -601,6 +601,16 @@ CREATE TABLE IF NOT EXISTS market_listings (
 CREATE INDEX IF NOT EXISTS ix_market_seller ON market_listings (seller_character);
 CREATE INDEX IF NOT EXISTS ix_market_status ON market_listings (status);
 
+-- SKILLS & SPECIALIZATIONS: the character build layer. Points derive from level (never stored —
+-- no currency, no §10.4 surface); owned skills die with the street (estate wipe). Design:
+-- omerta-skills-design.md.
+CREATE TABLE IF NOT EXISTS character_skills (
+  character_id TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  learned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (character_id, skill_id)
+);
+
 -- D4: NPC-hit per-TARGET cooldown — one rival can no longer be repeat-reset every 6h by a whale
 -- cycling their payer cooldown (each attempt stamps the pair, win or lose).
 CREATE TABLE IF NOT EXISTS npc_hits (

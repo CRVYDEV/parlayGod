@@ -1,9 +1,9 @@
 // M4 — THE KITCHEN (§7.10, §5.3). Fictional period product lines; an economy of
 // risk, not a recipe. Every formula cites spec §7.10 / prototype v24.
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
 import {
-  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION,
+  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat,
 } from './rules.js';
@@ -163,7 +163,9 @@ export async function layLow(ch, client, h) {
   if (Number(ch.heat || 0) < 5) throw new GameError('cold', "You're already a ghost.");
   // Commission decree: AMNESTY — the judges are paid, laying low costs half this week
   const amnesty = (await activeDecree(client))?.id === 'amnesty';
-  const cost = Math.floor(M4.LAYLOW_CASH * (amnesty ? COMMISSION.AMNESTY_MULT : 1));
+  // FAST TALKER (skills) stacks multiplicatively with an amnesty decree — both are new levers
+  const cost = Math.floor(M4.LAYLOW_CASH * (amnesty ? COMMISSION.AMNESTY_MULT : 1)
+    * skillMult(h, 'fast_talker', SKILLS.FX.LAYLOW_MULT));
   if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes $${cost}.`);
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
   ch.cash = Number(ch.cash) - cost;

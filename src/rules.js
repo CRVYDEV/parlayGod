@@ -795,6 +795,32 @@ export const decreeOf = (id) => COMMISSION.DECREES.find((d) => d.id === id) || n
 // past the convoy game). The 2% take is carved FROM the hammer (half street tax, half burns) —
 // never minted on top. Gear deliberately excluded (its market IS the on-chain rail). All
 // numbers are founder sign-off levers. Design: omerta-market-design.md.
+// SKILLS & SPECIALIZATIONS — the character BUILD layer. Three branches (Enforcer/Operator/
+// Wheelman), three tiers each (cost 1/2/3 points, previous tier required); points derive from
+// LEVEL (1 per LVL_PER_POINT — never a currency, no §10.4 surface). Maxing one branch = lvl 24,
+// two = lvl 48 — real specialization. Skills DIE WITH THE STREET (like stats; the heir starts
+// fresh); respec burns $OMR (`respec:skills`) on the shared M8 respec cooldown. Every effect is
+// a NEW single-touchpoint modifier — deliberately OFF the audit-locked surfaces (no heat
+// deterrent discounts, no loot-exposure windows, no extraction caps). ALL numbers (FX + costs)
+// are founder sign-off levers — sim before production. Design: omerta-skills-design.md.
+export const SKILLS = {
+  LVL_PER_POINT: 4,     // one skill point per four levels
+  RESPEC_OMR: 10,       // burn to unlearn everything (shared respec cooldown)
+  TREE: [
+    { id: 'bruiser',        branch: 'enforcer', tier: 1, cost: 1, name: 'Bruiser',          desc: 'Jumps and shakedowns hit 8% harder.' },
+    { id: 'doctors_friend', branch: 'enforcer', tier: 2, cost: 2, name: "The Doc's Friend", desc: 'Healing costs 25% less.' },
+    { id: 'executioner',    branch: 'enforcer', tier: 3, cost: 3, name: 'Executioner',      desc: 'Hit searches take 20% less time.' },
+    { id: 'fast_talker',    branch: 'operator', tier: 1, cost: 1, name: 'Fast Talker',      desc: 'Laying low costs 20% less.' },
+    { id: 'fence_network',  branch: 'operator', tier: 2, cost: 2, name: 'Fence Network',    desc: 'Fencing and melting yield 8% more.' },
+    { id: 'broker',         branch: 'operator', tier: 3, cost: 3, name: 'Broker',           desc: 'Black Market listing fees are halved.' },
+    { id: 'pack_mule',      branch: 'wheelman', tier: 1, cost: 1, name: 'Pack Mule',        desc: 'The trunk holds 3 more units.' },
+    { id: 'getaway',        branch: 'wheelman', tier: 2, cost: 2, name: 'Getaway',          desc: 'Crime stints run 20% shorter.' },
+    { id: 'road_captain',   branch: 'wheelman', tier: 3, cost: 3, name: 'Road Captain',     desc: 'Your convoys run 20% faster.' },
+  ],
+  FX: { BRUISER_MULT: 1.08, DOC_MULT: 0.75, SEARCH_MULT: 0.8, LAYLOW_MULT: 0.8,
+        FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8 },
+};
+export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
 export const BLACK_MARKET = {           // (MARKET is the generated §5 goods catalog — hands off)
   LIST_FEE_BPS: 100, LIST_FEE_MIN: 10,  // 1% of the ask (min $10) to list — prices the "free warehouse" angle
   MIN_PRICE: 50,                         // no penny listings

@@ -772,6 +772,30 @@ order balances (qty×price summed in JS — pg-mem SUM-over-expression is dicey)
 `/v1/market/:id/fill|claim`. Step-two numbers are sign-off levers. Still deferred: goods
 auctions proper, the gear-market design call. Suite 14/14 + sim drift-0.
 
+**Skills & Specializations — BUILT** (`src/skills.js`, `test/skills.js` — the 15th suite file;
+design `omerta-skills-design.md`). The character BUILD layer: three branches × three tiers
+(`SKILLS.TREE` rules tail — Enforcer: bruiser/doctors_friend/executioner; Operator:
+fast_talker/fence_network/broker; Wheelman: pack_mule/getaway/road_captain), tier costs 1/2/3
+points with the previous tier as prerequisite; points DERIVE from level (`floor(lvl/4)` — never
+stored, no currency, no §10.4 surface), so one maxed branch = lvl 24, two = lvl 48. Skills DIE
+WITH THE STREET (`character_skills` joined the estate wipe — like stats, unlike prestige);
+respec burns `RESPEC_OMR` 10 (`respec:skills`, the omr burn term widened to `respec%`) on the
+SHARED M8 respec cooldown (`characters.respec_at`, M8.RESPEC_CD_MS). Every effect is a NEW
+single-touchpoint modifier read via game.js `hasSkill`/`skillMult`/`trunkCap`, deliberately OFF
+the audit-locked surfaces (no heat-deterrent discounts, no loot-exposure windows, no extraction
+caps, no kill economics, no signed accrual curves): bruiser ×1.08 on jump+shakedown attack;
+doctors_friend heal ×0.75; executioner search clock ×0.8 (applied at BOTH the hunter's clock
+sites — startSearch placedAt AND fire's readiness — so they agree, composing with the TEST-ONLY
+SEARCH_MS knob); fast_talker laylow ×0.8 (stacks multiplicatively with the amnesty decree);
+fence_network fence+melt yields ×1.08; broker Black Market listing fees ×0.5; pack_mule trunk
++3 (via `trunkCap(h)` — swapped in at every player-trunk site: goods buy, market buy/claim/
+reclaim, convoy load/hijack/collect); getaway crime stints ×0.8; road_captain own convoys ×0.8
+time. `GET /v1/skills` (board), `POST /v1/skills/:id`, `POST /v1/skills/respec`; view carries
+`skills` + `skillPoints` + skill-aware `cargoCap`. ALL numbers (FX + costs + LVL_PER_POINT) are
+founder sign-off levers — sim before production. Step two (deferred): ACTIVE abilities with
+cooldowns, tier-4 capstones, prestige-carried skill slots (a founder call — it would soften
+death), per-skill respec. Suite 15/15 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

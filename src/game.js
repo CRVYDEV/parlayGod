@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf } from './rules.js';
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -87,7 +87,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -99,6 +99,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]),
     client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
+    client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -122,8 +123,15 @@ export async function loadOwned(client, ch) {
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
+    skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
   };
 }
+
+// Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).
+export const hasSkill = (h, id) => !!h?.owned?.skills?.has(id);
+export const skillMult = (h, id, mult) => (hasSkill(h, id) ? mult : 1);
+// trunk capacity incl. the Pack Mule bonus — use this, not cargoCapacity(), on player paths
+export const trunkCap = (h) => cargoCapacity(h.owned.assets) + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0);
 
 async function accrueAndLedger(client, ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash });
@@ -324,7 +332,11 @@ export function view(ch, acct = {}, owned = {}) {
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
     maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
-    cargoCap: cargoCapacity(assets),
+    cargoCap: cargoCapacity(assets) + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0),
+    skills: [...(owned.skills || [])],
+    skillPoints: (() => { const total = Math.floor(lvl / SKILLS.LVL_PER_POINT);
+      const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
+      return { total, spent, available: Math.max(0, total - spent) }; })(),
     rackets: owned.rackets || [], assets, businesses: owned.businesses || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
@@ -401,7 +413,9 @@ export function doCrime(ch, crimeId, client, h) {
       await bumpFamilyTask(client, h, 'crime', 1);
       return { ok: true, success: true, take, rep, crates, makingsDrop };
     }
-    const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1));
+    // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever
+    const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1)
+      * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
     await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'fail');
     await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: false });
@@ -424,7 +438,9 @@ export async function train(ch, stat, client, h) {
 // ── §5.1 HEAL ──
 export async function heal(ch, client, h) {
   const lvl = levelOf(Number(ch.respect));
-  const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1));
+  // THE DOC'S FRIEND (skills): the enforcer heals cheaper — a new modifier, sign-off lever
+  const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
+    * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT));
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);
   ch.cash = Number(ch.cash) - cost; ch.health = 100;

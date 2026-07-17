@@ -20,6 +20,7 @@ import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
 import * as Commission from './commission.js';
 import * as Market from './market.js';
+import * as Skills from './skills.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -330,6 +331,14 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castVote(ch, req.body?.decree, client, h)));
   app.post('/v1/commission/veto', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.vetoDecree(ch, client, h)));
+
+  // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
+  app.get('/v1/skills', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.skillsBoard(ch, h)));
+  app.post('/v1/skills/respec', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
+  app.post('/v1/skills/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.learnSkill(ch, req.params.id, client, h)));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));
