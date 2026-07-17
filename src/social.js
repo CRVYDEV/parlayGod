@@ -1188,12 +1188,14 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  // BLOODLINE MEMORY (Underworld step two): capture the dead street's standings before the
-  // wipe — the heir inherits MEMORY_BPS of each ("the Doc remembers your father"), floored,
-  // sub-1 remainders forgotten. A softened corner of "everything dies with the street",
-  // founder-dialed (MEMORY_BPS 0 restores the hard rule).
-  const remembered = (await client.query('SELECT npc_id, standing FROM npc_standing WHERE character_id=$1', [victim.id])).rows
-    .map((r) => ({ npc: r.npc_id, s: Math.floor(Number(r.standing) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
+  // BLOODLINE MEMORY (Underworld step two): the heir inherits MEMORY_BPS of each standing
+  // ("the Doc remembers your father"), floored, sub-1 remainders forgotten. Read from
+  // h.victimOwned.npc — the EFFECTIVE (decay-applied) values, same as every perk site — not
+  // the stored rows, which sit stale-high for an idle street until a bump materializes the
+  // cooling (audit: a lapsed stored 90 must hand down floor(25×25%), not floor(90×25%)).
+  // Founder-dialed: MEMORY_BPS 0 restores the hard rule.
+  const remembered = Object.entries(h.victimOwned.npc || {})
+    .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
   for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
