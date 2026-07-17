@@ -12,8 +12,8 @@
 // touched by an ambush; the manifest is the contested object, not the man. The insurance CLAIM
 // therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
-import { CONVOY, COMMISSION, guardTierOf, DISTRICTS, GOODS, goodPriceOf, cargoCapacity } from './rules.js';
+import { GameError, bus, skillMult, trunkCap } from './game.js';
+import { CONVOY, COMMISSION, SKILLS, guardTierOf, DISTRICTS, GOODS, goodPriceOf } from './rules.js';
 import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
@@ -108,13 +108,15 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
     await client.query('UPDATE convoy_insurance SET pool=$1 WHERE id=1', [Number(pool.pool) + premium]);
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -premium, reason: 'convoy:insure' });
   }
-  const arrivesAt = new Date(Date.now() + convoyMs());
+  // ROAD CAPTAIN (skills): the wheelman's convoys run faster — a new modifier, sign-off lever
+  const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT));
+  const arrivesAt = new Date(Date.now() + rideMs);
   await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, insured=$4, departed_at=now(), arrives_at=$5 WHERE id=$1",
     [convoy.id, tier.def, h.owned.gangId || null, !!premium, arrivesAt]);
   const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
   await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id, insured: !!premium });
-  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(convoyMs() / 1000), units, band, premium };
+  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(rideMs / 1000), units, band, premium };
 }
 
 // CANCEL while loading — the goods come back to the trunk (they must fit).
@@ -123,7 +125,7 @@ export async function cancelConvoy(ch, client, h) {
   if (!convoy || convoy.status !== 'loading') throw new GameError('no_convoy', 'No shipment loading.');
   const manifest = await manifestOf(client, convoy.id);
   const units = manifest.reduce((a, r) => a + Number(r.qty), 0);
-  const cap = cargoCapacity(h.owned.assets);
+  const cap = trunkCap(h);
   if (cargoCount(h.owned.cargo) + units > cap) throw new GameError('cargo', 'The trunk cannot take it all back — sell something first.');
   for (const m of manifest) {
     const back = (h.owned.cargo[m.good_id] || 0) + Number(m.qty);
@@ -184,7 +186,7 @@ export async function ambushConvoy(ch, convoyId, client, h) {
     await client.query('UPDATE convoys SET ambushes=$2 WHERE id=$1', [convoyId, prior + 1]);
     // take what the trunk holds — a pure ownership transfer; the rest rolls on to the docks
     const manifest = await manifestOf(client, convoyId);
-    const cap = cargoCapacity(h.owned.assets);
+    const cap = trunkCap(h);
     let space = Math.max(0, cap - cargoCount(h.owned.cargo));
     let taken = 0, lossValue = 0;
     for (const m of manifest) {
@@ -228,7 +230,7 @@ export async function collectConvoy(ch, convoyId, client, h) {
   if (!arrived(c)) throw new GameError('en_route', 'Still on the road.');
   if (ch.loc !== c.destination) throw new GameError('district', `The freight lands at ${c.destination} — be there.`);
   const manifest = await manifestOf(client, convoyId);
-  const cap = cargoCapacity(h.owned.assets);
+  const cap = trunkCap(h);
   let space = Math.max(0, cap - cargoCount(h.owned.cargo));
   let taken = 0, left = 0, collectedValue = 0;
   for (const m of manifest) {

@@ -16,8 +16,8 @@
 // → market_listings (pot class) → street_tax singleton. Acyclic vs the global order; residual
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify } from './game.js';
-import { BLACK_MARKET as MARKET, GOODS, cargoCapacity } from './rules.js';
+import { GameError, bus, ledger, notify, skillMult, trunkCap } from './game.js';
+import { BLACK_MARKET as MARKET, GOODS, SKILLS } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -71,7 +71,7 @@ export async function listItem(ch, opts, client, h) {
     const reserve = opts.reserve != null ? Math.floor(Number(opts.reserve)) : null;
     if (reserve != null && (reserve < minBid || (buyNow != null && reserve > buyNow)))
       throw new GameError('bad_reserve', 'A reserve sits between the minimum bid and buy-now.');
-    const fee = listFee(buyNow ?? reserve ?? minBid);
+    const fee = Math.max(1, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT))); // BROKER (skills) halves fees
     if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
     ch.cash = Number(ch.cash) - fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -91,7 +91,7 @@ export async function listItem(ch, opts, client, h) {
   const price = Math.floor(Number(opts.price) || 0);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   if (qty * price < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = listFee(qty * price);
+  const fee = Math.max(1, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
   if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -164,7 +164,7 @@ export async function postOrder(ch, opts, client, h) {
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   const escrow = qty * price;
   if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = listFee(escrow);
+  const fee = Math.max(1, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
   if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
   const hours = Math.min(MARKET.MAX_TTL_H, Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   ch.cash = Number(ch.cash) - fee;
@@ -212,7 +212,7 @@ export async function claimOrder(ch, listingId, client, h) {
   if (ch.loc !== l.district) throw new GameError('district', `The warehouse is at ${l.district} — be there.`);
   const avail = Number(l.filled_qty);
   if (avail <= 0) throw new GameError('empty', 'Nothing delivered yet.');
-  const space = Math.max(0, cargoCapacity(h.owned.assets) - cargoCount(h.owned.cargo));
+  const space = Math.max(0, trunkCap(h) - cargoCount(h.owned.cargo));
   const n = Math.min(avail, space);
   if (n <= 0) throw new GameError('cargo', 'No room in the trunk.');
   h.owned.cargo[l.good_id] = (h.owned.cargo[l.good_id] || 0) + n;
@@ -269,7 +269,7 @@ export async function buyListing(ch, listingId, qty, client, h) {
   // goods: stand at the dock, take what your trunk holds, pay unit price
   if (ch.loc !== l.district) throw new GameError('district', `Pickup is at ${l.district} — be there.`);
   const want = Math.max(1, Math.floor(Number(qty) || Number(l.qty)));
-  const space = Math.max(0, cargoCapacity(h.owned.assets) - cargoCount(h.owned.cargo));
+  const space = Math.max(0, trunkCap(h) - cargoCount(h.owned.cargo));
   const n = Math.min(want, Number(l.qty), space);
   if (n <= 0) throw new GameError('cargo', 'No room in the trunk.');
   const gross = n * Number(l.price);
@@ -311,7 +311,7 @@ export async function cancelListing(ch, listingId, client, h) {
     return { ok: true, cancelled: l.id, refunded: remaining, awaiting: Number(l.filled_qty) };
   } else {
     const back = (h.owned.cargo[l.good_id] || 0) + Number(l.qty);
-    if (cargoCount(h.owned.cargo) + Number(l.qty) > cargoCapacity(h.owned.assets))
+    if (cargoCount(h.owned.cargo) + Number(l.qty) > trunkCap(h))
       throw new GameError('cargo', 'The trunk cannot take it all back — sell or make room first.');
     h.owned.cargo[l.good_id] = back;
     await setCargo(client, ch.id, l.good_id, back);

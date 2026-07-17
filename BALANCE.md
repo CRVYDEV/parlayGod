@@ -157,6 +157,19 @@ per-member ≈ $43.7k/8h window vs the solo heist's guaranteed $30k = **1.46× s
 1.3–2.1× design band**, with 1-in-3 runs ending in shared jail. §10.4 drift-0 with the faucet
 live. **KEEP as proposed.**
 
+## Post-signing addendum — Skills & Specializations (sign-off pending)
+
+A build layer of NEW single-touchpoint modifiers — nothing signed was retuned, and the tree
+deliberately avoids the audit-locked surfaces (heat deterrents, loot-exposure windows,
+extraction caps, kill economics, accrual curves). Levers: `LVL_PER_POINT` 4, `RESPEC_OMR` 10,
+and the nine FX (×1.08 attack, ×0.75 heal, ×0.8 search, ×0.8 laylow, ×1.08 fence/melt, ×0.5
+market fees, +3 trunk, ×0.8 stints, ×0.8 convoy time). Economy notes for the sim pass:
+fence_network is the only one touching a FAUCET (fence/melt +8% for 2 points at level ≥12 —
+bounded by the unchanged GTA faucet rate and garage cap; watch alongside the market's car-price
+item); executioner (−20% search) raises assassin throughput ~25% for a 6-point commitment —
+the deepest PvP lever here, flag for the whale-hunt economics; everything else is QoL/pacing.
+Respec cadence shares the daily M8 cooldown so build-swapping around fights stays impossible.
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,

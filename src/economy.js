@@ -2,9 +2,9 @@
 // Every formula cites spec §7 / prototype v24. Actions receive the locked character
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
 import {
-  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS,
+  CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf,
 } from './rules.js';
@@ -77,7 +77,9 @@ async function removeCar(client, h, carId) {
 
 export async function meltCar(ch, carId, client, h) {
   const car = findCar(h, carId);
-  const yieldRounds = carMelt(car.model_id, car.trim_id, car.dmg);
+  // FENCE NETWORK (skills): the operator's contacts pay better — a new modifier, sign-off lever
+  const yieldRounds = Math.floor(carMelt(car.model_id, car.trim_id, car.dmg)
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT));
   // §7.5: in a family, 25% of the rounds tithe to the armory and the treasury is
   // credited $30/round — atomically, in this same transaction.
   const tithe = h.owned.gangId ? Math.floor(yieldRounds * CONSTANTS.MELT_TITHE) : 0;
@@ -119,7 +121,9 @@ export async function repairCar(ch, carId, client, h) {
 
 export async function fenceCar(ch, carId, client, h) {
   const car = findCar(h, carId);
-  const gross = Math.floor(carVal(car.model_id, car.trim_id) * 0.5 * (1 - (car.dmg || 0) / 100) * (cityEventOf(dayOf()).fenceMult || 1));
+  // FENCE NETWORK (skills): +8% on the gross — a new modifier, sign-off lever
+  const gross = Math.floor(carVal(car.model_id, car.trim_id) * 0.5 * (1 - (car.dmg || 0) / 100) * (cityEventOf(dayOf()).fenceMult || 1)
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT));
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;
@@ -186,7 +190,7 @@ export async function buyGood(ch, goodId, qty, client, h) {
   const g = GOODS.find((x) => x.id === goodId);
   if (!g) throw new GameError('bad_good', 'No such good.');
   const n = Math.max(1, Math.floor(Number(qty) || 0));
-  const cap = cargoCapacity(h.owned.assets);
+  const cap = trunkCap(h);
   if (cargoCount(h.owned.cargo) + n > cap) throw new GameError('cargo', `The trunk holds ${cap} units. Better Wheels carry more.`);
   const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'buy'));
   const cost = unit * n, fee = Math.ceil(cost * 0.01), tax = Math.ceil(cost * 0.01);

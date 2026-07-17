@@ -3,12 +3,12 @@
 // Every formula cites spec §7 / prototype v24. Two-party actions run under
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, bus, ledger } from './game.js';
+import { GameError, bumpFamilyTask, bus, ledger, skillMult } from './game.js';
 import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION,
+  VENDETTA, COMMISSION, SKILLS,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -267,8 +267,9 @@ export async function jump(ch, victim, client, h) {
   const rIdx = rankIdxOf(levelOf(Number(ch.respect)));
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
+  // BRUISER (skills): the enforcer hits harder — a new modifier on the attack term, sign-off lever
   const atk = (eff('muscle') + eff('speed') * 0.5 + (gunObjOf(ch.gun)?.fp || 0) * 0.4 + (rIdx >= 3 ? 5 : 0))
-    * (ch.path === 'gun' ? 1.1 : 1) + Math.random() * 25;
+    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) + Math.random() * 25;
   const def = (vEff('muscle') + vEff('speed') * 0.5 + (gunObjOf(victim.gun)?.fp || 0) * 0.4) + Math.random() * 25;
   await h.rngLog(client, ch.id, `jump:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
@@ -765,7 +766,9 @@ export async function startSearch(ch, targetCharacterId, client, h) {
   const cur = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (cur) throw new GameError('searching', 'Your people are already out looking. Call them off first.');
   await client.query('INSERT INTO searches (hunter, target) VALUES ($1,$2)', [ch.id, targetCharacterId]);
-  return { ok: true, placedAt: new Date(Date.now() + searchMs()) };
+  // EXECUTIONER (skills): the assassin's people work faster — applied here AND at fire's
+  // readiness check (both read the HUNTER's build, so the two clocks agree). Sign-off lever.
+  return { ok: true, placedAt: new Date(Date.now() + Math.floor(searchMs() * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT))) };
 }
 
 // §9 production timers: search 3 h, failed-shot cooldown 2 h.
@@ -781,7 +784,8 @@ export async function callOffSearch(ch, client) {
 export async function fire(ch, victim, client, h, rounds) {
   const s = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (!s || s.target !== victim.id) throw new GameError('no_search', 'Your people have no fix on them. Start a search.');
-  if (new Date(s.started_at).getTime() + searchMs() > Date.now())
+  // EXECUTIONER (skills): same multiplier as startSearch — the hunter's two clocks agree
+  if (new Date(s.started_at).getTime() + Math.floor(searchMs() * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)) > Date.now())
     throw new GameError('searching', "They haven't been placed yet. Patience is a caliber.");
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
@@ -1135,7 +1139,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
