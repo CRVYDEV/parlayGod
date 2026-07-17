@@ -617,11 +617,32 @@ CREATE TABLE IF NOT EXISTS npc_standing (
 
 -- Underworld step two: the daily LEAD — the first business each day with your best fixture
 -- pays bonus standing, once. One row per claimed day (old rows are inert; wiped with the street).
+-- Step four: `streak` = consecutive claimed days as of this row (yesterday's streak + 1).
 CREATE TABLE IF NOT EXISTS npc_leads (
   character_id TEXT NOT NULL,
   day INT NOT NULL,
   npc_id TEXT NOT NULL,
+  streak INT NOT NULL DEFAULT 1,
   PRIMARY KEY (character_id, day)
+);
+
+-- Underworld step four: GRUDGES with teeth — a fixture holding one caps your tier with them
+-- (no tier-3 service) until squared by penance. Count > 0 = grudged. Dies with the street
+-- (the fixtures forgive the dead; the standing loss still echoes via bloodline memory).
+CREATE TABLE IF NOT EXISTS npc_grudges (
+  character_id TEXT NOT NULL,
+  npc_id TEXT NOT NULL,
+  count INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, npc_id)
+);
+
+-- Underworld step four: the weekly FAVOR — one per street per week, claimed from any
+-- un-grudged tier-3 fixture (a resource package, never money).
+CREATE TABLE IF NOT EXISTS npc_favors (
+  character_id TEXT NOT NULL,
+  week INT NOT NULL,
+  npc_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, week)
 );
 
 CREATE TABLE IF NOT EXISTS character_skills (

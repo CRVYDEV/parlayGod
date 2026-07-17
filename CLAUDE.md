@@ -853,8 +853,25 @@ GRUDGE_MIN 60 docks the killer (fire) or the PAYER (npcHit) GRUDGE_LOSS 5 with t
 kill response; losses echo down the killer's bloodline via step-two memory). Tests: drawn-task
 lead (off-task pays flat, task claims, once/day), ambush rivalry both directions, grudge kill
 (friends ≥60 grudge / acquaintance forgives / stranger floors at 0 / Vinnie never grudges /
-exact −2×attempts−5 arithmetic). Suite 16/16 + sim drift-0. Step four (deferred): NPC gifts
-back, den-comp ladder, grudge forgiveness/penance, lead streaks.
+exact −2×attempts−5 arithmetic). Suite 16/16 + sim drift-0. **Step four — BUILT**
+(`UNDERWORLD.STEP4`): **grudges with teeth** — `npc_grudges` (count per fixture, loaded into
+`h.owned.grudges`) caps `npcTier` at GRUDGE_TIER_CAP 2 while any grudge is open (standing 95
+reads tier 2 — business yes, favors no; every T3 perk site inherits the cap), recorded by
+`bearGrudges` (absolute count writes — the pg-mem INT-arithmetic quirk), wiped at estate (the
+fixtures forgive the dead; the standing loss still echoes via memory); **penance**
+(`POST /v1/underworld/:npc/penance`, `underworld.js:payPenance`) squares ONE grudge for
+PENANCE_COST $25k — a ledgered `underworld:penance` sink riding the existing vocabulary
+prefix (zero invariant changes), no standing moves; **the weekly favor**
+(`POST /v1/underworld/:npc/favor`, `claimFavor`; `npc_favors` week-PK, one per street per
+week, tier-3 required POST-cap so a grudged fixture refuses): resource packages only — doc
+health→100, madame nerve→cap, harbor energy→cap, armorer repairs the WORST car (throws
+'nothing' BEFORE consuming the week), fixer always 'debts' — never money, no §10.4 surface;
+**lead streaks** — `npc_leads.streak` (yesterday's + 1), bonus = LEAD_BONUS + min(streak−1,
+STREAK_BONUS_CAP 5), so day 6+ pays +10; notify carries bonus+streak. Board gained `penance`,
+`favor.taken`, per-fixture `grudge`. Tests: board grudge counts, tier-cap at 95, penance
+(ledgered/squared/clean), favor (all four packages, one-per-week, refused-errand keeps the
+week, debts, stranger gate), streak (+2 on day 3, capped +5 on day 10, row advance).
+Suite 16/16 + sim drift-0. Step five (deferred): grudge decay, favor menus, errand chains.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
