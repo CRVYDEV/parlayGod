@@ -1012,6 +1012,23 @@ into the price, floor holds, per-district variance), the raid (bounded faucet, a
 rout, all gates), the patrol conviction premium, and the closed vocabulary. Suite 18/18 + sim drift-0.
 ALL numbers are founder sim sign-off levers — sign into BALANCE.md before production.
 
+A **five-lens red-team over the Law + Living World** (`AUDIT-law-world.md`: §10.4, concurrency/locks,
+death/estate/PvP, Law internals, World internals) closed two HIGH correctness defects + four MED/LOW
+(regression per fix): the NPC-raid **rout bonus re-farmed** while the shared reservoir sat pinned below
+the floor (an unbounded mint the §10.4 sweep was blind to — now fires only on the CROSSING); the
+investigation meter **instant-indicted an OFFLINE kitchen dealer** because the exposure GAIN used
+uncapped `dtMin` while the crew re-adds heat mid-accrual (now capped at the offline window like income,
+bleed left uncapped); the informant collapse **never cleared the indictment it caused AND clobbered the
+killer's own relief** when the killer was the named target (now a `CASE`-clear + in-memory killer mirror);
+a rat **didn't actually forfeit family protection** (now omertà is VOID for a rat target in
+fire/npcHit/postBounty); plus the raid hosp-gate, a forfeiture/plea sub-cent bank clamp, the first-touch
+`world_npcs` INSERT race, and a dead-target notify. Verified CLEAN: the `goodPriceOf` shock ripple
+(convoy toll atomic, insurance frozen-snapshot + underwriting cap, market untouched, `floor(blk/6)==dayOf`),
+forfeiture-vs-kill serialization, witpro/respawn/bodyguard ordering, flip/sweepLaw persist discipline, the
+meter/courtroom math, and the vocabulary. Flagged for founder sign-off (NOT patched, ground rule #1):
+`demandTrial` 0.15-floor cheap reset, the raid loot $/day magnitude, the collapse's contention-mapped
+out-of-order lock. Suite 18/18 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

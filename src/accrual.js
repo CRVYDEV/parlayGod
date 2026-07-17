@@ -145,7 +145,11 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   {
     const hv = Number(ch.heat);
     const evMult = LAW.EXPOSURE_EVENT[ev.id] ?? 1;
-    const gain = Math.max(0, hv - LAW.WATCH) * dtMin * LAW.EXPOSURE_RATE * evMult;
+    // audit: the GAIN time factor is CAPPED at the offline window (like income), or a kitchen crew
+    // (which re-adds heat during THIS accrual, then clamps to 100) would feed heat 100 over an entire
+    // multi-day gap and instant-indict an offline dealer on login — the opposite of "active play".
+    // The BLEED stays uncapped (player-favourable, no exploit — a long absence bleeds a case off).
+    const gain = Math.max(0, hv - LAW.WATCH) * cappedMin * LAW.EXPOSURE_RATE * evMult;
     const bleed = dtMin * LAW.EXPOSURE_DECAY;
     ch.heat_exposure = Math.max(0, Number(ch.heat_exposure || 0) + gain - bleed);
     if (ch.heat_exposure >= LAW.INDICT_AT && !ch.indicted_at) {

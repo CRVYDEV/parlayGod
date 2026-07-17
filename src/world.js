@@ -11,14 +11,23 @@ import { WORLD_NPCS, worldNpcOf, WORLD, LIVING, levelOf, effStat, cityHourOf } f
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 
 // Lazy §7.1 strength regen toward the fixture max. Seeds the row (at max) on first touch. Returns
 // the current strength; the caller writes it back inside its own transaction (or here, under lock).
 async function currentStrength(client, fixture, now = new Date()) {
-  const row = (await client.query('SELECT strength, strength_at FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [fixture.id])).rows[0];
+  let row = (await client.query('SELECT strength, strength_at FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [fixture.id])).rows[0];
   if (!row) {
-    await client.query('INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ($1,$2,$3)', [fixture.id, fixture.max, now]);
-    return fixture.max;
+    // seed lazily; a concurrent first-touch may INSERT first — swallow the dup and re-read under
+    // lock (audit: FOR UPDATE locks nothing on a missing row, so two first raids both INSERT and
+    // the loser 23505'd into a raw 500 instead of a clean retry).
+    try {
+      await client.query('INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ($1,$2,$3)', [fixture.id, fixture.max, now]);
+      return fixture.max;
+    } catch (e) {
+      if (e?.code !== '23505') throw e;
+      row = (await client.query('SELECT strength, strength_at FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [fixture.id])).rows[0];
+    }
   }
   const hrs = Math.max(0, (now - new Date(row.strength_at)) / 3600000);
   const regened = Math.min(fixture.max, Number(row.strength) + fixture.regenPerHr * hrs);
@@ -73,6 +82,7 @@ export async function raidNpc(ch, npcId, client, h) {
   if (!fixture) throw new GameError('bad_npc', 'No outfit by that name to hit.');
   if (jailed(ch)) throw new GameError('jailed', 'No moves from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't run an op from a safehouse.");
+  if (hospitalized(ch)) throw new GameError('hosp', 'Not in any shape to run an op — see the Doc first.'); // parity with convoy/heist ambush
   const lvl = levelOf(Number(ch.respect));
   if (lvl < fixture.minLvl) throw new GameError('level', `Hitting ${fixture.name} takes level ${fixture.minLvl}.`);
   if (ch.world_raid_at && new Date(ch.world_raid_at) > new Date()) throw new GameError('cooldown', 'Your crew needs to regroup before the next hit.');
@@ -111,9 +121,12 @@ export async function raidNpc(ch, npcId, client, h) {
   ch.cash = Number(ch.cash) + loot;
   if (loot > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: loot, reason: 'world:raid', counterparty: fixture.id });
 
-  // routing an outfit (draining it below the floor) pays a one-time bonus + tells the streets
+  // routing an outfit pays a one-time bonus + tells the streets — ONLY on the floor CROSSING
+  // (audit: without the `strength > floorVal` guard, every raid while the shared reservoir sits
+  // pinned below the floor re-paid the flat bonus — an unbounded mint not backed by regen).
+  const floorVal = fixture.max * WORLD.ROUT_FLOOR_BPS / 10000;
   let routed = false, routBonus = 0;
-  if (after <= fixture.max * WORLD.ROUT_FLOOR_BPS / 10000) {
+  if (strength > floorVal && after <= floorVal) {
     routed = true; routBonus = fixture.routBonus;
     ch.cash = Number(ch.cash) + routBonus;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: routBonus, reason: 'world:raid', counterparty: fixture.id });
