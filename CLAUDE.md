@@ -821,8 +821,26 @@ joined the estate wipe); `underworld:` joined the cash vocabulary (all rows char
 `/v1/underworld/discharge`, `/v1/underworld/gun/:gunId/sell`. One pre-existing test rewired:
 social.js's looped NPC-hit refund probe now asserts `res.cost` (the hirer legitimately earned
 Vinnie T1 across ~100 hires). ALL numbers are founder sign-off levers — sim before production.
-Step two (deferred): the Madame (den/intel), bloodline memory, NPC leads, decay, rivalry.
-Suite 16/16 + sim drift-0.
+Suite 16/16 + sim drift-0. **Step two — BUILT** (`UNDERWORLD.STEP2` rules tail; zero new money
+flows — status/access/pacing only, §10.4 untouched by construction): **the Madame** (fifth
+fixture, den loop — dice +1/numbers +1/fade +3/fight bet +2 actor-side in casino.js; T1 comped
+seat = dice cost no nerve (a sink amplifier), T2 velvet rope = high-stakes room at any level
+(access only, odds untouched), T3 pillow talk = the board counts hunters with a search out on
+you — a COUNT, never a name, so the $OMR peek stays the only name-piercer); **the daily LEAD**
+(`npc_leads` day-PK; the first business bump each day with your BEST fixture (≥ LEAD_MIN 25)
+pays +5, once — gifts pass `business:false` and never claim it, implemented inside game.js
+`bumpStanding` so all 20 touchpoints participate); **standing DECAY** (lazy §7.1 —
+`npc_standing.touched_at`; past 7 idle days standing cools 1/day toward floor 25 = tier 1,
+never below; the EFFECTIVE value is computed at loadOwned and is what perks read; the stored
+row catches up on the next bump — writes are absolute-from-effective); **RIVALRY** (fire-kill
+and NPC hire cost the Doc −2 — one legible pair); **BLOODLINE MEMORY** (runEstate captures
+standings pre-wipe and the heir inherits floor(25%) each, sub-1 forgotten, `kept.memory` in
+the estate report — MEMORY_BPS 0 restores hard death; at 25% a maxed street hands down ~22,
+below tier 1). Board (`GET /v1/underworld`) gained `lead`, `decay`, and (Madame T3 only)
+`whispers.asking`. Tests: madame tiers, lead (gift-doesn't-claim, once/day, off-lead pays
+flat, strangers get none), decay (37/floor-25/below-floor-inert + materialize-on-bump),
+rivalry, memory (heir standings computed from pre-death board). Suite 16/16 + sim drift-0.
+Step three (deferred): rotating lead tasks, more rivalry pairs, grudge memory.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

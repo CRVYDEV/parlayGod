@@ -100,7 +100,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
     client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
-    client.query('SELECT npc_id, standing FROM npc_standing WHERE character_id=$1', [ch.id]),
+    client.query('SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -125,8 +125,21 @@ export async function loadOwned(client, ch) {
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
     skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
-    npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, Number(r.standing)])), // who you know — dies with the street
+    // who you know — dies with the street. Idle friendships COOL (Underworld step two): the
+    // EFFECTIVE standing is what everyone reads; the stored row catches up on the next bump.
+    npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, decayedStanding(Number(r.standing), r.touched_at)])),
   };
+}
+
+// Lazy standing decay (§7.1 pattern — no cron): after DECAY_GRACE_DAYS without business, a
+// standing cools DECAY_PER_DAY toward DECAY_FLOOR (tier 1 — old friends stay friends; the
+// inner circle needs upkeep). Below the floor nothing decays. Sign-off levers.
+function decayedStanding(s, touchedAt) {
+  const { DECAY_GRACE_DAYS, DECAY_PER_DAY, DECAY_FLOOR } = UNDERWORLD.STEP2;
+  if (s <= DECAY_FLOOR) return s;
+  const days = (Date.now() - new Date(touchedAt).getTime()) / 86400000;
+  if (days <= DECAY_GRACE_DAYS) return s;
+  return Math.max(DECAY_FLOOR, s - Math.floor((days - DECAY_GRACE_DAYS) * DECAY_PER_DAY));
 }
 
 // Underworld touchpoint helpers — perks are NEW single-touchpoint modifiers (sign-off levers).
@@ -136,20 +149,47 @@ export const npcTier = (h, npcId) => {
 };
 export const npcMult = (h, npcId, tier, mult) => (npcTier(h, npcId) >= tier ? mult : 1);
 
+// Your best relationship (Underworld step two): the highest EFFECTIVE standing at or above
+// LEAD_MIN, first in cast order on ties. Null while everyone is still a stranger.
+export function bestNpc(h) {
+  let best = null, bestS = UNDERWORLD.STEP2.LEAD_MIN - 1;
+  for (const n of UNDERWORLD.NPCS) {
+    const s = Number(h?.owned?.npc?.[n.id] || 0);
+    if (s > bestS) { best = n.id; bestS = s; }
+  }
+  return best;
+}
+
 // Standing bumps are earned actor-side at the loop's touchpoints (design §3). Standing is a
 // pure status axis — no §10.4 surface — so the write is a plain upsert under the actor's lock.
 // Lives here (not underworld.js) because game.js's own heal() bumps the Doc.
-export async function bumpStanding(client, h, ch, npcId, pts) {
+// Step two: the write is ABSOLUTE from the effective (decayed) value, so cooling materializes
+// on the next bump; every bump re-stamps touched_at (any contact, friendly or not, is contact).
+// The daily LEAD rides in here too: the FIRST business bump of the day with your BEST fixture
+// pays +LEAD_BONUS, once — gifts (business:false) and rivalry losses (pts<0) never trigger it.
+export async function bumpStanding(client, h, ch, npcId, pts, { business = true } = {}) {
   const cur = Number(h.owned.npc[npcId] || 0);
-  const next = Math.min(100, cur + pts);
-  if (next === cur) return;
-  const upd = await client.query('UPDATE npc_standing SET standing=$3 WHERE character_id=$1 AND npc_id=$2',
-    [ch.id, npcId, next]);
-  if (!upd.rowCount) {
-    await client.query('INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,$2,$3)',
-      [ch.id, npcId, next]);
+  let lead = false;
+  if (business && pts > 0 && bestNpc(h) === npcId) {
+    const day = dayOf();
+    const claimed = await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, day]);
+    if (!claimed.rowCount) {
+      await client.query('INSERT INTO npc_leads (character_id, day, npc_id) VALUES ($1,$2,$3)', [ch.id, day, npcId]);
+      pts += UNDERWORLD.STEP2.LEAD_BONUS;
+      lead = true;
+    }
   }
-  h.owned.npc[npcId] = next;
+  const next = Math.max(0, Math.min(100, cur + pts));
+  if (next !== cur || lead) {
+    const upd = await client.query('UPDATE npc_standing SET standing=$3, touched_at=now() WHERE character_id=$1 AND npc_id=$2',
+      [ch.id, npcId, next]);
+    if (!upd.rowCount) {
+      await client.query('INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,$2,$3)',
+        [ch.id, npcId, next]);
+    }
+    h.owned.npc[npcId] = next;
+  }
+  if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus: UNDERWORLD.STEP2.LEAD_BONUS });
 }
 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).

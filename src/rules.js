@@ -840,9 +840,20 @@ export const UNDERWORLD = {
       perks: ['Guns ×0.9 cash', 'Workshop crafts ×0.9 cash', 'She buys guns back at 30%'] },
     { id: 'harbor',  name: 'Big Tuna',         earn: 'convoys + market listings',
       perks: ['Guard fees ×0.9', 'Your listings run 72h', 'A fourth market listing slot'] },
+    { id: 'madame',  name: 'The Madame',       earn: 'den play + back-room fades + fight bets',
+      perks: ['The house comps your seat — dice cost no nerve', 'The velvet rope — the high-stakes room opens at any level',
+              "Pillow talk — she tells you how many hunters have been asking around about you"] },
   ],
   FX: { DOC_MULT: 0.9, NPCHIT_MULT: 0.9, SEARCH_MULT: 0.9, GUN_MULT: 0.9, CRAFT_MULT: 0.9,
         GUARD_MULT: 0.9, TTL_H: 72, EXTRA_LISTING: 1 },
+  // step two (all founder sign-off levers): relationships that live — daily leads, cooling,
+  // inherited memory, and one rivalry. Zero money flows; every number is a status-axis dial.
+  STEP2: {
+    LEAD_BONUS: 5, LEAD_MIN: 25,      // first business each day with your BEST fixture (≥25) pays +5
+    DECAY_GRACE_DAYS: 7, DECAY_PER_DAY: 1, DECAY_FLOOR: 25, // idle friendships cool to tier 1, never below
+    MEMORY_BPS: 2500,                 // the heir inherits 25% of each standing (floored; <1 forgotten)
+    RIVAL_LOSS: 2,                    // blood work (fire-kill, NPC hire) costs the Doc's goodwill
+  },
 };
 export const npcOf = (id) => UNDERWORLD.NPCS.find((n) => n.id === id) || null;
 export const BLACK_MARKET = {           // (MARKET is the generated §5 goods catalog — hands off)

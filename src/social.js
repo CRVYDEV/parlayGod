@@ -930,6 +930,8 @@ export async function fire(ch, victim, client, h, rounds) {
     // bonus, a settled vendetta a bigger one
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed, !!vend);
     await bumpStanding(client, h, ch, 'fixer', 5); // Vinnie hears about confirmed work
+    // RIVALRY (step two): the Doc took an oath — blood work costs his goodwill
+    await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
     // war interlock: a kill on a family you're at war with scores war points (worth more than a
     // jump's 1) — the lethal layer finally decides wars, not just jump-spam. Done BEFORE the
     // estate vacates the victim's gang seat, while h.victimOwned.gangId is still known.
@@ -1086,6 +1088,8 @@ export async function npcHit(ch, victim, client, h, tierId) {
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'npchit:hire', counterparty: victim.id });
   await bumpStanding(client, h, ch, 'fixer', 4); // arranged work is business with the Match
+  // RIVALRY (step two): the Doc hears who sent the man with the bag
+  await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
   ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
   ch.npchit_at = new Date(Date.now() + M3.NPC_HIT_CD_MS);
   if (pair) await client.query('UPDATE npc_hits SET last_at=now() WHERE payer=$1 AND target=$2', [ch.id, victim.id]);
@@ -1151,7 +1155,14 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
   if (Number(victim.ammo) > 0) await h.ledger(client, { characterId: victim.id, currency: 'ammo', amount: -Number(victim.ammo), reason: 'death:estate' });
 
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing'])
+  // BLOODLINE MEMORY (Underworld step two): capture the dead street's standings before the
+  // wipe — the heir inherits MEMORY_BPS of each ("the Doc remembers your father"), floored,
+  // sub-1 remainders forgotten. A softened corner of "everything dies with the street",
+  // founder-dialed (MEMORY_BPS 0 restores the hard rule).
+  const remembered = (await client.query('SELECT npc_id, standing FROM npc_standing WHERE character_id=$1', [victim.id])).rows
+    .map((r) => ({ npc: r.npc_id, s: Math.floor(Number(r.standing) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
+    .filter((r) => r.s >= 1);
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'character_skills', 'npc_standing', 'npc_leads'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
@@ -1213,6 +1224,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake, !!acct.minted]);
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
+  // …and the names that remember the bloodline follow the heir (fresh touched_at — the clock restarts)
+  for (const m of remembered)
+    await client.query('INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,$2,$3)', [heirId, m.npc, m.s]);
+  report.kept.memory = remembered.length;
   await h.notify(client, heirId, 'estate', report);
   // VENDETTA — a player fire-kill swears the bloodline against the killer's (NPC/mod deaths
   // don't: no street to swear against). One active vendetta per account pair; a repeat kill

@@ -343,7 +343,7 @@ export async function buildServer() {
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, client, h)));
   app.post('/v1/underworld/discharge', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.discharge(ch, client, h)));
   app.post('/v1/underworld/gun/:gunId/sell', { preHandler: auth }, async (req) =>
