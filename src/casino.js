@@ -5,8 +5,8 @@
 // every stake → the street-tax pool via takeHouse (the buyback/yield loop), the rest of the house
 // edge burns. Dice are stateless (a full pass-line round in one call); the Numbers is a daily
 // ticket resolved lazily against the seed-drawn number.
-import { GameError, bus } from './game.js';
-import { CASINO, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
+import { GameError, bus, npcTier, bumpStanding } from './game.js';
+import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -34,11 +34,15 @@ function gateBet(ch, amount, min, max) {
 // First roll 7/11 wins, 2/3/12 craps out; anything else sets the point and the server rolls on
 // until the point (win) or a seven (loss). Pays 1:1 — house edge ≈ 1.41%, the authentic number.
 export async function playDice(ch, amount, client, h) {
-  // the HIGH-STAKES ROOM: a made player (HIGH_LVL+) plays up to HIGH_MAX a roll
-  const max = levelOf(Number(ch.respect)) >= CASINO.HIGH_LVL ? CASINO.HIGH_MAX : CASINO.MAX_BET;
+  // the HIGH-STAKES ROOM: a made player (HIGH_LVL+) plays up to HIGH_MAX a roll — or the
+  // MADAME T2 velvet rope opens it at any level (an ACCESS perk; the table odds are untouched)
+  const max = levelOf(Number(ch.respect)) >= CASINO.HIGH_LVL || npcTier(h, 'madame') >= 2 ? CASINO.HIGH_MAX : CASINO.MAX_BET;
   const amt = gateBet(ch, amount, CASINO.MIN_BET, max);
-  if (Number(ch.nerve) < CASINO.DICE_NERVE) throw new GameError('nerve', 'Even dice take nerve.');
-  ch.nerve = Number(ch.nerve) - CASINO.DICE_NERVE;
+  // MADAME T1: the house comps your seat — dice cost no nerve (pacing QoL, the edge still pays)
+  if (npcTier(h, 'madame') < 1) {
+    if (Number(ch.nerve) < CASINO.DICE_NERVE) throw new GameError('nerve', 'Even dice take nerve.');
+    ch.nerve = Number(ch.nerve) - CASINO.DICE_NERVE;
+  }
 
   const rolls = [];
   const roll = () => { const r = d6() + d6(); rolls.push(r); return r; };
@@ -65,6 +69,7 @@ export async function playDice(ch, amount, client, h) {
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:dice' });
   }
   await bumpVolume(client, amt);
+  await bumpStanding(client, h, ch, 'madame', 1); // action on her floor is business
   await h.rngLog(client, ch.id, 'casino:dice', rolls[0], `${win ? 'win' : 'loss'} $${amt} [${rolls.join(',')}]`);
   await h.track(client, ch.account_id, 'casino', { game: 'dice', amt, win, rolls: rolls.length });
   if (amt >= CASINO.HIGH_FEED) bus.emit('streets', { type: 'highroller', who: ch.name, amount: amt, win }); // whale theater
@@ -98,8 +103,11 @@ export async function pvpDice(ch, fader, amount, client, h) {
   if (amt > limit) throw new GameError('limit', `They'll only fade up to $${limit}.`);
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
   if (Number(fader.cash) < amt) throw new GameError('their_cash', "They can't cover it right now.");
-  if (Number(ch.nerve) < CASINO.DICE_NERVE) throw new GameError('nerve', 'Even dice take nerve.');
-  ch.nerve = Number(ch.nerve) - CASINO.DICE_NERVE;
+  // MADAME T1 comps the back room too — the challenger's nerve, actor-side like the standing
+  if (npcTier(h, 'madame') < 1) {
+    if (Number(ch.nerve) < CASINO.DICE_NERVE) throw new GameError('nerve', 'Even dice take nerve.');
+    ch.nerve = Number(ch.nerve) - CASINO.DICE_NERVE;
+  }
 
   let mine, theirs;
   do { mine = d6() + d6(); theirs = d6() + d6(); } while (mine === theirs); // ties reroll — fair 50/50
@@ -113,6 +121,7 @@ export async function pvpDice(ch, fader, amount, client, h) {
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'casino:pvp', counterparty: loser.id });
   await takeHouse(client, Math.floor(rake / 2)); // half the rake to the street; the rest burns
   await bumpVolume(client, pot);
+  await bumpStanding(client, h, ch, 'madame', 3); // back-room action is her favorite kind
   await h.rngLog(client, ch.id, `casino:pvp:${fader.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, fader.id, 'backroom_dice', { from: ch.name, amount: amt, theyWon: !win });
   await h.track(client, ch.account_id, 'casino', { game: 'pvp', amt, win });
@@ -145,6 +154,7 @@ export async function betFight(ch, side, amount, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:fight' });
   await takeHouse(client, Math.ceil(amt * 0.01));
   await bumpVolume(client, amt);
+  await bumpStanding(client, h, ch, 'madame', 2); // she holds the book
   await h.track(client, ch.account_id, 'casino', { game: 'fight', amt, side });
   return { ok: true, game: 'fight', ...boutOf(week), side, stake: amt };
 }
@@ -213,6 +223,7 @@ export async function playNumbers(ch, pick, amount, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:numbers' });
   await takeHouse(client, tax);
   await bumpVolume(client, amt);
+  await bumpStanding(client, h, ch, 'madame', 1); // the runner reports who plays
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
   return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT };
 }

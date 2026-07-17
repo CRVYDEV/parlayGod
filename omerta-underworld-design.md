@@ -33,7 +33,36 @@ windows, extraction caps, income curves. New money flows, all ledgered + vocabul
 halved stays T2 / full release T3), `gunsale` (a small bounded FAUCET: 30% of the gun's cash
 price, once per owned gun — flagged for the sim pass). Standing itself has no §10.4 surface.
 
-## 5. Step two (deferred)
-The Madame (a fifth NPC on the den/intel loop), bloodline memory (standing partially inherited),
-NPC LEADS (daily rotating jobs from your best relationship), standing decay, rivalry (helping
-one NPC costs standing with another).
+## 5. Step two — BUILT (all numbers in `UNDERWORLD.STEP2`, founder sign-off levers)
+Relationships that LIVE — they open, cool, feud, and outlive you a little:
+
+- **The Madame** (the fifth fixture, den/intel loop). Earned by den play (dice +1/round, numbers
+  +1/ticket, back-room fade +3, fight bet +2 — actor-side like everyone). T1 **the comped seat**:
+  dice cost no nerve (pacing QoL — the house edge still gets paid, so this is a sink
+  *amplifier*). T2 **the velvet rope**: the high-stakes room opens at any level (an ACCESS perk;
+  odds/limits inside are untouched). T3 **pillow talk**: the board shows how many hunters
+  currently have a search out on you — a COUNT, never a name (the $OMR peek stays the only
+  name-piercing intel; flagged as a defense-intel lever).
+- **The daily LEAD** (`npc_leads`): the FIRST business bump each day with your BEST fixture
+  (highest standing ≥ LEAD_MIN 25) pays +LEAD_BONUS 5, once. Gifts are not business and never
+  claim it. Simplified from "rotating jobs" — the job is *doing business at all*; task variety
+  is a step-three option.
+- **Standing DECAY** (lazy, §7.1 pattern — no cron): past DECAY_GRACE_DAYS 7 idle, a standing
+  cools DECAY_PER_DAY 1 toward DECAY_FLOOR 25 (tier 1 — old friends stay friends, the inner
+  circle needs upkeep; below the floor nothing decays). The EFFECTIVE value is what every read
+  and every perk uses; the stored row catches up on the next bump.
+- **RIVALRY**: the Doc took an oath — a fire-kill or an NPC hire costs RIVAL_LOSS 2 Doc
+  standing (the doctors-friend assassin now maintains two relationships in tension). One pair
+  only, kept legible.
+- **BLOODLINE MEMORY**: the heir inherits floor(standing × MEMORY_BPS 25%) with each fixture
+  ("the Doc remembers your father"); sub-1 remainders are forgotten, the clock restarts. A
+  deliberate, DIALED soft corner on "everything dies with the street" — MEMORY_BPS 0 restores
+  the hard rule; at 25% even a maxed street hands down ~22, below tier 1.
+
+Zero new money flows in all of step two — every mechanic is status/access/pacing, §10.4
+untouched by construction.
+
+## 6. Step three (deferred)
+Rotating lead TASKS (not just "do business"), more rivalry pairs, NPC gifts back (the Madame
+sends work), a Madame den-comp ladder, memory of the KILLER's bloodline (grudges, not just
+friendships).

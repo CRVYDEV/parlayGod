@@ -189,6 +189,23 @@ economics; **Vinnie T2's waived post fee** halves the contract board's friction 
 QoL-priced discounting on sinks (discounted numbers are what's ledgered, so §10.4 stays exact
 by construction). Two cash sinks join the vocabulary (`underworld:gift`, `underworld:discharge`).
 
+**Step two** (levers in `UNDERWORLD.STEP2`; zero money flows — every item is a status/access/
+pacing dial, §10.4 untouched by construction): `LEAD_BONUS` 5 / `LEAD_MIN` 25 (the daily lead —
+raises honest standing velocity by ≤5/day, exactly one claim/day, gifts excluded);
+`DECAY_GRACE_DAYS` 7 / `DECAY_PER_DAY` 1 / `DECAY_FLOOR` 25 (idle standings cool to tier 1 —
+the T2/T3 perks now demand ongoing play, answering "earn once, keep forever"); `MEMORY_BPS`
+2500 (the heir inherits 25% of each standing — a DIALED soft corner on hard death; 0 restores
+it; at 25% even a maxed street hands down ~22, below tier 1, so no perk survives death — only
+a head start); `RIVAL_LOSS` 2 (kills/NPC hires cost the Doc — the assassin who wants cheap
+healing maintains two relationships in tension). The Madame's watch items for the sim pass:
+**T1 comped nerve** removes the den's pacing throttle (the ~1.4% edge still gets paid per roll,
+so unlimited play is a cash-sink amplifier, not a leak — but standing velocity via dice +1/roll
+becomes cash-bounded, ~$1.41 expected cost per point at the $100 minimum: cheap; consider
+capping den bumps per day if live data shows madame tiers trivializing); **T3 whispers**
+(a count of open searches on you, no names) is new defense intel — it tips a mark to safehouse
+before placement, softening the hunter's 3h investment; watch kill-completion rates and pair it
+with the fixer-T3×executioner stack already flagged above.
+
 ## Post-signing addendum — the Black Market (P2P trade) — **SIGNED 2026-07-17**
 
 Step-one levers (LIST_FEE_BPS 100/min $10, MAX_LISTINGS 3, MIN_RAISE_BPS 500, TAKE_BPS 200,

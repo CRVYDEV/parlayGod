@@ -611,7 +611,17 @@ CREATE TABLE IF NOT EXISTS npc_standing (
   character_id TEXT NOT NULL,
   npc_id TEXT NOT NULL,
   standing NUMERIC NOT NULL DEFAULT 0,
+  touched_at TIMESTAMPTZ NOT NULL DEFAULT now(), -- last business — idle standings cool (lazy decay on read)
   PRIMARY KEY (character_id, npc_id)
+);
+
+-- Underworld step two: the daily LEAD — the first business each day with your best fixture
+-- pays bonus standing, once. One row per claimed day (old rows are inert; wiped with the street).
+CREATE TABLE IF NOT EXISTS npc_leads (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  npc_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, day)
 );
 
 CREATE TABLE IF NOT EXISTS character_skills (

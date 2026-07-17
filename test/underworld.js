@@ -8,7 +8,7 @@ process.env.SEARCH_MS = '10000';    // 10s search (TEST-ONLY knob)
 process.env.CONVOY_MS = '600000';   // 10-min road (TEST-ONLY knob)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { UNDERWORLD, BLACK_MARKET, CONVOY, GUNS, CONSUMABLES, NPC_HITMEN } from '../src/rules.js';
+import { UNDERWORLD, BLACK_MARKET, CONVOY, CASINO, GUNS, CONSUMABLES, NPC_HITMEN } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -47,7 +47,7 @@ await seedCh(mark.id, 'respect=100');     // lvl 6 — over the NPC-hit floor
 // ── the board: four named fixtures, all strangers at first ──
 let r = await call('GET', '/v1/underworld', { token: una.token });
 assert.equal(r.code, 200, 'the board is readable');
-assert.equal(r.body.npcs.length, 4, 'four fixtures');
+assert.equal(r.body.npcs.length, 5, 'five fixtures (step two seats the Madame)');
 assert.deepEqual(r.body.thresholds, UNDERWORLD.THRESHOLDS, 'tier thresholds published');
 assert(r.body.npcs.every((n) => n.standing === 0 && n.tier === 0), 'everyone starts a stranger');
 
@@ -74,7 +74,7 @@ r = await call('POST', '/v1/underworld/doc/gift', { token: una.token });
 assert.equal(r.code, 200, 'the gift lands');
 assert.equal(r.body.standing, 7, '2 + 5');
 assert.equal((await meOf(una.token)).cash, cashBefore - UNDERWORLD.GIFT_COST, 'the envelope cost $5k');
-assert.equal((await call('POST', '/v1/underworld/madame/gift', { token: una.token })).body.error, 'bad_npc', 'no such fixture');
+assert.equal((await call('POST', '/v1/underworld/capone/gift', { token: una.token })).body.error, 'bad_npc', 'no such fixture');
 await seedNpc(una.id, 'doc', UNDERWORLD.GIFT_CAP - 2);
 r = await call('POST', '/v1/underworld/doc/gift', { token: una.token });
 assert.equal(r.body.standing, UNDERWORLD.GIFT_CAP, 'the bump is capped at the door (48 + 5 → 50)');
@@ -160,17 +160,96 @@ for (let i = 0; i < 3; i++)
   assert.equal((await call('POST', '/v1/market/order', { token: ted.token, body: { goodId: 'gin', qty: 1, price: 100 } })).code, 200, `order ${i + 2} of 4`);
 assert.equal((await call('POST', '/v1/market/order', { token: ted.token, body: { goodId: 'gin', qty: 1, price: 100 } })).body.error, 'max_listings', 'the fifth slot does not exist');
 
-// ── the estate: standing dies with the street ──
+// ── STEP TWO: THE MADAME — dice bumps, T1 comped nerve, T2 velvet rope, T3 whispers ──
+const mia = await mk('Madame-friend Mia');
+await seedCh(mia.id, `cash=5000000, loc='${CASINO.DISTRICT}'`);
+const nerve0 = (await meOf(mia.token)).nerve;
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: 100 } })).code, 200, 'a roll at the den');
+assert.equal((await standingOf(mia.token, 'madame')).standing, 1, 'action on her floor is business (+1)');
+assert.equal((await meOf(mia.token)).nerve, nerve0 - CASINO.DICE_NERVE, 'a stranger pays the nerve');
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).body.error, 'max', 'no velvet rope for strangers');
+await seedNpc(mia.id, 'madame', 25);
+const nerve1 = (await meOf(mia.token)).nerve;
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: 100 } })).code, 200, 'another roll at T1');
+assert.equal((await meOf(mia.token)).nerve, nerve1, 'T1: the house comps the seat — no nerve');
+assert.equal((await standingOf(mia.token, 'madame')).standing, 25 + 1 + UNDERWORLD.STEP2.LEAD_BONUS, 'the roll was also her first business today with her best fixture (+1 and the lead +5)');
+await seedNpc(mia.id, 'madame', 60);
+assert.equal((await call('POST', '/v1/casino/dice', { token: mia.token, body: { amount: CASINO.MAX_BET + 1 } })).code, 200, 'T2: the velvet rope opens the high-stakes room at any level');
+assert.equal((await call('POST', '/v1/casino/numbers', { token: mia.token, body: { pick: 7, amount: 100 } })).code, 200, 'a numbers ticket');
+assert.equal((await standingOf(mia.token, 'madame')).standing, 62, 'high-stakes roll +1, the runner +1 (lead spent)');
+await seedNpc(mia.id, 'madame', 90);
+r = await call('GET', '/v1/underworld', { token: mia.token });
+assert.deepEqual(r.body.whispers, { asking: 0 }, 'T3: pillow talk — quiet streets read zero');
+const hank = await mk('Hunter Hank');
+assert.equal((await call('POST', `/v1/streets/${mia.id}/search`, { token: hank.token })).code, 200, 'a hunter starts asking around');
+r = await call('GET', '/v1/underworld', { token: mia.token });
+assert.deepEqual(r.body.whispers, { asking: 1 }, 'the girls hear the question — a count, never a name');
+assert.equal((await call('GET', '/v1/underworld', { token: rob.token })).body.whispers, undefined, 'below T3 nobody whispers');
+
+// ── STEP TWO: THE LEAD — first business each day with your best fixture pays +5, once ──
+const lee = await mk('Lucky Lee');
+await seedCh(lee.id, "cash=100000, cb=5, loc='docks'");
+await seedNpc(lee.id, 'armorer', 30); // his best relationship
+r = await call('POST', '/v1/underworld/armorer/gift', { token: lee.token });
+assert.equal(r.body.standing, 35, 'the envelope pays +5 flat');
+r = await call('GET', '/v1/underworld', { token: lee.token });
+assert.deepEqual(r.body.lead, { npc: 'armorer', bonus: UNDERWORLD.STEP2.LEAD_BONUS, done: false }, 'a gift is not business — the lead still stands');
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: lee.token })).code, 200, 'real business');
+assert.equal((await standingOf(lee.token, 'armorer')).standing, 35 + 3 + UNDERWORLD.STEP2.LEAD_BONUS, 'the first business of the day with your best pays the lead (+3+5)');
+assert.equal((await call('GET', '/v1/underworld', { token: lee.token })).body.lead.done, true, 'claimed');
+assert.equal((await call('POST', '/v1/armory/ammo', { token: lee.token })).code, 200, 'more business');
+assert.equal((await standingOf(lee.token, 'armorer')).standing, 44, 'once a day (+1 only)');
+const ned = await mk('Non-best Ned');
+await seedCh(ned.id, 'cash=100000, health=90');
+await seedNpc(ned.id, 'armorer', 30);
+assert.equal((await call('POST', '/v1/heal', { token: ned.token })).code, 200, 'business with the WRONG fixture');
+assert.equal((await standingOf(ned.token, 'doc')).standing, 2, 'no bonus off-lead (+2 flat)');
+assert.equal((await call('GET', '/v1/underworld', { token: ned.token })).body.lead.done, false, 'the lead waits for Bella');
+assert.equal((await call('GET', '/v1/underworld', { token: hank.token })).body.lead, null, 'strangers to everyone get no lead');
+
+// ── STEP TWO: DECAY — idle friendships cool 1/day past a week, never below tier 1 ──
+const otis = await mk('Old-Timer Otis');
+await seedCh(otis.id, 'cash=100000, health=90');
+const daysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString();
+await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ('${otis.id}','doc',40,'${daysAgo(10)}')`);
+await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ('${otis.id}','harbor',90,'${daysAgo(100)}')`);
+await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing, touched_at) VALUES ('${otis.id}','fixer',20,'${daysAgo(100)}')`);
+r = await call('GET', '/v1/underworld', { token: otis.token });
+const oNpc = Object.fromEntries(r.body.npcs.map((n) => [n.id, n.standing]));
+assert.equal(oNpc.doc, 37, '10 idle days = 3 past grace → 40 cools to 37');
+assert.equal(oNpc.harbor, 25, 'a season away cools any friendship to the tier-1 floor, never below');
+assert.equal(oNpc.fixer, 20, 'below the floor nothing cools — strangers stay as they were');
+assert.equal((await call('POST', '/v1/heal', { token: otis.token })).code, 200, 'business with the Doc again');
+assert.equal((await standingOf(otis.token, 'doc')).standing, 44, 'the bump lands on the COOLED value (37+2, +5 lead — doc is his best)');
+assert.equal(Number((await pool.query(`SELECT standing FROM npc_standing WHERE character_id='${otis.id}' AND npc_id='doc'`)).rows[0].standing), 44, 'the cooling materialized in the stored row');
+
+// ── STEP TWO: RIVALRY — blood work costs the Doc's goodwill ──
+const ray = await mk('Rival-test Ray');
+await seedCh(ray.id, 'cash=100000');
+await seedNpc(ray.id, 'doc', 30);
+const vic2 = await mk('Poor Vic');
+await seedCh(vic2.id, 'respect=100');
+assert.equal((await call('POST', `/v1/streets/${vic2.id}/npchit`, { token: ray.token, body: { tier: 'legbreaker' } })).code, 200, 'ray sends the man with the bag');
+assert.equal((await standingOf(ray.token, 'fixer')).standing, 4, 'Vinnie approves (+4)');
+assert.equal((await standingOf(ray.token, 'doc')).standing, 28, 'the Doc does not (−2)');
+
+// ── the estate: BLOODLINE MEMORY — the heir inherits 25% of each standing, floored ──
+const preDeath = (await call('GET', '/v1/underworld', { token: ted.token })).body.npcs;
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ted.id },
   headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(kill.statusCode, 200, 'the Commission retires ted');
-r = await call('GET', '/v1/underworld', { token: ted.token });
-assert(r.body.npcs.every((n) => n.standing === 0 && n.tier === 0), 'the heir is a stranger — who you knew died with the street');
-assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_standing WHERE character_id='${ted.id}'`)).rows[0].n), 0, 'the rows are gone');
+const heirNpcs = (await call('GET', '/v1/underworld', { token: ted.token })).body.npcs;
+for (const n of preDeath) {
+  const inherited = Math.floor(n.standing * UNDERWORLD.STEP2.MEMORY_BPS / 10000);
+  assert.equal(heirNpcs.find((x) => x.id === n.id).standing, inherited,
+    `${n.id}: the heir inherits floor(${n.standing} × 25%) = ${inherited}`);
+}
+assert(heirNpcs.some((n) => n.standing > 0), 'the heir is NOT a total stranger — the names remember the bloodline');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM npc_standing WHERE character_id='${ted.id}'`)).rows[0].n), 0, 'the dead street\'s own rows are gone');
 
 // ── §10.4: the underworld: vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `underworld:* rides the vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Underworld test passed — four-fixture board, actor-side bumps (heal+2/gun+3/craft+1/ammo+1/listing+1), gifts ($5k sink, capped at 50, refused above), DOC heal ×0.9 + discharge $150/min (T2 half stay, T3 walk-out), VINNIE NPC-hit ×0.9 + waived post fee (tax stands) + ~9s search, BELLA gun ×0.9 cash + craft ×0.9 + 30% buyback (row gone, no double-sell), BIG TUNA guards ×0.9 + 72h listings + a fourth slot (fifth refused), estate wipes standing, vocabulary closed');
+console.log('✅ Underworld test passed — five-fixture board, actor-side bumps (heal+2/gun+3/craft+1/ammo+1/listing+1), gifts ($5k sink, capped at 50, refused above), DOC heal ×0.9 + discharge $150/min (T2 half stay, T3 walk-out), VINNIE NPC-hit ×0.9 + waived post fee (tax stands) + ~9s search, BELLA gun ×0.9 cash + craft ×0.9 + 30% buyback (row gone, no double-sell), BIG TUNA guards ×0.9 + 72h listings + a fourth slot (fifth refused) + STEP TWO: the MADAME (den bumps, T1 comped nerve, T2 velvet rope at any level, T3 whispers count hunters — never names), the daily LEAD (+5 on first business with your best, gifts never claim it, once a day, strangers get none), DECAY (1/day past a week idle, floored at tier 1, materializes on the next bump), RIVALRY (an NPC hire costs the Doc −2), BLOODLINE MEMORY (the heir inherits floor(25%) of every standing; the dead street\'s rows are gone), vocabulary closed');
 await app.close();

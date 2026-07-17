@@ -12,16 +12,29 @@
 // the sim pass). Deliberately UNTOUCHED: $OMR burns, ammo prices (the D1-signed kill-EV
 // anchor), heat deterrents, loot-exposure windows, extraction caps, income curves. All
 // numbers are founder sign-off levers.
-import { GameError, npcTier, bumpStanding } from './game.js';
-import { UNDERWORLD, npcOf, GUNS } from './rules.js';
+import { GameError, npcTier, bumpStanding, bestNpc } from './game.js';
+import { UNDERWORLD, npcOf, GUNS, dayOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 
-// The board — the cast, your standing with each, and what the next tier buys.
-export function underworldBoard(ch, h) {
+// The board — the cast, your standing with each, what the next tier buys, plus step two:
+// today's LEAD (your best fixture, and whether its bonus is already claimed) and — Madame T3
+// only — the WHISPERS: how many hunters currently have a search out on you (a count, never
+// names; the $OMR peek stays the only name-piercing intel).
+export async function underworldBoard(ch, client, h) {
+  const best = bestNpc(h);
+  const lead = best ? {
+    npc: best, bonus: UNDERWORLD.STEP2.LEAD_BONUS,
+    done: !!(await client.query('SELECT 1 FROM npc_leads WHERE character_id=$1 AND day=$2', [ch.id, dayOf()])).rowCount,
+  } : null;
+  const whispers = npcTier(h, 'madame') >= 3
+    ? { asking: Number((await client.query('SELECT COUNT(*) n FROM searches WHERE target=$1', [ch.id])).rows[0].n) }
+    : undefined;
   return {
     thresholds: UNDERWORLD.THRESHOLDS,
     gift: { cost: UNDERWORLD.GIFT_COST, standing: UNDERWORLD.GIFT_STANDING, cap: UNDERWORLD.GIFT_CAP },
+    decay: { graceDays: UNDERWORLD.STEP2.DECAY_GRACE_DAYS, perDay: UNDERWORLD.STEP2.DECAY_PER_DAY, floor: UNDERWORLD.STEP2.DECAY_FLOOR },
+    lead, ...(whispers ? { whispers } : {}),
     npcs: UNDERWORLD.NPCS.map((n) => ({
       id: n.id, name: n.name, earn: n.earn, perks: n.perks,
       standing: Number(h.owned.npc[n.id] || 0), tier: npcTier(h, n.id),
@@ -40,9 +53,10 @@ export async function giftNpc(ch, npcId, client, h) {
   if (Number(ch.cash) < UNDERWORLD.GIFT_COST) throw new GameError('cash', `A proper gift runs $${UNDERWORLD.GIFT_COST}.`);
   ch.cash = Number(ch.cash) - UNDERWORLD.GIFT_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -UNDERWORLD.GIFT_COST, reason: 'underworld:gift' });
-  // the bump is capped at GIFT_CAP — a gift can't vault you past the door
+  // the bump is capped at GIFT_CAP — a gift can't vault you past the door. An envelope is
+  // not BUSINESS (business:false), so it never claims the daily lead bonus.
   const pts = Math.min(UNDERWORLD.GIFT_CAP, cur + UNDERWORLD.GIFT_STANDING) - cur;
-  await bumpStanding(client, h, ch, npcId, pts);
+  await bumpStanding(client, h, ch, npcId, pts, { business: false });
   await h.track(client, ch.account_id, 'underworld_gift', { npc: npcId });
   return { ok: true, npc: npcId, standing: Number(h.owned.npc[npcId]), tier: npcTier(h, npcId) };
 }
