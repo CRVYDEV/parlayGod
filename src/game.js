@@ -6,7 +6,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf,
-         crewWageOwed, crewCold } from './rules.js';
+         crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -279,6 +279,14 @@ async function accrueAndLedger(client, ch, acct, owned) {
     await notify(client, ch.id, 'raid', { lost: ch._raid.lost, keptPct: ch._raid.keepPct });
     await track(client, ch.account_id, 'raid', { lost: ch._raid.lost });
   }
+  // THE LAW — an indictment was filed this accrual (exposure crossed LAW.INDICT_AT). No value
+  // moves at indictment (§10.4-free); the mark is warned so they can lawyer/plea/flip/liquidate
+  // before the grace window runs out and the worker (or a demanded trial) resolves the bust.
+  if (ch._indicted) {
+    await notify(client, ch.id, 'indicted', { graceHours: Math.round(LAW.INDICT_GRACE_MS / 3600000) });
+    await track(client, ch.account_id, 'indicted', { exposure: Math.round(Number(ch.heat_exposure)) });
+    delete ch._indicted;
+  }
 }
 
 // Persist the in-memory stash/makings maps back to their tables (kitchen state
@@ -351,11 +359,11 @@ async function persistAccount(client, accountId, a) {
     `UPDATE account_persistent SET omr=$2, staked=$3, rewards=$4, prestige=$5, deaths=$6,
       recruits=$7, checkins_lifetime=$8, ref_paid=$9, onboard=$10, wallet_address=$11,
       minted=$12, mint_credits=$13, respawn_tokens=$14, hitman_rep=$15, kills=$16,
-      unbonding=$17, unbond_at=$18 WHERE account_id=$1`,
+      unbonding=$17, unbond_at=$18, rat=$19 WHERE account_id=$1`,
     [accountId, a.omr, a.staked, a.rewards, a.prestige, a.deaths,
      a.recruits, a.checkins_lifetime, a.ref_paid, a.onboard, a.wallet_address,
      a.minted ?? false, a.mint_credits ?? 0, a.respawn_tokens ?? 0, a.hitman_rep ?? 0, a.kills ?? 0,
-     a.unbonding ?? 0, a.unbond_at ?? null]);
+     a.unbonding ?? 0, a.unbond_at ?? null, a.rat ?? false]);
 }
 
 // Two-party actions (§10.1): lock BOTH character rows in stable id order, then both
@@ -419,7 +427,8 @@ async function persistCharacter(client, ch) {
       racket_credit_ms=$31, season_kills=$32, npchit_at=$33, safe_until=$34,
       guard_price=$35, guarded_by=$36, guarded_until=$37, bank_credit_ms=$38, last_accrued_at=$39,
       bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45,
-      crew_paid_at=$46 WHERE id=$1`,
+      crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51
+      WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -427,7 +436,8 @@ async function persistCharacter(client, ch) {
      ch.lab, ch.crew, ch.heist_at, ch.title, ch.racket_credit_ms, ch.season_kills ?? 0, ch.npchit_at, ch.safe_until,
      ch.guard_price, ch.guarded_by, ch.guarded_until, ch.bank_credit_ms, ch.last_accrued_at,
      ch.bank_intransit ?? 0, ch.bank_intransit_at, ch.fade_limit ?? null,
-     ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null, ch.crew_paid_at ?? null]);
+     ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null, ch.crew_paid_at ?? null,
+     ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null]);
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -448,6 +458,12 @@ export function view(ch, acct = {}, owned = {}) {
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
     ammo: Number(ch.ammo || 0), cb: Number(ch.cb || 0), heat: Math.round(Number(ch.heat || 0)),
+    // THE LAW — the rap sheet at a glance (GET /v1/law is the full docket). Pure status.
+    law: { stage: rapStageOf(ch.heat_exposure, ch.indicted_at), exposure: Math.round(Number(ch.heat_exposure || 0)),
+      indicted: !!ch.indicted_at,
+      retainerSeconds: retainerActive(ch) ? Math.max(0, Math.ceil((new Date(ch.retainer_until) - Date.now()) / 1000)) : 0,
+      witproSeconds: witproActive(ch) ? Math.max(0, Math.ceil((new Date(ch.witpro_until) - Date.now()) / 1000)) : 0,
+      rat: !!acct.rat },
     tradeRep: Number(ch.trade_rep || 0), busts: Number(ch.busts || 0),
     gun: ch.gun || null, vest: ch.vest || null, guns: owned.guns || [],
     jailSeconds: ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until) - Date.now()) / 1000)) : 0,

@@ -946,6 +946,41 @@ the loot-proof cash vault that undercut Make-Risk-Pay. `npc_gain` joined the est
 committed across `2caec07`/`a20954b`/`4ad4a18` + the package; regressions per fix; Suite 16/16 +
 sim drift-0.
 
+**THE LAW / RICO / INFORMANTS — BUILT, all four phases** (`src/law.js`, `test/law.js` — the 17th
+suite file; design `omerta-law-rico-design.md`). The state-run PvE antagonist: everything DOWNSTREAM
+of the `heat` number (heat's ACCRUAL is untouched — sim-audited surfaces stay put, ground rule #1).
+The `LAW` rules-tail block holds every lever. **Phase 1 — the investigation meter**: `heat_exposure`
+banks lazily in `accrual.js` (the business-scrutiny precedent — `+(heat−WATCH)×min×event-mult`, bleeds
+passively, so a spike-and-decay costs little and a long offline gap builds ~nothing since accrual
+decays heat first); `rapStageOf` reads clean→watched→investigation; crackdown/sweep weather build it
+faster, a commissioner's visit bleeds it (keyed on the CITY_EVENTS id — the table's generated, hands
+off). The two escapes are cash SINKS: **bribe** (`law:bribe`, wealth-scaled `bribeCostOf`, knocks
+`BRIBE_CLEAR` off the meter; blocked when clean / indicted / safehoused — D2 exposed act) and the
+**lawyer retainer** (`law:retainer`, time-boxed, softens the bust P + forfeiture). `GET /v1/law` is the
+public docket. **Phase 2 — the RICO bust + forfeiture**: crossing `INDICT_AT` files an indictment (a
+LATCH — `indicted_at`, surfaced as `ch._indicted`, game.js notifies with the grace window); `resolveBust`
+rolls `bustProbOf` (exposure over the line, × retainer × jury) and on conviction seizes `FORFEIT_RATE`
+of **pocket+bank** into the confiscation buffer (`street_tax.pool` — the exact `mod:confiscate` §10.4
+pattern, one `law:forfeit` row spanning cash+bank, reaching pocket then bank) + jails; **staked $OMR +
+minted gear are SAFE**; it is **NOT death** (the street survives — the Law is an economic antagonist,
+death stays PvP). The `sweepLaw` worker force-busts anyone past `INDICT_GRACE_MS` (reaches the OFFLINE
+whale — closes the safehoused-hoard gap the sim flagged). **Phase 3 — the courtroom**: `plea` (a certain
+`PLEA_FORFEIT_RATE` loss + short jail, `law:plea`), `buyJury` (a `law:jury` $OMR BURN that cuts
+conviction P once), `demandTrial` (resolve now). **Phase 4 — informants** (status-only, §10.4 untouched):
+`flip` (two-party — drop your case, name a rival seeding `FLIP_SEED` onto THEIR meter, earn the permanent
+account-level `rat` badge that follows the bloodline), the rat's **waived directed-contract floor** on a
+KILL pot (`postBounty`, the vendetta-waiver twin), **witness protection** (`witpro_until` — a one-time
+untargetable relocation window; `fire`/`npcHit` throw `witpro`), and the **informant collapse** in
+`runEstate` (killing a witness lifts the seed off every target they named, via a bounded `GREATEST`
+NUMERIC update, and clears the `informants` row). §10.4: `law:` joined the cash vocabulary (all sinks →
+the pool, the mod:confiscate precedent — the Law only DRAINS, no new faucet, so extraction-vs-inflow is
+helped) and `law:jury` joined `omrBurns`. `LAW_BUST_P` is a TEST-ONLY roll knob (the BUSINESS_RAID_P
+precedent — never in production). `test/law.js` proves the meter (build+bleed), all Phase-1 gates, the
+indictment, the bust as a scoped char==pool==−ledger transfer with staked $OMR untouched and not-death,
+acquittal, plea, jury, the flip + rat waiver, witpro untargetability, the collapse, the worker sweep +
+grace window, and the closed vocabulary. Suite 17/17 + sim drift-0. ALL numbers are founder sign-off
+levers — sim + sign-off into BALANCE.md before production.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

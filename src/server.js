@@ -22,6 +22,7 @@ import * as Commission from './commission.js';
 import * as Market from './market.js';
 import * as Skills from './skills.js';
 import * as Underworld from './underworld.js';
+import * as Law from './law.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -347,6 +348,26 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
   app.post('/v1/skills/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.learnSkill(ch, req.params.id, client, h)));
+
+  // THE LAW — the state antagonist. GET /v1/law is the rap sheet + docket; the sinks are the
+  // escapes (bribe/lawyer), the courtroom is plea/jury/trial, and the flip turns state's evidence.
+  app.get('/v1/law', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.lawBoard(ch, h)));
+  app.post('/v1/law/bribe', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.bribe(ch, client, h)));
+  app.post('/v1/law/retainer', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.retainer(ch, client, h)));
+  app.post('/v1/law/plea', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.plea(ch, client, h)));
+  app.post('/v1/law/jury', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.buyJury(ch, client, h)));
+  app.post('/v1/law/trial', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.demandTrial(ch, client, h)));
+  app.post('/v1/law/witpro', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.enterWitpro(ch, client, h)));
+  // the flip is two-party — you name a rival, seeding THEIR case. Look up the target, lock both.
+  app.post('/v1/law/flip/:targetId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Law.flip(ch, victim, client, h)));
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>

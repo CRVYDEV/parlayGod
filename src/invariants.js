@@ -12,10 +12,11 @@ const KNOWN_REASONS = {
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
-    'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:'],
+    'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:',
+    'law:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:'],
 };
@@ -91,7 +92,8 @@ export async function runLedgerInvariants(pool) {
   const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr')");
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%')"));
+  // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // (e) CAR CONSERVATION: boost is the only faucet; melt, fence, and death the only
