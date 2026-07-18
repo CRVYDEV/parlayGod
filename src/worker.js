@@ -16,6 +16,7 @@ import { sweepStaleHeists } from './heists.js';
 import { reclaimExpiredVouchers } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
+import { sweepLoans } from './loans.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -162,6 +163,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE LAW: force the RICO bust on an indicted player past the grace window (reaches the offline whale)
     const law = await safe('law sweep', () => sweepLaw(pool));
     if (law && law.cases > 0) console.log(`⚖️  law: tried ${law.cases} case(s) — ${law.convicted} convicted ($${Math.round(law.seized)} seized), ${law.acquitted} walked`);
+    // LOAN SHARKING: refund expired offers to the lender; mark overdue borrowers welshers
+    const ln = await safe('loan sweep', () => sweepLoans(pool));
+    if (ln && (ln.refunded > 0 || ln.welshed > 0)) console.log(`💵 loans: refunded ${ln.refunded} stale offer(s), flagged ${ln.welshed} welsher(s)`);
     // §11: reverse expired-unclaimed withdrawal vouchers — refund the burned $OMR (freeing the
     // otherwise-permanently-committed reserve capacity) and restore optimistically-removed gear.
     const vr = await safe('voucher reclaim', () => reclaimExpiredVouchers(pool));

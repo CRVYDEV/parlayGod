@@ -14,6 +14,7 @@ import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
 import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
+import { voidLoansAtDeath } from './loans.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -1296,6 +1297,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0);
   if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
   await burnBidsAtDeath(client, victim.id);
+  // LOAN SHARKING: the dead man's OPEN offers burn their escrow (loan:death); his ACTIVE loans (as
+  // lender or borrower) void — the principal already moved, so no ledger (§10.4-neutral).
+  await voidLoansAtDeath(client, victim.id, h);
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
   victim.alive = false;

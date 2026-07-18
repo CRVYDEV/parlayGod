@@ -906,6 +906,24 @@ export const jailSecondsLeft = (ch, now = Date.now()) =>
   ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;
 export const penSafe = (ch, now = Date.now()) => !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now;
 export const inHole = (ch, now = Date.now()) => !!ch.hole_until && new Date(ch.hole_until).getTime() > now;
+
+// LOAN SHARKING — the Shylock (design omerta-loan-sharking-design.md). The game's first player-to-
+// player CASH primitive: a lender escrows capital at usurious interest (the bounty-escrow pattern), a
+// borrower takes it and must repay by a deadline, and a DEFAULT is enforced (the seizure + the beating
+// + the welsher mark). Every value movement is a §10.4-ledgered transfer; only the house vig leaves
+// the economy (a sink → the buyback pool). Numbers are founder sign-off levers (ground rule #1).
+export const LOAN = {
+  MIN: 5000, MAX: 1000000,             // loan size bounds
+  RATE_MAX: 0.5,                        // interest cap — loan sharking is usurious (50%)
+  TERM_MIN_H: 1, TERM_MAX_H: 72,        // repayment window (hours)
+  OFFER_TTL_MS: 48 * 3600 * 1000,       // an untaken offer expires + refunds the lender (worker sweep)
+  VIG_BPS: 500,                         // 5% house take on repayment/collection → the street-tax pool
+  COLLECT_HOSP_MS: 30 * 60 * 1000,      // the leg-breaking: collection hospitalizes the deadbeat
+  MAX_ACTIVE: 1,                        // one active loan at a time per borrower (no debt-stacking)
+};
+export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
+// outstanding debt on an active loan = principal × (1 + rate), floored to whole dollars
+export const loanOwed = (principal, rate) => Math.floor(Number(principal) * (1 + Number(rate)));
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —
