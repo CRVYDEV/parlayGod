@@ -1308,6 +1308,30 @@ the header now rides only with a body. Verified live: serve → guest → create
 Deferred (client step two): kitchen/family/market curated screens (the deck reaches them raw today),
 mobile layout polish, the X/Privy sign-in buttons (guest + upgrade path works).
 
+**THE CONSOLE step two — Kitchen / Family / Black Market curated screens — BUILT** (public/index.html;
+all three verified live in Chromium with a two-account scenario, zero page errors). **The Kitchen tab**:
+trade rank card (server-computed `me.tradeRank` — the client never re-derives game math) with
+next-rank threshold, the lab with the NEXT-tier upgrade button (cost + $OMR off the new `/v1/rules`
+`kitchens` ladder), the Supplier (per-unlocked-drug makings price from `/v1/market/prices` + shelf qty +
+buy form; locked lines shown as rank chips), the Burner (live batch countdown / collect, or the cook
+form with the crates hint), the Corner (stash lines with quality + district demand + deal form), the
+Crew (hire cost from `rules.crew.costStep`, wages owed, COLD warning, pay-the-nut), laylow/cleanpapers.
+**The Family tab**: two states — no gang → the families board (standing-sorted, join buttons) + the
+found form; in a gang → the dashboard: treasury/$OMR reserve/wars/turf cards, made-men roster, territory
+operations (income/pending/upkeep/COLD per district) with boss-gated collect/upkeep/establish-here,
+tribute (cash + $OMR pool), war & turf (seize-here + declare-war, boss-only), the Commission (seats,
+decree in force, veto record; vote/veto UI only when seated + boss — correctly hidden otherwise), leave.
+**The Black Market tab**: the board rendered per kind — car auctions (bid/floor/buy-now/reserve-met/
+countdown + bid/buy-now forms, pull-it on own listings), goods (unit price vs the district SPOT price
+from `/v1/market/prices`, district-pinned buy form gated by where you stand), WTB orders (fill-from-
+trunk at the pinned dock, claim-delivered on own orders) — plus the sell side: auction a car (unlisted+
+unpledged only), list trunk goods at your district, post a buy order (spot prices in the pickers).
+`/v1/rules` gained `kitchens`/`tradeRanks`/`family` (found cost, tribute min)/`crew` (cost step, max).
+The verification pass caught FOUR wrong deck body templates against the real handlers (`drugId` not
+`drug` for cook/deal; `goodId` not `good`/`id` for goods buy/sell + market listings/orders) and an
+`[object Object]` decree render — all fixed; the probe also confirmed `com.book` = `{id,name,desc}`,
+`territoryOf` fields, and that establish takes no body (sequential tiers). Suite 20/20.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
