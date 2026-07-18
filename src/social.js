@@ -3,9 +3,9 @@
 // Every formula cites spec §7 / prototype v24. Two-party actions run under
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, bus, ledger, skillMult, npcMult, npcTier, bumpStanding } from './game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding } from './game.js';
 import {
-  DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
+  DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole,
@@ -20,6 +20,7 @@ const uid = () => crypto.randomUUID();
 const now = () => new Date();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+const isWanted = (ch) => ch && ch.wanted_until && new Date(ch.wanted_until) > new Date(); // LOAN step 4: a WANTED defaulter forfeits omertà (the rat precedent)
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 
@@ -329,13 +330,14 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
   const kind = opts.kind || 'kill';
   if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
-  const t = (await client.query('SELECT id, name, account_id, welsher FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  const t = (await client.query('SELECT id, name, account_id, welsher, wanted_until FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
   // a rat forfeits family protection (audit): fetched once, reused for the omertà void + the waiver
   const targetRat = !!(await client.query('SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;
-  // Omertà: no open contracts on your own family (parity with searches/hits) — VOID for a rat
+  // Omertà: no open contracts on your own family (parity with searches/hits) — VOID for a rat OR a
+  // WANTED welsher (a defaulter under pursuit is fair game even to their own family, step 4).
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
-  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !targetRat) throw new GameError('family', "They're family. Omertà.");
+  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !targetRat && !isWanted(t)) throw new GameError('family', "They're family. Omertà.");
   const amt = Math.floor(Number(amount) || 0);
   if (amt < M3.BOUNTY_MIN) throw new GameError('min', `Minimum contract is $${M3.BOUNTY_MIN}.`);
   // VINNIE T2 (underworld): the Match waives HIS 1% posting fee for friends — the street
@@ -655,6 +657,11 @@ async function refundPot(client, target, kind, skipId = null) {
       } else {
         await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target });
       }
+    } else if (f.contributor === 'HOUSE') {
+      // LOAN step 4: the underworld's WANTED_BOUNTY goes home to the confiscation pool on expiry (a
+      // §10.4 bucket transfer, character_id NULL — the pool that funded it takes it back).
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
+      await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
     } else if (f.contributor === skipId) {
       selfRefund += amt; // caller applies to the poster's in-memory cash
       await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
@@ -773,10 +780,10 @@ export async function hitmanLeaderboard(pool, limit = 20) {
 // ═══════════════════ HIT CONTRACTS (§7.7) ═══════════════════
 export async function startSearch(ch, targetCharacterId, client, h) {
   if (targetCharacterId === ch.id) throw new GameError('self', 'You know where you are.');
-  const t = (await client.query('SELECT id, name FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  const t = (await client.query('SELECT id, name, wanted_until FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
-  if (tg?.gang_id && tg.gang_id === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !isWanted(t)) throw new GameError('family', "They're family. Omertà."); // a WANTED welsher is fair game even to family
   const cur = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (cur) throw new GameError('searching', 'Your people are already out looking. Call them off first.');
   await client.query('INSERT INTO searches (hunter, target) VALUES ($1,$2)', [ch.id, targetCharacterId]);
@@ -821,7 +828,7 @@ export async function fire(ch, victim, client, h, rounds) {
   // family omertà — VOID for a rat (an informant has forfeited the family's protection; audit:
   // the rat badge must actually make them fair game, or a rat hiding in a strong family defeats
   // the contract-magnet the waiver promises).
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat) {
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) {
     await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
     throw new GameError('family', "They've been made family since you took the contract. It's off.");
   }
@@ -1090,7 +1097,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   // cell — pen.js consumes the burner first, then calls in with the jail gate waived.
   if (!opts.fromBurner && jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat) throw new GameError('family', "They're family. Omertà."); // a rat forfeits family protection
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà."); // a rat OR a WANTED welsher forfeits family protection
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
@@ -1155,6 +1162,52 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   bus.emit('streets', { type: 'kill', by: 'a hired gun', victim: victim.name });
   return { ok: true, hit: true, killed: true, success, cost, ...(grudges.length ? { grudges } : {}),
     estate: { heirId: estate.heirId } };
+}
+
+// LOAN step 4 — the worker's NPC bounty-hunter sweep. Each WANTED defaulter is rolled WANTED_HUNT_P
+// per tick; a landed hit runs the estate with NO killer (no chop/loot/rep — the mod-kill/npcHit
+// precedent; the wanted pool bounty burns as death:bounty). A safehouse / witpro / pen shield / a
+// hospital bed / lockup blocks the hunter this tick; a bodyguard or a pre-paid revive token absorbs
+// the blow (the shields the mark paid for still hold — hide or square your name). Headless (its own
+// per-victim txn), so third-party rows are persisted by raw SQL, never an in-memory clobber.
+export async function huntWanted(pool) {
+  const p = Number(process.env.WANTED_HUNT_P ?? LOAN.WANTED_HUNT_P);
+  const marks = (await pool.query("SELECT id FROM characters WHERE alive AND wanted_until > now()")).rows;
+  let killed = 0, absorbed = 0, revived = 0;
+  for (const m of marks) {
+    if (Math.random() >= p) continue; // no hunter came for them this tick
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const victim = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [m.id])).rows[0];
+      if (!victim || !isWanted(victim)) { await client.query('ROLLBACK'); continue; } // squared up / lapsed under the lock
+      // the hunter can't reach a hidden mark this tick (the npcHit victim gates)
+      if (safeHoused(victim) || witproActive(victim) || penSafe(victim) || inHole(victim) || hospitalized(victim) || jailed(victim)) { await client.query('ROLLBACK'); continue; }
+      const victimAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [victim.account_id])).rows[0];
+      const victimOwned = await loadOwned(client, victim);
+      const h = { ledger, notify, track, victimAcct, victimOwned };
+      // a bodyguard steps in (no player attacker → id null is never the betrayal); persist the cleared
+      // guard on the mark's row directly (headless — no withCharacter to write it back).
+      const guard = await bodyguardAbsorbs(client, h, { id: null }, victim);
+      if (guard) {
+        await client.query('UPDATE characters SET guarded_by=NULL, guarded_until=NULL WHERE id=$1', [victim.id]);
+        await client.query('COMMIT'); absorbed++; continue;
+      }
+      if (Number(victimAcct.respawn_tokens || 0) > 0) { // pre-paid insurance absorbs it
+        await client.query('UPDATE account_persistent SET respawn_tokens = respawn_tokens - 1 WHERE account_id=$1', [victim.account_id]);
+        await client.query('UPDATE characters SET health=100 WHERE id=$1', [victim.id]);
+        await notify(client, victim.id, 'revived', { from: 'a bounty hunter' });
+        await client.query('COMMIT'); revived++; continue;
+      }
+      // the hunter lands it — the estate runs (no killerCh: no chop/loot/rep; the pool bounty burns)
+      await runEstate(client, h, victim, 'A BOUNTY HUNTER');
+      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3 WHERE account_id=$1', [victim.account_id, victimAcct.prestige, victimAcct.deaths]);
+      bus.emit('streets', { type: 'kill', by: 'a bounty hunter', victim: victim.name });
+      await client.query('COMMIT'); killed++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('huntWanted', m.id, e.message); }
+    finally { client.release(); }
+  }
+  return { killed, absorbed, revived, marks: marks.length };
 }
 
 // Every fixture the victim was a REAL friend of (effective standing ≥ GRUDGE_MIN) docks the

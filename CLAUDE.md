@@ -1225,6 +1225,29 @@ lootable seller, not reclaimable escrow — the vault the gate blocks), the shel
 wealth shelterable in safe harbours; a one-line `if (safeHoused(ch)) throw` gives offerLoan-parity if the
 founder wants it. **F2 (LOW)** the public paper board discloses the borrower (inherent to a receivables
 market; only edge is a once-private directed loan's borrower surfacing on listing). Suite 20/20 + sim drift-0.
+**Step four — WANTED (the defaulter's pursuit) — BUILT** (`src/loans.js`, `src/social.js`; founder-directed
+"a hit put on them / become wanted"). A default (collect OR the overdue sweep) marks the borrower WANTED
+for `LOAN.WANTED_MS` (3d) on top of the permanent welsher mark, via `characters.wanted_until`. Three teeth:
+**(1) omertà stripped** — `isWanted(target)` joins the rat exception in `fire`/`startSearch`/`npcHit`/
+`postBounty` family gates, so even the mark's OWN family can hunt/contract them (a defaulter under pursuit
+is fair game). **(2) a pool-funded player bounty** — `postWantedBounty` fronts `WANTED_BOUNTY` ($25k) from
+the confiscation pool as a `'HOUSE'`-contributor share on the (target,'kill') pot, so ANY player who kills
+them collects it through the EXISTING `claimBounty` (the HOUSE share never locks out a killer); §10.4: pool
+→ escrow ledgered `bounty:wanted` (NULL char), the bounty-escrow check gained the term, `refundPot`'s new
+`'HOUSE'` branch returns it to the pool on expiry, and the estate burns it (`death:bounty`) on an NPC/mod
+kill; guarded so it never drives the pool negative. **(3) NPC bounty hunters** — the worker's `huntWanted`
+sweep rolls `WANTED_HUNT_P` (0.05/tick; env-overridable, the LAW_BUST_P precedent) per wanted mark and, on a
+landed hit, runs the estate with NO killer (no chop/loot/rep, the mod-kill precedent) — a safehouse/witpro/
+pen shield/hospital/lockup blocks the hunter that tick, a bodyguard or a pre-paid revive token absorbs it
+(the earned shields still hold; hide or square up). **Square your name** (`POST /v1/loans/square`,
+`squareWanted`) — pay `SQUARE_COST` ($50k, a `loan:square` cash sink → pool) to clear WANTED **and** the
+welsher mark (borrow again) and refund the pool's bounty — the "square your name" route the step-one audit
+flagged as missing (a founder-approved change to the "welsher is permanent" step-one sign-off). §10.4:
+`loan:square` rides the `loan:` prefix, `bounty:wanted` the `bounty:` prefix (no vocab change). Tests: loans
+(default marks wanted + pool bounty + the escrow reconcile, square clears both + refunds the bounty + borrow-
+again), social (omertà strip lets family contract a wanted member, `huntWanted` whacks a mark, a safehoused
+mark survives). Suite 20/20 + sim drift-0. ALL numbers (WANTED_MS/BOUNTY/HUNT_P/SQUARE_COST) are founder
+sign-off levers. Deferred: NPC lenders still need the backed `loan_house` pool (step-five decision).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

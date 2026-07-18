@@ -464,3 +464,19 @@ NPC lenders (a house credit line). Both are new surfaces needing their own sign-
   net inflation faucet on default (borrow → spend → default → keep). Doing it §10.4-clean needs a BACKED,
   sink-funded `loan_house` pool (the Phase-4 stake-pool pattern) — its own build, flagged for a step-four
   decision, NOT hand-waved as a mint.
+
+## Post-signing addendum — Loan Sharking step four: WANTED (founder-directed; sign-off levers)
+
+Founder-directed punishment for defaulters ("a hit put on them / become wanted"). A default marks the
+borrower WANTED for `LOAN.WANTED_MS` (3d). Levers:
+- `WANTED_BOUNTY` $25k — the pool-funded "dead or alive" price any player collects by killing the mark
+  (redistribution from the confiscation pool, not a mint — burns/refunds/pays out, §10.4 bounty-escrow
+  reconciled; pool-guarded so it never goes negative).
+- `WANTED_HUNT_P` 0.05/worker-tick — the NPC bounty-hunter roll (frequency-dependent; a sign-off lever,
+  the LAW_BUST_P precedent — env-overridable for tests, never in production). Over a 3-day window at ~hourly
+  ticks a mark is very likely whacked unless they hide (safehouse) or square up.
+- `SQUARE_COST` $50k — squares the name: clears WANTED **and** the welsher mark + refunds the pool bounty.
+  A cash sink → pool. **This changes the step-one "welsher is permanent" sign-off** (defaulting is now
+  recoverable at a price — the founder-requested "square your name" route the step-one audit flagged).
+Omertà-strip / NPC-hunter existence / the pursuit window are new founder levers — status/PvE pacing on
+top of signed BALANCE surfaces, not retunes of them.

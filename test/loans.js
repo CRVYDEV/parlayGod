@@ -345,6 +345,41 @@ assert.equal(r.code, 200, 'the new lender collects the claim they bought');
 assert(r.body.seized > 0, 'and recovers the debt');
 assert((await check('loan escrow')).ok, 'loan-escrow unaffected by a paper sale (active loans, not open escrow)');
 
+// ── STEP FOUR: WANTED — a default marks the borrower + the underworld posts a pool bounty ──
+const wShark = await mk('Wanted Shark');
+const welch = await mk('Welching Wally');
+await seedCh(wShark.id, 'cash=200000');
+await seedCh(welch.id, 'cash=100000');
+await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1'); // the pool can front the price
+const wLoan = (await call('POST', '/v1/loans', { token: wShark.token, body: { amount: 30000, rate: 0.2, hours: 1 } })).body.id;
+await call('POST', `/v1/loans/${wLoan}/take`, { token: welch.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${wLoan}'`);
+await seedCh(welch.id, 'cash=0, bank=0, bank_intransit=0'); // broke — defaults
+const wPoolBefore = await poolCash();
+r = await call('POST', `/v1/loans/${wLoan}/collect`, { token: wShark.token });
+assert.equal(r.body.wanted, true, 'the default marks them WANTED');
+assert.equal((await meOf(welch.token)).wanted, true, 'the view flags them wanted');
+assert.equal(Number((await pool.query(`SELECT amount FROM bounty_contributors WHERE target_character='${welch.id}' AND kind='kill' AND contributor='HOUSE'`)).rows[0].amount), LOAN.WANTED_BOUNTY, 'the underworld posts a WANTED_BOUNTY from the pool');
+assert.equal(wPoolBefore - await poolCash(), LOAN.WANTED_BOUNTY, 'the pool fronts the price (nothing seized from the broke deadbeat, so no vig)');
+assert((await check('bounty escrow')).ok, 'bounty escrow reconciles with the pool-funded wanted bounty');
+// a wanted defaulter can't dodge by being poor — but they CAN square their name
+assert.equal((await call('POST', '/v1/loans/square', { token: welch.token })).body.error, 'cash', 'squaring takes real money');
+await seedCh(welch.id, `cash=${LOAN.SQUARE_COST}`);
+const sqPoolBefore = await poolCash();
+r = await call('POST', '/v1/loans/square', { token: welch.token });
+assert.equal(r.code, 200, 'squared up');
+const welchAfter = await rawCh(welch.id);
+assert.equal(welchAfter.welsher, false, 'squaring clears the welsher mark');
+assert(!welchAfter.wanted_until || new Date(welchAfter.wanted_until) <= new Date(), 'and lifts the wanted status');
+assert.equal(await poolCash() - sqPoolBefore, LOAN.SQUARE_COST + LOAN.WANTED_BOUNTY, 'the square fee AND the called-off bounty reach the pool');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM bounty_contributors WHERE target_character='${welch.id}' AND contributor='HOUSE'`)).rows[0].c), 0, 'the house bounty is called off');
+assert((await check('bounty escrow')).ok, 'bounty escrow reconciles after squaring (house share refunded to pool)');
+assert.equal((await meOf(welch.token)).wanted, false, 'the view shows a clean name');
+// a squared name can borrow again
+const reShark = await mk('Re Shark'); await seedCh(reShark.id, 'cash=200000');
+const reOffer = (await call('POST', '/v1/loans', { token: reShark.token, body: { amount: 20000, rate: 0.1, hours: 24 } })).body.id;
+assert.equal((await call('POST', `/v1/loans/${reOffer}/take`, { token: welch.token })).code, 200, 'a squared name can take a loan again');
+
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
