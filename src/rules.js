@@ -920,10 +920,18 @@ export const LOAN = {
   VIG_BPS: 500,                         // 5% house take on repayment/collection → the street-tax pool
   COLLECT_HOSP_MS: 30 * 60 * 1000,      // the leg-breaking: collection hospitalizes the deadbeat
   MAX_ACTIVE: 1,                        // one active loan at a time per borrower (no debt-stacking)
+  // step 2 (secured credit): a lender may require collateral — a car worth ≥ collateral_min (its
+  // damage-adjusted book value). On default the shark SEIZES the car (ownership move, §10.4-neutral —
+  // cars conserve by row count) on top of the cash. COLLATERAL_MAX bounds the lender's asking figure.
+  COLLATERAL_MAX: 5000000,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // outstanding debt on an active loan = principal × (1 + rate), floored to whole dollars
 export const loanOwed = (principal, rate) => Math.floor(Number(principal) * (1 + Number(rate)));
+// step 2: a car's collateral (book) value = its cash value taken down by damage. Deterministic +
+// server-authoritative — the figure a secured offer's collateral_min is checked against at take.
+export const carCollateralValue = (modelId, trimId, dmg = 0) =>
+  Math.floor(carVal(modelId, trimId) * (1 - Math.min(100, Math.max(0, Number(dmg) || 0)) / 100));
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —

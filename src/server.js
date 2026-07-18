@@ -398,7 +398,7 @@ export async function buildServer() {
   app.post('/v1/loans', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.offerLoan(ch, req.body, client, h)));
   app.post('/v1/loans/:id/take', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.takeLoan(ch, req.params.id, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.takeLoan(ch, req.params.id, req.body?.carId, client, h)));
   app.post('/v1/loans/:id/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.cancelLoan(ch, req.params.id, client, h)));
   // repay is two-party (borrower pays, lender credited): look up the lender, lock both.

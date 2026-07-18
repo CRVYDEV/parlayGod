@@ -6,10 +6,11 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { LOAN, loanVig, loanOwed } from '../src/rules.js';
+import { LOAN, loanVig, loanOwed, carCollateralValue } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepLoans, voidLoansAtDeath } from '../src/loans.js';
 import { ledger, notify } from '../src/game.js';
+import crypto from 'node:crypto';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -209,9 +210,85 @@ assert.equal(r.code, 200, 'a borrower can square an overdue debt before the shar
 await sweepLoans(pool);
 assert.equal((await rawCh(tb.id)).welsher, false, 'squaring the debt (even late) keeps the name clean — the sweep re-scopes to STILL-active overdue loans');
 
-// ── §10.4: vocabulary closed ──
+// ── STEP TWO: directed (trust-line) offers — only the named borrower can take ──
+const dShark = await mk('Directed Shark');
+const friend = await mk('Trusted Friend');
+const stranger = await mk('Random Stranger');
+await seedCh(dShark.id, 'cash=300000');
+const dOffer = (await call('POST', '/v1/loans', { token: dShark.token, body: { amount: 50000, rate: 0.1, hours: 24, to: friend.id } })).body;
+assert.equal(dOffer.directed, true, 'the offer is directed');
+// the stranger doesn't even see it on the board, and can't take it
+const strangerBoard = (await call('GET', '/v1/loans', { token: stranger.token })).body.offers;
+assert(!strangerBoard.some((o) => o.id === dOffer.id), 'a directed offer is hidden from outsiders');
+assert.equal((await call('POST', `/v1/loans/${dOffer.id}/take`, { token: stranger.token })).body.error, 'directed', 'an outsider can’t take a directed offer');
+// the named friend sees it (forMe) and can take it
+const friendBoard = (await call('GET', '/v1/loans', { token: friend.token })).body.offers;
+assert(friendBoard.some((o) => o.id === dOffer.id && o.forMe), 'the named borrower sees the trust line');
+assert.equal((await call('POST', `/v1/loans/${dOffer.id}/take`, { token: friend.token })).code, 200, 'the named borrower takes it');
+
+// ── STEP TWO: collateralized loans — pledge a car, forfeit it on default ──
+const cShark = await mk('Secured Sam');
+const owner = await mk('Car Owner');
+await seedCh(cShark.id, 'cash=500000');
+await seedCh(owner.id, 'cash=100000');
+const mkCar = async (chId, model, trim, dmg = 0) => {
+  const id = crypto.randomUUID();
+  await pool.query(`INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ('${id}','${chId}','${model}','${trim}',${dmg})`);
+  return id;
+};
+const goodCar = await mkCar(owner.id, 'pigeon', 'stock', 0);   // carVal 2000
+const cheapCar = await mkCar(owner.id, 'junker', 'stock', 0);  // carVal 900
+const collat = carCollateralValue('pigeon', 'stock', 0);
+assert.equal(collat, 2000, 'the pigeon books at $2000');
+// a secured offer requiring $1500 collateral
+const secured = (await call('POST', '/v1/loans', { token: cShark.token, body: { amount: 40000, rate: 0.25, hours: 1, collateral: 1500 } })).body;
+assert.equal(secured.collateralMin, 1500, 'the offer records its collateral requirement');
+assert.equal((await call('POST', `/v1/loans/${secured.id}/take`, { token: owner.token })).body.error, 'no_car', 'a secured offer refuses a bare take');
+assert.equal((await call('POST', `/v1/loans/${secured.id}/take`, { token: owner.token, body: { carId: cheapCar } })).body.error, 'collateral', 'a $900 junker can’t secure a $1500 pledge');
+const takeRes = await call('POST', `/v1/loans/${secured.id}/take`, { token: owner.token, body: { carId: goodCar } });
+assert.equal(takeRes.code, 200, 'the pigeon secures the loan');
+assert.equal(takeRes.body.collateral, true, 'the take reports the pledge');
+assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${goodCar}'`)).rows[0].pledged, true, 'the car is locked (pledged)');
+// a pledged car can’t be melted or listed
+assert.equal((await call('POST', `/v1/garage/${goodCar}/melt`, { token: owner.token })).body.error, 'pledged', 'no melting pledged collateral');
+// repay squares it → the car comes home
+await seedCh(owner.id, 'cash=200000');
+assert.equal((await call('POST', `/v1/loans/${secured.id}/repay`, { token: owner.token })).code, 200, 'the debt is squared');
+assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${goodCar}'`)).rows[0].pledged, false, 'the pledged car unlocks on repay');
+
+// default → the collateral is SEIZED to the lender
+const secured2 = (await call('POST', '/v1/loans', { token: cShark.token, body: { amount: 30000, rate: 0.2, hours: 1, collateral: 1500 } })).body;
+await call('POST', `/v1/loans/${secured2.id}/take`, { token: owner.token, body: { carId: goodCar } });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${secured2.id}'`);
+await seedCh(owner.id, 'cash=0, bank=0, bank_intransit=0'); // broke — the shortfall is written off; the car is the recourse
+const carsBefore = Number((await pool.query('SELECT COUNT(*) c FROM cars')).rows[0].c);
+const collectRes = await call('POST', `/v1/loans/${secured2.id}/collect`, { token: cShark.token });
+assert.equal(collectRes.code, 200, 'collected');
+assert.equal(collectRes.body.carSeized, goodCar, 'the collateral car is seized on default');
+const carRow = (await pool.query(`SELECT character_id, pledged FROM cars WHERE id='${goodCar}'`)).rows[0];
+assert.equal(carRow.character_id, cShark.id, 'the car now belongs to the lender');
+assert.equal(carRow.pledged, false, 'and is no longer pledged (it changed hands)');
+assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM cars')).rows[0].c), carsBefore, 'car conservation: the seizure MOVED a row, never minted or destroyed one');
+
+// dead lender → the surviving borrower's pledged car unlocks + the debt voids
+const dLender = await mk('Doomed Lender');
+const survivor = await mk('Survivor Sid');
+await seedCh(dLender.id, 'cash=200000');
+const survCar = await mkCar(survivor.id, 'pigeon', 'stock', 0);
+const secured3 = (await call('POST', '/v1/loans', { token: dLender.token, body: { amount: 20000, rate: 0.1, hours: 24, collateral: 1500 } })).body;
+await call('POST', `/v1/loans/${secured3.id}/take`, { token: survivor.token, body: { carId: survCar } });
+assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, true, 'pledged while the loan is live');
+const killL = await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: dLender.id } });
+assert.equal(killL.statusCode, 200, 'the lender is dead');
+assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, false, 'the dead lender’s claim dies — the borrower’s car unlocks');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM loans WHERE id='${secured3.id}'`)).rows[0].c), 0, 'the active loan voided');
+
+// ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
+assert((await check('loan escrow')).ok, 'loan-escrow still reconciles after the step-two lifecycle');
+// (car conservation is proven above by the seize being a row-MOVE with a stable COUNT — the §10.4
+// invariant itself is confounded here by directly-seeded cars, the SQL-seeded-cash precedent.)
 
 console.log('✅ test/loans.js — loan sharking (offer/take/repay/cancel/collect, welsher, sweep, death, §10.4)');
 process.exit(0);

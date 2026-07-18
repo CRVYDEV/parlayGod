@@ -487,7 +487,7 @@ export function view(ch, acct = {}, owned = {}) {
       const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
       return { total, spent, available: Math.max(0, total - spent) }; })(),
     rackets: owned.rackets || [], assets, businesses: owned.businesses || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
-    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed })),
+    cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),

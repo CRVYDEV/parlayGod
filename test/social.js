@@ -345,6 +345,14 @@ await seedCh(vito.id, 'cash=200000');
 // sim-audit F1: exclusivity takes a real stake — below DIRECTED_MIN the direction is refused
 r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id } });
 assert.equal(r.body.error, 'directed_min', 'a cheap pot cannot reserve a mark ($10k floor)');
+// LOAN step 2 (the welsher hunt): a WELSHER's broken word waives the directed floor on a KILL pot
+// (the rat/vendetta-waiver twin — a status consequence, no money returns to any lender). Hospitalize
+// pots never get the waiver (kill-only — a welsher hunt means a body, not a squat).
+const deadbeat = await mk('Deadbeat Denny'); await seedCh(deadbeat.id, 'respect=400, welsher=true');
+r = await call('POST', `/v1/streets/${deadbeat.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id } });
+assert.equal(r.code, 200, 'a welsher is cheap to put a named gun on — the directed floor is waived on a kill pot');
+r = await call('POST', `/v1/streets/${deadbeat.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'hospitalize', hitman: don.id } });
+assert.equal(r.body.error, 'directed_min', 'no waiver on a hospitalize pot — a welsher hunt means a body');
 r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'kill', hitman: don.id, reason: 'Make it clean.', exclusiveHours: 999 } });
 assert.equal(r.code, 200, 'directed contract posted'); assert.equal(r.body.hitman, don.id, 'named hitman recorded');
 const dc = (await call('GET', '/v1/contracts', { token: don.token })).body.contracts.find((c) => c.target.id === marked.id);

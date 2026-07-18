@@ -68,6 +68,10 @@ function findCar(h, carId) {
   // the listing settles or is cancelled. (Chop still VALUES it: a hit crew knows your assets,
   // and excluding listed iron would let a marked man warehouse his fleet pre-hit.)
   if (car.listed) throw new GameError('listed', "It's on the block — cancel the listing first.");
+  // Loan step 2: a pledged car is collateral — melt/fence/repair keep hands off until the debt clears
+  // (or the shark seizes it). Same escrow-lock discipline as `listed`; CHOP still values it (a hit
+  // crew knows your assets — a marked man can't warehouse his fleet by pledging it).
+  if (car.pledged) throw new GameError('pledged', "It's pledged as loan collateral — square the debt first.");
   return car;
 }
 async function removeCar(client, h, carId) {
