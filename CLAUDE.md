@@ -1075,6 +1075,25 @@ vendetta / zero-farmable-rep, the §10.4 conservation + closed vocabulary, the s
 faucet magnitude, a shank scoring 0 war-points + applying no NPC-standing consequences (a quiet
 dishonorable killing — a design call), and the missing shank cooldown. Suite 19/19 + sim drift-0.
 
+**THE PEN — step two BUILT** (`src/pen.js`, `test/pen.js`; `PEN` rules-tail additions). Three drops,
+all leaning on existing machinery. **THE HOLE** (solitary): a CAUGHT shank now also throws the killer
+in the hole (`characters.hole_until`, `PEN.HOLE_MS`) — while `inHole`, every Pen action throws `hole`
+(no yard/commissary/calls) AND they can't be shanked (`segregated`); gives the caught-shank real teeth,
+board surfaces `holeSeconds`. **YARD INCIDENTS**: a deterministic block-wide daily draw (`yardEventOf`,
+the §7.11 seed / cityEventOf shape; `PEN_YARD_EVENT` is a TEST-ONLY override) — **lockdown** (no shanks),
+**riot** (shank odds +0.2 + protection cost halved), **visit** (bribe rate halved), **toss** (commissary
+closed); each ONE touchpoint, the discounted number ledgered (the decree precedent), surfaced as
+`incident` on the board — ties the Pen into the Living World's weather. **THE BURNER PHONE**: a
+contraband item (`burner`, a `pen:commissary` sink) — the ONE way to reach the outside from a cell:
+`POST /v1/pen/burner/:targetId` consumes it to call in an NPC hit (`npcHit` is jail-gated everywhere
+else — the burner threads `opts.fromBurner` to waive ONLY the actor jail gate; every other npcHit gate
+stands, the fee still burns win/lose, the burner is spent only if the call goes through). §10.4: no new
+reasons (burner rides `pen:commissary`, the burner hit rides `npchit:hire`); `hole_until` is a new
+character column. `test/pen.js` covers the hole (caught → solitary, actions blocked, untouchable), every
+incident touchpoint (discounted charges ledgered), and the burner (jail-gated npcHit refused without it,
+one call consumes it). Suite 19/19 + sim drift-0. Step three deferred: prison factions/shot-callers, the
+co-op break-out, richer yard incidents.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
