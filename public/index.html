@@ -26,6 +26,22 @@
 
   #layout { display: grid; grid-template-columns: 300px 1fr 320px; gap: 12px; padding: 12px 16px; }
   @media (max-width: 1100px) { #layout { grid-template-columns: 1fr; } }
+  /* phones: tighter chrome, thumb-sized targets, scrollable tab rail, calmer feed */
+  @media (max-width: 760px) {
+    :root { font-size: 14px; }
+    #layout { padding: 8px; gap: 8px; }
+    #top { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+    #top h1 { font-size: 17px; letter-spacing: 4px; }
+    #whoami { flex-basis: 100%; margin-left: 0; order: 3; }
+    #tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+    #tabs button { flex: 0 0 auto; padding: 8px 12px; }
+    button.act { padding: 9px 12px; }
+    input, select { padding: 9px 8px; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    #feed { max-height: 30vh; }
+    #resp { max-height: 140px; }
+  }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
   .panel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--dim); font-weight: normal; }
 
@@ -86,8 +102,19 @@
 <div id="screen-auth" class="center hidden">
   <h1>OMERTÀ</h1>
   <p>The city doesn't know your name yet. Good. Keep it that way.</p>
+  <div id="invite-row" class="hidden" style="margin-bottom:10px">
+    <input id="invite-code" placeholder="invite code" size="18" style="font-size:14px">
+    <div class="sub" style="font-size:11px;color:var(--bad);margin-top:4px">This alpha is invite-only. Ask a made man for a code.</div>
+  </div>
   <button class="act" id="btn-guest" style="font-size:14px;padding:10px 24px">ENTER AS A GHOST</button>
-  <p class="sub" style="font-size:11px;color:var(--dim)">A guest account — upgrade to X / Privy later without losing the street.</p>
+  <p class="sub" style="font-size:11px;color:var(--dim)">A guest account — claim it with X / Privy later without losing the street.</p>
+  <div style="margin-top:18px;border-top:1px dashed var(--line);padding-top:14px">
+    <div class="sub" style="font-size:11px;color:var(--dim);margin-bottom:6px">Already made? Sign in with a provider token:</div>
+    <select id="auth-provider"><option value="x">X (Twitter)</option><option value="privy">Privy</option></select>
+    <input id="auth-token" placeholder="provider access token" size="26">
+    <button class="act" id="btn-provider">SIGN IN</button>
+    <div class="sub" style="font-size:10px;color:var(--dim);margin-top:4px">X: an OAuth2 user token (read scope). Privy: your session's ES256 JWT. The hosted redirect flow lands with deploy.</div>
+  </div>
 </div>
 
 <div id="screen-create" class="center hidden">
@@ -114,6 +141,7 @@
           <button class="act" data-do="POST /v1/checkin">check in</button>
           <button class="act" id="btn-refresh">refresh</button>
         </div>
+        <div id="claim-card"></div>
       </div>
       <div class="panel" style="margin-top:12px">
         <h2>Last Word</h2>
@@ -142,7 +170,33 @@
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
   let token = localStorage.getItem('omerta_token') || null;
-  let me = null, rules = null, ws = null;
+  let me = null, rules = null, ws = null, session = null;
+
+  // ── the street talks back: turn a raw response into one human line ──
+  function describe(body, code) {
+    if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
+    if (code >= 400) return body.message || body.error || `the city said no (${code})`;
+    const bits = [];
+    if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
+    if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
+    if (body.win === true) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
+    if (body.win === false) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
+    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
+    if (body.absorbed) bits.push('their cover took the hit');
+    if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
+    if (body.earned) bits.push(`moved product — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}`);
+    if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    if (body.seized) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}`);
+    if (body.pay) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
+    if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
+    if (body.qty && body.quality) bits.push(`pulled ${body.qty} units at q${body.quality}`);
+    if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
+    if (body.readyAt) bits.push('the batch is on the burner');
+    if (body.heat) bits.push(`heat +${body.heat}`);
+    if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
+    return bits.length ? bits.join(' · ') : (body.message || 'done.');
+  }
 
   // ── plumbing ──
   async function api(method, path, body) {
@@ -161,11 +215,7 @@
   }
   async function act(method, path, body) {
     const r = await api(method, path, body);
-    if (r.code >= 400) toast(r.body?.message || r.body?.error || `${r.code}`, true);
-    else {
-      const b = r.body || {};
-      toast(b.message || (b.win === true ? 'WIN' : b.win === false ? 'bust' : null) || 'done.');
-    }
+    toast(describe(r.body, r.code), r.code >= 400);
     await refresh();
     return r;
   }
@@ -182,14 +232,26 @@
     if (r.code === 401) { token = null; localStorage.removeItem('omerta_token'); return show('screen-auth'); }
     if (r.code === 404 || r.body?.error === 'no_character') return show('screen-create');
     me = r.body.character || r.body;
+    session = (await api('GET', '/v1/session')).body || null;
     if (!rules) rules = (await api('GET', '/v1/rules')).body;
-    show('screen-main'); renderSheet(); buildTabs(); connectWs();
+    show('screen-main'); renderSheet(); buildTabs(); connectWs(); backfillFeed();
   }
 
+  const landToken = (r) => {
+    if (r.body?.token) { token = r.body.token; localStorage.setItem('omerta_token', token); boot(); return true; }
+    if (r.body?.error === 'invite') { $('#invite-row').classList.remove('hidden'); toast(r.body.message || 'invite only', true); }
+    else toast(r.body?.message || r.body?.error || 'no dice', true);
+    return false;
+  };
   $('#btn-guest').onclick = async () => {
-    const r = await api('POST', '/v1/auth/guest');
-    if (r.body?.token) { token = r.body.token; localStorage.setItem('omerta_token', token); boot(); }
-    else toast(r.body?.message || 'no dice', true);
+    const inviteCode = $('#invite-code').value.trim();
+    landToken(await api('POST', '/v1/auth/guest', inviteCode ? { inviteCode } : {}));
+  };
+  $('#btn-provider').onclick = async () => {
+    const provider = $('#auth-provider').value, tok = $('#auth-token').value.trim();
+    if (!tok) return toast('paste a provider token first', true);
+    const inviteCode = $('#invite-code').value.trim();
+    landToken(await api(`POST`, `/v1/auth/${provider}`, { token: tok, ...(inviteCode ? { inviteCode } : {}) }));
   };
   $('#btn-create').onclick = async () => {
     const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim() });
@@ -197,6 +259,17 @@
   };
   $('#btn-logout').onclick = () => { localStorage.removeItem('omerta_token'); location.reload(); };
   $('#btn-refresh').onclick = () => refresh();
+
+  // the sheet stays honest on its own: countdowns and accrual don't wait for a click
+  setInterval(() => { if (me && !document.hidden) refresh(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && me) refresh(); });
+
+  // recent history into the wire so a fresh page isn't blind to what happened while away
+  async function backfillFeed() {
+    const r = await api('GET', '/v1/notifications');
+    for (const n of (r.body?.notifications || []).slice(-20))
+      feedLine('me', { type: n.type, ...(typeof n.payload === 'object' ? n.payload : {}) });
+  }
 
   async function refresh() {
     const r = await api('GET', '/v1/me');
@@ -236,6 +309,23 @@
       <div class="row"><span class="k">gun</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">ammo / crates</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
       <div class="row"><span class="k">cars</span><span>${(me.cars || []).length}</span></div>`;
+    // a GHOST account lives in this browser only — the claim card upgrades it in place (same
+    // account row, same street, §4 guest→provider) so a lost device doesn't mean a lost life
+    const claim = $('#claim-card');
+    if (claim && session?.provider === 'guest') {
+      claim.innerHTML = `<div class="card" style="margin-top:8px;border-color:var(--neon)">
+        <span class="t" style="color:var(--neon)">CLAIM YOUR ACCOUNT</span>
+        <div class="d">you're a ghost — this street exists only in this browser. Tie it to X or Privy and keep everything.</div>
+        <select id="claim-provider"><option value="x">X</option><option value="privy">Privy</option></select>
+        <input id="claim-token" placeholder="provider token" size="16">
+        <button class="act" id="claim-go">claim it</button></div>`;
+      claim.querySelector('#claim-go').onclick = async () => {
+        const r = await api('POST', '/v1/auth/upgrade',
+          { provider: claim.querySelector('#claim-provider').value, token: claim.querySelector('#claim-token').value.trim() });
+        if (r.code < 400) { toast('the account is yours — same street, real papers.'); session = (await api('GET', '/v1/session')).body; renderSheet(); }
+        else toast(r.body?.message || r.body?.error, true);
+      };
+    } else if (claim) claim.innerHTML = '';
   }
 
   // ── tabs ──

@@ -1378,6 +1378,23 @@ with shank + burner-phone outside hits). Shape fixes caught by the pass: the pen
 `{id,name,level,gang}` (no tag/sentence fields), and `openConvoy` requires a first load. The console
 now curates EVERY major system — the raw deck remains for mod/chain/edge routes only. Suite 20/20.
 
+**THE CONSOLE step five — production auth + polish — BUILT** (public/index.html + one server.js
+addition; verified live in Chromium under `INVITE_MODE=on`, zero page errors). **Auth**: the entry
+screen now carries the FULL production surface — the ghost door (guest), an invite-code field that
+REVEALS itself when the server answers `invite` (closed-alpha ready; retry with the code proceeds),
+and provider sign-in (X / Privy token → `POST /v1/auth/x|privy`, invite-gated for new accounts;
+bogus tokens surface the server's own flavor — "X rejected that token."). **The claim card**: a
+guest sees CLAIM YOUR ACCOUNT on the sheet — `POST /v1/auth/upgrade` in place (same account row,
+same street, §4); keyed off the new `provider` field on `GET /v1/session` (the one backend line).
+The hosted OAuth REDIRECT flow (X app + Privy embed) is deploy-time work — the paste-token flow is
+honest about that on-screen. **The street talks back**: `describe()` humanizes every action response
+("clean job — $103, +2 respect" / "BUSTED — 4m in lockup" / "THEY'RE DONE. looted $10,250" / "the
+batch is on the burner") with the raw JSON still in the Last Word viewer for the deck. **Freshness**:
+the sheet self-refreshes every 30s + on tab-visibility return (countdowns stop going stale), and the
+wire BACKFILLS the last 20 undelivered notifications at boot so a returning player sees what happened
+while they were gone. **Mobile**: ≤760px pass — wrapped top bar, horizontally scrolling tab rail,
+thumb-sized targets, two-then-one column card grids, calmer feed/viewer heights. Suite 20/20.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
