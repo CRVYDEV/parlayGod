@@ -84,6 +84,10 @@ surviving counterparty (`loan_defaulted` to the lender / `loan_voided` to the bo
   the principal for a 30-min hosp + a mark they don't value. The market self-corrects to trusted
   counterparties but the first lenders are burned. Options (welsher penalties beyond borrowing,
   partial bank recourse, collateral) are levers, not a silent retune. **This is the core balance call.**
+  **→ SIGNED AS-IS 2026-07-18 (founder): "the lender vets their counterparties."** Default risk stays
+  with the lender by design — loan-sharking is a trust market; the welsher mark is a reputation signal,
+  not a clawback. No recourse/collateral added. Step-two debt-trading / trust-line loans become the
+  way trust gets priced, not retroactive lender protection. Recorded in BALANCE.md.
 - **Untaxed A→B collusion cash rail.** `take` moves escrow → borrower 1:1 with no house take (the
   vig is only on settlement); a never-settled loan is a free transfer. Cheaper than the 2%-taxed
   markets. A take-side take or same-IP flag is a founder lever.

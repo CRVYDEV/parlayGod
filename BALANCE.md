@@ -397,3 +397,29 @@ grosses ~$48k/hr while the nut is $6k/hr (~12%), but an IDLE 5-crew (no stash) s
 for $0, so the drain is sharpest on hoarded-but-unsupplied crew (intended). The $1,200 flat is the
 primary dial — watch the next sim pass on both the busy-crew % and the idle-crew bleed. Roadmap
 (deferred, a founder design call — touches signed heat surfaces): the heat-scaled city pad/bribery.
+
+## Post-signing addendum — Loan Sharking (the Shylock, step one) — **core balance SIGNED 2026-07-18**
+
+The game's first PvP credit market. Levers (`LOAN` rules tail, all founder sign-off): `MIN` $5k /
+`MAX` $1M loan band, `RATE_MAX` 0.5 (usury cap), `TERM_MIN/MAX_H` 1–72h, `VIG_BPS` 500 (5% house
+cut on settlement → the buyback pool, the ONLY value the loan game removes), `COLLECT_HOSP_MS`
+30min (the leg-break), `MAX_ACTIVE` 1 (no debt-stacking), `OFFER_TTL_MS` 48h.
+
+**The core call — default risk — SIGNED AS-IS 2026-07-18: "the lender vets their counterparties."**
+The audit flagged that first-loan-default is +EV for a throwaway/alt borrower (bank the principal —
+cleared bank is a safe harbour — then default; the welsher mark gates only *future borrowing*, which
+an alt doesn't value; the lender EATS the shortfall). The founder ruled this is **intended, not a
+bug**: loan-sharking is a trust market, the lender carries the counterparty risk, and the market
+self-corrects to vetted borrowers (a stranger's paper is priced accordingly, or not written). No
+recourse-to-bank, collateral, or extra welsher penalty is added — the risk IS the game. So the
+welsher mark stands as a reputation signal (a defaulter is publicly un-lendable-to), not a clawback.
+
+Consequence for the deferred step-two list: **debt trading / directed (trust-line) loans / an
+auto-contract on a welsher** become the natural way trust gets priced and enforced — build them as
+the market's answer to counterparty risk, NOT as retroactive default protection for the lender.
+
+Other flagged items remain open founder levers (not yet signed, ranked): the untaxed A→B collusion
+transfer rail (a take-side take or same-IP flag), a "square your name" welsher-clearing sink, a
+per-target collect cooldown, and whether default-collection is "civil" (reaches a safehoused/witpro
+borrower, as built — the shakedown precedent) or an "attack" (shield-gated like fire/npcHit). The
+five audited CODE defects are fixed in-commit (see `AUDIT-loan-sharking.md`); these are balance dials.
