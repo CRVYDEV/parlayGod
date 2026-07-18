@@ -13,7 +13,7 @@ const KNOWN_REASONS = {
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
     'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:',
-    'law:', 'world:', 'pen:'],
+    'law:', 'world:', 'pen:', 'loan:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury'],
@@ -144,6 +144,17 @@ export async function runLedgerInvariants(pool) {
   // the escrow-side outflow (the rest of the looted order burns as market:death). Net 0.
   const mLoot = -(await sum(pool, "currency='cash' AND reason='market:loot'"));
   push('market escrow', bidEscrow + orderEscrow, mPosted - mRefunded - mSales - mTakes - mDead - mLoot);
+
+  // (f4) LOAN ESCROW (loan sharking): an OPEN offer holds the principal in escrow (the bounty-escrow
+  // twin). escrow == offered − taken (escrow → borrower) − refunded (cancel/expiry) − deathBurned.
+  // repay/collect are transfers (character rows, in check (a)); the vig is the only value that LEAVES
+  // (a NULL-character sink → the pool, the market-take precedent).
+  const loanEscrow = await one(pool, "SELECT COALESCE(SUM(principal),0) s FROM loans WHERE status='open'");
+  const loanOffered = -(await sum(pool, "currency='cash' AND reason='loan:offer'"));
+  const loanTaken = await sum(pool, "currency='cash' AND reason='loan:take'");
+  const loanRefunded = await sum(pool, "currency='cash' AND reason='loan:refund'");
+  const loanDeath = -(await sum(pool, "currency='cash' AND reason='loan:death'"));
+  push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath);
 
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];

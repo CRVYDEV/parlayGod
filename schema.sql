@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS characters (
   world_raid_at TIMESTAMPTZ,                       -- THE LIVING WORLD P2: per-character NPC-raid cooldown
   pen_safe_until TIMESTAMPTZ,                      -- THE PEN: in-jail protection window (paid the yard boss — can't be shanked)
   hole_until TIMESTAMPTZ,                          -- THE PEN step two: solitary (a caught shank) — no yard actions, untouchable
+  welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -533,6 +534,22 @@ CREATE TABLE IF NOT EXISTS pen_contraband (
   item TEXT NOT NULL,
   qty INT NOT NULL DEFAULT 0,
   PRIMARY KEY (character_id, item)
+);
+
+-- LOAN SHARKING — the Shylock. An OPEN row is an escrowed offer (principal held like a bounty pot);
+-- a TAKEN row is an ACTIVE debt (principal already with the borrower). Escrow (SUM principal WHERE
+-- status='open') reconciles against the loan:* ledger (§10.4). `rate` is the interest fraction; the
+-- outstanding debt is principal×(1+rate). Numbers are founder sign-off levers.
+CREATE TABLE IF NOT EXISTS loans (
+  id TEXT PRIMARY KEY,
+  lender_character TEXT NOT NULL,
+  borrower_character TEXT,                          -- NULL while open (offered, untaken)
+  principal NUMERIC NOT NULL,
+  rate NUMERIC NOT NULL,
+  hours INT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',              -- open | active | repaid | collected | cancelled
+  offered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  due_at TIMESTAMPTZ
 );
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a

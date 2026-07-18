@@ -25,6 +25,7 @@ import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
 import * as Pen from './pen.js';
+import * as Loans from './loans.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -388,6 +389,30 @@ export async function buildServer() {
   // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)
   app.post('/v1/pen/burner/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.burnerHit(ch, victim, client, h, req.body?.tier)));
+
+  // LOAN SHARKING — the Shylock: escrowed offers, a taken loan is a live debt, default is enforced.
+  app.get('/v1/loans', { preHandler: auth }, async (req) => {
+    const ch = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    return ch ? Loans.loanBoard(pool, ch) : { offers: [], active: [] };
+  });
+  app.post('/v1/loans', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.offerLoan(ch, req.body, client, h)));
+  app.post('/v1/loans/:id/take', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.takeLoan(ch, req.params.id, client, h)));
+  app.post('/v1/loans/:id/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.cancelLoan(ch, req.params.id, client, h)));
+  // repay is two-party (borrower pays, lender credited): look up the lender, lock both.
+  app.post('/v1/loans/:id/repay', { preHandler: auth }, async (req) => {
+    const l = (await pool.query("SELECT lender_character FROM loans WHERE id=$1 AND status='active'", [req.params.id])).rows[0];
+    if (!l) throw new G.GameError('no_loan', 'No such debt to square.');
+    return G.withTwoCharacters(pool, req.user.sub, l.lender_character, (ch, victim, client, h) => Loans.repayLoan(ch, victim, req.params.id, client, h));
+  });
+  // collect is two-party (lender seizes from the borrower): look up the borrower, lock both.
+  app.post('/v1/loans/:id/collect', { preHandler: auth }, async (req) => {
+    const l = (await pool.query("SELECT borrower_character FROM loans WHERE id=$1 AND status='active'", [req.params.id])).rows[0];
+    if (!l) throw new G.GameError('no_loan', 'No such debt to collect.');
+    return G.withTwoCharacters(pool, req.user.sub, l.borrower_character, (ch, victim, client, h) => Loans.collectLoan(ch, victim, req.params.id, client, h));
+  });
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>

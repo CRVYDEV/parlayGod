@@ -1108,6 +1108,32 @@ idempotency, the §10.4 discounted-ledger exactness + clamps + closed vocabulary
 heir-freshness + self-defeating "immunity". Flagged for founder sign-off (NOT patched): yard-incident
 weighting (~40% of days hard-block the loop), the hole toothless near release. Suite 19/19 + sim drift-0.
 
+**LOAN SHARKING — the Shylock, step one — BUILT** (`src/loans.js`, `test/loans.js` — the 20th suite
+file; design `omerta-loan-sharking-design.md`). Player-to-player predatory lending: the first PvP CREDIT
+market. A lender **offers** (`POST /v1/loans`, `offerLoan`) — escrows the principal out of pocket
+(`loan:offer` sink into the loan bucket, the bounty/market-escrow precedent), setting rate (≤ `RATE_MAX`
+0.5) + term (`TERM_MIN/MAX_H` 1–72h); a borrower **takes** it off the open board (`GET /v1/loans`,
+`takeLoan` — escrow → borrower pocket `loan:take`, gated own/welsher/`MAX_ACTIVE` 1 so no debt-stacking),
+owing `loanOwed` = principal × (1 + rate) by `due_at`. **Repay** (`POST /v1/loans/:id/repay`,
+two-party `withTwoCharacters`) transfers the full debt back — borrower −owed, lender +owed−vig, the
+`VIG_BPS` (5%) **vig → the buyback pool** (`loan:vig`, the confiscation-buffer sink — the ONLY value the
+loan game removes, so it's a taxed transfer, never a free alt-funding rail). **Cancel** pulls an untaken
+offer (`loan:refund`). **Default → collect** (`POST /v1/loans/:id/collect`, two-party, only past due):
+the shark seizes pocket + in-transit cash up to the debt (CLEARED bank + staked $OMR are SAFE — the
+Make-Risk-Pay loot-surface precedent), pays the vig, leg-breaks the deadbeat (`COLLECT_HOSP_MS` 30min),
+and brands them a **welsher** (`characters.welsher`, dies with the street) — a permanent "nobody lends to
+you again" mark (the real default deterrent, since the shark eats any shortfall). The worker
+`sweepLoans` refunds expired offers (`OFFER_TTL_MS` 48h) + flags overdue borrowers welsher. Death:
+`voidLoansAtDeath` in `runEstate` burns a dead lender's OPEN escrow (`loan:death`, the dead-funder
+precedent) + voids active loans (a debt dies with either party). §10.4: `loan:` joined the cash
+vocabulary + a NEW **loan-escrow check** (open-offer principal == offered − taken − refunded − death —
+the bounty-escrow twin; repay/collect are check-(a)-neutral by construction). `LOAN` rules-tail block +
+`loanVig`/`loanOwed` helpers; all numbers founder sign-off levers. `test/loans.js` proves the gates
+(amount/rate/term/own/welsher/maxed/not_due), the full lifecycle, the scoped repay/collect transfers
+(vig → pool exactly), the welsher block + worker sweep, death both sides, and the closed vocabulary +
+escrow check. Suite 20/20 + sim drift-0. Step two deferred: directed/trust-line loans, an auto-contract
+posted on a welsher, debt trading (selling the paper), collateralized loans (car/gear as security).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
