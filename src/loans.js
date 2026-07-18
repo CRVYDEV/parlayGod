@@ -189,7 +189,12 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   if (loan.collateral_car) {
     await client.query('UPDATE cars SET character_id=$2, pledged=false WHERE id=$1', [loan.collateral_car, ch.id]);
     if (h.victimOwned?.cars) h.victimOwned.cars = h.victimOwned.cars.filter((c) => c.id !== loan.collateral_car);
-    if (h.owned?.cars) { const c = { id: loan.collateral_car }; if (!h.owned.cars.some((x) => x.id === c.id)) h.owned.cars.push(c); }
+    // push the FULL row into the lender's garage (the market auction-settle precedent) — a bare
+    // {id} stub would render the seized car with null model/trim/dmg in this response's view.
+    if (h.owned?.cars && !h.owned.cars.some((x) => x.id === loan.collateral_car)) {
+      const row = (await client.query('SELECT * FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
+      if (row) h.owned.cars.push(row);
+    }
     carSeized = loan.collateral_car;
   }
   borrower.hosp_until = new Date(Date.now() + LOAN.COLLECT_HOSP_MS); // the leg-breaking

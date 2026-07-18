@@ -1175,6 +1175,20 @@ family omertà (a lesser offense). §10.4 untouched (collateral is ownership, no
 repay-unlock/default-seize/dead-lender-unlock + car-count stability), and `test/social.js` the welsher
 kill-waiver (+ hospitalize-pot refusal). Suite 20/20 + sim drift-0. Numbers (`COLLATERAL_MAX`, the
 waiver) are founder sign-off levers. Step three deferred: debt trading (selling the paper), NPC lenders.
+A **three-lens red-team** (`AUDIT-loan-sharking-step-two.md`: collateral mechanics, directed+welsher-hunt,
+regression risk) verified the three mechanics sound (car conservation clean across all four collateral
+exits; the pledge-lock airtight — melt/fence/repair/list all refuse a pledged car; the seize can never
+dangle since a pledged car's only pre-collect exit is death, which voids the loan; no §10.4 drift, no
+lock cycle — cars are leaf writes never `FOR UPDATE`'d — no signature/schema regression) and fixed two
+LOW consistency defects (regression each): **F2** `collectLoan` pushed a bare `{id}` stub into the
+lender's view (seized car rendered null model/trim) — now `SELECT *`s the full row (the market
+auction-settle precedent); **F3** the armorer weekly favor filtered `!listed` but not `!pledged`, so a
+pledged car could be repaired around the lock — now `!c.pledged` too. Flagged for founder sign-off (NOT
+patched): an overdue secured loan can freeze the borrower's car indefinitely if the lender never
+collects (the borrower can always repay to free it — a design call on a sweep auto-forfeit/release);
+directed loans make the untaxed A→B collusion rail deterministic (one-shot per alt, `MAX_ACTIVE=1`); a
+welsher is a cheap perpetual named-kill target (intended); collateral seizure bypasses `GARAGE_CAP` (the
+market-win precedent).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

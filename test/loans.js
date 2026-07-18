@@ -268,6 +268,9 @@ assert.equal(collectRes.body.carSeized, goodCar, 'the collateral car is seized o
 const carRow = (await pool.query(`SELECT character_id, pledged FROM cars WHERE id='${goodCar}'`)).rows[0];
 assert.equal(carRow.character_id, cShark.id, 'the car now belongs to the lender');
 assert.equal(carRow.pledged, false, 'and is no longer pledged (it changed hands)');
+// AUDIT F2: the seized car shows FULLY in the lender's response view (not a null-model stub)
+const seizedInView = (collectRes.body.character?.cars || []).find((c) => c.id === goodCar);
+assert(seizedInView && seizedInView.model === 'pigeon', 'the seized car renders complete in the lender’s garage (full row, not a bare id stub)');
 assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM cars')).rows[0].c), carsBefore, 'car conservation: the seizure MOVED a row, never minted or destroyed one');
 
 // dead lender → the surviving borrower's pledged car unlocks + the debt voids
