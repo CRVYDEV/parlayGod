@@ -940,9 +940,13 @@ export const LOAN = {
   // name — clears WANTED + the welsher mark + refunds the pool bounty (a cash sink → the pool).
   WANTED_MS: 3 * 24 * 3600 * 1000, WANTED_BOUNTY: 25000, WANTED_HUNT_P: 0.05, SQUARE_COST: 50000,
   // alt-farm mitigation (audit F2): the pool-funded cash bounty only lands on a defaulter at or above
-  // this level — a throwaway rookie alt (the cheap farm fodder) gets NO pool price, though they're still
+  // this level — a throwaway alt (the cheap farm fodder) gets NO pool price, though they're still
   // WANTED (omertà stripped + NPC hunters). The npcHit "no hits on nobodies" rookie-floor precedent.
-  WANTED_MIN_LVL: 10,
+  // Raised 10→20 (founder call): level 20 (respect 1444) is ~4.5× the respect grind of level 10 (324)
+  // per DISPOSABLE alt — since the borrower alt DIES each farm cycle, the floor is a recurring cost, so
+  // a higher one directly taxes the Sybil ring while a real predatory-lending target (a mid-game player
+  // taking a $25k+ loan) is comfortably past it. Founder sign-off lever — raise further if farmed.
+  WANTED_MIN_LVL: 20,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // step 3: the house take on a paper (loan-claim) sale — the market/bodyguard 2% precedent → the pool
