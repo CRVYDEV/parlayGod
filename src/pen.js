@@ -6,7 +6,7 @@
 // and witness-protection segregation. Every action REQUIRES being jailed. Numbers are sign-off levers.
 import { GameError, bus } from './game.js';
 import { PEN, penContrabandOf, jailSecondsLeft, penSafe, levelOf, effStat, witproActive } from './rules.js';
-import { runEstate } from './social.js';
+import { runEstate, claimBounty } from './social.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -32,7 +32,7 @@ export async function penBoard(ch, client, h) {
     `SELECT c.id, c.name, c.respect, gm.gang_id FROM characters c
        LEFT JOIN gang_members gm ON gm.character_id = c.id
       WHERE c.alive AND c.jail_until > now() AND c.id <> $1
-      ORDER BY c.jail_until DESC LIMIT 30`, [ch.id])).rows
+      ORDER BY c.jail_until ASC LIMIT 30`, [ch.id])).rows
     .map((r) => ({ id: r.id, name: r.name, level: levelOf(Number(r.respect)), gang: r.gang_id || null }));
   return {
     inside: !!jailed(ch),
@@ -91,7 +91,11 @@ export async function payProtection(ch, client, h) {
 export async function bribeGuard(ch, seconds, client, h) {
   insideOnly(ch);
   const left = jailSecondsLeft(ch);
-  const cut = Math.min(left, Math.max(1, Math.floor(Number(seconds) || left))); // default: buy the whole sentence
+  // ABSENT (null/undefined) means "buy the whole sentence"; an EXPLICIT number is honoured — a
+  // non-positive/NaN value is a clean 400, never the silent full-sentence charge (audit LOW footgun).
+  let cut;
+  if (seconds === undefined || seconds === null || seconds === '') cut = left;
+  else { const n = Math.floor(Number(seconds)); if (!Number.isFinite(n) || n <= 0) throw new GameError('seconds', 'Ask for a positive number of seconds to cut.'); cut = Math.min(left, n); }
   const cost = cut * PEN.BRIBE_PER_S;
   if (Number(ch.cash) < cost) throw new GameError('cash', `Cutting ${cut}s costs $${cost}.`);
   ch.cash = Number(ch.cash) - cost;
@@ -104,6 +108,9 @@ export async function bribeGuard(ch, seconds, client, h) {
 // POST /v1/pen/shank/:targetId — the jailhouse hit (two-party: both must be inside)
 export async function shank(ch, victim, client, h) {
   insideOnly(ch);
+  // shield-not-bunker (P1.3, audit): the yard boss's protection is a SHIELD — you can't hunt from
+  // under it. Mirrors the street safeHoused(ch) actor-guards on fire/jump.
+  if (penSafe(ch)) throw new GameError('safe', "You're under the yard boss's protection — take it or hunt, not both.");
   if (!jailed(victim)) throw new GameError('target_free', "They've walked — you can't reach them out there.");
   // family omertà holds inside too — VOID for a rat (the audit precedent)
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat)
@@ -145,9 +152,13 @@ export async function shank(ch, victim, client, h) {
   // a body in the yard — the full estate (heir, prestige, a sworn bloodline), but no loot/chop (you
   // can't strip a fleet from a cell) and no feared-rep (a shanking is dishonorable — the npcHit rule)
   await h.notify(client, victim.id, 'shanked', { from: ch.name });
+  // a shank is a DIRECT player kill (like fire, not the hired npcHit) — it FULFILS open kill
+  // contracts on the mark (audit: else a random shiv burned the funder's escrow for free). Paid
+  // BEFORE the estate vacates the bounties. Cash only (still no loot, no chop, no feared-rep).
+  const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']);
   const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
   ch.jail_until = new Date(new Date(ch.jail_until).getTime() + PEN.KILL_ADD_S * 1000); // a body means more time
   bus.emit('streets', { type: 'shank', by: ch.name, victim: victim.name });
-  await h.track(client, ch.account_id, 'shank', { victim: victim.id });
-  return { ok: true, kill: true, sentenceSeconds: jailSecondsLeft(ch), estate: { heirId: estate.heirId } };
+  await h.track(client, ch.account_id, 'shank', { victim: victim.id, bounty });
+  return { ok: true, kill: true, bounty, sentenceSeconds: jailSecondsLeft(ch), estate: { heirId: estate.heirId } };
 }

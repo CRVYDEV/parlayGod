@@ -416,7 +416,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
 // (lock-out), a pot still inside another hitman's exclusive window, and an expired pot (left
 // for the refund sweep). Returns { total, directed } — directed=true if a pot named to `ch`
 // (a directed contract they were tapped for) was among those collected → bonus assassin rep.
-async function claimBounty(client, h, ch, victimId, kinds) {
+export async function claimBounty(client, h, ch, victimId, kinds) {
   const pots = (await client.query('SELECT kind, amount, hitman, opens_at FROM bounties WHERE target_character=$1 AND (expires_at IS NULL OR expires_at > now()) FOR UPDATE', [victimId])).rows;
   let total = 0, directed = false;
   for (const p of pots) {
