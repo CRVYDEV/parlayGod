@@ -74,8 +74,11 @@ export async function runLedgerInvariants(pool) {
   const wantedPosted = -(await sum(pool, "currency='cash' AND reason='bounty:wanted'"));
   const claimed = await sum(pool, "currency='cash' AND reason='bounty:claim'");
   const refunded = await sum(pool, "currency='cash' AND reason='bounty:refund'");
+  // the wanted HOUSE-share refund uses a DISTINCT reason (→ the pool, not a treasury) so it stays out
+  // of check (b)'s treasuryRefunds; it IS an escrow outflow here, so the escrow check must count it.
+  const wantedRefunded = await sum(pool, "currency='cash' AND reason='bounty:wanted:refund'");
   const deadBounties = -(await sum(pool, "currency='cash' AND reason='death:bounty'"));
-  push('bounty escrow', escrow, posted + gangPosted + wantedPosted - claimed - refunded - deadBounties);
+  push('bounty escrow', escrow, posted + gangPosted + wantedPosted - claimed - refunded - wantedRefunded - deadBounties);
 
   // (d) $OMR CONSERVATION: buckets = accounts (omr + staked; unclaimed rewards mint
   // at claim time) + AMM reserve + event fund + family reserves. Genesis is the

@@ -299,25 +299,33 @@ export async function buyPaper(ch, seller, loanId, client, h) {
 export async function squareWanted(ch, client, h) {
   if (!ch.welsher && !isWanted(ch)) throw new GameError('clean', 'Your name is already clean.');
   if (jailed(ch)) throw new GameError('jailed', 'Square your name when you get out.');
+  // audit F1: settle the DEBT before you square the NAME — a still-active overdue loan (a sweep-marked
+  // welsher, whose loan isn't 'collected') would have the sweep re-brand + re-post the bounty next tick,
+  // making the $50k pardon last < 1 tick. Repay it (or let the shark collect) first, THEN clear your name.
+  const stillOwed = (await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active' AND due_at < now()", [ch.id])).rows[0];
+  if (stillOwed) throw new GameError('overdue', 'Settle the debt you welshed on first — repay it or let the shark collect. Then square your name.');
   const cost = LOAN.SQUARE_COST;
   if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring your name runs $${cost}.`);
   ch.cash = Number(ch.cash) - cost;
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]); // the payment → the buyback pool
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'loan:square' });
   // call off the pool's WANTED_BOUNTY — refund the HOUSE share to the pool, leaving any PLAYER share
-  // (a separate grudge stands). §10.4: escrow −houseShare, ledgered `bounty:refund` (NULL → pool).
+  // (a separate grudge stands). Lock the POT first, then the contributor (audit F5 — the pot→contributor
+  // order refundPot/cancelBounty use, so a square can't AB-BA a concurrent expiry sweep on the same pot).
+  const pot = (await client.query("SELECT amount FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [ch.id])).rows[0];
   const house = (await client.query("SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE' FOR UPDATE", [ch.id])).rows[0];
   if (house) {
     const amt = Math.floor(Number(house.amount));
     await client.query("DELETE FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE'", [ch.id]);
-    const pot = (await client.query("SELECT amount FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [ch.id])).rows[0];
     if (pot) {
       const rest = Number(pot.amount) - amt;
       if (rest > 0) await client.query("UPDATE bounties SET amount=$2 WHERE target_character=$1 AND kind='kill'", [ch.id, rest]);
       else await client.query("DELETE FROM bounties WHERE target_character=$1 AND kind='kill'", [ch.id]);
     }
     await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
-    await h.ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: ch.id });
+    // DISTINCT reason (not plain bounty:refund) so the pool-destined refund doesn't drift the
+    // gang-treasuries check (b), which counts NULL bounty:refund as a family-contract refund (audit HIGH).
+    await h.ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:wanted:refund', counterparty: ch.id });
   }
   ch.welsher = false;
   ch.wanted_until = null;

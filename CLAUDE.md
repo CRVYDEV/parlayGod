@@ -1248,6 +1248,18 @@ flagged as missing (a founder-approved change to the "welsher is permanent" step
 again), social (omertà strip lets family contract a wanted member, `huntWanted` whacks a mark, a safehoused
 mark survives). Suite 20/20 + sim drift-0. ALL numbers (WANTED_MS/BOUNTY/HUNT_P/SQUARE_COST) are founder
 sign-off levers. Deferred: NPC lenders still need the backed `loan_house` pool (step-five decision).
+A **three-lens red-team** (`AUDIT-loan-wanted.md`: §10.4/bounty-escrow, the headless huntWanted death
+path/locks, omertà-strip/cross-system) fixed a **HIGH §10.4 drift** — the HOUSE bounty refund was
+ledgered plain `bounty:refund` (NULL char), byte-identical to a family-contract treasury refund, so the
+gang-treasuries check (b) drifted −$25k per square/expiry (reproduced); now a DISTINCT `bounty:wanted:refund`
+reason (excluded from check (b), added to escrow check (c)) — and a **MED pardon-trap** (a sweep-marked
+welsher who squared got re-marked next tick since the debt stayed active; `squareWanted` now refuses while
+an active overdue loan exists — settle the debt first), plus a **LOW lock-order hardening** (square locks
+the pot before the contributor, matching refundPot). The death path (headless persist, shields, heir),
+the escrow integration (post/claim/burn/refund all reconcile), and the omertà-strip scoping were verified
+CLEAN. Flagged for founder sign-off (NOT patched): alt-farming the pool bounty (a per-account/day cap or
+principal-funding if it bites), disproportion vs a $5k loan, the jump-vs-family asymmetry, WANTED_HUNT_P
+tick-dependence. Suite 20/20 + sim drift-0.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
