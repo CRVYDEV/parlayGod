@@ -480,3 +480,20 @@ borrower WANTED for `LOAN.WANTED_MS` (3d). Levers:
   recoverable at a price — the founder-requested "square your name" route the step-one audit flagged).
 Omertà-strip / NPC-hunter existence / the pursuit window are new founder levers — status/PvE pacing on
 top of signed BALANCE surfaces, not retunes of them.
+
+## Post-signing addendum — WANTED audit (founder sign-off items)
+
+The step-four WANTED audit (`AUDIT-loan-wanted.md`) fixed a HIGH §10.4 drift + a MED pardon-trap + a LOW
+lock-order in-commit. Open founder balance/design calls (NOT patched, ranked):
+- **Alt-farm the pool bounty (MED)** — a lender+borrower+killer alt ring can default-on-purpose to
+  manufacture a $25k HOUSE bounty and collect it from the confiscation pool (the killer alt), draining
+  communal pool value. §10.4-clean (redistribution, never minted), friction-bounded (the borrower alt
+  dies; pool must hold ≥$25k; an NPC hunter/other player may kill first and BURN it). Mitigations if it
+  bites: a per-account/day wanted-bounty cap, a borrower level floor on the pool bounty, or funding the
+  HOUSE pot from the defaulted principal instead of the communal pool. Same class as the casino
+  unbacked-faucet / farmable-faucet flags.
+- **Disproportion (LOW)** — a $5k (`LOAN.MIN`) default triggers the full WANTED apparatus + a $50k
+  `SQUARE_COST` (~10× the debt). Bounded by consent + the cheaper repay path; a dial.
+- **jump-vs-family asymmetry (LOW)** — a family member can fire/npcHit/contract a WANTED mate but not
+  the lesser non-lethal jump (consistent with the rat precedent, which also never stripped jump).
+- **`WANTED_HUNT_P` 0.05/tick is worker-frequency-dependent** — tune with the real tick cadence.

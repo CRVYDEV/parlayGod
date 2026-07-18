@@ -9,6 +9,7 @@ import { buildServer } from '../src/server.js';
 import { LOAN, loanVig, loanOwed, carCollateralValue } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepLoans, voidLoansAtDeath } from '../src/loans.js';
+import { huntWanted } from '../src/social.js';
 import { ledger, notify } from '../src/game.js';
 import crypto from 'node:crypto';
 
@@ -134,6 +135,10 @@ assert.equal(sweep.refunded, 1, 'the stale offer was refunded');
 assert.equal(await cashOf(s5.id) - s5Before, 30000, 'the escrow came home to the lender');
 assert.equal(sweep.welshed, 1, 'the overdue borrower was flagged');
 assert((await rawCh(late.id)).welsher, 'Larry is a welsher for going overdue');
+// AUDIT F1: a sweep-marked welsher (loan still ACTIVE) can't buy their name back until the debt is
+// settled — else the very next sweep re-brands + re-posts the bounty, making the pardon last <1 tick.
+await seedCh(late.id, `cash=${LOAN.SQUARE_COST}`);
+assert.equal((await call('POST', '/v1/loans/square', { token: late.token })).body.error, 'overdue', 'no squaring while still overdue on the debt');
 assert((await check('loan escrow')).ok, 'loan-escrow holds after the sweep');
 
 // ── death: a dead lender's OPEN escrow burns; active loans void; escrow stays clean ──
@@ -374,11 +379,35 @@ assert(!welchAfter.wanted_until || new Date(welchAfter.wanted_until) <= new Date
 assert.equal(await poolCash() - sqPoolBefore, LOAN.SQUARE_COST + LOAN.WANTED_BOUNTY, 'the square fee AND the called-off bounty reach the pool');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM bounty_contributors WHERE target_character='${welch.id}' AND contributor='HOUSE'`)).rows[0].c), 0, 'the house bounty is called off');
 assert((await check('bounty escrow')).ok, 'bounty escrow reconciles after squaring (house share refunded to pool)');
+// AUDIT (HIGH): the pool-destined house refund must NOT drift the gang-treasuries check — it uses a
+// DISTINCT reason (bounty:wanted:refund), not the plain bounty:refund that check (b) sums as treasury.
+assert((await check('gang treasuries')).ok, 'the wanted-bounty refund goes to the POOL, not a phantom treasury (§10.4 check b clean)');
 assert.equal((await meOf(welch.token)).wanted, false, 'the view shows a clean name');
 // a squared name can borrow again
 const reShark = await mk('Re Shark'); await seedCh(reShark.id, 'cash=200000');
 const reOffer = (await call('POST', '/v1/loans', { token: reShark.token, body: { amount: 20000, rate: 0.1, hours: 24 } })).body.id;
 assert.equal((await call('POST', `/v1/loans/${reOffer}/take`, { token: welch.token })).code, 200, 'a squared name can take a loan again');
+
+// AUDIT: an NPC bounty hunter killing a wanted mark BURNS the HOUSE bounty (death:bounty) — §10.4 clean
+const hShark = await mk('Hunt Shark');
+const doomed = await mk('Doomed Deadbeat');
+await seedCh(hShark.id, 'cash=200000');
+await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1');
+const hLoan = (await call('POST', '/v1/loans', { token: hShark.token, body: { amount: 20000, rate: 0.2, hours: 1 } })).body.id;
+await call('POST', `/v1/loans/${hLoan}/take`, { token: doomed.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${hLoan}'`);
+await seedCh(doomed.id, 'cash=0, bank=0, bank_intransit=0');
+await call('POST', `/v1/loans/${hLoan}/collect`, { token: hShark.token }); // → wanted + a HOUSE bounty
+assert.equal(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${doomed.id}' AND kind='kill'`)).rows[0].amount), LOAN.WANTED_BOUNTY, 'the HOUSE bounty is live on the deadbeat');
+await pool.query(`UPDATE characters SET wanted_until=NULL WHERE id <> '${doomed.id}'`); // isolate: only the doomed mark is hunted
+await seedCh(doomed.id, 'hosp_until=NULL'); // the leg-break healed — now reachable by the hunter
+process.env.WANTED_HUNT_P = '1';
+const hunt = await huntWanted(pool);
+delete process.env.WANTED_HUNT_P;
+assert.equal(hunt.killed, 1, 'the NPC hunter whacks the wanted deadbeat (the estate runs)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM bounties WHERE target_character='${doomed.id}'`)).rows[0].c), 0, 'the HOUSE bounty dies with the estate');
+assert((await check('bounty escrow')).ok, 'bounty escrow reconciles after the estate burned the HOUSE bounty');
+assert((await check('gang treasuries')).ok, 'gang treasuries clean after the NPC-kill bounty burn');
 
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');

@@ -658,10 +658,12 @@ async function refundPot(client, target, kind, skipId = null) {
         await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target });
       }
     } else if (f.contributor === 'HOUSE') {
-      // LOAN step 4: the underworld's WANTED_BOUNTY goes home to the confiscation pool on expiry (a
-      // §10.4 bucket transfer, character_id NULL — the pool that funded it takes it back).
+      // LOAN step 4: the underworld's WANTED_BOUNTY goes home to the confiscation POOL on expiry (a
+      // §10.4 bucket transfer, character_id NULL). A DISTINCT reason (`bounty:wanted:refund`) — a plain
+      // `bounty:refund` NULL row is indistinguishable from a family-contract refund and would drift the
+      // gang-treasuries check (b), which sums NULL bounty:refund as treasury inflow (audit HIGH).
       await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
-      await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
+      await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:wanted:refund', counterparty: target });
     } else if (f.contributor === skipId) {
       selfRefund += amt; // caller applies to the poster's in-memory cash
       await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
