@@ -1338,7 +1338,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     const { selfRefund } = await refundPot(client, victim.id, p.kind, opts.killerCh?.id);
     if (opts.killerCh && selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + selfRefund;
   }
-  // any remaining unclaimed contracts (open / past-window) die with the target — ledgered so escrow reconciles
+  // any remaining unclaimed contracts (open / past-window) die with the target — ledgered so escrow reconciles.
+  // Lock the pot rows FIRST (a plain SELECT — Postgres forbids FOR UPDATE on an aggregate) so the burn
+  // serializes with the expiry sweep's refundPot (which also locks characters→pot): without it the sweep
+  // could refund a pot between our SUM read and our DELETE, double-resolving the same escrow → §10.4 drift.
+  await client.query('SELECT 1 FROM bounties WHERE target_character=$1 FOR UPDATE', [victim.id]);
   const openBounty = Number((await client.query('SELECT COALESCE(SUM(amount),0) s FROM bounties WHERE target_character=$1', [victim.id])).rows[0].s);
   if (openBounty > 0)
     await h.ledger(client, { currency: 'cash', amount: -openBounty, reason: 'death:bounty', counterparty: victim.id });
