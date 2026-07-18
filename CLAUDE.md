@@ -1355,6 +1355,29 @@ npchit/burner `tier` templates used a nonexistent `'local'` → `'legbreaker'` (
 NPC_HITMEN ladder). Suite 20/20. Client now covers: core loop, PvP, Law, Kitchen, Family, Market,
 City, Den + the full raw deck.
 
+**THE CONSOLE step four — the FULL screen set — BUILT** (public/index.html; all six new tabs verified
+live in Chromium with a two-account scenario, zero page errors — the probe even organically demonstrated
+the jail gates when a failed boost locked the driver up mid-run and the loan-take toasted "No taking a
+loan from lockup"). **The Garage**: the fleet (boost/repair/fence/melt per car, ON-THE-BLOCK/PLEDGED
+escrow chips) + the armory (full gun catalog with owned/carrying states + equip/unequip, vests, ammo).
+**The Empire**: owned fronts (income/pending/pad-owed, COLD + FEDS-WATCHING chips, scrutiny + wash
+headroom, tier upgrades, per-front laundering) + the discoverable catalog with level gates. **Big
+Scores**: the solo score (cooldown-aware), crew heists (plan with job+role — the businessId field
+appears only for the inside job; the open board with role-select crew-up; the my-job card with
+leader-gated EXECUTE, disband/walk-away, and the deliberately-dimmed rat button), smuggling convoys
+(open-with-first-load — the probe caught that openConvoy REQUIRES an initial good, load/depart with
+guard tiers + insurance, arrived-collect, and the road board with AMBUSH per shipment). **The Shylock**:
+open offers (directed FOR-YOU/spoken-for chips, secured pledge-a-car input), the offer form (directed-to
+picker + collateral min), your book (repay / past-due COLLECT / sell-the-paper), the paper market
+(welsher-debtor + overdue + secured risk chips), square-your-name when marked. **The Life**: the
+three-branch skill tree (known/learnable, tier costs, respec) + all five fixtures (effective standing,
+tier, grudges, tier-gated perk lists, gift-below-cap, penance, the weekly favor, errand chains, the
+daily lead + Doc discharge when hospitalized). **The Pen**: outside teaser vs inside yard (sentence/
+hole/protection chips, the day's incident, work/protection/bribe, the commissary, the inmate roster
+with shank + burner-phone outside hits). Shape fixes caught by the pass: the pen roster maps
+`{id,name,level,gang}` (no tag/sentence fields), and `openConvoy` requires a first load. The console
+now curates EVERY major system — the raw deck remains for mod/chain/edge routes only. Suite 20/20.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
