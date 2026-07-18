@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { levelOf, dayOf, CONSTANTS } from './rules.js';
 import { runLedgerInvariants } from './invariants.js';
-import { sweepExpiredBounties } from './social.js';
+import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepStaleHeists } from './heists.js';
 import { reclaimExpiredVouchers } from './chain.js';
@@ -165,7 +165,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (law && law.cases > 0) console.log(`⚖️  law: tried ${law.cases} case(s) — ${law.convicted} convicted ($${Math.round(law.seized)} seized), ${law.acquitted} walked`);
     // LOAN SHARKING: refund expired offers to the lender; mark overdue borrowers welshers
     const ln = await safe('loan sweep', () => sweepLoans(pool));
-    if (ln && (ln.refunded > 0 || ln.welshed > 0)) console.log(`💵 loans: refunded ${ln.refunded} stale offer(s), flagged ${ln.welshed} welsher(s)`);
+    if (ln && (ln.refunded > 0 || ln.welshed > 0 || ln.forfeited > 0)) console.log(`💵 loans: refunded ${ln.refunded} stale offer(s), flagged ${ln.welshed} welsher(s), forfeited ${ln.forfeited} collateral car(s)`);
+    // LOAN step 4 — NPC bounty hunters come for WANTED defaulters (a landed hit runs the estate)
+    const hw = await safe('wanted hunt', () => huntWanted(pool));
+    if (hw && (hw.killed > 0 || hw.absorbed > 0 || hw.revived > 0)) console.log(`🎯 wanted: ${hw.killed} whacked, ${hw.absorbed} guarded, ${hw.revived} revived (${hw.marks} marked)`);
     // §11: reverse expired-unclaimed withdrawal vouchers — refund the burned $OMR (freeing the
     // otherwise-permanently-committed reserve capacity) and restore optimistically-removed gear.
     const vr = await safe('voucher reclaim', () => reclaimExpiredVouchers(pool));

@@ -139,3 +139,30 @@ stake-pool / vig-reserve pattern) — a `loan_house` singleton fed by real sinks
 loan vig), lending as a TRANSFER from that bucket, bounded by its balance, defaults depleting it. That
 is its own focused build (a tracked §10.4 bucket, funding, lending limits), deliberately NOT bundled
 into step three. Flagged for a step-four decision.
+
+## Step four — WANTED (the defaulter's pursuit, BUILT 2026-07-18)
+
+Founder-directed: "punish defaulters — a hit put on them / become wanted." A default (a `collectLoan` OR
+the overdue sweep) now marks the borrower WANTED for `LOAN.WANTED_MS` (3d), on top of the permanent
+welsher mark (`characters.wanted_until`). Three teeth + an exit:
+
+1. **Omertà stripped** — a WANTED mark is fair game even to their OWN family. `isWanted(target)` joins the
+   rat exception in the `fire` / `startSearch` / `npcHit` / `postBounty` family gates.
+2. **A pool-funded player bounty** — `postWantedBounty` fronts `WANTED_BOUNTY` ($25k) from the confiscation
+   pool as a `'HOUSE'`-contributor share on the mark's (target,'kill') pot. Any player who kills them
+   collects it through the existing `claimBounty` (the HOUSE share never locks a killer out). §10.4: pool →
+   escrow ledgered `bounty:wanted` (NULL char; the bounty-escrow check gained the term); `refundPot`'s new
+   `'HOUSE'` branch returns it to the pool on expiry; the estate burns it (`death:bounty`) on an NPC/mod
+   kill; a player kill pays it out (`bounty:claim`). Guarded so it never drives the pool negative (if the
+   pool can't front it, the mark is still WANTED, just with no cash price).
+3. **NPC bounty hunters** — the worker's `huntWanted` sweep rolls `WANTED_HUNT_P` (0.05/tick, env-
+   overridable) per wanted mark; a landed hit runs the estate with NO killer (no chop/loot/rep, the
+   mod-kill precedent — the pool bounty burns). A safehouse / witpro / pen shield / hospital bed / lockup
+   blocks the hunter that tick; a bodyguard or a pre-paid revive token absorbs the blow (the shields the
+   mark paid for still hold — hide or square up).
+4. **Square your name** (`POST /v1/loans/square`) — pay `SQUARE_COST` ($50k, a `loan:square` cash sink →
+   pool) to clear WANTED **and** the welsher mark (borrow again) and refund the pool's bounty. This is the
+   "square your name" route the step-one audit flagged as missing — a founder-approved change to the
+   step-one "welsher is permanent" sign-off (defaulting is now recoverable, at a price).
+
+All numbers (`WANTED_MS`, `WANTED_BOUNTY`, `WANTED_HUNT_P`, `SQUARE_COST`) are founder sign-off levers.

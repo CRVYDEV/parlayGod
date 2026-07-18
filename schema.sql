@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS characters (
   pen_safe_until TIMESTAMPTZ,                      -- THE PEN: in-jail protection window (paid the yard boss — can't be shanked)
   hole_until TIMESTAMPTZ,                          -- THE PEN step two: solitary (a caught shank) — no yard actions, untouchable
   welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
+  wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -418,6 +418,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.sellPaper(ch, req.params.id, req.body, client, h)));
   app.post('/v1/loans/:id/unsell', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.unsellPaper(ch, req.params.id, client, h)));
+  // step 4 — square your name: pay to clear WANTED + the welsher mark (calls off the hunt + pool bounty)
+  app.post('/v1/loans/square', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.squareWanted(ch, client, h)));
   // buy is two-party (buyer pays the current lender, becomes the new lender): look up the seller, lock both.
   app.post('/v1/loans/:id/buy', { preHandler: auth }, async (req) => {
     const l = (await pool.query("SELECT lender_character FROM loans WHERE id=$1 AND status='active' AND for_sale IS NOT NULL", [req.params.id])).rows[0];

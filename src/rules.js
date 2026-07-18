@@ -933,6 +933,12 @@ export const LOAN = {
   // price. The buyer becomes the new lender (the debt/collateral unchanged); the sale is a taxed cash
   // transfer — PAPER_TAKE_BPS (2%) → the buyback pool (never a free alt-rail). Price is bounded.
   PAPER_TAKE_BPS: 200, PAPER_MIN: 1, PAPER_MAX: 5000000,
+  // step 4 (WANTED — the defaulter's pursuit): welshing marks you WANTED for WANTED_MS — omertà is
+  // stripped (even your own family can hit you, the rat precedent), the underworld posts a
+  // WANTED_BOUNTY on your head from the confiscation pool (any player collects it by killing you),
+  // and NPC bounty hunters roll WANTED_HUNT_P each worker tick to whack you. SQUARE_COST squares your
+  // name — clears WANTED + the welsher mark + refunds the pool bounty (a cash sink → the pool).
+  WANTED_MS: 3 * 24 * 3600 * 1000, WANTED_BOUNTY: 25000, WANTED_HUNT_P: 0.05, SQUARE_COST: 50000,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // step 3: the house take on a paper (loan-claim) sale — the market/bodyguard 2% precedent → the pool

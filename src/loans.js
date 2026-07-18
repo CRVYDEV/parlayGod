@@ -10,6 +10,33 @@ const uid = () => crypto.randomUUID();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+const isWanted = (ch) => ch.wanted_until && new Date(ch.wanted_until) > new Date();
+
+// LOAN step 4 (WANTED): the underworld posts a WANTED_BOUNTY on a defaulter's head, funded from the
+// confiscation pool. It rides the (target,'kill') pot as a `HOUSE`-contributor share — so any player
+// who kills them collects it through the EXISTING claimBounty, refundPot returns it to the pool on
+// expiry, and the estate burns it (death:bounty) on an NPC/mod kill. Idempotent (one price at a time).
+// §10.4: pool → escrow, ledgered `bounty:wanted` (NULL char) — the bounty-escrow check gains the term.
+async function postWantedBounty(client, targetId, h) {
+  const already = (await client.query("SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE'", [targetId])).rows[0];
+  if (already) return; // already has a standing price on their head
+  const bounty = LOAN.WANTED_BOUNTY;
+  // the pool fronts the price — if it can't cover it, the mark is still WANTED (omertà stripped + NPC
+  // hunters), just with no cash bounty (never drive the confiscation pool negative).
+  const poolRow = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+  if (!poolRow || Number(poolRow.pool) < bounty) return;
+  const pot = (await client.query("SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [targetId])).rows[0];
+  const wantedExp = new Date(Date.now() + LOAN.WANTED_MS);
+  if (pot) { // ride a player's existing kill pot — top it up, keep it live for the pursuit window
+    const exp = pot.expires_at && new Date(pot.expires_at) > wantedExp ? new Date(pot.expires_at) : wantedExp;
+    await client.query("UPDATE bounties SET amount=$2, expires_at=$3 WHERE target_character=$1 AND kind='kill'", [targetId, Number(pot.amount) + bounty, exp]);
+  } else {
+    await client.query("INSERT INTO bounties (target_character, kind, amount, posted_by, reason, expires_at) VALUES ($1,'kill',$2,'HOUSE',$3,$4)", [targetId, bounty, 'WANTED — welshed on a debt', wantedExp]);
+  }
+  await client.query("INSERT INTO bounty_contributors (target_character, kind, contributor, amount) VALUES ($1,'kill','HOUSE',$2)", [targetId, bounty]);
+  await client.query('UPDATE street_tax SET pool = pool - $1 WHERE id=1', [bounty]);
+  await h.ledger(client, { currency: 'cash', amount: -bounty, reason: 'bounty:wanted', counterparty: targetId });
+}
 
 // GET /v1/loans — the board: open offers (the market) + your active loans, both sides. Unlocked read.
 // step 2: a DIRECTED offer (offered_to) is shown only to its named borrower + the lender; secured
@@ -211,11 +238,13 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   }
   borrower.hosp_until = new Date(Date.now() + LOAN.COLLECT_HOSP_MS); // the leg-breaking
   borrower.welsher = true;                                          // marked — can't borrow again
+  borrower.wanted_until = new Date(Date.now() + LOAN.WANTED_MS);     // WANTED: omertà stripped + hunted
+  await postWantedBounty(client, borrower.id, h);                   // the underworld puts a price on their head
   await client.query("UPDATE loans SET status='collected' WHERE id=$1", [loanId]);
-  await h.notify(client, borrower.id, 'loan_collected', { by: ch.name, seized: collected, car: !!carSeized });
+  await h.notify(client, borrower.id, 'loan_collected', { by: ch.name, seized: collected, car: !!carSeized, wanted: true });
   bus.emit('streets', { type: 'welsher', who: borrower.name, by: ch.name });
   await track(client, ch.account_id, 'loan_collect', { seized: collected, shortfall: owed - collected, car: !!carSeized });
-  return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected, carSeized };
+  return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected, carSeized, wanted: true };
 }
 
 // POST /v1/loans/:id/sell — step 3 (the paper market): the current lender puts this ACTIVE loan's
@@ -263,6 +292,36 @@ export async function buyPaper(ch, seller, loanId, client, h) {
   await h.notify(client, seller.id, 'paper_sold', { to: ch.name, price: toSeller });
   if (loan.borrower_character) await h.notify(client, loan.borrower_character, 'paper_transferred', { to: ch.name });
   return { ok: true, price, toSeller, take };
+}
+
+// POST /v1/loans/square — pay to square your name: clears WANTED (calls off the NPC hunters + the pool
+// bounty, restores omertà) AND the welsher mark (borrow again). SQUARE_COST is a cash sink → the pool.
+export async function squareWanted(ch, client, h) {
+  if (!ch.welsher && !isWanted(ch)) throw new GameError('clean', 'Your name is already clean.');
+  if (jailed(ch)) throw new GameError('jailed', 'Square your name when you get out.');
+  const cost = LOAN.SQUARE_COST;
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring your name runs $${cost}.`);
+  ch.cash = Number(ch.cash) - cost;
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]); // the payment → the buyback pool
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'loan:square' });
+  // call off the pool's WANTED_BOUNTY — refund the HOUSE share to the pool, leaving any PLAYER share
+  // (a separate grudge stands). §10.4: escrow −houseShare, ledgered `bounty:refund` (NULL → pool).
+  const house = (await client.query("SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE' FOR UPDATE", [ch.id])).rows[0];
+  if (house) {
+    const amt = Math.floor(Number(house.amount));
+    await client.query("DELETE FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE'", [ch.id]);
+    const pot = (await client.query("SELECT amount FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [ch.id])).rows[0];
+    if (pot) {
+      const rest = Number(pot.amount) - amt;
+      if (rest > 0) await client.query("UPDATE bounties SET amount=$2 WHERE target_character=$1 AND kind='kill'", [ch.id, rest]);
+      else await client.query("DELETE FROM bounties WHERE target_character=$1 AND kind='kill'", [ch.id]);
+    }
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
+    await h.ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: ch.id });
+  }
+  ch.welsher = false;
+  ch.wanted_until = null;
+  return { ok: true, cost, cleared: true };
 }
 
 // runEstate hook — the dead man's loans. OPEN offers hold escrowed cash: on a PLAYER fire-kill
@@ -331,14 +390,25 @@ export async function sweepLoans(pool, opts = {}) {
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans offer', id, e.message); }
     finally { client.release(); }
   }
-  // overdue debts → the borrower is a welsher (a status write; no value moves). ONE set-based UPDATE
-  // whose subquery re-derives the still-overdue set at execution (audit: a snapshot-then-loop could
-  // brand a borrower who legitimately repaid — repay has no due gate — after `due_at` but before the
-  // per-row write; scoping the write to a loan that is STILL active+overdue closes that TOCTOU).
-  const r = await pool.query(
-    `UPDATE characters SET welsher=true WHERE alive AND NOT welsher AND id IN (
-       SELECT borrower_character FROM loans WHERE status='active' AND due_at < $1)`, [now]);
-  welshed = r.rowCount;
+  // overdue debts → the borrower is branded a welsher AND goes WANTED (the underworld posts a pool
+  // bounty on their head). Per-borrower txn so the bounty posts atomically; each re-checks under the
+  // character lock that a STILL-active overdue loan exists (audit TOCTOU: repay has no due gate, so a
+  // borrower who squared up after `due_at` but before this pass must keep a clean name).
+  const overdue = (await pool.query(
+    "SELECT DISTINCT borrower_character FROM loans WHERE status='active' AND due_at < $1", [now])).rows;
+  for (const { borrower_character } of overdue) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const b = (await client.query('SELECT id, welsher FROM characters WHERE id=$1 AND alive FOR UPDATE', [borrower_character])).rows[0];
+      const still = b && (await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active' AND due_at < $2", [borrower_character, now])).rows[0];
+      if (!b || b.welsher || !still) { await client.query('ROLLBACK'); continue; }
+      await client.query('UPDATE characters SET welsher=true, wanted_until=$2 WHERE id=$1', [borrower_character, new Date(now.getTime() + LOAN.WANTED_MS)]);
+      await postWantedBounty(client, borrower_character, { ledger });
+      await client.query('COMMIT'); welshed++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans welsher', borrower_character, e.message); }
+    finally { client.release(); }
+  }
   // audit F1: a SECURED loan left un-collected past due + GRACE_MS auto-forfeits its collateral car to
   // the lender — so an absent/spiteful lender can't freeze the borrower's car forever (the borrower
   // always had the grace to repay). COLLATERAL-ONLY: the car changes hands (a pure ownership move, no

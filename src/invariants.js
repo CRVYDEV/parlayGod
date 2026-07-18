@@ -68,10 +68,14 @@ export async function runLedgerInvariants(pool) {
   const escrow = await one(pool, 'SELECT COALESCE(SUM(amount),0) s FROM bounties');
   const posted = -(await sum(pool, "currency='cash' AND reason='bounty:post'"));
   const gangPosted = -(await sum(pool, "currency='cash' AND reason='gang:contract'"));
+  // LOAN step 4: the underworld's WANTED_BOUNTY on a defaulter is funded from the confiscation pool —
+  // a NULL-char 'bounty:wanted' post into escrow. It pays a player killer (claimed), refunds to the
+  // pool on square/expiry (refunded, the HOUSE branch), or burns on an NPC/mod kill (deadBounties).
+  const wantedPosted = -(await sum(pool, "currency='cash' AND reason='bounty:wanted'"));
   const claimed = await sum(pool, "currency='cash' AND reason='bounty:claim'");
   const refunded = await sum(pool, "currency='cash' AND reason='bounty:refund'");
   const deadBounties = -(await sum(pool, "currency='cash' AND reason='death:bounty'"));
-  push('bounty escrow', escrow, posted + gangPosted - claimed - refunded - deadBounties);
+  push('bounty escrow', escrow, posted + gangPosted + wantedPosted - claimed - refunded - deadBounties);
 
   // (d) $OMR CONSERVATION: buckets = accounts (omr + staked; unclaimed rewards mint
   // at claim time) + AMM reserve + event fund + family reserves. Genesis is the

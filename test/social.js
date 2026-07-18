@@ -9,6 +9,7 @@ process.env.SHOOT_CD_MS = '1000';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
+import { huntWanted } from '../src/social.js';
 import { familyTaskOf, weekOf, M3, BLACK_MARKET } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -958,10 +959,36 @@ assert(escLootPost.ok, `market escrow still exact after the loot+burn (${JSON.st
 const vocabLoot = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocabLoot.ok, `market:loot rides the vocabulary (${JSON.stringify(vocabLoot.unknown || [])})`);
 
+// ── STEP FOUR: WANTED — a defaulter forfeits omertà (family may hit them); NPC hunters come ──
+const boss4 = await mk('Boss Fourette');
+const mem4 = await mk('Deadbeat Member');
+await seedCh(boss4.id, 'cash=200000, respect=5000'); // level to found a family
+const g4 = (await call('POST', '/v1/gangs', { token: boss4.token, body: { name: 'The Welchers', tag: 'WEL' } })).body.gangId;
+await call('POST', `/v1/gangs/${g4}/join`, { token: mem4.token });
+assert.equal((await call('POST', `/v1/streets/${mem4.id}/bounty`, { token: boss4.token, body: { amount: 5000, kind: 'kill' } })).body.error, 'family', 'omertà: no contract on your own family');
+await seedCh(mem4.id, "wanted_until = now() + interval '3 days'");
+assert.equal((await call('POST', `/v1/streets/${mem4.id}/bounty`, { token: boss4.token, body: { amount: 5000, kind: 'kill' } })).code, 200, 'a WANTED family member forfeits omertà — the contract lands');
+await seedCh(mem4.id, 'wanted_until = NULL'); // clear so the hunt below targets only the fresh mark
+// the NPC bounty hunters whack a WANTED mark (WANTED_HUNT_P forced to 1)
+process.env.WANTED_HUNT_P = '1';
+const mark = await mk('Hunted Mark');
+await seedCh(mark.id, "wanted_until = now() + interval '3 days'");
+let hunt = await huntWanted(pool);
+assert.equal(hunt.killed, 1, 'the NPC bounty hunter whacks the wanted mark');
+assert.equal((await pool.query(`SELECT alive FROM characters WHERE id='${mark.id}'`)).rows[0].alive, false, 'the mark is dead (the estate ran)');
+// a SAFEHOUSED wanted player is beyond the hunter's reach this tick (hide or square up)
+const safe4 = await mk('Hiding Deadbeat');
+await seedCh(safe4.id, "wanted_until = now() + interval '3 days', safe_until = now() + interval '4 hours'");
+hunt = await huntWanted(pool);
+assert.equal(hunt.killed, 0, 'a safehoused wanted player survives the hunt');
+assert.equal((await pool.query(`SELECT alive FROM characters WHERE id='${safe4.id}'`)).rows[0].alive, true, 'still alive, still hiding');
+await seedCh(safe4.id, 'wanted_until = NULL');
+delete process.env.WANTED_HUNT_P;
+
 // §10.4: the escrow bucket reconciles with family money in the mix (mirrors invariants.js check (c))
 const escNow = Number((await pool.query('SELECT COALESCE(SUM(amount),0) s FROM bounties')).rows[0].s);
 const tsum = async (w) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND ${w}`)).rows[0].s);
-const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang:contract'"))
+const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang:contract'")) - (await tsum("reason='bounty:wanted'"))
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
