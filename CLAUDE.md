@@ -1212,6 +1212,19 @@ transfer (ask − take → pool, new lender), and the new lender collecting the 
 20/20 + sim drift-0. **NPC lenders DEFERRED (step four decision)** — an always-available house lender that
 MINTS cash to lend is a net inflation faucet on default; doing it §10.4-clean needs a BACKED sink-funded
 `loan_house` pool (the Phase-4 stake-pool pattern), its own build — flagged, not hand-waved as a mint.
+A **two-lens red-team** (`AUDIT-loan-sharking-step-three.md`: §10.4/concurrency/persist-clobber, cross-
+system/exploits) found **NO code bug** — the paper mechanic is §10.4-clean (the take nets exactly, the
+loan-escrow check is untouched since paper is active loans not open escrow), deadlock-free (two buyers
+serialize on the seller's char lock; buy-vs-repay/collect share the old-lender lock so a repayment can't
+land on the old lender post-sale; buy-vs-sweep-forfeit is acyclic), persist-clobber-free, and the
+collateral carryover (car → the NEW lender on collect/forfeit), directed×paper, death, and idempotency
+paths are all sound. Two DESIGN-CALLs flagged for founder sign-off (NOT patched, ground rule #1): **F1
+(MED)** `buyPaper` lacks `offerLoan`'s safehouse gate — but buying paper is a PURCHASE (cash → a live
+lootable seller, not reclaimable escrow — the vault the gate blocks), the shelter is self-defeating
+(disperses cash across alts at 2%/hop for an unrealizable claim), and Make-Risk-Pay already intends
+wealth shelterable in safe harbours; a one-line `if (safeHoused(ch)) throw` gives offerLoan-parity if the
+founder wants it. **F2 (LOW)** the public paper board discloses the borrower (inherent to a receivables
+market; only edge is a once-private directed loan's borrower surfacing on listing). Suite 20/20 + sim drift-0.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
