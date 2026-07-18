@@ -1395,6 +1395,29 @@ wire BACKFILLS the last 20 undelivered notifications at boot so a returning play
 while they were gone. **Mobile**: ≤760px pass — wrapped top bar, horizontally scrolling tab rail,
 thumb-sized targets, two-then-one column card grids, calmer feed/viewer heights. Suite 20/20.
 
+**CHAIN GO-LIVE (the devnet proof) — DONE.** The §11 rail has now EXECUTED end-to-end on a real EVM
+for the first time: `tools/compile-contracts.js` (solc-js 0.8.26 + OZ 5.1, mirrors foundry.toml,
+evmVersion shanghai — the no-Foundry path since Foundry's GitHub-release binaries are egress-blocked
+while npm isn't; ad-hoc deps, never project ones; output gitignored — artifacts must never drift from
+source) + `tools/chain-e2e.js` (the go-live prover — viem only, runs against ANY RPC incl. the
+Robinhood testnet). **27 asserted steps, all green** on a ganache devnet: deploy OMR/GearVault/
+VoucherClaim/OMRStaking/OmertaFees → setMinter + gear cap + 1000-OMR tranche → boot the REAL backend
+against the chain → SIWE link (real signature) → `payMintFee()` 0.01 ETH on-chain (inexact fee
+REVERTS) → the getLogs cursor watcher credits it → `POST /v1/character/mint` spends the credit →
+$OMR earned in-game through the docks wash → `POST /v1/mod/reserve/fund` → `POST /v1/withdraw`
+signs the EIP-712 voucher (nonce 1, ledger debited `withdraw:omr`) → `claim()` on-chain from the
+player wallet → **25 real ERC-20 OMR held** → replay REVERTS, tampered voucher REVERTS → the
+`Claimed` watcher (polled, as in production) marks the voucher claimed and the reserve closes exact
+(committed 25 / available 475) → a server-signed gear voucher mints the ERC-1155, an UNCAPPED gearId
+fails closed even with a valid signature, `GearVault.mint` from a non-minter REVERTS → §10.4 $OMR
+conservation holds with the chain live. Two latent bugs caught by the run: the swap body is
+`direction` not `dir` (the console deck had it wrong too — fixed), and the prover now POLLS the
+Claimed sync like the real worker (dev nodes index logs a beat after the receipt). HONEST RESIDUAL:
+the Foundry unit+fuzz suite (`omerta-contracts/test`, 15 tests) still needs a Foundry-capable
+environment — the REAL bytecode + core security properties have now run on a real EVM, but `forge
+test` remains a pre-audit gate; and mainnet stays gated on legal counsel + the third-party audit of
+contracts AND signer. Suite 20/20.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

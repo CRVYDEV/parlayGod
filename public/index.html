@@ -691,7 +691,7 @@
       ['GET', '/v1/market/prices'],
     ],
     'Money & $OMR': [
-      ['POST', '/v1/swap', { dir: 'buy', amount: 1000 }], ['POST', '/v1/stake', { amount: 1 }],
+      ['POST', '/v1/swap', { direction: 'buy', amount: 1000 }], ['POST', '/v1/stake', { amount: 1 }],
       ['POST', '/v1/unstake', { amount: 1 }], ['POST', '/v1/claim-rewards', {}],
       ['POST', '/v1/rackets/:id/buy', {}], ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
       ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
