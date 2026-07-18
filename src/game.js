@@ -61,7 +61,7 @@ export async function bumpFamilyTask(client, h, kind, amount) {
       await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [omrPaid]);
     }
     await client.query(
-      'UPDATE gangs SET weekly_week=$2, weekly_progress=$3, weekly_done=true, lifetime_tribute = lifetime_tribute + $4, omr_reserve = omr_reserve + $5 WHERE id=$1',
+      'UPDATE gangs SET weekly_week=$2, weekly_progress=$3, weekly_done=true, lifetime_tribute = lifetime_tribute + $4, season_tribute = season_tribute + $4, omr_reserve = omr_reserve + $5 WHERE id=$1',
       [gangId, wk, prog, M3.WEEKLY_STANDING, omrPaid]);
     // ground rule #4: ledger the fund→family $OMR transfer for the audit trail, at parity with
     // daily:all / referral (a recognized transfer reason, not a mint — both buckets are tracked).

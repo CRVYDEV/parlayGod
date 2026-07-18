@@ -31,7 +31,8 @@ for (let i = 1; i <= 6; i++) {
   await seedCh(b.id, 'respect=400, cash=60000');
   const g = await call('POST', '/v1/gangs', { token: b.token, body: { name: `Family Number ${i}`, tag: `F${i}A` } });
   assert(g.body.gangId, `family ${i} founded`);
-  await pool.query(`UPDATE gangs SET lifetime_tribute=${(7 - i) * 100} WHERE id='${g.body.gangId}'`);
+  // econ pass: the chamber ranks by the SEASON ladder (lifetime standing feeds only the buyback)
+  await pool.query(`UPDATE gangs SET season_tribute=${(7 - i) * 100} WHERE id='${g.body.gangId}'`);
   bosses.push({ ...b, gang: g.body.gangId });
 }
 const civilian = await mk('No Family Nick');
@@ -160,5 +161,15 @@ assert.equal((await call('POST', '/v1/commission/veto', { token: bosses[0].token
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `no new reasons (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Commission test passed — five seats by standing, public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed');
+// ── econ pass: the chamber re-contests every season — the rollover zeroes the ladder ──
+// (the audit's purchasable-standing fix: parked lifetime wealth no longer owns the head seat)
+const { runSeasonRollover } = await import('../src/worker.js');
+assert(Number((await pool.query('SELECT COALESCE(SUM(season_tribute),0) s FROM gangs')).rows[0].s) > 0, 'the season ladder is live pre-rollover');
+await runSeasonRollover(pool, { season: Math.floor(Date.now() / 86400000 / 28) + 1 }); // force the next season
+assert.equal(Number((await pool.query('SELECT COALESCE(SUM(season_tribute) + SUM(season_wars),0) s FROM gangs')).rows[0].s), 0,
+  'rollover zeroes season tribute + wars — every family starts the season from the street');
+r = await call('GET', '/v1/commission');
+assert.equal(r.body.seats.length, 0, 'the chamber is empty until someone earns a seat THIS season');
+
+console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed');
 await app.close();

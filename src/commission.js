@@ -13,13 +13,19 @@
 import { GameError, bus } from './game.js';
 import { COMMISSION, decreeOf, weekOf, dayOf } from './rules.js';
 
-// the standing ladder — the same formula the buyback pays (lifetime tribute + 10k per war won).
+// the CHAMBER's ladder — THIS SEASON's showing (tribute since rollover + 10k per war won this
+// season). Econ pass (flagged in three audits: purchasable standing): lifetime tribute never
+// decayed, so a parked whale owned the head seat + veto forever at ~zero net cost — the chamber
+// now re-contests every season (the hitman legend/season precedent; season_tribute/season_wars
+// reset in runSeasonRollover). Buying a seat still works — but it must be re-bought each season,
+// and the parked treasury is war-lootable all the while. The buyback family split keeps the
+// LIFETIME formula (a different, signed surface — worker.js).
 // Deterministic tiebreak on id: tied families must not flap seats (or the head chair) per read.
 export async function seatedGangs(db) {
   return (await db.query(
-    `SELECT id, name, tag, lifetime_tribute + 10000 * wars_won AS standing FROM gangs
-      WHERE lifetime_tribute + 10000 * wars_won > 0
-      ORDER BY lifetime_tribute + 10000 * wars_won DESC, id ASC LIMIT ${COMMISSION.SEATS}`)).rows;
+    `SELECT id, name, tag, season_tribute + 10000 * season_wars AS standing FROM gangs
+      WHERE season_tribute + 10000 * season_wars > 0
+      ORDER BY season_tribute + 10000 * season_wars DESC, id ASC LIMIT ${COMMISSION.SEATS}`)).rows;
 }
 
 // rank week-`week` ballots by stamped standing and derive seat weights — the frozen electorate

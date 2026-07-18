@@ -1261,6 +1261,34 @@ CLEAN. Flagged for founder sign-off (NOT patched): alt-farming the pool bounty (
 principal-funding if it bites), disproportion vs a $5k loan, the jump-vs-family asymmetry, WANTED_HUNT_P
 tick-dependence. Suite 20/20 + sim drift-0. **Alt-farm mitigation BUILT**: the pool cash bounty now only lands on a defaulter at/above `LOAN.WANTED_MIN_LVL` (10) — a throwaway rookie alt (the cheap farm fodder) gets NO price (still WANTED: omertà stripped + NPC hunters), the npcHit rookie-floor precedent; `test/loans.js` proves a rookie default posts no bounty + leaves the pool untouched. A **max-effort concurrency pass** (a fourth lens over the whole WANTED value path — real-Postgres lock cycles + §10.4 under concurrency, findings in `AUDIT-loan-wanted.md`) then closed three defects pg-mem can't exercise: a **HIGH estate/sweep §10.4 double-resolution** (`runEstate` summed the dying mark's bounty pots UN-locked, so the expiry sweep's `refundPot` could refund a pot between the SUM and the DELETE — both `death:bounty` and `bounty:refund` firing on the same escrow; now a plain `SELECT … FOR UPDATE` locks the pot rows before the aggregate SUM, serializing with the sweep's characters→pot order), a **MED street_tax-before-pot AB-BA** across all three WANTED value paths (`postWantedBounty`/`collectLoan`/`squareWanted` touched the `street_tax` singleton before locking the `(target,'kill')` pot — now the pot, and the `HOUSE` contributor, lock FIRST, restoring the canonical characters→pots→singletons order), and a **MED forfeit-vs-estate deadlock** (`sweepLoans`' secured-collateral forfeit locked only the loan while a dead borrower's estate held the char lock + deleted the pledged car + voided the loan — a cycle; the forfeit now locks the counterparty characters sorted before the loan, blocking behind any death, with a paper-sale re-verify). The residual alt-farm (Sybil rings mass-producing disposable alts — no per-account cap fixes Sybil) is flagged as an accepted, §10.4-clean, bounded redistribution (the fight-fix/referral posture), `WANTED_MIN_LVL` the founder dial — **raised 10→20** (founder call): the borrower alt DIES each farm cycle, so a higher floor is a recurring ~4.5× respect-grind tax on the ring (level 20 = respect 1444 vs level 10 = 324), while a real predatory-lending target is comfortably past it. Below the floor a defaulter is still WANTED (omertà stripped + NPC hunters), just with no pool cash bounty.
 
+**THE ECON PASS (founder-directed 2026-07-18)** — the audits' three standing economy flags, measured then
+structurally fixed (no signed numeric lever retuned; the full record is the BALANCE.md econ-pass addendum).
+**(1) The den's mint-on-top — FIXED**: PvE `takeHouse` had credited the street pool 1%/stake un-ledgered and
+results-independent, and `casino:rakeback` minted from nowhere — together ~2%/volume against dice's 1.41%
+edge (dice volume net-inflationary +0.59%/unit). Now **the house tips only out of REALIZED profit**:
+`den_volume` gained `profit` (Σ PvE stakes − payouts, mirrors the ledger exactly) + `distributed`; every
+street cut and rakeback caps at `profit − distributed − open liability` (600:1 numbers + dog-odds fight
+exposure held in reserve — `denAvailable` in casino.js, FOR UPDATE on the singleton), each pool credit is
+a ledgered NULL `casino:take` row (rides the `casino:` vocabulary), and an uncoverable rakeback WAITS
+(cursor holds, nothing forfeits — all-or-nothing per collect). PvP untouched (rake already carved from
+the winner; its half-rake pool credit is direct and must NOT touch the PvE book). `invariants.js` gained
+two exact identities: `den profit` == PvE bets − wins and `den distributions` == takes + rakeback (the CAP
+is enforced at pay time + regression-tested, not an end-state identity — a later jackpot can legitimately
+drive lifetime profit below what was already tipped). `test/casino.js`: the craps session now mirrors the
+house book per-round, an under-water round tips nothing, the rakeback waits while negative then pays
+exactly after honest losing-ticket profit refills the book. **(2) Purchasable Commission standing — FIXED**:
+the chamber now ranks by THIS SEASON's showing — `gangs.season_tribute`/`season_wars` (bumped alongside
+lifetime at all three sites: tribute, weekly task, war win), reset in `runSeasonRollover` via the lazy
+`gangs.season` marker (founders stamped at creation so a mid-season founder's ladder isn't zeroed);
+`commission.js:seatedGangs` reads the seasonal formula. A seat must be re-bought every season with the
+parked treasury war-lootable all the while. The buyback family split keeps the LIFETIME formula (signed,
+untouched — worker.js). `test/commission.js` seeds season_tribute + proves rollover empties the chamber.
+**(3) Kill EV (D1) — CONFIRMED as signed**: standalone loot-EV vs a careless mid mark re-measured at
+−$72k (ammo $82k dominates; break-even liquid ≈ $328k — whale-hunting). By design: the kill economy is
+CONTRACT-driven (pots + the WANTED house bounty + war points + vendettas pay; loot is the tip). The sim
+now prints a standing `contract break-even` probe (~$72k pot turns a mid-mark job +EV) so the number is
+tracked at every economy change. Suite 20/20 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

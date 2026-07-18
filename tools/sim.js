@@ -14,7 +14,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { CRIMES, GUNS, CONSTANTS, M3, btkOf } from '../src/rules.js';
+import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -212,6 +212,11 @@ if (killed) {
   note('kill', 'kill EV (careless mark)', `$${fmt(lootCash - rounds * perRound)}`, `loot − ammo $${fmt(rounds * perRound)} (search/energy/heat free-ish)`);
 }
 note('kill', 'kill EV (rational mark)', `−$${fmt(rounds * perRound)}`, 'a banked victim loots $0 pocket — pure ammo loss + heat');
+// econ pass (D1 CONFIRMED-as-signed): standalone loot-EV is negative vs a mid mark BY DESIGN —
+// the kill economy is CONTRACT-driven (pots, WANTED house bounties, war points, vendettas pay the
+// work; loot is the tip). This line tracks the subsidy a contract must carry to turn the job +EV.
+note('kill', 'contract break-even (mid mark)', `pot ≥ $${fmt(Math.max(0, rounds * perRound - lootCash))}`,
+  `ammo $${fmt(rounds * perRound)} − loot; WANTED house bounty $${fmt(LOAN.WANTED_BOUNTY)} + open pots + war points close the gap — whale-hunting stays +EV standalone (break-even liquid ≈ $${fmt(Math.round(rounds * perRound / M3.CASH_LOOT_RATE))})`);
 
 // MAKE-RISK-PAY CHECK: a mark caught MID-DEPOSIT — the in-transit window is the new loot surface.
 // The mark banks their whole roll; the killer strikes inside BANK_CLEAR_MS.

@@ -1,10 +1,11 @@
 // THE GAMBLING DEN — player-vs-house games at the Neon Mile (design: omerta-gambling-den-design.md).
 // HARD RULES: cash only, never $OMR (the regulatory line); every roll server-side + rng_audit'd
 // (ground rule #3); every stake a §10.4 sink (casino:bet:<game>), every payout a faucet
-// (casino:win:<game>), both with character_id so the per-character cash check reconciles; 1% of
-// every stake → the street-tax pool via takeHouse (the buyback/yield loop), the rest of the house
-// edge burns. Dice are stateless (a full pass-line round in one call); the Numbers is a daily
-// ticket resolved lazily against the seed-drawn number.
+// (casino:win:<game>), both with character_id so the per-character cash check reconciles. The
+// street's 1% cut (→ the buyback/yield loop) and the fronts' rakeback are paid ONLY from the
+// house's REALIZED profit net of open liabilities (the econ-pass mint-on-top fix — see the book
+// helpers below); whatever profit isn't tipped out burns. Dice are stateless (a full pass-line
+// round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import { GameError, bus, npcTier, bumpStanding } from './game.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
 
@@ -12,8 +13,39 @@ const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 
-async function takeHouse(client, tax) {
-  if (tax > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
+// ── the house's book (econ pass — the mint-on-top fix) ──
+// The street's cut and the fronts' rakeback are paid ONLY out of the den's REALIZED profit
+// (Σ PvE stakes − Σ PvE payouts), net of what the book still owes if every open ticket/bet hits
+// (600:1 numbers, dog-odds fight liabilities held in reserve). The den distributes its winnings;
+// it never emits on volume — on a bad night the street simply doesn't get tipped. Every pool
+// credit is a ledgered character_id-NULL `casino:take` row, and §10.4 gained two exact identities
+// (den profit == PvE bets − wins; den distributed == takes + rakeback). PvP is untouched: its
+// rake is carved FROM the winner's payout (real money withheld — audited sound).
+async function bumpProfit(client, delta) {
+  if (delta) await client.query('UPDATE den_volume SET profit = profit + $1 WHERE id=1', [delta]);
+}
+// what the book still owes if every open ticket/bet hits — held back before any tip-out
+async function openLiability(client) {
+  const n = Number((await client.query('SELECT COALESCE(SUM(stake),0) s FROM numbers_tickets')).rows[0].s);
+  const f = Number((await client.query('SELECT COALESCE(SUM(stake),0) s FROM fight_bets')).rows[0].s);
+  return n * CASINO.NUMBERS_PAYOUT + Math.ceil(f * CASINO.FIGHT_DOG_PAYS);
+}
+// distributable house profit right now (locks den_volume — serializes concurrent tip-outs)
+export async function denAvailable(client) {
+  const dv = (await client.query('SELECT profit, distributed FROM den_volume WHERE id=1 FOR UPDATE')).rows[0];
+  return Math.floor(Number(dv.profit) - Number(dv.distributed) - (await openLiability(client)));
+}
+// rakeback bookkeeping hook for business.js — the payer marks what it tipped out
+export async function denDistribute(client, amt) {
+  if (amt > 0) await client.query('UPDATE den_volume SET distributed = distributed + $1 WHERE id=1', [amt]);
+}
+async function takeHouse(client, h, tax) { // PvE street cut — profit-capped, ledgered
+  const pay = Math.min(tax, Math.max(0, await denAvailable(client)));
+  if (pay > 0) {
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [pay]);
+    await denDistribute(client, pay);
+    await h.ledger(client, { currency: 'cash', amount: -pay, reason: 'casino:take' });
+  }
 }
 // lifetime den stake volume — a counter (not a money bucket), the rakeback basis
 async function bumpVolume(client, amt) {
@@ -62,11 +94,13 @@ export async function playDice(ch, amount, client, h) {
   const tax = Math.ceil(amt * 0.01);
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:dice' });
-  await takeHouse(client, tax);
+  await bumpProfit(client, amt);        // the stake enters the house's book…
+  await takeHouse(client, h, tax);      // …and the street is tipped only from realized profit
   if (win) {
     const payout = amt * 2; // stake back + 1:1
     ch.cash = Number(ch.cash) + payout;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:dice' });
+    await bumpProfit(client, -payout);
   }
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // action on her floor is business
@@ -119,7 +153,10 @@ export async function pvpDice(ch, fader, amount, client, h) {
   winner.cash = Number(winner.cash) + amt - rake; // their own stake never left; net +stake − rake
   await h.ledger(client, { characterId: loser.id, currency: 'cash', amount: -amt, reason: 'casino:pvp', counterparty: winner.id });
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'casino:pvp', counterparty: loser.id });
-  await takeHouse(client, Math.floor(rake / 2)); // half the rake to the street; the rest burns
+  // half the rake to the street, the rest burns — a DIRECT credit, not takeHouse: the pvp rake is
+  // carved FROM the winner's payout (real money withheld), so it needs no profit cap and must not
+  // touch the PvE profit book (pvp rows aren't casino:bet/win — the §10.4 den identities stay exact)
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]);
   await bumpVolume(client, pot);
   await bumpStanding(client, h, ch, 'madame', 3, { action: 'fade' }); // back-room action is her favorite kind
   await h.rngLog(client, ch.id, `casino:pvp:${fader.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
@@ -152,7 +189,8 @@ export async function betFight(ch, side, amount, client, h) {
   await client.query('INSERT INTO fight_bets (character_id, week, side, stake) VALUES ($1,$2,$3,$4)', [ch.id, week, side, amt]);
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:fight' });
-  await takeHouse(client, Math.ceil(amt * 0.01));
+  await bumpProfit(client, amt); // the open bet's dog-odds exposure is held back by openLiability
+  await takeHouse(client, h, Math.ceil(amt * 0.01));
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 2, { action: 'fight' }); // she holds the book
   await h.track(client, ch.account_id, 'casino', { game: 'fight', amt, side });
@@ -175,6 +213,7 @@ export async function claimFight(ch, client, h) {
       won += payout;
       ch.cash = Number(ch.cash) + payout;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:fight' });
+      await bumpProfit(client, -payout);
     }
     results.push({ week: Number(b.week), side: b.side, winner: res.winner, hit });
     await client.query('DELETE FROM fight_bets WHERE character_id=$1 AND week=$2', [ch.id, b.week]);
@@ -231,7 +270,8 @@ export async function playNumbers(ch, pick, amount, client, h) {
   const tax = Math.ceil(amt * 0.01);
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:numbers' });
-  await takeHouse(client, tax);
+  await bumpProfit(client, amt); // the ticket's 600:1 exposure is held back by openLiability
+  await takeHouse(client, h, tax);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'numbers' }); // the runner reports who plays
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
@@ -255,6 +295,7 @@ export async function claimNumbers(ch, client, h) {
       won += payout;
       ch.cash = Number(ch.cash) + payout;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:numbers' });
+      await bumpProfit(client, -payout);
       await h.notify(client, ch.id, 'numbers_hit', { day: Number(t.day), pick: Number(t.pick), payout });
     }
     results.push({ day: Number(t.day), pick: Number(t.pick), drawn, hit });

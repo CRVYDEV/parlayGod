@@ -131,6 +131,10 @@ export async function runSeasonRollover(pool, opts = {}) {
         [crypto.randomUUID(), ch.account_id, 'season_convert', JSON.stringify({ season: current, legacy })]);
       converted++;
     }
+    // econ pass: the COMMISSION ladder is seasonal — a new season re-contests the chamber.
+    // gangs.season is the lazy marker (the character-conversion pattern above), so the reset is
+    // idempotent per season and a fresh gang (season 0) is stamped current on its first sweep.
+    await client.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE season < $1', [current]);
     await client.query('COMMIT');
     return { season: current, converted };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
