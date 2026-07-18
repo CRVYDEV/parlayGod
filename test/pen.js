@@ -79,6 +79,8 @@ assert.equal(r.body.cost, 120 * PEN.BRIBE_PER_S, 'priced per second');
 assert.equal(await ledgerOf(cal.id, 'pen:bribe'), -120 * PEN.BRIBE_PER_S, 'the bribe is a ledgered sink');
 assert(r.body.sentenceSeconds <= preBribe - 120 + 2, 'the sentence dropped by the bought seconds');
 assert.equal((await poolCash()) - pool0, 120 * PEN.BRIBE_PER_S, 'the bribe reaches the pool');
+// AUDIT REGRESSION: an EXPLICIT non-positive `seconds` is a clean error, not a silent full-sentence charge
+assert.equal((await call('POST', '/v1/pen/bribe', { token: cal.token, body: { seconds: 0 } })).body.error, 'seconds', 'seconds:0 is rejected, not read as "buy it all"');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE JAILHOUSE SHANK
@@ -98,6 +100,11 @@ await call('POST', '/v1/pen/buy/shiv', { token: killer.token });
 await seedCh(mark.id, "pen_safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', `/v1/pen/shank/${mark.id}`, { token: killer.token })).body.error, 'protected', 'the yard boss’s man is off-limits');
 await seedCh(mark.id, 'pen_safe_until=NULL');
+// AUDIT REGRESSION (shield-not-bunker, P1.3): a PROTECTED attacker can't shank either — take the
+// yard boss's cover or hunt, not both (mirrors the street safeHoused(ch) actor-guard).
+await seedCh(killer.id, "pen_safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/pen/shank/${mark.id}`, { token: killer.token })).body.error, 'safe', 'no hunting from under protection');
+await seedCh(killer.id, 'pen_safe_until=NULL');
 
 // paid revive insurance still absorbs a landed shank (the shiv is spent, the mark lives)
 await seedCh(mark.id, `${jailFuture}`);
@@ -136,6 +143,27 @@ assert.equal(r.body.caught, true, 'the move is fumbled');
 assert(r.body.dmg > 0 && Number((await rawCh(killer2.id)).health) < 100, 'the killer takes the beating');
 assert(r.body.sentenceSeconds >= k2sent0 + PEN.CAUGHT_ADD_S - 3, 'getting caught adds time');
 assert(!!(await rawCh(mark2.id)).alive, 'the mark walks away');
+
+// AUDIT REGRESSION: a shank is a DIRECT player kill — it FULFILS an open kill contract on the mark
+// (like fire, not the hired npcHit), so a hunter who does the wet work in the yard gets paid rather
+// than the funder's escrow burning for a $5k shiv.
+const funder = await mk('Funder Fay');
+const yardKiller = await mk('Yard Yuri');
+const contractMark = await mk('Contract Cyril');
+await seedCh(funder.id, 'cash=300000');
+await seedCh(contractMark.id, 'respect=800');   // a real target
+r = await call('POST', `/v1/streets/${contractMark.id}/bounty`, { token: funder.token, body: { amount: 100000, kind: 'kill' } });
+assert.equal(r.code, 200, 'an open kill contract is posted on the mark');
+await seedCh(yardKiller.id, `${jailFuture}, energy=200, cash=100000, muscle=400`);
+await seedCh(contractMark.id, `${jailFuture}, muscle=5`);   // the mark gets pinched
+await call('POST', '/v1/pen/buy/shiv', { token: yardKiller.token });
+const ykCash0 = Number((await rawCh(yardKiller.id)).cash);
+process.env.SHANK_P = '1';
+r = await call('POST', `/v1/pen/shank/${contractMark.id}`, { token: yardKiller.token });
+delete process.env.SHANK_P;
+assert.equal(r.body.kill, true, 'the yard hit lands');
+assert.equal(r.body.bounty, 100000, 'the open kill contract pays out on a shank');
+assert.equal(Number((await rawCh(yardKiller.id)).cash) - ykCash0, 100000, 'the shanker collects the contract (wet work paid, escrow not burned)');
 
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');

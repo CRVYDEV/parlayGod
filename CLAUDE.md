@@ -1061,6 +1061,20 @@ plus the closed vocabulary. Suite 19/19 + sim drift-0. Step two (deferred): pris
 the burner phone (one tethered outside move), the co-op break-out, seed-drawn yard incidents, the hole.
 ALL numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.
 
+A **three-lens red-team over The Pen** (`AUDIT-the-pen.md`: the shank/death vector, §10.4+locks, Pen
+internals+cross-system) found no CRITICAL/HIGH and closed two MED + two LOW (regression per fix): a
+PROTECTED inmate could **shank with impunity** (the `payProtection` "in-jail safehouse" had no
+`penSafe(ch)` ACTOR guard — now shield-not-bunker like the street P1.3); a shank **burned open bounty
+escrow** instead of paying it (a shank is a DIRECT player kill like `fire`, so it now
+`claimBounty`s open kill contracts — the wet work is paid, not griefed away for a $5k shiv;
+`claimBounty` was exported for this); `bribeGuard` treated `seconds:0` as "buy the whole sentence"
+(now a clean 400); the yard roster ordered furthest-first (now closest-to-walking). Verified CLEAN:
+the shank's respawn ordering / persist-clobber / shiv-consume race / under-lock gate re-check /
+vendetta / zero-farmable-rep, the §10.4 conservation + closed vocabulary, the sentence math + races
++ heir freshness, and the lock order. Flagged for founder sign-off (NOT patched): the `pen:work`
+faucet magnitude, a shank scoring 0 war-points + applying no NPC-standing consequences (a quiet
+dishonorable killing — a design call), and the missing shank cooldown. Suite 19/19 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

@@ -38,11 +38,16 @@ sentence means you've walked and the Pen is closed to you.
   bodyguard isn't inside) — but RESPECTS the paid **respawn token** (real-ETH revive insurance works
   anywhere) and **witness protection** (a witpro'd rat is in protective custody, segregated from
   general population — `witpro` throws). Family **omertà** holds (unless the target is a rat, the
-  audit precedent). On a landed shank: `runEstate({ killerCh, vendetta: true })` — a real death (heir,
-  prestige, a sworn bloodline) but NO loot/chop (you can't strip a fleet from a cell) and NO
-  feared-rep (a shanking is dishonorable — the npcHit precedent); the killer's sentence EXTENDS by
-  `PEN.KILL_ADD_S` (a body means more time). On a miss: the shiv is gone, the killer eats health
-  damage + `PEN.SHANK_CAUGHT_ADD_S` more time (caught fumbling). Streets feed: "shanked in the yard."
+  audit precedent). **Protection is shield-not-bunker** (P1.3): a `penSafe(ch)` ACTOR guard blocks a
+  protected inmate from shanking (take cover OR hunt, not both — mirrors the street `safeHoused(ch)`
+  guards). On a landed shank: it FULFILS open kill contracts on the mark (`claimBounty`, like `fire` —
+  a shank is a DIRECT player kill, so a contract killer who gets their mark jailed and shanks them
+  collects; audit — else a $5k shiv burned the funder's escrow), then `runEstate({ killerCh,
+  vendetta: true })` — a real death (heir, prestige, a sworn bloodline) but NO loot/chop (you can't
+  strip a fleet from a cell) and NO feared-rep (a shanking is dishonorable — the npcHit precedent);
+  the killer's sentence EXTENDS by `PEN.KILL_ADD_S` (a body means more time). On a miss: the shiv is
+  gone, the killer eats health damage + `PEN.CAUGHT_ADD_S` more time (caught fumbling). Streets feed:
+  "shanked in the yard."
 
 §10.4: `pen:` joins the cash vocabulary — `pen:work` a bounded faucet, `pen:commissary`/`pen:protection`/
 `pen:bribe` sinks, all character_id'd (check (a) reconciles). The shank moves no currency (contraband
