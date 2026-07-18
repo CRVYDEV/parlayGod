@@ -157,9 +157,10 @@ export async function claimFavor(ch, npcId, client, h) {
     ch.health = 100;
     favor = { health: 100 };
   } else if (npcId === 'armorer') {            // her boys fix your worst iron overnight
-    // skip market-LISTED iron — repairing an auctioned car mid-bid changes what bidders bid on
-    // (melt/fence/repair all refuse listed cars; the favor honours the same escrow discipline)
-    const worst = h.owned.cars.filter((c) => !c.listed).sort((a, b) => Number(b.dmg) - Number(a.dmg))[0];
+    // skip market-LISTED and loan-PLEDGED iron — the favor honours the same escrow discipline
+    // findCar enforces (melt/fence/repair all refuse both; repairing pledged collateral would let
+    // the borrower quietly re-value the lender's security around the lock).
+    const worst = h.owned.cars.filter((c) => !c.listed && !c.pledged).sort((a, b) => Number(b.dmg) - Number(a.dmg))[0];
     if (!worst || !(Number(worst.dmg) > 0)) throw new GameError('nothing', 'Nothing in the garage needs her boys.');
     await client.query('UPDATE cars SET dmg=0 WHERE id=$1', [worst.id]);
     worst.dmg = 0;
