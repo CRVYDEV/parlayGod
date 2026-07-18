@@ -205,8 +205,11 @@ export async function buildServer() {
   // without eating a no_character 400 from /v1/me. Surfaces the whole gate state at a glance.
   app.get('/v1/session', { preHandler: auth }, async (req) => {
     const a = (await pool.query('SELECT minted, mint_credits, respawn_tokens, wallet_address, agent_flag FROM account_persistent WHERE account_id=$1', [req.user.sub])).rows[0] || {};
+    const acct = (await pool.query('SELECT auth_provider FROM accounts WHERE id=$1', [req.user.sub])).rows[0] || {};
     const ch = (await pool.query('SELECT id, name, generation FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0] || null;
     return { authed: true, hasCharacter: !!ch, character: ch ? { id: ch.id, name: ch.name, generation: ch.generation } : null,
+      // the client's claim-your-account card keys on this: a guest can upgrade to X/Privy in place
+      provider: acct.auth_provider || 'guest',
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),
       wallet: a.wallet_address || null, agent: !!a.agent_flag,
       canWithdraw: !!a.minted && !!a.wallet_address };
