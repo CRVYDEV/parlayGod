@@ -239,7 +239,8 @@
   }
 
   // ── tabs ──
-  const TABS = { streets: 'Streets', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+  const TABS = { streets: 'Streets', kitchen: 'The Kitchen', family: 'The Family', market: 'Black Market',
+    city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -257,6 +258,254 @@
     for (const t of $('#tabbodies').children) t.classList.toggle('on', t.id === 'tab-' + id);
     if (id === 'city') renderCity();
     if (id === 'den') renderDen();
+    if (id === 'kitchen') renderKitchen();
+    if (id === 'family') renderFamily();
+    if (id === 'market') renderMarket();
+  }
+  const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
+  const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
+  const mins = (s) => s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
+
+  // ── THE KITCHEN: lab → makings → cook → collect → deal, the crew, heat management ──
+  async function renderKitchen() {
+    const t = $('#tab-kitchen');
+    await refresh();
+    const prices = (await api('GET', '/v1/market/prices')).body || {};
+    const ranks = rules?.tradeRanks || [];
+    const rankIdx = me.tradeRank ?? 0; // server-computed — the client never re-derives game math
+    const rank = ranks[rankIdx] || { name: '?', bonus: 0 };
+    const nextRank = ranks[rankIdx + 1];
+    const kitchens = rules?.kitchens || [];
+    const labIdx = me.lab ? kitchens.findIndex((k) => k.id === me.lab) : -1;
+    const lab = kitchens[labIdx], nextLab = kitchens[labIdx + 1];
+    const demandHere = prices.demand?.[me.loc] || {};
+    const unlocked = (rules?.drugs || []).filter((d) => d.unlock <= rankIdx);
+
+    t.innerHTML = `
+      <h2>The Trade</h2>
+      <div class="card"><span class="t">${rank.name}</span>
+        <div class="d">gross moved $${fmt(me.tradeRep || 0)} · rank bonus +${Math.round(rank.bonus * 100)}%${nextRank ? ` · next: ${nextRank.name} at $${fmt(nextRank.at)}` : ' · the top of the trade'}</div></div>
+
+      <h2 style="margin-top:12px">The Lab</h2>
+      <div class="card"><span class="t">${lab ? lab.name : 'no kitchen'}</span>
+        <div class="d">${lab ? `batch cap ${lab.cap} · cook ~${lab.mins * 12}min · fire risk ${Math.round(lab.fire * 100)}%` : 'even a bathtub beats the corner'}</div>
+        ${nextLab ? `<button class="act" data-do="POST /v1/kitchen/lab/upgrade">upgrade → ${nextLab.name} ($${fmt(nextLab.cost)}${nextLab.omr ? ` + ${nextLab.omr} $OMR` : ''})</button>` : ''}</div>
+
+      <h2 style="margin-top:12px">The Supplier <span class="d" style="font-size:10px">(makings — today's prices)</span></h2>
+      <div class="grid">${unlocked.map((d) => `
+        <div class="card"><span class="t">${d.name}</span> <span class="d">${d.tag}</span>
+          <div class="d">makings $${fmt(prices.makings?.[d.id] ?? '?')}/unit · shelf: ${me.makings?.[d.id] || 0}</div>
+          <input data-mk="${d.id}" placeholder="qty" size="5"> <button class="act" data-mkbuy="${d.id}">buy</button></div>`).join('')}</div>
+      ${(rules?.drugs || []).filter((d) => d.unlock > rankIdx).map((d) =>
+        `<span class="chip">${d.name} — locked (rank ${d.unlock})</span>`).join(' ')}
+
+      <h2 style="margin-top:12px">The Burner</h2>
+      ${me.batch ? `
+        <div class="card"><span class="t">${drugName(me.batch.drug)} × ${me.batch.qty}</span>
+          <div class="d">${me.batch.readySeconds > 0 ? `ready in ${mins(me.batch.readySeconds)}` : 'DONE — pull it off the heat'}</div>
+          <button class="act" data-do="POST /v1/kitchen/collect">collect</button></div>` : `
+        <select id="cook-drug">${unlocked.map((d) => `<option value="${d.id}">${d.name}</option>`).join('')}</select>
+        <input id="cook-qty" placeholder="qty (blank = max)" size="14">
+        <button class="act" id="cook-go">cook</button>
+        <span class="d" style="color:var(--dim);font-size:11px">1 crate packs 20 units — crates: ${fmt(me.cb)}</span>`}
+
+      <h2 style="margin-top:12px">The Corner <span class="d" style="font-size:10px">(demand at ${me.loc})</span></h2>
+      ${(me.stash || []).length ? `<div class="grid">${me.stash.map((s) => `
+        <div class="card"><span class="t">${drugName(s.drug)}</span>
+          <div class="d">${s.qty} units · quality ${s.quality} · demand here ×${demandHere[s.drug] ?? '?'}</div>
+          <input data-deal="${s.drug}" placeholder="qty" size="5"> <button class="act" data-dealgo="${s.drug}">deal</button></div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
+
+      <h2 style="margin-top:12px">The Crew</h2>
+      <div class="card"><span class="t">${me.crew || 0} hands${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
+        <div class="d">they move the cheapest lines while you sleep · wages owed $${fmt(me.crewWageOwed || 0)}${me.crewCold ? ' · COLD: nothing moves until the nut is paid' : ''}</div>
+        <button class="act" data-do="POST /v1/kitchen/crew/hire">hire (next: $${fmt((rules?.crew?.costStep || 50000) * ((me.crew || 0) + 1))})</button>
+        <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut</button></div>
+
+      <h2 style="margin-top:12px">Heat (${me.heat})</h2>
+      <button class="act" data-do="POST /v1/kitchen/laylow">lay low</button>
+      <button class="act" data-do="POST /v1/kitchen/cleanpapers">clean papers ($OMR)</button>`;
+
+    t.querySelectorAll('[data-mkbuy]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/kitchen/makings/${b.dataset.mkbuy}`, { qty: Number(t.querySelector(`[data-mk="${b.dataset.mkbuy}"]`).value) || 1 }).then(() => renderKitchen()));
+    const cookBtn = t.querySelector('#cook-go');
+    if (cookBtn) cookBtn.onclick = () =>
+      act('POST', '/v1/kitchen/cook', { drugId: t.querySelector('#cook-drug').value, qty: Number(t.querySelector('#cook-qty').value) || undefined }).then(() => renderKitchen());
+    t.querySelectorAll('[data-dealgo]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/kitchen/deal', { drugId: b.dataset.dealgo, qty: Number(t.querySelector(`[data-deal="${b.dataset.dealgo}"]`).value) || 1 }).then(() => renderKitchen()));
+  }
+
+  // ── THE FAMILY: your family's dashboard, or the boards to found/join one ──
+  async function renderFamily() {
+    const t = $('#tab-family');
+    await refresh();
+    if (!me.gang) {
+      const gl = (await api('GET', '/v1/gangs')).body?.gangs || [];
+      t.innerHTML = `
+        <h2>The Families</h2>
+        ${gl.length ? `<div class="grid">${gl.sort((a, b) => b.standing - a.standing).map((g) => `
+          <div class="card"><span class="t">[${g.tag}] ${g.name}</span>${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}
+            <div class="d">${g.members} made · ${g.warsWon} wars won · standing ${fmt(g.standing)}</div>
+            <button class="act" data-join="${g.id}">kiss the ring</button></div>`).join('')}</div>`
+          : '<span class="d" style="color:var(--dim)">no families yet — the city is waiting for a boss</span>'}
+        <h2 style="margin-top:14px">Found Your Own <span class="d" style="font-size:10px">($${fmt(rules?.family?.foundCost || 25000)} — level-gated)</span></h2>
+        <input id="g-name" placeholder="family name" size="18"> <input id="g-tag" placeholder="TAG" size="5">
+        <button class="act" id="g-found">found it</button>`;
+      t.querySelectorAll('[data-join]').forEach((b) => b.onclick = () =>
+        act('POST', `/v1/gangs/${b.dataset.join}/join`, {}).then(() => renderFamily()));
+      t.querySelector('#g-found').onclick = () =>
+        act('POST', '/v1/gangs', { name: t.querySelector('#g-name').value.trim(), tag: t.querySelector('#g-tag').value.trim() }).then(() => renderFamily());
+      return;
+    }
+    const g = (await api('GET', `/v1/gangs/${me.gang.id}`)).body?.gang;
+    if (!g) { t.innerHTML = '<span class="d">the family is gone.</span>'; return; }
+    const com = (await api('GET', '/v1/commission')).body || {};
+    const mySeat = (com.seats || []).find((s) => s.name === g.name);
+    const boss = me.gang.role === 'boss' || me.gang.role === 'underboss';
+    t.innerHTML = `
+      <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''} — you are ${me.gang.role}</h2>
+      <div class="grid">
+        <div class="card"><span class="t">$${fmt(g.treasury)}</span><div class="d">treasury</div></div>
+        <div class="card"><span class="t">${fmt(g.omrReserve)} $OMR</span><div class="d">family reserve</div></div>
+        <div class="card"><span class="t">${g.warsWon}</span><div class="d">wars won</div></div>
+        <div class="card"><span class="t">${g.held.length ? g.held.join(', ') : 'none'}</span><div class="d">turf held</div></div>
+      </div>
+      ${g.war ? `<div class="card" style="border-color:var(--blood);margin-top:8px"><span class="t" style="color:var(--bad)">AT WAR</span>
+        <div class="d">score us ${g.war.us} — them ${g.war.them}</div></div>` : ''}
+
+      <h2 style="margin-top:12px">Made Men (${g.members.length})</h2>
+      <div class="grid">${g.members.map((m) => `
+        <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>
+
+      <h2 style="margin-top:12px">Territory Operations</h2>
+      ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
+        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>
+          <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div></div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no operations — a boss can establish one on held turf</span>'}
+      ${boss ? `<div style="margin-top:6px">
+        <button class="act" data-do="POST /v1/territory/collect">collect income → treasury</button>
+        <button class="act" data-do="POST /v1/territory/upkeep">pay upkeep (treasury)</button>
+        <button class="act" data-do="POST /v1/territory/${me.loc}/establish">establish here (${me.loc})</button></div>` : ''}
+
+      <h2 style="margin-top:12px">Tribute</h2>
+      <input id="trib-amt" placeholder="amount" size="10">
+      <button class="act" id="trib-go">kick up cash</button>
+      <input id="tribo-amt" placeholder="$OMR" size="8">
+      <button class="act" id="tribo-go">pool $OMR</button>
+      <span class="d" style="color:var(--dim);font-size:11px">tribute builds the treasury AND the family's season standing</span>
+
+      <h2 style="margin-top:12px">War & Turf</h2>
+      ${boss ? `<button class="act" data-do="POST /v1/districts/${me.loc}/seize">seize ${me.loc}</button>` : ''}
+      ${boss ? `<input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}
+
+      <h2 style="margin-top:12px">The Commission ${mySeat ? `<span class="chip good">seated — #${(com.seats || []).indexOf(mySeat) + 1}</span>` : '<span class="chip">no seat</span>'}</h2>
+      <div class="d" style="color:var(--dim);font-size:11px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
+      <div class="grid" style="margin-top:4px">${(com.seats || []).map((s, i) => `
+        <div class="card"><span class="t">#${i + 1} [${s.tag}] ${s.name}</span><div class="d">standing ${fmt(s.standing)} · weight ${s.weight}</div></div>`).join('')}</div>
+      ${boss && mySeat ? `<div style="margin-top:6px">
+        <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
+        <button class="act" id="com-vote">cast the family's vote</button>
+        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}
+
+      <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
+    t.querySelector('#trib-go').onclick = () =>
+      act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
+    t.querySelector('#tribo-go').onclick = () =>
+      act('POST', '/v1/gangs/tribute/omr', { amount: Number(t.querySelector('#tribo-amt').value) }).then(() => renderFamily());
+    const warBtn = t.querySelector('#war-go');
+    if (warBtn) warBtn.onclick = () =>
+      act('POST', `/v1/gangs/war/${t.querySelector('#war-gang').value.trim()}`, {}).then(() => renderFamily());
+    const voteBtn = t.querySelector('#com-vote');
+    if (voteBtn) voteBtn.onclick = () =>
+      act('POST', '/v1/commission/vote', { decree: t.querySelector('#com-decree').value }).then(() => renderFamily());
+  }
+
+  // ── BLACK MARKET: the board (auctions / goods / buy orders) + your sell side ──
+  async function renderMarket() {
+    const t = $('#tab-market');
+    await refresh();
+    const board = (await api('GET', '/v1/market')).body || {};
+    const prices = (await api('GET', '/v1/market/prices')).body || {};
+    const here = prices.goods?.[me.loc] || {};
+    const listings = board.listings || [];
+    const carCard = (l) => `
+      <div class="card"><span class="t">${l.car ? `${l.car.model}${l.car.trim ? ' · ' + l.car.trim : ''}` : 'iron'}</span>
+        ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
+        <div class="d">${l.car?.plate ? `[${l.car.plate}] · ` : ''}dmg ${l.car?.dmg ?? '?'}% · seller ${l.seller}</div>
+        <div class="d">bid ${l.bid != null ? '$' + fmt(l.bid) : 'none'} (floor $${fmt(l.minBid)})${l.buyNow ? ` · buy-now $${fmt(l.buyNow)}` : ''}${l.reserveMet === false ? ' · reserve NOT met' : ''} · ${mins(l.expiresSeconds)} left</div>
+        ${l.seller !== me.name ? `<input data-bid="${l.id}" placeholder="bid" size="9">
+          <button class="act" data-bidgo="${l.id}">bid</button>
+          ${l.buyNow ? `<button class="act" data-buynow="${l.id}">buy now</button>` : ''}`
+        : `<button class="act" data-cancel="${l.id}">pull it</button>`}</div>`;
+    const goodCard = (l) => `
+      <div class="card"><span class="t">${goodName(l.good)} × ${fmt(l.qty)}</span>
+        ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
+        <div class="d">$${fmt(l.unitPrice)}/unit at ${l.district} (spot here: $${fmt(here[l.good] ?? '?')}) · ${l.seller} · ${mins(l.expiresSeconds)} left</div>
+        ${l.seller !== me.name ? `${l.district === me.loc ? `<input data-gqty="${l.id}" placeholder="qty" size="6">
+          <button class="act" data-gbuy="${l.id}">buy</button>` : `<span class="chip cold">stand at ${l.district} to buy</span>`}`
+        : `<button class="act" data-cancel="${l.id}">pull it</button>`}</div>`;
+    const orderCard = (l) => `
+      <div class="card"><span class="t">WTB ${goodName(l.good)} × ${fmt(l.wanted)}</span>
+        ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
+        <div class="d">pays $${fmt(l.unitPrice)}/unit at ${l.district} · ${l.seller} · ${mins(l.expiresSeconds)} left</div>
+        ${l.seller !== me.name ? `${l.district === me.loc ? `<input data-fqty="${l.id}" placeholder="qty" size="6">
+          <button class="act" data-fill="${l.id}">fill from trunk</button>` : `<span class="chip cold">deliver at ${l.district}</span>`}`
+        : `<button class="act" data-claim="${l.id}">claim delivered</button> <button class="act" data-cancel="${l.id}">pull it</button>`}</div>`;
+    const myCars = (me.cars || []).filter((c) => !c.listed && !c.pledged);
+    const myCargo = Object.entries(me.cargo || {}).filter(([, q]) => q > 0);
+    t.innerHTML = `
+      <h2>The Board <span class="d" style="font-size:10px">(take ${(board.levers?.takeBps || 200) / 100}% · list fee ${(board.levers?.listFeeBps || 100) / 100}% · max ${board.levers?.maxListings} listings)</span></h2>
+      ${listings.length ? `<div class="grid">${listings.map((l) =>
+        l.kind === 'car' ? carCard(l) : l.kind === 'good' ? goodCard(l) : orderCard(l)).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">the board is bare — list something</span>'}
+
+      <h2 style="margin-top:14px">Put Iron on the Block</h2>
+      ${myCars.length ? `
+        <select id="mk-car">${myCars.map((c) => `<option value="${c.id}">${c.model}${c.trim ? ' · ' + c.trim : ''} (dmg ${c.dmg}%)</option>`).join('')}</select>
+        <input id="mk-minbid" placeholder="min bid" size="9">
+        <input id="mk-buynow" placeholder="buy-now (opt)" size="11">
+        <input id="mk-reserve" placeholder="reserve (opt)" size="11">
+        <button class="act" id="mk-listcar">auction it</button>`
+        : '<span class="d" style="color:var(--dim)">no unlisted, unpledged iron in the garage</span>'}
+
+      <h2 style="margin-top:12px">Move Goods <span class="d" style="font-size:10px">(pinned to ${me.loc} — buyers come to you)</span></h2>
+      ${myCargo.length ? `
+        <select id="mk-good">${myCargo.map(([id, q]) => `<option value="${id}">${goodName(id)} (${q} in trunk, spot $${fmt(here[id] ?? '?')})</option>`).join('')}</select>
+        <input id="mk-gqty" placeholder="qty" size="6">
+        <input id="mk-gprice" placeholder="$/unit" size="8">
+        <button class="act" id="mk-listgood">list it</button>`
+        : '<span class="d" style="color:var(--dim)">the trunk is empty — buy goods on the Streets first</span>'}
+
+      <h2 style="margin-top:12px">Post a Buy Order <span class="d" style="font-size:10px">(escrows cash — sellers deliver to ${me.loc})</span></h2>
+      <select id="mk-ogood">${(rules?.goods || []).map((g) => `<option value="${g.id}">${g.name} (spot $${fmt(here[g.id] ?? '?')})</option>`).join('')}</select>
+      <input id="mk-oqty" placeholder="qty" size="6">
+      <input id="mk-oprice" placeholder="$/unit" size="8">
+      <button class="act" id="mk-order">post it</button>`;
+    const rerender = () => renderMarket();
+    t.querySelectorAll('[data-bidgo]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.bidgo}/bid`, { amount: Number(t.querySelector(`[data-bid="${b.dataset.bidgo}"]`).value) }).then(rerender));
+    t.querySelectorAll('[data-buynow]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.buynow}/buy`, {}).then(rerender));
+    t.querySelectorAll('[data-gbuy]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.gbuy}/buy`, { qty: Number(t.querySelector(`[data-gqty="${b.dataset.gbuy}"]`).value) || 1 }).then(rerender));
+    t.querySelectorAll('[data-fill]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.fill}/fill`, { qty: Number(t.querySelector(`[data-fqty="${b.dataset.fill}"]`).value) || 1 }).then(rerender));
+    t.querySelectorAll('[data-claim]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.claim}/claim`, {}).then(rerender));
+    t.querySelectorAll('[data-cancel]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/market/${b.dataset.cancel}/cancel`, {}).then(rerender));
+    const listCar = t.querySelector('#mk-listcar');
+    if (listCar) listCar.onclick = () => {
+      const body = { carId: t.querySelector('#mk-car').value, minBid: Number(t.querySelector('#mk-minbid').value) };
+      const bn = Number(t.querySelector('#mk-buynow').value), rv = Number(t.querySelector('#mk-reserve').value);
+      if (bn) body.buyNow = bn; if (rv) body.reserve = rv;
+      act('POST', '/v1/market', body).then(rerender);
+    };
+    const listGood = t.querySelector('#mk-listgood');
+    if (listGood) listGood.onclick = () =>
+      act('POST', '/v1/market', { goodId: t.querySelector('#mk-good').value, qty: Number(t.querySelector('#mk-gqty').value), price: Number(t.querySelector('#mk-gprice').value) }).then(rerender);
+    t.querySelector('#mk-order').onclick = () =>
+      act('POST', '/v1/market/order', { goodId: t.querySelector('#mk-ogood').value, qty: Number(t.querySelector('#mk-oqty').value), price: Number(t.querySelector('#mk-oprice').value) }).then(rerender);
   }
 
   // Streets: crimes, train, bank, travel
@@ -338,7 +587,7 @@
     'Garage & Workshop': [
       ['POST', '/v1/garage/boost', {}], ['POST', '/v1/garage/:carId/melt', {}], ['POST', '/v1/garage/:carId/repair', {}],
       ['POST', '/v1/garage/:carId/fence', {}], ['POST', '/v1/workshop/craft/:id', {}], ['POST', '/v1/workshop/ammo', { qty: 1 }],
-      ['POST', '/v1/goods/buy', { id: 'gin', qty: 1 }], ['POST', '/v1/goods/sell', { id: 'gin', qty: 1 }],
+      ['POST', '/v1/goods/buy', { goodId: 'gin', qty: 1 }], ['POST', '/v1/goods/sell', { goodId: 'gin', qty: 1 }],
       ['GET', '/v1/market/prices'],
     ],
     'Money & $OMR': [
@@ -371,14 +620,14 @@
     ],
     'Kitchen': [
       ['POST', '/v1/kitchen/makings/:drugId', { qty: 1 }], ['POST', '/v1/kitchen/lab/upgrade', {}],
-      ['POST', '/v1/kitchen/cook', { drug: 'vim' }], ['POST', '/v1/kitchen/collect', {}],
-      ['POST', '/v1/kitchen/deal', { drug: 'vim', qty: 1 }], ['POST', '/v1/kitchen/crew/hire', {}],
+      ['POST', '/v1/kitchen/cook', { drugId: 'vim', qty: 10 }], ['POST', '/v1/kitchen/collect', {}],
+      ['POST', '/v1/kitchen/deal', { drugId: 'vim', qty: 1 }], ['POST', '/v1/kitchen/crew/hire', {}],
       ['POST', '/v1/kitchen/crew/wages', {}], ['POST', '/v1/kitchen/laylow', {}], ['POST', '/v1/kitchen/cleanpapers', {}],
     ],
     'Black Market': [
-      ['GET', '/v1/market'], ['POST', '/v1/market', { kind: 'car', carId: '', minBid: 1000, hours: 24 }],
+      ['GET', '/v1/market'], ['POST', '/v1/market', { carId: '', minBid: 1000, hours: 24 }],
       ['POST', '/v1/market/:id/bid', { amount: 1000 }], ['POST', '/v1/market/:id/buy', {}],
-      ['POST', '/v1/market/:id/cancel', {}], ['POST', '/v1/market/order', { good: 'gin', qty: 10, price: 100 }],
+      ['POST', '/v1/market/:id/cancel', {}], ['POST', '/v1/market/order', { goodId: 'gin', qty: 10, price: 100 }],
       ['POST', '/v1/market/:id/fill', { qty: 1 }], ['POST', '/v1/market/:id/claim', {}],
       ['GET', '/v1/exchange'], ['POST', '/v1/exchange/list', { kind: 'ammo', qty: 10, price: 50 }],
     ],
