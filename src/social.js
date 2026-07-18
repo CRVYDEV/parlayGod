@@ -8,7 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -1089,6 +1089,11 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   if (safeHoused(victim)) throw new GameError('safe', "The contractor can't find them — they've gone to ground.");
+  // THE PEN (audit): a contractor can't reach a jailed target under the yard boss's protection or in
+  // the hole any more than a shank can — the burner route (and a street hire) honours the Pen's
+  // own in-jail defenses, parity with the street safeHoused/witpro gates above.
+  if (penSafe(victim)) throw new GameError('protected', "They're covered inside — no contractor gets to them.");
+  if (inHole(victim)) throw new GameError('segregated', "They're in the hole — nobody reaches them there.");
   if (witproActive(victim)) throw new GameError('witpro', "The marshals have them locked away — no contractor gets near.");
   if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
   // BALANCE D4 — per-TARGET cooldown: a whale could repeat-reset ONE rival every 6h by cycling

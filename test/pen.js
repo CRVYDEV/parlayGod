@@ -239,6 +239,44 @@ assert.equal(r.body.burner, true, 'the burner was used');
 assert.equal(await ledgerOf(caller.id, 'npchit:hire'), feeBurn0 - NPC_HITMEN[0].cost, 'the NPC-hit fee burned, win or lose (the street npchit sink)');
 assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${caller.id}' AND item='burner'`)).rows[0].q, 0, 'the burner is spent — one call, then you eat the SIM');
 
+// AUDIT REGRESSION: the burner-hit HONOURS the Pen's own defenses — a hole'd or yard-boss-protected
+// inmate is untouchable by an NPC hit too (npcHit gates inHole/penSafe, parity with the shank).
+const burnKiller = await mk('Burner Bane');
+const segTarget = await mk('Seg Target');
+await seedCh(burnKiller.id, `${jailFuture}, cash=2000000`);
+await seedCh(segTarget.id, `${jailFuture}, respect=500`);   // jailed + over the NPC-hit level floor
+await call('POST', '/v1/pen/buy/burner', { token: burnKiller.token });
+await seedCh(segTarget.id, "hole_until = now() + interval '20 minutes'");
+assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'segregated', 'no burner-hit reaches a man in the hole');
+await seedCh(segTarget.id, "hole_until=NULL, pen_safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'protected', 'no burner-hit reaches a protected inmate');
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${burnKiller.id}' AND item='burner'`)).rows[0].q, 1, 'a refused call rolls back — the burner is NOT spent');
+await seedCh(segTarget.id, 'pen_safe_until=NULL');
+// AUDIT REGRESSION: shield-not-bunker — a PROTECTED inmate can't burner-hit either
+await seedCh(burnKiller.id, "pen_safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'safe', 'no hunting by phone from under protection');
+await seedCh(burnKiller.id, 'pen_safe_until=NULL');
+// AUDIT REGRESSION: a LOCKDOWN freezes an INSIDE burner-kill, but an OUTSIDE call still goes through
+const outsideMark = await mk('Outside Otto');
+await seedCh(outsideMark.id, 'respect=800');   // free, over the floor
+process.env.PEN_YARD_EVENT = 'lockdown';
+assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'lockdown', 'lockdown freezes an inside burner-kill');
+r = await call('POST', `/v1/pen/burner/${outsideMark.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } });
+assert.equal(r.code, 200, 'the burner still reaches an OUTSIDE target during a lockdown (it’s a phone call)');
+process.env.PEN_YARD_EVENT = 'quiet';
+
+// AUDIT REGRESSION: the hole can't outlast the sentence (no leak into a future re-jail)
+const shortTimer = await mk('Short Timer');
+const stMark = await mk('ST Mark');
+await seedCh(shortTimer.id, "jail_until = now() + interval '10 seconds', energy=200, cash=200000, health=100");
+await seedCh(stMark.id, `${jailFuture}, respect=500`);
+await call('POST', '/v1/pen/buy/shiv', { token: shortTimer.token });
+process.env.SHANK_P = '0';
+await call('POST', `/v1/pen/shank/${stMark.id}`, { token: shortTimer.token });
+delete process.env.SHANK_P;
+const stRow = await rawCh(shortTimer.id);
+assert(new Date(stRow.hole_until) <= new Date(stRow.jail_until), 'the hole is capped at the sentence — it can’t leak into a future stretch');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);

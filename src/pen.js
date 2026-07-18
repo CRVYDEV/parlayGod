@@ -156,7 +156,9 @@ export async function shank(ch, victim, client, h) {
     const dmg = rand(PEN.FAIL_DMG[0], PEN.FAIL_DMG[1]);
     ch.health = Math.max(1, Number(ch.health) - dmg);
     ch.jail_until = new Date(new Date(ch.jail_until).getTime() + PEN.CAUGHT_ADD_S * 1000);
-    ch.hole_until = new Date(Date.now() + PEN.HOLE_MS);
+    // the hole can't outlast the sentence (audit: an unbounded hole_until survived release and
+    // reactivated on a FUTURE re-jail, blocking an unrelated stretch) — cap it at jail_until.
+    ch.hole_until = new Date(Math.min(Date.now() + PEN.HOLE_MS, new Date(ch.jail_until).getTime()));
     await h.notify(client, victim.id, 'shank_survived', { from: ch.name });
     return { ok: true, kill: false, caught: true, dmg, holeSeconds: Math.round(PEN.HOLE_MS / 1000), sentenceSeconds: jailSecondsLeft(ch) };
   }
@@ -189,9 +191,18 @@ export async function shank(ch, victim, client, h) {
 // so nothing's consumed); the NPC-hit fee burns win or lose, exactly like a street npcHit.
 export async function burnerHit(ch, victim, client, h, tierId) {
   insideOnly(ch);
+  // shield-not-bunker (audit): a protected inmate can't hunt from under the yard boss's cover — even
+  // by phone. Mirrors the shank's penSafe(ch) guard. (npcHit itself gates penSafe/inHole on the TARGET.)
+  if (penSafe(ch)) throw new GameError('safe', "You're under the yard boss's protection — take it or hunt, not both.");
+  // a LOCKDOWN that freezes the yard freezes an INSIDE kill too — the burner can still reach an
+  // OUTSIDE target (a phone call), but it can't route around "no moves on anybody" for a cellmate.
+  if (jailed(victim) && activeYardEvent().shankBlock) throw new GameError('lockdown', "Lockdown — no moves on anybody inside today.");
   const held = await contrabandOf(client, ch.id);
   if (!(held.burner > 0)) throw new GameError('no_burner', 'You need a burner phone to reach the outside.');
-  await setContraband(client, ch.id, 'burner', held.burner - 1); // one call, then you eat the SIM
+  // place the call FIRST — npcHit gates the target (family/level/protected/segregated/witpro/cooldown)
+  // and throws on a bad call; consume the burner only once it goes through, so a refused call never
+  // spends it (no reliance on txn rollback). The NPC-hit fee still burns inside npcHit, win or lose.
   const res = await npcHit(ch, victim, client, h, tierId, { fromBurner: true }); // jail gate waived for the call
+  await setContraband(client, ch.id, 'burner', held.burner - 1); // one call, then you eat the SIM
   return { ok: true, burner: true, ...res };
 }

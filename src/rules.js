@@ -900,7 +900,7 @@ export const PEN = {
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
 export const yardEventById = (id) => PEN.YARD_EVENTS.find((e) => e.id === id) || PEN.YARD_EVENTS[0];
 // today's yard incident — seed-drawn, town-wide, deterministic (the cityEventOf shape)
-export const yardEventOf = (day = dayOf()) => PEN.YARD_EVENTS[Math.floor(hash01('yard:' + day + ':' + MARKET_SEED) * PEN.YARD_EVENTS.length)];
+export const yardEventOf = (day = dayOf()) => PEN.YARD_EVENTS[Math.floor(hash01('yard:' + day + ':' + MARKET_SEED) * PEN.YARD_EVENTS.length) % PEN.YARD_EVENTS.length];
 // seconds left on a sentence (0 if free) — the Pen's clock
 export const jailSecondsLeft = (ch, now = Date.now()) =>
   ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;

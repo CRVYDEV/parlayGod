@@ -1094,6 +1094,20 @@ incident touchpoint (discounted charges ledgered), and the burner (jail-gated np
 one call consumes it). Suite 19/19 + sim drift-0. Step three deferred: prison factions/shot-callers, the
 co-op break-out, richer yard incidents.
 
+A **three-lens red-team over Pen step two** (`AUDIT-the-pen-step-two.md`: the burner bypass, the hole,
+yard incidents + §10.4) closed one HIGH + three MED/LOW (regression per fix): a $25k burner **defeated
+the Pen's own defenses** — `npcHit`'s victim gates knew the street safehouse + witpro but NOT the
+in-jail `penSafe`/`inHole`, so a burner-called (or street-hired) hit killed a yard-boss-protected or
+hole'd ("untouchable") inmate → `npcHit` now gates `penSafe(victim)`/`inHole(victim)` parallel to the
+existing safeHoused/witpro gates (closes both routes); `burnerHit` was missing the `penSafe(ch)`
+shield-not-bunker actor guard (a protected inmate hunting from cover) and didn't honour a `lockdown`
+for an inside kill — both added; `hole_until` was bounded only by wall-clock so a re-jail within 30min
+reactivated a stale hole → capped at `jail_until`; and `burnerHit` was restructured to consume the
+burner AFTER the call goes through (rollback-independent). Verified CLEAN: burner atomicity/persist/
+idempotency, the §10.4 discounted-ledger exactness + clamps + closed vocabulary, the hole's persist +
+heir-freshness + self-defeating "immunity". Flagged for founder sign-off (NOT patched): yard-incident
+weighting (~40% of days hard-block the loop), the hole toothless near release. Suite 19/19 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
