@@ -38,9 +38,31 @@ const RECLAIM_GRACE_SEC = Number(process.env.VOUCHER_RECLAIM_GRACE_SEC || 3600);
 
 // Chain config from env (never hardcode chainId — see the F-3 audit note).
 export function chainConfig() {
-  const chainId = Number(process.env.CHAIN_ID || 46630);        // Robinhood Chain testnet
-  const verifyingContract = process.env.VOUCHER_CLAIM_ADDRESS || '0x0000000000000000000000000000000000000000';
-  return { name: 'OmertaVoucherClaim', version: '1', chainId, verifyingContract };
+  // AUDIT (chain trust lens F1 + OMR lens F-5): NO defaults. A chainId or verifyingContract that
+  // silently defaults to testnet/zero signs vouchers under the WRONG EIP-712 domain — every on-chain
+  // claim then reverts (`VC: bad signature`) while the backend has already burned the $OMR, a total
+  // (fail-closed-for-funds but invisible) withdrawal outage. Fail hard instead: no chain config, no
+  // signing (parity with signerAccount()'s chain_unconfigured throw).
+  const chainId = Number(process.env.CHAIN_ID);
+  const verifyingContract = process.env.VOUCHER_CLAIM_ADDRESS;
+  if (!chainId || !verifyingContract || !isAddress(verifyingContract))
+    throw new GameError('chain_unconfigured', 'Withdrawals are not enabled on this server yet (chain config missing).');
+  return { name: 'OmertaVoucherClaim', version: '1', chainId, verifyingContract: getAddress(verifyingContract) };
+}
+
+// AUDIT CRITICAL (reclaim-vs-claim double-spend): an authoritative reader of the contract's
+// `usedNonce(nonce)` — the on-chain truth for "was this voucher already claimed?". reclaim consults
+// this before reversing a voucher so a real claim the watcher hasn't yet processed can never be
+// refunded. Returns null when the chain is unconfigured (dormant → no real vouchers exist, callers
+// fall back to the wall-clock grace). Kept dependency-light; built per-call so tests can inject.
+export async function makeChainReader() {
+  if (!process.env.CHAIN_RPC_URL || !process.env.VOUCHER_CLAIM_ADDRESS || !isAddress(process.env.VOUCHER_CLAIM_ADDRESS)) return null;
+  const { createPublicClient, http } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  const address = getAddress(process.env.VOUCHER_CLAIM_ADDRESS);
+  const abi = [{ type: 'function', name: 'usedNonce', stateMutability: 'view',
+    inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }];
+  return { usedNonce: (nonce) => client.readContract({ address, abi, functionName: 'usedNonce', args: [BigInt(nonce)] }) };
 }
 function signerAccount() {
   const pk = process.env.VOUCHER_SIGNER_PK;
@@ -97,6 +119,14 @@ async function committedOutstanding(client) {
 export async function requestWithdraw(pool, accountId, amount, toAddress) {
   const amt = Math.floor(Number(amount) * 1e6) / 1e6;          // clamp to the ledger's 6-dp precision
   if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
+  // AUDIT (OMR lens F-1): reject up-front any single withdrawal that exceeds the on-chain per-UTC-day
+  // cap — otherwise the backend burns the $OMR and signs a voucher whose `claim()` reverts "VC: daily
+  // cap" on EVERY day forever (the amount alone busts the cap), stranding the player until reclaim.
+  // DAILY_CAP_OMR is the wei-denominated env the deploy uses; unset = unlimited (contract cap 0). The
+  // per-day accumulation (many small claims filling the cap) stays a documented liveness/griefing item.
+  const capWei = process.env.DAILY_CAP_OMR;
+  if (capWei && Number(capWei) > 0 && amt > Number(capWei) / 1e18)
+    throw new GameError('daily_cap', `A single withdrawal can't exceed the daily cap of ${Math.floor(Number(capWei) / 1e18)} $OMR — split it across days.`);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -215,6 +245,15 @@ export async function reserveStatus(pool) {
 // practice; the guard keeps the reclaimed refund as the record of truth). Unit-testable core.
 export async function markClaimed(pool, nonce) {
   const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain AND status<>'expired' RETURNING id", [nonce]);
+  // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY expired-and-refunded
+  // is the exact double-resolution the reserve model forbids (the player would hold the tokens AND the
+  // refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever fires it
+  // is a §10.4 breach at the chain boundary that the ledger sweep is blind to — so alarm LOUDLY.
+  if (r.rowCount === 0) {
+    const ex = (await pool.query('SELECT status FROM vouchers WHERE nonce=$1', [nonce])).rows[0];
+    if (ex && ex.status === 'expired')
+      console.error(`🚨 §10.4 CHAIN-BOUNDARY ALARM: Claimed(${nonce}) arrived for an already-EXPIRED (refunded) voucher — double-resolution`);
+  }
   return { claimed: r.rowCount };
 }
 
@@ -227,14 +266,29 @@ export async function markClaimed(pool, nonce) {
 //            and status='expired' drops it out of committedOutstanding → the reserve room frees.
 //   • gear → restore `minted_onchain=false` (back into play), status='expired'.
 // Per-voucher txn, re-checked under lock (the watcher may have claimed it since the read).
-export async function reclaimExpiredVouchers(pool) {
+export async function reclaimExpiredVouchers(pool, reader = undefined) {
+  // AUDIT CRITICAL: the wall-clock `deadline + grace` is NOT proof the watcher saw a claim — if the
+  // watcher/RPC stalled past the grace while a real claim landed, refunding here double-spends (tokens
+  // on-chain AND $OMR back), and §10.4 is blind to it (both rows net to zero). So consult the chain
+  // DIRECTLY: `usedNonce(nonce)` is the on-chain truth. reader===undefined → build from env; null → the
+  // chain is dormant (no real vouchers) → keep the legacy time-grace path. An RPC error → SKIP this
+  // voucher (fail safe: a delayed refund is recoverable, a double-spend is not).
+  const chain = reader !== undefined ? reader : await makeChainReader();
   const client = await pool.connect();
-  let omrReclaimed = 0, gearRestored = 0;
+  let omrReclaimed = 0, gearRestored = 0, reconciled = 0;
   try {
     const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
     const expired = (await client.query(
-      "SELECT id, account_id, kind, amount, gear_id FROM vouchers WHERE status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
+      "SELECT id, account_id, kind, amount, gear_id, nonce FROM vouchers WHERE status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
     for (const v of expired) {
+      // ask the chain first — a used nonce means this voucher WAS claimed (tokens left the tranche);
+      // record the claim the watcher missed and NEVER refund it.
+      if (chain) {
+        let used;
+        try { used = await chain.usedNonce(v.nonce); }
+        catch { continue; } // RPC hiccup — retry next tick, never refund blind
+        if (used) { await markClaimed(pool, Number(v.nonce)); reconciled++; continue; }
+      }
       await client.query('BEGIN');
       try {
         const cur = (await client.query("SELECT status, claimed_onchain FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
@@ -250,9 +304,11 @@ export async function reclaimExpiredVouchers(pool) {
         }
         await client.query("UPDATE vouchers SET status='expired' WHERE id=$1", [v.id]);
         await client.query('COMMIT');
-      } catch (e) { await client.query('ROLLBACK'); throw e; }
+      // AUDIT (reserve lens F3): isolate per voucher — a single poison row must NOT abort the whole
+      // batch (matches the worker's safe() philosophy). Log + skip; each refund is already its own txn.
+      } catch (e) { await client.query('ROLLBACK'); console.error('reclaim voucher failed', v.id, e?.code || e?.message || e); continue; }
     }
-    return { omrReclaimed, gearRestored };
+    return { omrReclaimed, gearRestored, reconciled };
   } finally { client.release(); }
 }
 

@@ -168,6 +168,19 @@ step('watcher marked the voucher claimed', `nonce ${wd.body.nonce} — the reser
 const rs = await api('GET', '/v1/mod/reserve', null, undefined, true);
 step('reserve status', JSON.stringify(rs.body));
 
+console.log('── PHASE 7b: AUDIT — reclaim must NOT refund a voucher that was truly claimed on-chain ──');
+// simulate the watcher having missed the Claimed event: force the (really-claimed) voucher back to
+// signed + long-expired, then run reclaim with the REAL env chain reader. It must read usedNonce()==true
+// on-chain and reconcile (mark claimed) instead of refunding — proving the double-spend fix on real state.
+const { reclaimExpiredVouchers } = await import('../src/chain.js');
+await app.pool.query(`UPDATE vouchers SET status='signed', claimed_onchain=false, deadline=${Math.floor(Date.now() / 1000) - 99999} WHERE nonce=${wd.body.nonce}`);
+const omrBeforeReclaim = (await api('GET', '/v1/me', tok)).body.character.omr;
+const rr = await reclaimExpiredVouchers(app.pool); // env reader (CHAIN_RPC_URL is set)
+assert(rr.omrReclaimed === 0, `a claimed voucher must not refund — got omrReclaimed ${rr.omrReclaimed}`);
+assert(rr.reconciled >= 1, 'the watcher-missed claim was reconciled from the chain');
+assert((await api('GET', '/v1/me', tok)).body.character.omr === omrBeforeReclaim, 'no $OMR refunded (no double-spend)');
+step('reclaim refuses to refund a truly-claimed voucher', 'read usedNonce() on-chain → reconciled, no double-spend');
+
 console.log('── PHASE 8: gear rail + minter gate (contract-level) ──');
 const gearTuple = { to: playerAddr, amount: 1n, kind: 1, gearId: 1n, nonce: 999001n, deadline: BigInt(Math.floor(Date.now() / 1000) + 3600) };
 const gearSig = await wallet(SIGNER_PK).signTypedData({
