@@ -13,10 +13,12 @@ Set `DATABASE_URL=postgres://...` to use real Postgres (schema auto-applies). Se
 ## Play it (the console)
 `npm start`, then open **http://localhost:8787/** — the playable web console (`public/index.html`, one
 static file, no build step, no extra deps). Guest sign-in → name a street character → the sheet (live
-vitals), crimes / train / bank / travel, **Wet Work** (the contract board, hunts, defenses, the streets roster), **the Law** (the investigation meter, the courtroom, the informant’s door), **the Kitchen** (lab → makings → cook → deal, the crew), **the
-Family** (found/join, tribute, territory, war & turf, the Commission), **the Black Market** (car
-auctions, district-pinned goods, buy orders), the City board, the Den, a live websocket feed ("the
-wire"), and an **Everything Else** deck that reaches every `/v1` system raw (`:params` become inputs,
+vitals), and a curated screen for EVERY major system: **Wet Work** (contracts, hunts, defenses, the
+roster), **the Law** (the meter, the courtroom, the informant's door), **the Kitchen**, **the Family**,
+**the Black Market**, **the Garage** (fleet + armory), **the Empire** (fronts, the pad, laundering),
+**Big Scores** (solo + crew heists, convoys), **the Shylock** (loans + the paper market), **the Life**
+(skills + the Underworld), **the Pen**, the City board, the Den, a live websocket feed ("the wire"),
+and an **Everything Else** deck that reaches the remaining `/v1` routes raw (`:params` become inputs,
 JSON bodies editable). `GET /v1/rules` serves the public rulebook (crimes/districts/guns/goods/lab
 ladder/trade ranks) that powers it — server-authoritative always; the client only ever sends choices.
 

@@ -240,7 +240,9 @@
 
   // ── tabs ──
   const TABS = { streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
-    market: 'Black Market', law: 'The Law', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
+    loans: 'The Shylock', life: 'The Life', pen: 'The Pen', law: 'The Law', city: 'The City',
+    den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -263,6 +265,12 @@
     if (id === 'market') renderMarket();
     if (id === 'pvp') renderPvp();
     if (id === 'law') renderLaw();
+    if (id === 'garage') renderGarage();
+    if (id === 'empire') renderEmpire();
+    if (id === 'scores') renderScores();
+    if (id === 'loans') renderLoans();
+    if (id === 'life') renderLife();
+    if (id === 'pen') renderPen();
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
@@ -880,6 +888,318 @@
     $('#flip-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
     $('#flip-go').onclick = () =>
       act('POST', `/v1/law/flip/${$('#flip-target').value}`, {}).then(() => renderLaw());
+  }
+
+  // ── THE GARAGE: your iron + the armory ──
+  async function renderGarage() {
+    const t = $('#tab-garage');
+    await refresh();
+    const ownedGuns = new Set(me.guns || []);
+    t.innerHTML = `
+      <h2>The Fleet (${(me.cars || []).length}) <button class="act" data-do="POST /v1/garage/boost" style="margin-left:8px">boost a car (GTA)</button></h2>
+      ${(me.cars || []).length ? `<div class="grid">${me.cars.map((c) => `
+        <div class="card"><span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
+          ${c.plate ? `<span class="chip">[${c.plate}]</span>` : ''}${c.listed ? '<span class="chip cold">ON THE BLOCK</span>' : ''}${c.pledged ? '<span class="chip cold">PLEDGED</span>' : ''}
+          <div class="d">damage ${c.dmg}%</div>
+          ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}">repair</button>
+          <button class="act" data-cardo="fence:${c.id}">fence</button>
+          <button class="act" data-cardo="melt:${c.id}">melt</button>`}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no iron — boost something</span>'}
+
+      <h2 style="margin-top:12px">The Armory <span class="d" style="font-size:10px">(carrying: ${me.gun || 'nothing'} · vest: ${me.vest || 'none'} · ammo ${fmt(me.ammo)})</span></h2>
+      <div class="grid">${(rules?.guns || []).map((g) => `
+        <div class="card"><span class="t">${g.name}</span>${me.gun === g.id ? '<span class="chip good">CARRYING</span>' : ownedGuns.has(g.id) ? '<span class="chip">owned</span>' : ''}
+          <div class="d">$${fmt(g.cash)} + ${g.crates} crate${g.crates > 1 ? 's' : ''} · firepower ${g.fp}</div>
+          <div class="d">${g.desc || ''}</div>
+          ${ownedGuns.has(g.id) ? (me.gun === g.id ? '<button class="act" data-do="POST /v1/armory/unequip">put it away</button>'
+            : `<button class="act" data-gundo="equip:${g.id}">carry it</button>`)
+            : `<button class="act" data-gundo="buy:${g.id}">buy</button>`}</div>`).join('')}</div>
+      <div style="margin-top:8px">
+        <input id="ammo-qty" placeholder="rounds" size="8"> <button class="act" id="ammo-buy">buy ammo</button>
+        <select id="vest-id">${(rules?.vests || []).map((v) => `<option value="${v.id}">${v.name} (${v.omr} $OMR)</option>`).join('')}</select>
+        <button class="act" id="vest-buy">buy vest</button></div>`;
+    t.querySelectorAll('[data-cardo]').forEach((b) => b.onclick = () => {
+      const [what, id] = b.dataset.cardo.split(':');
+      act('POST', `/v1/garage/${id}/${what}`, {}).then(() => renderGarage());
+    });
+    t.querySelectorAll('[data-gundo]').forEach((b) => b.onclick = () => {
+      const [what, id] = b.dataset.gundo.split(':');
+      act('POST', `/v1/armory/gun/${id}/${what}`, {}).then(() => renderGarage());
+    });
+    t.querySelector('#ammo-buy').onclick = () =>
+      act('POST', '/v1/armory/ammo', { qty: Number(t.querySelector('#ammo-qty').value) || 10 }).then(() => renderGarage());
+    t.querySelector('#vest-buy').onclick = () =>
+      act('POST', `/v1/armory/vest/${t.querySelector('#vest-id').value}`, {}).then(() => renderGarage());
+  }
+
+  // ── THE EMPIRE: personal fronts — income, the pad, laundering, scrutiny ──
+  async function renderEmpire() {
+    const t = $('#tab-empire');
+    await refresh();
+    const owned = (await api('GET', '/v1/business')).body?.businesses || [];
+    const cat = (await api('GET', '/v1/catalog')).body?.businesses || [];
+    const ownedKinds = new Set(owned.map((b) => b.kind));
+    t.innerHTML = `
+      <h2>Your Fronts (${owned.length})
+        <button class="act" data-do="POST /v1/business/collect" style="margin-left:8px">collect all</button>
+        <button class="act" data-do="POST /v1/business/upkeep">pay the pad</button></h2>
+      ${owned.length ? `<div class="grid">${owned.map((b) => `
+        <div class="card"><span class="t">${b.name} · tier ${b.tier}</span>
+          ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
+          <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
+          <div class="d">scrutiny ${b.scrutiny} · wash headroom $${fmt(b.launderHeadroom)}/day${b.kind === 'casino' ? ' · den rakeback at collect' : ''}</div>
+          ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
+          <input data-bizamt="${b.id}" placeholder="wash $" size="9"> <button class="act" data-bizwash="${b.id}">launder</button></div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
+
+      <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:10px">(income + PRIVATE laundering — lower heat than the street wash)</span></h2>
+      <div class="grid">${cat.map((c) => `
+        <div class="card"><span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
+          <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr, wash $${fmt(c.tiers[0].launderCapDay)}/day</div>
+          ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>`;
+    t.querySelectorAll('[data-bizbuy]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/business/${b.dataset.bizbuy}/buy`, {}).then(() => renderEmpire()));
+    t.querySelectorAll('[data-bizup]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/business/${b.dataset.bizup}/upgrade`, {}).then(() => renderEmpire()));
+    t.querySelectorAll('[data-bizwash]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/business/${b.dataset.bizwash}/launder`, { amount: Number(t.querySelector(`[data-bizamt="${b.dataset.bizwash}"]`).value) }).then(() => renderEmpire()));
+  }
+
+  // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──
+  async function renderScores() {
+    const t = $('#tab-scores');
+    await refresh();
+    const hb = (await api('GET', '/v1/heists')).body || {};
+    const cb = (await api('GET', '/v1/convoys')).body || {};
+    const my = hb.mine, cv = cb.mine;
+    t.innerHTML = `
+      <h2>The Solo Score</h2>
+      <div class="card"><div class="d">a one-man job — quick cash, shared cooldown with crew work</div>
+        ${me.heistSeconds > 0 ? `<span class="chip cold">cooling ${mins(me.heistSeconds)}</span>` : '<button class="act" data-do="POST /v1/heist">pull it</button>'}</div>
+
+      <h2 style="margin-top:12px">Crew Heists</h2>
+      ${my ? `
+        <div class="card" style="border-color:var(--neon)"><span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>
+          <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
+          ${my.leader ? `<button class="act" data-heistdo="execute:${my.id}" ${my.crewNeeded > 0 ? 'disabled' : ''}>EXECUTE</button>
+            <button class="act" data-heistdo="leave:${my.id}">disband</button>` : `<button class="act" data-heistdo="leave:${my.id}">walk away</button>`}
+          <button class="act" data-heistdo="rat:${my.id}" style="opacity:.55">…talk to the badges</button></div>` : `
+        <div class="d" style="color:var(--dim);font-size:12px;margin-bottom:4px">plan one (you front the stake) or crew up off the board:</div>
+        <select id="hj-job">${(hb.jobs || []).map((jb) => `<option value="${jb.id}">${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}</option>`).join('')}</select>
+        <select id="hj-role">${(hb.jobs?.[0]?.roles || []).map((ro) => `<option>${ro}</option>`).join('')}</select>
+        <input id="hj-biz" placeholder="mark's business id (inside job)" size="24" style="display:none">
+        <button class="act" id="hj-plan">plan it</button>`}
+      ${(hb.open || []).length ? `<div class="grid" style="margin-top:6px">${hb.open.map((o) => `
+        <div class="card"><span class="t">${o.name}</span>
+          <div class="d">${o.leader}'s job · ${o.crew} in, ${o.crewNeeded} needed · lvl ${o.lvl}+</div>
+          ${!my && o.rolesOpen.length ? `<select data-joinrole="${o.id}">${o.rolesOpen.map((ro) => `<option>${ro}</option>`).join('')}</select>
+          <button class="act" data-joinheist="${o.id}">crew up</button>` : ''}</div>`).join('')}</div>` : ''}
+
+      <h2 style="margin-top:12px">Smuggling Convoys</h2>
+      ${cv ? `
+        <div class="card" style="border-color:var(--neon)"><span class="t">your shipment · ${cv.from} → ${cv.to || '?'}</span> <span class="chip">${cv.status.toUpperCase()}</span>
+          <div class="d">manifest: ${cv.manifest.map((x) => `${goodName(x.good)} ×${x.qty}`).join(', ') || 'empty'}${cv.insured ? ' · INSURED' : ''}${cv.ambushes ? ` · hit ${cv.ambushes}×` : ''}${cv.insuranceDue ? ` · claim due $${fmt(cv.insuranceDue)}` : ''}</div>
+          ${cv.status === 'loading' ? `
+            <select id="cv-good">${Object.entries(me.cargo || {}).filter(([, q]) => q > 0).map(([id, q]) => `<option value="${id}">${goodName(id)} (${q})</option>`).join('')}</select>
+            <input id="cv-qty" placeholder="qty" size="5"> <button class="act" id="cv-load">load</button>
+            <select id="cv-guards">${(cb.guardTiers || []).map((gt) => `<option value="${gt.id}">${gt.id} guards ($${fmt(gt.fee)})</option>`).join('')}</select>
+            <label style="font-size:11px;color:var(--dim)"><input type="checkbox" id="cv-insure"> insure (${(cb.insureBps || 0) / 100}%)</label>
+            <button class="act" id="cv-depart">DEPART (30 min road)</button>
+            <button class="act" data-do="POST /v1/convoy/cancel">cancel</button>`
+          : cv.status === 'arrived' ? `<button class="act" data-convoy-collect="${cv.id}">collect at the dock (trunk-load at a time)</button>`
+          : `<span class="chip cold">on the road — ${mins(cv.arrivesSeconds || 0)}</span>`}</div>` : `
+        <div class="d" style="color:var(--dim);font-size:12px">open a shipment FROM ${me.loc} with a first load from the trunk (bulk beats the trunk cap — refill from the market between loads):</div>
+        <select id="cv-to">${(rules?.districts || []).filter((d) => (d.id || d) !== me.loc).map((d) => `<option value="${d.id || d}">${d.id || d}</option>`).join('')}</select>
+        <select id="cv-good0">${Object.entries(me.cargo || {}).filter(([, q]) => q > 0).map(([id, q]) => `<option value="${id}">${goodName(id)} (${q})</option>`).join('')}</select>
+        <input id="cv-qty0" placeholder="qty" size="5">
+        <button class="act" id="cv-open">open a shipment</button>
+        ${Object.values(me.cargo || {}).every((q) => !q) ? '<span class="d" style="color:var(--dim);font-size:11px"> (trunk empty — buy goods on the Streets first)</span>' : ''}`}
+      ${(cb.inTransit || []).length ? `<div class="grid" style="margin-top:6px">${cb.inTransit.map((c) => `
+        <div class="card"><span class="t">${c.owner}'s convoy</span>
+          <div class="d">${c.from} → ${c.to} · value ${c.band} · arrives ${mins(c.arrivesSeconds)} · ${c.ambushesLeft} ambush${c.ambushesLeft === 1 ? '' : 'es'} left</div>
+          <button class="act" data-ambush="${c.id}">AMBUSH (energy + ammo + heat)</button></div>`).join('')}</div>`
+        : '<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">no freight on the roads</div>'}`;
+    const jobSel = t.querySelector('#hj-job');
+    if (jobSel) {
+      const syncRoles = () => {
+        const jb = (hb.jobs || []).find((x) => x.id === jobSel.value);
+        t.querySelector('#hj-role').innerHTML = (jb?.roles || []).map((ro) => `<option>${ro}</option>`).join('');
+        t.querySelector('#hj-biz').style.display = jobSel.value === 'inside' ? 'inline-block' : 'none';
+      };
+      jobSel.onchange = syncRoles; syncRoles();
+      t.querySelector('#hj-plan').onclick = () => {
+        const body = { job: jobSel.value, role: t.querySelector('#hj-role').value };
+        const biz = t.querySelector('#hj-biz').value.trim(); if (biz) body.businessId = biz;
+        act('POST', '/v1/heists/plan', body).then(() => renderScores());
+      };
+    }
+    t.querySelectorAll('[data-heistdo]').forEach((b) => b.onclick = () => {
+      const [what, id] = b.dataset.heistdo.split(':');
+      act('POST', `/v1/heists/${id}/${what}`, {}).then(() => renderScores());
+    });
+    t.querySelectorAll('[data-joinheist]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/heists/${b.dataset.joinheist}/join`, { role: t.querySelector(`[data-joinrole="${b.dataset.joinheist}"]`).value }).then(() => renderScores()));
+    const cvOpen = t.querySelector('#cv-open');
+    if (cvOpen) cvOpen.onclick = () =>
+      act('POST', '/v1/convoy', { to: t.querySelector('#cv-to').value, goodId: t.querySelector('#cv-good0').value,
+        qty: Number(t.querySelector('#cv-qty0').value) || 1 }).then(() => renderScores());
+    const cvLoad = t.querySelector('#cv-load');
+    if (cvLoad) cvLoad.onclick = () =>
+      act('POST', '/v1/convoy/load', { goodId: t.querySelector('#cv-good').value, qty: Number(t.querySelector('#cv-qty').value) || 1 }).then(() => renderScores());
+    const cvDep = t.querySelector('#cv-depart');
+    if (cvDep) cvDep.onclick = () =>
+      act('POST', '/v1/convoy/depart', { guards: t.querySelector('#cv-guards').value, insure: t.querySelector('#cv-insure').checked }).then(() => renderScores());
+    t.querySelectorAll('[data-convoy-collect]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/convoy/${b.dataset.convoyCollect}/collect`, {}).then(() => renderScores()));
+    t.querySelectorAll('[data-ambush]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/convoy/${b.dataset.ambush}/ambush`, {}).then(() => renderScores()));
+  }
+
+  // ── THE SHYLOCK: the loan board, your book, the paper market ──
+  async function renderLoans() {
+    const t = $('#tab-loans');
+    await refresh();
+    const b = (await api('GET', '/v1/loans')).body || {};
+    const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
+    t.innerHTML = `
+      <h2>Open Offers <span class="d" style="font-size:10px">(vig ${(b.terms?.vigBps || 500) / 100}% of every settle → the pool)</span></h2>
+      ${(b.offers || []).length ? `<div class="grid">${b.offers.map((o) => `
+        <div class="card"><span class="t">$${fmt(o.principal)} at ${Math.round(o.rate * 100)}%</span>
+          ${o.mine ? '<span class="chip">your paper</span>' : ''}${o.forMe ? '<span class="chip good">FOR YOU</span>' : ''}${o.directed && !o.forMe && !o.mine ? '<span class="chip cold">spoken for</span>' : ''}
+          <div class="d">owe $${fmt(o.owed)} in ${o.hours}h · ${o.lender}${o.secured ? ` · SECURED: pledge a car worth $${fmt(o.collateralMin)}+` : ''}</div>
+          ${o.mine ? `<button class="act" data-loando="cancel:${o.id}">pull it</button>`
+            : `${o.secured ? `<input data-loancar="${o.id}" placeholder="car id to pledge" size="20">` : ''}
+               <button class="act" data-loantake="${o.id}">take the money</button>`}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no paper on offer</span>'}
+
+      <h2 style="margin-top:12px">Put Money on the Street</h2>
+      <input id="ln-amt" placeholder="principal $" size="10">
+      <input id="ln-rate" placeholder="rate (0.2 = 20%)" size="12">
+      <input id="ln-hours" placeholder="term hrs" size="8">
+      <select id="ln-to"><option value="">— open offer —</option>${streets.map((s) => `<option value="${s.id}">${s.name} only${s.id === me.id ? '' : ''}</option>`).join('')}</select>
+      <input id="ln-coll" placeholder="collateral min $ (opt)" size="16">
+      <button class="act" id="ln-offer">escrow it</button>
+      <div class="d" style="color:var(--dim);font-size:11px">the escrow leaves your pocket now — a defaulter gets leg-broken, branded a WELSHER, and goes WANTED</div>
+
+      <h2 style="margin-top:12px">Your Book</h2>
+      ${(b.active || []).length ? `<div class="grid">${b.active.map((l) => `
+        <div class="card"><span class="t">${l.role === 'lender' ? 'they owe you' : 'YOU OWE'} $${fmt(l.owed)}</span>
+          ${l.overdue ? '<span class="chip bad">OVERDUE</span>' : ''}${l.collateral ? '<span class="chip">secured</span>' : ''}${l.forSale ? `<span class="chip cold">paper listed $${fmt(l.forSale)}</span>` : ''}
+          <div class="d">${l.role === 'lender' ? 'to' : 'to'} ${l.counterparty} · ${l.overdue ? 'past due' : 'due in ' + mins(l.dueSeconds)}</div>
+          ${l.role === 'borrower' ? `<button class="act" data-loando="repay:${l.id}">square it</button>`
+            : `${l.overdue ? `<button class="act" data-loando="collect:${l.id}" style="border-color:var(--blood)">COLLECT (break legs)</button>` : ''}
+               ${l.forSale ? `<button class="act" data-loando="unsell:${l.id}">pull the paper</button>`
+                : `<input data-loanask="${l.id}" placeholder="ask $" size="8"> <button class="act" data-loansell="${l.id}">sell the paper</button>`}`}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no active debts either way</span>'}
+
+      <h2 style="margin-top:12px">The Paper Market <span class="d" style="font-size:10px">(buy a claim — the debt + collateral carry over)</span></h2>
+      ${(b.paper || []).length ? `<div class="grid">${b.paper.map((p) => `
+        <div class="card"><span class="t">$${fmt(p.owed)} claim — ask $${fmt(p.price)}</span>
+          ${p.borrowerWelsher ? '<span class="chip bad">WELSHER debtor</span>' : ''}${p.overdue ? '<span class="chip bad">overdue</span>' : ''}${p.collateral ? '<span class="chip">secured</span>' : ''}${p.mine ? '<span class="chip">yours</span>' : ''}
+          <div class="d">${p.borrower} owes it · held by ${p.lender} · ${p.overdue ? 'collectable NOW' : 'due ' + mins(p.dueSeconds)}</div>
+          ${p.mine ? '' : `<button class="act" data-loando="buy:${p.id}">buy the claim</button>`}</div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">nobody’s selling their book</span>'}
+      ${me.welsher || me.wanted ? `<div style="margin-top:10px"><button class="act" data-do="POST /v1/loans/square" style="border-color:var(--blood)">square your name ($50k — settle the debt first)</button></div>` : ''}`;
+    t.querySelector('#ln-offer').onclick = () => {
+      const body = { amount: Number(t.querySelector('#ln-amt').value), rate: Number(t.querySelector('#ln-rate').value), hours: Number(t.querySelector('#ln-hours').value) };
+      const to = t.querySelector('#ln-to').value; if (to) body.to = to;
+      const coll = Number(t.querySelector('#ln-coll').value); if (coll) body.collateral = coll;
+      act('POST', '/v1/loans', body).then(() => renderLoans());
+    };
+    t.querySelectorAll('[data-loantake]').forEach((btn) => btn.onclick = () => {
+      const carInp = t.querySelector(`[data-loancar="${btn.dataset.loantake}"]`);
+      const body = carInp && carInp.value.trim() ? { carId: carInp.value.trim() } : {};
+      act('POST', `/v1/loans/${btn.dataset.loantake}/take`, body).then(() => renderLoans());
+    });
+    t.querySelectorAll('[data-loando]').forEach((btn) => btn.onclick = () => {
+      const [what, id] = btn.dataset.loando.split(':');
+      act('POST', `/v1/loans/${id}/${what}`, {}).then(() => renderLoans());
+    });
+    t.querySelectorAll('[data-loansell]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/loans/${btn.dataset.loansell}/sell`, { price: Number(t.querySelector(`[data-loanask="${btn.dataset.loansell}"]`).value) }).then(() => renderLoans()));
+  }
+
+  // ── THE LIFE: the skill tree + the five fixtures who remember your name ──
+  async function renderLife() {
+    const t = $('#tab-life');
+    await refresh();
+    const sk = (await api('GET', '/v1/skills')).body || {};
+    const uw = (await api('GET', '/v1/underworld')).body || {};
+    const branches = {};
+    for (const s of (sk.tree || [])) (branches[s.branch] = branches[s.branch] || []).push(s);
+    t.innerHTML = `
+      <h2>The Build <span class="d" style="font-size:10px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
+        <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
+      <div class="grid">${Object.entries(branches).map(([br, list]) => `
+        <div class="card"><span class="t" style="text-transform:capitalize">${br}</span>
+          ${list.sort((a, b) => a.tier - b.tier).map((s) => `
+            <div class="d" style="margin-top:5px">${s.known ? '◆' : '◇'} <b>${s.name}</b> (t${s.tier}, ${s.cost}pt) — ${s.desc}
+              ${!s.known ? `<button class="act" data-learn="${s.id}" style="font-size:10px;padding:2px 6px">learn</button>` : ''}</div>`).join('')}</div>`).join('')}</div>
+
+      <h2 style="margin-top:12px">The Underworld
+        ${uw.lead ? `<span class="chip good">today's lead: ${uw.lead.npc} — ${uw.lead.task || 'any business'}</span>` : ''}
+        ${uw.errand ? `<span class="chip">errand: ${uw.errand.npc} ${uw.errand.step}/${uw.errand.of} — ${uw.errand.task}</span>` : ''}</h2>
+      <div class="grid">${(uw.npcs || []).map((n) => `
+        <div class="card"><span class="t">${n.name}</span> <span class="chip ${n.tier >= 3 ? 'good' : ''}">standing ${n.standing} · tier ${n.tier}</span>
+          ${n.grudge ? `<span class="chip bad">${n.grudge} grudge${n.grudge > 1 ? 's' : ''}</span>` : ''}
+          <div class="d">earns: ${n.earn}</div>
+          <div class="d">${(n.perks || []).map((p, i) => `${i < n.tier ? '◆' : '◇'} ${p}`).join('<br>')}</div>
+          ${n.standing < (uw.gift?.cap ?? 50) ? `<button class="act" data-uwgift="${n.id}">gift $${fmt(uw.gift?.cost || 5000)} (+${uw.gift?.standing || 5})</button>` : ''}
+          ${n.grudge ? `<button class="act" data-uwpenance="${n.id}">penance $${fmt(uw.penance || 25000)}</button>` : ''}
+          ${n.tier >= 3 && !uw.favor?.taken ? `<button class="act" data-uwfavor="${n.id}">the weekly favor</button>` : ''}
+          ${n.tier >= 1 && !uw.errand ? `<button class="act" data-uwerrand="${n.id}">take an errand</button>` : ''}</div>`).join('')}</div>
+      ${me.hospSeconds > 0 ? `<div style="margin-top:8px"><button class="act" data-do="POST /v1/underworld/discharge">Doc's early discharge ($150/min left)</button></div>` : ''}`;
+    t.querySelectorAll('[data-learn]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/skills/${btn.dataset.learn}`, {}).then(() => renderLife()));
+    for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
+      t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
+        act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));
+  }
+
+  // ── THE PEN: dead time made a place (jailed only) ──
+  async function renderPen() {
+    const t = $('#tab-pen');
+    await refresh();
+    const r = await api('GET', '/v1/pen');
+    const p = r.body || {};
+    if (!p.inside) {
+      t.innerHTML = `<h2>The Pen</h2><div class="card"><div class="d">You're on the outside. The yard only opens from a cell —
+        get busted (or don't) and this tab becomes your world: work the yard, buy contraband, pay the yard boss,
+        bribe the guard… or shank somebody who thought lockup made them safe.</div></div>`;
+      return;
+    }
+    t.innerHTML = `
+      <h2>The Yard <span class="chip bad">INSIDE — ${mins(p.sentenceSeconds)} left</span>
+        ${p.holeSeconds > 0 ? `<span class="chip bad">THE HOLE ${mins(p.holeSeconds)}</span>` : ''}
+        ${p.protectedSeconds > 0 ? `<span class="chip good">protected ${mins(p.protectedSeconds)}</span>` : ''}
+        ${p.armed ? '<span class="chip">carrying a shiv</span>' : ''}</h2>
+      <div class="card"><span class="t">${p.incident?.name || 'a day like any other'}</span>
+        <div class="d">${p.incident?.desc || ''}</div></div>
+      <div class="grid" style="margin-top:6px">
+        <div class="card"><span class="t">Work the Yard</span><div class="d">energy → a little cash + time off the stretch</div>
+          <button class="act" data-do="POST /v1/pen/work">work</button></div>
+        <div class="card"><span class="t">Protection</span><div class="d">$${fmt(p.protectionCost)} buys the yard boss's word — no shanks (shield, not bunker)</div>
+          <button class="act" data-do="POST /v1/pen/protection">pay</button></div>
+        <div class="card"><span class="t">Bribe the Guard</span><div class="d">$${fmt(p.bribePerSecond)}/second off the sentence</div>
+          <input id="pen-secs" placeholder="seconds" size="8"> <button class="act" id="pen-bribe">pay</button></div>
+      </div>
+      <h2 style="margin-top:10px">The Commissary</h2>
+      <div class="grid">${(p.commissary || []).map((it) => `
+        <div class="card"><span class="t">${it.name}</span><div class="d">$${fmt(it.cost)} — ${it.desc}</div>
+          <button class="act" data-penbuy="${it.id}">buy</button></div>`).join('')}</div>
+      <h2 style="margin-top:10px">The Roster (${(p.yard || []).length})</h2>
+      <div class="grid">${(p.yard || []).map((y) => `
+        <div class="card"><span class="t">${y.name}</span> <span class="d">lvl ${y.level ?? '?'}${y.gang ? ' · made' : ''}</span>
+          <button class="act" data-shank="${y.id}" style="border-color:var(--blood)">shank</button>
+          <button class="act" data-burner="${y.id}">burner: outside hit</button></div>`).join('')}</div>`;
+    t.querySelector('#pen-bribe').onclick = () =>
+      act('POST', '/v1/pen/bribe', { seconds: Number(t.querySelector('#pen-secs').value) }).then(() => renderPen());
+    t.querySelectorAll('[data-penbuy]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/buy/${btn.dataset.penbuy}`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-shank]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/shank/${btn.dataset.shank}`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-burner]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/burner/${btn.dataset.burner}`, { tier: 'legbreaker' }).then(() => renderPen()));
   }
 
   // data-do buttons (simple POST/GET with no body)
