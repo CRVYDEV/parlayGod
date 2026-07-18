@@ -26,11 +26,13 @@ async function postWantedBounty(client, targetId, h) {
   const tgt = (await client.query('SELECT respect FROM characters WHERE id=$1', [targetId])).rows[0];
   if (!tgt || levelOf(Number(tgt.respect)) < LOAN.WANTED_MIN_LVL) return;
   const bounty = LOAN.WANTED_BOUNTY;
-  // the pool fronts the price — if it can't cover it, the mark is still WANTED (omertà stripped + NPC
-  // hunters), just with no cash bounty (never drive the confiscation pool negative).
-  const poolRow = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-  if (!poolRow || Number(poolRow.pool) < bounty) return;
+  // lock the POT first, THEN street_tax — the canonical characters→pots→singletons order (postBounty/
+  // refundPot/cancelBounty all lock the pot before touching street_tax). A street_tax-before-pot order
+  // here would AB-BA every pot→takeHouse path (audit HIGH). The pool fronts the price — if it can't
+  // cover it, the mark is still WANTED (omertà stripped + NPC hunters), just with no cash bounty.
   const pot = (await client.query("SELECT amount, expires_at FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [targetId])).rows[0];
+  const poolRow = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+  if (!poolRow || Number(poolRow.pool) < bounty) return; // never drive the confiscation pool negative
   const wantedExp = new Date(Date.now() + LOAN.WANTED_MS);
   if (pot) { // ride a player's existing kill pot — top it up, keep it live for the pursuit window
     const exp = pot.expires_at && new Date(pot.expires_at) > wantedExp ? new Date(pot.expires_at) : wantedExp;
@@ -212,6 +214,14 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   const fromPocket = Math.min(collected, pocket);
   const fromTransit = collected - fromPocket;
   const vig = loanVig(collected), toLender = collected - vig;
+  // WANTED first: postWantedBounty locks the (target,'kill') pot BEFORE any street_tax, so the vig
+  // update below re-locks the already-held singleton — keeping the canonical pots→singletons order
+  // (a street_tax-before-pot collect would AB-BA a concurrent postBounty on the same mark, audit HIGH).
+  // The marks are in-memory (persisted by withTwoCharacters).
+  borrower.hosp_until = new Date(Date.now() + LOAN.COLLECT_HOSP_MS); // the leg-breaking
+  borrower.welsher = true;                                          // marked — can't borrow again
+  borrower.wanted_until = new Date(Date.now() + LOAN.WANTED_MS);     // WANTED: omertà stripped + hunted
+  await postWantedBounty(client, borrower.id, h);                   // the underworld puts a price on their head
   if (collected > 0) {
     borrower.cash = Number(borrower.cash) - fromPocket;
     borrower.bank = Number(borrower.bank) - fromTransit;
@@ -241,10 +251,6 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
     }
     carSeized = loan.collateral_car;
   }
-  borrower.hosp_until = new Date(Date.now() + LOAN.COLLECT_HOSP_MS); // the leg-breaking
-  borrower.welsher = true;                                          // marked — can't borrow again
-  borrower.wanted_until = new Date(Date.now() + LOAN.WANTED_MS);     // WANTED: omertà stripped + hunted
-  await postWantedBounty(client, borrower.id, h);                   // the underworld puts a price on their head
   await client.query("UPDATE loans SET status='collected' WHERE id=$1", [loanId]);
   await h.notify(client, borrower.id, 'loan_collected', { by: ch.name, seized: collected, car: !!carSeized, wanted: true });
   bus.emit('streets', { type: 'welsher', who: borrower.name, by: ch.name });
@@ -311,14 +317,16 @@ export async function squareWanted(ch, client, h) {
   if (stillOwed) throw new GameError('overdue', 'Settle the debt you welshed on first — repay it or let the shark collect. Then square your name.');
   const cost = LOAN.SQUARE_COST;
   if (Number(ch.cash) < cost) throw new GameError('cash', `Squaring your name runs $${cost}.`);
+  // lock the POT (then the contributor) BEFORE any street_tax — the canonical characters→pots→
+  // singletons order refundPot/cancelBounty/postBounty use, so a square can't AB-BA a concurrent
+  // expiry sweep or postWantedBounty on the same pot (audit HIGH; the earlier F5 note only reordered
+  // pot-vs-contributor, but the SQUARE_COST street_tax update below still sat BEFORE the pot lock).
+  const pot = (await client.query("SELECT amount FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [ch.id])).rows[0];
+  const house = (await client.query("SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE' FOR UPDATE", [ch.id])).rows[0];
   ch.cash = Number(ch.cash) - cost;
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]); // the payment → the buyback pool
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'loan:square' });
   // call off the pool's WANTED_BOUNTY — refund the HOUSE share to the pool, leaving any PLAYER share
-  // (a separate grudge stands). Lock the POT first, then the contributor (audit F5 — the pot→contributor
-  // order refundPot/cancelBounty use, so a square can't AB-BA a concurrent expiry sweep on the same pot).
-  const pot = (await client.query("SELECT amount FROM bounties WHERE target_character=$1 AND kind='kill' FOR UPDATE", [ch.id])).rows[0];
-  const house = (await client.query("SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE' FOR UPDATE", [ch.id])).rows[0];
   if (house) {
     const amt = Math.floor(Number(house.amount));
     await client.query("DELETE FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE'", [ch.id]);
@@ -436,8 +444,19 @@ export async function sweepLoans(pool, opts = {}) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Lock the counterparty characters (sorted, the global order) BEFORE the loan row. runEstate holds
+      // the dead borrower's char lock while it both DELETEs the pledged car (the estate wipe) and voids
+      // the loan — so a forfeit that grabbed the loan lock first would deadlock (it wants the car the
+      // estate deleted; the estate wants the loan lock we hold). Chars→loan keeps us behind any death.
+      const pre = (await client.query("SELECT lender_character, borrower_character FROM loans WHERE id=$1 AND status='active'", [id])).rows[0];
+      if (!pre) { await client.query('ROLLBACK'); continue; }
+      for (const cid of [pre.lender_character, pre.borrower_character].filter(Boolean).sort())
+        await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
       const loan = (await client.query("SELECT * FROM loans WHERE id=$1 AND status='active' FOR UPDATE", [id])).rows[0];
       if (!loan || !loan.collateral_car || new Date(loan.due_at) >= graceCut) { await client.query('ROLLBACK'); continue; }
+      // a paper sale can reassign lender_character between the unlocked pre-read and the lock — if the
+      // counterparties moved under us, skip this tick (the next sweep re-reads; 24h grace has many ticks)
+      if (loan.lender_character !== pre.lender_character || loan.borrower_character !== pre.borrower_character) { await client.query('ROLLBACK'); continue; }
       // the pledged car goes to the lender (it can only still be pledged to a LIVE active loan)
       const car = (await client.query('SELECT id FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
       if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false WHERE id=$1', [loan.collateral_car, loan.lender_character]);
