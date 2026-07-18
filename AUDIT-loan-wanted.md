@@ -100,9 +100,12 @@ between the unlocked pre-read and the lock is caught by a re-verify that skips t
   (a) fund the HOUSE pot from the defaulted **principal** instead of the pool — but a ring's principal
   stays inside the ring (the borrower keeps it on default), so it adds no real cost; (b) **remove** the
   auto pool bounty and rely on the lender opting into a self-funded welsher-hunt — but that walks back the
-  "both hunter types" the founder chose. Recommend KEEP the level floor (raise `WANTED_MIN_LVL` if the
-  farm is observed) and treat the residual as an accepted, §10.4-clean, bounded redistribution — the same
-  posture the codebase takes on the fight-fix (Sybil-scalable, flagged not blocked) and referral farming.
+  "both hunter types" the founder chose. Recommend KEEP the level floor and treat the residual as an
+  accepted, §10.4-clean, bounded redistribution — the same posture the codebase takes on the fight-fix
+  (Sybil-scalable, flagged not blocked) and referral farming. **Founder call taken: `WANTED_MIN_LVL`
+  raised 10→20** — the borrower alt dies each cycle, so the floor is a recurring cost, and level 20
+  (respect 1444) is ~4.5× the grind of level 10 (324) per disposable alt, taxing the ring while a real
+  mid-game welsher (who took a $25k+ loan) clears it comfortably.
 - **F3 (LOW) — disproportionate for a small loan.** A defaulted $5k (`LOAN.MIN`) loan triggers the full
   WANTED apparatus + a $50k square (~10× the debt). Bounded by borrower consent + a cheaper repay path;
   a balance dial.
