@@ -8,7 +8,8 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { LOAN, loanVig, loanOwed } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepLoans } from '../src/loans.js';
+import { sweepLoans, voidLoansAtDeath } from '../src/loans.js';
+import { ledger, notify } from '../src/game.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -146,6 +147,67 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM loans WHERE id='${
 const deathBurn = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='loan:death'")).rows[0].s);
 assert.equal(deathBurn, -25000, 'the escrow burn is ledgered (loan:death)');
 assert((await check('loan escrow')).ok, 'loan-escrow reconciles after the escrow burn (loan:death)');
+
+// ── AUDIT: actor gates (jailed / safe-housed can't run the book or break legs) ──
+const jailedLender = await mk('Jailbird Joe');
+await seedCh(jailedLender.id, "cash=200000, jail_until=now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/loans', { token: jailedLender.token, body: { amount: 20000, rate: 0.1, hours: 24 } })).body.error, 'jailed', 'no running your book from a cell');
+const safeLender = await mk('Safehouse Sal');
+await seedCh(safeLender.id, "cash=200000, safe_until=now() + interval '4 hours'");
+assert.equal((await call('POST', '/v1/loans', { token: safeLender.token, body: { amount: 20000, rate: 0.1, hours: 24 } })).body.error, 'safe', 'no fronting money from a safehouse (loot-proof-vault block)');
+// a jailed borrower can't take; a jailed/safe-housed collector can't collect
+const g1 = await mk('Gate Shark');
+const g2 = await mk('Gate Borrower');
+await seedCh(g1.id, 'cash=300000');
+await seedCh(g2.id, 'cash=100000');
+const gOffer = (await call('POST', '/v1/loans', { token: g1.token, body: { amount: 40000, rate: 0.2, hours: 1 } })).body.id;
+await seedCh(g2.id, "jail_until=now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/loans/${gOffer}/take`, { token: g2.token })).body.error, 'jailed', 'no taking a loan from lockup');
+await seedCh(g2.id, 'jail_until=NULL');
+await call('POST', `/v1/loans/${gOffer}/take`, { token: g2.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${gOffer}'`);
+await seedCh(g1.id, "jail_until=now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/loans/${gOffer}/collect`, { token: g1.token })).body.error, 'jailed', 'no collecting debts from a cell');
+await seedCh(g1.id, "jail_until=NULL, safe_until=now() + interval '4 hours'");
+assert.equal((await call('POST', `/v1/loans/${gOffer}/collect`, { token: g1.token })).body.error, 'safe', 'no shaking anyone down while to ground (P1.3)');
+
+// ── AUDIT: a fire-kill LOOTS the dead lender's open escrow (not a loot-proof vault) ──
+// Direct estate-hook call (a full fire-kill is exercised in test/social.js): killerCh + CASH_LOOT_RATE.
+const vaultVic = await mk('Vault Vic');
+const killer = await mk('Killer Kim');
+await seedCh(vaultVic.id, 'cash=500000');
+await call('POST', '/v1/loans', { token: vaultVic.token, body: { amount: 200000, rate: 0.1, hours: 24 } });
+assert((await check('loan escrow')).ok, 'escrow ok before the lender is whacked');
+{
+  const client = await pool.connect();
+  await client.query('BEGIN');
+  const killerCh = (await client.query(`SELECT * FROM characters WHERE id='${killer.id}' FOR UPDATE`)).rows[0];
+  const before = Number(killerCh.cash);
+  const res = await voidLoansAtDeath(client, vaultVic.id, { ledger, notify }, killerCh, 0.25);
+  await client.query(`UPDATE characters SET cash=${Number(killerCh.cash)} WHERE id='${killer.id}'`); // persist the in-memory killer credit
+  await client.query('COMMIT'); client.release();
+  assert.equal(res.looted, 50000, 'the killer loots 25% of the $200k open escrow');
+  assert.equal(await cashOf(killer.id) - before, 50000, 'the loot lands on the killer');
+}
+const loanLoot = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='loan:loot'")).rows[0].s);
+assert.equal(loanLoot, -50000, 'the escrow-side loot outflow is ledgered (loan:loot)');
+const vicBurn = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='loan:death' AND counterparty='${vaultVic.id}'`)).rows[0].s);
+assert.equal(vicBurn, -150000, 'the remainder of the escrow burns (loan:death)');
+assert((await check('loan escrow')).ok, 'loan-escrow reconciles after the loot + burn (loan:loot + loan:death)');
+
+// ── AUDIT (TOCTOU): the sweep never brands a borrower who legitimately repaid AFTER due ──
+const ts = await mk('Timely Shark');
+const tb = await mk('Timely Borrower');
+await seedCh(ts.id, 'cash=200000');
+await seedCh(tb.id, 'cash=100000');
+const tLoan = (await call('POST', '/v1/loans', { token: ts.token, body: { amount: 30000, rate: 0.1, hours: 1 } })).body.id;
+await call('POST', `/v1/loans/${tLoan}/take`, { token: tb.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 minute' WHERE id='${tLoan}'`); // now overdue
+await seedCh(tb.id, 'cash=100000'); // ensure pocket to repay
+r = await call('POST', `/v1/loans/${tLoan}/repay`, { token: tb.token }); // repay is allowed past due
+assert.equal(r.code, 200, 'a borrower can square an overdue debt before the shark collects');
+await sweepLoans(pool);
+assert.equal((await rawCh(tb.id)).welsher, false, 'squaring the debt (even late) keeps the name clean — the sweep re-scopes to STILL-active overdue loans');
 
 // ── §10.4: vocabulary closed ──
 const vocab = await check('reason vocabulary');

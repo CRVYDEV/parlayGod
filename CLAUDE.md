@@ -1133,6 +1133,23 @@ the bounty-escrow twin; repay/collect are check-(a)-neutral by construction). `L
 (vig → pool exactly), the welsher block + worker sweep, death both sides, and the closed vocabulary +
 escrow check. Suite 20/20 + sim drift-0. Step two deferred: directed/trust-line loans, an auto-contract
 posted on a welsher, debt trading (selling the paper), collateralized loans (car/gear as security).
+A **four-lens red-team** (`AUDIT-loan-sharking.md`: §10.4, concurrency/locks, gameplay/economy,
+cross-system) verified the core sound (no drift, no deadlock, no persist-clobber, no double-settle;
+welsher round-trips, all death paths clean, idempotency/rate-limit inherited) and fixed five in-commit
+(regression each): a **HIGH loot-proof cash vault** — a lender's OPEN-offer escrow was BURNED at death
+so a fire-kill looted none of it (the market buy-order hole, reopened); now `offerLoan` is safehouse-
+blocked and `voidLoansAtDeath` on a PLAYER fire-kill loots `CASH_LOOT_RATE` of the escrow to the killer
+(`whack:loot` + a NULL `loan:loot` outflow, remainder burns `loan:death`, the `market:loot` §10.4 twin);
+a **MED missing actor gate** (a dead `hospitalized` helper betrayed the dropped intent) — `collectLoan`
+now gates the actor `jailed`+`safeHoused`+`hospitalized` (the `shakedownBusiness` set — the borrower
+stays reachable, a civil recovery), `offerLoan`/`takeLoan` gate `jailed`; a **sweep welsher TOCTOU**
+(a set-based UPDATE re-scoped to a STILL-active overdue loan, so a late-but-paid debt keeps a clean
+name); the **in-transit loot-marker over-retention** on collect; and **death-void notifications**
+(`loan_defaulted`/`loan_voided`). Flagged for founder sign-off (NOT patched, ground rule #1): first-
+loan-default +EV for alts (the core balance call), the untaxed A→B collusion rail, the permanent
+welsher lockout with no built "square your name" route, no per-target collect cooldown, collect
+reaching a safehoused/witpro borrower (the civil-vs-attack call), killing-your-lender-erases-the-debt
+moral hazard, and the latent sweep/`alive=false` coupling.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
