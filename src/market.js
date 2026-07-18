@@ -67,6 +67,7 @@ export async function listItem(ch, opts, client, h) {
     const car = h.owned.cars.find((c) => c.id === opts.carId);
     if (!car) throw new GameError('no_car', 'Not your iron.');
     if (car.listed) throw new GameError('listed', "It's already on the block.");
+    if (car.pledged) throw new GameError('pledged', "That car's pledged as loan collateral — square the debt first."); // Loan step 2
     const minBid = Math.floor(Number(opts.minBid) || 0);
     if (minBid < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE}.`);
     const buyNow = opts.buyNow != null ? Math.floor(Number(opts.buyNow)) : null;

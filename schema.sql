@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS cars (
   dmg INT NOT NULL DEFAULT 0,
   plate TEXT,                                    -- M8 vanity plate (display only, $OMR sink)
   listed BOOLEAN NOT NULL DEFAULT false,         -- Black Market escrow: the row STAYS (car conservation counts rows); melt/fence/repair reject it
+  pledged BOOLEAN NOT NULL DEFAULT false,        -- Loan step 2: pledged as loan collateral — locked like `listed` (findCar/list reject); seized to the lender on default
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS character_items (
@@ -549,7 +550,10 @@ CREATE TABLE IF NOT EXISTS loans (
   hours INT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',              -- open | active | repaid | collected | cancelled
   offered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  due_at TIMESTAMPTZ
+  due_at TIMESTAMPTZ,
+  offered_to TEXT,                                  -- step 2: directed (trust-line) offer — only this borrower can take (NULL = open board)
+  collateral_min NUMERIC NOT NULL DEFAULT 0,        -- step 2: a SECURED offer requires a car worth ≥ this (0 = unsecured)
+  collateral_car TEXT                               -- step 2: the pledged car id once taken (NULL = none); seized to the lender on default
 );
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a

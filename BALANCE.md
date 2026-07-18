@@ -423,3 +423,25 @@ transfer rail (a take-side take or same-IP flag), a "square your name" welsher-c
 per-target collect cooldown, and whether default-collection is "civil" (reaches a safehoused/witpro
 borrower, as built — the shakedown precedent) or an "attack" (shield-gated like fire/npcHit). The
 five audited CODE defects are fixed in-commit (see `AUDIT-loan-sharking.md`); these are balance dials.
+
+## Post-signing addendum — Loan Sharking step two (secured credit & enforcement, sign-off levers)
+
+Framed by the step-one sign-off ("the lender vets their counterparties") to PRICE trust, not protect
+lenders retroactively. All numbers proposed, sim + founder sign-off before production:
+
+- **Directed (trust-line) loans** — no new number (a visibility + take gate; `loans.offered_to`).
+- **Collateralized loans** — `LOAN.COLLATERAL_MAX` $5M bounds a secured offer's asking figure; the pledge
+  valuation is `carCollateralValue` = `carVal × (1 − dmg/100)` (deterministic book value, reuses the signed
+  car catalog). Economic shape: secured lending lets credit reach un-vetted borrowers because the car
+  backstops the shortfall the lender would otherwise eat (step-one D1 flag). A default forfeits the car
+  (ownership move, §10.4-neutral) ON TOP of the cash seizure — so a secured borrower's default cost = the
+  30-min hosp + welsher mark + the pledged car, materially above the unsecured default (which the sign-off
+  left as "the lender's risk"). Watch: a lender could demand collateral worth far more than the loan (a
+  predatory over-pledge) — bounded only by the borrower declining; a max collateral-to-principal ratio is a
+  future lever if over-collateralization becomes a grief.
+- **The welsher hunt** — no new number (the `DIRECTED_MIN` waiver on a kill pot, the rat/vendetta twin). A
+  status consequence: a defaulter is cheaply huntable. No money moves; outside the signed economy (the
+  hitman-rep precedent — a cosmetic/access axis, not §10.4 balance).
+
+Step three deferred (design-only): debt trading (selling the paper — a secondary market with its own escrow),
+NPC lenders (a house credit line). Both are new surfaces needing their own sign-off.

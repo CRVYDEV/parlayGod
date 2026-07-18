@@ -1149,7 +1149,32 @@ name); the **in-transit loot-marker over-retention** on collect; and **death-voi
 loan-default +EV for alts (the core balance call), the untaxed A→B collusion rail, the permanent
 welsher lockout with no built "square your name" route, no per-target collect cooldown, collect
 reaching a safehoused/witpro borrower (the civil-vs-attack call), killing-your-lender-erases-the-debt
-moral hazard, and the latent sweep/`alive=false` coupling.
+moral hazard, and the latent sweep/`alive=false` coupling. **Balance SIGNED 2026-07-18: "the lender
+vets their counterparties"** — default risk stays with the lender by design (loan-sharking is a trust
+market; the welsher mark is a reputation signal, not a clawback), recorded in BALANCE.md; step two is
+framed as how trust gets PRICED, not retroactive lender protection.
+**Step two — secured credit & enforcement — BUILT** (`src/loans.js`, `test/loans.js`): three mechanics
+answering the sign-off's counterparty-risk framing. **(1) Directed (trust-line) loans** — `offerLoan {to}`
+names a living borrower who ALONE can take the offer (`loans.offered_to`; the board hides a directed
+offer from outsiders and flags `forMe` to the named borrower; `takeLoan` throws `directed` for anyone
+else) — the vetted-counterparty market made concrete. **(2) Collateralized loans** — `offerLoan {collateral}`
+sets a min car value (`loans.collateral_min`, ≤ `LOAN.COLLATERAL_MAX` $5M); the borrower pledges a car at
+`take {carId}` worth ≥ it by `carCollateralValue` (its damage-adjusted `carVal` book value, deterministic).
+The car LOCKS (`cars.pledged` — the `cars.listed` escrow precedent; `findCar` + market-list refuse a
+pledged car, so melt/fence/repair/list can't dodge it; CHOP still values it so a marked man can't
+warehouse his fleet by pledging). Repay/lender-death UNLOCKS it; a default `collectLoan` SEIZES it to the
+lender (`UPDATE cars SET character_id=lender` — a pure ownership move, §10.4-NEUTRAL since cars conserve
+by ROW COUNT, no ledger — the market/chop precedent; `carSeized` in the response). Secured lending lets
+credit cross trust gaps, priced up front (consensual, not retroactive). A dead BORROWER's pledged car
+dies with the fleet (the lender must collect BEFORE the borrower dies — "the debt dies with either party").
+**(3) The welsher hunt** — `postBounty` waives the `DIRECTED_MIN` floor on a KILL contract on a WELSHER
+(the rat/vendetta-waiver twin — a defaulter's broken word makes them cheap to put a named gun on); pure
+status consequence (no clawback, no money to any lender), kill-only, and — unlike a rat — a welsher KEEPS
+family omertà (a lesser offense). §10.4 untouched (collateral is ownership, not currency; no new reason).
+`test/loans.js` covers directed visibility+gate, the full collateral lifecycle (pledge/lock/melt-refused/
+repay-unlock/default-seize/dead-lender-unlock + car-count stability), and `test/social.js` the welsher
+kill-waiver (+ hospitalize-pot refusal). Suite 20/20 + sim drift-0. Numbers (`COLLATERAL_MAX`, the
+waiver) are founder sign-off levers. Step three deferred: debt trading (selling the paper), NPC lenders.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

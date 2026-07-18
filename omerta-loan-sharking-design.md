@@ -68,3 +68,32 @@ moved — §10.4-neutral, just delete the row).
 - **Collateral** — escrow a car/gear against the loan, forfeit on default.
 
 All numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.
+
+## Step two — secured credit & enforcement (BUILT 2026-07-18)
+
+The founder signed the step-one default-risk call "the lender vets their counterparties" — so step two
+prices and enforces TRUST rather than protecting lenders retroactively. Three mechanics:
+
+1. **Directed (trust-line) loans.** `POST /v1/loans {to}` names a borrower who alone can take the offer
+   (`loans.offered_to`). The board hides a directed offer from outsiders (shown only to the lender + named
+   borrower, flagged `forMe`); `takeLoan` throws `directed` for anyone else. This is the vetted-counterparty
+   market made explicit — a lender extends credit to someone they trust, at terms of their choosing.
+
+2. **Collateralized loans.** `POST /v1/loans {collateral}` requires the borrower to pledge a car worth
+   ≥ that figure (its damage-adjusted book value, `carCollateralValue` = `carVal × (1 − dmg/100)`; capped at
+   `LOAN.COLLATERAL_MAX` $5M). The borrower picks the car at `take {carId}`; it LOCKS (`cars.pledged`, the
+   `cars.listed` escrow precedent — `findCar` and market-listing refuse a pledged car so melt/fence/repair/
+   list can't dodge it; CHOP still values it). Repay (or the lender's death) unlocks it; a default
+   `collectLoan` SEIZES it to the lender (ownership transfer, §10.4-neutral — cars conserve by row count).
+   Secured lending lets credit cross trust gaps, priced up front — consensual, not retroactive protection.
+   A dead borrower's pledged car dies with the fleet (collect before they die — "the debt dies with either
+   party" applies to the collateral too).
+
+3. **The welsher hunt.** `postBounty` waives the `DIRECTED_MIN` floor on a KILL contract on a WELSHER (the
+   rat/vendetta-waiver twin). A defaulter's broken word makes them cheap to put a named gun on — a status
+   consequence of the reputation mark, NOT a clawback (no money returns to any lender). Kill-only (a
+   hospitalize pot keeps the floor). Unlike a rat, a welsher keeps family omertà (a lesser offense).
+
+§10.4 is untouched (collateral is ownership, not currency; the welsher hunt moves no value). All numbers
+(`COLLATERAL_MAX`, the waiver) are founder sign-off levers. Step three deferred: debt trading (selling the
+paper — a secondary market), NPC lenders.

@@ -329,7 +329,7 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
   if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
   const kind = opts.kind || 'kill';
   if (!BKINDS.has(kind)) throw new GameError('kind', "A contract is 'hospitalize' or 'kill'.");
-  const t = (await client.query('SELECT id, name, account_id FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  const t = (await client.query('SELECT id, name, account_id, welsher FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
   // a rat forfeits family protection (audit): fetched once, reused for the omertà void + the waiver
   const targetRat = !!(await client.query('SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;
@@ -364,7 +364,12 @@ export async function postBounty(ch, targetCharacterId, amount, client, h, opts 
     // THE LAW Phase 4: a RAT is fair game — the directed floor is waived on a KILL contract on an
     // informant, so the whole town can put a named gun on them cheaply (the vendetta-waiver twin).
     const ratWaiver = kind === 'kill' && targetRat;
-    if (!vendetta && !ratWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
+    // LOAN step 2 (the welsher hunt): a defaulter's broken word makes them cheap to hunt — the
+    // directed floor is waived on a KILL contract on a WELSHER (the rat-waiver twin; status
+    // consequence, not a clawback — no money returns to any lender). Their family still shields
+    // them from OPEN contracts (unlike a rat) — a welsher is a lesser offense than an informant.
+    const welsherWaiver = kind === 'kill' && !!t.welsher;
+    if (!vendetta && !ratWaiver && !welsherWaiver && amt < M3.DIRECTED_MIN) throw new GameError('directed_min', `Naming a hitman takes a serious stake — $${M3.DIRECTED_MIN} minimum.`);
     hitmanId = hm.id;
     const exH = Math.min(ttlH, M3.DIRECTED_MAX_H, Math.max(1, Math.floor(Number(opts.exclusiveHours) || 24)));
     opensAt = new Date(Date.now() + exH * 3600 * 1000);
