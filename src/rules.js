@@ -870,6 +870,27 @@ export const WORLD = {
   FAIL_HOSP_MS: 20 * 60 * 1000,                    // a repelled raid hospitalizes
   ROUT_FLOOR_BPS: 200,                             // "routed" once the reservoir is drained below 2% of max
 };
+
+// THE PEN — the prison meta-game (design omerta-the-pen-design.md). Turns `jail_until` dead time into
+// a place: work the yard down, buy contraband, pay for protection, bribe out — and the marquee
+// JAILHOUSE SHANK, reaching an enemy who's ALSO inside (bypassing the street defenses). Every Pen
+// action REQUIRES being jailed. Numbers are founder sign-off levers (ground rule #1).
+export const PEN = {
+  WORK_ENERGY: 15, WORK_PAY: [200, 600], WORK_CUT_S: 60,   // yard duty: energy → a little cash + shave 60s off the sentence
+  CONTRABAND: [
+    { id: 'shiv', name: 'Sharpened Toothbrush', cost: 5000, desc: 'The price of admission to a conversation nobody walks away from.' },
+  ],
+  PROTECTION_COST: 15000, PROTECTION_MS: 2 * 3600 * 1000,   // pay the yard boss for a no-shank window
+  BRIBE_PER_S: 200,                                         // bribe the guard: $/second shaved off the remaining sentence
+  SHANK_ENERGY: 25, SHANK_BASE: 0.5, SHANK_SCALE: 200,      // the shank contest: base + (musc edge)/scale, clamped
+  SHANK_MIN: 0.15, SHANK_MAX: 0.9,
+  KILL_ADD_S: 600, CAUGHT_ADD_S: 300, FAIL_DMG: [15, 35],   // a body / getting caught both add time; a miss hurts
+};
+export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
+// seconds left on a sentence (0 if free) — the Pen's clock
+export const jailSecondsLeft = (ch, now = Date.now()) =>
+  ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;
+export const penSafe = (ch, now = Date.now()) => !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now;
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —
