@@ -4,7 +4,7 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue } from './rules.js';
+import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -20,6 +20,11 @@ const isWanted = (ch) => ch.wanted_until && new Date(ch.wanted_until) > new Date
 async function postWantedBounty(client, targetId, h) {
   const already = (await client.query("SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind='kill' AND contributor='HOUSE'", [targetId])).rows[0];
   if (already) return; // already has a standing price on their head
+  // alt-farm mitigation (audit F2): no pool cash bounty on a low-level defaulter — a throwaway rookie
+  // alt is the cheap farm fodder, and a $25k pool price on a ~$500-estate nobody is the +EV the farm
+  // exploited. They're still WANTED (omertà stripped + NPC hunters); only the CASH price is gated.
+  const tgt = (await client.query('SELECT respect FROM characters WHERE id=$1', [targetId])).rows[0];
+  if (!tgt || levelOf(Number(tgt.respect)) < LOAN.WANTED_MIN_LVL) return;
   const bounty = LOAN.WANTED_BOUNTY;
   // the pool fronts the price — if it can't cover it, the mark is still WANTED (omertà stripped + NPC
   // hunters), just with no cash bounty (never drive the confiscation pool negative).

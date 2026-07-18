@@ -359,7 +359,7 @@ await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1'); // the pool ca
 const wLoan = (await call('POST', '/v1/loans', { token: wShark.token, body: { amount: 30000, rate: 0.2, hours: 1 } })).body.id;
 await call('POST', `/v1/loans/${wLoan}/take`, { token: welch.token });
 await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${wLoan}'`);
-await seedCh(welch.id, 'cash=0, bank=0, bank_intransit=0'); // broke — defaults
+await seedCh(welch.id, 'cash=0, bank=0, bank_intransit=0, respect=5000'); // broke, but a real (lvl 36) mark — worth a price
 const wPoolBefore = await poolCash();
 r = await call('POST', `/v1/loans/${wLoan}/collect`, { token: wShark.token });
 assert.equal(r.body.wanted, true, 'the default marks them WANTED');
@@ -367,6 +367,20 @@ assert.equal((await meOf(welch.token)).wanted, true, 'the view flags them wanted
 assert.equal(Number((await pool.query(`SELECT amount FROM bounty_contributors WHERE target_character='${welch.id}' AND kind='kill' AND contributor='HOUSE'`)).rows[0].amount), LOAN.WANTED_BOUNTY, 'the underworld posts a WANTED_BOUNTY from the pool');
 assert.equal(wPoolBefore - await poolCash(), LOAN.WANTED_BOUNTY, 'the pool fronts the price (nothing seized from the broke deadbeat, so no vig)');
 assert((await check('bounty escrow')).ok, 'bounty escrow reconciles with the pool-funded wanted bounty');
+// alt-farm mitigation: a LOW-LEVEL (rookie) defaulter is still WANTED but gets NO pool cash bounty
+const rookieShark = await mk('Rookie Shark');
+const rookie = await mk('Rookie Deadbeat'); // level 1 — a nobody
+await seedCh(rookieShark.id, 'cash=200000');
+await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1');
+const rkLoan = (await call('POST', '/v1/loans', { token: rookieShark.token, body: { amount: 20000, rate: 0.2, hours: 1 } })).body.id;
+await call('POST', `/v1/loans/${rkLoan}/take`, { token: rookie.token });
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${rkLoan}'`);
+await seedCh(rookie.id, 'cash=0, bank=0, bank_intransit=0'); // broke rookie (level 1)
+const rkPoolBefore = await poolCash();
+r = await call('POST', `/v1/loans/${rkLoan}/collect`, { token: rookieShark.token });
+assert.equal(r.body.wanted, true, 'a rookie deadbeat is still WANTED (omertà stripped + NPC hunters)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM bounty_contributors WHERE target_character='${rookie.id}' AND contributor='HOUSE'`)).rows[0].c), 0, 'but NO pool cash bounty on a nobody (alt-farm floor)');
+assert.equal(await poolCash(), rkPoolBefore, 'the pool is untouched by a rookie default');
 // a wanted defaulter can't dodge by being poor — but they CAN square their name
 assert.equal((await call('POST', '/v1/loans/square', { token: welch.token })).body.error, 'cash', 'squaring takes real money');
 await seedCh(welch.id, `cash=${LOAN.SQUARE_COST}`);
@@ -396,7 +410,7 @@ await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1');
 const hLoan = (await call('POST', '/v1/loans', { token: hShark.token, body: { amount: 20000, rate: 0.2, hours: 1 } })).body.id;
 await call('POST', `/v1/loans/${hLoan}/take`, { token: doomed.token });
 await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${hLoan}'`);
-await seedCh(doomed.id, 'cash=0, bank=0, bank_intransit=0');
+await seedCh(doomed.id, 'cash=0, bank=0, bank_intransit=0, respect=5000'); // a real (lvl 36) mark
 await call('POST', `/v1/loans/${hLoan}/collect`, { token: hShark.token }); // → wanted + a HOUSE bounty
 assert.equal(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${doomed.id}' AND kind='kill'`)).rows[0].amount), LOAN.WANTED_BOUNTY, 'the HOUSE bounty is live on the deadbeat');
 await pool.query(`UPDATE characters SET wanted_until=NULL WHERE id <> '${doomed.id}'`); // isolate: only the doomed mark is hunted

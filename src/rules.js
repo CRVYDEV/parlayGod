@@ -939,6 +939,10 @@ export const LOAN = {
   // and NPC bounty hunters roll WANTED_HUNT_P each worker tick to whack you. SQUARE_COST squares your
   // name — clears WANTED + the welsher mark + refunds the pool bounty (a cash sink → the pool).
   WANTED_MS: 3 * 24 * 3600 * 1000, WANTED_BOUNTY: 25000, WANTED_HUNT_P: 0.05, SQUARE_COST: 50000,
+  // alt-farm mitigation (audit F2): the pool-funded cash bounty only lands on a defaulter at or above
+  // this level — a throwaway rookie alt (the cheap farm fodder) gets NO pool price, though they're still
+  // WANTED (omertà stripped + NPC hunters). The npcHit "no hits on nobodies" rookie-floor precedent.
+  WANTED_MIN_LVL: 10,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // step 3: the house take on a paper (loan-claim) sale — the market/bodyguard 2% precedent → the pool

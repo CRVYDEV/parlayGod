@@ -1259,7 +1259,7 @@ the pot before the contributor, matching refundPot). The death path (headless pe
 the escrow integration (post/claim/burn/refund all reconcile), and the omertà-strip scoping were verified
 CLEAN. Flagged for founder sign-off (NOT patched): alt-farming the pool bounty (a per-account/day cap or
 principal-funding if it bites), disproportion vs a $5k loan, the jump-vs-family asymmetry, WANTED_HUNT_P
-tick-dependence. Suite 20/20 + sim drift-0.
+tick-dependence. Suite 20/20 + sim drift-0. **Alt-farm mitigation BUILT**: the pool cash bounty now only lands on a defaulter at/above `LOAN.WANTED_MIN_LVL` (10) — a throwaway rookie alt (the cheap farm fodder) gets NO price (still WANTED: omertà stripped + NPC hunters), the npcHit rookie-floor precedent; `test/loans.js` proves a rookie default posts no bounty + leaves the pool untouched.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
