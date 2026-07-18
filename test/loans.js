@@ -286,6 +286,28 @@ assert.equal(killL.statusCode, 200, 'the lender is dead');
 assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, false, 'the dead lender’s claim dies — the borrower’s car unlocks');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM loans WHERE id='${secured3.id}'`)).rows[0].c), 0, 'the active loan voided');
 
+// ── STEP TWO audit F1: an un-collected SECURED loan auto-forfeits its collateral past due + GRACE ──
+const afShark = await mk('Absent Shark');
+const afBorrow = await mk('Grace Gary');
+await seedCh(afShark.id, 'cash=200000');
+const afCar = await mkCar(afBorrow.id, 'pigeon', 'stock', 0);
+const afLoan = (await call('POST', '/v1/loans', { token: afShark.token, body: { amount: 20000, rate: 0.1, hours: 1, collateral: 1500 } })).body.id;
+await call('POST', `/v1/loans/${afLoan}/take`, { token: afBorrow.token, body: { carId: afCar } });
+// overdue but WITHIN grace → NOT forfeited (the lender still has time to collect; the borrower to repay)
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${afLoan}'`);
+let afSweep = await sweepLoans(pool);
+assert.equal(afSweep.forfeited, 0, 'a loan overdue within grace is NOT auto-forfeited');
+assert.equal((await pool.query(`SELECT character_id, pledged FROM cars WHERE id='${afCar}'`)).rows[0].character_id, afBorrow.id, 'the car is still the borrower’s inside the grace window');
+// past due + GRACE_MS → the collateral car forfeits to the lender, the loan resolves
+await pool.query(`UPDATE loans SET due_at = now() - interval '48 hours' WHERE id='${afLoan}'`);
+afSweep = await sweepLoans(pool);
+assert.equal(afSweep.forfeited, 1, 'past the grace window the collateral auto-forfeits');
+const afRow = (await pool.query(`SELECT character_id, pledged FROM cars WHERE id='${afCar}'`)).rows[0];
+assert.equal(afRow.character_id, afShark.id, 'the abandoned collateral goes to the lender');
+assert.equal(afRow.pledged, false, 'and unlocks (it changed hands — no frozen car)');
+assert.equal((await pool.query(`SELECT status FROM loans WHERE id='${afLoan}'`)).rows[0].status, 'collected', 'the loan resolves on forfeit');
+assert((await check('loan escrow')).ok, 'loan-escrow still reconciles after an auto-forfeit (a pure ownership move)');
+
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);

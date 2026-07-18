@@ -280,5 +280,31 @@ export async function sweepLoans(pool, opts = {}) {
     `UPDATE characters SET welsher=true WHERE alive AND NOT welsher AND id IN (
        SELECT borrower_character FROM loans WHERE status='active' AND due_at < $1)`, [now]);
   welshed = r.rowCount;
-  return { refunded, welshed, offers: stale.length };
+  // audit F1: a SECURED loan left un-collected past due + GRACE_MS auto-forfeits its collateral car to
+  // the lender — so an absent/spiteful lender can't freeze the borrower's car forever (the borrower
+  // always had the grace to repay). COLLATERAL-ONLY: the car changes hands (a pure ownership move, no
+  // cash, §10.4-neutral — cars conserve by row count), the loan resolves. The lender who also wanted
+  // the cash had the grace window to collectLoan manually. Lock the loan (serializes vs a concurrent
+  // manual collect/repay); the car + loan are the only writes (no character rows → no lock cycle).
+  let forfeited = 0;
+  const graceCut = new Date(now.getTime() - LOAN.GRACE_MS);
+  const abandoned = (await pool.query(
+    "SELECT id FROM loans WHERE status='active' AND collateral_car IS NOT NULL AND due_at < $1 ORDER BY id", [graceCut])).rows;
+  for (const { id } of abandoned) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const loan = (await client.query("SELECT * FROM loans WHERE id=$1 AND status='active' FOR UPDATE", [id])).rows[0];
+      if (!loan || !loan.collateral_car || new Date(loan.due_at) >= graceCut) { await client.query('ROLLBACK'); continue; }
+      // the pledged car goes to the lender (it can only still be pledged to a LIVE active loan)
+      const car = (await client.query('SELECT id FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
+      if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false WHERE id=$1', [loan.collateral_car, loan.lender_character]);
+      await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
+      await notify(client, loan.lender_character, 'loan_forfeited', { car: !!car });
+      await notify(client, loan.borrower_character, 'loan_forfeited', { car: !!car, lost: true });
+      await client.query('COMMIT'); forfeited++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans forfeit', id, e.message); }
+    finally { client.release(); }
+  }
+  return { refunded, welshed, forfeited, offers: stale.length };
 }
