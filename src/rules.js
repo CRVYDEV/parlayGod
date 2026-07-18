@@ -929,8 +929,14 @@ export const LOAN = {
   // borrower's car forever. The borrower always had the grace window to repay; the lender had it to
   // collect cash+car manually. The forfeit is collateral-only (no cash seized) — a pure ownership move.
   GRACE_MS: 24 * 3600 * 1000,
+  // step 3 (the paper market): a lender can SELL an active loan's claim to another player at an ask
+  // price. The buyer becomes the new lender (the debt/collateral unchanged); the sale is a taxed cash
+  // transfer — PAPER_TAKE_BPS (2%) → the buyback pool (never a free alt-rail). Price is bounded.
+  PAPER_TAKE_BPS: 200, PAPER_MIN: 1, PAPER_MAX: 5000000,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
+// step 3: the house take on a paper (loan-claim) sale — the market/bodyguard 2% precedent → the pool
+export const paperTake = (price) => Math.ceil(Math.max(0, Number(price)) * LOAN.PAPER_TAKE_BPS / 10000);
 // outstanding debt on an active loan = principal × (1 + rate), floored to whole dollars
 export const loanOwed = (principal, rate) => Math.floor(Number(principal) * (1 + Number(rate)));
 // step 2: a car's collateral (book) value = its cash value taken down by damage. Deterministic +

@@ -1194,6 +1194,24 @@ covers within-grace (not forfeited) vs past-grace (car → lender, loan resolved
 sign-off (NOT patched): directed loans make the untaxed A→B collusion rail deterministic (one-shot per alt, `MAX_ACTIVE=1`); a
 welsher is a cheap perpetual named-kill target (intended); collateral seizure bypasses `GARAGE_CAP` (the
 market-win precedent).
+**Step three — the paper market (debt trading) — BUILT** (`src/loans.js`, `test/loans.js`): a secondary
+market for loan CLAIMS, the natural completion of the loan economy and the sharpest expression of "trust
+gets priced." A lender lists an ACTIVE loan's claim for sale (`sellPaper`, `POST /v1/loans/:id/sell
+{price}` → `loans.for_sale`, no escrow — a claim, not cash; `unsell` pulls it); `GET /v1/loans` gains a
+`paper` section showing every listing with `owed`, `collateral`, `overdue`, and **`borrowerWelsher`** so
+buyers price default risk (a welsher's paper trades far below face; a collector with muscle buys risky
+paper cheap and enforces it). `buyPaper` (`POST /v1/loans/:id/buy`, two-party) pays the ask minus
+`PAPER_TAKE_BPS` (2%) → the buyback pool and reassigns `lender_character` — the debt + any collateral
+carry over unchanged; the borrower can't buy the paper on their own debt (`own_debt`). §10.4: a pure
+taxed cash transfer (`loan:paper` — buyer −price, seller +net, NULL take → pool — riding the existing
+`loan:` vocabulary; the loan-escrow check is untouched since paper is ACTIVE loans, not open escrow; the
+loan's principal/vig still fire on repay/collect whoever holds it, so no new faucet). Death needs no new
+handling (paper escrows nothing; a dead party's loan voids, taking the listing). `PAPER_TAKE_BPS` + price
+bounds are founder sign-off levers. `test/loans.js` covers the sell/unsell/board/own_debt gates, the buy
+transfer (ask − take → pool, new lender), and the new lender collecting the claim they bought. Suite
+20/20 + sim drift-0. **NPC lenders DEFERRED (step four decision)** — an always-available house lender that
+MINTS cash to lend is a net inflation faucet on default; doing it §10.4-clean needs a BACKED sink-funded
+`loan_house` pool (the Phase-4 stake-pool pattern), its own build — flagged, not hand-waved as a mint.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

@@ -308,6 +308,43 @@ assert.equal(afRow.pledged, false, 'and unlocks (it changed hands — no frozen 
 assert.equal((await pool.query(`SELECT status FROM loans WHERE id='${afLoan}'`)).rows[0].status, 'collected', 'the loan resolves on forfeit');
 assert((await check('loan escrow')).ok, 'loan-escrow still reconciles after an auto-forfeit (a pure ownership move)');
 
+// ── STEP THREE: the PAPER market — sell an active loan's claim to another player ──
+const pLender = await mk('Paper Pete');
+const pBorrow = await mk('Debtor Dave');
+const pBuyer = await mk('Collector Cal');
+await seedCh(pLender.id, 'cash=200000');
+await seedCh(pBuyer.id, 'cash=200000');
+const pLoan = (await call('POST', '/v1/loans', { token: pLender.token, body: { amount: 50000, rate: 0.2, hours: 24 } })).body.id;
+await call('POST', `/v1/loans/${pLoan}/take`, { token: pBorrow.token });
+assert.equal((await call('POST', `/v1/loans/${pLoan}/sell`, { token: pBorrow.token, body: { price: 40000 } })).body.error, 'not_yours', 'only the lender sells the paper');
+assert.equal((await call('POST', `/v1/loans/${pLoan}/sell`, { token: pLender.token, body: { price: 0 } })).body.error, 'price', 'a paper needs a price');
+assert.equal((await call('POST', `/v1/loans/${pLoan}/sell`, { token: pLender.token, body: { price: 40000 } })).code, 200, 'the paper is listed');
+// unsell then relist (the flag toggles cleanly)
+assert.equal((await call('POST', `/v1/loans/${pLoan}/unsell`, { token: pLender.token })).code, 200, 'the lender can pull the paper');
+assert.equal((await call('POST', `/v1/loans/${pLoan}/buy`, { token: pBuyer.token })).body.error, 'gone', 'an unlisted paper can’t be bought');
+await call('POST', `/v1/loans/${pLoan}/sell`, { token: pLender.token, body: { price: 40000 } });
+// the board surfaces the receivable + its risk (owed, collateral, welsher)
+const listing = (await call('GET', '/v1/loans', { token: pBuyer.token })).body.paper.find((p) => p.id === pLoan);
+assert(listing && listing.price === 40000 && listing.owed === loanOwed(50000, 0.2), 'the paper shows price + owed (the receivable)');
+assert.equal((await call('POST', `/v1/loans/${pLoan}/buy`, { token: pBorrow.token })).body.error, 'own_debt', 'you can’t buy the paper on your own debt');
+// buy: pay the ask minus the 2% take → the pool; become the new lender
+const takeP = Math.ceil(40000 * LOAN.PAPER_TAKE_BPS / 10000);
+const buyerBefore = await cashOf(pBuyer.id), sellerBefore = await cashOf(pLender.id), poolBeforeP = await poolCash();
+r = await call('POST', `/v1/loans/${pLoan}/buy`, { token: pBuyer.token });
+assert.equal(r.code, 200, 'the paper is bought');
+assert.equal(buyerBefore - await cashOf(pBuyer.id), 40000, 'the buyer pays the ask');
+assert.equal(await cashOf(pLender.id) - sellerBefore, 40000 - takeP, 'the seller gets the ask minus the take');
+assert.equal(await poolCash() - poolBeforeP, takeP, 'the 2% take reaches the buyback pool');
+assert.equal((await pool.query(`SELECT lender_character, for_sale FROM loans WHERE id='${pLoan}'`)).rows[0].lender_character, pBuyer.id, 'the buyer is the new lender');
+assert.equal(await ledgerOf(pBuyer.id, 'loan:paper') + await ledgerOf(pLender.id, 'loan:paper'), -takeP, 'the two paper rows net to −take (the taxed transfer)');
+// the NEW lender now holds the claim — the borrower owes THEM
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${pLoan}'`);
+await seedCh(pBorrow.id, 'cash=100000, bank=0, bank_intransit=0');
+r = await call('POST', `/v1/loans/${pLoan}/collect`, { token: pBuyer.token });
+assert.equal(r.code, 200, 'the new lender collects the claim they bought');
+assert(r.body.seized > 0, 'and recovers the debt');
+assert((await check('loan escrow')).ok, 'loan-escrow unaffected by a paper sale (active loans, not open escrow)');
+
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);

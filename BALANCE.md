@@ -445,3 +445,22 @@ lenders retroactively. All numbers proposed, sim + founder sign-off before produ
 
 Step three deferred (design-only): debt trading (selling the paper — a secondary market with its own escrow),
 NPC lenders (a house credit line). Both are new surfaces needing their own sign-off.
+
+## Post-signing addendum — Loan Sharking step two F1 + step three (sign-off levers)
+
+- **Collateral auto-forfeit** (`LOAN.GRACE_MS` 24h) — a SECURED loan left un-collected past due + grace
+  auto-forfeits its collateral car to the lender (worker sweep). Collateral-only, no cash — so it only
+  resolves genuinely abandoned loans and does NOT touch the signed step-one cash-default behavior (the
+  lender still bears cash risk; the borrower always had the grace to repay). A pure ownership move,
+  §10.4-neutral. GRACE_MS is the lever.
+- **The paper market** (`LOAN.PAPER_TAKE_BPS` 2%, `PAPER_MIN` $1 / `PAPER_MAX` $5M) — a lender sells an
+  active loan's claim; the buyer becomes the new lender. A taxed cash transfer (2% → the pool, the
+  market/bodyguard-take precedent) so it's not a free alt-rail. Economic shape: a receivable trades at a
+  discount to `owed` reflecting default risk (collateral, the welsher mark, overdue) — creating a role
+  for collector-specialists who buy risky paper cheap and enforce it. No new faucet (the loan's
+  principal/vig fire on repay/collect regardless of who holds it). PAPER_TAKE_BPS + the price bounds are
+  the levers.
+- **NPC lenders — DEFERRED, not built.** An always-available house lender that MINTS cash to lend is a
+  net inflation faucet on default (borrow → spend → default → keep). Doing it §10.4-clean needs a BACKED,
+  sink-funded `loan_house` pool (the Phase-4 stake-pool pattern) — its own build, flagged for a step-four
+  decision, NOT hand-waved as a mint.
