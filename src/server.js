@@ -29,8 +29,11 @@ import * as Loans from './loans.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf,
+         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf } from './rules.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const uid = () => crypto.randomUUID();
 
@@ -40,6 +43,12 @@ export async function buildServer() {
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET)
     throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
   const app = Fastify({ logger: false });
+
+  // ── the playable console: one static file, no build step, no new deps (public/index.html) ──
+  // Read once at boot; a missing file degrades to a pointer, never a crash (tests boot headless).
+  let clientHtml = '<!doctype html><title>OMERTA</title><p>API up. Client file missing (public/index.html).</p>';
+  try { clientHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'index.html'), 'utf8'); } catch { /* headless */ }
+  app.get('/', async (req, reply) => reply.type('text/html; charset=utf-8').send(clientHtml));
   const pool = await makeDb();
   app.decorate('pool', pool);
   await app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret-change-me' });
@@ -313,6 +322,18 @@ export async function buildServer() {
   // farm pocket cash and double as private, lower-heat laundering. GET /v1/catalog is the public
   // discoverable catalog (also closes the audit's API-discoverability gap).
   app.get('/v1/catalog', async () => ({ businesses: Business.catalog() }));
+  // ── the public rulebook (client discoverability — the /v1/catalog precedent, read-only) ──
+  // Curated PUBLIC constants only: what the prototype UI always showed players. Server stays
+  // authoritative — knowing the odds table doesn't move a single roll client-side.
+  app.get('/v1/rules', async () => ({
+    crimes: CRIMES.map((c) => ({ id: c.id, name: c.name, lvl: c.lvl, nerve: c.nerve, cash: c.cash, base: c.base, jail: c.jail })),
+    districts: DISTRICTS,
+    stats: ['muscle', 'cunning', 'speed'],
+    guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
+    vests: VESTS.map((v) => ({ id: v.id, name: v.name, mult: v.mult, omr: v.omr, desc: v.desc })),
+    drugs: DRUGS.map((d) => ({ id: d.id, name: d.name, tag: d.tag, base: d.base, unlock: d.unlock })),
+    goods: GOODS.map((g) => ({ id: g.id, name: g.name, base: g.base })),
+  }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
   app.post('/v1/business/collect', { preHandler: auth }, async (req) =>

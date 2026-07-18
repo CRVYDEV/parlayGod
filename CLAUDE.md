@@ -1289,6 +1289,25 @@ CONTRACT-driven (pots + the WANTED house bounty + war points + vendettas pay; lo
 now prints a standing `contract break-even` probe (~$72k pot turns a mid-mark job +EV) so the number is
 tracked at every economy change. Suite 20/20 + sim drift-0.
 
+**THE CONSOLE (playable client, step one) — BUILT** (`public/index.html`, served at `GET /` by
+server.js; screenshot-verified in Chromium). One static file, zero new deps, zero build step — the
+deploy story is unchanged. Guest auth → character creation → the SHEET (live vitals/status chips
+incl. wanted/welsher/indicted/law stage), the Streets tab (all 29 crimes off `GET /v1/rules`, train,
+bank with the in-transit warning, travel), the City board (`/v1/city` events/weather/forecast/clock),
+the Den (craps/numbers/fight/back-room off `/v1/casino`), THE WIRE (live `/v1/ws` websocket feed with
+auto-reconnect + auto-refresh on `me` events), a Last-Word response viewer, and the **Everything Else
+deck** — a grouped registry of ~150 routes covering every system (`:params` become inputs, JSON bodies
+prefilled + editable), each entry VERIFIED against server.js registrations (two were fixed by the
+check: `/v1/contracts/:targetId/:kind/cancel`, `/v1/convoy/:id/collect`). New backend surface:
+`GET /v1/rules` (the public rulebook — curated CRIMES/DISTRICTS/GUNS/VESTS/DRUGS/GOODS constants, the
+/v1/catalog discoverability precedent; server stays authoritative — odds knowledge moves no roll) and
+the `GET /` static route (file read once at boot, headless-safe fallback). Client bug found by the
+end-to-end probe and fixed: `content-type: application/json` on a bodyless POST 400s in Fastify —
+the header now rides only with a body. Verified live: serve → guest → create → crime → bank
+(in-transit visible) → travel → dice at neon → WS hello + feed, plus four Chromium screenshots.
+Deferred (client step two): kitchen/family/market curated screens (the deck reaches them raw today),
+mobile layout polish, the X/Privy sign-in buttons (guest + upgrade path works).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
