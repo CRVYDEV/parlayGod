@@ -1077,10 +1077,12 @@ async function bodyguardAbsorbs(client, h, attacker, victim) {
 // (`npchit:hire`), the payer takes law heat + a cooldown, and it pays ZERO rep (no player
 // killer). On a landed hit the estate runs (no chop/bounty — nobody fulfilled a contract);
 // pre-paid revive insurance absorbs it exactly like a player hit.
-export async function npcHit(ch, victim, client, h, tierId) {
+export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   const tier = npcHitmanOf(tierId);
   if (!tier) throw new GameError('bad_tier', 'No such contractor for hire.');
-  if (jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
+  // THE PEN step two: a burner phone (opts.fromBurner) is the ONE way to arrange wet work from a
+  // cell — pen.js consumes the burner first, then calls in with the jail gate waived.
+  if (!opts.fromBurner && jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat) throw new GameError('family', "They're family. Omertà."); // a rat forfeits family protection
   const vicLvl = levelOf(Number(victim.respect));

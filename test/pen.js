@@ -4,9 +4,10 @@
 // estate, no loot, sentence extended), the caught miss, and paid revive-insurance absorption. §10.4
 // vocabulary stays closed (pen:* — a bounded work faucet + commissary/protection/bribe sinks). pg-mem.
 process.env.MOD_KEY = 'test-mod-key';
+process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the step-one tests (overridden per-case below)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PEN } from '../src/rules.js';
+import { PEN, NPC_HITMEN } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -165,9 +166,82 @@ assert.equal(r.body.kill, true, 'the yard hit lands');
 assert.equal(r.body.bounty, 100000, 'the open kill contract pays out on a shank');
 assert.equal(Number((await rawCh(yardKiller.id)).cash) - ykCash0, 100000, 'the shanker collects the contract (wet work paid, escrow not burned)');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP TWO — the hole, yard incidents, the burner phone
+// ─────────────────────────────────────────────────────────────────────────────
+// THE HOLE: a caught shank throws the killer in solitary — no yard actions, and untouchable.
+const holed = await mk('Holed Hank');
+const holeMark = await mk('Hole Mark');
+await seedCh(holed.id, `${jailFuture}, energy=200, cash=200000, health=100`);
+await seedCh(holeMark.id, `${jailFuture}, respect=500`);
+await call('POST', '/v1/pen/buy/shiv', { token: holed.token });
+process.env.SHANK_P = '0';
+r = await call('POST', `/v1/pen/shank/${holeMark.id}`, { token: holed.token });
+delete process.env.SHANK_P;
+assert.equal(r.body.caught, true, 'the shank is fumbled');
+assert(r.body.holeSeconds > 0, 'getting caught earns a stretch in the hole');
+let hb = (await call('GET', '/v1/pen', { token: holed.token })).body;
+assert(hb.holeSeconds > 0, 'the board shows the hole time');
+assert.equal((await call('POST', '/v1/pen/work', { token: holed.token })).body.error, 'hole', 'no yard duty from the hole');
+await seedCh(holed.id, 'cash=200000');
+assert.equal((await call('POST', '/v1/pen/buy/shiv', { token: holed.token })).body.error, 'hole', 'no commissary from the hole');
+// …and a man in the hole can't be shanked (segregated)
+const holeHunter = await mk('Hole Hunter');
+await seedCh(holeHunter.id, `${jailFuture}, energy=200, cash=200000, muscle=400`);
+await call('POST', '/v1/pen/buy/shiv', { token: holeHunter.token });
+process.env.SHANK_P = '1';
+assert.equal((await call('POST', `/v1/pen/shank/${holed.id}`, { token: holeHunter.token })).body.error, 'segregated', 'nobody reaches a man in the hole');
+delete process.env.SHANK_P;
+await seedCh(holed.id, 'hole_until=NULL');
+
+// YARD INCIDENTS: deterministic block-wide modifiers (forced via PEN_YARD_EVENT for the test).
+// LOCKDOWN freezes the yard — no shanks.
+const inc = await mk('Incident Ike');
+const incMark = await mk('Incident Mark');
+await seedCh(inc.id, `${jailFuture}, energy=200, cash=1000000, muscle=400`);
+await seedCh(incMark.id, `${jailFuture}, respect=500`);
+await call('POST', '/v1/pen/buy/shiv', { token: inc.token });
+process.env.PEN_YARD_EVENT = 'lockdown';
+assert.equal((await call('POST', `/v1/pen/shank/${incMark.id}`, { token: inc.token })).body.error, 'lockdown', 'a lockdown freezes the yard — no shanks');
+assert.equal((await call('GET', '/v1/pen', { token: inc.token })).body.incident.id, 'lockdown', 'the board names the incident');
+// A CELL TOSS closes the commissary.
+process.env.PEN_YARD_EVENT = 'toss';
+assert.equal((await call('POST', '/v1/pen/buy/shiv', { token: inc.token })).body.error, 'toss', 'a cell toss shuts the commissary');
+// A RIOT halves protection (the board reflects it, the charge is the discounted number).
+process.env.PEN_YARD_EVENT = 'riot';
+let rb = (await call('GET', '/v1/pen', { token: inc.token })).body;
+assert.equal(rb.protectionCost, Math.round(PEN.PROTECTION_COST * 0.5), 'a riot puts cover on sale (board)');
+let poolR = await poolCash();
+r = await call('POST', '/v1/pen/protection', { token: inc.token });
+assert.equal(r.body.cost, Math.round(PEN.PROTECTION_COST * 0.5), 'protection is charged the riot-discounted price');
+assert.equal((await poolCash()) - poolR, r.body.cost, 'the discounted number is what reaches the pool');
+// A VISIT DAY halves the bribe rate.
+process.env.PEN_YARD_EVENT = 'visit';
+const preV = (await call('GET', '/v1/pen', { token: inc.token })).body.sentenceSeconds;
+r = await call('POST', '/v1/pen/bribe', { token: inc.token, body: { seconds: 60 } });
+assert.equal(r.body.cost, 60 * Math.round(PEN.BRIBE_PER_S * 0.5), 'a visit day, the guard takes half');
+process.env.PEN_YARD_EVENT = 'quiet';
+
+// THE BURNER PHONE: call in an NPC hit from inside (jail-gated everywhere else).
+const caller = await mk('Caller Cass');
+const hitMark = await mk('Hit Mark');
+await seedCh(caller.id, `${jailFuture}, cash=1000000`);
+await seedCh(hitMark.id, 'respect=800');   // over the NPC-hit level floor, on the outside
+// a normal NPC hit from lockup is refused…
+assert.equal((await call('POST', `/v1/streets/${hitMark.id}/npchit`, { token: caller.token, body: { tier: 'legbreaker' } })).body.error, 'jailed', 'no arranging wet work from lockup — without a burner');
+// …but a burner reaches out. No burner yet → refused.
+assert.equal((await call('POST', `/v1/pen/burner/${hitMark.id}`, { token: caller.token, body: { tier: 'legbreaker' } })).body.error, 'no_burner', 'no call without a burner');
+await call('POST', '/v1/pen/buy/burner', { token: caller.token });
+const feeBurn0 = await ledgerOf(caller.id, 'npchit:hire');
+r = await call('POST', `/v1/pen/burner/${hitMark.id}`, { token: caller.token, body: { tier: 'legbreaker' } });
+assert.equal(r.code, 200, 'the call goes through from the cell');
+assert.equal(r.body.burner, true, 'the burner was used');
+assert.equal(await ledgerOf(caller.id, 'npchit:hire'), feeBurn0 - NPC_HITMEN[0].cost, 'the NPC-hit fee burned, win or lose (the street npchit sink)');
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${caller.id}' AND item='burner'`)).rows[0].q, 0, 'the burner is spent — one call, then you eat the SIM');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/pen.js — the prison meta-game (yard, commissary, protection, bribe, the shank)');
+console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone)');
 process.exit(0);

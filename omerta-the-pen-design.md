@@ -66,15 +66,35 @@ wipe (it dies with the man).
 - **Clean** — one new table, one new character column, one new cash vocabulary prefix; the shank
   reuses `runEstate`/`withTwoCharacters` wholesale.
 
-## 4. Step two (deferred — the roadmap)
+## 4. Step two — the hole, yard incidents, the burner phone (BUILT)
+- **THE HOLE** — solitary. A CAUGHT shank (the fumble branch) now throws the killer in the hole
+  (`hole_until`, `PEN.HOLE_MS`) on top of the health + sentence hit: while `inHole`, ALL Pen actions
+  throw `hole` (no yard, no commissary, no calls) AND you can't be shanked (`segregated` — the hole is
+  isolation both ways). Gives the caught-shank real teeth. Board surfaces `holeSeconds`.
+- **YARD INCIDENTS** — a deterministic, block-wide daily draw (`yardEventOf`, the §7.11 seed / the
+  cityEventOf shape; `PEN_YARD_EVENT` is a TEST-ONLY override): **lockdown** (no shanks — `shankBlock`),
+  **riot** (shank odds +0.2, protection cost halved — blood's cheap, cover's on sale), **visit** (bribe
+  rate halved — the guard takes less), **toss** (commissary closed). Each is ONE touchpoint; the
+  discounted number is what's ledgered (the decree precedent). Surfaced as `incident` on the board.
+  Ties the Pen into the Living World's weather layer.
+- **THE BURNER PHONE** — a contraband item (`burner`, a `pen:commissary` sink) that is the ONE way to
+  reach the outside from a cell: `POST /v1/pen/burner/:targetId` consumes it to call in an NPC hit
+  (`npcHit` is jail-gated everywhere else — the burner threads `opts.fromBurner` to waive JUST the
+  actor jail gate; every other npcHit gate stands). The NPC-hit fee still burns win or lose; the burner
+  is spent only if the call goes through (a bad target throws → the txn rolls back). "One call, then you
+  eat the SIM."
+
+`schema`: `characters.hole_until`. §10.4: no new reasons (the burner rides `pen:commissary`; the burner
+hit rides the existing `npchit:hire` sink). `test/pen.js` covers the hole (caught → solitary, all
+actions blocked, untouchable), every incident touchpoint (lockdown/toss/riot/visit, discounted charges
+ledgered), and the burner (jail-gated npcHit refused without it, one call consumes it, the fee burns).
+
+## 5. Step three (deferred — the roadmap)
 - **Prison factions / shot-callers** — your family's rep sets the pecking order; a yard boss taxes
   new fish; controlling the yard is a mini-turf game.
-- **The burner phone** — a contraband item that lets you run ONE outside action from inside (a
-  tethered move — collect a racket, order a hit) at a heat premium.
 - **The riot / the break-out** — a rare, co-op Pen event (the crew-heist pattern) to spring the yard.
-- **Yard incidents** — random events while you serve (a shakedown, a hostage, a snitch) drawn off the
-  §7.11 seed, tying the Pen into the Living World.
-- **Segregation & the hole** — solitary as a harsher sentence tier; protective custody as the witpro
-  home.
+- **Richer yard incidents** — a hostage, a snitch, a work-strike; incident-specific rewards.
+- **Protective custody** — witpro as an explicit in-Pen segregation tier (today the shank already
+  respects `witproActive`).
 
-All step-one numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.
+All numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.

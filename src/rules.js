@@ -878,19 +878,34 @@ export const WORLD = {
 export const PEN = {
   WORK_ENERGY: 15, WORK_PAY: [200, 600], WORK_CUT_S: 60,   // yard duty: energy → a little cash + shave 60s off the sentence
   CONTRABAND: [
-    { id: 'shiv', name: 'Sharpened Toothbrush', cost: 5000, desc: 'The price of admission to a conversation nobody walks away from.' },
+    { id: 'shiv',   name: 'Sharpened Toothbrush', cost: 5000,  desc: 'The price of admission to a conversation nobody walks away from.' },
+    { id: 'burner', name: 'Burner Phone',         cost: 25000, desc: "Locked up, not out of the game. One call, one contract — then you eat the SIM." },
   ],
   PROTECTION_COST: 15000, PROTECTION_MS: 2 * 3600 * 1000,   // pay the yard boss for a no-shank window
   BRIBE_PER_S: 200,                                         // bribe the guard: $/second shaved off the remaining sentence
   SHANK_ENERGY: 25, SHANK_BASE: 0.5, SHANK_SCALE: 200,      // the shank contest: base + (musc edge)/scale, clamped
   SHANK_MIN: 0.15, SHANK_MAX: 0.9,
   KILL_ADD_S: 600, CAUGHT_ADD_S: 300, FAIL_DMG: [15, 35],   // a body / getting caught both add time; a miss hurts
+  HOLE_MS: 30 * 60 * 1000,                                  // step two: solitary — a caught shank throws you in the hole (no yard actions, untouchable)
+  // step two — YARD INCIDENTS: a deterministic daily draw (the §7.11 seed) the whole block shares,
+  // a modifier layer on the Pen (the cityEventOf pattern). Each is ONE touchpoint. Sign-off levers.
+  YARD_EVENTS: [
+    { id: 'quiet',    name: 'Quiet Day',          desc: 'The block is calm. Business as usual.' },
+    { id: 'lockdown', name: 'Lockdown',           shankBlock: true,               desc: 'Cells locked, guards on every tier — nobody moves on anybody today.' },
+    { id: 'riot',     name: 'Riot in the Block',  shankAdd: 0.2, protMult: 0.5,   desc: 'The yard is up. Blood is cheap and the boss cuts a deal on cover.' },
+    { id: 'visit',    name: 'Family Visit Day',   bribeMult: 0.5,                 desc: 'Brass wants the place looking civilised — the guard takes less to look away.' },
+    { id: 'toss',     name: 'Cell Toss',          commissaryClosed: true,         desc: 'Guards are tearing the block apart — the guard won’t move contraband today.' },
+  ],
 };
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
+export const yardEventById = (id) => PEN.YARD_EVENTS.find((e) => e.id === id) || PEN.YARD_EVENTS[0];
+// today's yard incident — seed-drawn, town-wide, deterministic (the cityEventOf shape)
+export const yardEventOf = (day = dayOf()) => PEN.YARD_EVENTS[Math.floor(hash01('yard:' + day + ':' + MARKET_SEED) * PEN.YARD_EVENTS.length)];
 // seconds left on a sentence (0 if free) — the Pen's clock
 export const jailSecondsLeft = (ch, now = Date.now()) =>
   ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;
 export const penSafe = (ch, now = Date.now()) => !!ch.pen_safe_until && new Date(ch.pen_safe_until).getTime() > now;
+export const inHole = (ch, now = Date.now()) => !!ch.hole_until && new Date(ch.hole_until).getTime() > now;
 // CREW HEISTS (THE BIG SCORE) — the co-op layer. Pot scales with the AVERAGE crew level (a low
 // alt shrinks everyone's take), split evenly with a 1.2x leader weight (they fronted the stake).
 // Per-member EV targets ~1.3-2.1x the solo heist (1200/lvl guaranteed) with real jail risk —

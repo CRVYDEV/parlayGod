@@ -385,6 +385,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.bribeGuard(ch, req.body?.seconds, client, h)));
   app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h)));
+  // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)
+  app.post('/v1/pen/burner/:targetId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.burnerHit(ch, victim, client, h, req.body?.tier)));
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>
