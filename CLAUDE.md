@@ -1183,10 +1183,15 @@ lock cycle — cars are leaf writes never `FOR UPDATE`'d — no signature/schema
 LOW consistency defects (regression each): **F2** `collectLoan` pushed a bare `{id}` stub into the
 lender's view (seized car rendered null model/trim) — now `SELECT *`s the full row (the market
 auction-settle precedent); **F3** the armorer weekly favor filtered `!listed` but not `!pledged`, so a
-pledged car could be repaired around the lock — now `!c.pledged` too. Flagged for founder sign-off (NOT
-patched): an overdue secured loan can freeze the borrower's car indefinitely if the lender never
-collects (the borrower can always repay to free it — a design call on a sweep auto-forfeit/release);
-directed loans make the untaxed A→B collusion rail deterministic (one-shot per alt, `MAX_ACTIVE=1`); a
+pledged car could be repaired around the lock — now `!c.pledged` too. **F1 (the audit's one MED) is now
+BUILT**: a SECURED loan left un-collected past `due_at + LOAN.GRACE_MS` (24h) auto-forfeits its collateral
+car to the lender via the worker sweep (`sweepLoans` third pass) — so an absent/spiteful lender can't
+freeze the borrower's car forever (the borrower always had the grace to repay; the lender had it to
+`collectLoan` cash+car manually). COLLATERAL-ONLY (no cash seized — the car changes hands, a pure
+ownership move, §10.4-neutral), the loan resolves to `collected`; the sweep locks the loan (serializes vs
+a manual collect/repay), car+loan are the only writes (no character rows → no lock cycle). `test/loans.js`
+covers within-grace (not forfeited) vs past-grace (car → lender, loan resolved). Still flagged for founder
+sign-off (NOT patched): directed loans make the untaxed A→B collusion rail deterministic (one-shot per alt, `MAX_ACTIVE=1`); a
 welsher is a cheap perpetual named-kill target (intended); collateral seizure bypasses `GARAGE_CAP` (the
 market-win precedent).
 

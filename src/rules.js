@@ -924,6 +924,11 @@ export const LOAN = {
   // damage-adjusted book value). On default the shark SEIZES the car (ownership move, §10.4-neutral —
   // cars conserve by row count) on top of the cash. COLLATERAL_MAX bounds the lender's asking figure.
   COLLATERAL_MAX: 5000000,
+  // step 2 audit F1: a SECURED loan left un-collected past `due_at + GRACE_MS` auto-forfeits its
+  // collateral car to the lender (the worker sweep) — so a spiteful/absent lender can't freeze the
+  // borrower's car forever. The borrower always had the grace window to repay; the lender had it to
+  // collect cash+car manually. The forfeit is collateral-only (no cash seized) — a pure ownership move.
+  GRACE_MS: 24 * 3600 * 1000,
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // outstanding debt on an active loan = principal × (1 + rate), floored to whole dollars
