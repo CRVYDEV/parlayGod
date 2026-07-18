@@ -24,6 +24,7 @@ import * as Skills from './skills.js';
 import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
+import * as Pen from './pen.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -370,6 +371,20 @@ export async function buildServer() {
   // the flip is two-party — you name a rival, seeding THEIR case. Look up the target, lock both.
   app.post('/v1/law/flip/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Law.flip(ch, victim, client, h)));
+
+  // THE PEN — the prison meta-game. Every action requires being in lockup; the shank is two-party.
+  app.get('/v1/pen', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.penBoard(ch, client, h)));
+  app.post('/v1/pen/work', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.workYard(ch, client, h)));
+  app.post('/v1/pen/buy/:item', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.buyContraband(ch, req.params.item, client, h)));
+  app.post('/v1/pen/protection', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.payProtection(ch, client, h)));
+  app.post('/v1/pen/bribe', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.bribeGuard(ch, req.body?.seconds, client, h)));
+  app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h)));
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>

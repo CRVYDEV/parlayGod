@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS characters (
   jury_bought BOOLEAN NOT NULL DEFAULT false,
   witpro_until TIMESTAMPTZ,
   world_raid_at TIMESTAMPTZ,                       -- THE LIVING WORLD P2: per-character NPC-raid cooldown
+  pen_safe_until TIMESTAMPTZ,                      -- THE PEN: in-jail protection window (paid the yard boss — can't be shanked)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -522,6 +523,15 @@ CREATE TABLE IF NOT EXISTS informants (
   target_account TEXT NOT NULL,
   seed NUMERIC NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- THE PEN — prison contraband: what an inmate is holding (a shiv for the yard). Bought from the
+-- corrupt guard (a cash sink); ownership, not a §10.4 currency. Dies with the man (runEstate wipe).
+CREATE TABLE IF NOT EXISTS pen_contraband (
+  character_id TEXT NOT NULL,
+  item TEXT NOT NULL,
+  qty INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, item)
 );
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a

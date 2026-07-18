@@ -1029,6 +1029,38 @@ meter/courtroom math, and the vocabulary. Flagged for founder sign-off (NOT patc
 `demandTrial` 0.15-floor cheap reset, the raid loot $/day magnitude, the collapse's contention-mapped
 out-of-order lock. Suite 18/18 + sim drift-0.
 
+**THE PEN — BUILT, step one** (`src/pen.js`, `test/pen.js` — the 19th suite file; design
+`omerta-the-pen-design.md`). Turns `jail_until` dead time into a place. The `PEN` rules-tail block holds
+every lever; every Pen action REQUIRES being jailed (`insideOnly`). **The yard** (`GET /v1/pen`): your
+sentence, the inmate roster (level/family), your contraband, protection window, commissary. **Work the
+yard** (`POST /v1/pen/work`) — energy → a bounded cash FAUCET (`pen:work`, `WORK_PAY` band) + shaves
+`WORK_CUT_S` off the sentence (good behaviour, the honest grind out). **The commissary**
+(`POST /v1/pen/buy/:item`) — buy contraband from the corrupt guard (a cash SINK `pen:commissary` → the
+buyback pool, the mod:confiscate precedent); step one stocks the **shiv**. **Protection**
+(`POST /v1/pen/protection`) — pay the yard boss `PROTECTION_COST` for a `pen_safe_until` no-shank window
+(the in-jail safehouse, a `pen:protection` sink). **Bribe the guard** (`POST /v1/pen/bribe`) — `$BRIBE_PER_S`
+per second off the remaining sentence (the fast expensive exit, `pen:bribe`). **The jailhouse SHANK**
+(`POST /v1/pen/shank/:targetId`, `withTwoCharacters`) — the marquee: BOTH must be jailed; the killer
+spends a shiv + energy in a muscle contest (`SHANK_P` is a TEST-ONLY roll knob — the LAW_BUST_P
+precedent). It BYPASSES the street defenses (a safehouse can't be entered from a cell, a street bodyguard
+isn't inside) but RESPECTS paid revive insurance (a `respawn_token` absorbs it, the mark lives) and
+witness-protection segregation (`witpro` throws); family omertà holds unless the target is a rat (the
+audit precedent); a protected mark (`penSafe`) or hospitalized mark is off-limits. A landed shank runs
+`runEstate({ killerCh, vendetta: true })` — a real death (heir, prestige, a sworn bloodline) but NO
+loot/chop (you can't strip a fleet from a cell) and NO feared-rep (a shanking is dishonorable — the
+npcHit rule); the killer's sentence extends by `KILL_ADD_S`. A caught miss spends the shiv, costs the
+killer health + `CAUGHT_ADD_S` more time. §10.4: `pen:` joined the cash vocabulary (`pen:work` faucet +
+`pen:commissary`/`pen:protection`/`pen:bribe` sinks, all character_id'd — check (a) reconciles); the
+shank moves no currency (contraband is ownership; the death is the existing ledgered estate);
+`pen_contraband` joined the runEstate wipe; `pen_safe_until` is a new character column. Gives the Law's
+RICO conviction a destination and makes a jailed rival briefly reachable. `test/pen.js` proves the board,
+the free-player gate, work (faucet + cut + energy gate), the commissary (sink + pool + bad-item), the
+protection window, the bribe (per-second sink), and the shank (both-inside/no-shiv/protected gates, a
+landed kill with the estate + no loot + sentence extension, revive-token absorption, the caught miss),
+plus the closed vocabulary. Suite 19/19 + sim drift-0. Step two (deferred): prison factions/shot-callers,
+the burner phone (one tethered outside move), the co-op break-out, seed-drawn yard incidents, the hole.
+ALL numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

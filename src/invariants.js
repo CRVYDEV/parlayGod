@@ -13,7 +13,7 @@ const KNOWN_REASONS = {
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'laylow', 'mission:', 'daily:', 'onboard:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
     'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:',
-    'law:', 'world:'],
+    'law:', 'world:', 'pen:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury'],
