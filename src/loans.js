@@ -4,10 +4,12 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed } from './rules.js';
+import { LOAN, loanVig, loanOwed, M3 } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
+const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // GET /v1/loans — the board: open offers (the market) + your active loans, both sides. Unlocked read.
 export async function loanBoard(pool, ch) {
@@ -36,6 +38,10 @@ export async function offerLoan(ch, body, client, h) {
   const amount = Math.floor(Number(body?.amount) || 0);
   const rate = Number(body?.rate);
   const hours = Math.floor(Number(body?.hours) || 0);
+  if (jailed(ch)) throw new GameError('jailed', 'No running your book from a cell.');
+  // audit (loot-proof vault): parking cash in an offer while safe-housed would be a loot-immune
+  // vault (a killer can't reach escrow AND can't reach you) — the market order-post precedent.
+  if (safeHoused(ch)) throw new GameError('safe', 'No fronting money from a safehouse — come out first.');
   if (amount < LOAN.MIN || amount > LOAN.MAX) throw new GameError('amount', `A loan is $${LOAN.MIN}–$${LOAN.MAX}.`);
   if (!(rate > 0) || rate > LOAN.RATE_MAX) throw new GameError('rate', `The vig runs up to ${Math.round(LOAN.RATE_MAX * 100)}%.`);
   if (hours < LOAN.TERM_MIN_H || hours > LOAN.TERM_MAX_H) throw new GameError('hours', `Terms run ${LOAN.TERM_MIN_H}–${LOAN.TERM_MAX_H} hours.`);
@@ -50,6 +56,7 @@ export async function offerLoan(ch, body, client, h) {
 
 // POST /v1/loans/:id/take — a borrower takes an open offer (escrow → borrower)
 export async function takeLoan(ch, loanId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No taking a loan from lockup.');
   const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
   if (!loan || loan.status !== 'open') throw new GameError('gone', 'That offer is off the table.');
   if (loan.lender_character === ch.id) throw new GameError('own', "You can't take your own money.");
@@ -100,6 +107,14 @@ export async function repayLoan(ch, lender, loanId, client, h) {
 // borrower's POCKET + IN-TRANSIT cash (cleared bank is safe) up to the debt, minus the vig; the
 // shortfall is written off; the deadbeat is leg-broken (hospitalized) + marked a welsher.
 export async function collectLoan(ch, borrower, loanId, client, h) {
+  // collecting is offense (a seizure + a beating) — gate the actor exactly like shakedownBusiness,
+  // the closest two-party seize-and-hospitalize analog: no leg-breaking from a cell, a safehouse
+  // (P1.3 shield-not-bunker), or a hospital bed. The borrower is NOT shield-gated — a civil debt
+  // recovery reaches a safe-housed deadbeat (the shakedown precedent gates only the actor + victim
+  // hospitalization; here we let the shark collect even from a hospitalized mark, no dodge).
+  if (jailed(ch)) throw new GameError('jailed', 'No collecting debts from a cell.');
+  if (safeHoused(ch)) throw new GameError('safe', 'No shaking anyone down while you’re to ground.');
+  if (hospitalized(ch)) throw new GameError('hurt', 'You’re in no shape to break legs.');
   const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
   if (!loan || loan.status !== 'active') throw new GameError('no_loan', 'No such debt to collect.');
   if (loan.lender_character !== ch.id) throw new GameError('not_yours', 'That’s not your book.');
@@ -115,7 +130,9 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   if (collected > 0) {
     borrower.cash = Number(borrower.cash) - fromPocket;
     borrower.bank = Number(borrower.bank) - fromTransit;
-    borrower.bank_intransit = Math.min(Number(borrower.bank_intransit || 0), Number(borrower.bank));
+    // seizing from the in-transit slice clears exactly that much of the marker (else the now-cleared
+    // remainder would stay flagged lootable — an over-exposure nit); clamp to the reduced bank.
+    borrower.bank_intransit = Math.min(Number(borrower.bank_intransit || 0) - fromTransit, Number(borrower.bank));
     ch.cash = Number(ch.cash) + toLender;
     await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [vig]);
     // one row spans the borrower's cash+bank (check (a) is on cash+bank — the whack:loot precedent)
@@ -132,15 +149,40 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected };
 }
 
-// runEstate hook — the dead man's loans. OPEN offers burn their escrow (loan:death, the death:bounty
-// pattern — the dead lender's cash is already zeroed); ACTIVE loans (as lender or borrower) void with
-// no ledger (the principal already moved — §10.4-neutral). Called inside the estate txn (victim locked).
-export async function voidLoansAtDeath(client, victimId, h) {
-  const openEscrow = (await client.query("SELECT COALESCE(SUM(principal),0) s FROM loans WHERE lender_character=$1 AND status='open'", [victimId])).rows[0].s;
-  if (Number(openEscrow) > 0)
-    await h.ledger(client, { currency: 'cash', amount: -Number(openEscrow), reason: 'loan:death', counterparty: victimId });
+// runEstate hook — the dead man's loans. OPEN offers hold escrowed cash: on a PLAYER fire-kill
+// (killerCh + lootRate>0) the killer LOOTS CASH_LOOT_RATE of it (whack:loot + a NULL loan:loot
+// escrow-side outflow — parked capital is no longer a loot-proof vault, the market-order precedent);
+// the rest BURNS (loan:death, the dead-funder pattern). NPC/mod kills pass 0 → the whole escrow burns.
+// ACTIVE loans (as lender or borrower) void with no ledger (the principal already moved — §10.4-neutral);
+// both sides are notified. Called inside the estate txn (victim + killer rows already locked).
+export async function voidLoansAtDeath(client, victimId, h, killerCh = null, lootRate = 0) {
+  const openEscrow = Number((await client.query(
+    "SELECT COALESCE(SUM(principal),0) s FROM loans WHERE lender_character=$1 AND status='open'", [victimId])).rows[0].s);
+  let looted = 0;
+  if (openEscrow > 0) {
+    const loot = killerCh && lootRate > 0 ? Math.floor(openEscrow * lootRate) : 0;
+    if (loot > 0) {
+      killerCh.cash = Number(killerCh.cash) + loot; // the killer is the in-memory actor — never SQL (persist clobber)
+      looted = loot;
+      await h.ledger(client, { characterId: killerCh.id, currency: 'cash', amount: loot, reason: 'whack:loot', counterparty: victimId });
+      await h.ledger(client, { currency: 'cash', amount: -loot, reason: 'loan:loot', counterparty: victimId }); // escrow-side outflow
+    }
+    const burn = openEscrow - loot;
+    if (burn > 0) await h.ledger(client, { currency: 'cash', amount: -burn, reason: 'loan:death', counterparty: victimId });
+  }
   await client.query("DELETE FROM loans WHERE lender_character=$1 AND status='open'", [victimId]);
+  // active loans void — tell the surviving counterparty why the row vanished (a lender loses a claim,
+  // a borrower's debt is erased). The killer, if a counterparty, still gets the notification row.
+  const active = (await client.query(
+    "SELECT id, lender_character, borrower_character FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId])).rows;
+  for (const l of active) {
+    if (l.lender_character === victimId && l.borrower_character)
+      await h.notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_dead' }); // your debt is erased
+    else if (l.borrower_character === victimId)
+      await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead' }); // your claim is void
+  }
   await client.query("DELETE FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId]);
+  return { looted };
 }
 
 // worker sweep — refund EXPIRED open offers to the lender, and mark OVERDUE borrowers welsher (so
@@ -168,12 +210,13 @@ export async function sweepLoans(pool, opts = {}) {
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans offer', id, e.message); }
     finally { client.release(); }
   }
-  // overdue debts → the borrower is a welsher (a status write; no value moves)
-  const overdue = (await pool.query(
-    "SELECT DISTINCT borrower_character FROM loans WHERE status='active' AND due_at < $1", [now])).rows;
-  for (const { borrower_character } of overdue) {
-    const r = await pool.query('UPDATE characters SET welsher=true WHERE id=$1 AND alive AND NOT welsher', [borrower_character]);
-    if (r.rowCount) welshed++;
-  }
+  // overdue debts → the borrower is a welsher (a status write; no value moves). ONE set-based UPDATE
+  // whose subquery re-derives the still-overdue set at execution (audit: a snapshot-then-loop could
+  // brand a borrower who legitimately repaid — repay has no due gate — after `due_at` but before the
+  // per-row write; scoping the write to a loan that is STILL active+overdue closes that TOCTOU).
+  const r = await pool.query(
+    `UPDATE characters SET welsher=true WHERE alive AND NOT welsher AND id IN (
+       SELECT borrower_character FROM loans WHERE status='active' AND due_at < $1)`, [now]);
+  welshed = r.rowCount;
   return { refunded, welshed, offers: stale.length };
 }

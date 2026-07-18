@@ -154,7 +154,11 @@ export async function runLedgerInvariants(pool) {
   const loanTaken = await sum(pool, "currency='cash' AND reason='loan:take'");
   const loanRefunded = await sum(pool, "currency='cash' AND reason='loan:refund'");
   const loanDeath = -(await sum(pool, "currency='cash' AND reason='loan:death'"));
-  push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath);
+  // audit (loot-proof vault): a fire-kill loots CASH_LOOT_RATE of the dead lender's OPEN escrow — the
+  // killer's matching +row is a `whack:loot` credit (in check (a)); this NULL-char `loan:loot` row is
+  // the escrow-side outflow (the rest of the escrow burns as loan:death). The market:loot precedent.
+  const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
+  push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
 
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
