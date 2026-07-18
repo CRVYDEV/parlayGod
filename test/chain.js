@@ -188,5 +188,53 @@ await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000)
 assert.equal((await reclaimExpiredVouchers(pool)).gearRestored, 1, 'the expired gear voucher restores');
 assert.equal((await pool.query(`SELECT minted_onchain FROM account_gear WHERE gear_id='knuckles'`)).rows[0].minted_onchain, false, 'the gear is back in play — not lost to a failed claim');
 
+// ══ AUDIT (chain on-chain audit) regressions ══
+// CRITICAL — reclaim-vs-claim double-spend: a voucher whose nonce is USED on-chain (the watcher just
+// missed the event) must NEVER be refunded — reclaim asks the chain directly and records the claim.
+await call('POST', '/v1/mod/reserve/fund', { headers: modH, body: { amount: 1000 } });
+const omrPreRace = (await meOf(token)).omr;
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 9 } });
+const raceNonce = r.body.nonce;
+assert.equal((await meOf(token)).omr, omrPreRace - 9, '$OMR burned at request');
+await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE nonce=${raceNonce}`);
+// inject a chain reader that reports this nonce as CLAIMED on-chain (the watcher was down past the grace)
+const claimedReader = { usedNonce: async (n) => Number(n) === Number(raceNonce) };
+const raceRes = await reclaimExpiredVouchers(pool, claimedReader);
+assert.equal(raceRes.omrReclaimed, 0, 'a voucher already CLAIMED on-chain is NOT refunded — no double-spend');
+assert.equal(raceRes.reconciled, 1, 'the watcher-missed claim is reconciled instead');
+assert.equal((await meOf(token)).omr, omrPreRace - 9, 'the $OMR stays burned — the player got the tokens on-chain');
+assert.equal((await pool.query(`SELECT status, claimed_onchain FROM vouchers WHERE nonce=${raceNonce}`)).rows[0].status, 'claimed', 'the voucher is recorded claimed, not expired');
+// and a reader reporting NOT-claimed still refunds normally (the legitimate expiry)
+await call('POST', '/v1/mod/reserve/fund', { headers: modH, body: { amount: 1000 } });
+const omrPreLegit = (await meOf(token)).omr;
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 4 } });
+const legitNonce = r.body.nonce;
+await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE nonce=${legitNonce}`);
+assert.equal((await reclaimExpiredVouchers(pool, { usedNonce: async () => false })).omrReclaimed, 4, 'an unclaimed expired voucher still refunds');
+assert.equal((await meOf(token)).omr, omrPreLegit, 'the burned $OMR came back');
+
+// MED — chainConfig fails CLOSED: no chainId / verifyingContract → throw, never sign a wrong domain
+const savedChainId = process.env.CHAIN_ID;
+delete process.env.CHAIN_ID;
+assert.throws(() => chainConfig(), /chain_unconfigured|missing/i, 'chainConfig throws when unconfigured (never signs a testnet-default domain)');
+process.env.CHAIN_ID = savedChainId;
+assert.ok(chainConfig().chainId === 46630, 'chainConfig works again with the env restored');
+
+// LOW — gearNumId is APPEND-ONLY: the on-chain ERC-1155 tokenId is a gear's 1-based MARKET position,
+// and the Safe keys gearSupplyCap[n]/gearMinted[n] by that number. A MARKET reorder/insert would
+// silently re-point every cap AND change the tokenId of gear players already hold. Pin the known
+// head so any reorder breaks CI loudly (a re-extract must only APPEND).
+const { gearNumId } = await import('../src/chain.js');
+for (const [id, n] of [['brasspin', 1], ['newscap', 2], ['knuckles', 3], ['dice', 4]])
+  assert.equal(gearNumId(id), n, `gear tokenId is stable + append-only: ${id} == ${n}`);
+
+// MED — daily-cap guard: a single withdrawal over the on-chain cap is refused BEFORE any burn
+process.env.DAILY_CAP_OMR = String(50n * 10n ** 18n); // 50 $OMR cap
+const omrPreCap = (await meOf(token)).omr;
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 51 } });
+assert.equal(r.body.error, 'daily_cap', 'a withdrawal exceeding the daily cap is refused');
+assert.equal((await meOf(token)).omr, omrPreCap, 'no $OMR was burned on the rejected over-cap request');
+delete process.env.DAILY_CAP_OMR;
+
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety');
 await app.close();

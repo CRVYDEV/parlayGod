@@ -42,14 +42,20 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
   try {
     await client.query('BEGIN');
     // idempotency: the nonce PK rejects a re-delivered event. Try the insert; a duplicate
-    // key means we've already processed this payment — commit the empty txn and report it.
+    // key (23505) means we've already processed this payment — roll back and report it.
+    // AUDIT (fee lens F1): swallow ONLY the true duplicate. A bare catch absorbed EVERY insert
+    // error (timeout, serialization failure, a future constraint) as "duplicate", returned
+    // normally, and let the watcher advance its cursor past a real-money payment that was never
+    // recorded — an unrecoverable lost fee. Rethrow anything but 23505 so the outer handler rolls
+    // back and the cursor does NOT advance (the block window re-scans idempotently next tick).
     try {
       await client.query(
         'INSERT INTO fee_payments (nonce, kind, payer_address, amount_wei, tx_hash) VALUES ($1,$2,$3,$4,$5)',
         [n, kind, addr, String(amountWei ?? '0'), txHash || null]);
-    } catch {
-      await client.query('COMMIT');
-      return { recorded: false, duplicate: true };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      if (e?.code === '23505') return { recorded: false, duplicate: true };
+      throw e;
     }
     // Phase 2: route this payment's Vig share into the redistribution pool (same txn). The ETH
     // itself still went to the dev wallet on-chain; this only records the accounting split.
@@ -97,8 +103,13 @@ export async function reconcileFees(pool, accountId, address) {
     // exactly one transaction win each row. Two concurrent links (or a link racing the watcher)
     // can no longer both see the same uncredited row and each grant a token — the loser's UPDATE
     // matches zero rows. (Prior SELECT-then-credit double-credited one on-chain fee into N tokens.)
+    // AUDIT (fee lens F4): match case-INSENSITIVELY, exactly like sweepUncreditedFees's JOIN. Both
+    // sides store checksummed addresses today (so this is behaviour-preserving), but an exact-case
+    // predicate here against a case-insensitive discovery join was a fragile coupling: any future
+    // path storing a differently-cased address would make the row forever uncreditable AND make the
+    // sweep re-select it every cycle (a busy no-op). lower()=lower() closes that.
     const claimed = (await client.query(
-      'UPDATE fee_payments SET credited=true, account_id=$2 WHERE payer_address=$1 AND NOT credited RETURNING kind, amount_wei',
+      'UPDATE fee_payments SET credited=true, account_id=$2 WHERE lower(payer_address)=lower($1) AND NOT credited RETURNING kind, amount_wei',
       [addr, accountId])).rows;
     for (const r of claimed) {
       if (positiveWei(r.amount_wei)) { await creditEntitlement(client, accountId, r.kind); credited++; }
