@@ -22,6 +22,24 @@ and an **Everything Else** deck that reaches the remaining `/v1` routes raw (`:p
 JSON bodies editable). `GET /v1/rules` serves the public rulebook (crimes/districts/guns/goods/lab
 ladder/trade ranks) that powers it — server-authoritative always; the client only ever sends choices.
 
+## Chain go-live (the devnet proof)
+The full §11 rail — contracts + backend + watcher — is proven end-to-end by `tools/chain-e2e.js`
+against ANY EVM RPC (a local dev node or the Robinhood Chain testnet):
+```
+npm i --no-save solc@0.8.26 @openzeppelin/contracts@5.1.0 ganache   # ad-hoc, never project deps
+npx ganache --wallet.deterministic --chain.chainId 1337 &            # or point at a real testnet
+node tools/compile-contracts.js                                      # solc-js, mirrors foundry.toml
+CHAIN_RPC_URL=http://127.0.0.1:8545 CHAIN_ID=1337 \
+DEPLOYER_PK=0x... PLAYER_PK=0x... VOUCHER_SIGNER_PK=0x... node tools/chain-e2e.js
+```
+27 asserted steps: deploy the suite → SIWE wallet link → 0.01 ETH `payMintFee()` on-chain (inexact
+fee reverts) → the getLogs cursor watcher credits it → character MINTED → $OMR earned in-game
+(laundering gate) → reserve funded → EIP-712 withdraw voucher signed → `claim()` on-chain (real
+ERC-20 in the player's wallet; replay + tampering revert) → the `Claimed` watcher closes the
+reserve accounting → gear voucher mints the ERC-1155 (uncapped ids fail closed; only VoucherClaim
+mints) → §10.4 $OMR conservation holds with the chain live. The Foundry unit+fuzz suite
+(`omerta-contracts/test`) still needs a Foundry-capable environment before the third-party audit.
+
 ## Try it
 ```
 TOKEN=$(curl -s -X POST localhost:8787/v1/auth/guest | jq -r .token)
