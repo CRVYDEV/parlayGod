@@ -485,9 +485,11 @@ top of signed BALANCE surfaces, not retunes of them.
 
 The step-four WANTED audit (`AUDIT-loan-wanted.md`) fixed a HIGH §10.4 drift + a MED pardon-trap + a LOW
 lock-order in-commit. Open founder balance/design calls (NOT patched, ranked):
-- **Alt-farm the pool bounty (MED)** — a lender+borrower+killer alt ring can default-on-purpose to
-  manufacture a $25k HOUSE bounty and collect it from the confiscation pool (the killer alt), draining
-  communal pool value. §10.4-clean (redistribution, never minted), friction-bounded (the borrower alt
+- **Alt-farm the pool bounty (MED) — MITIGATED (`WANTED_MIN_LVL` 10)**: the pool cash bounty now only
+  lands on a defaulter at/above level 10, so a throwaway rookie alt (the cheap farm fodder) generates
+  NO price (still WANTED — omertà stripped + NPC hunters). This forces real per-alt leveling friction
+  (the npcHit rookie-floor precedent) that doesn't scale like alt-spam. Residual: a determined farmer
+  can still level alts; if it bites, a per-account/day cap or principal-scaled bounty is the next lever. §10.4-clean (redistribution, never minted), friction-bounded (the borrower alt
   dies; pool must hold ≥$25k; an NPC hunter/other player may kill first and BURN it). Mitigations if it
   bites: a per-account/day wanted-bounty cap, a borrower level floor on the pool bounty, or funding the
   HOUSE pot from the defaulted principal instead of the communal pool. Same class as the casino
