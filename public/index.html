@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMERTÀ — the city</title>
+<style>
+  :root {
+    --bg: #0b0b0e; --panel: #131318; --panel2: #17171e; --line: #26262f;
+    --ink: #d6d2c4; --dim: #7d7a6f; --neon: #e8b34b; --blood: #c0392b;
+    --ok: #5fa96b; --bad: #d16055; --cold: #5b84a8;
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif; }
+  code, .mono, textarea, input, select, button { font-family: 'Courier New', monospace; }
+  a { color: var(--neon); }
+
+  #top { display: flex; align-items: baseline; gap: 14px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  #top h1 { font-size: 20px; margin: 0; letter-spacing: 6px; color: var(--neon); font-weight: normal; }
+  #top .sub { color: var(--dim); font-size: 12px; }
+  #whoami { margin-left: auto; color: var(--dim); font-size: 13px; }
+  #whoami b { color: var(--ink); }
+
+  #layout { display: grid; grid-template-columns: 300px 1fr 320px; gap: 12px; padding: 12px 16px; }
+  @media (max-width: 1100px) { #layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+  .panel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--dim); font-weight: normal; }
+
+  /* the sheet */
+  #sheet .money { font-size: 22px; color: var(--neon); }
+  #sheet .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 13px; }
+  #sheet .row .k { color: var(--dim); }
+  .bar { height: 7px; background: #22222a; border-radius: 4px; overflow: hidden; margin: 2px 0 8px; }
+  .bar i { display: block; height: 100%; background: var(--neon); }
+  .bar.health i { background: var(--ok); } .bar.heat i { background: var(--blood); }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); }
+  .chip.bad { border-color: var(--blood); color: var(--bad); }
+  .chip.good { border-color: var(--ok); color: var(--ok); }
+  .chip.cold { border-color: var(--cold); color: var(--cold); }
+
+  /* tabs */
+  #tabs { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 10px; }
+  #tabs button { background: var(--panel2); color: var(--dim); border: 1px solid var(--line);
+    padding: 6px 12px; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 12px; }
+  #tabs button.on { color: var(--neon); border-bottom-color: var(--panel); }
+  .tab { display: none; } .tab.on { display: block; }
+
+  button.act { background: #1d1d25; border: 1px solid var(--line); color: var(--ink);
+    padding: 6px 10px; margin: 2px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+  button.act:hover { border-color: var(--neon); color: var(--neon); }
+  button.act:disabled { opacity: .35; cursor: default; }
+  input, select, textarea { background: #0f0f13; border: 1px solid var(--line); color: var(--ink);
+    padding: 6px 8px; border-radius: 4px; font-size: 12px; }
+  textarea { width: 100%; min-height: 110px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-size: 12px; }
+  .card .t { color: var(--ink); } .card .d { color: var(--dim); font-size: 11px; margin: 3px 0; }
+
+  /* feed */
+  #feed { max-height: 75vh; overflow-y: auto; font-size: 12px; }
+  #feed .ev { border-bottom: 1px dashed var(--line); padding: 5px 0; }
+  #feed .ev .ch { color: var(--cold); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+  #feed .ev.me .ch { color: var(--neon); }
+  #resp { white-space: pre-wrap; font-size: 11px; color: var(--dim); max-height: 260px; overflow: auto;
+    background: #0f0f13; border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--neon); color: var(--ink);
+    padding: 10px 18px; border-radius: 6px; font-size: 13px; display: none; z-index: 10; max-width: 70vw; }
+  #toast.bad { border-color: var(--blood); }
+
+  /* auth screens */
+  .center { max-width: 460px; margin: 12vh auto; text-align: center; }
+  .center h1 { letter-spacing: 10px; color: var(--neon); font-weight: normal; }
+  .center p { color: var(--dim); }
+  .hidden { display: none !important; }
+  label.f { display: block; text-align: left; color: var(--dim); font-size: 11px; margin: 8px 0 2px; }
+</style>
+</head>
+<body>
+
+<div id="screen-auth" class="center hidden">
+  <h1>OMERTÀ</h1>
+  <p>The city doesn't know your name yet. Good. Keep it that way.</p>
+  <button class="act" id="btn-guest" style="font-size:14px;padding:10px 24px">ENTER AS A GHOST</button>
+  <p class="sub" style="font-size:11px;color:var(--dim)">A guest account — upgrade to X / Privy later without losing the street.</p>
+</div>
+
+<div id="screen-create" class="center hidden">
+  <h1>A NAME</h1>
+  <p>Every street name is a debt someone eventually collects.</p>
+  <input id="new-name" placeholder="street name" style="width:260px;font-size:15px">
+  <div style="margin-top:10px"><button class="act" id="btn-create" style="font-size:14px;padding:10px 24px">STEP OUT</button></div>
+</div>
+
+<div id="screen-main" class="hidden">
+  <div id="top">
+    <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
+    <span id="whoami"></span>
+    <button class="act" id="btn-logout">burn the papers</button>
+  </div>
+  <div id="layout">
+
+    <div>
+      <div class="panel" id="sheet">
+        <h2>The Sheet</h2>
+        <div id="sheet-body">…</div>
+        <div style="margin-top:8px">
+          <button class="act" data-do="POST /v1/heal">heal</button>
+          <button class="act" data-do="POST /v1/checkin">check in</button>
+          <button class="act" id="btn-refresh">refresh</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <h2>Last Word</h2>
+        <div id="resp">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div id="tabs"></div>
+      <div id="tabbodies"></div>
+    </div>
+
+    <div class="panel">
+      <h2>The Wire <span id="ws-dot" style="color:var(--bad)">●</span></h2>
+      <div id="feed"></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
+  const fmt = (n) => Number(n).toLocaleString('en-US');
+  let token = localStorage.getItem('omerta_token') || null;
+  let me = null, rules = null, ws = null;
+
+  // ── plumbing ──
+  async function api(method, path, body) {
+    // content-type only when a body rides along — Fastify 400s an empty JSON-typed body
+    const r = await fetch(path, { method,
+      headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(token ? { authorization: 'Bearer ' + token } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    let j = null; try { j = await r.json(); } catch { j = { raw: await r.text?.() }; }
+    $('#resp').textContent = `${method} ${path}\n` + JSON.stringify(j, null, 2);
+    return { code: r.status, body: j };
+  }
+  function toast(msg, bad = false) {
+    const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : '';
+    t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3200);
+  }
+  async function act(method, path, body) {
+    const r = await api(method, path, body);
+    if (r.code >= 400) toast(r.body?.message || r.body?.error || `${r.code}`, true);
+    else {
+      const b = r.body || {};
+      toast(b.message || (b.win === true ? 'WIN' : b.win === false ? 'bust' : null) || 'done.');
+    }
+    await refresh();
+    return r;
+  }
+
+  // ── screens ──
+  function show(id) {
+    for (const s of ['screen-auth', 'screen-create', 'screen-main']) $('#' + s).classList.add('hidden');
+    $('#' + id).classList.remove('hidden');
+  }
+
+  async function boot() {
+    if (!token) return show('screen-auth');
+    const r = await api('GET', '/v1/me');
+    if (r.code === 401) { token = null; localStorage.removeItem('omerta_token'); return show('screen-auth'); }
+    if (r.code === 404 || r.body?.error === 'no_character') return show('screen-create');
+    me = r.body.character || r.body;
+    if (!rules) rules = (await api('GET', '/v1/rules')).body;
+    show('screen-main'); renderSheet(); buildTabs(); connectWs();
+  }
+
+  $('#btn-guest').onclick = async () => {
+    const r = await api('POST', '/v1/auth/guest');
+    if (r.body?.token) { token = r.body.token; localStorage.setItem('omerta_token', token); boot(); }
+    else toast(r.body?.message || 'no dice', true);
+  };
+  $('#btn-create').onclick = async () => {
+    const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim() });
+    if (r.code < 400) boot(); else toast(r.body?.message || r.body?.error, true);
+  };
+  $('#btn-logout').onclick = () => { localStorage.removeItem('omerta_token'); location.reload(); };
+  $('#btn-refresh').onclick = () => refresh();
+
+  async function refresh() {
+    const r = await api('GET', '/v1/me');
+    if (r.code < 400) { me = r.body.character || r.body; renderSheet(); }
+  }
+
+  // ── the sheet ──
+  function bar(cls, v, max) {
+    const pct = Math.max(0, Math.min(100, 100 * v / Math.max(1, max)));
+    return `<div class="bar ${cls}"><i style="width:${pct}%"></i></div>`;
+  }
+  function renderSheet() {
+    if (!me) return;
+    $('#whoami').innerHTML = `<b>${me.name}</b> · gen ${me.generation} · lvl ${me.level} · ${me.loc}` +
+      (me.gang ? ` · <span style="color:${me.gang.color || 'var(--dim)'}">${me.gang.tag}</span>` : '');
+    const chips = [];
+    if (me.jailSeconds > 0) chips.push(['bad', `LOCKUP ${Math.ceil(me.jailSeconds / 60)}m`]);
+    if (me.hospSeconds > 0) chips.push(['bad', `HOSPITAL ${Math.ceil(me.hospSeconds / 60)}m`]);
+    if (me.safeSeconds > 0) chips.push(['cold', `SAFEHOUSE ${Math.ceil(me.safeSeconds / 60)}m`]);
+    if (me.wanted) chips.push(['bad', 'WANTED']);
+    if (me.welsher) chips.push(['bad', 'WELSHER']);
+    if (me.law?.indicted) chips.push(['bad', 'INDICTED']);
+    if (me.law?.rat) chips.push(['bad', 'RAT']);
+    if (me.law?.stage && me.law.stage !== 'clean') chips.push(['cold', me.law.stage.toUpperCase()]);
+    if (me.guardedBy) chips.push(['good', 'GUARDED']);
+    $('#sheet-body').innerHTML = `
+      <div class="money">$${fmt(me.cash)}</div>
+      <div class="row"><span class="k">bank</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} in transit)</span>` : ''}</span></div>
+      <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} liquid · ${fmt(me.staked)} staked</span></div>
+      <div class="row"><span class="k">respect</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>
+      <div class="chips">${chips.map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('')}</div>
+      <div class="row"><span class="k">energy</span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
+      <div class="row"><span class="k">nerve</span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
+      <div class="row"><span class="k">health</span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
+      <div class="row"><span class="k">heat</span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
+      <div class="row"><span class="k">muscle / cunning / speed</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
+      <div class="row"><span class="k">gun</span><span>${me.gun || '—'}</span></div>
+      <div class="row"><span class="k">ammo / crates</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
+      <div class="row"><span class="k">cars</span><span>${(me.cars || []).length}</span></div>`;
+  }
+
+  // ── tabs ──
+  const TABS = { streets: 'Streets', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+  function buildTabs() {
+    const tabs = $('#tabs'), bodies = $('#tabbodies');
+    if (tabs.childElementCount) return;
+    for (const [id, label] of Object.entries(TABS)) {
+      const b = el(`<button data-tab="${id}">${label}</button>`);
+      b.onclick = () => { setTab(id); };
+      tabs.appendChild(b);
+      bodies.appendChild(el(`<div class="tab" id="tab-${id}"></div>`));
+    }
+    renderStreets(); renderCity(); renderDen(); renderDeck();
+    setTab('streets');
+  }
+  function setTab(id) {
+    for (const b of $('#tabs').children) b.classList.toggle('on', b.dataset.tab === id);
+    for (const t of $('#tabbodies').children) t.classList.toggle('on', t.id === 'tab-' + id);
+    if (id === 'city') renderCity();
+    if (id === 'den') renderDen();
+  }
+
+  // Streets: crimes, train, bank, travel
+  function renderStreets() {
+    const t = $('#tab-streets');
+    const crimes = (rules?.crimes || []).map((c) => `
+      <div class="card"><span class="t">${c.name}</span>
+        <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
+        <button class="act" data-do="POST /v1/crimes/${c.id}">do it</button></div>`).join('');
+    const travel = (rules?.districts || []).map((d) =>
+      `<button class="act" data-do="POST /v1/travel/${d.id || d}">${d.name || d.id || d}</button>`).join('');
+    const train = (rules?.stats || []).map((s) =>
+      `<button class="act" data-do="POST /v1/train/${s}">${s}</button>`).join('');
+    t.innerHTML = `
+      <h2>Crimes</h2><div class="grid">${crimes}</div>
+      <h2 style="margin-top:14px">Train</h2>${train}
+      <h2 style="margin-top:14px">The Bank</h2>
+      <input id="bank-amt" placeholder="amount" size="10">
+      <button class="act" id="bank-dep">deposit</button>
+      <button class="act" id="bank-wd">withdraw</button>
+      <span class="d" style="color:var(--dim);font-size:11px"> deposits ride in transit (lootable) before they clear</span>
+      <h2 style="margin-top:14px">Travel</h2>${travel}`;
+    t.querySelector('#bank-dep').onclick = () => act('POST', '/v1/bank/deposit', { amount: Number(t.querySelector('#bank-amt').value) });
+    t.querySelector('#bank-wd').onclick = () => act('POST', '/v1/bank/withdraw', { amount: Number(t.querySelector('#bank-amt').value) });
+  }
+
+  // The City board
+  async function renderCity() {
+    const t = $('#tab-city');
+    const r = await api('GET', '/v1/city');
+    if (r.code >= 400) { t.innerHTML = '<p class="d">the city is quiet.</p>'; return; }
+    const c = r.body;
+    t.innerHTML = `
+      <h2>Today</h2>
+      <div class="card"><span class="t">${c.event?.name || c.event?.id || '—'}</span>
+        <div class="d">${c.event?.desc || ''}</div>
+        <div class="d">law: ${c.lawEvent?.name || c.lawEvent?.id || '—'} · ${c.clock?.phase || ''} h${c.clock?.hour ?? '?'} ${c.clock?.patrol ? '· PATROL OUT' : ''}</div></div>
+      <h2 style="margin-top:12px">District Weather (goods shocks)</h2>
+      <div class="grid">${Object.entries(c.weather || {}).map(([d, w]) =>
+        `<div class="card"><span class="t">${d}</span><div class="d">shock ×${Number(w).toFixed(3)}</div></div>`).join('')}</div>
+      <h2 style="margin-top:12px">Forecast</h2>
+      <div class="grid">${(c.forecast || []).map((f) =>
+        `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>`;
+  }
+
+  // The Den
+  async function renderDen() {
+    const t = $('#tab-den');
+    const r = await api('GET', '/v1/casino');
+    const den = r.code < 400 ? r.body : {};
+    t.innerHTML = `
+      <h2>Street Craps <span class="d" style="font-size:10px">(neon only — pays 1:1)</span></h2>
+      <input id="dice-amt" placeholder="stake" size="10" value="1000">
+      <button class="act" id="dice-go">roll</button>
+      <h2 style="margin-top:14px">The Numbers <span class="d" style="font-size:10px">(0–999, pays 600:1, one/day)</span></h2>
+      <input id="num-pick" placeholder="pick" size="6"> <input id="num-amt" placeholder="stake" size="8" value="100">
+      <button class="act" id="num-go">play</button>
+      <button class="act" data-do="POST /v1/casino/numbers/claim">claim tickets</button>
+      <div class="d" style="color:var(--dim);font-size:11px;margin-top:6px">yesterday's number: <b>${den.numbers?.yesterday ?? '—'}</b></div>
+      <h2 style="margin-top:14px">The Fight</h2>
+      <div class="d" style="color:var(--dim);font-size:12px">${den.fight ? `${den.fight.a} vs ${den.fight.b}` : '—'}</div>
+      <button class="act" id="fight-a">back the favorite</button>
+      <button class="act" id="fight-b">back the dog</button>
+      <input id="fight-amt" placeholder="stake" size="8" value="1000">
+      <button class="act" data-do="POST /v1/casino/fight/claim">claim bets</button>
+      <h2 style="margin-top:14px">Back Room</h2>
+      <div class="d" style="color:var(--dim);font-size:11px">faders: ${(den.backroom?.faders || []).map((f) => `${f.name} ($${fmt(f.fadeLimit)})`).join(', ') || 'nobody'}</div>
+      <input id="fade-limit" placeholder="your fade limit" size="12">
+      <button class="act" id="fade-set">post a fade</button>`;
+    t.querySelector('#dice-go').onclick = () => act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
+    t.querySelector('#num-go').onclick = () => act('POST', '/v1/casino/numbers', { pick: Number(t.querySelector('#num-pick').value), amount: Number(t.querySelector('#num-amt').value) });
+    t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
+    t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
+    t.querySelector('#fade-set').onclick = () => act('POST', '/v1/casino/fade', { limit: Number(t.querySelector('#fade-limit').value) });
+  }
+
+  // Everything Else — the grouped action deck over the full /v1 surface
+  const DECK = {
+    'Garage & Workshop': [
+      ['POST', '/v1/garage/boost', {}], ['POST', '/v1/garage/:carId/melt', {}], ['POST', '/v1/garage/:carId/repair', {}],
+      ['POST', '/v1/garage/:carId/fence', {}], ['POST', '/v1/workshop/craft/:id', {}], ['POST', '/v1/workshop/ammo', { qty: 1 }],
+      ['POST', '/v1/goods/buy', { id: 'gin', qty: 1 }], ['POST', '/v1/goods/sell', { id: 'gin', qty: 1 }],
+      ['GET', '/v1/market/prices'],
+    ],
+    'Money & $OMR': [
+      ['POST', '/v1/swap', { dir: 'buy', amount: 1000 }], ['POST', '/v1/stake', { amount: 1 }],
+      ['POST', '/v1/unstake', { amount: 1 }], ['POST', '/v1/claim-rewards', {}],
+      ['POST', '/v1/rackets/:id/buy', {}], ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
+      ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
+    ],
+    'Armory & Fights': [
+      ['POST', '/v1/armory/gun/:id/buy', {}], ['POST', '/v1/armory/gun/:id/equip', {}],
+      ['POST', '/v1/armory/vest/:id', {}], ['POST', '/v1/armory/ammo', { qty: 10 }],
+      ['POST', '/v1/streets/:targetId/search', {}], ['POST', '/v1/streets/:targetId/fire', {}],
+      ['POST', '/v1/streets/:targetId/jump', {}], ['POST', '/v1/streets/:targetId/bust', {}],
+      ['POST', '/v1/streets/:targetId/npchit', { tier: 'local' }], ['POST', '/v1/safehouse', {}],
+      ['POST', '/v1/bodyguard/offer', { price: 10000 }], ['POST', '/v1/bodyguard/hire/:guardId', {}],
+      ['GET', '/v1/streets'], ['GET', '/v1/leaderboard/hitmen'], ['GET', '/v1/feud/:characterId'],
+    ],
+    'Contracts': [
+      ['GET', '/v1/contracts'], ['POST', '/v1/streets/:targetId/bounty', { amount: 5000, kind: 'hospitalize' }],
+      ['POST', '/v1/contracts/:targetId/:kind/cancel', {}], ['POST', '/v1/contracts/peek', {}],
+    ],
+    'Family': [
+      ['GET', '/v1/gangs'], ['GET', '/v1/gangs/:id'], ['POST', '/v1/gangs', { name: '', tag: '' }],
+      ['POST', '/v1/gangs/:id/join', {}], ['POST', '/v1/gangs/leave', {}], ['POST', '/v1/gangs/tribute', { amount: 1000 }],
+      ['POST', '/v1/gangs/tribute/omr', { amount: 1 }], ['POST', '/v1/gangs/war/:targetGangId', {}],
+      ['POST', '/v1/districts/:id/seize', {}], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { tier: 1 }],
+      ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
+      ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
+      ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],
+    ],
+    'Kitchen': [
+      ['POST', '/v1/kitchen/makings/:drugId', { qty: 1 }], ['POST', '/v1/kitchen/lab/upgrade', {}],
+      ['POST', '/v1/kitchen/cook', { drug: 'vim' }], ['POST', '/v1/kitchen/collect', {}],
+      ['POST', '/v1/kitchen/deal', { drug: 'vim', qty: 1 }], ['POST', '/v1/kitchen/crew/hire', {}],
+      ['POST', '/v1/kitchen/crew/wages', {}], ['POST', '/v1/kitchen/laylow', {}], ['POST', '/v1/kitchen/cleanpapers', {}],
+    ],
+    'Black Market': [
+      ['GET', '/v1/market'], ['POST', '/v1/market', { kind: 'car', carId: '', minBid: 1000, hours: 24 }],
+      ['POST', '/v1/market/:id/bid', { amount: 1000 }], ['POST', '/v1/market/:id/buy', {}],
+      ['POST', '/v1/market/:id/cancel', {}], ['POST', '/v1/market/order', { good: 'gin', qty: 10, price: 100 }],
+      ['POST', '/v1/market/:id/fill', { qty: 1 }], ['POST', '/v1/market/:id/claim', {}],
+      ['GET', '/v1/exchange'], ['POST', '/v1/exchange/list', { kind: 'ammo', qty: 10, price: 50 }],
+    ],
+    'Convoys & Heists': [
+      ['GET', '/v1/convoys'], ['POST', '/v1/convoy', { to: 'docks' }], ['POST', '/v1/convoy/load', { good: 'gin', qty: 1 }],
+      ['POST', '/v1/convoy/depart', { guards: 'none' }], ['POST', '/v1/convoy/:id/ambush', {}], ['POST', '/v1/convoy/:id/collect', {}],
+      ['GET', '/v1/heists'], ['POST', '/v1/heists/plan', { job: 'payroll', role: 'brains' }],
+      ['POST', '/v1/heists/:id/join', { role: 'muscle' }], ['POST', '/v1/heists/:id/execute', {}],
+      ['POST', '/v1/heists/:id/leave', {}], ['POST', '/v1/heists/:id/rat', {}], ['POST', '/v1/heist', {}],
+    ],
+    'Business Empire': [
+      ['GET', '/v1/catalog'], ['GET', '/v1/business'], ['POST', '/v1/business/:kind/buy', {}],
+      ['POST', '/v1/business/collect', {}], ['POST', '/v1/business/upkeep', {}],
+      ['POST', '/v1/business/:id/upgrade', {}], ['POST', '/v1/business/:id/launder', { amount: 1000 }],
+      ['POST', '/v1/business/:id/shakedown', {}],
+    ],
+    'The Law': [
+      ['GET', '/v1/law'], ['POST', '/v1/law/bribe', {}], ['POST', '/v1/law/retainer', {}],
+      ['POST', '/v1/law/plea', {}], ['POST', '/v1/law/jury', {}], ['POST', '/v1/law/trial', {}],
+      ['POST', '/v1/law/witpro', {}], ['POST', '/v1/law/flip/:targetId', {}],
+    ],
+    'The Pen': [
+      ['GET', '/v1/pen'], ['POST', '/v1/pen/work', {}], ['POST', '/v1/pen/buy/:item', {}],
+      ['POST', '/v1/pen/protection', {}], ['POST', '/v1/pen/bribe', { seconds: 60 }],
+      ['POST', '/v1/pen/shank/:targetId', {}], ['POST', '/v1/pen/burner/:targetId', { tier: 'local' }],
+    ],
+    'Loans': [
+      ['GET', '/v1/loans'], ['POST', '/v1/loans', { amount: 10000, rate: 0.2, hours: 24 }],
+      ['POST', '/v1/loans/:id/take', {}], ['POST', '/v1/loans/:id/repay', {}], ['POST', '/v1/loans/:id/collect', {}],
+      ['POST', '/v1/loans/:id/cancel', {}], ['POST', '/v1/loans/:id/sell', { price: 5000 }],
+      ['POST', '/v1/loans/:id/buy', {}], ['POST', '/v1/loans/square', {}],
+    ],
+    'Underworld & Skills': [
+      ['GET', '/v1/underworld'], ['POST', '/v1/underworld/:npc/gift', {}], ['POST', '/v1/underworld/discharge', {}],
+      ['POST', '/v1/underworld/:npc/penance', {}], ['POST', '/v1/underworld/:npc/favor', {}],
+      ['POST', '/v1/underworld/:npc/errand', {}], ['GET', '/v1/skills'], ['POST', '/v1/skills/:id', {}],
+      ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
+      ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
+    ],
+    'World & Growth': [
+      ['GET', '/v1/world'], ['POST', '/v1/world/:npcId/raid', {}], ['GET', '/v1/daily'],
+      ['POST', '/v1/daily/:id/claim', {}], ['POST', '/v1/missions/:id', {}], ['POST', '/v1/path', { path: 'earner' }],
+      ['GET', '/v1/notifications'],
+    ],
+    'Chain': [
+      ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', { address: '' }],
+      ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
+      ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['GET', '/v1/fees/status'],
+    ],
+  };
+  function renderDeck() {
+    const t = $('#tab-deck');
+    t.innerHTML = `<p class="d" style="color:var(--dim);font-size:12px;margin-top:0">
+      Every system in the city, raw. Pick a move — <code>:params</code> become inputs, the body is yours to edit.</p>`;
+    const groupSel = el(`<select id="deck-group">${Object.keys(DECK).map((g) => `<option>${g}</option>`).join('')}</select>`);
+    const routeSel = el(`<select id="deck-route" style="max-width:340px"></select>`);
+    const paramBox = el(`<span id="deck-params"></span>`);
+    const bodyTa = el(`<textarea id="deck-body" spellcheck="false"></textarea>`);
+    const goBtn = el(`<button class="act" style="margin-top:6px">SEND</button>`);
+    t.append(groupSel, ' ', routeSel, el('<div style="margin:6px 0"></div>'), paramBox, bodyTa, goBtn);
+    const fillRoutes = () => {
+      const routes = DECK[groupSel.value] || [];
+      routeSel.innerHTML = routes.map(([m, p], i) => `<option value="${i}">${m} ${p}</option>`).join('');
+      fillRoute();
+    };
+    const fillRoute = () => {
+      const [m, p, body] = (DECK[groupSel.value] || [])[Number(routeSel.value) || 0] || [];
+      paramBox.innerHTML = '';
+      for (const prm of (p?.match(/:([A-Za-z]+)/g) || []))
+        paramBox.appendChild(el(`<label class="f">${prm.slice(1)} <input data-prm="${prm}" size="24"></label>`));
+      bodyTa.value = m === 'GET' || body === undefined ? '' : JSON.stringify(body, null, 2);
+      bodyTa.style.display = m === 'GET' ? 'none' : 'block';
+    };
+    groupSel.onchange = fillRoutes; routeSel.onchange = fillRoute;
+    goBtn.onclick = async () => {
+      const [m, p] = (DECK[groupSel.value] || [])[Number(routeSel.value) || 0] || [];
+      let path = p;
+      for (const inp of paramBox.querySelectorAll('input')) path = path.replace(inp.dataset.prm, encodeURIComponent(inp.value.trim()));
+      let body;
+      if (m !== 'GET' && bodyTa.value.trim()) {
+        try { body = JSON.parse(bodyTa.value); } catch { return toast('bad JSON body', true); }
+      } else if (m !== 'GET') body = {};
+      await act(m, path, body);
+    };
+    fillRoutes();
+  }
+
+  // data-do buttons (simple POST/GET with no body)
+  document.addEventListener('click', (e) => {
+    const d = e.target?.dataset?.do;
+    if (!d) return;
+    const [m, p] = d.split(' ');
+    act(m, p, m === 'GET' ? undefined : {});
+  });
+
+  // ── the wire (websocket feed) ──
+  function feedLine(channel, ev) {
+    const f = $('#feed');
+    const line = el(`<div class="ev ${channel === 'me' ? 'me' : ''}"><span class="ch">${channel}</span> ` +
+      `<span>${ev.type || ''}</span> <span style="color:var(--dim)">${escapeHtml(summarize(ev))}</span></div>`);
+    f.prepend(line);
+    while (f.childElementCount > 120) f.lastElementChild.remove();
+  }
+  const escapeHtml = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  function summarize(ev) {
+    const { type, channel, ...rest } = ev;
+    const s = JSON.stringify(rest);
+    return s.length > 140 ? s.slice(0, 140) + '…' : s;
+  }
+  function connectWs() {
+    if (ws) return;
+    try {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      ws = new WebSocket(`${proto}://${location.host}/v1/ws?token=${encodeURIComponent(token)}`);
+      ws.onopen = () => { $('#ws-dot').style.color = 'var(--ok)'; };
+      ws.onmessage = (m) => {
+        try {
+          const ev = JSON.parse(m.data);
+          feedLine(ev.channel || '?', ev);
+          if (ev.channel === 'me') refresh();
+        } catch { /* noise */ }
+      };
+      ws.onclose = () => { $('#ws-dot').style.color = 'var(--bad)'; ws = null; setTimeout(connectWs, 4000); };
+    } catch { /* headless */ }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

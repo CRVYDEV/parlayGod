@@ -10,6 +10,14 @@ npm start       # API on :8787 using pg-mem (no Postgres needed)
 ```
 Set `DATABASE_URL=postgres://...` to use real Postgres (schema auto-applies). Set `JWT_SECRET` in production.
 
+## Play it (the console)
+`npm start`, then open **http://localhost:8787/** — the playable web console (`public/index.html`, one
+static file, no build step, no extra deps). Guest sign-in → name a street character → the sheet (live
+vitals), crimes / train / bank / travel, the City board, the Den, a live websocket feed ("the wire"),
+and an **Everything Else** deck that reaches every `/v1` system raw (`:params` become inputs, JSON
+bodies editable). `GET /v1/rules` serves the public rulebook (crimes/districts/guns/goods) that powers
+it — server-authoritative always; the client only ever sends choices.
+
 ## Try it
 ```
 TOKEN=$(curl -s -X POST localhost:8787/v1/auth/guest | jq -r .token)
