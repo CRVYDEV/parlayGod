@@ -1332,6 +1332,29 @@ The verification pass caught FOUR wrong deck body templates against the real han
 `[object Object]` decree render — all fixed; the probe also confirmed `com.book` = `{id,name,desc}`,
 `territoryOf` fields, and that establish takes no body (sequential tiers). Suite 20/20.
 
+**THE CONSOLE step three — Wet Work + The Law curated screens — BUILT** (public/index.html; both
+verified live in Chromium — a $60k kill contract posted and a search started through the UI, the
+indicted courtroom rendered off a warped case — zero page errors). **Wet Work**: the CONTRACT BOARD
+(`GET /v1/contracts` — pot/kind/poster-or-"somebody"/family attribution/directed-exclusive window/
+expiry + pull-my-stake per pot), the post-a-contract form (target picker off `GET /v1/streets`,
+kill/hospitalize, anon 3-$OMR checkbox, public reason, optional named gun + exclusive window), YOUR
+HUNT (the client remembers the search it started — `{targetId, placedAt}` per-character in
+localStorage since the view doesn't surface searches; FIRE disabled until placed; the server stays
+the referee: any resolved shot or a stale `no_search` clears it; call-it-off wired to the DELETE),
+YOUR DEFENSES (safehouse with the live wealth-scaled quote, bodyguard offer/status, the 5-$OMR peek,
+and a square-your-name card that appears only when wanted/welsher), and THE STREETS roster (level/
+tag/district/lockup/hospital chips + jump, search, tiered NPC hit, hire-guard when a price is
+listed, and the blood-feud ledger per mark). **The Law**: the RAP SHEET (stage-colored meter with
+watched/investigation/indictment thresholds off `GET /v1/law`, the heat-feeds-the-case line, city-
+event multiplier, PATROL-hours chip, RAT badge), THE CASE AGAINST YOU (indicted only — grace
+countdown, live conviction odds, forfeit terms + plea/buy-jury/demand-trial), THE ESCAPES (bribe
+with the wealth-scaled cost — correctly refused once a case is FILED, the retainer with its active
+countdown, a pointer to laylow/cleanpapers), and THE INFORMANT'S DOOR (flip-on-a-rival picker with
+the permanent-rat warning, witpro button only when available). Deck fixes caught by the pass: the
+npchit/burner `tier` templates used a nonexistent `'local'` → `'legbreaker'` (the real
+NPC_HITMEN ladder). Suite 20/20. Client now covers: core loop, PvP, Law, Kitchen, Family, Market,
+City, Den + the full raw deck.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

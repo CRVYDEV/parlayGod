@@ -13,7 +13,7 @@ Set `DATABASE_URL=postgres://...` to use real Postgres (schema auto-applies). Se
 ## Play it (the console)
 `npm start`, then open **http://localhost:8787/** — the playable web console (`public/index.html`, one
 static file, no build step, no extra deps). Guest sign-in → name a street character → the sheet (live
-vitals), crimes / train / bank / travel, **the Kitchen** (lab → makings → cook → deal, the crew), **the
+vitals), crimes / train / bank / travel, **Wet Work** (the contract board, hunts, defenses, the streets roster), **the Law** (the investigation meter, the courtroom, the informant’s door), **the Kitchen** (lab → makings → cook → deal, the crew), **the
 Family** (found/join, tribute, territory, war & turf, the Commission), **the Black Market** (car
 auctions, district-pinned goods, buy orders), the City board, the Den, a live websocket feed ("the
 wire"), and an **Everything Else** deck that reaches every `/v1` system raw (`:params` become inputs,

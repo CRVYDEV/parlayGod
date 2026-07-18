@@ -239,8 +239,8 @@
   }
 
   // ── tabs ──
-  const TABS = { streets: 'Streets', kitchen: 'The Kitchen', family: 'The Family', market: 'Black Market',
-    city: 'The City', den: 'The Den', deck: 'Everything Else' };
+  const TABS = { streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
+    market: 'Black Market', law: 'The Law', city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -261,6 +261,8 @@
     if (id === 'kitchen') renderKitchen();
     if (id === 'family') renderFamily();
     if (id === 'market') renderMarket();
+    if (id === 'pvp') renderPvp();
+    if (id === 'law') renderLaw();
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
@@ -601,7 +603,7 @@
       ['POST', '/v1/armory/vest/:id', {}], ['POST', '/v1/armory/ammo', { qty: 10 }],
       ['POST', '/v1/streets/:targetId/search', {}], ['POST', '/v1/streets/:targetId/fire', {}],
       ['POST', '/v1/streets/:targetId/jump', {}], ['POST', '/v1/streets/:targetId/bust', {}],
-      ['POST', '/v1/streets/:targetId/npchit', { tier: 'local' }], ['POST', '/v1/safehouse', {}],
+      ['POST', '/v1/streets/:targetId/npchit', { tier: 'legbreaker' }], ['POST', '/v1/safehouse', {}],
       ['POST', '/v1/bodyguard/offer', { price: 10000 }], ['POST', '/v1/bodyguard/hire/:guardId', {}],
       ['GET', '/v1/streets'], ['GET', '/v1/leaderboard/hitmen'], ['GET', '/v1/feud/:characterId'],
     ],
@@ -652,7 +654,7 @@
     'The Pen': [
       ['GET', '/v1/pen'], ['POST', '/v1/pen/work', {}], ['POST', '/v1/pen/buy/:item', {}],
       ['POST', '/v1/pen/protection', {}], ['POST', '/v1/pen/bribe', { seconds: 60 }],
-      ['POST', '/v1/pen/shank/:targetId', {}], ['POST', '/v1/pen/burner/:targetId', { tier: 'local' }],
+      ['POST', '/v1/pen/shank/:targetId', {}], ['POST', '/v1/pen/burner/:targetId', { tier: 'legbreaker' }],
     ],
     'Loans': [
       ['GET', '/v1/loans'], ['POST', '/v1/loans', { amount: 10000, rate: 0.2, hours: 24 }],
@@ -713,6 +715,171 @@
       await act(m, path, body);
     };
     fillRoutes();
+  }
+
+  // ── WET WORK: the contract board, the streets roster, your hunt, your defenses ──
+  const huntKey = () => 'omerta_hunt_' + (me?.id || '');
+  async function renderPvp() {
+    const t = $('#tab-pvp');
+    await refresh();
+    const board = (await api('GET', '/v1/contracts')).body?.contracts || [];
+    const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
+    const hunt = JSON.parse(localStorage.getItem(huntKey()) || 'null');
+    const huntReadyS = hunt ? Math.ceil((new Date(hunt.placedAt) - Date.now()) / 1000) : 0;
+    const npcs = [['legbreaker', 'Leg-Breaker $50k'], ['journeyman', 'Journeyman $250k'], ['professional', 'The Professional $1M']];
+
+    t.innerHTML = `
+      <h2>The Contract Board</h2>
+      ${board.length ? `<div class="grid">${board.map((c) => `
+        <div class="card"><span class="t">${c.target.name}</span>
+          <span class="chip ${c.kind === 'kill' ? 'bad' : ''}">${c.kind.toUpperCase()}</span>
+          <div class="d">pot <b style="color:var(--neon)">$${fmt(c.pot)}</b> · by ${c.poster ? (c.family ? c.poster + ' (family)' : c.poster) : 'somebody'}${c.reason ? ` · “${c.reason}”` : ''}</div>
+          <div class="d">${c.directedTo ? `EXCLUSIVE: ${c.directedTo} for ${mins(c.opensInSeconds)} · ` : ''}${c.expiresInSeconds != null ? mins(c.expiresInSeconds) + ' left' : 'open-ended'}</div>
+          <button class="act" data-pullstake="${c.target.id}:${c.kind}">pull my stake</button></div>`).join('')}</div>`
+        : '<span class="d" style="color:var(--dim)">no open contracts — the city is at peace. fix that.</span>'}
+
+      <h2 style="margin-top:12px">Put Out a Contract</h2>
+      <select id="ct-target">${streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''})</option>`).join('')}</select>
+      <select id="ct-kind"><option value="hospitalize">hospitalize</option><option value="kill">kill</option></select>
+      <input id="ct-amt" placeholder="pot $" size="9">
+      <label style="font-size:11px;color:var(--dim)"><input type="checkbox" id="ct-anon"> anonymous (3 $OMR)</label>
+      <input id="ct-reason" placeholder="reason (public)" size="18">
+      <button class="act" id="ct-post">post it</button>
+      <div style="margin-top:4px"><span class="d" style="color:var(--dim);font-size:11px">name a gun (optional — directed contract, $10k floor):</span>
+        <select id="ct-hitman"><option value="">— open to all —</option>${streets.map((s) => `<option value="${s.id}">${s.name}</option>`).join('')}</select>
+        <input id="ct-excl" placeholder="exclusive hrs" size="10"></div>
+
+      <h2 style="margin-top:12px">Your Hunt</h2>
+      ${hunt ? `
+        <div class="card"><span class="t">hunting ${hunt.name}</span>
+          <div class="d">${huntReadyS > 0 ? `your people place them in ${mins(huntReadyS)}` : 'PLACED — take the shot'}${me.shootCdSeconds > 0 ? ` · trigger cools ${mins(me.shootCdSeconds)}` : ''}</div>
+          <button class="act" data-fire="${hunt.targetId}" ${huntReadyS > 0 ? 'disabled' : ''}>FIRE</button>
+          <button class="act" id="hunt-off">call it off</button></div>`
+        : '<span class="d" style="color:var(--dim)">nobody in the crosshairs — start a search from the roster below (3h to place a mark)</span>'}
+
+      <h2 style="margin-top:12px">Your Defenses</h2>
+      <div class="grid">
+        <div class="card"><span class="t">Safehouse</span>
+          <div class="d">${me.safeSeconds > 0 ? `to ground for ${mins(me.safeSeconds)} more` : `$${fmt(me.safehouseCost)} for 4h — untargetable by fire + NPC hits (still jumpable; no offense/extraction inside)`}</div>
+          ${me.safeSeconds > 0 ? '' : '<button class="act" data-do="POST /v1/safehouse">go to ground</button>'}</div>
+        <div class="card"><span class="t">Bodyguard</span>
+          <div class="d">${me.guardedBy ? `guarded — one lethal shot absorbed (${mins(me.guardSeconds)})` : me.guardPrice != null ? `you're for hire at $${fmt(me.guardPrice)}` : 'list yourself, or hire off the roster below'}</div>
+          <input id="bg-price" placeholder="your price" size="9"> <button class="act" id="bg-offer">offer to guard</button></div>
+        <div class="card"><span class="t">Counter-intel</span>
+          <div class="d">5 $OMR reads every funder on every pot on YOUR head — pierces anonymity</div>
+          <button class="act" data-do="POST /v1/contracts/peek">peek</button></div>
+        ${me.wanted || me.welsher ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">Square Your Name</span>
+          <div class="d">$50k clears WANTED + the welsher mark and calls off the pool bounty (settle the debt first)</div>
+          <button class="act" data-do="POST /v1/loans/square">pay it</button></div>` : ''}
+      </div>
+
+      <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
+      <div class="grid">${streets.map((s) => `
+        <div class="card"><span class="t">${s.name}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
+          ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}
+          <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
+          <button class="act" data-jump="${s.id}">jump</button>
+          <button class="act" data-search="${s.id}" data-name="${s.name}">search</button>
+          <select data-npctier="${s.id}" style="font-size:10px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
+          <button class="act" data-npchit="${s.id}">NPC hit</button>
+          ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
+          <button class="act" data-feud="${s.id}">feud</button></div>`).join('')}</div>`;
+
+    t.querySelectorAll('[data-pullstake]').forEach((b) => b.onclick = () => {
+      const [tid, kind] = b.dataset.pullstake.split(':');
+      act('POST', `/v1/contracts/${tid}/${kind}/cancel`, {}).then(() => renderPvp());
+    });
+    t.querySelector('#ct-post').onclick = () => {
+      const body = { amount: Number(t.querySelector('#ct-amt').value), kind: t.querySelector('#ct-kind').value };
+      if (t.querySelector('#ct-anon').checked) body.anon = true;
+      const rsn = t.querySelector('#ct-reason').value.trim(); if (rsn) body.reason = rsn;
+      const hm = t.querySelector('#ct-hitman').value; if (hm) { body.hitman = hm;
+        const ex = Number(t.querySelector('#ct-excl').value); if (ex) body.exclusiveHours = ex; }
+      act('POST', `/v1/streets/${t.querySelector('#ct-target').value}/bounty`, body).then(() => renderPvp());
+    };
+    t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.jump}/jump`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-search]').forEach((b) => b.onclick = async () => {
+      const r = await act('POST', `/v1/streets/${b.dataset.search}/search`, {});
+      if (r.code < 400 && r.body.placedAt)
+        localStorage.setItem(huntKey(), JSON.stringify({ targetId: b.dataset.search, name: b.dataset.name, placedAt: r.body.placedAt }));
+      renderPvp();
+    });
+    t.querySelectorAll('[data-npchit]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.npchit}/npchit`, { tier: t.querySelector(`[data-npctier="${b.dataset.npchit}"]`).value }).then(() => renderPvp()));
+    t.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/bodyguard/hire/${b.dataset.hire}`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-feud]').forEach((b) => b.onclick = () => act('GET', `/v1/feud/${b.dataset.feud}`));
+    t.querySelectorAll('[data-fire]').forEach((b) => b.onclick = async () => {
+      const r = await act('POST', `/v1/streets/${b.dataset.fire}/fire`, {});
+      // the server consumes the search on every resolved shot (kill or miss) — clear the local
+      // hunt on any 2xx, and on a stale no_search too
+      if (r.code < 400 || r.body?.error === 'no_search') localStorage.removeItem(huntKey());
+      renderPvp();
+    });
+    const off = t.querySelector('#hunt-off');
+    if (off) off.onclick = () => act('DELETE', '/v1/streets/search').then(() => { localStorage.removeItem(huntKey()); renderPvp(); });
+    t.querySelector('#bg-offer').onclick = () =>
+      act('POST', '/v1/bodyguard/offer', { price: Number(t.querySelector('#bg-price').value) }).then(() => renderPvp());
+  }
+
+  // ── THE LAW: the investigation meter, the escapes, the courtroom, the informant's door ──
+  async function renderLaw() {
+    const t = $('#tab-law');
+    await refresh();
+    const r = await api('GET', '/v1/law');
+    if (r.code >= 400) { t.innerHTML = '<span class="d">the docket is sealed.</span>'; return; }
+    const L = r.body;
+    const meterMax = Math.max(L.thresholds.indict * 1.2, L.exposure);
+    const mark = (v) => `${Math.min(100, 100 * v / meterMax)}%`;
+    const stageColor = { clean: 'var(--ok)', watched: 'var(--neon)', investigation: 'var(--neon)', indicted: 'var(--bad)' }[L.stage] || 'var(--dim)';
+    t.innerHTML = `
+      <h2>The Rap Sheet</h2>
+      <div class="card"><span class="t" style="color:${stageColor};text-transform:uppercase">${L.stage}</span>
+        ${L.rat ? '<span class="chip bad">RAT — the badge follows the bloodline</span>' : ''}
+        ${L.patrol ? '<span class="chip cold">PATROL HOURS — the Bureau convicts harder</span>' : ''}
+        <div class="d" style="margin-top:6px">the case: ${L.exposure} exposure · heat above ${L.watch} feeds it (yours: ${me.heat}) · today ×${L.cityEvent.exposureMult} (${L.cityEvent.name})</div>
+        <div class="bar" style="height:10px;position:relative;margin-top:6px"><i style="width:${mark(L.exposure)};background:${stageColor}"></i></div>
+        <div class="d" style="display:flex;justify-content:space-between;font-size:10px">
+          <span>watched @ ${L.thresholds.watched}</span><span>investigation @ ${L.thresholds.investigation}</span><span>INDICTMENT @ ${L.thresholds.indict}</span></div></div>
+
+      ${L.indicted ? `
+      <h2 style="margin-top:12px" >The Case Against You</h2>
+      <div class="card" style="border-color:var(--blood)">
+        <span class="t" style="color:var(--bad)">UNDER INDICTMENT</span>
+        <div class="d">trial in ${mins(L.graceSeconds)} unless you act · conviction odds ~${L.convictionOdds}% · a conviction seizes ${Math.round(L.forfeitRate * 100)}% of pocket + bank (staked $OMR + minted gear are SAFE) and jails you — the street SURVIVES</div>
+        <div style="margin-top:6px">
+          <button class="act" data-do="POST /v1/law/plea">cop a plea (${Math.round((L.plea?.forfeitRate || 0) * 100)}% + ${mins(L.plea?.jailSeconds || 0)} inside)</button>
+          <button class="act" data-do="POST /v1/law/jury" ${L.jury.bought ? 'disabled' : ''}>${L.jury.bought ? 'jury bought' : `buy the jury (${L.jury.cost} $OMR)`}</button>
+          <button class="act" data-do="POST /v1/law/trial">demand trial NOW</button>
+        </div></div>` : ''}
+
+      <h2 style="margin-top:12px">The Escapes</h2>
+      <div class="grid">
+        <div class="card"><span class="t">Grease the Beat Cop</span>
+          <div class="d">${L.bribeCost != null ? `$${fmt(L.bribeCost)} knocks ${L.bribeClears} off the meter (wealth-scaled)` : 'a FILED case is past bribing'}</div>
+          ${L.bribeCost != null ? '<button class="act" data-do="POST /v1/law/bribe">pay</button>' : ''}</div>
+        <div class="card"><span class="t">The Lawyer</span>
+          <div class="d">${L.retainer.active ? `on retainer — ${mins(L.retainer.seconds)} left (softer busts, smaller forfeits)` : `$${fmt(L.retainer.cost)} keeps counsel on call`}</div>
+          ${L.retainer.active ? '' : '<button class="act" data-do="POST /v1/law/retainer">retain</button>'}</div>
+        <div class="card"><span class="t">Lay Low / Clean Papers</span>
+          <div class="d">heat feeds the case — cool it in the Kitchen tab</div></div>
+      </div>
+
+      <h2 style="margin-top:12px">The Informant's Door</h2>
+      <div class="card">
+        <div class="d">FLIP: drop your case by naming a rival — seeds their meter, brands you a RAT forever
+        (omertà void on your head; witness protection opens). The named man collapsing YOUR case means
+        someone probably wants you dead.</div>
+        <select id="flip-target"></select>
+        <button class="act" id="flip-go" style="border-color:var(--blood)">flip on them</button>
+        ${L.witpro.available ? '<button class="act" data-do="POST /v1/law/witpro">enter witness protection</button>' : ''}
+        ${L.witpro.active ? `<span class="chip cold">WITPRO — untargetable ${mins(L.witpro.seconds)}</span>` : ''}
+      </div>`;
+    const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
+    $('#flip-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
+    $('#flip-go').onclick = () =>
+      act('POST', `/v1/law/flip/${$('#flip-target').value}`, {}).then(() => renderLaw());
   }
 
   // data-do buttons (simple POST/GET with no body)
