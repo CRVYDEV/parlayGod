@@ -553,7 +553,8 @@ CREATE TABLE IF NOT EXISTS loans (
   due_at TIMESTAMPTZ,
   offered_to TEXT,                                  -- step 2: directed (trust-line) offer — only this borrower can take (NULL = open board)
   collateral_min NUMERIC NOT NULL DEFAULT 0,        -- step 2: a SECURED offer requires a car worth ≥ this (0 = unsecured)
-  collateral_car TEXT                               -- step 2: the pledged car id once taken (NULL = none); seized to the lender on default
+  collateral_car TEXT,                              -- step 2: the pledged car id once taken (NULL = none); seized to the lender on default
+  for_sale NUMERIC                                  -- step 3: the paper market — the current lender's ASK price on this active loan (NULL = not for sale)
 );
 
 -- THE LIVING WORLD Phase 2 — NPC rival families. One SERVER-WIDE row per fixture: `strength` is a

@@ -4,7 +4,7 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed, M3, carCollateralValue } from './rules.js';
+import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -25,7 +25,7 @@ export async function loanBoard(pool, ch) {
       collateralMin: Number(r.collateral_min) || 0, secured: Number(r.collateral_min) > 0,
       directed: !!r.offered_to, forMe: r.offered_to === ch.id }));
   const active = (await pool.query(
-    `SELECT l.id, l.principal, l.rate, l.due_at, l.lender_character, l.borrower_character, l.collateral_car,
+    `SELECT l.id, l.principal, l.rate, l.due_at, l.lender_character, l.borrower_character, l.collateral_car, l.for_sale,
             lc.name AS lender, bc.name AS borrower
        FROM loans l JOIN characters lc ON lc.id=l.lender_character
        LEFT JOIN characters bc ON bc.id=l.borrower_character
@@ -33,10 +33,22 @@ export async function loanBoard(pool, ch) {
     .map((r) => ({ id: r.id, owed: loanOwed(r.principal, r.rate),
       role: r.lender_character === ch.id ? 'lender' : 'borrower',
       counterparty: r.lender_character === ch.id ? r.borrower : r.lender,
-      collateral: !!r.collateral_car,
+      collateral: !!r.collateral_car, forSale: r.for_sale != null ? Number(r.for_sale) : null,
       dueSeconds: Math.ceil((new Date(r.due_at) - Date.now()) / 1000),
       overdue: new Date(r.due_at) <= new Date() }));
-  return { offers, active, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS } };
+  // step 3: the PAPER market — active loans the lender has put up for sale (a receivables market; a
+  // buyer weighs the borrower's creditworthiness — owed, collateral, overdue, the welsher mark).
+  const paper = (await pool.query(
+    `SELECT l.id, l.principal, l.rate, l.due_at, l.for_sale, l.collateral_car, l.lender_character,
+            lc.name AS lender, bc.name AS borrower, bc.welsher AS borrower_welsher
+       FROM loans l JOIN characters lc ON lc.id=l.lender_character
+       JOIN characters bc ON bc.id=l.borrower_character
+      WHERE l.status='active' AND l.for_sale IS NOT NULL ORDER BY l.for_sale ASC LIMIT 50`)).rows
+    .map((r) => ({ id: r.id, price: Number(r.for_sale), owed: loanOwed(r.principal, r.rate),
+      lender: r.lender, borrower: r.borrower, mine: r.lender_character === ch.id,
+      collateral: !!r.collateral_car, borrowerWelsher: !!r.borrower_welsher,
+      dueSeconds: Math.ceil((new Date(r.due_at) - Date.now()) / 1000), overdue: new Date(r.due_at) <= new Date() }));
+  return { offers, active, paper, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS, paperTakeBps: LOAN.PAPER_TAKE_BPS } };
 }
 
 // POST /v1/loans — offer capital (escrow the principal, the bounty:post pattern). step 2: `to` names a
@@ -204,6 +216,53 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   bus.emit('streets', { type: 'welsher', who: borrower.name, by: ch.name });
   await track(client, ch.account_id, 'loan_collect', { seized: collected, shortfall: owed - collected, car: !!carSeized });
   return { ok: true, seized: collected, toLender, vig, shortfall: owed - collected, carSeized };
+}
+
+// POST /v1/loans/:id/sell — step 3 (the paper market): the current lender puts this ACTIVE loan's
+// CLAIM up for sale at an ask price. No escrow (a claim, not cash); the debt/collateral are untouched.
+export async function sellPaper(ch, loanId, body, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No trading paper from a cell.');
+  const price = Math.floor(Number(body?.price) || 0);
+  if (price < LOAN.PAPER_MIN || price > LOAN.PAPER_MAX) throw new GameError('price', `A paper sells for $${LOAN.PAPER_MIN}–$${LOAN.PAPER_MAX}.`);
+  const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
+  if (!loan || loan.status !== 'active') throw new GameError('no_loan', 'No such debt to sell.');
+  if (loan.lender_character !== ch.id) throw new GameError('not_yours', 'That’s not your book to sell.');
+  await client.query('UPDATE loans SET for_sale=$2 WHERE id=$1', [loanId, price]);
+  return { ok: true, price };
+}
+
+// POST /v1/loans/:id/unsell — the lender pulls the paper off the market (just clears the flag)
+export async function unsellPaper(ch, loanId, client, h) {
+  const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
+  if (!loan || loan.lender_character !== ch.id) throw new GameError('not_yours', 'That’s not your book.');
+  if (loan.for_sale == null) throw new GameError('not_listed', 'That paper isn’t on the market.');
+  await client.query('UPDATE loans SET for_sale=NULL WHERE id=$1', [loanId]);
+  return { ok: true };
+}
+
+// POST /v1/loans/:id/buy — two-party: ch=buyer (actor, the NEW lender), seller=current lender. The buyer
+// pays the ask (minus PAPER_TAKE_BPS → the pool) and takes over the claim; debt + collateral unchanged.
+// A pure taxed cash transfer (the loan's principal/vig fire later on repay/collect, whoever holds it).
+export async function buyPaper(ch, seller, loanId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No buying paper from a cell.');
+  const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
+  if (!loan || loan.status !== 'active' || loan.for_sale == null) throw new GameError('gone', 'That paper is off the market.');
+  if (loan.lender_character !== seller.id) throw new GameError('mismatch', 'The book doesn’t match.');
+  if (loan.lender_character === ch.id) throw new GameError('own', 'You already hold that paper.');
+  if (loan.borrower_character === ch.id) throw new GameError('own_debt', 'You can’t buy the paper on your own debt.');
+  const price = Math.floor(Number(loan.for_sale));
+  if (Number(ch.cash) < price) throw new GameError('cash', `That paper costs $${price}.`);
+  const take = paperTake(price), toSeller = price - take;
+  ch.cash = Number(ch.cash) - price;
+  seller.cash = Number(seller.cash) + toSeller;
+  await client.query('UPDATE loans SET lender_character=$2, for_sale=NULL WHERE id=$1', [loanId, ch.id]);
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [take]); // the house take → the buyback pool
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'loan:paper', counterparty: seller.id });
+  await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: toSeller, reason: 'loan:paper', counterparty: ch.id });
+  await h.ledger(client, { currency: 'cash', amount: -take, reason: 'loan:paper' }); // NULL-char take → pool (the market-take precedent)
+  await h.notify(client, seller.id, 'paper_sold', { to: ch.name, price: toSeller });
+  if (loan.borrower_character) await h.notify(client, loan.borrower_character, 'paper_transferred', { to: ch.name });
+  return { ok: true, price, toSeller, take };
 }
 
 // runEstate hook — the dead man's loans. OPEN offers hold escrowed cash: on a PLAYER fire-kill

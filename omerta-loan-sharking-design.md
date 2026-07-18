@@ -97,3 +97,45 @@ prices and enforces TRUST rather than protecting lenders retroactively. Three me
 §10.4 is untouched (collateral is ownership, not currency; the welsher hunt moves no value). All numbers
 (`COLLATERAL_MAX`, the waiver) are founder sign-off levers. Step three deferred: debt trading (selling the
 paper — a secondary market), NPC lenders.
+
+## Step two audit follow-up — the collateral auto-forfeit (BUILT 2026-07-18)
+
+Closes the step-two audit's one MED (an overdue secured loan could freeze the borrower's car forever if
+a spiteful/absent lender never collected). The worker sweep gains a third pass: a SECURED loan left
+un-collected past `due_at + LOAN.GRACE_MS` (24h) auto-forfeits its collateral car to the lender and
+resolves the loan. COLLATERAL-ONLY (the pledged car goes to the lender; no cash is seized — the lender
+had the grace window to `collectLoan` cash+car manually, the borrower had it to repay). A pure ownership
+move (§10.4-neutral); the sweep locks the loan (serializes vs a manual collect/repay), car+loan the only
+writes. `LOAN.GRACE_MS` is a founder sign-off lever.
+
+## Step three — the paper market (debt trading, BUILT 2026-07-18)
+
+A secondary market for loan CLAIMS — the natural completion of the loan economy, and the sharpest
+expression of "trust gets priced": a receivable's price reflects the borrower's creditworthiness.
+
+- **Sell paper.** `POST /v1/loans/:id/sell {price}` — the current lender puts an ACTIVE loan's claim up
+  for sale at an ask (`loans.for_sale`, bounded `PAPER_MIN..PAPER_MAX`). No escrow — a claim, not cash;
+  the debt + collateral are untouched. `POST /v1/loans/:id/unsell` pulls it.
+- **The board.** `GET /v1/loans` gains a `paper` section: every active loan for sale, with `owed`,
+  `collateral`, `overdue`, and **`borrowerWelsher`** — so a buyer weighs the risk (a welsher's paper is
+  worth far less than face). A collector with the muscle to enforce can buy risky paper cheap.
+- **Buy paper.** `POST /v1/loans/:id/buy` — two-party (buyer + current lender). The buyer pays the ask
+  minus `PAPER_TAKE_BPS` (2%) → the buyback pool, and BECOMES the new `lender_character`; the debt and
+  any collateral carry over unchanged. A pure taxed cash transfer (the loan's principal/vig fire later
+  on repay/collect, whoever holds it) — §10.4: `loan:paper` rows (buyer −price, seller +net, NULL take
+  → pool), riding the existing `loan:` vocabulary; the loan-escrow check is untouched (paper is active
+  loans, not open escrow). A borrower can't buy the paper on their own debt (`own_debt`).
+
+`loan:paper` is a taxed transfer (the 2% take), so the secondary market isn't a free alt-funding rail.
+Death needs no new handling (paper escrows nothing; a dead lender/borrower's loan voids, taking the
+listing with it). `PAPER_TAKE_BPS` and the price bounds are founder sign-off levers.
+
+## Deferred — NPC lenders (a house credit line) — needs a BACKED pool (§10.4)
+
+An always-available house lender is valuable but is NOT a simple faucet: if the house MINTS cash to
+lend, every borrower who defaults and keeps the money is a net inflation faucet (borrow → spend →
+default → keep). To stay §10.4-clean it must lend from a BACKED, sink-funded pool (the Phase-4
+stake-pool / vig-reserve pattern) — a `loan_house` singleton fed by real sinks (e.g. a slice of the
+loan vig), lending as a TRANSFER from that bucket, bounded by its balance, defaults depleting it. That
+is its own focused build (a tracked §10.4 bucket, funding, lending limits), deliberately NOT bundled
+into step three. Flagged for a step-four decision.

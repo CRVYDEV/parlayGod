@@ -413,6 +413,17 @@ export async function buildServer() {
     if (!l) throw new G.GameError('no_loan', 'No such debt to collect.');
     return G.withTwoCharacters(pool, req.user.sub, l.borrower_character, (ch, victim, client, h) => Loans.collectLoan(ch, victim, req.params.id, client, h));
   });
+  // step 3 — the paper market: a lender sells/pulls an active loan's claim; a buyer takes it over.
+  app.post('/v1/loans/:id/sell', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.sellPaper(ch, req.params.id, req.body, client, h)));
+  app.post('/v1/loans/:id/unsell', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.unsellPaper(ch, req.params.id, client, h)));
+  // buy is two-party (buyer pays the current lender, becomes the new lender): look up the seller, lock both.
+  app.post('/v1/loans/:id/buy', { preHandler: auth }, async (req) => {
+    const l = (await pool.query("SELECT lender_character FROM loans WHERE id=$1 AND status='active' AND for_sale IS NOT NULL", [req.params.id])).rows[0];
+    if (!l) throw new G.GameError('gone', 'That paper is off the market.');
+    return G.withTwoCharacters(pool, req.user.sub, l.lender_character, (ch, victim, client, h) => Loans.buyPaper(ch, victim, req.params.id, client, h));
+  });
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>
