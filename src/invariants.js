@@ -167,6 +167,22 @@ export async function runLedgerInvariants(pool) {
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
 
+  // (f5) THE DEN'S BOOK (econ pass — the mint-on-top fix): the house's realized-profit accumulator
+  // and its tip-outs each mirror the ledger EXACTLY. profit == PvE stakes − PvE payouts; distributed
+  // == street cuts (NULL `casino:take` rows) + rakeback. The profit CAP itself (distributions never
+  // exceed profit net of open 600:1/dog-odds liability) is enforced at pay time (denAvailable) and
+  // regression-tested — a later jackpot can legitimately drive lifetime profit below what was
+  // already tipped out, so the cap is not an end-state identity; these two are.
+  const denRow = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+  if (denRow) {
+    const denBets = -(await sum(pool, "currency='cash' AND reason LIKE 'casino:bet:%'"));
+    const denWins = await sum(pool, "currency='cash' AND reason LIKE 'casino:win:%'");
+    push('den profit', Number(denRow.profit), denBets - denWins);
+    const denTakes = -(await sum(pool, "currency='cash' AND reason='casino:take'"));
+    const denRake = await sum(pool, "currency='cash' AND reason='casino:rakeback'");
+    push('den distributions', Number(denRow.distributed), denTakes + denRake);
+  }
+
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
   for (const [cur, prefixes] of Object.entries(KNOWN_REASONS)) {

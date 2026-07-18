@@ -499,3 +499,38 @@ lock-order in-commit. Open founder balance/design calls (NOT patched, ranked):
 - **jump-vs-family asymmetry (LOW)** — a family member can fire/npcHit/contract a WANTED mate but not
   the lesser non-lethal jump (consistent with the rat precedent, which also never stripped jump).
 - **`WANTED_HUNT_P` 0.05/tick is worker-frequency-dependent** — tune with the real tick cadence.
+
+## Post-signing addendum — the ECON PASS (founder-directed 2026-07-18): the three flagged holes
+
+The founder directed a core-loop economics pass on the audits' three standing flags. Measurement first
+(`tools/sim.js` + code reading), then structural fixes — **no signed numeric lever was retuned**.
+
+### 1. The den's mint-on-top (FIXED — structural, both §10.4-identity-checked)
+Measured: PvE `takeHouse` credited the street pool 1% of stake volume un-ledgered and independent of
+results, and `casino:rakeback` was a ledgered faucet from nowhere — combined ~2%/volume distributed
+against dice's 1.41% edge, so dice volume was **net-inflationary (+0.59%/unit)** with volume a free
+variable. **Fix: the house now tips only out of REALIZED profit.** `den_volume` carries `profit`
+(Σ PvE stakes − Σ PvE payouts — mirrors the ledger exactly) and `distributed`; every street cut and
+rakeback is capped at `profit − distributed − open liability` (600:1 numbers + dog-odds fight exposure
+held in reserve), each pool credit is a ledgered NULL `casino:take` row, and rakeback that can't be
+covered simply WAITS (cursor holds — nothing forfeits). On a bad night the street doesn't get tipped.
+PvP untouched (its rake was already carved from the winner). §10.4 gained two exact identities
+(`den profit`, `den distributions`). The 1% cut / `RAKEBACK_BPS` 100 numeric levers are UNCHANGED —
+they now mean "up to, when the house is ahead," which is the only economically honest reading.
+
+### 2. Purchasable Commission standing (FIXED — seasonal chamber)
+Measured: seats ranked by `lifetime_tribute + 10000×wars_won` — tribute is pocket→own-treasury
+(~zero net cost) and NEVER decayed, so a parked whale owned the head seat + veto forever (flagged in
+three audits). **Fix: the chamber now ranks by THIS SEASON's showing** (`season_tribute` +
+10000×`season_wars`, reset at rollover — the hitman legend/season precedent; `gangs.season` is the
+lazy marker, founders stamped at creation). Buying a seat still works — but it must be re-bought every
+season, and the parked treasury is war-lootable the whole time (spoils take 20%). The buyback family
+split keeps the LIFETIME formula — a different, signed surface, untouched.
+
+### 3. Kill EV (D1) — CONFIRMED as signed, now tracked
+Re-measured with every loot surface live: standalone loot-EV vs a careless mid mark is **−$72k**
+(ammo $82k dominates; break-even liquid ≈ $328k — "hunt whales", exactly the signed D1). This is BY
+DESIGN: the kill economy is CONTRACT-driven — pots, the $25k WANTED house bounty, war points, and
+vendettas pay for wet work; loot is the tip. The sim now prints a standing `contract break-even`
+probe (pot ≥ ~$72k turns a mid-mark job +EV) so the number is tracked at every economy change. No
+lever moved.

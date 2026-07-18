@@ -40,7 +40,8 @@ export async function createGang(ch, name, tag, client, h) {
   if (clash.rows.length) throw new GameError('taken', 'That name or tag is already claimed.');
   ch.cash = Number(ch.cash) - M3.GANG_FOUND_COST;
   const id = uid();
-  await client.query('INSERT INTO gangs (id, name, tag) VALUES ($1,$2,$3)', [id, name, tag]);
+  // stamped with the CURRENT season so the rollover sweep never zeroes a mid-season founder's ladder
+  await client.query('INSERT INTO gangs (id, name, tag, season) VALUES ($1,$2,$3,$4)', [id, name, tag, Math.floor(dayOf() / 28)]);
   await client.query('INSERT INTO gang_members (gang_id, character_id, role) VALUES ($1,$2,$3)', [id, ch.id, 'boss']);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -M3.GANG_FOUND_COST, reason: 'gang:found' });
   h.owned.gangId = id; h.owned.gangRole = 'boss';
@@ -140,7 +141,8 @@ export async function tribute(ch, amount, client, h) {
   await resolveWarIfDue(client, h.owned.gangId);
   ch.cash = Number(ch.cash) - amt;
   // treasury is a §10.4 cash bucket, not a sink — the ledger row keeps Σ balanced
-  await client.query('UPDATE gangs SET treasury = treasury + $2, lifetime_tribute = lifetime_tribute + $2 WHERE id=$1', [h.owned.gangId, amt]);
+  // season_tribute rides along — the Commission's seasonal ladder (lifetime feeds the buyback split)
+  await client.query('UPDATE gangs SET treasury = treasury + $2, lifetime_tribute = lifetime_tribute + $2, season_tribute = season_tribute + $2 WHERE id=$1', [h.owned.gangId, amt]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'gang:tribute', counterparty: h.owned.gangId });
   await h.bumpDaily(client, ch.id, 'tribute');
   await bumpFamilyTask(client, h, 'tribute', amt);
@@ -187,7 +189,7 @@ export async function resolveWarIfDue(client, gangId) {
     spoils = Math.floor(Number(l.treasury) * M3.WAR_SPOILS);
     winner = w.id;
     await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [l.id, spoils]);
-    await client.query('UPDATE gangs SET treasury = treasury + $2, wars_won = wars_won + 1 WHERE id=$1', [w.id, spoils]);
+    await client.query('UPDATE gangs SET treasury = treasury + $2, wars_won = wars_won + 1, season_wars = season_wars + 1 WHERE id=$1', [w.id, spoils]);
   }
   await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL, war_score_us=0, war_score_them=0 WHERE id=$1 OR id=$2', [us.id, them?.id || us.id]);
   bus.emit(`gang:${us.id}`, { type: 'war_over', winner, spoils });

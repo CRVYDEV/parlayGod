@@ -36,6 +36,9 @@ await seed("jail_until=NULL");
 const omrBefore = (await meOf(token)).omr;
 const taxPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 let wins = 0, losses = 0, staked = 0, paidOut = 0;
+// econ pass: mirror of the HOUSE BOOK — the street is tipped 1% per stake but only out of realized
+// profit (no open tickets during the session, so liability is 0 and the mirror is exact)
+let denProfit = 0, denDist = 0;
 for (let i = 0; i < 60; i++) {
   await seed('nerve=50'); // nerve is the natural throttle; refill to keep the session going
   const r = await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } });
@@ -45,7 +48,10 @@ for (let i = 0; i < 60; i++) {
   if (r.body.rolls.length === 1) assert([7, 11, 2, 3, 12].includes(last), 'a one-roll round is a natural or craps');
   else assert(last === 7 || last === r.body.point, 'a point round ends on the point or a seven');
   staked += 1000;
-  if (r.body.win) { wins++; paidOut += 2000; } else losses++;
+  denProfit += 1000;                                                // the stake enters the book…
+  const take = Math.min(10, Math.max(0, denProfit - denDist));      // …the tip is profit-capped
+  denDist += take;
+  if (r.body.win) { wins++; paidOut += 2000; denProfit -= 2000; } else losses++;
 }
 assert(wins > 0 && losses > 0, `both outcomes over 60 rounds (${wins}W/${losses}L)`);
 // every roll is in the audit log
@@ -54,9 +60,15 @@ assert(Number((await pool.query(`SELECT COUNT(*) n FROM rng_audit WHERE action='
 const sum = async (reason) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='${reason}' AND character_id='${cid}'`)).rows[0].s);
 assert.equal(await sum('casino:bet:dice'), -staked, 'every stake is a ledgered casino:bet:dice sink');
 assert.equal(await sum('casino:win:dice'), paidOut, 'every payout is a ledgered casino:win:dice faucet');
-// the street's cut: 1% of every stake landed in the tax pool
+// the street's cut: 1% of each stake, CAPPED at the house's realized profit (the mint-on-top fix —
+// the den tips out of its winnings, it never emits on volume)
 const taxPost = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
-assert.equal(taxPost - taxPre, Math.ceil(1000 * 0.01) * 60, 'the street takes 1% of every stake (→ the buyback)');
+assert.equal(taxPost - taxPre, denDist, 'the street cut is tipped only out of realized profit');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:take'")).rows[0].s),
+  -denDist, 'every tip-out is a ledgered NULL casino:take row');
+const dvCraps = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+assert.equal(Number(dvCraps.profit), staked - paidOut, 'the house book mirrors the ledger (profit == bets − wins)');
+assert.equal(Number(dvCraps.distributed), denDist, 'and knows exactly what it tipped out');
 // THE regulatory line: a gambling session never touches $OMR
 assert.equal((await meOf(token)).omr, omrBefore, 'the den never touches $OMR — cash only');
 
@@ -90,6 +102,16 @@ assert.equal(rr.code, 200, 'a second ticket (new day slot freed)');
 await pool.query(`UPDATE numbers_tickets SET day=${yesterday} WHERE character_id='${cid}'`);
 rr = await call('POST', '/v1/casino/numbers/claim', { token });
 assert.equal(rr.body.settled, 1, 'the loser settled'); assert.equal(rr.body.won, 0, 'and paid nothing');
+
+// econ-pass regression: the 600:1 hit put the house DEEP under water — no street cut is minted on
+// top of a stake until the book recovers (the old model tipped 1% regardless of results)
+assert(Number((await pool.query('SELECT profit FROM den_volume WHERE id=1')).rows[0].profit) < 0,
+  'the jackpot drove the house book negative');
+const poolUW = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+await seed('nerve=50');
+assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a round while the house is under water');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolUW,
+  'no street cut while the book is negative — the den only tips out of realized profit');
 
 // ══════════ STEP TWO: back-room PvP dice, the weekly fight + the neon fix, rakeback ══════════
 let seededCash = 1000000; // every later seed is a tracked RELATIVE bump so the identity check stays exact
@@ -170,18 +192,38 @@ assert.equal(rr.body.settled, 1, 'unfixed bout settled');
 assert.equal(rr.body.results[0].winner, drawWinner, 'the seed draw decided it');
 assert.equal(rr.body.won, drawWinner === 'a' ? Math.floor(1000 * CASINO.FIGHT_FAV_PAYS) : 0, 'paid iff the pick hit');
 
-// ── rakeback: a casino-front owner earns a cut of den volume at business collect ──
+// ── rakeback: a casino-front owner earns a cut of den volume — paid ONLY out of house profit ──
 await seed("cash = cash + 8000000"); seededCash += 8000000;
 rr = await call('POST', '/v1/business/casino/buy', { token });
 assert.equal(rr.code, 200, 'lou bought the casino front');
 const volAtBuy = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
 assert.equal(Number((await pool.query("SELECT rake_cursor FROM businesses WHERE character_id=$1 AND kind='casino'", [cid])).rows[0].rake_cursor),
   volAtBuy, 'the rakeback cursor starts at today — no claiming history');
+// econ-pass regression: the house is still under water from the 600:1 hit — the rakeback WAITS
+// (the cursor holds; the claim isn't forfeited, it's just not minted while the book is negative)
 await seed("nerve=50");
-assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 100000 } })).code, 200, 'a big roll after the buy');
+assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'volume lands after the buy');
+rr = await call('POST', '/v1/business/collect', { token });
+assert.equal(rr.body.rakeback, undefined, 'no rakeback while the book is negative');
+assert.equal(Number((await pool.query("SELECT rake_cursor FROM businesses WHERE character_id=$1 AND kind='casino'", [cid])).rows[0].rake_cursor),
+  volAtBuy, 'the cursor holds — the claim waits for the house to recover, nothing forfeits');
+// bank REAL profit for the house (honest play, no value seeded): matured losing tickets, until the
+// book can cover the rakeback owed on the volume since the cursor
+for (let i = 0; i < 300; i++) {
+  const dv = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+  const volNow0 = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
+  const owed = Math.floor((volNow0 - volAtBuy) * CASINO.RAKEBACK_BPS / 10000);
+  if (Number(dv.profit) - Number(dv.distributed) >= owed + 1000) break;
+  rr = await call('POST', '/v1/casino/numbers', { token, body: { pick: 0, amount: 1000 } });
+  assert.equal(rr.code, 200, `top-up ticket (${JSON.stringify(rr.body)})`);
+  await pool.query(`UPDATE numbers_tickets SET day=${yesterday}, pick=${(winningPick + 1) % 1000} WHERE character_id='${cid}'`);
+  await call('POST', '/v1/casino/numbers/claim', { token }); // a settled loser: +$1k realized profit
+}
 rr = await call('POST', '/v1/business/collect', { token });
 assert.equal(rr.code, 200, 'collected');
-assert.equal(rr.body.rakeback, Math.floor(100000 * CASINO.RAKEBACK_BPS / 10000), 'the owner raked 1% of the new volume');
+const volNow = Number((await pool.query('SELECT total FROM den_volume WHERE id=1')).rows[0].total);
+assert.equal(rr.body.rakeback, Math.floor((volNow - volAtBuy) * CASINO.RAKEBACK_BPS / 10000),
+  'the owner raked 1% of the volume since the cursor — now that the house can pay it');
 assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:rakeback' AND character_id='${cid}'`)).rows[0].s),
   rr.body.rakeback, 'the rakeback is a ledgered casino: faucet');
 assert.equal((await call('POST', '/v1/business/collect', { token })).body.rakeback, undefined, 'no double-claim — the cursor advanced');
@@ -197,6 +239,11 @@ const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `casino:* reasons are in the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const treas = inv.checks.find((c) => c.name === 'gang treasuries');
 assert(treas.ok, `the treasury check reconciles the casino:fix sink (drift ${treas.drift})`);
+// econ pass: the den's book mirrors the ledger exactly — both §10.4 identities hold
+const denP = inv.checks.find((c) => c.name === 'den profit');
+assert(denP?.ok, `den profit == PvE bets − wins (drift ${denP?.drift})`);
+const denD = inv.checks.find((c) => c.name === 'den distributions');
+assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/1% street cut exact), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
 await app.close();

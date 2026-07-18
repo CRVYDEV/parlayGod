@@ -189,6 +189,12 @@ CREATE TABLE IF NOT EXISTS gangs (
   ammo_bank INT NOT NULL DEFAULT 0,
   lifetime_tribute NUMERIC NOT NULL DEFAULT 0,   -- standing for buyback payouts
   wars_won INT NOT NULL DEFAULT 0,               -- +10,000 standing each
+  -- econ pass (audit: purchasable Commission standing): the CHAMBER ranks by THIS SEASON's showing
+  -- (reset at rollover) — parked lifetime wealth no longer owns the head seat. The buyback family
+  -- split keeps the lifetime formula (a different, signed surface). NUMERIC (pg-mem INT-arith quirk).
+  season_tribute NUMERIC NOT NULL DEFAULT 0,
+  season_wars NUMERIC NOT NULL DEFAULT 0,
+  season INT NOT NULL DEFAULT 0,                 -- lazy rollover marker (the character pattern)
   weekly_week INT,
   weekly_progress NUMERIC NOT NULL DEFAULT 0,
   weekly_done BOOLEAN NOT NULL DEFAULT false,
@@ -498,7 +504,13 @@ CREATE TABLE IF NOT EXISTS fight_fixes (
 -- Casino-business owners earn rakeback against the volume that flowed since their cursor.
 CREATE TABLE IF NOT EXISTS den_volume (
   id INT PRIMARY KEY,
-  total NUMERIC NOT NULL DEFAULT 0
+  total NUMERIC NOT NULL DEFAULT 0,
+  -- econ pass (audit: mint-on-top): the house's REALIZED edge (Σ PvE stakes − Σ PvE payouts, may run
+  -- negative on a bad night) and what has been tipped out of it (street cuts + rakeback). Every
+  -- distribution is capped at profit − distributed − open liability, so the den never emits beyond
+  -- what the players actually lost. Both mirror the ledger exactly (§10.4 den checks).
+  profit NUMERIC NOT NULL DEFAULT 0,
+  distributed NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
 

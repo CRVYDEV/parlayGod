@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
+import { denAvailable, denDistribute } from './casino.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -147,8 +148,12 @@ export async function collectBusiness(ch, client, h) {
       const vol = Number((await client.query('SELECT total FROM den_volume WHERE id=1')).rows[0]?.total || 0);
       const owners = Number((await client.query("SELECT COUNT(*) n FROM businesses WHERE kind='casino'")).rows[0].n) || 1;
       const share = Math.floor(Math.max(0, vol - Number(r.rake_cursor)) * (CASINO.RAKEBACK_BPS || 0) / 10000 / owners);
-      if (share > 0) {
+      // econ pass (mint-on-top fix): rakeback pays only out of the den's REALIZED profit net of open
+      // liabilities — all-or-nothing per collect: when the house is under water the cursor doesn't
+      // advance, so the owner's claim simply waits for the book to recover (nothing is forfeited).
+      if (share > 0 && (await denAvailable(client)) >= share) {
         rakeback += share;
+        await denDistribute(client, share);
         await client.query('UPDATE businesses SET rake_cursor=$2 WHERE id=$1', [r.id, vol]);
       }
     }
