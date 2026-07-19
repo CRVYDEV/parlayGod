@@ -2056,6 +2056,35 @@ what that NFT represents, so it's forward-compatible), the WINDOWED contested-au
 (escrow the owner can defend/outbid — deferred for the leaner instant Standover), and deeper renown perks
 (access/status only).
 
+**THE FIGHT CIRCUIT (step one) — BUILT** (`src/boxing.js`, `test/boxing.js` — the 29th suite; design
+`omerta-fight-circuit-design.md`). Mob boxing — a new competitive loop distinct from the casino's spectator
+FIGHT bet (that's gambling on an NPC card; this is MANAGING YOUR OWN fighter). A manager signs ONE contender
+(`fighters.character_id` PK — power/chin/speed + a W/L record + an injury clock + a `bout_limit`
+consent-listing), trains them up, and stakes them against other managers' fighters. The bout is the AUDITED
+`casino:pvp` back-room-dice pattern EXACTLY — a taxed TRANSFER with a vig (half → the buyback pool, half
+burns), so §10.4 stays exact with **NO new cash faucet** (no PvE purse minting) and **NO escrow**. The
+fighter DIES WITH THE STREET (`fighters` joins the runEstate wipe — the business/club precedent). Loop:
+**recruit** (`recruitFighter`, `BOXING.RECRUIT_COST` cash SINK `boxing:recruit`, level-gated, stats rolled
+`[STAT_MIN,STAT_MAX]`, one-per-man), **train** (`trainFighter`, cash+energy SINK `boxing:train`, +`TRAIN_GAIN`
+to one stat, capped `STAT_CAP`), **list** (`listBout` — set `bout_limit`, the fade/bodyguard consent pattern),
+**fight** (`fightBout`, two-party `withTwoCharacters`: score = `power+chin+speed + rand(VARIANCE)` each, ties
+reroll, rng-audited; the winner takes `2×stake − rake` (`RAKE_BPS` vig, half → street_tax via a direct UPDATE,
+half burns implicitly since the winner nets `stake − rake` — the `casino:pvp` split, NO NULL take row, NO
+faucet); the LOSER's fighter is laid up `INJURY_MS` so it's not spam). `GET /v1/boxing` is the circuit (your
+fighter + every fighter taking bouts, ranked by record); `GET /v1/leaderboard/boxing` ranks the whole circuit;
+`BOXING.RANKS` (Prospect → Hall of Famer, by wins) is a status ladder. Gates: both own a fighter, opponent
+listing, neither injured, stake ≤ limit, both cover it, not self, family omertà, not jailed/hospitalized.
+§10.4: `boxing:` joined the cash `KNOWN_REASONS` — recruit/train character_id'd SINKS + `boxing:bout` the
+taxed PvP TRANSFER (the `casino:pvp` twin), all character_id'd → check (a) reconciles per character exactly
+like the back-room dice; the fighter row uses ABSOLUTE INT writes for wins/losses (the pg-mem arithmetic-UPDATE
+quirk). Surfaced on the view (`fighter`) + `/v1/rules` + a "The Fights" console tab (sign/train/list + the
+circuit board with make-the-match + the leaderboard). `test/boxing.js` covers recruit/train/list gates + sinks,
+a deterministic strong-vs-weak bout (the taxed transfer + the rake split + records + injury + no-rematch), the
+board/leaderboard, DEATH, and §10.4. Suite 29/29 + sim drift-0. All numbers are founder sign-off levers.
+Deferred (step two): a STABLE (multiple fighters), NPC exhibition bouts (a bounded PvE purse — sim-gated like
+the world-raid faucet), title belts, spectator betting on bouts (→ the den book), an account-level career-wins
+LEGEND surviving death (the hitman-rep precedent), and cornerman/trainer NPCs (the Underworld tie-in).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

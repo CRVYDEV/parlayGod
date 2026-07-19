@@ -16,6 +16,7 @@ import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
 import { wipeSpeakeasyAtDeath } from './speakeasy.js';
+import { wipeFighterAtDeath } from './boxing.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -1321,6 +1322,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);
+  await wipeFighterAtDeath(client, victim.id);
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);

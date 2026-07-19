@@ -1518,6 +1518,30 @@ export const assessedValueOf = (tier) => {
   return v;
 };
 
+// ── THE FIGHT CIRCUIT (omerta-fight-circuit-design.md): sign a contender, train them up, stake them in PvP
+// bouts (the casino:pvp transfer pattern — a taxed contest, never a new faucet). All numbers are sign-off levers.
+export const BOXING = {
+  MANAGER_MIN_LEVEL: 8,      // sign a fighter at level 8+
+  RECRUIT_COST: 50000,       // signing bonus (a cash sink)
+  STAT_MIN: 6, STAT_MAX: 14, // stats rolled at signing (power/chin/speed)
+  STAT_CAP: 25,              // training ceiling per stat
+  TRAIN_COST: 20000,         // per session (a cash sink)
+  TRAIN_ENERGY: 15,
+  TRAIN_GAIN: 1,             // +1 to the chosen stat per session
+  MIN_STAKE: 5000, MAX_STAKE: 500000,
+  RAKE_BPS: 500,             // 5% vig off the pot (half → the buyback pool, half burns — the casino:pvp rate)
+  VARIANCE: 22,              // rng added to each fighter's score — enough for upsets, form still tells
+  INJURY_MS: 14400000,      // 4h — a lost bout lays the fighter up
+  STATS: ['power', 'chin', 'speed'],
+  // the record ladder (by wins) — pure status
+  RANKS: [
+    { min: 0, name: 'Prospect' }, { min: 3, name: 'Contender' }, { min: 8, name: 'Ranked' },
+    { min: 15, name: 'Champion' }, { min: 30, name: 'Hall of Famer' },
+  ],
+};
+export const boxerRankOf = (wins) =>
+  [...BOXING.RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.RANKS[0];
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
