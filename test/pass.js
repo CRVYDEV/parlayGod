@@ -10,6 +10,7 @@ import { getAddress } from 'viem';
 import { buildServer } from '../src/server.js';
 import { PASS } from '../src/rules.js';
 import { runVigBuyback } from '../src/vig.js';
+import { sweepPassStipends } from '../src/pass.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -67,19 +68,23 @@ assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned
 r = await call('POST', '/v1/pass/claim', { token: alice.token }); // tier 3: full energy
 assert.equal(r.body.granted.energy > 0, true, 'tanked up');
 
-// ── fund the prize pool via the pass's OWN buyback share (0.05 ETH × 40% = 0.02 ETH → $OMR) ──
-await runVigBuyback(pool, { priceOmrPerEth: 1000 }); // 0.02 × 1000 = 20 $OMR bought; 50% (10) → prize pool
-assert(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance) >= 10, 'the pool is funded by the pass buyback');
-
-// ── claim the $OMR stipend tier (tier 4 = 2 $OMR) — paid through the BACKED prize rail ──
-const omrBefore = (await meOf(alice.token)).omr;
+// ── claim the $OMR stipend tier (tier 4 = 2 $OMR) with a DRY pool → the stipend ACCRUES as OWED
+// (durably recorded, never lost), the tier still advances, and $0 is paid now (the fix) ──
 r = await call('POST', '/v1/pass/claim', { token: alice.token });
 assert.equal(r.body.tier, 4, 'tier 4');
-assert.equal(r.body.stipendOmr, 2, 'the tier owes a 2 $OMR stipend');
-assert.equal(r.body.stipendPaid, 2, 'and the backed pool paid it in full');
-assert.equal((await meOf(alice.token)).omr, omrBefore + 2, 'the $OMR landed in the account');
+assert.equal(r.body.stipendOwed, 2, 'the tier owes a 2 $OMR stipend');
+assert.equal(r.body.stipendPaid || 0, 0, 'a dry pool pays nothing NOW — but the tier is not lost');
+assert.equal((await call('GET', '/v1/pass', { token: alice.token })).body.stipendOwed, 2, 'the 2 $OMR is on the books');
+assert.equal((await meOf(alice.token)).omr, 0, 'nothing paid yet');
 
-// ── finish the track (tiers 5–12; more stipends at 8 and 12) ──
+// ── fund the pool via the pass's OWN buyback share, then the worker sweep pays the owed stipend ──
+await runVigBuyback(pool, { priceOmrPerEth: 1000 }); // 0.05 × 40% = 0.02 ETH × 1000 = 20 $OMR; 50% (10) → prize pool
+assert(Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0].balance) >= 10, 'the pool is funded by the pass buyback');
+await sweepPassStipends(pool); // the worker net: pays down owed as the pool funds
+assert.equal((await meOf(alice.token)).omr, 2, 'the owed 2 $OMR is now paid (backed prize:omr)');
+assert.equal((await call('GET', '/v1/pass', { token: alice.token })).body.stipendOwed, 0, 'the books are square');
+
+// ── finish the track (tiers 5–12; more stipends at 8 and 12, now paid inline since the pool is funded) ──
 for (let i = 0; i < 8; i++) await call('POST', '/v1/pass/claim', { token: alice.token });
 r = await call('GET', '/v1/pass', { token: alice.token });
 assert.equal(r.body.tier, PASS.TRACK.length, 'the whole Ledger is claimed');

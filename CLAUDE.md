@@ -1842,23 +1842,33 @@ grants the NEXT tier once per `passClaimMs()` (~20h; `PASS_CLAIM_MS` is a TEST-O
 the SEARCH_MS precedent), escalating up a 12-tier `PASS.TRACK` (rules tail). **Anti-pay-to-win +
 §10.4-safe by construction:** rewards are STATUS (a street title into the `characters.title` slot),
 CONSUMABLES (revive tokens — out-of-band account entitlements; an energy refill — not currency), and a
-small **$OMR STIPEND** on three tiers (2/3/5, capstone) paid through the EXISTING backed prize-pool rail
-(`Vig.payPrizes` → `prize:omr`, pool-bounded — a redistribution the pass's OWN buyback share funds, NEVER
-an unbacked mint). So the pass closes the "spenders fund earners" loop end-to-end: the buyer's ETH →
-buyback → prize pool → their own stipend (bounded below what the pass contributed). **Self-contained** —
-the track advances only on claim (zero touchpoints in other modules, lowest risk). The $OMR stipend is
-paid by the ROUTE post-commit (`claimPass` returns `stipendOmr`; the route calls `payPrizes` in its own
-connection) — so no `vig_prize_pool` lock nests inside the withCharacter txn (which would invert
-payPrizes' singleton→account lock order → deadlock). Account-level state (`account_persistent.pass_tier`/
+small **$OMR STIPEND** on three tiers (2/3/5, capstone) — a redistribution the pass's OWN buyback share
+funds, NEVER an unbacked mint. So the pass closes the "spenders fund earners" loop end-to-end: the
+buyer's ETH → buyback → prize pool → their own stipend (bounded below what the pass contributed).
+**The stipend is ACCRUED as OWED at claim** (`account_persistent.pass_owed`, in the SAME txn as the tier
+advance — so the reward is never lost) and paid down by **`settlePassStipend`** from the backed prize
+pool (credits `prize:omr` + moves the same $OMR pool→reserve via `fundReserve` — pool-bounded, always
+backed). `settlePassStipend` is STANDALONE (not nested in the withCharacter claim txn), so it locks the
+pool singleton FIRST then the account — the SAME order as `payPrizes`/`runVigBuyback` → **no AB-BA
+deadlock**. The claim route pays it best-effort (a failure/dry-pool leaves it owed, never fails the claim
+or mis-advances the track — the **red-team HIGH/MED fix**: the post-commit-payout seam is replaced by a
+durable owe + the stake-pool "pending, no forfeit" pattern), and the worker `sweepPassStipends` is the
+net that pays every owed stipend as the pool funds. **Self-contained** — the track advances only on claim
+(zero touchpoints in other modules). Account-level state (`account_persistent.pass_tier`/
 `pass_at`) → **the track SURVIVES DEATH** (the heir keeps claiming what the pass paid for), and buying the
 pass while LAPSED starts a **fresh season** (`store.js:grantPackage` resets the track; renewing an ACTIVE
 pass keeps progress). Routes: `GET /v1/pass` (the board — tier/track/cooldown/stipend pool), `POST
 /v1/pass/claim`; `/v1/rules` gained a `pass` block; console: a **"The Ledger"** section on the Store tab
 (progress bar + the tier grid + claim); `describe()` humanizes the claim; raw deck gained the pass routes.
 `test/pass.js` covers the no-pass gate, the board, the daily claim (title/revives/energy), the ~daily
-cooldown, the backed $OMR stipend (funded by the pass's own buyback, pool-bounded, totalling 10 $OMR —
-never minted), completing the track + the complete gate, §10.4 (`prize:omr` reconciles at drift-0),
-DEATH SURVIVAL, and the fresh-season reset. Suite 26/26 + sim drift-0. All numbers are sign-off levers.
+cooldown, the **owed-stipend path** (a DRY pool accrues the owe + advances the tier + pays $0 now; a
+buyback funds the pool; `sweepPassStipends` pays the owed — never lost), the rest of the track's stipends
+paid inline (totalling 10 $OMR, pool-bounded, never minted), the complete gate, §10.4 (`prize:omr`
+reconciles at drift-0), DEATH SURVIVAL, and the fresh-season reset. Suite 26/26 + sim drift-0. A focused
+red-team confirmed the critical property (the stipend can never mint unbacked $OMR / extraction ≤ inflow
+holds end-to-end through the backed rail) and flagged the post-commit-payout seam (lost stipend + track
+mis-advance on a payout failure or dry pool) — fixed by the owed-accrual + `settlePassStipend` +
+worker-sweep design above. All numbers are sign-off levers.
 
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the

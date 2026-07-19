@@ -1231,7 +1231,7 @@
             : P.claimable ? `next up: <b>${P.track[P.tier].reward}</b>`
             : `next claim in ${mins(P.cooldownSeconds)}`}</div>
           ${P.claimable ? '<button class="act" id="pass-claim" style="border-color:var(--neon)">claim the next mark</button>' : ''}
-          <div class="d" style="font-size:10px;margin-top:4px">stipend pool: ${fmt(P.stipendPoolOmr)} $OMR (funds the $OMR tiers)</div>
+          <div class="d" style="font-size:10px;margin-top:4px">stipend pool: ${fmt(P.stipendPoolOmr)} $OMR${P.stipendOwed > 0 ? ` · you're owed ${fmt(P.stipendOwed)} $OMR (paid as the pool funds)` : ''}</div>
         </div>
         <div class="grid" style="margin-top:6px">${P.track.map((t) => `
           <div class="card" style="${t.next ? 'border-color:var(--neon)' : t.claimed ? 'opacity:.55' : ''}">
