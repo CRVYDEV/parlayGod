@@ -8,7 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -91,6 +91,9 @@ export async function removeMember(client, gangId, characterId) {
     // gang's frozen vote must not govern next week from beyond the grave, invisible to the
     // board's join). Its VETO record stays — the decree it killed was killed while it lived.
     await client.query('DELETE FROM commission_votes WHERE gang_id=$1', [gangId]);
+    // R1 — the family's legit book dies with the family (status only, no §10.4 currency: the $OMR
+    // that bought the shares was already burned 'rwa:invest', so nothing is stranded).
+    await client.query('DELETE FROM gang_portfolios WHERE gang_id=$1', [gangId]);
     await client.query('DELETE FROM gangs WHERE id=$1', [gangId]);
     return { dissolved: true };
   }
@@ -1262,7 +1265,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const report = {
     by: killerName, legacy,
     kept: { omr: Number(acct.omr), staked: Number(acct.staked), rewards: Number(acct.rewards),
-            gear: h.victimOwned.gear.length, prestige: acct.prestige },
+            gear: h.victimOwned.gear.length, prestige: acct.prestige,
+            // R1 — the Portfolio is LEGIT money: account-level, never in the wipe below, so the heir
+            // keeps the book (the retirement fantasy, made legible at the moment of death). Its value
+            // at today's price — a status figure, no §10.4 currency moves.
+            portfolio: Math.round(((h.victimOwned.portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)) * 100) / 100 },
     lost: { cash: lostCash, cars: h.victimOwned.cars.length, guns: h.victimOwned.guns.length,
             rackets: h.victimOwned.rackets.length, assets: h.victimOwned.assets.length, lvl },
   };

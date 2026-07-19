@@ -1,0 +1,126 @@
+# OMERTÀ — The Portfolio ("Going Legit"): RWA / blue-chip holdings
+
+**Status: R1 (off-chain, no securities) — SPEC + BUILD.** R2/R3 legal-gated (below).
+
+The narrative apex of the game's own laundering arc. Every mob story ends the same way: the
+crook who goes legit — dirty street cash washed up the ladder into legitimate, untouchable, real
+holdings (Corleone into Vegas real estate, Lansky quietly moving skim into blue chips). OMERTÀ
+already built the entire on-ramp — laundering (cash → $OMR), the Business Empire ("going legit"
+fronts), the Law/RICO (getting caught moving money is already a risk surface). **Real-world assets
+(RWA stock — AAPL / TSLA / SPCX, the tickers Robinhood Chain natively settles) are simply the top
+rung of that ladder.** Not a bolt-on: the missing capstone.
+
+## The three models (why R1 is the earn-in-game / graduate-to-real model)
+
+| Model | Player holds | Legal weight | Role |
+|---|---|---|---|
+| A — real tokenized equity | real AAPL tokens in-wallet | heaviest (a securities *distribution*) | the R3 destination |
+| B — synthetic price-tracker | a cashable number that tracks the stock | deceptively heavy (a *derivative*) | avoided |
+| C — earn-in-game, graduate-to-real | in-game credits, later *extracted* to a real token | one gated boundary | **this build** |
+
+Model C is the exact architecture already shipped for $OMR: earn freely off-chain (a game
+mechanic, no securities); the *only* moment a real security exists is a single, KYC-gated, on-chain
+extraction (the voucher → reserve → claim rail already built + CI-tested). The full-reserve queue
+(`signedOutstanding + amt ≤ funded_omr`) already guarantees **extraction ≤ reserve** — point that
+same invariant at an RWA reserve and every credit is 1:1 backed. It is "the Vig, but the prize is
+fractional AAPL instead of $OMR."
+
+## Phasing (R1 carries the same risk profile as everything shipped this year — none)
+
+- **R1 — buildable now, ZERO regulatory surface (THIS DOC).** The in-game Portfolio: ticker-
+  denominated credits bought by burning clean $OMR, tracked by a deterministic server-authoritative
+  price (the §7.11 seed machinery). **Pure STATUS** — no sell, no cash-out — so shares touch no
+  securities/derivative law (the hitman-rep / family-seal precedent: a status axis *outside* §10.4
+  and outside the sim-audited balance). Ships the whole fiction, the earning loop, the family book,
+  the death-proof retirement fantasy, the leaderboard. Gathers data.
+- **R2 — the real reserve, still no distribution.** A `RWA_BPS` slice of real ETH fee revenue funds
+  a buy bot that acquires real fractional RWA into a reserve wallet; the in-game credits become
+  *backed* (the full-reserve invariant). We *hold* assets; players do not yet extract. **Gated on
+  legal structuring.**
+- **R3 — extraction: the one securities event.** The KYC'd on-chain claim, through Robinhood's own
+  broker-dealer rails (their KYC / custody / tax reporting / issuance — *not* ours; OMERTÀ is a
+  rewards program distributing THROUGH Robinhood, not an independent issuer). **Hard-gated on a
+  Robinhood partnership + securities counsel + the third-party audit that already gates mainnet.**
+
+The three hard rules the whole design respects, so R3 stays inside the lines:
+1. **Never distribute securities by chance.** Every RNG/loot/casino layer stays in cash/$OMR; RWA
+   acquisition is a *purchase* or an *earned/vested/skill* payout only — never a spin-to-win.
+2. Receiving stock is a taxable event; jurisdiction/KYC gating is mandatory (Robinhood's KYC is the
+   asset that makes this plausible at all).
+3. The regulated surface is confined to one gated extraction boundary (the $OMR model).
+
+---
+
+## R1 — what ships this build
+
+### Fiction
+The family accountant turns your clean money into legitimate blue-chip holdings — a book that
+outlives your street. Buy in with laundered $OMR (you don't buy blue chips with street cash — you
+buy them with clean money); the book is **legit, so it can't be looted, seized, or lost when your
+character dies** (it survives to the heir, like prestige). RWA becomes the ultimate safe harbour —
+the retirement account earned by surviving.
+
+### Why it strengthens the core game (not just a finance bolt-on)
+- **A deep $OMR sink.** Every prior burn was one-time or capped; a kitted veteran's $OMR pools into
+  staking. The Portfolio is an *uncapped, permanent* $OMR burn — deflationary, and it *helps*
+  extraction-≤-inflow (the Risk-to-Earn sustainability math) by construction.
+- **A death-proof endgame store + a graceful exit.** Solves a flagged balance problem (endgame
+  wealth has nowhere legit to go). Gives whales a reason to keep grinding (build the book) and a
+  reason to eventually get out alive with a portfolio (retention + churn/exit lever).
+- **Family politics.** The family book is a seize-resistant status flex — a war chest wars can't
+  loot.
+
+### Tickers & price (`PORTFOLIO` rules-tail block)
+Three tickers, ticker-flavored to districts (fiction only): **AAPL** (old money — the tech district
+washes here), **TSLA** (the docks & wheelmen), **SPCX** (the high-risk moonshot). Each has a `base`
+(day-0 display floor) and a `drift` (± band). `tickerPriceOf(id, day)` = `base × (1 ± drift·hash)`
+via `hash01('rwa:'+id+':'+day+':'+MARKET_SEED)` — deterministic per UTC day, server-authoritative,
+unpredictable without the seed, verifiable after. **Display-only: the price moves no value** (no
+sell in R1), so it never touches §10.4. All numbers are founder sign-off levers.
+
+### State (account-level → survives death)
+- `portfolios (account_id, ticker)` PK — `shares NUMERIC`, `cost_omr NUMERIC` (lifetime $OMR spent,
+  the display cost basis). Keyed on **account_id, not character_id**, so it is *never in the
+  runEstate wipe* — the heir inherits the book. That IS the retirement mechanic.
+- `gang_portfolios (gang_id, ticker)` PK — the family book. Bought by the boss/underboss from the
+  family $OMR **reserve** (the seal precedent). Dies with a dissolved family.
+
+### Actions (`src/portfolio.js`)
+- `GET /v1/portfolio` (`portfolioBoard`) — the market (all tickers: price, day-change %, blurb),
+  your book (per-ticker shares/price/book value/cost basis + totals), and the family book if you're
+  in a gang (holdings + reserve + whether you can invest).
+- `POST /v1/portfolio/invest {ticker, omr}` (`invest`) — burn $OMR → `shares += omr/price` at
+  today's price. A §10.4 $OMR **BURN** `rwa:invest` through the vanity `spendOmr` till.
+- `POST /v1/gangs/portfolio/invest {ticker, omr}` (`familyInvest`) — boss/underboss burns from the
+  family reserve (gang row locked, the `buySeal` pattern) → the family book. §10.4 burn `rwa:invest`
+  (reserve bucket, character_id NULL + counterparty = gang, like `vanity:gang:seal`).
+
+### §10.4 treatment
+Shares are **not a currency** (a status collectible — the hitman-rep / seal precedent) → zero new
+bucket, zero faucet, and the deterministic price moves no value. The **only** ledgered flow is the
+`rwa:invest` $OMR burn:
+- `rwa:` joins the `omr` KNOWN_REASONS vocabulary.
+- `rwa:invest` joins `omrBurns` in `invariants.js`. Personal burns leave `account_persistent.omr`;
+  family burns leave `gangs.omr_reserve` — both already inside `omrBuckets`, so `$OMR conservation`
+  (`omrBuckets == 20000 + mints − burns`) stays exact with zero formula change beyond the new term.
+
+### Surfaced
+- Character `view` gains a `portfolio` summary (holdings + total book value).
+- `GET /v1/gangs/:id` gains the family `portfolio`.
+- `GET /v1/leaderboard/portfolio` — the biggest legit books (a status leaderboard, the hitmen-board
+  precedent; book value computed in JS from the deterministic price).
+- `runEstate` report `kept.portfolio` — the heir is shown the book that survived (the fantasy, made
+  legible at the moment of death).
+
+### Tests (`test/portfolio.js` — the 21st suite)
+Price determinism + daily drift; invest burns $OMR exactly (spends == ledgered `rwa:invest` burns) +
+share math; min/ticker gates; family reserve invest + rank gate + empty-reserve rejection; **death
+survival** (heir keeps the book — a two-character kill scenario); the board + leaderboard; and the
+`$OMR conservation` §10.4 check holding with `rwa:invest` as a burn. Full suite must stay green +
+`node tools/sim.js` drift-0.
+
+## Deferred to R1 step two (not this build)
+Gameplay-earned exposure that keeps the "never by chance" rule: the big-score cut (heist/convoy/war
+spoils drop a sliver into the crew book), skill/season leaderboard payouts, the laundering-graduation
+tier that draws RICO scrutiny (ties RWA to the Law antagonist), an automatic "Envelope" tithe skim
+on taxed flows. All are earned/vested/skill payouts, never RNG.

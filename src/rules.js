@@ -1204,3 +1204,31 @@ export const NPC_HITMEN = [
   { id: 'professional', name: 'The Professional', cost: 1000000, base: 0.55, desc: 'Expensive. Worth it. Ask around — you can\'t.' },
 ];
 export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);
+
+// ── R1 — THE PORTFOLIO ("going legit"): the RWA / blue-chip holdings layer ──
+// The narrative apex of the laundering arc — clean $OMR → legitimate, death-proof equity. PURE
+// STATUS in R1 (no sell, no cash-out): a ticker-denominated collectible that survives the street
+// (account-level, like prestige), OUTSIDE §10.4 on the reward side and outside the sim-audited
+// balance (the hitman-rep / family-seal precedent — shares are not currency; their $ display is
+// cosmetic; the price moves no value). The ONLY §10.4 flow is the enumerated 'rwa:invest' $OMR BURN
+// (the vanity/cleanpapers till). R2 backs the shares with a real RWA reserve; R3 opens the KYC'd
+// on-chain extraction — both legal-gated (Robinhood partnership + securities counsel). R1 touches
+// NO securities. Tickers are flavored to districts (fiction only). base = the day-0 display floor;
+// drift = the ± band the daily seed hash swings it. ALL numbers are founder sign-off levers.
+export const PORTFOLIO = {
+  MIN_INVEST_OMR: 1, // no dust buys
+  TICKERS: [
+    { id: 'AAPL', name: 'Atlas Apple',  base: 220, drift: 0.06, blurb: 'Old money. The tech district washes clean here.' },
+    { id: 'TSLA', name: 'Tesla Motors', base: 250, drift: 0.14, blurb: 'The docks and the wheelmen buy the cars.' },
+    { id: 'SPCX', name: 'SpaceX',       base: 180, drift: 0.22, blurb: 'The moonshot. High risk, high status.' },
+  ],
+};
+export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
+// The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
+// seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
+// values a status collectible and moves no §10.4 currency, so R1 stays fully outside the ledger.
+export const tickerPriceOf = (id, day = dayOf()) => {
+  const t = tickerOf(id); if (!t) return 0;
+  const swing = (hash01(`rwa:${id}:${day}:${MARKET_SEED}`) * 2 - 1) * t.drift;
+  return Math.max(1, Math.round(t.base * (1 + swing) * 100) / 100);
+};
