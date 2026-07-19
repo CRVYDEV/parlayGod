@@ -696,3 +696,21 @@ high-stakes gamble that trades cells for a coordinated manhunt. Watch in the alp
 at ~0.76 makes group escape too reliable vs the RICO sink (dials: `COOP_BASE`/`COOP_PER_EXTRA` down,
 `COOP_MAX_P` down, or `FUGITIVE_MS` up). Same LOW-2 note as the solo break: no per-attempt cooldown
 (the hole on a miss + the cutkit cost are the pacing).
+
+### Co-op breakout red-team — HIGH fixed + design flag
+
+A concurrency-focused red-team over the co-op breakout returned CLEAN on the lock order (leader→sorted
+members→break row, disjoint executes, residual leader-vs-PvP 40P01→contention), cutkit conservation, and
+persist-clobber — and found one HIGH (fixed):
+- **HIGH (fixed):** `executeBreak` flipped the plan to `'done'` but never deleted the member rows, and
+  `pen_break_members.character_id` is globally `UNIQUE`, so a survivor's NEXT plan/join would trip 23505
+  → perpetual `contention` (feature bricked per-character until death). Fixed: `executeBreak` now DELETEs
+  the memberships on resolve (the character outcomes are on the character rows, not the membership rows),
+  so the UNIQUE constraint only ever guards live planning rows — this also keeps the constraint's benefit
+  (it structurally forbids the double-join race the heist gate accepts as residual). Regression added
+  (a survivor re-plans a break without contention). Also dropped a redundant execute-time cutkit consume
+  (the kit is spent at plan; the redundant call was a no-op that could destroy a leader's *second* kit).
+- **LOW / design flag (not patched — sign-off lever):** the co-op break strictly dominates solo — only
+  the leader stakes a cutkit, joiners pay nothing, and a full 4-crew escapes at ~0.76 vs solo's 0.35, all
+  sentences cleared for one $50k kit. Consistent with "the leader stakes the kit"; price it deliberately.
+  Dials: charge joiners a kit/energy, lower `COOP_BASE`/`COOP_PER_EXTRA`, or cap the crew payoff.

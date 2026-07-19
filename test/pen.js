@@ -350,6 +350,14 @@ for (const m of [cl, c1, c2]) {
   assert(Number(row.heat) >= PEN.BREAK_HEAT, 'the alarm spiked everyone\'s heat');
 }
 assert.equal((await pool.query(`SELECT status FROM pen_breaks WHERE id='${bid}'`)).rows[0].status, 'done', 'the break is resolved');
+// AUDIT HIGH: a resolved break DELETES its memberships, so a survivor isn't perma-bricked by the
+// UNIQUE(character_id) — re-jailed, they can plan a fresh break (pre-fix this 23505'd into 'contention').
+assert.equal((await pool.query(`SELECT COUNT(*) n FROM pen_break_members WHERE character_id='${cl.id}'`)).rows[0].n, 0, 'a resolved break clears its member rows');
+await seedCh(cl.id, `${jailFuture}, cash=1000000, wanted_until=NULL`);
+await call('POST', '/v1/pen/buy/cutkit', { token: cl.token });
+const replan = await call('POST', '/v1/pen/break/plan', { token: cl.token });
+assert.equal(replan.code, 200, 'a survivor can plan another break — not perma-bricked (audit HIGH)');
+await call('POST', `/v1/pen/break/${replan.body.id}/leave`, { token: cl.token }); // disband to leave state clean for later cases
 // FORCED FAIL — the whole crew eats the hole + a longer stretch
 const fl = await mk('Fail Leader'); const f1 = await mk('Fail One');
 await seedCh(fl.id, `${jailFuture}, energy=200, cash=1000000, health=100`);

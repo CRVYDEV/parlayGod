@@ -258,9 +258,12 @@ export async function executeBreak(ch, breakId, client, h) {
     if (inHole(m)) throw new GameError('crew_hole', "One of the crew is in the hole — nobody moves without them.");
     if (hospitalized(m)) throw new GameError('crew_hurt', 'One of the crew is in the infirmary. Wait for them.');
   }
-  const held = await contrabandOf(client, ch.id);
-  await setContraband(client, ch.id, 'cutkit', Math.max(0, (held.cutkit || 0) - 1)); // the staked kit is spent win or lose
+  // resolve: the kit was already spent at PLAN (removed from inventory; never refunded once we're 'done').
+  // DELETE the member rows so the crew can break again — `pen_break_members.character_id` is UNIQUE, so
+  // leaving stale 'done' rows would trip 23505 on a survivor's NEXT plan/join (audit HIGH). The character
+  // outcomes below are written to the CHARACTER rows, not these membership rows.
   await client.query("UPDATE pen_breaks SET status='done' WHERE id=$1", [breakId]);
+  await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [breakId]);
   // PEN_BREAK_P is a TEST-ONLY knob (the SHANK_P precedent). Odds scale with crew + a riot's chaos.
   const p = process.env.PEN_BREAK_P != null ? Number(process.env.PEN_BREAK_P)
     : Math.max(0.05, Math.min(PEN.COOP_MAX_P, PEN.COOP_BASE + (crewRows.length - 1) * PEN.COOP_PER_EXTRA + (ev.shankAdd || 0)));
