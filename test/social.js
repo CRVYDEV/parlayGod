@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -746,6 +746,39 @@ assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id ==
 assert.equal((await meOf(don.token)).gang.seal, 'Brass Seal', 'every member carries it');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='vanity:gang:seal'")).rows[0].s), -100, 'every seal $OMR is a ledgered burn');
 
+// ── THE FOUNDATION — the family charity: a $OMR sink from the reserve that softens members' RICO trials ──
+const soldier = await mk('Footsoldier Frankie');
+assert.equal((await call('POST', `/v1/gangs/${gangA}/join`, { token: soldier.token })).code, 200, 'a soldier joins the family');
+assert.equal((await call('POST', '/v1/gangs/foundation', { token: soldier.token })).body.error, 'rank', 'a rank-and-file soldier can\'t endow the foundation (boss/underboss only)');
+assert.equal((await call('POST', '/v1/gangs/foundation', { token: barry.token })).body.error, 'reserve', 'an empty reserve endows nothing');
+// top up the reserve, then climb sequentially: Community Fund (60) then Youth League (180)
+await seedOmr(mook.id, 1000);
+await call('POST', '/v1/gangs/tribute/omr', { token: mook.token, body: { amount: 300 } });
+const fReserve0 = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve;
+r = await call('POST', '/v1/gangs/foundation', { token: don.token });
+assert.equal(r.code, 200, 'the family endowed its first foundation'); assert.equal(r.body.foundation.name, 'Community Fund', 'the ladder starts at the community fund');
+r = await call('POST', '/v1/gangs/foundation', { token: don.token });
+assert.equal(r.code, 200, 'and climbed'); assert.equal(r.body.foundation.name, 'Youth League', 'no skipping tiers');
+assert(close((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.omrReserve, fReserve0 - 240), 'Community Fund (60) + Youth League (180) burned from the reserve');
+// the badge on all three views
+const fGang = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang;
+assert.equal(fGang.foundation, 'Youth League', 'the family page bears the foundation');
+assert.equal(fGang.foundationTier, 2, 'and its tier');
+assert(fGang.foundationBustMult < 1, 'the family page publishes the trial-softening');
+assert.equal((await call('GET', '/v1/gangs', {})).body.gangs.find((g) => g.id === gangA).foundation, 'Youth League', 'the foundation shows on the families list');
+assert.equal((await meOf(don.token)).gang.foundation, 'Youth League', 'every member carries it');
+// the philanthropy leaderboard
+const fboard = (await call('GET', '/v1/leaderboard/foundation', { token: don.token })).body.board;
+assert(fboard.some((g) => g.tier === 2 && g.foundation === 'Youth League'), 'the family tops the philanthropy board');
+// every foundation $OMR is a ledgered burn (its own reason, distinct from vanity)
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='foundation:tier'")).rows[0].s), -240, 'every foundation $OMR is a ledgered burn');
+// the RICO effect: the charity softens a member's conviction odds, more at higher tiers (bustProbOf × the tier mult)
+{
+  const fch = { heat_exposure: 3500, indicted_at: new Date(), jury_bought: false };
+  const p0 = bustProbOf(fch, Date.now(), 0), p1 = bustProbOf(fch, Date.now(), 1), p2 = bustProbOf(fch, Date.now(), 2);
+  assert(p2 < p1 && p1 < p0, `the family foundation cuts a member's conviction odds, more at higher tiers (${p2.toFixed(3)} < ${p1.toFixed(3)} < ${p0.toFixed(3)})`);
+}
+
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
 process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)
 const geared = await mk('Geared Gary'); await seedCh(geared.id, "respect=400, muscle=1, speed=1, loc='docks'");
@@ -992,5 +1025,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
 await app.close();

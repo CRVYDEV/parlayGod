@@ -1621,6 +1621,47 @@ BALANCE.md): the bid escrow is a windowless loot-shelter for the P1.1 $OMR loot 
 (no cancel; a win burns 100%), a future `auction:refund` exposure window is the sign-off lever if
 whale-sheltering via outbid-churn is seen in the alpha.
 
+**THE ENVELOPE & THE FOUNDATION — going-legit $OMR sinks on the Law surface — BUILT**
+(`omerta-envelope-foundation-design.md`; founder-directed 2026-07-19). Two recurring $OMR sinks that
+buy LEGITIMACY — the counterweight to the RICO antagonist, a personal/collective pair (the Law-side
+Estate+Auction). Both are NEW Law levers (real power, not pure status) → founder sign-off levers, sim
++ BALANCE.md before production; NOT retunes of any signed surface. **The Envelope** (`law.js:payEnvelope`,
+`POST /v1/law/envelope`) — the standing graft: a personal recurring $OMR sink (`law:envelope` burn
+through the `spendOmr` till, `LAW.ENVELOPE_OMR` 15) that keeps `ch.envelope_until` current for
+`ENVELOPE_MS` (7d); while current, the investigation-meter GAIN in `accrual.js` scales by
+`ENVELOPE_GAIN_MULT` (0.5) — the cops bury half your file, so a case builds slower (NOT immunity — a
+reckless street still indicts, and the bleed is untouched). PROACTIVE, unlike the reactive one-shot
+bribe. Gated `jailed`; deliberately NOT safehouse-gated (a wire, not a face-to-face sit-down — the D2
+gate is for *meeting* the man). Surfaced on `GET /v1/law` (`envelope {cost,gainMult,active,seconds}`)
++ the console Law tab "The Escapes". `persistCharacter` carries `envelope_until` ($59);
+`characters.envelope_until` new column. **The Foundation** (`vanity.js:buyFoundation`,
+`POST /v1/gangs/foundation`) — the family charity: a tiered institution the boss/underboss buys
+SEQUENTIALLY from the gang `omr_reserve` (the `buySeal` precedent — `FOUNDATION.TIERS` Community Fund
+60 → Youth League 180 → City Trust 500 → The Institute 1200 → The Legacy 3000 $OMR, `foundation:tier`
+burn against the reserve, counterparty=gang, no character_id). Two faces: (1) public philanthropy
+STATUS (`gangs.foundation` int, a badge on `me.gang`/`GET /v1/gangs`/`GET /v1/gangs/:id` incl.
+`nextFoundation`/`foundationBustMult` + a `GET /v1/leaderboard/foundation` status board — the
+hitmen/portfolio precedent); (2) it launders the family's collective RICO exposure — the tier's
+`bustMult` (0.97 → 0.75) multiplies EVERY member's conviction odds in `bustProbOf(ch, now,
+foundationTier)` (the one gameplay touchpoint). The tier is sourced at the two bust sites: online
+(`lawBoard`/`buyJury` from `h.owned.gang.foundation`) and — crucially — offline (`resolveBust`, shared
+by `demandTrial` + the `sweepLaw` worker, via a small `familyFoundationTier(client, charId)` lookup so
+the offline whale the worker force-busts is covered). The `bustProbOf` min-clamp is unchanged, so the
+discount bottoms out at the existing floor (composes with retainer/jury); the `LAW_BUST_P` test knob
+still pins the roll (bypassing `bustProbOf`). §10.4: `law:envelope` (account bucket) + `foundation:`
+(gang-reserve bucket, already in `omrBuckets`) joined the `omr` KNOWN_REASONS + `omrBurns` — both pure
+deflationary burns, no new faucet/bucket, so `$OMR conservation` stays exact (the Law only DRAINS —
+both help extraction-≤-inflow). A dissolved family's foundation dies with the row (`gang:dissolved`,
+no orphan). Console: the Envelope card in the Law "Escapes" grid, a "The Foundation" section in the
+Family dashboard (tier ladder + boss/underboss endow, badge on the header + gang list). `test/law.js`
+covers the envelope (gain-mult slows the build via direct `accrue()`, ledgered `law:envelope` burn,
+window extends on re-pay, jailed/broke gates, closed vocabulary); `test/social.js` covers the
+foundation (rank gate, empty-reserve rejection, sequential tiers with exact reserve deltas, badge on
+all three views + the philanthropy leaderboard, the monotonic `bustProbOf` odds drop, ledgered
+`foundation:tier` burns). Suite 23/23 + sim drift-0. All numbers are founder sign-off levers. A
+focused red-team is in flight; any findings land in a follow-up. Deferred (step two): a per-precinct
+envelope; the Foundation bleeding members' heat passively + a Commission-standing angle + naming.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

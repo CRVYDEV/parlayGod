@@ -7,7 +7,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf } from './rules.js';
+         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -444,7 +444,7 @@ async function persistCharacter(client, ch) {
       bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45,
       crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
       world_raid_at=$52, pen_safe_until=$53, hole_until=$54, welsher=$55, wanted_until=$56,
-      rwa_used=$57, rwa_at=$58 WHERE id=$1`,
+      rwa_used=$57, rwa_at=$58, envelope_until=$59 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -455,7 +455,7 @@ async function persistCharacter(client, ch) {
      ch.wash_used ?? 0, ch.wash_at ?? null, ch.respec_at ?? null, ch.crew_paid_at ?? null,
      ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null,
      ch.world_raid_at ?? null, ch.pen_safe_until ?? null, ch.hole_until ?? null, ch.welsher ?? false, ch.wanted_until ?? null,
-     ch.rwa_used ?? 0, ch.rwa_at ?? null]);
+     ch.rwa_used ?? 0, ch.rwa_at ?? null, ch.envelope_until ?? null]);
 }
 
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
@@ -533,6 +533,7 @@ export function view(ch, acct = {}, owned = {}) {
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
+      foundation: foundationOf(owned.gang.foundation)?.name || null, foundationTier: Number(owned.gang.foundation || 0),
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
     lab: ch.lab || null, crew: Number(ch.crew || 0),

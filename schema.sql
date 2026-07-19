@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS characters (
   hole_until TIMESTAMPTZ,                          -- THE PEN step two: solitary (a caught shank) — no yard actions, untouchable
   welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
+  envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -188,6 +189,7 @@ CREATE TABLE IF NOT EXISTS gangs (
   tag TEXT NOT NULL UNIQUE,
   color TEXT,                                    -- M8 crest color, '#rrggbb' (display only, $OMR sink)
   seal INT NOT NULL DEFAULT 0,                   -- M8 family seal tier (display only; bought from omr_reserve)
+  foundation INT NOT NULL DEFAULT 0,             -- THE FOUNDATION: family charity tier (bought from omr_reserve; public status + softens members' RICO conviction odds)
   treasury NUMERIC NOT NULL DEFAULT 0,
   omr_reserve NUMERIC NOT NULL DEFAULT 0,
   ammo_bank INT NOT NULL DEFAULT 0,

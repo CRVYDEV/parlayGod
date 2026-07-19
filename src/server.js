@@ -34,7 +34,8 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION } from './rules.js';
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
+         foundationOf, foundationBustMult, FOUNDATION, LAW } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -352,6 +353,8 @@ export async function buildServer() {
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
+    envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT },
+    foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, blurb: t.blurb })),
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -401,6 +404,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.bribe(ch, client, h)));
   app.post('/v1/law/retainer', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.retainer(ch, client, h)));
+  app.post('/v1/law/envelope', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.payEnvelope(ch, client, h)));
   app.post('/v1/law/plea', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.plea(ch, client, h)));
   app.post('/v1/law/jury', { preHandler: auth }, async (req) =>
@@ -495,6 +500,7 @@ export async function buildServer() {
   app.post('/v1/gangs/portfolio/invest', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.familyInvest(ch, req.body?.ticker, req.body?.omr, client, h)));
   app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
+  app.get('/v1/leaderboard/foundation', { preHandler: auth }, async () => V.foundationLeaderboard(pool));
 
   // THE ESTATE ("the compound"): the deep personal $OMR sink + a "home" that displays your legend.
   app.get('/v1/estate', { preHandler: auth }, async (req) =>
@@ -596,11 +602,11 @@ export async function buildServer() {
   app.get('/v1/gangs', async () => {
     // two flat queries instead of a correlated subquery — identical response, and pg-mem
     // (the test db) can execute it, so the route is actually covered by the suite
-    const r = await pool.query('SELECT id, name, tag, seal, treasury, wars_won, lifetime_tribute FROM gangs');
+    const r = await pool.query('SELECT id, name, tag, seal, foundation, treasury, wars_won, lifetime_tribute FROM gangs');
     const counts = await pool.query('SELECT gang_id, COUNT(*) n FROM gang_members GROUP BY gang_id');
     const members = Object.fromEntries(counts.rows.map((c) => [c.gang_id, Number(c.n)]));
     return { gangs: r.rows.map((g) => ({ id: g.id, name: g.name, tag: g.tag,
-      seal: sealOf(g.seal)?.name || null,
+      seal: sealOf(g.seal)?.name || null, foundation: foundationOf(g.foundation)?.name || null,
       members: members[g.id] || 0, warsWon: Number(g.wars_won),
       standing: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) })) };
   });
@@ -623,6 +629,9 @@ export async function buildServer() {
       return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
         seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
         nextSeal: sealOf(Number(g.seal || 0) + 1) || null,
+        foundation: foundationOf(g.foundation)?.name || null, foundationTier: Number(g.foundation || 0),
+        foundationBustMult: foundationBustMult(Number(g.foundation || 0)),
+        nextFoundation: foundationOf(Number(g.foundation || 0) + 1) || null,
         treasury: Math.floor(Number(g.treasury)),
         ammoBank: Number(g.ammo_bank), omrReserve: Number(g.omr_reserve), warsWon: Number(g.wars_won),
         war: g.war_with ? { with: g.war_with, until: g.war_until, us: g.war_score_us, them: g.war_score_them } : null,
@@ -716,6 +725,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.renameGang(ch, req.body?.name, req.body?.tag, client, h)));
   app.post('/v1/gangs/vanity/seal', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => V.buySeal(ch, client, h)));
+  app.post('/v1/gangs/foundation', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => V.buyFoundation(ch, client, h)));
   app.post('/v1/streets/:targetId/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>

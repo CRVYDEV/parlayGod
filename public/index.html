@@ -245,6 +245,8 @@
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
+    if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
+    if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
@@ -532,7 +534,7 @@
     const mySeat = (com.seats || []).find((s) => s.name === g.name);
     const boss = me.gang.role === 'boss' || me.gang.role === 'underboss';
     t.innerHTML = `
-      <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''} — you are ${me.gang.role}</h2>
+      <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.foundation ? ` <span class="chip good">${g.foundation}</span>` : ''} — you are ${me.gang.role}</h2>
       <div class="grid">
         <div class="card"><span class="t">$${fmt(g.treasury)}</span><div class="d">treasury</div></div>
         <div class="card"><span class="t">${fmt(g.omrReserve)} $OMR</span><div class="d">family reserve</div></div>
@@ -575,6 +577,13 @@
         <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
         <button class="act" id="com-vote">cast the family's vote</button>
         <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}
+
+      <h2 style="margin-top:12px">The Foundation ${g.foundation ? `<span class="chip good">${g.foundation}</span>` : '<span class="chip">none</span>'}</h2>
+      <div class="d" style="color:var(--dim);font-size:11px">the family charity — public philanthropy that launders the family's reputation: every member's RICO conviction odds ×${g.foundationBustMult ?? 1}${g.foundationTier ? ` (tier ${g.foundationTier})` : ''}. Endowed from the $OMR reserve.</div>
+      ${g.nextFoundation ? `<div class="card" style="margin-top:4px"><span class="t">Next: ${g.nextFoundation.name} — ${g.nextFoundation.omr} $OMR</span>
+        <div class="d">${g.nextFoundation.blurb || ''} · softens odds ×${g.nextFoundation.bustMult}</div>
+        ${boss ? `<button class="act" data-do="POST /v1/gangs/foundation">endow ${g.nextFoundation.name} (${g.nextFoundation.omr} $OMR from reserve)</button>` : '<span class="d" style="color:var(--dim)">the boss/underboss endows the foundation</span>'}</div>`
+        : '<span class="d" style="color:var(--dim)">the family is the highest pillar of the community there is.</span>'}
 
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
     t.querySelector('#trib-go').onclick = () =>
@@ -1069,6 +1078,9 @@
         <div class="card"><span class="t">The Lawyer</span>
           <div class="d">${L.retainer.active ? `on retainer — ${mins(L.retainer.seconds)} left (softer busts, smaller forfeits)` : `$${fmt(L.retainer.cost)} keeps counsel on call`}</div>
           ${L.retainer.active ? '' : '<button class="act" data-do="POST /v1/law/retainer">retain</button>'}</div>
+        <div class="card"><span class="t">The Envelope</span>
+          <div class="d">${L.envelope.active ? `current — ${mins(L.envelope.seconds)} left. The cops bury your file: the investigation meter builds at ${Math.round(L.envelope.gainMult * 100)}% rate.` : `slip the precinct ${L.envelope.omr} $OMR — while it's current the case builds slower (${Math.round(L.envelope.gainMult * 100)}% rate). Standing protection, not a one-shot.`}</div>
+          <button class="act" data-do="POST /v1/law/envelope">${L.envelope.active ? 'top up the envelope' : `pay ${L.envelope.omr} $OMR`}</button></div>
         <div class="card"><span class="t">Lay Low / Clean Papers</span>
           <div class="d">heat feeds the case — cool it in the Kitchen tab</div></div>
       </div>

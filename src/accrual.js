@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -149,7 +149,10 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
     // (which re-adds heat during THIS accrual, then clamps to 100) would feed heat 100 over an entire
     // multi-day gap and instant-indict an offline dealer on login — the opposite of "active play".
     // The BLEED stays uncapped (player-favourable, no exploit — a long absence bleeds a case off).
-    const gain = Math.max(0, hv - LAW.WATCH) * cappedMin * LAW.EXPOSURE_RATE * evMult;
+    // THE ENVELOPE: while the standing graft is paid up the cops bury the file — the meter builds
+    // at ENVELOPE_GAIN_MULT rate (a single touchpoint; the bleed is untouched). Not immunity.
+    const envMult = envelopeActive(ch, now.getTime()) ? LAW.ENVELOPE_GAIN_MULT : 1;
+    const gain = Math.max(0, hv - LAW.WATCH) * cappedMin * LAW.EXPOSURE_RATE * evMult * envMult;
     const bleed = dtMin * LAW.EXPOSURE_DECAY;
     ch.heat_exposure = Math.max(0, Number(ch.heat_exposure || 0) + gain - bleed);
     if (ch.heat_exposure >= LAW.INDICT_AT && !ch.indicted_at) {
