@@ -392,6 +392,20 @@ const sw = await sweepStaleBreaks(pool);
 assert(sw.swept >= 1, 'the sweep abandons the stale plan');
 assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${sl.id}' AND item='cutkit'`)).rows[0].q, 1, 'a living leader gets the cutkit back on sweep');
 
+// AUDIT L2: a dead break-leader's plan is abandoned AT DEATH (not left for the 1h sweep) so the
+// stranded crew are freed to plan a fresh break immediately
+const dkl = await mk('Doomed Leader'); const dm = await mk('Doomed Member');
+await seedCh(dkl.id, `${jailFuture}, cash=1000000`);
+await seedCh(dm.id, `${jailFuture}, cash=1000000`);
+await call('POST', '/v1/pen/buy/cutkit', { token: dkl.token });
+const dkPlan = (await call('POST', '/v1/pen/break/plan', { token: dkl.token })).body.id;
+assert.equal((await call('POST', `/v1/pen/break/${dkPlan}/join`, { token: dm.token })).code, 200, 'the doomed member joins');
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: dkl.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal((await pool.query(`SELECT status FROM pen_breaks WHERE id='${dkPlan}'`)).rows[0].status, 'abandoned', 'the dead leader\'s break is abandoned at death');
+await seedCh(dm.id, `${jailFuture}, cash=1000000`); // the survivor is still jailed
+await call('POST', '/v1/pen/buy/cutkit', { token: dm.token });
+assert.equal((await call('POST', '/v1/pen/break/plan', { token: dm.token })).code, 200, 'the freed member can plan a fresh break, not bricked by the dead leader\'s plan');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);

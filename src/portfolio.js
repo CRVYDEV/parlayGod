@@ -17,6 +17,7 @@ export async function nameDynasty(ch, name, client, h) {
   const n = String(name || '').trim();
   if (n.length < 3 || n.length > 24) throw new GameError('name', 'A dynasty name runs 3–24 characters.');
   if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
+  if (n === (h.acct?.dynasty_name || null)) throw new GameError('same', 'The dynasty already carries that name.'); // no-op re-burn guard (changeName precedent)
   await spendOmr(client, h, PORTFOLIO.DYNASTY_NAME_OMR, 'rwa:dynasty'); // gates on h.acct.omr, debits, ledgers the burn
   await client.query('UPDATE account_persistent SET dynasty_name=$2 WHERE account_id=$1', [ch.account_id, n]);
   if (h.acct) h.acct.dynasty_name = n;
@@ -33,8 +34,9 @@ export async function nameFamilyDynasty(ch, name, client, h) {
   if (n.length < 3 || n.length > 24) throw new GameError('name', 'A fund name runs 3–24 characters.');
   if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
   const cost = PORTFOLIO.FAMILY_DYNASTY_NAME_OMR;
-  const g = (await client.query('SELECT omr_reserve FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const g = (await client.query('SELECT omr_reserve, dynasty_name FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (!g) throw new GameError('gang', 'No family.');
+  if (n === (g.dynasty_name || null)) throw new GameError('same', 'The fund already carries that name.'); // no-op re-burn guard — protects the shared reserve (MED-1)
   if (Number(g.omr_reserve) < cost) throw new GameError('reserve', `The reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR — naming the fund runs ${cost}.`);
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, dynasty_name=$3 WHERE id=$1', [h.owned.gangId, cost, n]);
   await h.ledger(client, { currency: 'omr', amount: -cost, reason: 'rwa:dynasty', counterparty: h.owned.gangId }); // burn (rwa:% term), reserve bucket

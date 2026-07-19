@@ -150,6 +150,18 @@ assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owne
 // the spend is a LEDGERED plex:* burn (§10.4-legal deflationary sink; no clobber of the grant)
 const plexBurnAfter = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].s);
 assert.equal(plexBurnAfter - plexBurnBefore, mm.plexOmr, 'the PLEX spend is a ledgered plex:* burn');
+// walkthrough MED-1: buying made_man while ALREADY MINTED is refused BEFORE the burn (a dead credit) —
+// the vig.js:116 precedent; the $OMR must not leave the account
+await pool.query(`UPDATE account_persistent SET minted=true, omr=1000 WHERE account_id='${paid}'`);
+const omrBeforeDead = (await meOf(plexer.token)).omr;
+const deadBuy = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
+assert.equal(deadBuy.body.error, 'minted', 'a made account cannot PLEX-buy a dead mint credit');
+assert.equal((await meOf(plexer.token)).omr, omrBeforeDead, 'the refused made_man buy burned nothing');
+// and re-buying the pure Patron ring while already a patron is refused (no-op re-burn)
+await pool.query(`UPDATE account_persistent SET patron=true WHERE account_id='${paid}'`);
+const omrBeforePatron = (await meOf(plexer.token)).omr;
+assert.equal((await call('POST', '/v1/store/plex/patron', { token: plexer.token })).body.error, 'patron', 'a patron cannot re-buy the ring');
+assert.equal((await meOf(plexer.token)).omr, omrBeforePatron, 'the refused patron buy burned nothing');
 // insufficient earned $OMR + bad sku are clean refusals
 assert.equal((await call('POST', '/v1/store/plex/revive_5', { token: plexer.token })).body.error, 'omr', 'not enough earned $OMR is refused');
 assert.equal((await call('POST', '/v1/store/plex/nope', { token: plexer.token })).body.error, 'bad_sku', 'no such package');

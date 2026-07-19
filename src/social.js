@@ -1303,6 +1303,18 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
       WHERE ch.leader_character=$1 AND ch.status='planning' AND m.character_id != $1`, [victim.id])).rows;
   await client.query("UPDATE crew_heists SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [victim.id]);
   for (const o of orphaned) await h.notify(client, o.character_id, 'heist_abandoned', { job: o.job, reason: 'leader_dead' });
+  // a dead break-leader's plan is abandoned NOW (the crew_heists precedent — audit L2): the stranded
+  // crew hear about it and are freed to plan a fresh break instead of waiting on the 1h stale-sweep
+  // (the cutkit stays sunk for a dead leader, as the sweep already enforces)
+  const brOrphans = (await client.query(
+    `SELECT m.character_id FROM pen_breaks b JOIN pen_break_members m ON m.break_id = b.id
+      WHERE b.leader_character=$1 AND b.status='planning' AND m.character_id != $1`, [victim.id])).rows;
+  await client.query("UPDATE pen_breaks SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [victim.id]);
+  // free the crew cleanly — the disband precedent DELETEs member rows (UNIQUE(character_id) would else
+  // block a stranded member from planning a fresh break, the resolve-path bug the co-op test caught)
+  await client.query(
+    "DELETE FROM pen_break_members WHERE break_id IN (SELECT id FROM pen_breaks WHERE leader_character=$1 AND status='abandoned')", [victim.id]);
+  for (const o of brOrphans) await h.notify(client, o.character_id, 'break_abandoned', { reason: 'leader_dead' });
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);
