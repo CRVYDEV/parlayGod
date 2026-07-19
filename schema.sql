@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- lifetime feared-reputation (the "most feared" ladder) + lifetime confirmed kills.
   hitman_rep BIGINT NOT NULL DEFAULT 0,
   kills INT NOT NULL DEFAULT 0,
+  -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
+  -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
+  dynasty_name TEXT,
   -- THE LAW Phase 4 — the informant's mark. Set the moment an account turns state's evidence
   -- (`flip`): a permanent badge that FOLLOWS THE BLOODLINE (the heir carries it, like prestige) and
   -- makes the account a contract magnet — it VOIDS FAMILY OMERTÀ (fire/npcHit/postBounty on a rat

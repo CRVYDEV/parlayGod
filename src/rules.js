@@ -1265,11 +1265,24 @@ export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);
 // drift = the ± band the daily seed hash swings it. ALL numbers are founder sign-off levers.
 export const PORTFOLIO = {
   MIN_INVEST_OMR: 1, // no dust buys
+  // The board — a spread from a safe store of value (GLD, drift .05) to pure degen (BTC, drift .30).
+  // All DISPLAY-ONLY status collectibles (deterministic seed price, no sell, no cash-out — the R1
+  // regulatory line). Names are lightly fictionalised (the AAPL→"Atlas Apple" house style). New
+  // tickers are drop-in — the board/leaderboard/view iterate TICKERS generically. Sign-off levers.
   TICKERS: [
-    { id: 'AAPL', name: 'Atlas Apple',  base: 220, drift: 0.06, blurb: 'Old money. The tech district washes clean here.' },
-    { id: 'TSLA', name: 'Tesla Motors', base: 250, drift: 0.14, blurb: 'The docks and the wheelmen buy the cars.' },
-    { id: 'SPCX', name: 'SpaceX',       base: 180, drift: 0.22, blurb: 'The moonshot. High risk, high status.' },
+    { id: 'GLD',  name: 'The Vault',           base: 190, drift: 0.05, blurb: 'Bricks of gold in a hole in the ground. When the city burns, this holds.' },
+    { id: 'AAPL', name: 'Atlas Apple',         base: 220, drift: 0.06, blurb: 'Old money. The tech district washes clean here.' },
+    { id: 'AMZN', name: 'The Everything Store', base: 175, drift: 0.10, blurb: 'They deliver. Everything. Everywhere. Nobody asks what.' },
+    { id: 'TSLA', name: 'Tesla Motors',        base: 250, drift: 0.14, blurb: 'The docks and the wheelmen buy the cars.' },
+    { id: 'HOOD', name: 'The Green House',     base: 90,  drift: 0.16, blurb: 'The house that lets everybody play. You take a piece of the action.' },
+    { id: 'NVDA', name: 'Nero Graphics',       base: 300, drift: 0.18, blurb: 'The chip runners. The whole city wants what they make.' },
+    { id: 'SPCX', name: 'SpaceX',              base: 180, drift: 0.22, blurb: 'The moonshot. High risk, high status.' },
+    { id: 'BTC',  name: 'Digital Gold',        base: 400, drift: 0.30, blurb: 'Untraceable, unkillable, unhinged. The degens’ crown.' },
   ],
+  // THE DYNASTY — your account-level book survives death (the heir inherits), so it IS a generational
+  // fund. Name it (a $OMR vanity sink, ledgered under the existing rwa:% burn term — zero invariant
+  // changes): the name outlives every character and heads the legit-legend leaderboard.
+  DYNASTY_NAME_OMR: 5,
   // R1 STEP TWO — EARNED exposure (never by chance; each is a deterministic cut of a realized win,
   // a skill-ranked season prize, or a purchase that draws heat — so the R3 "never distribute
   // securities by chance" rule is respected by construction). Grants are $OMR-WORTH denominated

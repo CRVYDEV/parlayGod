@@ -1746,6 +1746,26 @@ so anyone indicted before the migration transiently loses their soften for that 
 Deferred (step three): a per-precinct envelope; naming the Foundation (the Commission-standing angle is
 intentionally NOT built — it would reintroduce purchasable Commission standing, which the econ-pass fix closed).
 
+**THE DYNASTY FUND + more tickers — BUILT** (`src/portfolio.js`, `src/rules.js`; design
+`omerta-the-wire-and-revenue-design.md`, which also specs THE WIRE + the ETH-revenue toolbox — NOT yet
+built, pending founder direction). Pure off-chain, §10.4-clean expansion of the R1 Portfolio.
+**Tickers 3 → 8** — a real risk spread, all status-only/deterministic-price (drop-in; board/leaderboard/
+view iterate `TICKERS`): GLD The Vault (.05) · AAPL · AMZN (.10) · TSLA · HOOD The Green House (.16, the
+Robinhood nod) · NVDA (.18) · SPCX · BTC Digital Gold (.30). **The Dynasty** — the account-level book
+already survives death (the heir inherits), so it's a generational fund; now you `POST /v1/dynasty/name`
+(a `PORTFOLIO.DYNASTY_NAME_OMR` 5 $OMR vanity sink, reason `rwa:dynasty` — rides the existing `rwa:%`
+omr burn term + vocab, ZERO invariant changes). `account_persistent.dynasty_name` (new col); the board
+surfaces `dynasty {name, generation (deaths+1), nameCost}`; `portfolioLeaderboard` now ranks DYNASTIES
+(name = dynasty || street, with the living `steward` beneath). Console: a name-your-dynasty card on the
+Going Legit tab. `test/portfolio.js`: the ledgered `rwa:dynasty` burn, the board/leaderboard surface,
+the length gate, and the §10.4 vocabulary + conservation (drift == the test grant only; the naming burn
+is conservation-neutral). The existing "no such stock" gate ticker was retargeted (NVDA is now real).
+Suite 23/23 + sim drift-0. All numbers sign-off levers. **NEXT (needs founder call — spec'd in the
+design doc):** THE WIRE (the surveillance + premium-feed intelligence terminal), and the ETH-revenue
+packages (Season Pass / Vanity Store / Premium Wire sub / revive bundles / Made-Man tiers / named
+landmarks) with a configurable Founder/Buyback/RWA-reserve split — all off-chain-first / chain-dormant,
+mainnet gated on legal + audit.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
