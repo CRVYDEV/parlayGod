@@ -1609,6 +1609,17 @@ lots) ADDED to `omrBuckets` so `$OMR conservation` stays exact; `auction:win` jo
 forms, your trophies). `test/auction.js` proves lot determinism, the floor + min-raise, outbid-refund-
 exact, the self-raise net, the escrow §10.4 check mid-auction, settle (burn + grant, no extra debit),
 death survival, and the closed vocabulary. Suite 23/23 + sim drift-0. All numbers are sign-off levers.
+A focused red-team of the $OMR-escrow surface (escrow §10.4 exactness + the cross-refund deadlock/
+lost-update, the two highest-risk surfaces) returned CLEAN — no CRITICAL/HIGH — and closed two
+correctness fixes (regression each): **F1** the concurrent-first-bid materialize race (two FIRST bids
+on a fresh lot both lock nothing under `FOR UPDATE`, both INSERT, the loser `23505`'d into a raw 500 —
+now `deadlockToRetry` maps `23505` → clean `contention` retry, the world_npcs first-touch precedent;
+the loser rolled back so no §10.4 impact, and the retry finds the row and raises), and **F2** the ops
+dashboard `$OMR supply` gauge omitting the live auction escrow (now `+ SUM(current_bid) WHERE
+status='live'`). **F3** (accepted-as-designed, founder call, NOT patched per ground rule #1, recorded in
+BALANCE.md): the bid escrow is a windowless loot-shelter for the P1.1 $OMR loot surface — self-limiting
+(no cancel; a win burns 100%), a future `auction:refund` exposure window is the sign-off lever if
+whale-sheltering via outbid-churn is seen in the alpha.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

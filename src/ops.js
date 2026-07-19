@@ -29,11 +29,13 @@ export async function opsOverview(pool) {
   const den = await row('SELECT total, profit, distributed FROM den_volume WHERE id=1');
   const ammPrice = num(amm.omr_reserve) > 0 ? num(amm.cash_reserve) / num(amm.omr_reserve) : 0;
 
-  // $OMR supply — the invariants omrBuckets (the true circulating soft-$OMR total)
+  // $OMR supply — the invariants omrBuckets (the true circulating soft-$OMR total). Includes the
+  // auction escrow (live standing bids are $OMR parked in the house, part of the bucket sum).
   const omrSupply = await one('SELECT COALESCE(SUM(omr+staked+unbonding),0) n FROM account_persistent')
     + num(amm.omr_reserve) + num(tax.fund)
     + await one('SELECT COALESCE(SUM(omr_reserve),0) n FROM gangs')
-    + num(stake.balance);
+    + num(stake.balance)
+    + await one("SELECT COALESCE(SUM(current_bid),0) n FROM auctions WHERE status='live'");
 
   const topPlayers = await rows('SELECT name, respect, cash, bank FROM characters WHERE alive ORDER BY respect DESC LIMIT 8');
   const topGangs = await rows('SELECT name, tag, treasury, wars_won FROM gangs ORDER BY treasury DESC LIMIT 8');
