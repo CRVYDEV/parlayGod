@@ -874,3 +874,25 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
   dev off-ledger + 98% net) — an untaxed unlimited P2P transfer is the cheapest value pipe in the game.
 - Step two is the **revenue layer**: real-money (ETH) cosmetic decor + bottle service, and the club
   hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, legal + audit).
+
+## The Speakeasy — step two (the games + the risk)
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `SPEAKEASY.TABLE.RAKE_BPS` | 300 (3%) | The owner's cut of every table stake — carved FROM the bet (a transfer, not minted). Recurring owner income from social play. | KEEP |
+| `SPEAKEASY.TABLE.WIN_P` | 0.48 | The wheel's win prob → ~4% house edge (the edge BURNS). Worse than the casino's 1.41% craps — a back-room game costs you for the ambiance. | KEEP |
+| `SPEAKEASY.TABLE.MIN/MAX_BET` | $1k / $100k | Table limits. | KEEP |
+| `SPEAKEASY.TABLE.NOTORIETY` | 8/play | Gambling draws the Prohibition boys (the raid tie). | KEEP |
+| `SPEAKEASY.ROUND_NOTORIETY` | 2/round | A busy bar draws a little heat too. | KEEP |
+| `SPEAKEASY.RAID_THRESHOLD` | 60 | Notoriety above which a raid can roll (decays at `NOTORIETY_DECAY_HR` 4/hr). | KEEP |
+| `SPEAKEASY.RAID_P_PER_MIN` | 0.0025 | Per-minute raid prob over the above-threshold window (the BUSINESS_RAID_P_PER_MIN precedent; `SPEAKEASY_RAID_P` is a TEST-ONLY knob). | KEEP |
+| `SPEAKEASY.RAID_FINE_RATE` | 0.15 | Fine = 15% of the value sunk (open + decor), clamped to pocket+bank. | KEEP |
+| `SPEAKEASY.RAID_SHUT_MS` | 2h | The shutter — no rounds/table/income while dark. | KEEP |
+
+**Notes (sign-off):**
+- The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);
+  the win is a gambling faucet, the edge a net sink. All rows character_id'd → §10.4 check (a) reconciles.
+- Table collusion (patron alt → owner alt) is −EV: the alt loses the ~7% edge+rake to funnel 3%. No pipe.
+- The raid makes the passive income EARNED: the more you monetize (table + patrons), the hotter the club,
+  the bigger the raid risk. Self-inflicted notoriety from your own money-making — a real risk/reward dial.
+- Step three is the ETH cosmetic-decor revenue layer (mainnet-gated) + a P2P buyout + a renown axis.

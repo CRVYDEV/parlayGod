@@ -143,6 +143,41 @@ await seed(patron.id, `loc='docks'`);
 assert.equal((await call('POST', '/v1/speakeasy/neon/bottle', { token: patron.token, body: { bottle: 'bottle' } })).body.error, 'travel', 'no bottle from across town');
 await seed(patron.id, `loc='neon'`);
 
+// ── STEP TWO — THE BACK-ROOM TABLE: patron plays, owner takes the rake (a taxed transfer, edge burns) ──
+await grantCash(patron.id, 200000);
+assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: 10 } })).body.error, 'min', 'below the table minimum');
+assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: 99999999 } })).body.error, 'max', 'above the table cap');
+const notoPre = Number((await pool.query(`SELECT notoriety FROM speakeasies WHERE district_id='neon'`)).rows[0].notoriety);
+const ownerCashPreT = (await meOf(owner.token)).cash, patronCashPreT = (await meOf(patron.token)).cash;
+const tbet = 10000, trake = Math.ceil(tbet * SPEAKEASY.TABLE.RAKE_BPS / 10000);
+const tbl = await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } });
+assert.equal(tbl.code, 200, 'the wheel spins');
+assert.equal(tbl.body.rake, trake, 'the club took its rake');
+assert.equal((await meOf(owner.token)).cash, ownerCashPreT + trake, 'the rake landed with the owner (carved from the stake, not minted)');
+assert.equal((await meOf(patron.token)).cash, patronCashPreT + (tbl.body.win ? tbl.body.payout - tbet : -tbet), 'the patron paid the bet and got the win (or not)');
+assert(Number((await pool.query(`SELECT notoriety FROM speakeasies WHERE district_id='neon'`)).rows[0].notoriety) > notoPre, 'gambling drew heat onto the club');
+// away from the club → no table
+await seed(patron.id, `loc='docks'`);
+assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } })).body.error, 'travel', 'no table from across town');
+await seed(patron.id, `loc='neon'`);
+
+// ── STEP TWO — THE PROHIBITION RAID: a hot club is seized + fined + shuttered on the owner's collect ──
+await grantCash(owner.id, 500000); // cover the fine
+await pool.query(`UPDATE speakeasies SET notoriety=100, notoriety_at = now() - interval '1 hour', income_at = now() - interval '3 hours' WHERE district_id='neon'`);
+const ownerBeforeRaid = (await meOf(owner.token)).cash;
+process.env.SPEAKEASY_RAID_P = '1'; // force the roll (the BUSINESS_RAID_P precedent)
+const raid = await call('POST', '/v1/speakeasy/collect', { token: owner.token });
+delete process.env.SPEAKEASY_RAID_P;
+assert(raid.body.raid && raid.body.raid.raided, 'the Prohibition boys raided the club');
+assert(raid.body.raid.fine > 0, 'the owner was fined');
+assert.equal((await meOf(owner.token)).cash, ownerBeforeRaid - raid.body.raid.fine, 'the fine left the pocket (ledgered speakeasy:raid) — the pending take was seized, not banked');
+const shutRow = (await pool.query(`SELECT shut_until FROM speakeasies WHERE district_id='neon'`)).rows[0];
+assert(shutRow.shut_until && new Date(shutRow.shut_until) > new Date(), 'the club is shuttered');
+// a shuttered club serves no one and earns nothing
+assert.equal((await call('POST', '/v1/speakeasy/neon/round', { token: patron.token, body: { round: 'round' } })).body.error, 'shut', 'no rounds at a shuttered club');
+assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } })).body.error, 'shut', 'no table at a shuttered club');
+assert.equal((await call('POST', '/v1/speakeasy/collect', { token: owner.token })).body.collected, 0, 'a dark club earns nothing while shuttered');
+
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
 let inv = await runLedgerInvariants(pool);
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
@@ -164,5 +199,5 @@ inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'vocabulary still closed');
 
-console.log('✅ The Speakeasy test passed — open (level/one-per-district/one-per-man/cash gates), the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn + prestige), the nightlife board, DEATH (the proprietor\'s club goes dark + guest list clears + district reopens), and §10.4 (the per-character cash check reconciles speakeasy:; bottles/naming ride vanity:%)');
+console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid; bottles/naming ride vanity:%)');
 await app.close();

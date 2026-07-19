@@ -589,6 +589,12 @@ CREATE TABLE IF NOT EXISTS speakeasies (
   tier INT NOT NULL DEFAULT 0,                      -- decor tier (0 = The Backroom, as opened)
   prestige NUMERIC NOT NULL DEFAULT 0,             -- bumped by rounds/bottles, floored by tier — the nightlife rank
   income_at TIMESTAMPTZ NOT NULL DEFAULT now(),    -- base bar-take accrual clock (lazy, capped)
+  -- step two — the Prohibition RAID (the business-raid pattern): NOTORIETY accrues from the club's illicit
+  -- activity (the back-room table + patronage), decays hourly; past the threshold the owner's collect rolls
+  -- a lazy raid that seizes pending income + fines the owner + SHUTTERS the club (shut_until).
+  notoriety NUMERIC NOT NULL DEFAULT 0,
+  notoriety_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  shut_until TIMESTAMPTZ,
   opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_speakeasies_owner ON speakeasies (owner_character);

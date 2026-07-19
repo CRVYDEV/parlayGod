@@ -12,12 +12,69 @@ const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
-// base bar take accrued for one club up to the cap, in whole dollars (the business/territory pattern)
+// base bar take accrued for one club up to the cap, in whole dollars (the business/territory pattern).
+// A raid sets income_at into the future (= shut_until), so a shuttered club accrues NOTHING until it reopens.
 function accruedIncome(row) {
   const tier = speakeasyTierOf(row.tier);
   if (!tier) return 0;
   const elapsed = Math.min(Date.now() - new Date(row.income_at).getTime(), SPEAKEASY.INCOME_CAP_MS);
   return Math.floor(tier.incomePerHr * Math.max(0, elapsed) / 3600000);
+}
+
+// ── step two — the Prohibition raid: NOTORIETY (decays hourly), the raid roll, and the shutter ──
+function decayedNotoriety(row, now = Date.now()) {
+  const hrs = Math.max(0, now - new Date(row.notoriety_at).getTime()) / 3600000;
+  return Math.max(0, Number(row.notoriety) - hrs * SPEAKEASY.NOTORIETY_DECAY_HR);
+}
+const isShut = (row, now = Date.now()) => row.shut_until && new Date(row.shut_until).getTime() > now;
+
+// add heat to a (locked) club row — the round + the table draw the Prohibition boys (mutates row in memory)
+async function bumpNotoriety(client, row, amount) {
+  const now = Date.now();
+  const nn = Math.min(SPEAKEASY.NOTORIETY_MAX, decayedNotoriety(row, now) + amount);
+  row.notoriety = nn; row.notoriety_at = new Date(now);
+  await client.query('UPDATE speakeasies SET notoriety=$2, notoriety_at=now() WHERE district_id=$1', [row.district_id, nn]);
+}
+
+// resolve the notoriety window on the owner's collect (the §7.1 business-raid pattern): decay, and if the
+// club sat ABOVE the threshold, roll one raid over those minutes. A raid SEIZES pending income (clock reset,
+// never minted — no ledger row, the business/territory precedent), fines the owner (`speakeasy:raid`, a
+// §10.4 cash sink clamped to pocket+bank), and SHUTTERS the club (income_at → shut_until so it earns nothing
+// while dark). `SPEAKEASY_RAID_P` env overrides the per-minute p for tests (the BUSINESS_RAID_P precedent).
+async function resolveRaid(ch, row, client, h) {
+  const now = Date.now();
+  const not0 = Number(row.notoriety);
+  const elapsedHrs = Math.max(0, now - new Date(row.notoriety_at).getTime()) / 3600000;
+  const not = Math.max(0, not0 - elapsedHrs * SPEAKEASY.NOTORIETY_DECAY_HR);
+  if (not0 >= SPEAKEASY.RAID_THRESHOLD && !isShut(row, now)) {
+    const hrsAbove = Math.min(elapsedHrs, (not0 - SPEAKEASY.RAID_THRESHOLD) / SPEAKEASY.NOTORIETY_DECAY_HR);
+    const minAbove = Math.min(1440, hrsAbove * 60);
+    const p = Number(process.env.SPEAKEASY_RAID_P ?? SPEAKEASY.RAID_P_PER_MIN);
+    const pWindow = 1 - Math.pow(1 - p, minAbove);
+    const roll = Math.random();
+    if (roll < pWindow) {
+      const seized = accruedIncome(row);
+      const tier = speakeasyTierOf(row.tier);
+      // the fine scales with the value at risk (open + decor sunk), clamped to pocket then bank (the
+      // business:raid discipline — the §10.4 cash check covers cash+bank, so the one row stays exact)
+      const fine = Math.min(Math.floor((SPEAKEASY.OPEN_COST + (tier?.cost || 0)) * SPEAKEASY.RAID_FINE_RATE),
+        Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
+      const fromPocket = Math.min(fine, Math.max(0, Math.floor(Number(ch.cash))));
+      ch.cash = Number(ch.cash) - fromPocket;
+      ch.bank = Number(ch.bank) - (fine - fromPocket);
+      const shut = new Date(now + SPEAKEASY.RAID_SHUT_MS);
+      row.notoriety = 0; row.notoriety_at = new Date(now); row.income_at = shut; row.shut_until = shut;
+      await client.query('UPDATE speakeasies SET notoriety=0, notoriety_at=now(), income_at=$2, shut_until=$2 WHERE district_id=$1', [row.district_id, shut]);
+      if (fine > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fine, reason: 'speakeasy:raid' });
+      await h.rngLog(client, ch.id, `speakeasy:raid:${row.district_id}`, Math.round(roll * 1e4) / 1e4, `raided (P ${pWindow.toFixed(4)}, seized $${seized}, fined $${fine})`);
+      await h.notify(client, ch.id, 'speakeasy_raid', { district: row.district_id, seized, fine });
+      await h.track(client, ch.account_id, 'speakeasy_raid', { district: row.district_id, seized, fine });
+      return { raided: true, seized, fine, shutSeconds: Math.ceil(SPEAKEASY.RAID_SHUT_MS / 1000) };
+    }
+  }
+  row.notoriety = not; row.notoriety_at = new Date(now);
+  await client.query('UPDATE speakeasies SET notoriety=$2, notoriety_at=now() WHERE district_id=$1', [row.district_id, not]);
+  return { raided: false };
 }
 
 // Open the district's club (one per district, first-come). Level-gated, pocket cash pays. Opens at tier 0.
@@ -46,8 +103,11 @@ export async function collectSpeakeasy(ch, client, h) {
   if (safeHoused(ch)) throw new GameError('safe', 'The take waits for a man on the floor, not a ghost.');
   const row = (await client.query('SELECT * FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
   if (!row) throw new GameError('no_club', "You don't run a house.");
-  const inc = accruedIncome(row);
-  if (inc <= 0) return { ok: true, collected: 0 };
+  // step two: the Prohibition raid resolves on the owner's touch — a hot club may be seized + shuttered
+  const raid = await resolveRaid(ch, row, client, h);
+  if (raid.raided) return { ok: true, collected: 0, raid, district: row.district_id };
+  const inc = accruedIncome(row); // 0 while shut (income_at was pushed to shut_until by the raid)
+  if (inc <= 0) return { ok: true, collected: 0, ...(isShut(row) ? { shutSeconds: Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) } : {}) };
   ch.cash = Number(ch.cash) + inc;
   await client.query('UPDATE speakeasies SET income_at=now() WHERE district_id=$1', [row.district_id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: inc, reason: 'speakeasy:income' });
@@ -116,6 +176,7 @@ export async function visitSpeakeasy(ch, owner, districtId, roundId, client, h) 
   // re-read the club under the owner's lock: gone / owner changed (a death/reopen race) → clean retry
   const row = (await client.query('SELECT * FROM speakeasies WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!row || row.owner_character !== owner.id) throw new GameError('gone', 'The club changed hands — try again.');
+  if (isShut(row)) throw new GameError('shut', 'The place is dark — the Prohibition boys shut it down. Come back later.');
   if (Number(ch.cash) < round.cost) throw new GameError('cash', `That round runs $${round.cost}.`);
   // cooldown FIRST (ch is locked by withTwoCharacters, so same-patron rounds serialize — no TOCTOU)
   const prior = (await client.query('SELECT last_at FROM speakeasy_patrons WHERE district_id=$1 AND character_id=$2', [districtId, ch.id])).rows[0];
@@ -130,6 +191,7 @@ export async function visitSpeakeasy(ch, owner, districtId, roundId, client, h) 
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -round.cost, reason: 'speakeasy:round', counterparty: owner.id });
   await h.ledger(client, { characterId: owner.id, currency: 'cash', amount: net, reason: 'speakeasy:round', counterparty: ch.id });
   await client.query('UPDATE speakeasies SET prestige = prestige + $2 WHERE district_id=$1', [districtId, round.prestige]); // club row already locked
+  await bumpNotoriety(client, row, SPEAKEASY.ROUND_NOTORIETY); // a busy bar draws the Prohibition boys (the raid tie)
   const p = await bumpPatron(client, districtId, ch.id, { cash: round.cost }); // the patron leaf row
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (audit LOW-1: keep the canonical characters→leaves→singletons order — no latent deadlock trap)
   const regular = p.visits >= SPEAKEASY.REGULAR_VISITS;
@@ -159,13 +221,49 @@ export async function bottleService(ch, districtId, bottleId, client, h) {
   return { ok: true, district: districtId, bottle: bottle.name, spent: bottle.omr, visits: p.visits };
 }
 
+// THE BACK-ROOM TABLE — the club hosts a house game (the wheel). The patron bets CASH, the OWNER takes a
+// RAKE carved from the stake (a transfer, never minted on top — the casino discipline), the rest wagers at
+// WIN_P and a win pays 2× (the edge BURNS, deflationary). Draws NOTORIETY (the raid tie). Two-party
+// (patron + owner). CASH only (the Den's hard rule — no $OMR at the table). District-pinned.
+export async function playTable(ch, owner, districtId, stake, client, h) {
+  const bet = Math.floor(Number(stake));
+  if (!Number.isFinite(bet) || bet < SPEAKEASY.TABLE.MIN_BET) throw new GameError('min', `The table takes $${SPEAKEASY.TABLE.MIN_BET} minimum.`);
+  if (bet > SPEAKEASY.TABLE.MAX_BET) throw new GameError('max', `The table caps at $${SPEAKEASY.TABLE.MAX_BET} a spin.`);
+  if (jailed(ch)) throw new GameError('jailed', 'No table from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to be out on the town.");
+  if (safeHoused(ch)) throw new GameError('safe', "You can't be seen at the table while you're supposed to be to ground.");
+  if (ch.loc !== districtId) throw new GameError('travel', "You're not in that district — go there first.");
+  const row = (await client.query('SELECT * FROM speakeasies WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!row || row.owner_character !== owner.id) throw new GameError('gone', 'The club changed hands — try again.');
+  if (isShut(row)) throw new GameError('shut', 'The place is dark — the Prohibition boys shut it down. Come back later.');
+  if (Number(ch.cash) < bet) throw new GameError('cash', 'Not that much in pocket.');
+  const rake = Math.ceil(bet * SPEAKEASY.TABLE.RAKE_BPS / 10000);
+  const wager = bet - rake;
+  const roll = Math.random();
+  const win = roll < SPEAKEASY.TABLE.WIN_P;
+  ch.cash = Number(ch.cash) - bet;              // the patron pays the full bet
+  owner.cash = Number(owner.cash) + rake;       // the club's cut, carved from the stake (a transfer, not a mint)
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -bet, reason: 'speakeasy:table:bet' });
+  await h.ledger(client, { characterId: owner.id, currency: 'cash', amount: rake, reason: 'speakeasy:table:rake', counterparty: ch.id });
+  let payout = 0;
+  if (win) { payout = wager * 2; ch.cash = Number(ch.cash) + payout; await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'speakeasy:table:win' }); }
+  await h.rngLog(client, ch.id, `speakeasy:table:${districtId}`, Math.round(roll * 1e4) / 1e4, win ? `win $${payout}` : 'loss');
+  await bumpNotoriety(client, row, SPEAKEASY.TABLE.NOTORIETY); // gambling draws the Prohibition boys
+  bus.emit('streets', { type: 'speakeasy_table', by: ch.name, at: row.name || districtId, win });
+  await h.track(client, ch.account_id, 'speakeasy_table', { district: districtId, bet, win });
+  return { ok: true, district: districtId, bet, rake, win, payout, net: (win ? payout : 0) - bet, toOwner: rake };
+}
+
 // the owner's club summary (for loadOwned + the character view). null if they run no house.
 export async function speakeasyOwnedOf(pool, characterId) {
   const row = (await pool.query('SELECT * FROM speakeasies WHERE owner_character=$1', [characterId])).rows[0];
   if (!row) return null;
   const tier = speakeasyTierOf(row.tier), next = speakeasyTierOf(Number(row.tier) + 1);
+  const shut = isShut(row);
   return { district: row.district_id, name: row.name || null, tier: Number(row.tier), tierName: tier?.name || null,
     incomePerHr: tier?.incomePerHr || 0, pending: accruedIncome(row), prestige: Math.round(Number(row.prestige)),
+    notoriety: Math.round(decayedNotoriety(row)), raidRisk: decayedNotoriety(row) >= SPEAKEASY.RAID_THRESHOLD,
+    shutSeconds: shut ? Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) : 0,
     nextTier: next ? { tier: next.tier, name: next.name, cost: next.cost } : null };
 }
 
@@ -174,7 +272,7 @@ export async function speakeasyOwnedOf(pool, characterId) {
 // precedent). Ranked by prestige.
 export async function speakeasyBoard(pool, characterId) {
   const clubs = (await pool.query(
-    `SELECT s.district_id, s.owner_character, s.name, s.tier, s.prestige, c.name AS owner_name
+    `SELECT s.district_id, s.owner_character, s.name, s.tier, s.prestige, s.shut_until, c.name AS owner_name
        FROM speakeasies s JOIN characters c ON c.id = s.owner_character`)).rows;
   const patrons = (await pool.query(
     `SELECT p.district_id, p.character_id, p.visits, p.spent_cash, p.spent_omr, c.name
@@ -191,11 +289,13 @@ export async function speakeasyBoard(pool, characterId) {
     const list = (byClub.get(s.district_id) || []).sort((a, b) => (b.spent + b.omr * 500) - (a.spent + a.omr * 500));
     return { district: s.district_id, owner: s.owner_name, name: s.name || null, mine: s.owner_character === characterId,
       tier: Number(s.tier), tierName: tier?.name || null, prestige: Math.round(Number(s.prestige)),
-      regulars: list.filter((x) => x.regular).length, guestList: list.slice(0, 8) };
+      shut: isShut(s), regulars: list.filter((x) => x.regular).length, guestList: list.slice(0, 8) };
   }).sort((a, b) => b.prestige - a.prestige);
   // the open districts (no club yet) — where a made man could plant a flag
   const open = DISTRICTS.filter((d) => !clubs.find((c) => c.district_id === d.id)).map((d) => d.id);
-  return { clubs: map, open, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES, openCost: SPEAKEASY.OPEN_COST, minLevel: SPEAKEASY.MIN_LEVEL };
+  return { clubs: map, open, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
+    table: { minBet: SPEAKEASY.TABLE.MIN_BET, maxBet: SPEAKEASY.TABLE.MAX_BET, rakeBps: SPEAKEASY.TABLE.RAKE_BPS },
+    openCost: SPEAKEASY.OPEN_COST, minLevel: SPEAKEASY.MIN_LEVEL };
 }
 
 // estate hook — a dead proprietor's club goes dark (+ its guest list); patron rows at other clubs also

@@ -1972,10 +1972,28 @@ Speakeasy" console tab (your club, the nightlife map, buy-a-round/bottle where y
 covers the open gates, the capped bar take + safehouse gate, the decor ladder, naming + no-op, the round
 (two-party taxed transfer + guest list + cooldown/travel/self/jail gates), the regular status, bottle
 service, the board, DEATH (club goes dark + guest list clears + district reopens), and §10.4 (per-character
-cash reconciles + vocabulary + the $OMR burns). Suite 28/28 + sim drift-0. **Deferred (step two, the
-revenue layer)**: the club hosts the games (a rake to the owner), a Prohibition **raid** (the Law busts
-the club), a P2P buyout/contest, a cross-club **renown** axis, and the **real-money (ETH) cosmetic decor +
-bottle-service** tier (the Store/GearVault rail — cosmetics-as-NFTs with resale royalties).
+cash reconciles + vocabulary + the $OMR burns). A focused red-team returned CLEAN (no CRITICAL/HIGH/MED —
+§10.4 exact, the round IS the audited `bodyguard:hire` transfer verbatim); the one LOW fixed was the
+round's lock order (singleton-last restored). **Step two — BUILT** (the living gaming venue): **(1) the
+back-room TABLE** (`playTable`, `POST /v1/speakeasy/:district/table`) — the club hosts the wheel; a patron
+bets CASH (district-pinned, `TABLE.MIN_BET`..`MAX_BET`), the **owner takes a RAKE** carved from the stake
+(`TABLE.RAKE_BPS` 3%, `speakeasy:table:rake` — a transfer, never minted on top; the casino discipline), the
+wager plays at `WIN_P` 0.48 and a win pays 2× (`speakeasy:table:win` faucet / `:bet` sink, the edge burns);
+two-party, CASH only (the Den's rule), collusion is −EV (lose ~7% to funnel 3%), draws notoriety.
+**(2) the PROHIBITION RAID** (`resolveRaid`, the business-raid pattern) — **notoriety** accrues from the
+table (`TABLE.NOTORIETY` 8) + patronage (`ROUND_NOTORIETY` 2), decays hourly; past `RAID_THRESHOLD` (60)
+the owner's `collectSpeakeasy` rolls a lazy raid that SEIZES pending (never minted), FINES the owner
+`RAID_FINE_RATE` (15%) of the value sunk clamped to pocket+bank (`speakeasy:raid` sink), and SHUTTERS the
+club `RAID_SHUT_MS` (2h — no rounds/table/income while dark, `income_at` pushed to `shut_until`);
+`SPEAKEASY_RAID_P` is a TEST-ONLY roll knob (the BUSINESS_RAID_P precedent). New `speakeasies` columns
+`notoriety`/`notoriety_at`/`shut_until` (estate-wiped). §10.4: `speakeasy:table:*` + `speakeasy:raid` ride
+the existing `speakeasy:` cash prefix (zero invariant change — the rake is a transfer, the win a faucet,
+all character_id'd; the fine a sink; seized pending never ledgered). Console: the table + notoriety/raid
+status on the tab. `test/speakeasy.js` extended (table rake/win/notoriety/gates + the forced raid seize+
+fine+shutter + the shut gate). Suite 28/28 + sim drift-0. **Deferred (step three, the revenue layer)**:
+the **real-money (ETH) cosmetic decor + bottle-service** tier (the Store/GearVault rail — cosmetics-as-NFTs
+with resale royalties, the recurring-revenue engine), a P2P **buyout/contest** so districts clear without a
+death, and a cross-club **renown** axis — all chain work mainnet-gated (legal + audit), the M6 pattern.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
