@@ -11,6 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { PORTFOLIO, tickerPriceOf, dayOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { runSeasonRollover } from '../src/worker.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -111,6 +112,31 @@ assert.equal(r.code, 200, 'the board is public');
 assert(r.body.board.length >= 1, 'the investor is on it');
 assert.equal(r.body.board[0].name, heir.name, 'the heir\'s book leads (it carried over)');
 assert(r.body.board[0].bookValue > 0, 'valued at the daily price');
+
+// ── STEP TWO (1) — the RICO GRADUATION: a BIG legit move draws heat + is safehouse-blocked ──
+const whale = await mk('Made Man Moe');
+await acctOmr(whale.id, 6000); grantDrift += 6000;
+await pool.query(`UPDATE characters SET heat=0, safe_until=NULL WHERE id='${whale.id}'`);
+r = await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR } });
+assert.equal(r.code, 200, 'a big legit move goes through');
+assert.equal(r.body.scrutiny, true, 'but it draws scrutiny');
+assert((await meOf(whale.token)).heat > 0, 'the paper trail raised heat');
+// a small buy flies under the radar (no scrutiny flag)
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR - 1 } })).body.scrutiny, false, 'small buys go unnoticed');
+// a big move from a safehouse is blocked (P1.3 — hiding, not moving money); a small one is fine
+await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${whale.id}'`);
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR } })).body.error, 'safe', 'no big legit moves from the safehouse');
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: 10 } })).code, 200, 'a small buy still flies under the radar');
+
+// ── STEP TWO (2) — the SEASON PRIZE: the top season grinder earns the champion's moonshot (SPCX) ──
+const champ = await mk('Season King Sal');
+const cur = Math.floor(dayOf() / 28);
+await pool.query(`UPDATE characters SET respect=9999, season=${cur - 1} WHERE id='${champ.id}'`);
+const before = (await pool.query(`SELECT COALESCE(SUM(shares),0) s FROM portfolios p JOIN characters c ON c.account_id=p.account_id WHERE c.id='${champ.id}' AND p.ticker='SPCX'`)).rows[0].s;
+await runSeasonRollover(pool, { season: cur });
+const spcx = Number((await pool.query(`SELECT COALESCE(SUM(shares),0) s FROM portfolios p JOIN characters c ON c.account_id=p.account_id WHERE c.id='${champ.id}' AND p.ticker='SPCX'`)).rows[0].s);
+assert(spcx > Number(before), 'the season\'s top grinder was granted SPCX at rollover (a skill-ranked status prize — no $OMR spent)');
+assert.equal(spcx, Math.round((PORTFOLIO.SEASON_PRIZES[0] / tickerPriceOf('SPCX')) * 1e6) / 1e6, 'rank-1 prize = SEASON_PRIZES[0] $OMR-worth of SPCX');
 
 // ── §10.4: rwa:invest is a recognized burn; the ONLY drift is the unledgered SQL grants ──
 const inv = await runLedgerInvariants(pool);

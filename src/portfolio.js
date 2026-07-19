@@ -30,15 +30,38 @@ function bookRow(row, priceMap) {
     shares: round6(shares), price, bookValue: round2(shares * price), costBasis: Math.floor(Number(row.cost_omr)) };
 }
 
+// A STATUS GRANT of shares (step two — earned exposure): shares = omrWorth / price, cost basis 0
+// (a free legit kickback — season prizes, the big-score cut). Not a §10.4 currency, so no ledger.
+// A plain DB helper (no `h`) so headless callers (the season worker) and under-lock member payouts
+// (the heist crew) can grant directly. Returns the updated { ticker, shares, cost_omr } row.
+export async function grantShares(client, accountId, ticker, omrWorth) {
+  if (!tickerOf(ticker) || !(Number(omrWorth) > 0)) return null;
+  const granted = round6(Number(omrWorth) / tickerPriceOf(ticker));
+  if (!(granted > 0)) return null;
+  const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [accountId, ticker])).rows[0];
+  const shares = round6(Number(cur?.shares || 0) + granted);
+  const cost = Number(cur?.cost_omr || 0); // a grant costs nothing — cost basis unchanged (pure gain)
+  if (cur) await client.query('UPDATE portfolios SET shares=$3 WHERE account_id=$1 AND ticker=$2', [accountId, ticker, shares]);
+  else await client.query('INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ($1,$2,$3,0)', [accountId, ticker, shares]);
+  return { ticker, shares, cost_omr: cost, granted };
+}
+
 // PERSONAL invest: burn clean $OMR → fractional shares at today's price. A §10.4 $OMR burn
 // ('rwa:invest', account bucket) — the shares are pure status, so nothing else moves value.
+// Step two — the RICO GRADUATION: a BIG legit move draws heat and can't be done from a safehouse.
 export async function invest(ch, ticker, omr, client, h) {
   const t = tickerOf(ticker);
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
   const amt = validAmount(omr);
+  // the classic laundering red flag: moving a big sum into legit fronts gets noticed (the launder
+  // precedent). Small buys fly under the radar. Checked BEFORE the burn so a blocked move is clean.
+  const scrutiny = amt >= PORTFOLIO.SCRUTINY_MIN_OMR;
+  if (scrutiny && ch.safe_until && new Date(ch.safe_until) > new Date())
+    throw new GameError('safe', "You can't move big money into legit fronts while you're to ground.");
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
   await spendOmr(client, h, amt, 'rwa:invest'); // gates on h.acct.omr, debits in-memory, ledgers the burn
+  if (scrutiny) ch.heat = Number(ch.heat || 0) + PORTFOLIO.SCRUTINY_HEAT; // going legit in a big way draws the law
   const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [ch.account_id, ticker])).rows[0];
   const shares = round6(Number(cur?.shares || 0) + bought);
   const cost = Number(cur?.cost_omr || 0) + amt;
@@ -50,7 +73,7 @@ export async function invest(ch, ticker, omr, client, h) {
   h.owned.portfolio = pf;
   await h.track(client, ch.account_id, 'rwa_invest', { ticker, omr: amt, shares: bought });
   return { ok: true, ticker, name: t.name, price, bought, shares,
-    bookValue: round2(shares * price), costBasis: cost };
+    bookValue: round2(shares * price), costBasis: cost, scrutiny };
 }
 
 // FAMILY invest: the boss/underboss commissions the family's legit holdings from the $OMR RESERVE
