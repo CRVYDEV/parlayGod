@@ -42,6 +42,9 @@ assert.equal(neon.nextMin, LANDMARKS.MIN_DEDICATE, 'first dedication is the floo
 
 // ── gates: bad district, below the floor ──
 assert.equal((await call('POST', '/v1/landmarks/nowhere', { token: don.token, body: { amount: 100 } })).body.error, 'district', 'no landmark there');
+// audit LOW: a prototype-chain key must NOT slip past the district gate (own-property lookup)
+assert.equal((await call('POST', '/v1/landmarks/__proto__', { token: don.token, body: { amount: 100 } })).body.error, 'district', '__proto__ is not a district');
+assert.equal((await call('POST', '/v1/landmarks/constructor', { token: don.token, body: { amount: 100 } })).body.error, 'district', 'constructor is not a district');
 assert.equal((await call('POST', '/v1/landmarks/neon', { token: don.token, body: { amount: LANDMARKS.MIN_DEDICATE - 1 } })).body.error, 'amount', 'below the floor is refused');
 
 // ── name your dynasty, then dedicate — a ledgered vanity:landmark BURN ──

@@ -1315,6 +1315,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query(
     "DELETE FROM pen_break_members WHERE break_id IN (SELECT id FROM pen_breaks WHERE leader_character=$1 AND status='abandoned')", [victim.id]);
   for (const o of brOrphans) await h.notify(client, o.character_id, 'break_abandoned', { reason: 'leader_dead' });
+  // wiretaps die with either party (audit: a dead WATCHER's taps are dead-code row-leak; a dead TARGET's
+  // taps wasted a live watcher's concurrency slot with no untap route — deleting the target's frees it)
+  await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);

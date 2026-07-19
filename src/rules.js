@@ -1419,7 +1419,10 @@ export const LANDMARKS = {
     brick: 'The Brickyard Monument', canal: 'The Canal Bridge', cathedral: 'The Cathedral Steps',
   },
 };
-export const landmarkOf = (districtId) => LANDMARKS.PLACES[districtId] || null;
+// own-property lookup only — else '__proto__'/'constructor'/'toString' would resolve inherited members
+// and slip past the "no such district" gate (audit LOW: a junk row + a self-inflicted $OMR burn).
+export const landmarkOf = (districtId) =>
+  (Object.prototype.hasOwnProperty.call(LANDMARKS.PLACES, districtId) ? LANDMARKS.PLACES[districtId] : null);
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market

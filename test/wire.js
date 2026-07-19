@@ -144,6 +144,13 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: 
 assert.equal((await call('GET', '/v1/wire', { token: mark.token })).body.bugsOnYou, 0, "a dead watcher's tap is not counted (alive-join parity with the threat read)");
 r = await call('POST', '/v1/wire/sweep', { token: mark.token });
 assert.equal(r.body.spent, 0, "and a sweep against only a dead watcher's ghost row is free — no phantom charge");
+// ── MED regression: a tap on a mark who DIES is deleted at their estate, freeing the watcher's cap slot ──
+const hunter = await mk('Wire Hunter'); const doomed = await mk('Doomed Mark');
+await acctOmr(hunter.id, 100); grantDrift += 100;
+await call('POST', `/v1/wire/tap/${doomed.id}`, { token: hunter.token });
+assert.equal((await call('GET', '/v1/wire', { token: hunter.token })).body.taps.filter((t) => t.target === doomed.id).length, 1, 'the hunter is wired on the mark');
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: doomed.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM wiretaps WHERE watcher_character='${hunter.id}'`)).rows[0].n), 0, "the dead mark's tap is deleted at the estate — the watcher's slot is freed (no untap dead-end)");
 
 // ── the worker sweep: expired taps are tidied (reads already filter, this is hygiene) ──
 await pool.query(`INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ('${watcher.id}','stale', now() - interval '1 hour')`);

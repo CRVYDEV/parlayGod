@@ -222,6 +222,8 @@ export async function familyInvest(ch, ticker, omr, client, h) {
     throw new GameError('rank', 'Only the boss or underboss invests the family money.');
   const t = tickerOf(ticker);
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
+  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+    throw new GameError('jailed', "You can't move the family money into legit fronts from a cell."); // parity with personal invest
   const amt = validAmount(omr);
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (!g) throw new GameError('gang', 'No family to invest for.'); // F2: defensive (unreachable via loadOwned, but every sibling guards it)
@@ -286,7 +288,7 @@ export async function portfolioBoard(ch, client, h) {
       canInvest: canManage,
       reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
       holdings: fh, bookValue: famBook,
-      dividend: { claimable: canManage && famBasis > 0 && gcd === 0, cooldownSeconds: gcd, pool: poolNow,
+      dividend: { claimable: canManage && famBasis > 0 && gcd === 0 && poolNow > 0, cooldownSeconds: gcd, pool: poolNow,
         estimate: round2(Math.min(famBasis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolNow)) } };
   }
   // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
@@ -309,7 +311,7 @@ export async function portfolioBoard(ch, client, h) {
   const dividend = {
     pool: poolBal, rateBps: PORTFOLIO.DIVIDEND_DAILY_BPS, basis,
     estimate: round2(Math.min(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolBal)),
-    claimable: basis > 0 && cd === 0, cooldownSeconds: cd,
+    claimable: basis > 0 && cd === 0 && poolBal > 0, cooldownSeconds: cd, // pool>0 so the board can't say claimable while the claim throws 'dry'
   };
   return { market, portfolio, family, dynasty, dividend };
 }
