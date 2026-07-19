@@ -625,3 +625,22 @@ Three touchpoints (§10.4-neutral — meter-rate + conviction-odds modifiers, La
 
 Both bleed levers compose multiplicatively with each other and with the event/decay base. Sim-clean at
 drift-0 on build; watch the RICO conviction/indictment rate in the alpha.
+
+### Envelope/Foundation step two — red-team result (CLEAN) + sign-off items
+
+A four-lens red-team over the step-two deltas returned no CRITICAL/HIGH/MED (freeload gate airtight,
+bleed math floored, §10.4-neutral, no lock/regression). Three flagged items (NOT patched, ground rule #1):
+- **(L1, balance)** The foundation bleed accelerates the meter even while a case is FILED, so a
+  maxed-foundation offline whale gets bled toward `INDICT_AT` (lowering the exposure-driven `bustProbOf`)
+  AND keeps the step-one `bustMult` — a double discount on the same forced trial, bounded by the
+  `bustProbOf` min-clamp. Note: base `EXPOSURE_DECAY` already bleeds exposure while indicted; step two
+  only accelerates it. Dial = `bleedMult`, or gate the bleed on `!indicted_at` if it over-protects.
+- **(L2, design)** The freeload gate keys on join-time vs indict-time only — a family can upgrade the
+  foundation AFTER a still-member is indicted and soften that trial. Reads as intended (collective
+  defense of a made man who was in the family when the case was filed); confirm it matches design intent.
+- **(L3, deploy note)** No migration script exists (`schema.sql` is `CREATE TABLE IF NOT EXISTS`;
+  fresh-DB alpha + pg-mem are unaffected). Adding `gang_members.joined_at NOT NULL DEFAULT now()` to a
+  LIVE DB via `ALTER TABLE` backfills every existing member with the migration timestamp, so anyone
+  indicted BEFORE the migration transiently reads `joined_at > indicted_at` and loses their foundation
+  soften for that in-flight case (one-time, player-unfavorable). If a live migration is ever needed,
+  backfill `joined_at` from `gangs.created_at` or a sentinel epoch instead of `now()`.
