@@ -29,13 +29,14 @@ import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
+import * as Wire from './wire.js';
 import * as Ops from './ops.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW } from './rules.js';
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -355,6 +356,8 @@ export async function buildServer() {
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
+    wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
+      sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000) },
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -535,6 +538,16 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.auctionBoard(ch, client, h)));
   app.post('/v1/auction/:lotId/bid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidAuction(ch, req.params.lotId, req.body?.amount, client, h)));
+
+  // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
+  app.get('/v1/wire', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.wireBoard(ch, client, h)));
+  app.post('/v1/wire/tap/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.placeTap(ch, req.params.targetId, client, h)));
+  app.post('/v1/wire/sweep', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.sweepBugs(ch, client, h)));
+  app.post('/v1/wire/subscribe', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.subscribeWire(ch, client, h)));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));

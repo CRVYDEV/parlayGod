@@ -173,7 +173,7 @@
     </div>
 
     <div class="panel">
-      <h2>The Wire <span id="ws-dot" style="color:var(--bad)">●</span></h2>
+      <h2>Live Feed <span id="ws-dot" style="color:var(--bad)">●</span></h2>
       <div id="feed"></div>
     </div>
 
@@ -249,6 +249,9 @@
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
+    if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
+    if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
+    if (body.wireSeconds) bits.push('subscribed to the Street Wire — the intelligence is flowing');
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
@@ -397,7 +400,7 @@
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
-    city: 'The City', den: 'The Den', deck: 'Everything Else' };
+    wire: 'The Wire', city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -431,6 +434,7 @@
     if (id === 'estate') renderEstate();
     if (id === 'life') renderLife();
     if (id === 'pen') renderPen();
+    if (id === 'wire') renderWire();
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
@@ -888,6 +892,10 @@
       ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
       ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
     ],
+    'The Wire': [
+      ['GET', '/v1/wire'], ['POST', '/v1/wire/tap/:targetId', {}], ['POST', '/v1/wire/sweep', {}],
+      ['POST', '/v1/wire/subscribe', {}],
+    ],
     'World & Growth': [
       ['GET', '/v1/world'], ['POST', '/v1/world/:npcId/raid', {}], ['GET', '/v1/daily'],
       ['POST', '/v1/daily/:id/claim', {}], ['POST', '/v1/missions/:id', {}], ['POST', '/v1/path', { path: 'earner' }],
@@ -1102,6 +1110,80 @@
     $('#flip-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
     $('#flip-go').onclick = () =>
       act('POST', `/v1/law/flip/${$('#flip-target').value}`, {}).then(() => renderLaw());
+  }
+
+  // ── THE WIRE: the intelligence terminal — wiretaps on rivals + the Street Wire premium feed ──
+  async function renderWire() {
+    const t = $('#tab-wire');
+    await refresh();
+    const r = await api('GET', '/v1/wire');
+    if (r.code >= 400) { t.innerHTML = '<span class="d">the line is dead.</span>'; return; }
+    const W = r.body;
+    const bandColor = (s) => ({ 'red hot': 'var(--bad)', hot: 'var(--blood)', warm: 'var(--neon)', cold: 'var(--dim)' })[s] || 'var(--dim)';
+    const stageColor = { clean: 'var(--ok)', watched: 'var(--neon)', investigation: 'var(--neon)', indicted: 'var(--bad)' };
+    // the ticker tape — a scrolling row of RWA prices, the day's biggest mover flagged
+    const tape = (W.tape || []).map((k) => {
+      const up = k.dayChange >= 0;
+      const hot = W.mover && k.ticker === W.mover.ticker;
+      return `<span class="chip" style="${hot ? 'border-color:var(--neon);' : ''}">${k.ticker} $${fmt(k.price)} <span style="color:${up ? 'var(--ok)' : 'var(--bad)'}">${up ? '▲' : '▼'}${Math.abs(k.dayChange)}%</span>${hot ? ' ◂ HOT' : ''}</span>`;
+    }).join(' ');
+    // your live wires — the intel on each tapped mark
+    const wires = (W.taps || []).map((i) => `
+      <div class="card">
+        <span class="t">${i.name} <span class="dim">lvl ${i.level}</span></span>
+        ${i.huntingYou ? '<span class="chip bad">HUNTING YOU</span>' : ''}${i.wanted ? '<span class="chip bad">WANTED</span>' : ''}
+        <div class="d" style="margin-top:4px">
+          the law: <b style="color:${stageColor[i.law.stage] || 'var(--dim)'};text-transform:uppercase">${i.law.stage}</b>${i.law.indicted ? ' · INDICTED' : ''} · heat <b style="color:${bandColor(i.law.heat)}">${i.law.heat}</b><br>
+          money: ${i.wealth}<br>
+          rackets: ${i.ops.businesses} front(s) · ${i.ops.rackets} racket(s) · ${i.ops.territory} turf op(s)${i.ops.family ? ' · <b>' + i.ops.family + '</b>' : ' · unaffiliated'}
+        </div>
+        <div class="d" style="font-size:10px;margin-top:4px">wire runs ${mins(i.expiresSeconds)}</div>
+      </div>`).join('');
+    t.innerHTML = `
+      ${!(W.taps || []).length && !W.subscribed ? coachCard('The Wire — information is a weapon', 'Pay $OMR to run a WIRETAP on a rival (their Law heat, wealth, rackets, and whether they\'re hunting YOU) — or subscribe to the STREET WIRE for forecasts, threat chatter, and the war room. Someone bugging your line? SWEEP it clean.') : ''}
+      <h2>The Street Wire</h2>
+      <div class="card" style="${W.subscribed ? 'border-color:var(--neon)' : ''}">
+        <span class="t">${W.subscribed ? 'SUBSCRIBED' : 'The Premium Feed'}</span>
+        ${W.subscribed ? `<span class="chip cold">${mins(W.subSeconds)} left</span>` : ''}
+        <div class="d">${W.subscribed ? 'the intelligence service is live — forecasts, threat chatter, the war room below.' : `Law forecasts, threat chatter (who's asking about you), the ticker tape, and your family's war room — for ${W.costs.sub} $OMR / week.`}</div>
+        <button class="act" data-do="POST /v1/wire/subscribe">${W.subscribed ? `renew (${W.costs.sub} $OMR)` : `subscribe (${W.costs.sub} $OMR)`}</button>
+      </div>
+
+      <h2 style="margin-top:12px">The Ticker Tape</h2>
+      <div class="card"><div style="display:flex;flex-wrap:wrap;gap:4px">${tape || '<span class="d">quiet market.</span>'}</div></div>
+
+      <h2 style="margin-top:12px">Run a Wire (${(W.taps || []).length}/${W.tapMax})</h2>
+      <div class="card">
+        <div class="d">tap a rival for ${W.costs.tap} $OMR — reads their Law heat, wealth, rackets, and whether they've got a search out on you (${W.tapMax} concurrent max).</div>
+        <select id="wire-target"></select>
+        <button class="act" id="wire-tap-go">place the wire</button>
+      </div>
+      ${wires ? `<div class="grid" style="margin-top:8px">${wires}</div>` : '<div class="d" style="margin-top:6px">no wires running.</div>'}
+
+      <h2 style="margin-top:12px">Sweep Your Lines</h2>
+      <div class="card" style="${W.bugsOnYou ? 'border-color:var(--bad)' : ''}">
+        <span class="t">${W.bugsOnYou ? `🐞 ${W.bugsOnYou} BUG(S) ON YOUR LINE` : 'lines clean'}</span>
+        <div class="d">${W.bugsOnYou ? `someone's listening. sweep clears every tap on you for ${W.costs.sweep} $OMR.` : 'no wires on you — a sweep is free when there\'s nothing to find.'}</div>
+        <button class="act" data-do="POST /v1/wire/sweep">sweep (${W.bugsOnYou ? W.costs.sweep + ' $OMR' : 'free'})</button>
+      </div>
+
+      ${W.premium ? `
+      <h2 style="margin-top:12px">The War Room</h2>
+      <div class="card">
+        <span class="t">Threats</span>
+        <div class="d">${W.premium.threats.huntersCount} hunter(s) have a search out on you${W.premium.threats.contracts.length ? ' · contracts on your head: ' + W.premium.threats.contracts.map((c) => `${c.kind} $${fmt(c.pot)}`).join(', ') : ' · no open contracts'}</div>
+      </div>
+      ${W.premium.warRoom ? `<div class="card"><span class="t">${W.premium.warRoom.name}</span>
+        <div class="d">turf held: ${(W.premium.warRoom.held || []).join(', ') || 'none'}${W.premium.warRoom.war ? ` · AT WAR with ${W.premium.warRoom.war.with} (${W.premium.warRoom.war.us}–${W.premium.warRoom.war.them})` : ' · at peace'}</div></div>` : ''}
+      <h2 style="margin-top:12px">Law Forecast</h2>
+      <div class="grid">${(() => { const today = (W.premium.forecast || [])[0]?.day || 0; return (W.premium.forecast || []).map((f) => `<div class="card"><span class="t">${f.day === today ? 'today' : '+' + (f.day - today) + 'd'}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join(''); })()}</div>
+      ` : ''}`;
+    const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
+    $('#wire-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
+    $('#wire-tap-go').onclick = () => {
+      const tgt = $('#wire-target').value;
+      if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
+    };
   }
 
   // ── THE GARAGE: your iron + the armory ──

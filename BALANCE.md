@@ -714,3 +714,29 @@ persist-clobber — and found one HIGH (fixed):
   the leader stakes a cutkit, joiners pay nothing, and a full 4-crew escapes at ~0.76 vs solo's 0.35, all
   sentences cleared for one $50k kit. Consistent with "the leader stakes the kit"; price it deliberately.
   Dials: charge joiners a kit/energy, lower `COOP_BASE`/`COOP_PER_EXTRA`, or cap the crew payoff.
+
+## THE WIRE — the intelligence terminal (proposed levers, sign-off pending)
+
+Off-chain, §10.4-clean recurring $OMR sinks (every burn rides the existing `intel:*` omr vocabulary +
+burn term — zero invariant changes; status/access/convenience, never sim-audited power). `WIRE` block:
+
+| Lever | Default | Rationale / measurement | Rec |
+|---|---|---|---|
+| `TAP_OMR` | 8 $OMR | Wiretap on a rival for a 12h window — the offensive intel sink. Priced as a routine recurring buy (below the peek's 5 $OMR only nominally; a tap reveals far more, over time, than a one-shot peek). | KEEP |
+| `TAP_MS` | 12h | The surveillance window. Long enough to be worth 8 $OMR, short enough to be recurring. | KEEP |
+| `TAP_MAX` | 5 | Concurrent wire cap — a spy runs a watchlist, not the whole town. | KEEP |
+| `SWEEP_OMR` | 5 $OMR | Clears every bug on your line; FREE when clean (the peek precedent — no charge for a no-op). Counter-play to taps; cheaper than a tap so defense is affordable. | KEEP |
+| `SUB_OMR` | 12 $OMR / week | The Street Wire premium feed (forecasts + threat-chatter COUNT + war room). A recurring weekly sink — the late-game "Bloomberg terminal" subscription. | KEEP |
+| `SUB_MS` | 7d | Subscription window; extends from the later of now/current end (the retainer/envelope precedent). | KEEP |
+
+**The layered intel economy (deliberate, keep the tiers distinct):** the SUB warns you (a hunter
+COUNT, never a name), a TAP identifies whether a SPECIFIC rival is hunting you, the $OMR **peek** names
+funders. Each tier sells strictly more identity for strictly more cost — don't collapse them.
+
+**Notes / watch-items (not patched — sign-off):**
+- The tap INTEL is intentionally *banded* (wealth band, heat band, ops COUNTS, stage) — never exact
+  books — so surveillance informs targeting without handing a mark's precise numbers to a rival. If the
+  bands prove too coarse/fine, they're the dial (a status-axis read, outside §10.4).
+- The premium threat-chatter is a COUNT of hunters, by design (the peek stays the only name-piercer).
+  If whales want names on the sub, that's a deliberate re-pricing of the peek, not a free add.
+- All numbers are new/tunable — sim + founder sign-off before production (ground rule #1).

@@ -1300,6 +1300,19 @@ export const PORTFOLIO = {
   // to the Law. (audit F1: a per-call-only threshold was trivially dodged by investing 999 on repeat.)
   SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
 };
+// ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
+// Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
+// window — their Law heat, wealth/ops, and whether they're hunting you. SWEEP (intel:sweep) clears
+// taps on you. The STREET WIRE (a recurring $OMR subscription, intel:wire) upgrades the feed into an
+// intelligence service (forecasts, threat chatter, the ticker tape, the war room). All numbers are
+// founder sign-off levers; every burn rides the existing intel:* omr vocabulary (zero invariant changes).
+export const WIRE = {
+  TAP_OMR: 8, TAP_MS: 12 * 3600 * 1000, TAP_MAX: 5, // place a wire: cost, window, concurrent cap
+  SWEEP_OMR: 5,                                     // sweep your lines clean of bugs
+  SUB_OMR: 12, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window
+};
+export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
