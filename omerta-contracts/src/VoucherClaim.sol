@@ -114,6 +114,10 @@ contract VoucherClaim is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     function claim(Voucher calldata v, bytes calldata sig) external nonReentrant whenNotPaused {
         require(block.timestamp <= v.deadline, "VC: expired");
         require(v.deadline <= block.timestamp + MAX_VOUCHER_TTL, "VC: deadline too far");
+        // AUDIT hardening: explicit zero-recipient guard. The underlying ERC20/1155 would revert on
+        // a to==0 anyway, but a clear boundary check gives the intended custom reason (a server bug
+        // signing to 0x0 fails legibly) and validates external input up front (auditor checklist).
+        require(v.to != address(0), "VC: zero recipient");
         require(!usedNonce[v.nonce], "VC: replay");
         require(ECDSA.recover(hashVoucher(v), sig) == signer, "VC: bad signature");
         usedNonce[v.nonce] = true;

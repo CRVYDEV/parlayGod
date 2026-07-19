@@ -361,6 +361,108 @@ contract OmertaTest is Test {
         vm.expectRevert();                                     // re-entry hits nonReentrant → forward fails → tx unwinds
         f.payMintFee{value: 0.01 ether}();
     }
+
+    // ═══════════════ HARDENING PASS (chain on-chain audit) — new coverage ═══════════════
+
+    // THE trust-model keystone: rotating the signer INSTANTLY revokes a leaked key's vouchers.
+    // (Was untested — the whole "a compromised signer is bounded + revocable" claim rested on it.)
+    function test_signer_rotation_revokes_the_old_key() public {
+        VoucherClaim.Voucher memory v = _voucher(player, 100e18, 0, 0, 30);
+        bytes memory leakedSig = _sign(v, signerPk);          // signed by the (now-leaked) key
+        uint256 newPk = 0xB0B;
+        vm.prank(safe); vc.setSigner(vm.addr(newPk));         // the Safe rotates
+        vm.expectRevert("VC: bad signature");                 // the leaked key's voucher is dead on arrival
+        vm.prank(player); vc.claim(v, leakedSig);
+        vm.prank(player); vc.claim(v, _sign(v, newPk));        // the new key works
+        assertEq(omr.balanceOf(player), 10_100e18);
+        assertTrue(vc.usedNonce(30));
+    }
+
+    function test_bad_kind_reverts() public {
+        VoucherClaim.Voucher memory v = _voucher(player, 1, 2, 0, 31); // kind 2 is neither OMR nor gear
+        bytes memory sig = _sign(v, signerPk);
+        vm.expectRevert("VC: bad kind");
+        vm.prank(player); vc.claim(v, sig);
+    }
+
+    function test_zero_gearId_reverts() public {
+        VoucherClaim.Voucher memory v = _voucher(player, 1, 1, 0, 32); // gear kind, gearId 0
+        bytes memory sig = _sign(v, signerPk);
+        vm.expectRevert("VC: zero gear");
+        vm.prank(player); vc.claim(v, sig);
+    }
+
+    function test_zero_recipient_reverts() public {
+        VoucherClaim.Voucher memory v = _voucher(address(0), 1e18, 0, 0, 33);
+        bytes memory sig = _sign(v, signerPk);
+        vm.expectRevert("VC: zero recipient");                 // the new explicit guard
+        vm.prank(player); vc.claim(v, sig);
+    }
+
+    function test_constructor_and_setSigner_reject_zero() public {
+        vm.expectRevert("VC: zero signer");
+        new VoucherClaim(safe, address(0), IERC20(address(omr)), IGearVault(address(gear)), DAILY_CAP);
+        vm.expectRevert();                                     // setSigner not owner
+        vc.setSigner(player);
+        vm.startPrank(safe);
+        vm.expectRevert("VC: zero signer");
+        vc.setSigner(address(0));
+        vc.setSigner(player);                                 // valid rotation
+        vm.stopPrank();
+        assertEq(vc.signer(), player);
+    }
+
+    function test_setMinter_rejects_zero_and_only_owner() public {
+        vm.expectRevert();                                     // not owner
+        gear.setMinter(player);
+        vm.prank(safe);
+        vm.expectRevert("GearVault: zero minter");             // the new guard
+        gear.setMinter(address(0));
+    }
+
+    // gear is real property — it transfers freely and survives the character (the heir/market premise)
+    function test_gear_transfers_are_open() public {
+        VoucherClaim.Voucher memory v = _voucher(player, 1, 1, 7, 34);
+        vm.prank(player); vc.claim(v, _sign(v, signerPk));
+        address heir = makeAddr("heir");
+        vm.prank(player); gear.safeTransferFrom(player, heir, 7, 1, "");
+        assertEq(gear.balanceOf(heir, 7), 1);
+        assertEq(gear.balanceOf(player, 7), 0);
+    }
+
+    function test_staking_rejects_zero_and_bad_amounts() public {
+        vm.startPrank(player);
+        omr.approve(address(staking), type(uint256).max);
+        vm.expectRevert("Staking: zero");
+        staking.stake(0);
+        staking.stake(1_000e18);
+        vm.expectRevert("Staking: bad amount");
+        staking.unstake(2_000e18);                            // more than staked
+        vm.expectRevert("Staking: nothing accrued");
+        staking.claimRewards();                              // no time elapsed → nothing to claim
+        vm.stopPrank();
+    }
+
+    function test_vig_recipient_cannot_zero_while_active_but_rotates() public {
+        address payable dev = payable(makeAddr("dev"));
+        address payable vig = payable(makeAddr("vig"));
+        OmertaFees f = new OmertaFees(safe, dev, vig, 6000, 0.01 ether, 0.10 ether);
+        vm.startPrank(safe);
+        vm.expectRevert(OmertaFees.ZeroAddress.selector);
+        f.setVigRecipient(payable(address(0)));              // can't zero a live split's destination
+        address payable vig2 = payable(makeAddr("vig2"));
+        f.setVigRecipient(vig2);                             // rotation is fine
+        vm.stopPrank();
+        assertEq(f.vigRecipient(), vig2);
+    }
+
+    // every contract is Safe-owned FROM DEPLOY (no hot-deployer window) and the minter is wired
+    function test_ownership_is_safe_from_deploy() public view {
+        assertEq(vc.owner(), safe);
+        assertEq(gear.owner(), safe);
+        assertEq(staking.owner(), safe);
+        assertEq(gear.minter(), address(vc));
+    }
 }
 
 /// Recipient that rejects all ETH — exercises the ForwardFailed / DoS path.
