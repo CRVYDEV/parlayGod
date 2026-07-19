@@ -8,7 +8,7 @@
 // extraction — both legal-gated. Holdings live at the ACCOUNT level (survive death → the heir keeps
 // the book, the retirement fantasy); the family book lives on the gang and dies with the family.
 import { GameError } from './game.js';
-import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf } from './rules.js';
+import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf, dynastyTierOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // name your DYNASTY (the account-level book survives death → a generational fund). A $OMR vanity sink
@@ -82,7 +82,20 @@ export async function invest(ch, ticker, omr, client, h) {
     throw new GameError('safe', "You can't move big money into legit fronts while you're to ground.");
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
-  await spendOmr(client, h, amt, 'rwa:invest'); // gates on h.acct.omr, debits in-memory, ledgers the burn
+  // THE DYNASTY FUND split: DIVIDEND_BPS of every invest funds the dividend pool (a §10.4 TRANSFER —
+  // new capital pays holders' yield, like a real fund), the rest BURNS (deflationary). Manual debit
+  // (not spendOmr) so the account pays the full amt split across the burn + transfer reasons. §10.4:
+  // account −amt, pool +toPool; rwa:invest burns toBurn, dividend:fund is a transfer → drift 0.
+  const toPool = Math.floor(amt * PORTFOLIO.DIVIDEND_BPS / 10000);
+  const toBurn = amt - toPool;
+  if (Number(h.acct.omr) < amt) throw new GameError('omr', `That costs ${amt} $OMR — earn it in the game first.`);
+  h.acct.omr = Number(h.acct.omr) - amt;
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toBurn, reason: 'rwa:invest' });
+  if (toPool > 0) {
+    await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toPool, reason: 'dividend:fund' });
+    await client.query('UPDATE rwa_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
+  }
+  await client.query('UPDATE account_persistent SET rwa_invested = rwa_invested + $2 WHERE account_id=$1', [ch.account_id, amt]); // monotonic tier metric
   ch.rwa_used = cumulative; ch.rwa_at = new Date(); // record the windowed spend (persistCharacter commits it)
   if (scrutiny) ch.heat = Math.min(100, Number(ch.heat || 0) + PORTFOLIO.SCRUTINY_HEAT); // F7: clamp like business raids
   const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [ch.account_id, ticker])).rows[0];
@@ -96,7 +109,33 @@ export async function invest(ch, ticker, omr, client, h) {
   h.owned.portfolio = pf;
   await h.track(client, ch.account_id, 'rwa_invest', { ticker, omr: amt, shares: bought });
   return { ok: true, ticker, name: t.name, price, bought, shares,
-    bookValue: round2(shares * price), costBasis: cost, scrutiny };
+    bookValue: round2(shares * price), costBasis: cost, scrutiny, dividendFunded: toPool };
+}
+
+// CLAIM the Dynasty dividend — a ~daily $OMR yield on your book value, POOL-BOUNDED (the stake-pool
+// rule: never mints, so the fund pays only what investment funded it). A §10.4 TRANSFER (pool→account,
+// reason dividend:omr, both inside omrBuckets). Runs under withCharacter (h.acct is the account); locks
+// the pool singleton (canonical: account is already held, singletons last) so concurrent claims
+// serialize on it. The book value is the deterministic display price × shares (no sell, no cash-out —
+// R1 stays status; only the yield is $OMR).
+export async function claimDividend(ch, client, h) {
+  const rows = (await client.query('SELECT ticker, shares FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id])).rows;
+  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0));
+  if (!(book > 0)) throw new GameError('nothing', 'Buy into the fund before it pays you.');
+  const now = Date.now();
+  if (h.acct.dividend_at && new Date(h.acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
+    throw new GameError('cooldown', 'The dividend pays about once a day — come back later.');
+  const gross = round6(book * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
+  const pp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
+  if (!(pay > 0)) throw new GameError('dry', 'The dividend pool is dry right now — it fills as the family invests. Try again later.'); // don't burn the cooldown on a $0 day
+  h.acct.omr = Number(h.acct.omr) + pay; // persistAccount commits omr
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: pay, reason: 'dividend:omr' }); // transfer (pool→acct), not a mint
+  await client.query('UPDATE rwa_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
+  await client.query('UPDATE account_persistent SET dividend_at=$2 WHERE account_id=$1', [ch.account_id, new Date(now)]);
+  h.acct.dividend_at = new Date(now);
+  await h.track(client, ch.account_id, 'rwa_dividend', { omr: pay, book });
+  return { ok: true, paid: pay, gross, bookValue: book, dividendPaid: pay };
 }
 
 // FAMILY invest: the boss/underboss commissions the family's legit holdings from the $OMR RESERVE
@@ -153,10 +192,26 @@ export async function portfolioBoard(ch, client, h) {
       holdings: fh, bookValue: round2(fh.reduce((a, r) => a + r.bookValue, 0)) };
   }
   // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
-  // generations the bloodline has weathered (deaths + 1) + the cost to name it.
-  const acct = (await client.query('SELECT dynasty_name, deaths FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
-  const dynasty = { name: acct.dynasty_name || null, generation: Number(acct.deaths || 0) + 1, nameCost: PORTFOLIO.DYNASTY_NAME_OMR };
-  return { market, portfolio, family, dynasty };
+  // generations the bloodline has weathered (deaths + 1) + the cost to name it + the status TIER.
+  const acct = (await client.query('SELECT dynasty_name, deaths, rwa_invested, dividend_at FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
+  const invested = Math.floor(Number(acct.rwa_invested || 0));
+  const tier = dynastyTierOf(invested);
+  const nextTier = PORTFOLIO.DYNASTY_TIERS.find((t) => invested < t.min) || null;
+  const dynasty = { name: acct.dynasty_name || null, generation: Number(acct.deaths || 0) + 1,
+    nameCost: PORTFOLIO.DYNASTY_NAME_OMR, invested,
+    tier: tier ? { tier: tier.tier, name: tier.name } : null,
+    nextTier: nextTier ? { tier: nextTier.tier, name: nextTier.name, min: nextTier.min } : null };
+  // DIVIDENDS — a ~daily $OMR yield on the book, paid from the sink-fed pool (pool-bounded).
+  const now = Date.now();
+  const poolBal = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
+  const cd = acct.dividend_at ? Math.max(0, Math.ceil((new Date(acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS - now) / 1000)) : 0;
+  const bookValue = portfolio.bookValue;
+  const dividend = {
+    pool: poolBal, rateBps: PORTFOLIO.DIVIDEND_DAILY_BPS,
+    estimate: round2(Math.min(bookValue * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolBal)),
+    claimable: bookValue > 0 && cd === 0, cooldownSeconds: cd,
+  };
+  return { market, portfolio, family, dynasty, dividend };
 }
 
 // The biggest legit books (a STATUS leaderboard — the hitmen-board precedent). Book value is the

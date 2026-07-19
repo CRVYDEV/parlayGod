@@ -51,9 +51,13 @@ r = await call('POST', '/v1/portfolio/invest', { token: boss.token, body: { tick
 assert.equal(r.code, 200, 'invested in AAPL');
 assert.equal(r.body.bought, Math.round((3000 / priceA) * 1e6) / 1e6, 'shares = omr / price (fractional)');
 assert.equal(r.body.shares, r.body.bought, 'first buy, so total == bought');
-// the $OMR left the account (a burn) and the ledger row is exact
-assert.equal((await meOf(boss.token)).omr, 7000, 'the burn debited the account bucket by exactly the spend');
-assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:invest'")).rows[0].s), -3000, 'the burn is ledgered rwa:invest');
+// the full $OMR left the account; of it, DIVIDEND_BPS funded the dividend pool (a transfer) and the
+// rest burned (rwa:invest) — the Dynasty Fund split
+assert.equal((await meOf(boss.token)).omr, 7000, 'the account paid the full spend (3000)');
+const divCut = Math.floor(3000 * PORTFOLIO.DIVIDEND_BPS / 10000);
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:invest'")).rows[0].s), -(3000 - divCut), 'the burn portion is ledgered rwa:invest');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='dividend:fund'")).rows[0].s), -divCut, 'the dividend slice is a ledgered dividend:fund transfer');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), divCut, 'and it landed in the dividend pool');
 // the character view carries the book
 let me = await meOf(boss.token);
 assert.equal(me.portfolio.holdings.length, 1, 'the view shows the holding');
@@ -160,7 +164,41 @@ const spcx = Number((await pool.query(`SELECT COALESCE(SUM(shares),0) s FROM por
 assert(spcx > Number(before), 'the season\'s top grinder was granted SPCX at rollover (a skill-ranked status prize — no $OMR spent)');
 assert.equal(spcx, Math.round((PORTFOLIO.SEASON_PRIZES[0] / tickerPriceOf('SPCX')) * 1e6) / 1e6, 'rank-1 prize = SEASON_PRIZES[0] $OMR-worth of SPCX');
 
-// ── §10.4: rwa:invest is a recognized burn; the ONLY drift is the unledgered SQL grants ──
+// ── THE DYNASTY FUND (dividends + tiers) ──
+// the status TIER: boss invested 4000 personal → Blue Blood (min 2500), next is Old Money (10000)
+let board = (await call('GET', '/v1/portfolio', { token: boss.token })).body;
+assert.equal(board.dynasty.invested, 6000, 'cumulative invested tracked (3000 + 1000 + 2000)');
+assert.equal(board.dynasty.tier.name, 'Blue Blood', 'crossed the tier-3 floor');
+assert.equal(board.dynasty.nextTier.name, 'Old Money', 'the next rung is named');
+// the dividend: the pool is fed by every personal invest; a claim pays min(book × rate, pool)
+assert(board.dividend.pool > 0, 'the dividend pool was fed by the invests');
+assert.equal(board.dividend.claimable, true, 'a holder can claim (no cooldown yet)');
+const omrPreDiv = (await meOf(boss.token)).omr;
+const poolPre = Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool);
+let dr = await call('POST', '/v1/portfolio/dividend', { token: boss.token });
+assert.equal(dr.code, 200, 'claimed the dividend');
+assert(dr.body.paid > 0, 'the dividend paid $OMR');
+assert.equal((await meOf(boss.token)).omr, omrPreDiv + dr.body.paid, 'the yield landed in the account');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((poolPre - dr.body.paid) * 1e6) / 1e6, 'paid from the pool (a transfer, not a mint)');
+// the ~daily cooldown blocks an immediate re-claim
+assert.equal((await call('POST', '/v1/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the dividend pays about once a day');
+// the DRY-pool refusal — drained the §10.4-clean way (a whale claims the pool empty via a ledgered
+// transfer; shares aren't §10.4 currency, so the big book is a status grant with no ledger row)
+const drainer = await mk('Vault Vic');
+const daid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${drainer.id}'`)).rows[0].a;
+await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${daid}','GLD',100000,0)`);
+assert(Number((await call('POST', '/v1/portfolio/dividend', { token: drainer.token })).body.paid) > 0, 'the whale drew a dividend');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the whale drained the pool (a ledgered transfer, not a mint)');
+// a fresh holder now finds it dry — a clean refusal, not a wasted claim (the cooldown isn't burned)
+const latecomer = await mk('Late Larry');
+await acctOmr(latecomer.id, 200); grantDrift += 200;
+await call('POST', '/v1/portfolio/invest', { token: latecomer.token, body: { ticker: 'GLD', omr: 100 } }); // re-funds the pool a little
+await pool.query(`UPDATE account_persistent SET dividend_at=NULL WHERE account_id='${daid}'`); // reset the whale's cooldown to drain it again
+await call('POST', '/v1/portfolio/dividend', { token: drainer.token });
+assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.token })).body.error, 'dry', 'a dry pool is a clean refusal');
+
+// ── §10.4: rwa:invest is a recognized burn; dividend:* are TRANSFERS (pool ↔ account, both inside
+// omrBuckets), so the ONLY drift is the unledgered SQL grants ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `rwa: rides the omr vocabulary (${JSON.stringify(vocab.unknown || [])})`);
