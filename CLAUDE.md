@@ -2120,9 +2120,17 @@ OmertaFees pattern), immutable `polBps` + `MAX_DISCOUNT_BPS`/`MAX_VEST` backstop
 backend `BONDS.*`, Safe-owned + pausable, and `sweep` that can pull only the UNCOMMITTED tranche (never OMR
 backing outstanding bonds). It **compiles clean** (solc 0.8.26 + OZ 5.1, 0 warnings, via
 `tools/compile-contracts.js` — the no-Foundry path); the README carries the viem quote-signing parity
-snippet. Still deferred (mainnet milestone, legal + audit gated): **`forge test` must run** (Foundry
-egress-blocked here — the established suite residual), the `Bonded` watcher wiring (→ `recordBond`), the
-POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
+snippet. A focused Solidity red-team verified the five central invariants SOUND (no-mint tranche cap,
+CEI/reentrancy on the ETH split, vesting clamp, EIP-712 replay, payout math) — **no CRITICAL/HIGH** —
+and fixed two in-commit (mirroring the sister contracts, regression + fuzz tests each): **MED-1** a
+missing future-bound on `deadline` (a leaked-then-rotated signer's `deadline=2100` quotes stayed
+bondable) → `MAX_QUOTE_TTL` 30d + `DeadlineTooFar` (the `VoucherClaim.MAX_VOUCHER_TTL` mirror); **LOW-1**
+no ETH-rescue → an `onlyOwner sweepETH()` to the Safe (the `OmertaFees.sweep` pattern). Added tests: the
+deadline backstop (+ exact-boundary accept), the ETH sweep (+ owner-gate), a reentrant-recipient
+re-entry (guard blocks → forward fails → the bond rolls back), and a **fuzz** of the anti-Ponzi
+invariant (`committedOMR ≤ balanceOf` after any bond). Still deferred (mainnet milestone, legal + audit
+gated): **`forge test` must run** (Foundry egress-blocked here — the established suite residual), the
+`Bonded` watcher wiring (→ `recordBond`), the POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
 primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
 
 ## Sensitive design notes

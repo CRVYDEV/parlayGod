@@ -109,6 +109,28 @@ outstanding bond — the test proves a bond is fully honoured after a sweep). It
 quote-signing parity snippet. `forge test` still needs a Foundry-capable environment (egress-blocked here —
 the established suite residual) before the third-party audit.
 
+### Contract red-team (focused Solidity audit)
+A max-skepticism review of `OmertaBond.sol` verified the five central invariants SOUND — **no
+CRITICAL/HIGH**: the no-mint tranche cap can't be breached (the cap check precedes the `committedOMR`
+bump; `claim` decrements it; `sweep` guards `amount ≤ balance − committedOMR`; the assumption is a
+fixed-supply vanilla ERC-20, documented — a fee-on-transfer/rebasing token would be the only way to
+drift `balance` below `committedOMR`, and OMR is neither); the ETH split forwards under
+`nonReentrant` + full CEI (nonce/committed/bond all written before the external calls) with
+`toPol + toVig == msg.value` exact; vesting is clamped `[0, payout]` and the final claim sums to
+exactly `payout`; EIP-712 typehash/domain/`verifyingContract` block cross-contract + cross-chain
+replay; and the payout math has divisor ≥ 8000 (no div-by-zero, no realistic overflow). Two items
+fixed in-commit (mirroring the sister contracts, regression tests each): **MED-1** — `bond()` bounded
+`deadline` only from below (Expired) but not from the FUTURE, so a leaked-then-rotated signer's
+`deadline=2100` pre-signed quotes stayed bondable at a stale price up to the tranche; now
+`MAX_QUOTE_TTL = 30 days` + `if (q.deadline > block.timestamp + MAX_QUOTE_TTL) revert DeadlineTooFar();`
+(the `VoucherClaim.MAX_VOUCHER_TTL` mirror). **LOW-1** — no ETH-rescue path (force-sent ETH was
+trapped); now an `onlyOwner nonReentrant sweepETH()` routes `address(this).balance` to `owner()` (the
+Safe), the `OmertaFees.sweep` pattern. Added tests: the `DeadlineTooFar` revert (+ the exact-boundary
+accept), the ETH sweep (+ owner-gate), a reentrant-recipient re-entry (the guard blocks it → the
+forward fails → the whole bond rolls back, nothing committed/leaked, nonce freed), and a **fuzz** of
+the anti-Ponzi invariant (`committedOMR ≤ omr.balanceOf(this)` after any bond). LOW-2 (a zero-payout
+bond books a nonce + forwards ETH) is accepted as informational self-harm, server-gated.
+
 ## Deferred (mainnet milestone — legal + audit gated)
 `forge test` execution (the pre-audit gate), the **`Bonded` event watcher** (the `getLogs` cursor pattern,
 `watcher.js` precedent → `recordBond`), the **POL pairing bot** (pairs the POL ETH share with treasury OMR

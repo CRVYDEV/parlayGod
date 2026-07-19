@@ -11,6 +11,14 @@ contract RejectETH2 {
     receive() external payable { revert("no ETH"); }
 }
 
+/// A malicious POL recipient that re-enters the bond on receiving its ETH share — exercises the
+/// nonReentrant guard (the re-entry reverts, is swallowed by the forward `.call`, ForwardFailed bubbles).
+contract ReenterOnPol {
+    OmertaBond public target;
+    function set(OmertaBond b) external { target = b; }
+    receive() external payable { target.claim(1); } // re-entry attempt — must be blocked
+}
+
 contract OmertaBondTest is Test {
     OMR omr;
     OmertaBond bond;
@@ -124,6 +132,23 @@ contract OmertaBondTest is Test {
         bond.bond{value: 1 ether}(q2, _sign(q2, signerPk));
     }
 
+    function test_bond_reverts_deadline_too_far() public {
+        // a leaked-then-rotated signer's far-future quote can't stay bondable (the MAX_QUOTE_TTL backstop)
+        OmertaBond.BondQuote memory q = OmertaBond.BondQuote(
+            bonder, 1 ether, PRICE, 800, 5 days, 1, block.timestamp + 31 days
+        );
+        vm.prank(bonder);
+        vm.expectRevert(OmertaBond.DeadlineTooFar.selector);
+        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        // exactly at the backstop is still fine
+        OmertaBond.BondQuote memory ok = OmertaBond.BondQuote(
+            bonder, 1 ether, PRICE, 800, 5 days, 2, block.timestamp + 30 days
+        );
+        vm.prank(bonder);
+        bond.bond{value: 1 ether}(ok, _sign(ok, signerPk));
+        assertEq(bond.committedOMR(), _payout(1 ether, 800));
+    }
+
     function test_bond_reverts_replay() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
         bytes memory sig = _sign(q, signerPk);
@@ -219,6 +244,57 @@ contract OmertaBondTest is Test {
         vm.expectRevert(OmertaBond.ForwardFailed.selector);
         bond.bond{value: 1 ether}(q, _sign(q, signerPk));
     }
+
+    // ── ETH rescue: any stray ETH goes to the Safe, never trapped ──
+    function test_sweepETH_rescues_stray_eth() public {
+        vm.deal(address(bond), 3 ether);      // ETH lands outside bond() (e.g. a selfdestruct push)
+        uint256 before = safe.balance;
+        vm.prank(safe);
+        bond.sweepETH();
+        assertEq(address(bond).balance, 0, "contract drained");
+        assertEq(safe.balance, before + 3 ether, "rescued to the Safe (owner)");
+    }
+
+    function test_sweepETH_only_owner() public {
+        vm.deal(address(bond), 1 ether);
+        vm.prank(makeAddr("nobody"));
+        vm.expectRevert();
+        bond.sweepETH();
+    }
+
+    // ── the reentrancy guard: a recipient can't re-enter to double-spend the tranche ──
+    function test_reentrant_recipient_is_blocked() public {
+        ReenterOnPol rej = new ReenterOnPol();
+        rej.set(bond);
+        vm.prank(safe);
+        bond.setRecipients(payable(address(rej)), vig);
+        OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        vm.prank(bonder);
+        vm.expectRevert(OmertaBond.ForwardFailed.selector); // the re-entry reverts, swallowed → forward fails
+        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        // the whole tx rolled back: nothing committed, no OMR moved, the nonce is free again
+        assertEq(bond.committedOMR(), 0, "no commitment survived the reverted bond");
+        assertEq(omr.balanceOf(address(rej)), 0, "no OMR leaked");
+        assertFalse(bond.usedNonce(1), "nonce rolled back");
+    }
+
+    // ── fuzz: committedOMR can NEVER exceed the funded balance (the no-mint anti-Ponzi invariant) ──
+    function testFuzz_committed_never_exceeds_balance(uint256 principal, uint256 disc) public {
+        principal = bound(principal, 1, 15 ether);
+        disc = bound(disc, 0, MAX_DISCOUNT_BPS_T);
+        vm.deal(bonder, principal);
+        OmertaBond.BondQuote memory q = _quote(bonder, principal, disc, 5 days, 1);
+        vm.prank(bonder);
+        try bond.bond{value: principal}(q, _sign(q, signerPk)) {
+            // a booked bond must be fully backed by the pre-funded balance
+            assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "committed <= funded balance");
+        } catch {
+            // over-tranche (or zero-value) rejected — nothing committed, the invariant trivially holds
+            assertEq(bond.committedOMR(), 0);
+        }
+    }
+
+    uint256 constant MAX_DISCOUNT_BPS_T = 2000;
 
     function test_only_owner_admin() public {
         vm.prank(makeAddr("nobody"));
