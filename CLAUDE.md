@@ -1691,9 +1691,24 @@ faster (same accrual touchpoint), so it both builds slower AND cools faster. Sur
 (`envelope.bleedMult`, `foundation[].bleedMult`), `GET /v1/gangs/:id` (`foundationBleedMult`), and the
 console cards. Tests: `test/law.js` (envelope + foundation accrue-bleed via direct `accrue()`),
 `test/social.js` (the freeload gate — joined-before is softened, joined-after is not). Suite 23/23 +
-sim drift-0. Deferred (step three): a per-precinct envelope; naming the Foundation (the
-Commission-standing angle is intentionally NOT built — it would reintroduce purchasable Commission
-standing, which the econ-pass fix closed).
+sim drift-0. A focused four-lens red-team over the step-two deltas returned CLEAN — **no
+CRITICAL/HIGH/MED**: the freeload gate is airtight (leave/rejoin only LOSES the soften, the heir starts
+fresh with no membership, acquittal→re-indict is per-current-case, `joined_at` is `NOT NULL` so the
+`&&` guards fail open only for a legit member, the offline `sweepLaw` path passes `ch.indicted_at`); the
+×4-max bleed can't drive exposure negative (the `max(0,…)` floor) or un-file the latched case; §10.4
+moves zero value (pure rate/read modifiers, no ledger rows); the `familyFoundationTier` join is an
+unlocked MVCC read (no new lock edge); and the new `NOT NULL DEFAULT now()` column doesn't regress the
+two explicit-column `gang_members` INSERTs. Three sign-off items flagged (NOT patched, ground rule #1):
+**(L1)** the foundation bleed accelerates the meter even while indicted, so a maxed-foundation offline
+whale's exposure bleeds toward `INDICT_AT` (lower `bustProbOf`) AND stacks the step-one `bustMult` on
+the same trial — bounded by the min-clamp, a founder dial; **(L2)** the gate keys on join-time vs
+indict-time only, so a family can upgrade the foundation AFTER a still-member is indicted and soften
+that trial (consistent with "a made man in the family when the case was filed" — confirm intent); **(L3
+deploy note)** there's no migration script (fresh-DB alpha + pg-mem unaffected), but an `ALTER TABLE ADD
+joined_at NOT NULL DEFAULT now()` on a LIVE DB backfills existing members with the migration timestamp,
+so anyone indicted before the migration transiently loses their soften for that in-flight case.
+Deferred (step three): a per-precinct envelope; naming the Foundation (the Commission-standing angle is
+intentionally NOT built — it would reintroduce purchasable Commission standing, which the econ-pass fix closed).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
