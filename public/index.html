@@ -252,6 +252,7 @@
     if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
     if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
     if (body.wireSeconds) bits.push('subscribed to the Street Wire — the intelligence is flowing');
+    if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
@@ -907,6 +908,7 @@
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['GET', '/v1/fees/status'],
       ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
+      ['GET', '/v1/pass'], ['POST', '/v1/pass/claim', {}],
     ],
   };
   function renderDeck() {
@@ -1215,7 +1217,27 @@
         <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>
           <div class="d">${p.blurb}</div></div>`).join('')}</div>
       <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
-      <div class="d" style="font-size:10px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>`;
+      <div class="d" style="font-size:10px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>
+      <div id="pass-slot"></div>`;
+    // THE LEDGER — the Season Pass reward track (shown when you hold an active pass)
+    const P = (await api('GET', '/v1/pass')).body;
+    if (P && P.active) {
+      $('#pass-slot').innerHTML = `
+        <h2 style="margin-top:14px">The Ledger <span class="chip cold">${mins(P.passSeconds)} of pass left</span></h2>
+        <div class="card">
+          <span class="t">Tier ${P.tier} / ${P.of}</span>
+          <div class="bar" style="height:8px;margin:6px 0"><i style="width:${Math.round(100 * P.tier / P.of)}%;background:var(--neon)"></i></div>
+          <div class="d">${P.complete ? 'the whole Ledger is claimed this season — buy again next season for a fresh track.'
+            : P.claimable ? `next up: <b>${P.track[P.tier].reward}</b>`
+            : `next claim in ${mins(P.cooldownSeconds)}`}</div>
+          ${P.claimable ? '<button class="act" id="pass-claim" style="border-color:var(--neon)">claim the next mark</button>' : ''}
+          <div class="d" style="font-size:10px;margin-top:4px">stipend pool: ${fmt(P.stipendPoolOmr)} $OMR (funds the $OMR tiers)</div>
+        </div>
+        <div class="grid" style="margin-top:6px">${P.track.map((t) => `
+          <div class="card" style="${t.next ? 'border-color:var(--neon)' : t.claimed ? 'opacity:.55' : ''}">
+            <span class="t">${t.claimed ? '✓ ' : ''}Tier ${t.tier}</span><div class="d">${t.reward}</div></div>`).join('')}</div>`;
+      const cb = $('#pass-claim'); if (cb) cb.onclick = () => act('POST', '/v1/pass/claim', {}).then(() => renderStore());
+    }
   }
 
   // ── THE GARAGE: your iron + the armory ──

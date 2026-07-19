@@ -776,3 +776,25 @@ not a lever.
 - The Store's real payment path is the on-chain paywall (dormant, mainnet-gated); today's live path is the
   mod comp/simulate route. Deploy note: nothing extracts real value until the `OmertaFees.payForPackage`
   contract + the `StorePaid` watcher ship — both gated on legal + the third-party audit.
+
+## THE LEDGER — Season Pass reward track (proposed levers, sign-off pending)
+
+A daily-claim track unlocked while the ETH Season Pass is active. Anti-pay-to-win + §10.4-safe: rewards
+are status / consumables / a backed $OMR stipend (via the prize-pool rail — never a mint). `PASS` block:
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `TRACK` length | 12 tiers | ~12 daily claims over the 30-day pass — a reason to log in. | KEEP |
+| claim cooldown | ~20h (`passClaimMs()`) | One mark per day; `PASS_CLAIM_MS` is a TEST-ONLY knob — never in production. | KEEP |
+| title tiers | 1/5/9/12 | Pure status (the character title slot; street-scoped like mission titles). | KEEP |
+| revive tiers | 2/6/10 (1/1/2) | Consumable revive tokens (account-level, survive death). | KEEP |
+| energy tiers | 3/7/11 | A full-tank refill (not §10.4 currency). | KEEP |
+| $OMR stipend | tiers 4/8/12 (2/3/5 = 10 total) | Paid through the BACKED prize pool (`payPrizes`), pool-bounded. The pass's own buyback share (0.05 ETH × 40% → the pool) funds ~2× the stipend at typical prices, so the stipend stays below what the pass contributes — net-positive for the earner pool. | KEEP |
+
+**Notes (sign-off):**
+- The stipend is the "spenders fund earners" loop closing on itself: the buyer's ETH funds the pool their
+  own stipend draws from, bounded so it never drains the pool the skilled earners compete for.
+- Pool-bounded: if the prize pool is dry (early alpha, no revenue yet), a stipend tier pays what the pool
+  can cover (possibly 0) and still advances — the track is never blocked. In a live economy the pool has
+  funds. The stipend amounts + tier placement are the dials if the alpha shows the pool straining.
+- The track is account-level (survives death); a fresh pass season (bought after lapse) resets it.

@@ -51,7 +51,13 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- the Season Pass window; `patron` is the permanent ETH-patron status badge. NEITHER is §10.4
   -- currency — the Store grants only entitlements/access/status, so it writes zero `transactions` rows.
   pass_until TIMESTAMPTZ,
-  patron BOOLEAN NOT NULL DEFAULT false
+  patron BOOLEAN NOT NULL DEFAULT false,
+  -- THE LEDGER (Season Pass reward track): a daily-claim track unlocked while the pass is active.
+  -- pass_tier = highest tier claimed THIS season (reset when a fresh pass season starts); pass_at =
+  -- the last claim (the ~daily cooldown). Account-level → the track survives death (the heir keeps
+  -- claiming what the pass paid for). Rewards are status/consumables + a backed prize-pool $OMR stipend.
+  pass_tier INT NOT NULL DEFAULT 0,
+  pass_at TIMESTAMPTZ
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,

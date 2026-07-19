@@ -31,13 +31,14 @@ import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
 import * as Store from './store.js';
+import * as Pass from './pass.js';
 import * as Ops from './ops.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE } from './rules.js';
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -360,6 +361,7 @@ export async function buildServer() {
     wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
       sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000) },
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
+    pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })) },
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -1009,6 +1011,19 @@ export async function buildServer() {
   app.post('/v1/mod/store/grant', { preHandler: modAuth }, async (req) =>
     Store.recordStorePurchase(pool, { nonce: req.body?.nonce, sku: req.body?.sku,
       payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: req.body?.txHash }));
+
+  // THE LEDGER — the Season Pass reward track. The daily-claim track (status/consumables in the
+  // claim txn; the $OMR stipend is paid post-commit through the BACKED prize-pool rail — pool-bounded,
+  // never a mint, so extraction ≤ inflow holds).
+  app.get('/v1/pass', { preHandler: auth }, async (req) => Pass.passBoard(pool, req.user.sub));
+  app.post('/v1/pass/claim', { preHandler: auth }, async (req) => {
+    const res = await G.withCharacter(pool, req.user.sub, (ch, client, h) => Pass.claimPass(ch, client, h));
+    if (res?.stipendOmr > 0) {
+      const p = await Vig.payPrizes(pool, [{ accountId: req.user.sub, omr: res.stipendOmr }]);
+      res.stipendPaid = p.paid; // pool-bounded: pays min(stipend, pool balance), backs it in the reserve
+    }
+    return res;
+  });
 
   // ── Risk-to-Earn Phase 4: BACKED EMISSION (the staking reward pool) ──
   // Gauge: pool balance + effective-APY runway; and an ops/test top-up (the buyback funds it live).

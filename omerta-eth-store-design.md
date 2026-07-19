@@ -113,8 +113,9 @@ side. So: real ETH → revenue + grant; comp → grant only.
 
 1. The on-chain `OmertaFees.payForPackage` + the watcher `storeLogs` wiring (the mainnet milestone).
 2. PLEX-for-packages (pay a SKU's fee from earned $OMR — the `vig.js:payPlex` pattern, per-SKU).
-3. The Season Pass reward *track* (tiered claims) + a per-pass prize-pool $OMR stipend (needs the
-   backed `payPrizes` rail per-buyer — a balance call).
+3. ~~The Season Pass reward *track* (tiered claims) + a per-pass prize-pool $OMR stipend.~~ **BUILT** —
+   `src/pass.js` (THE LEDGER): a 12-tier daily-claim track; status/consumable rewards + a backed $OMR
+   stipend through `Vig.payPrizes` (pool-bounded, funded by the pass's own buyback share). See CLAUDE.md.
 4. Named landmarks / Founder's charter numbers (whale status flexes — more `store_grants` SKUs).
 5. R2: the rwa_revenue → real-RWA-buy bot + the reserve that backs Dynasty shares (legal-gated).
 
