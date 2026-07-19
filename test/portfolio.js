@@ -71,7 +71,7 @@ assert.equal(r.body.portfolio.holdings.length, 2, 'two lines on the book');
 assert.equal(r.body.portfolio.costBasis, 6000, 'total cost basis across lines');
 
 // ── the gates ──
-assert.equal((await call('POST', '/v1/portfolio/invest', { token: boss.token, body: { ticker: 'NVDA', omr: 100 } })).body.error, 'ticker', 'no such stock');
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: boss.token, body: { ticker: 'ZZZZ', omr: 100 } })).body.error, 'ticker', 'no such stock');
 assert.equal((await call('POST', '/v1/portfolio/invest', { token: boss.token, body: { ticker: 'AAPL', omr: 0 } })).body.error, 'amount', 'no dust buys');
 assert.equal((await call('POST', '/v1/portfolio/invest', { token: nobody.token, body: { ticker: 'AAPL', omr: 100 } })).body.error, 'omr', 'no $OMR, no shares');
 
@@ -112,6 +112,19 @@ assert.equal(r.code, 200, 'the board is public');
 assert(r.body.board.length >= 1, 'the investor is on it');
 assert.equal(r.body.board[0].name, heir.name, 'the heir\'s book leads (it carried over)');
 assert(r.body.board[0].bookValue > 0, 'valued at the daily price');
+
+// ── THE DYNASTY: the account-level book is generational — name it (a $OMR vanity sink; the name heads the board) ──
+await acctOmr(heir.id, 10); grantDrift += 10;
+let dyn = (await call('GET', '/v1/portfolio', { token: boss.token })).body.dynasty;
+assert.equal(dyn.name, null, 'the dynasty starts unnamed');
+assert(dyn.generation >= 2, 'the bloodline has weathered a death — generation ≥ 2');
+const omrPre = (await meOf(boss.token)).omr;
+r = await call('POST', '/v1/dynasty/name', { token: boss.token, body: { name: 'The Medici' } });
+assert.equal(r.code, 200, 'the dynasty is named'); assert.equal(r.body.spent, PORTFOLIO.DYNASTY_NAME_OMR, 'a $OMR vanity sink');
+assert.equal((await meOf(boss.token)).omr, omrPre - PORTFOLIO.DYNASTY_NAME_OMR, 'the naming fee burned from the account');
+assert.equal((await call('GET', '/v1/portfolio', { token: boss.token })).body.dynasty.name, 'The Medici', 'the book carries the dynasty name');
+assert.equal((await call('GET', '/v1/leaderboard/portfolio', { token: soldier.token })).body.board[0].name, 'The Medici', 'the dynasty name heads the legit-legend board');
+assert.equal((await call('POST', '/v1/dynasty/name', { token: boss.token, body: { name: 'x' } })).body.error, 'name', 'a too-short name is rejected');
 
 // ── STEP TWO (1) — the RICO GRADUATION + audit F1 (STRUCTURING is caught) + F4 (jail gate) ──
 const whale = await mk('Made Man Moe');

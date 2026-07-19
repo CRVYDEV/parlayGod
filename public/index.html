@@ -1347,8 +1347,11 @@
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:10px">(clean $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
-      <div class="card"><span class="t">Your Book — $${fmt(pf.portfolio?.bookValue || 0)}</span>
-        <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)</div></div>
+      <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
+        <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
+        <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">
+          <button class="act" id="dyn-go">${pf.dynasty?.name ? 'rename' : 'name it'} (${pf.dynasty?.nameCost ?? 5} $OMR)</button>
+          <span class="d" style="font-size:10px;color:var(--dim)">the name outlives every character & heads the legit board</span></div></div>
 
       <h2 style="margin-top:12px">The Board <span class="d" style="font-size:10px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
@@ -1373,6 +1376,8 @@
       <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
+    $('#dyn-go').onclick = () =>
+      act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
     t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>
       act('POST', '/v1/portfolio/invest', { ticker: b.dataset.rwabuy, omr: Number(t.querySelector(`[data-rwaamt="${b.dataset.rwabuy}"]`).value) }).then(() => renderPortfolio()));
     const fb = $('#rwa-fam-buy');

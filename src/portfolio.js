@@ -11,6 +11,19 @@ import { GameError } from './game.js';
 import { PORTFOLIO, tickerOf, tickerPriceOf, dayOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
+// name your DYNASTY (the account-level book survives death → a generational fund). A $OMR vanity sink
+// ledgered under the existing rwa:% burn term (zero invariant changes). 3–24 chars, printable.
+export async function nameDynasty(ch, name, client, h) {
+  const n = String(name || '').trim();
+  if (n.length < 3 || n.length > 24) throw new GameError('name', 'A dynasty name runs 3–24 characters.');
+  if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
+  await spendOmr(client, h, PORTFOLIO.DYNASTY_NAME_OMR, 'rwa:dynasty'); // gates on h.acct.omr, debits, ledgers the burn
+  await client.query('UPDATE account_persistent SET dynasty_name=$2 WHERE account_id=$1', [ch.account_id, n]);
+  if (h.acct) h.acct.dynasty_name = n;
+  await h.track(client, ch.account_id, 'dynasty_name', {});
+  return { ok: true, dynasty: n, spent: PORTFOLIO.DYNASTY_NAME_OMR };
+}
+
 const round2 = (n) => Math.round(n * 100) / 100;
 const round6 = (n) => Math.round(n * 1e6) / 1e6; // fractional shares to 6 places
 
@@ -139,7 +152,11 @@ export async function portfolioBoard(ch, client, h) {
       reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
       holdings: fh, bookValue: round2(fh.reduce((a, r) => a + r.bookValue, 0)) };
   }
-  return { market, portfolio, family };
+  // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
+  // generations the bloodline has weathered (deaths + 1) + the cost to name it.
+  const acct = (await client.query('SELECT dynasty_name, deaths FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0] || {};
+  const dynasty = { name: acct.dynasty_name || null, generation: Number(acct.deaths || 0) + 1, nameCost: PORTFOLIO.DYNASTY_NAME_OMR };
+  return { market, portfolio, family, dynasty };
 }
 
 // The biggest legit books (a STATUS leaderboard — the hitmen-board precedent). Book value is the
@@ -149,18 +166,21 @@ export async function portfolioLeaderboard(pool) {
   const day = dayOf();
   const priceMap = Object.fromEntries(PORTFOLIO.TICKERS.map((t) => [t.id, tickerPriceOf(t.id, day)]));
   const rows = (await pool.query(
-    `SELECT p.account_id, p.ticker, p.shares, c.name
-       FROM portfolios p LEFT JOIN characters c ON c.account_id = p.account_id AND c.alive
+    `SELECT p.account_id, p.ticker, p.shares, c.name, a.dynasty_name
+       FROM portfolios p
+       LEFT JOIN characters c ON c.account_id = p.account_id AND c.alive
+       LEFT JOIN account_persistent a ON a.account_id = p.account_id
       WHERE p.shares > 0`)).rows;
   const byAccount = new Map();
   for (const r of rows) {
-    const e = byAccount.get(r.account_id) || { name: r.name || null, bookValue: 0 };
+    const e = byAccount.get(r.account_id) || { name: r.name || null, dynasty: r.dynasty_name || null, bookValue: 0 };
     if (r.name && !e.name) e.name = r.name;
+    if (r.dynasty_name && !e.dynasty) e.dynasty = r.dynasty_name;
     e.bookValue += Number(r.shares) * (priceMap[r.ticker] || 0);
     byAccount.set(r.account_id, e);
   }
   const board = [...byAccount.values()]
-    .map((e) => ({ name: e.name, bookValue: round2(e.bookValue) }))
+    .map((e) => ({ name: e.dynasty || e.name, steward: e.name, dynasty: e.dynasty || null, bookValue: round2(e.bookValue) }))
     .filter((e) => e.bookValue > 0)
     .sort((a, b) => b.bookValue - a.bookValue)
     .slice(0, 25);
