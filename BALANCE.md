@@ -661,3 +661,18 @@ cell. A miss is punishing (the hole + a long stretch + a beating). No pool bount
 §10.4-clean); the escapee can clear the warrant by lying low or paying the existing `loans/square`
 ($50k → pool). Watch in the alpha: whether 0.35 makes breakouts too common vs the RICO sink's intent
 (the dial is `PEN.BREAK_P` down, or `FUGITIVE_MS` up to make the manhunt bite harder).
+
+### The Pen breakout — red-team result (CLEAN) + one balance flag
+
+A four-lens red-team over THE BREAKOUT returned no CRITICAL/HIGH/MED (§10.4-clean, state-correct,
+concurrency-safe; the win never clears `indicted_at` so a fugitive stays RICO-indictable; `wanted_until`
+only ever extends, never shortens; `squareWanted` handles a bounty-less pen fugitive cleanly). Two findings:
+- **LOW-1 (fixed):** the non-lethal `jump` path did NOT strip omertà for a WANTED/rat target, unlike
+  fire/npcHit/postBounty/startSearch — a fugitive's own family couldn't jump him. Aligned `jump` with the
+  others (`!h.victimAcct.rat && !isWanted(victim)`) so a hunted man forfeits protection on EVERY PvP path;
+  regression added.
+- **LOW-2 (flag, sign-off lever):** no per-attempt breakout cooldown — pacing comes only from energy
+  (30/try) and the hole on a miss. A cash-rich inmate can stack $50k cutkits and retry the 35% roll to make
+  escape near-certain over time. §10.4-clean (each cutkit is a `pen:commissary` sink → the pool,
+  deflationary) and arguably matches the "trade a cell for a manhunt" intent. Dial if the alpha shows escape
+  is too reliable: a `break_at` cooldown, `PEN.BREAK_P` down, or `FUGITIVE_MS` up.

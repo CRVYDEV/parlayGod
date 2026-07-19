@@ -261,7 +261,10 @@ export async function jump(ch, victim, client, h) {
   if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
-  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  // omertà holds inside the family — VOID for a rat OR a WANTED man (a defaulter/escapee under pursuit),
+  // matching fire/npcHit/postBounty/startSearch so a fugitive forfeits protection on EVERY PvP path (the
+  // non-lethal jump was the one gap; a hunted man's own family can lay hands on him too).
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà.");
   ch.energy = Number(ch.energy) - M3.JUMP_ENERGY;
   ch.ammo = Number(ch.ammo) - M3.JUMP_AMMO;
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -M3.JUMP_AMMO, reason: 'jump' });

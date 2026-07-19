@@ -790,6 +790,18 @@ await pool.query(`UPDATE gang_members SET joined_at = now() - interval '2 hours'
 await seedCh(don.id, "indicted_at = NULL, heat_exposure = 0");
 // (the FOUNDATION passive heat-bleed — accrue ctx.foundationTier — is covered by the direct accrue check in test/law.js)
 
+// ── AUDIT (Pen breakout LOW-1): omertà is VOID on the JUMP path too for a WANTED man — a fugitive's
+// own family can lay hands on him (parity with fire/npcHit/postBounty; the non-lethal gap, now closed) ──
+const jboss = await mk('Jump Boss');
+const jmember = await mk('Jump Member');
+await seedCh(jboss.id, "respect=5000, cash=100000, muscle=800, energy=200, ammo=500, health=100, loc='downtown', jail_until=NULL, safe_until=NULL");
+await seedCh(jmember.id, "respect=300, health=100, loc='downtown', jail_until=NULL, hosp_until=NULL");
+const jgid = (await call('POST', '/v1/gangs', { token: jboss.token, body: { name: 'Jumpers', tag: 'JMP' } })).body.gangId;
+await call('POST', `/v1/gangs/${jgid}/join`, { token: jmember.token });
+assert.equal((await call('POST', `/v1/streets/${jmember.id}/jump`, { token: jboss.token })).body.error, 'family', 'a loyal family member has omertà on the jump path');
+await seedCh(jmember.id, "wanted_until = now() + interval '1 day'");
+assert.equal((await call('POST', `/v1/streets/${jmember.id}/jump`, { token: jboss.token })).code, 200, 'a WANTED family member forfeits omertà on the jump path too (audit LOW-1)');
+
 
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
 process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)
