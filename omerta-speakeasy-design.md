@@ -235,6 +235,21 @@ vocabulary. Renown decor: pure status, zero §10.4. New column `speakeasies.stan
 cooldown, a win forces a taxed sale at the assessed value + transfers ownership + resets the guest list) and
 renown-earned decor (the renown gate + the earned-style apply).
 
+### Step-four red-team (independent)
+An independent audit of the standover returned CLEAN — **no CRITICAL/HIGH**: the §10.4 (the fee SINK + the
+`speakeasy:buyout` win transfer, no escrow bucket), lock order (characters→leaf→singleton, and the one-per-man
+gate means a challenger holds no other club-row lock → no club-club deadlock), persist discipline (all char
+mutations in-memory; `resetClubToNewOwner` never touches the cooldown), roll integrity (clamp + the prod-inert
+env override), and the renown-decor gate (server-derived, proto-safe) all verified sound. Two LOW fixes landed
+in-commit (regression each): **F1** — the standover now gates a HOSPITALIZED owner (`even we have rules` —
+shakedown parity; closes a hospitalize-then-strip combo); **F3** — a WON standover now resolves the owner's
+pending raid BEFORE handover (the buyout precedent), so a friendly standover can't launder a hot club's raid
+fine (the outgoing owner eats it; the challenger inherits the shuttered club). **F2 (LOW, NOT patched, founder
+sign-off, ground rule #1):** `assessedValueOf` is BUILD cost (open + tiers), so a high-income/high-prestige club
+is seizable below its going-concern value — the "hostile discount". Bounded by the ≤75% stat-gated roll, the
+one-per-man cap, the 24h cooldown, and the challenger carrying the full price; a goodwill/prestige premium on
+the assessed value is the lever if whale-club predation is seen in the alpha (recorded in BALANCE.md).
+
 ## Deferred (step five)
 The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — cosmetics minted to the player's
 ERC-1155, tradeable P2P with a creator royalty; mainnet-gated on legal + the third-party audit, the M6

@@ -266,6 +266,10 @@ assert.equal((await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.
 await grantCash(bruno.id, 2000000);
 // a man can't stand over his own house / a non-existent club — and the owner isn't at self (withTwoCharacters)
 assert.equal((await call('POST', '/v1/speakeasy/docks/standover', { token: bruno.token })).body.error, 'no_club', 'no club in that district to lean on');
+// audit F1: an owner under the Doc's care is off-limits (shakedown parity — "even we have rules")
+await seed(rival.id, `hosp_until = now() + interval '30 minutes'`);
+assert.equal((await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token })).body.error, 'hosp', 'no standover on a hospitalized owner');
+await seed(rival.id, `hosp_until = NULL`);
 // LOSS (forced roll): the fee BURNS, the owner keeps the club
 process.env.SPEAKEASY_STANDOVER_P = '0';
 const brunoPreLoss = (await meOf(bruno.token)).cash;
@@ -277,18 +281,25 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE 
 // the club goes on cooldown after any attempt
 assert.equal((await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token })).body.error, 'cooldown', 'a leaned-on club goes on cooldown');
 await pool.query(`UPDATE speakeasies SET standover_cd_until=NULL WHERE district_id='neon'`);
-// WIN (forced roll): a forced sale — the owner is PAID the assessed value (taxed), bruno takes the club
+// WIN (forced roll): a forced sale — the owner is PAID the assessed value (taxed), bruno takes the club.
+// audit F3: make the club HOT + force the raid — a WON standover must resolve the owner's pending raid
+// BEFORE handover (the buyout precedent), so a friendly standover can't launder a hot club's raid fine.
+await pool.query(`UPDATE speakeasies SET notoriety=100, notoriety_at=now()-interval '1 hour', income_at=now()-interval '3 hours' WHERE district_id='neon'`);
+const raidFine = Math.floor((SPEAKEASY.OPEN_COST + speakeasyTierOf(1).cost) * SPEAKEASY.RAID_FINE_RATE); // (750k+600k)×15% = 202,500
 process.env.SPEAKEASY_STANDOVER_P = '1';
+process.env.SPEAKEASY_RAID_P = '1';
 const brunoPreWin = (await meOf(bruno.token)).cash, rivalPreWin = (await meOf(rival.token)).cash;
 const poolPreStandover = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 const netAssessed = assessed - Math.ceil(assessed * 0.01) * 2;
 const win = await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token });
-delete process.env.SPEAKEASY_STANDOVER_P;
+delete process.env.SPEAKEASY_STANDOVER_P; delete process.env.SPEAKEASY_RAID_P;
 assert.equal(win.body.won, true, 'the standover landed');
 assert.equal(win.body.paid, assessed, 'bruno paid the assessed build value');
 assert.equal((await meOf(bruno.token)).cash, brunoPreWin - S_FEE - assessed, 'bruno paid the fee + the assessed price');
-assert.equal((await meOf(rival.token)).cash, rivalPreWin + netAssessed, 'the forced-out owner was PAID the assessed value (98%) — a forced SALE, not theft');
-assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolPreStandover + Math.ceil(assessed * 0.01), 'the 1% street tax fed the buyback');
+assert.equal((await meOf(rival.token)).cash, rivalPreWin + netAssessed - raidFine, 'the forced-out owner was PAID (98%) but ATE the pending raid fine first (F3: no laundering a hot club via a standover)');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolPreStandover + Math.ceil(assessed * 0.01), 'the 1% sale tax fed the buyback (the raid fine burns, not to pool)');
+const shutRow2 = (await pool.query(`SELECT shut_until FROM speakeasies WHERE district_id='neon'`)).rows[0];
+assert(shutRow2.shut_until && new Date(shutRow2.shut_until) > new Date(), 'the raided club transferred to bruno SHUTTERED (he leaned on a hot club)');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon' AND owner_character='${bruno.id}'`)).rows[0].n), 1, 'bruno now runs the Neon club');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list reset for the new proprietor');
 
