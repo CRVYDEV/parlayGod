@@ -579,7 +579,7 @@
         <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}
 
       <h2 style="margin-top:12px">The Foundation ${g.foundation ? `<span class="chip good">${g.foundation}</span>` : '<span class="chip">none</span>'}</h2>
-      <div class="d" style="color:var(--dim);font-size:11px">the family charity — public philanthropy that launders the family's reputation: every member's RICO conviction odds ×${g.foundationBustMult ?? 1}${g.foundationTier ? ` (tier ${g.foundationTier})` : ''}. Endowed from the $OMR reserve.</div>
+      <div class="d" style="color:var(--dim);font-size:11px">the family charity — public philanthropy that launders the family's reputation: every member's RICO conviction odds ×${g.foundationBustMult ?? 1} AND their investigation meter cools ${g.foundationBleedMult ?? 1}× faster (keeps files thin)${g.foundationTier ? ` (tier ${g.foundationTier})` : ''}. Endowed from the $OMR reserve.</div>
       ${g.nextFoundation ? `<div class="card" style="margin-top:4px"><span class="t">Next: ${g.nextFoundation.name} — ${g.nextFoundation.omr} $OMR</span>
         <div class="d">${g.nextFoundation.blurb || ''} · softens odds ×${g.nextFoundation.bustMult}</div>
         ${boss ? `<button class="act" data-do="POST /v1/gangs/foundation">endow ${g.nextFoundation.name} (${g.nextFoundation.omr} $OMR from reserve)</button>` : '<span class="d" style="color:var(--dim)">the boss/underboss endows the foundation</span>'}</div>`
@@ -1079,7 +1079,7 @@
           <div class="d">${L.retainer.active ? `on retainer — ${mins(L.retainer.seconds)} left (softer busts, smaller forfeits)` : `$${fmt(L.retainer.cost)} keeps counsel on call`}</div>
           ${L.retainer.active ? '' : '<button class="act" data-do="POST /v1/law/retainer">retain</button>'}</div>
         <div class="card"><span class="t">The Envelope</span>
-          <div class="d">${L.envelope.active ? `current — ${mins(L.envelope.seconds)} left. The cops bury your file: the investigation meter builds at ${Math.round(L.envelope.gainMult * 100)}% rate.` : `slip the precinct ${L.envelope.omr} $OMR — while it's current the case builds slower (${Math.round(L.envelope.gainMult * 100)}% rate). Standing protection, not a one-shot.`}</div>
+          <div class="d">${L.envelope.active ? `current — ${mins(L.envelope.seconds)} left. The cops bury your file: the case builds at ${Math.round(L.envelope.gainMult * 100)}% rate AND cools ${L.envelope.bleedMult}× faster.` : `slip the precinct ${L.envelope.omr} $OMR — while it's current the case builds slower (${Math.round(L.envelope.gainMult * 100)}%) and cools ${L.envelope.bleedMult}× faster. Standing protection, not a one-shot.`}</div>
           <button class="act" data-do="POST /v1/law/envelope">${L.envelope.active ? 'top up the envelope' : `pay ${L.envelope.omr} $OMR`}</button></div>
         <div class="card"><span class="t">Lay Low / Clean Papers</span>
           <div class="d">heat feeds the case — cool it in the Kitchen tab</div></div>

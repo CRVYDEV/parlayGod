@@ -85,9 +85,30 @@ that existing floor but never below it (a bounded discount that composes with re
   the `bustProbOf` odds drop (a member's conviction odds fall with the family's tier), and
   `spends == ledgered foundation: burns`.
 
-## Deferred (step two)
-- Envelope: a per-district / per-precinct envelope (pay the cops where you *operate*); an
-  agent-flagged premium.
-- Foundation: bleed the family's members' heat passively (the accrual decay boost, sourced from the
-  family tier — a second touchpoint); a philanthropy Commission-standing angle; naming the
-  Foundation (a `vanity:`-style status burn).
+## Step two — BUILT
+Three touchpoints that deepen the pair and close the step-one red-team's MED finding:
+- **The freeload gate** (`gang_members.joined_at` + `familyFoundationTier`/`appliedFoundationTier`
+  gate) — the Foundation's trial-soften applies ONLY to a member who was in the family when the case
+  was FILED (`joined_at <= indicted_at`). Joining a high-tier family after being indicted buys
+  nothing — closes the step-one MED. Threaded through `resolveBust` (offline-safe query, `ch.indicted_at`)
+  and the online display (`lawBoard`/`buyJury` via the loaded `h.owned.gangJoinedAt`).
+- **The Foundation passive heat-bleed** (`FOUNDATION.TIERS[].bleedMult` 1.15 → 2.0, applied in
+  `accrual.js` via the new `ctx.foundationTier`) — while your family holds a Foundation, EVERY member's
+  investigation meter bleeds faster (the family's lawyers keep files thin). So the charity now PREVENTS
+  the case, not just softens a filed one. Continuous accrual → a momentary freeload join gets ~nothing,
+  so this touchpoint needs no gate.
+- **The Envelope accelerated bleed** (`LAW.ENVELOPE_BLEED_MULT` 2) — symmetric: while the envelope is
+  current the meter ALSO bleeds 2× faster (the same accrual touchpoint), so it both builds slower and
+  cools faster.
+
+§10.4 untouched (no value moves — these are meter-rate + conviction-odds modifiers, all Law
+sign-off levers). Surfaced on `/v1/rules` (`envelope.bleedMult`, `foundation[].bleedMult`), the gang
+view (`foundationBleedMult`), and the console cards. Tests: `test/law.js` (envelope + foundation
+accrue-bleed via direct `accrue()`), `test/social.js` (the freeload gate — a member who joined before
+the case is softened, a join-after freeloader is not). Suite 23/23 + sim drift-0.
+
+## Deferred (step three)
+- A per-district / per-precinct envelope (pay the cops where you *operate*); an agent-flagged premium.
+- Naming the Foundation (a `vanity:`-style status burn). (The Commission-standing angle is
+  intentionally NOT built — it would reintroduce purchasable Commission standing, which the econ-pass
+  fix closed.)

@@ -26,10 +26,24 @@ const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date()
 
 // THE FOUNDATION: the character's family charity tier (softens their conviction odds). One small
 // lookup on the (rare) bust path — covers the OFFLINE whale the worker force-busts (no h.owned there).
-async function familyFoundationTier(client, characterId) {
+// Step two — the FREELOAD GATE: the soften applies only if the member was in the family when the case
+// was FILED (joined_at <= indicted_at). Joining a high-tier family AFTER being indicted buys nothing
+// (audit MED). Passing indictedAt=null (an unfiled case) skips the gate — informational display only.
+async function familyFoundationTier(client, characterId, indictedAt = null) {
   const r = (await client.query(
-    'SELECT g.foundation FROM gang_members gm JOIN gangs g ON g.id = gm.gang_id WHERE gm.character_id=$1', [characterId])).rows[0];
-  return Number(r?.foundation || 0);
+    'SELECT g.foundation, gm.joined_at FROM gang_members gm JOIN gangs g ON g.id = gm.gang_id WHERE gm.character_id=$1', [characterId])).rows[0];
+  if (!r) return 0;
+  if (indictedAt && r.joined_at && new Date(r.joined_at) > new Date(indictedAt)) return 0;
+  return Number(r.foundation || 0);
+}
+
+// The sync twin for the online display paths (lawBoard/buyJury) — the freeload gate off the loaded
+// membership (h.owned.gangJoinedAt) vs ch.indicted_at. Same rule as the async version.
+function appliedFoundationTier(ch, h) {
+  const tier = Number(h.owned?.gang?.foundation || 0);
+  const joinedAt = h.owned?.gangJoinedAt;
+  if (ch.indicted_at && joinedAt && new Date(joinedAt) > new Date(ch.indicted_at)) return 0;
+  return tier;
 }
 
 // ── GET /v1/law — the public rap sheet + docket ──
@@ -38,7 +52,7 @@ export function lawBoard(ch, h) {
   const exposure = Number(ch.heat_exposure || 0);
   const ev = cityEventOf(dayOf());
   const indicted = !!ch.indicted_at;
-  const foundationTier = Number(h.owned?.gang?.foundation || 0); // THE FOUNDATION: the family charity softens the trial
+  const foundationTier = appliedFoundationTier(ch, h); // THE FOUNDATION: the family charity softens the trial (freeload-gated)
   return {
     stage: rapStageOf(exposure, ch.indicted_at),
     exposure: Math.round(exposure),
@@ -125,7 +139,7 @@ export async function payEnvelope(ch, client, h) {
 async function resolveBust(client, h, ch, { forced = false } = {}) {
   // LAW_BUST_P is a TEST-ONLY knob (the BUSINESS_RAID_P / GEAR_LOOT_CHANCE precedent) that pins the
   // conviction probability so the courtroom is deterministic in tests — never set in production.
-  const foundationTier = await familyFoundationTier(client, ch.id); // the family charity softens the trial (covers the offline whale)
+  const foundationTier = await familyFoundationTier(client, ch.id, ch.indicted_at); // the family charity softens the trial (freeload-gated; covers the offline whale)
   const p = process.env.LAW_BUST_P != null ? Number(process.env.LAW_BUST_P) : bustProbOf(ch, Date.now(), foundationTier);
   const roll = Math.random();
   const convicted = roll < p;
@@ -193,7 +207,7 @@ export async function buyJury(ch, client, h) {
   acct.omr = Number(acct.omr) - LAW.JURY_COST_OMR;
   ch.jury_bought = true;
   await ledger(client, { accountId: ch.account_id, currency: 'omr', amount: -LAW.JURY_COST_OMR, reason: 'law:jury' });
-  return { ok: true, spent: LAW.JURY_COST_OMR, convictionOdds: Math.round(bustProbOf(ch, Date.now(), Number(h.owned?.gang?.foundation || 0)) * 100) };
+  return { ok: true, spent: LAW.JURY_COST_OMR, convictionOdds: Math.round(bustProbOf(ch, Date.now(), appliedFoundationTier(ch, h)) * 100) };
 }
 
 // ── Phase 3 — demand trial now (resolve the indictment immediately, player agency) ──

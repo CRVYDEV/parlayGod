@@ -610,3 +610,18 @@ findings, all flagged (NOT patched — ground rule #1):
 - **(LOW) Envelope payable while indicted** — the envelope only scales the meter GAIN, so it can't help
   a FILED case; but an active window still slows the post-acquittal exposure rebuild, so it is NOT
   wasted for a savvy player and the card copy never claims to fix a filed trial. Left as-is.
+
+### Envelope/Foundation step two — new sign-off levers (built)
+
+Three touchpoints (§10.4-neutral — meter-rate + conviction-odds modifiers, Law levers):
+- **Freeload gate** (`gang_members.joined_at`) — closes the step-one MED: the Foundation's trial-soften
+  applies only to a member who joined before their indictment. No number, a structural gate.
+- **Foundation passive heat-bleed** (`FOUNDATION.TIERS[].bleedMult` 1.15 → 2.0) — every member's
+  investigation meter bleeds faster while the family holds a Foundation; the charity now PREVENTS the
+  case, not just softens a filed one. Dial per tier if it over-protects vs the RICO loop.
+- **Envelope accelerated bleed** (`LAW.ENVELOPE_BLEED_MULT` 2) — the envelope also bleeds the meter 2×
+  faster while current (builds slower AND cools faster). Dial toward 1 if standing protection is too
+  cheap for whales.
+
+Both bleed levers compose multiplicatively with each other and with the event/decay base. Sim-clean at
+drift-0 on build; watch the RICO conviction/indictment rate in the alpha.

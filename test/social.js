@@ -778,6 +778,18 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
   const p0 = bustProbOf(fch, Date.now(), 0), p1 = bustProbOf(fch, Date.now(), 1), p2 = bustProbOf(fch, Date.now(), 2);
   assert(p2 < p1 && p1 < p0, `the family foundation cuts a member's conviction odds, more at higher tiers (${p2.toFixed(3)} < ${p1.toFixed(3)} < ${p0.toFixed(3)})`);
 }
+// STEP TWO — the FREELOAD GATE: the family charity softens the trial only for a member who was in the
+// family when the case was FILED. Seed don indicted; joined BEFORE → soften, joined AFTER → none.
+await seedCh(don.id, "indicted_at = now() - interval '1 hour', heat_exposure = 5000, heat = 0, last_accrued_at = now()");
+await pool.query(`UPDATE gang_members SET joined_at = now() - interval '2 hours' WHERE character_id='${don.id}'`);
+const oddsMember = (await call('GET', '/v1/law', { token: don.token })).body.convictionOdds;
+await pool.query(`UPDATE gang_members SET joined_at = now() WHERE character_id='${don.id}'`); // "joined" AFTER the case — a freeloader
+const oddsFreeload = (await call('GET', '/v1/law', { token: don.token })).body.convictionOdds;
+assert(oddsMember < oddsFreeload, `the foundation softens a real member's trial but not a freeloader's (${oddsMember} < ${oddsFreeload})`);
+await pool.query(`UPDATE gang_members SET joined_at = now() - interval '2 hours' WHERE character_id='${don.id}'`);
+await seedCh(don.id, "indicted_at = NULL, heat_exposure = 0");
+// (the FOUNDATION passive heat-bleed — accrue ctx.foundationTier — is covered by the direct accrue check in test/law.js)
+
 
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
 process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)
@@ -1025,5 +1037,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
 await app.close();

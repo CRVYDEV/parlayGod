@@ -798,6 +798,7 @@ export const LAW = {
   ENVELOPE_OMR: 15,                     // $OMR to keep the envelope current
   ENVELOPE_MS: 7 * 24 * 3600 * 1000,    // how long one payment buys
   ENVELOPE_GAIN_MULT: 0.5,              // exposure gain scaled by this while the envelope is current
+  ENVELOPE_BLEED_MULT: 2,               // step two: the meter also BLEEDS this much faster while current
 };
 // the rap sheet's stage — a pure function of the meter, except INDICTED which LATCHES (an
 // indictment doesn't un-file when heat drops; only a bust/plea/flip clears it).
@@ -817,17 +818,21 @@ export const envelopeActive = (ch, now = Date.now()) => !!ch.envelope_until && n
 // gang $OMR reserve (the GANG_SEALS precedent). Public philanthropy STATUS (gangs.foundation) + it
 // launders the family's collective RICO exposure: every member's conviction odds × the tier bustMult.
 // A NEW Law lever (real power, not pure status) — founder sign-off levers, sim before production.
+// `bustMult` softens a member's RICO trial (step one); `bleedMult` (step two) speeds every member's
+// investigation-meter BLEED — the charity keeps everyone's files thin, so the Foundation PREVENTS the
+// case, not just softens the bust once filed. Both are founder sign-off levers (a Law surface).
 export const FOUNDATION = {
   TIERS: [
-    { tier: 1, name: 'Community Fund', omr: 60,   bustMult: 0.97, blurb: 'A soup kitchen, a little goodwill.' },
-    { tier: 2, name: 'Youth League',   omr: 180,  bustMult: 0.93, blurb: 'Ball fields with the family name on them.' },
-    { tier: 3, name: 'City Trust',     omr: 500,  bustMult: 0.88, blurb: 'Grants, ribbons, a friend on the council.' },
-    { tier: 4, name: 'The Institute',  omr: 1200, bustMult: 0.82, blurb: 'A wing at the hospital. Judges attend the galas.' },
-    { tier: 5, name: 'The Legacy',     omr: 3000, bustMult: 0.75, blurb: 'Pillars of the community. The DA takes the call.' },
+    { tier: 1, name: 'Community Fund', omr: 60,   bustMult: 0.97, bleedMult: 1.15, blurb: 'A soup kitchen, a little goodwill.' },
+    { tier: 2, name: 'Youth League',   omr: 180,  bustMult: 0.93, bleedMult: 1.30, blurb: 'Ball fields with the family name on them.' },
+    { tier: 3, name: 'City Trust',     omr: 500,  bustMult: 0.88, bleedMult: 1.50, blurb: 'Grants, ribbons, a friend on the council.' },
+    { tier: 4, name: 'The Institute',  omr: 1200, bustMult: 0.82, bleedMult: 1.75, blurb: 'A wing at the hospital. Judges attend the galas.' },
+    { tier: 5, name: 'The Legacy',     omr: 3000, bustMult: 0.75, bleedMult: 2.00, blurb: 'Pillars of the community. The DA takes the call.' },
   ],
 };
 export const foundationOf = (tier) => FOUNDATION.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const foundationBustMult = (tier) => foundationOf(tier)?.bustMult ?? 1;
+export const foundationBleedMult = (tier) => foundationOf(tier)?.bleedMult ?? 1;
 // conviction probability for the current case (Phase 2/3): scales with exposure over the
 // indictment threshold, softened by an active lawyer retainer, (once) a bought jury, and the
 // family's FOUNDATION tier (the charity buys softer trials — sourced at the two bust call sites).
