@@ -207,5 +207,16 @@ for (let i = 0; i < 7; i++) {
 assert(swapLimited && swapLimited.at === 7, 'the seventh swap in a minute → 429');
 process.env.RATE_LIMIT = 'off';
 
+// ── LIVE-OPS dashboard endpoints (mod-gated overview + activity feed) ──
+assert.equal((await call('GET', '/v1/mod/overview')).code, 401, 'the ops overview needs the mod key');
+const ov = (await call('GET', '/v1/mod/overview', { headers: modH })).body;
+assert(ov.players.accounts >= 1 && ov.players.alive >= 1, 'overview counts accounts + living streets');
+assert(ov.economy.ammPrice > 0, 'overview reads the AMM spot ($/$OMR)');
+assert(ov.economy.omrSupply >= 20000, 'overview reads the true $OMR supply (≥ the 20k genesis)');
+assert(Array.isArray(ov.top.players) && Array.isArray(ov.top.gangs), 'overview carries the leaderboards');
+const act = (await call('GET', '/v1/mod/activity?limit=10', { headers: modH })).body;
+assert(Array.isArray(act.events), 'the activity feed returns events');
+assert.equal((await call('GET', '/v1/mod/activity')).code, 401, 'the activity feed needs the mod key');
+
 console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
 await app.close();

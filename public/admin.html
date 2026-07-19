@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMERTÀ — the books</title>
+<style>
+  :root { --bg:#0b0b0e; --panel:#131318; --panel2:#17171e; --line:#26262f; --ink:#d6d2c4;
+    --dim:#7d7a6f; --neon:#e8b34b; --blood:#c0392b; --ok:#5fa96b; --bad:#d16055; --cold:#5b84a8; font-size:15px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:Georgia,'Times New Roman',serif; }
+  code,input,button,.mono { font-family:'Courier New',monospace; }
+  #top { display:flex; align-items:baseline; gap:14px; padding:10px 16px; border-bottom:1px solid var(--line);
+    background:var(--panel); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
+  #top h1 { font-size:19px; margin:0; letter-spacing:5px; color:var(--neon); font-weight:normal; }
+  #top .sub { color:var(--dim); font-size:12px; }
+  #status { margin-left:auto; font-size:13px; }
+  button { background:#1d1d25; border:1px solid var(--line); color:var(--ink); padding:7px 12px;
+    border-radius:4px; cursor:pointer; font-size:12px; }
+  button:hover { border-color:var(--neon); }
+  button.danger { border-color:var(--blood); color:var(--bad); }
+  input { background:#0e0e12; border:1px solid var(--line); color:var(--ink); padding:7px 8px; border-radius:4px; font-size:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; padding:12px 16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; }
+  .panel h2 { margin:0 0 10px; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--dim); font-weight:normal; }
+  .row { display:flex; justify-content:space-between; margin:3px 0; font-size:13px; gap:10px; }
+  .row .k { color:var(--dim); } .row .v { color:var(--ink); text-align:right; }
+  .big { font-size:26px; color:var(--neon); margin:2px 0 8px; }
+  .banner { padding:12px 16px; margin:0; text-align:center; font-size:15px; letter-spacing:2px; }
+  .banner.ok { background:rgba(95,169,107,.14); color:var(--ok); border-bottom:1px solid var(--ok); }
+  .banner.bad { background:rgba(192,57,43,.18); color:var(--bad); border-bottom:1px solid var(--blood); }
+  .chk { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; border-bottom:1px solid #1c1c22; }
+  .chk .g { color:var(--ok); } .chk .b { color:var(--bad); }
+  .feed { max-height:340px; overflow-y:auto; font-size:11px; }
+  .feed .e { padding:3px 0; border-bottom:1px solid #1a1a20; color:var(--dim); }
+  .feed .e b { color:var(--ink); }
+  .bar { height:6px; background:#22222a; border-radius:3px; overflow:hidden; margin:1px 0 6px; }
+  .bar i { display:block; height:100%; background:var(--neon); }
+  .mod-row { display:flex; gap:6px; margin:6px 0; flex-wrap:wrap; align-items:center; }
+  .mod-row input { flex:1; min-width:80px; }
+  .center { max-width:420px; margin:16vh auto; text-align:center; }
+  .center h1 { letter-spacing:8px; color:var(--neon); font-weight:normal; }
+  .center p { color:var(--dim); font-size:13px; }
+  .hidden { display:none !important; }
+  #err { color:var(--bad); font-size:12px; margin-top:6px; }
+  .note { color:var(--dim); font-size:11px; margin-top:4px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="center">
+  <h1>THE BOOKS</h1>
+  <p>OMERTÀ live-ops. This is the mod console — the whole city, one screen.</p>
+  <div style="margin-top:14px"><input id="mkey" type="password" placeholder="mod key" size="26" style="font-size:14px">
+    <button id="enter" style="font-size:14px;padding:8px 18px">OPEN THE LEDGER</button></div>
+  <div id="err"></div>
+</div>
+
+<div id="dash" class="hidden">
+  <div id="banner" class="banner">…</div>
+  <div id="top">
+    <h1>THE BOOKS</h1><span class="sub" id="stamp">—</span>
+    <span id="status"></span>
+    <button id="refresh">refresh</button>
+    <button id="logout" class="danger">lock up</button>
+  </div>
+  <div class="grid">
+    <div class="panel" id="p-integrity"><h2>§10.4 Integrity</h2><div class="body">…</div></div>
+    <div class="panel" id="p-economy"><h2>The Economy</h2><div class="body">…</div></div>
+    <div class="panel" id="p-players"><h2>Players</h2><div class="body">…</div></div>
+    <div class="panel" id="p-funnel"><h2>Onboarding Funnel</h2><div class="body">…</div></div>
+    <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
+    <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
+    <div class="panel" id="p-activity"><h2>Live Activity</h2><div class="feed body">…</div></div>
+    <div class="panel" id="p-mod"><h2>Moderation</h2><div class="body"></div></div>
+  </div>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  let mkey = sessionStorage.getItem('omerta_mod_key') || '';
+  let timer = null;
+
+  async function j(method, path, body) {
+    const r = await fetch(path, { method, headers: { 'x-mod-key': mkey,
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    let b = null; try { b = await r.json(); } catch { b = {}; }
+    return { code: r.status, body: b };
+  }
+
+  $('#enter').onclick = tryLogin;
+  $('#mkey').onkeydown = (e) => { if (e.key === 'Enter') tryLogin(); };
+  async function tryLogin() {
+    mkey = $('#mkey').value.trim();
+    const r = await j('GET', '/v1/mod/overview');
+    if (r.code === 200) { sessionStorage.setItem('omerta_mod_key', mkey); showDash(); }
+    else { $('#err').textContent = r.code === 401 ? 'Wrong key.' : `Error ${r.code}.`; }
+  }
+  $('#logout').onclick = () => { sessionStorage.removeItem('omerta_mod_key'); location.reload(); };
+  $('#refresh').onclick = refreshAll;
+
+  function showDash() {
+    $('#login').classList.add('hidden'); $('#dash').classList.remove('hidden');
+    refreshAll();
+    if (timer) clearInterval(timer);
+    timer = setInterval(refreshAll, 15000); // live
+  }
+
+  async function refreshAll() {
+    const [ov, inv, fn, res, vig, em, act] = await Promise.all([
+      j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
+      j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
+      j('GET', '/v1/mod/activity?limit=60'),
+    ]);
+    if (ov.code === 401) return $('#logout').onclick();
+    $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
+    renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body);
+    renderActivity(act.body); renderMod();
+  }
+
+  const rowHtml = (k, v) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+
+  function renderIntegrity(inv) {
+    const checks = inv?.checks || [];
+    const ok = !!inv?.ok;
+    $('#banner').className = 'banner ' + (ok ? 'ok' : 'bad');
+    $('#banner').textContent = ok ? '§10.4 HOLDS — the books balance' : '⚠ LEDGER DRIFT DETECTED — investigate now';
+    $('#p-integrity').querySelector('.body').innerHTML = checks.map((c) =>
+      `<div class="chk"><span>${c.name}</span><span class="${c.ok ? 'g' : 'b'}">${c.ok ? '✓' : 'drift ' + fmt(c.drift)}</span></div>`).join('')
+      + (checks.find((c) => c.name === 'reason vocabulary' && (c.unknown || []).length)
+        ? `<div class="note" style="color:var(--bad)">unknown reasons: ${(checks.find((c) => c.name === 'reason vocabulary').unknown).join(', ')}</div>` : '');
+  }
+
+  function renderEconomy(ov, em) {
+    const e = ov?.economy || {};
+    $('#p-economy').querySelector('.body').innerHTML =
+      `<div class="big">$${fmt(e.ammPrice)} <span class="note">per $OMR (AMM spot)</span></div>`
+      + rowHtml('$OMR supply', `${fmt(e.omrSupply)} (${fmt(e.omrStaked)} staked)`)
+      + rowHtml('AMM pool', `$${fmt(e.ammCash)} / ${fmt(e.ammOmr)} $OMR`)
+      + rowHtml('street-tax pool', `$${fmt(e.taxPool)} <span class="note">→ next buyback</span>`)
+      + rowHtml('event fund', `${fmt(e.eventFund)} $OMR`)
+      + rowHtml('stake pool', `${fmt(e.stakePool)} $OMR (${Math.round((em?.backed ?? 1) * 100)}% backed)`)
+      + rowHtml('the den book', `profit $${fmt(e.den.profit)} · paid $${fmt(e.den.distributed)}`)
+      + rowHtml('gang treasuries', `$${fmt(e.gangTreasury)} across ${fmt(e.gangCount)}`)
+      + rowHtml('player wealth', `$${fmt(e.charWealth)} (cash+bank)`);
+  }
+
+  function renderPlayers(ov) {
+    const p = ov?.players || {};
+    $('#p-players').querySelector('.body').innerHTML =
+      `<div class="big">${fmt(p.active24h)} <span class="note">active (24h)</span></div>`
+      + rowHtml('accounts', `${fmt(p.accounts)}${p.banned ? ` · ${fmt(p.banned)} banned` : ''}${p.agents ? ` · ${fmt(p.agents)} agents` : ''}`)
+      + rowHtml('living streets', fmt(p.alive))
+      + rowHtml('in the ground', fmt(p.dead))
+      + rowHtml('in lockup', fmt(p.jailed))
+      + rowHtml('under indictment', fmt(p.indicted));
+  }
+
+  function renderFunnel(fn) {
+    if (!fn) return;
+    const lv = fn.levels || {}, pr = fn.progression || {}, fw = fn.firstWeek || {};
+    const alive = Math.max(1, (fn.characters || {}).alive || 1);
+    const barRow = (k, n) => { const pct = Math.round(100 * n / alive);
+      return `<div class="row"><span class="k">${k}</span><span class="v">${fmt(n)} (${pct}%)</span></div><div class="bar"><i style="width:${pct}%"></i></div>`; };
+    $('#p-funnel').querySelector('.body').innerHTML =
+      `<div class="note">of ${fmt((fn.characters || {}).alive)} living streets</div>`
+      + barRow('pulled a job', pr.pulled_a_job || 0)
+      + barRow('declared a Path', pr.declared_path || 0)
+      + barRow('in a family', pr.in_a_family || 0)
+      + barRow('linked a wallet', pr.linked_wallet || 0)
+      + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
+      + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`;
+  }
+
+  function renderTop(ov) {
+    const t = ov?.top || {};
+    $('#p-top').querySelector('.body').innerHTML =
+      `<div class="note">top streets by respect</div>`
+      + (t.players || []).slice(0, 6).map((p, i) => rowHtml(`${i + 1}. ${p.name}`, `${fmt(p.respect)} rsp · $${fmt(p.netWorth)}`)).join('')
+      + `<div class="note" style="margin-top:8px">top families by treasury</div>`
+      + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${g.name} [${g.tag}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
+  }
+
+  function renderChain(res, vig, em) {
+    const v = vig?.invariants || {}, vs = vig?.status || {};
+    const extractOk = v.ok !== false;
+    $('#p-chain').querySelector('.body').innerHTML =
+      `<div class="note">withdrawal reserve (full-reserve queue)</div>`
+      + rowHtml('funded', `${fmt(res?.fundedOmr)} $OMR`)
+      + rowHtml('committed / available', `${fmt(res?.committedOutstanding)} / ${fmt(res?.available)}`)
+      + rowHtml('queued (unsigned)', `${fmt(res?.queuedOmr)} $OMR`)
+      + `<div class="note" style="margin-top:8px">the Vig (real-revenue redistribution)</div>`
+      + rowHtml('extraction ≤ inflow', `<span class="${extractOk ? '' : ''}" style="color:${extractOk ? 'var(--ok)' : 'var(--bad)'}">${extractOk ? '✓ holds' : '⚠ VIOLATED'}</span>`)
+      + rowHtml('prize pool', `${fmt(vs.prizePool ?? vs.prize_pool ?? '?')} $OMR`)
+      + `<div class="note" style="margin-top:8px">staking emission</div>`
+      + rowHtml('pool / backed', `${fmt(em?.poolBalance)} $OMR · ${Math.round((em?.backed ?? 1) * 100)}%`);
+  }
+
+  function renderActivity(act) {
+    const evs = act?.events || [];
+    $('#p-activity').querySelector('.body').innerHTML = evs.map((e) => {
+      const t = e.at ? new Date(e.at).toLocaleTimeString() : '';
+      const p = e.props || {}; const bits = Object.entries(p).slice(0, 3).map(([k, val]) =>
+        `${k}=${typeof val === 'object' ? JSON.stringify(val) : val}`).join(' ');
+      return `<div class="e"><b>${e.event}</b> <span style="float:right">${t}</span><br>${bits}</div>`;
+    }).join('') || '<div class="note">quiet on the wire…</div>';
+  }
+
+  function renderMod() {
+    if ($('#p-mod').querySelector('.body').dataset.wired) return; // forms are static — wire once
+    $('#p-mod').querySelector('.body').dataset.wired = '1';
+    $('#p-mod').querySelector('.body').innerHTML = `
+      <div class="mod-row"><input id="m-invcount" placeholder="# codes" size="4" value="5"><input id="m-invuses" placeholder="uses" size="4" value="1">
+        <button id="m-invite">mint invites</button></div>
+      <div id="m-invout" class="note"></div>
+      <div class="mod-row"><input id="m-conf-id" placeholder="character id"><input id="m-conf-amt" placeholder="$ (blank=all)" size="8">
+        <button id="m-conf" class="danger">confiscate</button></div>
+      <div class="mod-row"><input id="m-kill-id" placeholder="character id"><button id="m-kill" class="danger">mod-kill</button></div>
+      <div class="mod-row"><input id="m-ban-id" placeholder="account id"><button id="m-ban" class="danger">ban</button></div>
+      <div class="mod-row"><input id="m-fund" placeholder="$OMR to reserve" size="10"><button id="m-fund-go">fund reserve</button></div>
+      <div id="m-out" class="note"></div>`;
+    const out = (m, bad) => { const el = $('#m-out'); el.textContent = m; el.style.color = bad ? 'var(--bad)' : 'var(--dim)'; };
+    $('#m-invite').onclick = async () => {
+      const r = await j('POST', '/v1/mod/invites', { count: Number($('#m-invcount').value), uses: Number($('#m-invuses').value) });
+      $('#m-invout').textContent = r.code === 200 ? `codes: ${(r.body.codes || []).join(', ')}` : `error ${r.code}`;
+    };
+    $('#m-conf').onclick = async () => {
+      const id = $('#m-conf-id').value.trim(); if (!id) return out('character id?', true);
+      if (!confirm(`Confiscate from ${id}?`)) return;
+      const amt = $('#m-conf-amt').value.trim();
+      const r = await j('POST', '/v1/mod/confiscate', { characterId: id, ...(amt ? { amount: Number(amt) } : {}) });
+      out(r.code === 200 ? `confiscated $${fmt(r.body.confiscated)}` : `error: ${r.body.message || r.code}`, r.code !== 200); refreshAll();
+    };
+    $('#m-kill').onclick = async () => {
+      const id = $('#m-kill-id').value.trim(); if (!id) return out('character id?', true);
+      if (!confirm(`MOD-KILL ${id}? This runs the estate — irreversible.`)) return;
+      const r = await j('POST', '/v1/mod/kill', { characterId: id });
+      out(r.code === 200 ? `retired — heir ${r.body.heirId}` : `error: ${r.body.message || r.code}`, r.code !== 200); refreshAll();
+    };
+    $('#m-ban').onclick = async () => {
+      const id = $('#m-ban-id').value.trim(); if (!id) return out('account id?', true);
+      if (!confirm(`Ban account ${id}?`)) return;
+      const r = await j('POST', '/v1/mod/ban', { accountId: id });
+      out(r.code === 200 ? 'banned.' : `error: ${r.body.message || r.code}`, r.code !== 200);
+    };
+    $('#m-fund-go').onclick = async () => {
+      const amt = Number($('#m-fund').value); if (!(amt > 0)) return out('amount?', true);
+      const r = await j('POST', '/v1/mod/reserve/fund', { amount: amt });
+      out(r.code === 200 ? 'reserve funded (queue drained).' : `error: ${r.body.message || r.code}`, r.code !== 200); refreshAll();
+    };
+  }
+
+  // auto-open if a key is already stored this session
+  if (mkey) { $('#mkey').value = mkey; tryLogin(); }
+</script>
+</body>
+</html>
