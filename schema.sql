@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS gang_members (
   gang_id TEXT NOT NULL,
   character_id TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL DEFAULT 'soldier',
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),   -- THE FOUNDATION step two: the bust-soften only helps members who joined BEFORE their indictment (freeload gate)
   PRIMARY KEY (gang_id, character_id)
 );
 CREATE TABLE IF NOT EXISTS districts (

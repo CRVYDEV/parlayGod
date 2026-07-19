@@ -103,7 +103,7 @@ export async function loadOwned(client, ch) {
     client.query('SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', [ch.id]),
     client.query('SELECT gear_id FROM account_gear WHERE account_id=$1', [ch.account_id]),
     client.query('SELECT gun_id FROM character_guns WHERE character_id=$1', [ch.id]),
-    client.query('SELECT gang_id, role FROM gang_members WHERE character_id=$1', [ch.id]),
+    client.query('SELECT gang_id, role, joined_at FROM gang_members WHERE character_id=$1', [ch.id]),
     client.query('SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]),
     client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
@@ -133,7 +133,7 @@ export async function loadOwned(client, ch) {
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
-    gangId, gangRole: gm.rows[0]?.role || null, gang, held,
+    gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
     makings: Object.fromEntries(mk.rows.map((r) => [r.drug_id, Number(r.qty)])),
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
@@ -278,7 +278,8 @@ export const skillMult = (h, id, mult) => (hasSkill(h, id) ? mult : 1);
 export const trunkCap = (h) => cargoCapacity(h.owned.assets) + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0);
 
 async function accrueAndLedger(client, ch, acct, owned) {
-  accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash });
+  accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,
+    foundationTier: owned.gang?.foundation || 0 }); // THE FOUNDATION step two: the family charity speeds the exposure bleed
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
   if (ch._accruedIncome > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });

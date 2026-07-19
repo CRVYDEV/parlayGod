@@ -288,6 +288,22 @@ assert(!!(await rawCh(fresh.id)).indicted_at, 'Fred keeps his window to lawyer u
   assert(paid.heat_exposure < plain.heat_exposure,
     `the envelope slows the case build (${Math.round(paid.heat_exposure)} < ${Math.round(plain.heat_exposure)})`);
 }
+// STEP TWO — the accelerated BLEED: from a COLD-heat, high-exposure state (gain≈0, bleed dominates),
+// an enveloped street AND a family-foundation member both shed MORE of the case than a bare one.
+{
+  const { accrue } = await import('../src/accrual.js');
+  const cold = () => ({ respect: 2000, energy: 0, nerve: 0, health: 0, cash: 0, bank: 0, heat: 0,
+    heat_exposure: 500, crew: 0, racket_credit_ms: 0, bank_credit_ms: 0,
+    last_accrued_at: new Date(Date.now() - 60 * 60000), path: null, loc: 'downtown', indicted_at: null });
+  const bare = cold(); accrue(bare, { staked: 0 }, { stash: [], rackets: [], assets: [], held: [] });
+  const env = cold(); env.envelope_until = new Date(Date.now() + 3600000);
+  accrue(env, { staked: 0 }, { stash: [], rackets: [], assets: [], held: [] });
+  assert(env.heat_exposure < bare.heat_exposure,
+    `the envelope bleeds the case faster (${Math.round(env.heat_exposure)} < ${Math.round(bare.heat_exposure)})`);
+  const fam = cold(); accrue(fam, { staked: 0 }, { stash: [], rackets: [], assets: [], held: [], foundationTier: 5 });
+  assert(fam.heat_exposure < bare.heat_exposure,
+    `the family foundation keeps files thin — the case bleeds faster (${Math.round(fam.heat_exposure)} < ${Math.round(bare.heat_exposure)})`);
+}
 // pay it — a ledgered $OMR sink, the window live on the docket, extends on re-pay
 const gil = await mk('Grifter Gil');
 await seedAcct(gil.id, 'omr=100');

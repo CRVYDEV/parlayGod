@@ -1675,6 +1675,25 @@ exposure (a narrow corner; the dial is whether the charity composes below the st
 wasted (an active window still slows the post-acquittal exposure rebuild), so left as-is. Deferred
 (step two): a per-precinct envelope; the Foundation bleeding members' heat passively + a
 Commission-standing angle + naming; a foundation-freeload gate (join timestamps) if the alpha shows abuse.
+**Step two — BUILT** (three touchpoints; §10.4 untouched — all meter-rate/conviction-odds modifiers,
+Law sign-off levers): **(1) the FREELOAD GATE** (closes the step-one MED) — `gang_members.joined_at`
+(new column) + the Foundation's trial-soften now applies ONLY to a member who was in the family when
+the case was FILED (`joined_at <= indicted_at`); joining a high-tier family after being indicted buys
+nothing. Threaded through `resolveBust` (async `familyFoundationTier(client, id, indictedAt)` — the
+offline whale) and the online display (`lawBoard`/`buyJury` via the sync `appliedFoundationTier(ch, h)`
+off the loaded `h.owned.gangJoinedAt`). **(2) the Foundation PASSIVE HEAT-BLEED** — `FOUNDATION.TIERS[]`
+gained `bleedMult` (1.15 → 2.0, `foundationBleedMult`); `accrual.js` speeds every member's
+investigation-meter BLEED by it (via the new `ctx.foundationTier` threaded from `loadOwned`'s
+`owned.gang.foundation`), so the charity now PREVENTS the case, not just softens a filed one
+(continuous accrual → a momentary freeload join gets ~nothing, so this needs no gate). **(3) the
+Envelope ACCELERATED BLEED** — `LAW.ENVELOPE_BLEED_MULT` (2); while current, the meter also bleeds 2×
+faster (same accrual touchpoint), so it both builds slower AND cools faster. Surfaced on `/v1/rules`
+(`envelope.bleedMult`, `foundation[].bleedMult`), `GET /v1/gangs/:id` (`foundationBleedMult`), and the
+console cards. Tests: `test/law.js` (envelope + foundation accrue-bleed via direct `accrue()`),
+`test/social.js` (the freeload gate — joined-before is softened, joined-after is not). Suite 23/23 +
+sim drift-0. Deferred (step three): a per-precinct envelope; naming the Foundation (the
+Commission-standing angle is intentionally NOT built — it would reintroduce purchasable Commission
+standing, which the econ-pass fix closed).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
