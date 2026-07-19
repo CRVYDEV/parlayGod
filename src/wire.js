@@ -63,7 +63,11 @@ export async function placeTap(ch, targetId, client, h) {
 
 // POST /v1/wire/sweep — sweep your lines clean of bugs. A $OMR sink; FREE (uncharged) when you're clean.
 export async function sweepBugs(ch, client, h) {
-  const bugs = Number((await client.query('SELECT COUNT(*) n FROM wiretaps WHERE target_character=$1 AND expires_at > now()', [ch.id])).rows[0].n);
+  // count only LIVE watchers' bugs (join alive — parity with the huntersCount threat read, so a dead
+  // surveiller's un-swept row isn't a phantom bug the victim pays to clear)
+  const bugs = Number((await client.query(
+    `SELECT COUNT(*) n FROM wiretaps w JOIN characters c ON c.id = w.watcher_character AND c.alive
+       WHERE w.target_character=$1 AND w.expires_at > now()`, [ch.id])).rows[0].n);
   if (bugs === 0) return { ok: true, bugsFound: 0, clean: true, spent: 0 }; // nothing to sweep — no charge (the peek precedent)
   await spendOmr(client, h, WIRE.SWEEP_OMR, 'intel:sweep');
   await client.query('DELETE FROM wiretaps WHERE target_character=$1', [ch.id]);
@@ -101,7 +105,9 @@ export async function wireBoard(ch, client, h) {
     return { ticker: tk.id, name: tk.name, price, dayChange: prev ? Math.round(((price - prev) / prev) * 10000) / 100 : 0 };
   });
   const mover = tape.slice().sort((a, b) => Math.abs(b.dayChange) - Math.abs(a.dayChange))[0] || null;
-  const bugsOnYou = Number((await client.query('SELECT COUNT(*) n FROM wiretaps WHERE target_character=$1 AND expires_at > now()', [ch.id])).rows[0].n);
+  const bugsOnYou = Number((await client.query(
+    `SELECT COUNT(*) n FROM wiretaps w JOIN characters c ON c.id = w.watcher_character AND c.alive
+       WHERE w.target_character=$1 AND w.expires_at > now()`, [ch.id])).rows[0].n);
   const board = {
     subscribed: sub, subSeconds: sub ? Math.max(0, Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000)) : 0,
     costs: { tap: WIRE.TAP_OMR, sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR }, tapMax: WIRE.TAP_MAX,

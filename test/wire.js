@@ -135,6 +135,16 @@ r = await call('POST', '/v1/wire/subscribe', { token: watcher.token });
 assert.equal(r.code, 200, 're-subscribed');
 assert(r.body.wireSeconds > WIRE.SUB_MS / 1000, 'the window stacked past a single term');
 
+// ── LOW-1 regression: a DEAD watcher's un-swept tap is NOT a phantom bug the victim pays to clear ──
+const ghost = await mk('Ghost Gus');
+await acctOmr(ghost.id, 100); grantDrift += 100;
+await call('POST', `/v1/wire/tap/${mark.id}`, { token: ghost.token }); // ghost bugs the mark
+assert.equal((await call('GET', '/v1/wire', { token: mark.token })).body.bugsOnYou, 1, 'a live watcher is a real bug');
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ghost.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal((await call('GET', '/v1/wire', { token: mark.token })).body.bugsOnYou, 0, "a dead watcher's tap is not counted (alive-join parity with the threat read)");
+r = await call('POST', '/v1/wire/sweep', { token: mark.token });
+assert.equal(r.body.spent, 0, "and a sweep against only a dead watcher's ghost row is free — no phantom charge");
+
 // ── the worker sweep: expired taps are tidied (reads already filter, this is hygiene) ──
 await pool.query(`INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ('${watcher.id}','stale', now() - interval '1 hour')`);
 const swept = await sweepWire(pool);
