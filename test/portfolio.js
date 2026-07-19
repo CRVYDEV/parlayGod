@@ -100,6 +100,20 @@ const gv = (await call('GET', `/v1/gangs/${gangId}`)).body.gang;
 assert.equal(gv.portfolio.holdings.length, 1, 'the family book shows on the gang page');
 assert.equal(gv.portfolio.holdings[0].ticker, 'TSLA', 'the family holds TSLA');
 
+// ── FAMILY DIVIDEND (Dynasty step two): the gang book yields to the RESERVE, boss/underboss only ──
+const famBoard = (await call('GET', '/v1/portfolio', { token: boss.token })).body.family;
+assert(famBoard.dividend, 'the family dividend surfaces on the board');
+assert.equal(famBoard.dividend.claimable, true, 'the boss can draw it (book funded, no cooldown)');
+assert.equal((await call('POST', '/v1/gangs/portfolio/dividend', { token: soldier.token })).body.error, 'rank', 'a soldier does not draw the family dividend');
+const gResBefore = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve);
+const gPoolBefore = Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool);
+const famDiv = await call('POST', '/v1/gangs/portfolio/dividend', { token: boss.token });
+assert.equal(famDiv.code, 200, 'the boss drew the family dividend');
+assert(famDiv.body.paid > 0, 'it paid $OMR into the reserve');
+assert.equal(Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve), gResBefore + famDiv.body.paid, 'the reserve grew by exactly the dividend');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((gPoolBefore - famDiv.body.paid) * 1e6) / 1e6, 'paid from the SHARED pool (a transfer, not a mint)');
+assert.equal((await call('POST', '/v1/gangs/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the family dividend pays about once a day');
+
 // ── DEATH SURVIVAL: the legit book is account-level, so the heir keeps it (the retirement fantasy) ──
 const bookBefore = (await call('GET', '/v1/portfolio', { token: boss.token })).body.portfolio;
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: boss.id },

@@ -138,6 +138,34 @@ export async function claimDividend(ch, client, h) {
   return { ok: true, paid: pay, gross, bookValue: book, dividendPaid: pay };
 }
 
+// CLAIM the FAMILY dividend — the gang RWA book's ~daily yield, paid from the SHARED sink-fed pool to
+// the gang RESERVE (the personal-claim twin, gang side). §10.4 transfer (pool→reserve, both inside
+// omrBuckets), pool-bounded. Boss/underboss only. Locks the gang row (loadOwned reads it unlocked) then
+// the pool singleton — canonical (…→gangs→singletons); personal claims lock account→pool, family locks
+// gang→pool, disjoint entities + same pool → serialize on the pool, no AB-BA.
+export async function claimFamilyDividend(ch, client, h) {
+  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
+    throw new GameError('rank', 'Only the boss or underboss draws the family dividend.');
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('gang', 'No family.');
+  const rows = (await client.query('SELECT ticker, shares FROM gang_portfolios WHERE gang_id=$1 AND shares>0', [g.id])).rows;
+  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0));
+  if (!(book > 0)) throw new GameError('nothing', 'The family has no legit book to draw from.');
+  const now = Date.now();
+  if (g.dividend_at && new Date(g.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
+    throw new GameError('cooldown', 'The family dividend pays about once a day.');
+  const gross = round6(book * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
+  const pp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
+  if (!(pay > 0)) throw new GameError('dry', 'The dividend pool is dry — it fills as families invest. Try again later.');
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2, dividend_at=$3 WHERE id=$1', [g.id, pay, new Date(now)]);
+  await h.ledger(client, { currency: 'omr', amount: pay, reason: 'dividend:omr', counterparty: g.id }); // transfer (pool→reserve), not a mint
+  await client.query('UPDATE rwa_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
+  if (h.owned.gang) h.owned.gang.omr_reserve = Number(g.omr_reserve) + pay;
+  await h.track(client, ch.account_id, 'rwa_family_dividend', { omr: pay, book });
+  return { ok: true, paid: pay, gross, bookValue: book, reserve: Math.floor(Number(g.omr_reserve) + pay), dividendPaid: pay };
+}
+
 // FAMILY invest: the boss/underboss commissions the family's legit holdings from the $OMR RESERVE
 // (the seal precedent — the reserve is its own §10.4 bucket, so the burn is ledgered directly
 // against it with counterparty = the gang id, no account_id). Gang row LOCKED: reserve read-and-spend
@@ -154,8 +182,17 @@ export async function familyInvest(ch, ticker, omr, client, h) {
     throw new GameError('reserve', `The family reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR. Tribute $OMR to fill it.`);
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
-  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2 WHERE id=$1', [g.id, amt]);
-  await h.ledger(client, { currency: 'omr', amount: -amt, reason: 'rwa:invest', counterparty: g.id });
+  // the Dynasty Fund split (the personal-invest twin, gang side): DIVIDEND_BPS of the family invest
+  // funds the SHARED dividend pool (a §10.4 transfer, reserve→pool), the rest burns. So the family's
+  // own investing pays the family dividend (claimFamilyDividend). counterparty=g.id, no character_id.
+  const toPool = Math.floor(amt * PORTFOLIO.DIVIDEND_BPS / 10000);
+  const toBurn = amt - toPool;
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, rwa_invested = rwa_invested + $2 WHERE id=$1', [g.id, amt]);
+  await h.ledger(client, { currency: 'omr', amount: -toBurn, reason: 'rwa:invest', counterparty: g.id });
+  if (toPool > 0) {
+    await h.ledger(client, { currency: 'omr', amount: -toPool, reason: 'dividend:fund', counterparty: g.id });
+    await client.query('UPDATE rwa_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
+  }
   const cur = (await client.query('SELECT shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND ticker=$2', [g.id, ticker])).rows[0];
   const shares = round6(Number(cur?.shares || 0) + bought);
   const cost = Number(cur?.cost_omr || 0) + amt;
@@ -186,10 +223,18 @@ export async function portfolioBoard(ch, client, h) {
   if (h.owned.gangId) {
     const fam = (await client.query('SELECT ticker, shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [h.owned.gangId])).rows;
     const fh = fam.map((r) => bookRow(r, priceMap));
+    const famBook = round2(fh.reduce((a, r) => a + r.bookValue, 0));
+    const gd = h.owned.gang?.dividend_at;
+    const now2 = Date.now();
+    const gcd = gd ? Math.max(0, Math.ceil((new Date(gd).getTime() + PORTFOLIO.DIVIDEND_MS - now2) / 1000)) : 0;
+    const poolNow = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
+    const canManage = h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
     family = { name: h.owned.gang?.name || null,
-      canInvest: h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss',
+      canInvest: canManage,
       reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
-      holdings: fh, bookValue: round2(fh.reduce((a, r) => a + r.bookValue, 0)) };
+      holdings: fh, bookValue: famBook,
+      dividend: { claimable: canManage && famBook > 0 && gcd === 0, cooldownSeconds: gcd,
+        estimate: round2(Math.min(famBook * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolNow)) } };
   }
   // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
   // generations the bloodline has weathered (deaths + 1) + the cost to name it + the status TIER.
