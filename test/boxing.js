@@ -74,6 +74,10 @@ assert.equal((await call('POST', `/v1/boxing/fight/${bb.id}`, { token: lowbie.to
 assert.equal((await call('POST', `/v1/boxing/fight/${aa.id}`, { token: bb.token, body: { stake: 10000 } })).body.error, 'not_listed', "The Bull isn't taking bouts");
 assert.equal((await call('POST', `/v1/boxing/fight/${bb.id}`, { token: aa.token, body: { stake: 999999 } })).body.error, 'limit', 'over the opponent limit');
 assert.equal((await call('POST', `/v1/boxing/fight/${aa.id}`, { token: aa.token, body: { stake: 10000 } })).body.error, 'self', "you don't fight your own contender");
+// audit MED-1: no draining a manager who's in lockup (they consented by listing, but can't call it off) — casino:pvp parity
+await seed(bb.id, `jail_until = now() + interval '10 minutes'`);
+assert.equal((await call('POST', `/v1/boxing/fight/${bb.id}`, { token: aa.token, body: { stake: 10000 } })).body.error, 'unavailable', "no matching an incapacitated opponent");
+await seed(bb.id, `jail_until = NULL`);
 
 // ── THE BOUT: The Bull (strong) always beats The Palooka (weak) — a taxed transfer + the rake split ──
 const stake = 10000, pot = stake * 2, rake = Math.ceil(pot * BOXING.RAKE_BPS / 10000);
