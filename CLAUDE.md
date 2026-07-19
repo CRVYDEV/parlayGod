@@ -1480,6 +1480,28 @@ humanizes invest + the heist cut; `GET /v1/rules` gained a `portfolio` block (ti
 the /v1/catalog discoverability precedent). Verified live end-to-end (guest → rules → board → big
 invest draws heat → leaderboard). Suite 21/21 + sim drift-0.
 
+A **max-effort five-lens red-team over the Portfolio + all contract interactions**
+(`AUDIT-portfolio.md`: §10.4, concurrency/locks, death/estate, internals/exploit, chain+contracts)
+found **no CRITICAL/HIGH**. Confirmed sound: the status/currency split (§10.4 exact on both the
+account and gang-reserve burn buckets), full CHAIN CONTAINMENT (the Portfolio has zero reach into
+`chain.js`/`fees.js`/`watcher.js`/vouchers — a share is structurally incapable of becoming a voucher;
+no dormant R2/R3 hook — the legal line holds), death/estate survival (`portfolios` never wiped, heir
+inherits; no sell/withdraw path exists), and the contract interactions (EIP-712 parity, full-reserve
+queue, fee idempotency, no owner-mint/reentrancy — `forge test` 39/39 in CI). The flagged NaN-through-
+`validAmount` vector was RULED OUT (`!Number.isFinite` short-circuits first). Fixed in-commit
+(regression each): **F1 MED — structuring defeated the RICO graduation** (a per-call-only ≥1000 $OMR
+threshold let 999-on-repeat convert unlimited $OMR heat-free + safehouse-free; now CUMULATIVE over a
+rolling window via new `characters.rwa_used`/`rwa_at` — the D3 `wash_used` token-bucket twin,
+`SCRUTINY_WINDOW_MS` 24h a new lever); **F3/F4 LOW — the season prize was the only `portfolios` writer
+without a character lock** (a latent lost-update/deadlock vs a same-ticker invest, guarded only by
+`SCORE_TICKER≠SEASON_TICKER`; the grant now runs UNDER the winner's `char FOR UPDATE` in the reset
+loop, restoring char→portfolios order — a naive `FOR UPDATE` on grantShares would have INTRODUCED the
+deadlock); **F2 LOW** — `familyInvest` `if (!g)` guard; **F4b LOW** — `invest` jailed gate (consistency
++ R3 forward-safety); **F7 LOW** — the graduation heat add now `Math.min(100,…)`-clamped. Accepted
+(flagged, status-only / fail-closed): the leaderboard full-scan (matches the hitmen board), free-grant
+farmability (status axis, Sybil posture), the chain daily-cap liveness + `OmertaFees` forward-DoS.
+Suite 21/21 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

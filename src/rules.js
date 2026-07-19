@@ -1232,10 +1232,12 @@ export const PORTFOLIO = {
   // (2) the SEASON PRIZE: at rollover the top season grinders (by respect, before the reset) earn
   // the champion's moonshot — a skill-ranked status prize (omrWorth by rank 1..N).
   SEASON_PRIZES: [500, 250, 100], SEASON_TICKER: 'SPCX',
-  // (3) the RICO GRADUATION: a BIG legit move (invest ≥ SCRUTINY_MIN_OMR at once) is the classic
-  // laundering red flag — it draws heat (the launder-heat precedent) and can't be done from a
-  // safehouse (P1.3 — hiding, not moving money). Small buys fly under the radar. Ties RWA to the Law.
-  SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12,
+  // (3) the RICO GRADUATION: a BIG legit move is the classic laundering red flag — it draws heat
+  // (the launder-heat precedent) and can't be done from a safehouse (P1.3 — hiding, not moving
+  // money). "Big" is CUMULATIVE over a rolling window (the D3 wash-bucket precedent), so STRUCTURING
+  // — many sub-threshold buys — still trips it once the window sum crosses SCRUTINY_MIN_OMR. Ties RWA
+  // to the Law. (audit F1: a per-call-only threshold was trivially dodged by investing 999 on repeat.)
+  SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
 };
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market

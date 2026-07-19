@@ -123,23 +123,25 @@ export async function runSeasonRollover(pool, opts = {}) {
     // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the
     // reset below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so
     // no §10.4 currency moves and no chance is involved (rank is earned). Account-level → survives
-    // death. Only characters actually rolling over this season (season < current) and with respect
-    // to their name are eligible.
+    // death. Only characters rolling over this season (season < current) with respect are eligible.
+    // audit F3/F4: the snapshot picks the winners here, but the GRANT is deferred into the reset loop
+    // below so it runs UNDER the winner's `char FOR UPDATE` lock — matching invest's char→portfolios
+    // order. Granting here (unlocked) was the sole `portfolios` writer holding no character lock, a
+    // latent lost-update/deadlock vs a concurrent same-ticker invest. Now closed by lock-ordering.
     const leaders = (await client.query(
-      'SELECT id, account_id, name, respect FROM characters WHERE alive AND season < $1 AND respect > 0 ORDER BY respect DESC, id LIMIT $2',
+      'SELECT id FROM characters WHERE alive AND season < $1 AND respect > 0 ORDER BY respect DESC, id LIMIT $2',
       [current, PORTFOLIO.SEASON_PRIZES.length])).rows;
-    for (let i = 0; i < leaders.length; i++) {
-      const omrWorth = PORTFOLIO.SEASON_PRIZES[i];
-      const g = await grantShares(client, leaders[i].account_id, PORTFOLIO.SEASON_TICKER, omrWorth);
-      if (g) {
-        await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
-          [crypto.randomUUID(), leaders[i].id, 'season_prize', JSON.stringify({ rank: i + 1, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
-      }
-    }
+    const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
     const rows = (await client.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
     for (const { id } of rows) {
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
       if (!ch || ch.season >= current) continue;
+      const prize = prizeByChar.get(id); // grant the season prize while THIS char row is locked (F3/F4)
+      if (prize) {
+        const g = await grantShares(client, ch.account_id, PORTFOLIO.SEASON_TICKER, prize.omrWorth);
+        if (g) await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
+          [crypto.randomUUID(), id, 'season_prize', JSON.stringify({ rank: prize.rank, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
+      }
       const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
       await client.query('UPDATE characters SET respect=0, season_kills=0, season=$2 WHERE id=$1', [id, current]);
       if (legacy > 0)

@@ -52,16 +52,26 @@ export async function grantShares(client, accountId, ticker, omrWorth) {
 export async function invest(ch, ticker, omr, client, h) {
   const t = tickerOf(ticker);
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
+  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+    throw new GameError('jailed', "You can't move money into legit fronts from a cell."); // F4: consistency with other extraction-adjacent acts
   const amt = validAmount(omr);
   // the classic laundering red flag: moving a big sum into legit fronts gets noticed (the launder
-  // precedent). Small buys fly under the radar. Checked BEFORE the burn so a blocked move is clean.
-  const scrutiny = amt >= PORTFOLIO.SCRUTINY_MIN_OMR;
+  // precedent). "Big" is CUMULATIVE over a rolling window (the D3 wash-bucket twin), so structuring —
+  // repeated sub-threshold buys — still trips it (audit F1). Checked BEFORE the burn so a blocked
+  // move is clean (the txn rolls back on throw, discarding the rwa_used mutation below).
+  const refill = ch.rwa_at
+    ? (Date.now() - new Date(ch.rwa_at).getTime()) / PORTFOLIO.SCRUTINY_WINDOW_MS * PORTFOLIO.SCRUTINY_MIN_OMR
+    : PORTFOLIO.SCRUTINY_MIN_OMR;
+  const windowUsed = Math.max(0, Number(ch.rwa_used || 0) - Math.max(0, refill));
+  const cumulative = windowUsed + amt;
+  const scrutiny = cumulative >= PORTFOLIO.SCRUTINY_MIN_OMR;
   if (scrutiny && ch.safe_until && new Date(ch.safe_until) > new Date())
     throw new GameError('safe', "You can't move big money into legit fronts while you're to ground.");
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
   await spendOmr(client, h, amt, 'rwa:invest'); // gates on h.acct.omr, debits in-memory, ledgers the burn
-  if (scrutiny) ch.heat = Number(ch.heat || 0) + PORTFOLIO.SCRUTINY_HEAT; // going legit in a big way draws the law
+  ch.rwa_used = cumulative; ch.rwa_at = new Date(); // record the windowed spend (persistCharacter commits it)
+  if (scrutiny) ch.heat = Math.min(100, Number(ch.heat || 0) + PORTFOLIO.SCRUTINY_HEAT); // F7: clamp like business raids
   const cur = (await client.query('SELECT shares, cost_omr FROM portfolios WHERE account_id=$1 AND ticker=$2', [ch.account_id, ticker])).rows[0];
   const shares = round6(Number(cur?.shares || 0) + bought);
   const cost = Number(cur?.cost_omr || 0) + amt;
@@ -87,6 +97,7 @@ export async function familyInvest(ch, ticker, omr, client, h) {
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
   const amt = validAmount(omr);
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('gang', 'No family to invest for.'); // F2: defensive (unreachable via loadOwned, but every sibling guards it)
   if (Number(g.omr_reserve) < amt)
     throw new GameError('reserve', `The family reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR. Tribute $OMR to fill it.`);
   const price = tickerPriceOf(ticker);

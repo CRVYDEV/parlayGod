@@ -95,6 +95,10 @@ CREATE TABLE IF NOT EXISTS characters (
   -- launderCapDay — heat was the only brake and it decays in minutes)
   wash_used NUMERIC NOT NULL DEFAULT 0,
   wash_at TIMESTAMPTZ,
+  -- R1 audit F1: rolling-window cumulative $OMR invested into the Portfolio (the wash-bucket twin),
+  -- so structuring (many sub-threshold buys) still draws RICO scrutiny once the window sum crosses.
+  rwa_used NUMERIC NOT NULL DEFAULT 0,
+  rwa_at TIMESTAMPTZ,
   respec_at TIMESTAMPTZ,                           -- D7: 24h between stat respecs (opposed rolls are shape-sensitive)
   guarded_by TEXT,                                 -- M7 Phase 4: my hired bodyguard's character id
   guarded_until TIMESTAMPTZ,                       -- M7 Phase 4: protection window (one absorb, then consumed)
