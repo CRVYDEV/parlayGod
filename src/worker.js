@@ -15,6 +15,7 @@ import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
+import { sweepWire } from './wire.js';
 import { reclaimExpiredVouchers } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
@@ -191,6 +192,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
     const auc = await safe('auction sweep', () => sweepAuctions(pool));
     if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
+    // THE WIRE: expire stale wiretaps (row hygiene — reads already filter expires_at)
+    const wr = await safe('wire sweep', () => sweepWire(pool));
+    if (wr?.swept > 0) console.log(`📡 wire: swept ${wr.swept} expired wiretap(s)`);
     // THE LAW: force the RICO bust on an indicted player past the grace window (reaches the offline whale)
     const law = await safe('law sweep', () => sweepLaw(pool));
     if (law && law.cases > 0) console.log(`⚖️  law: tried ${law.cases} case(s) — ${law.convicted} convicted ($${Math.round(law.seized)} seized), ${law.acquitted} walked`);

@@ -1760,11 +1760,46 @@ surfaces `dynasty {name, generation (deaths+1), nameCost}`; `portfolioLeaderboar
 Going Legit tab. `test/portfolio.js`: the ledgered `rwa:dynasty` burn, the board/leaderboard surface,
 the length gate, and the §10.4 vocabulary + conservation (drift == the test grant only; the naming burn
 is conservation-neutral). The existing "no such stock" gate ticker was retargeted (NVDA is now real).
-Suite 23/23 + sim drift-0. All numbers sign-off levers. **NEXT (needs founder call — spec'd in the
-design doc):** THE WIRE (the surveillance + premium-feed intelligence terminal), and the ETH-revenue
-packages (Season Pass / Vanity Store / Premium Wire sub / revive bundles / Made-Man tiers / named
+Suite 23/23 + sim drift-0. All numbers sign-off levers.
+
+**THE WIRE — the intelligence terminal — BUILT** (`src/wire.js`, `test/wire.js` — the 24th suite;
+design `omerta-the-wire-and-revenue-design.md`, design fork **A** — surveillance + premium feed —
+founder-approved). Information as a spendable resource: pay to KNOW (surveil a rival) and pay to NOT be
+known (sweep bugs). Off-chain, §10.4-clean — every burn is an `intel:*` $OMR sink through the vanity
+`spendOmr` till, riding the EXISTING `intel:` omr vocabulary + burn term (ZERO invariant changes). The
+`WIRE` rules-tail block holds every lever (`wireActive` helper). Three layers: **(1) WIRETAPS** (the
+offensive sink) — `placeTap` (`POST /v1/wire/tap/:targetId`) burns `WIRE.TAP_OMR` (8) to run a
+time-boxed (`TAP_MS` 12h), concurrent-capped (`TAP_MAX` 5) wire on ONE living rival (self/gone/capped
+gates; upsert via SELECT-then-write, pg-mem-safe). While live it reveals — via `tapIntel`, a
+point-in-time read, never exact books — the mark's **Law stage** (`rapStageOf`) + heat band, a **wealth
+band**, their **ops counts** (businesses / character_rackets / territory_rackets / family), whether
+they're **WANTED**, and the money signal: **are they HUNTING you** (a search on `(their id → your id)` —
+pierces the intel-peek space). **(2) SWEEP** (the defensive sink) — `sweepBugs` (`POST /v1/wire/sweep`)
+shows `bugsOnYou` and clears every tap on you for `WIRE.SWEEP_OMR` (5); **FREE when clean** (the peek
+precedent — no charge, no-op). **(3) THE STREET WIRE** (the recurring premium sink) — `subscribeWire`
+(`POST /v1/wire/subscribe`) burns `WIRE.SUB_OMR` (12) for a `SUB_MS` (7d) window (extends from the later
+of now / current end — the retainer/envelope precedent), upgrading `GET /v1/wire` into an intelligence
+service: the **ticker tape** (RWA prices + the day's mover — the Dynasty tie-in, free to all), plus
+(subscribers only) **Law forecasts** (`cityForecast`), **threat chatter** (a COUNT of hunters with a
+search on you + open contracts on your head — a COUNT never a NAME: the layered intel economy — the SUB
+warns, a TAP IDs a specific rival, the $OMR peek names funders), and the **war room** (your family's
+turf + war score). A tap READ is UNLOCKED (surveillance, not a two-party action — no lock complexity);
+reads filter `expires_at` + JOIN `alive`, so a dead party's wire goes silent; the worker `sweepWire`
+tidies expired rows (row hygiene — the reads already filter). New `characters.wire_until` column
+(persisted, $60) + `wiretaps` table (`PK(watcher,target)`, `ix_wiretaps_target`). §10.4: `intel:*` is
+already a recognized burn — the test proves the ONLY $OMR drift is the SQL grant, so every wire spend
+reconciles as a burn. Console: a new **"The Wire"** tab (the WS side-panel renamed "Live Feed" to
+disambiguate) — the Street Wire subscribe card, the ticker tape, a run-a-wire target picker + live
+intel cards, the sweep-your-lines card, and (subscribed) the war room + Law forecast; `describe()`
+humanizes tap/sweep/subscribe; `/v1/rules` gained a `wire` block; the raw deck gained a Wire group.
+`test/wire.js` covers the terminal, the tap sink + gates + INTEL (law/wealth/ops/huntingYou), bugs +
+sweep (free-clean vs charged-clears), the subscription + premium feed, the worker sweep, and the §10.4
+vocabulary + conservation. Suite 24/24 + sim drift-0. All numbers are founder sign-off levers.
+
+**STILL NEXT (needs founder call — spec'd in `omerta-the-wire-and-revenue-design.md`):** the ETH-revenue
+packages (Season Pass / Vanity Store / Premium Wire sub in ETH / revive bundles / Made-Man tiers / named
 landmarks) with a configurable Founder/Buyback/RWA-reserve split — all off-chain-first / chain-dormant,
-mainnet gated on legal + audit.
+mainnet gated on legal + audit; and the Dynasty Fund's dividends/tiers/family-book vision.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

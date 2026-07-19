@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS characters (
   welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)
+  wire_until TIMESTAMPTZ,                           -- THE WIRE: the Street Wire premium-intelligence subscription window (a $OMR sink)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -282,6 +283,18 @@ CREATE TABLE IF NOT EXISTS searches (
   target TEXT NOT NULL,
   started_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- THE WIRE — the intelligence terminal. A wiretap is a time-boxed surveillance a watcher places on a
+-- target (a $OMR sink); while live it reveals the target's Law heat / wealth-ops / whether they're
+-- hunting the watcher. Reads filter expires_at + join to `alive`, so a dead party's wire goes silent;
+-- the worker sweeps expired rows. Pure intel — no §10.4 currency beyond the intel:* $OMR burn.
+CREATE TABLE IF NOT EXISTS wiretaps (
+  watcher_character TEXT NOT NULL,
+  target_character TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (watcher_character, target_character)
+);
+CREATE INDEX IF NOT EXISTS ix_wiretaps_target ON wiretaps (target_character);
 -- Escrowed Exchange order book (§5.4): cb | ammo | item; product is rejected.
 CREATE TABLE IF NOT EXISTS listings (
   id TEXT PRIMARY KEY,
