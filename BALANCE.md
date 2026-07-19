@@ -889,6 +889,9 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 | `SPEAKEASY.RAID_FINE_RATE` | 0.15 | Fine = 15% of the value sunk (open + decor), clamped to pocket+bank. | KEEP |
 | `SPEAKEASY.RAID_SHUT_MS` | 2h | The shutter — no rounds/table/income while dark. | KEEP |
 | `SPEAKEASY.PATRON_NOTORIETY_CAP` | 24 | Anti-grief (step-two red-team HIGH-1): max notoriety one `(patron, club)` pair adds per rolling 24h (a token bucket). Deliberately < `RAID_THRESHOLD` so no single account can force a raid — a hot club needs distinct patron traffic. Legit play is uncapped; only the heat per account is bounded. | KEEP |
+| `SPEAKEASY.SALE_MIN` / `SALE_MAX` (step 3) | $100k / $50M | The P2P buyout price bounds. A consensual sale (taxed transfer, the round pattern) — a district clears without a death. | KEEP |
+| `SPEAKEASY.RENOWN.CASH_PER` / `OMR_WEIGHT` / `OWNER_WEIGHT` (step 3) | 10000 / 50 / 0.5 | Cross-club renown weights (pure DERIVED status — outside §10.4 + the sim balance, the hitman-rep argument). $1 spent = 1/10000 renown; 1 $OMR bottle-spend = 50; own-club prestige × 0.5. Bottle-$OMR weighted heaviest (the flex pays most). | KEEP |
+| Store cosmetic decor SKUs (step 3) | `decor_deco` 0.02 / `decor_gilded` 0.04 / `decor_midnight` 0.06 ETH | Display-only club skins (account-level unlock, survives death). §10.4-neutral (Store entitlement + the `plex:%` PLEX burn). The ETH-revenue foothold; the NFT/royalty resale market is mainnet-gated (step four). | KEEP |
 
 **Notes (sign-off):**
 - The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);

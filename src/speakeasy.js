@@ -5,7 +5,7 @@
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
 import { GameError, bus } from './game.js';
-import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf } from './rules.js';
+import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -275,6 +275,117 @@ export async function playTable(ch, owner, districtId, stake, client, h) {
   return { ok: true, district: districtId, bet, rake, win, payout, net: (win ? payout : 0) - bet, toOwner: rake };
 }
 
+// ── step three — cross-club RENOWN (the nightlife legend, pure DERIVED status). Bottle-service ($OMR)
+// is weighted heaviest — the flex is worth the most. Owning a club adds its prestige. No column, no §10.4.
+function renownScore(cash, omr, ownPrestige) {
+  const R = SPEAKEASY.RENOWN;
+  return Math.floor(Number(cash) / R.CASH_PER + Number(omr) * R.OMR_WEIGHT + Number(ownPrestige) * R.OWNER_WEIGHT);
+}
+
+// ── step three — the P2P BUYOUT (a district clears without a death). The owner LISTS a sale price; a
+// buyer completes a consensual TAXED cash transfer (the round pattern) to take the keys. ──
+export async function listSpeakeasy(ch, price, client, h) {
+  const p = Math.floor(Number(price));
+  if (!Number.isFinite(p) || p < SPEAKEASY.SALE_MIN) throw new GameError('price', `Ask at least $${SPEAKEASY.SALE_MIN} for the place.`);
+  if (p > SPEAKEASY.SALE_MAX) throw new GameError('price', `The most you can ask is $${SPEAKEASY.SALE_MAX}.`);
+  const row = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!row) throw new GameError('no_club', "You don't run a house to sell.");
+  await client.query('UPDATE speakeasies SET sale_price=$2 WHERE district_id=$1', [row.district_id, p]);
+  await h.track(client, ch.account_id, 'speakeasy_list', { district: row.district_id, price: p });
+  return { ok: true, district: row.district_id, salePrice: p };
+}
+export async function unlistSpeakeasy(ch, client, h) {
+  const row = (await client.query('SELECT district_id, sale_price FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!row) throw new GameError('no_club', "You don't run a house.");
+  if (row.sale_price == null) throw new GameError('not_listed', "The club isn't on the market.");
+  await client.query('UPDATE speakeasies SET sale_price=NULL WHERE district_id=$1', [row.district_id]);
+  return { ok: true, district: row.district_id };
+}
+
+// BUY OUT a listed club — a taxed cash transfer buyer → seller (the round/bodyguard pattern: seller nets
+// 98%, 1% street tax → buyback, 1% dev off-ledger), then ownership flips to the buyer. Runs under
+// withTwoCharacters(buyer, seller). The seller's pending bar take (+ any pending raid) is settled for
+// THEM first (they earned it); the guest list resets (a fresh house). District-pinned (you show up).
+export async function buySpeakeasy(ch, seller, districtId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', "You can't take the keys from a cell.");
+  if (levelOf(Number(ch.respect)) < SPEAKEASY.MIN_LEVEL)
+    throw new GameError('level', `Running a house of your own opens up at level ${SPEAKEASY.MIN_LEVEL}.`);
+  if (ch.loc !== districtId) throw new GameError('travel', "You're not in that district — go there to take over.");
+  if (seller.id === ch.id) throw new GameError('own_club', 'You already run that house.');
+  const mine = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1', [ch.id])).rows[0];
+  if (mine) throw new GameError('own', 'A man runs one house at a time — sell yours first.');
+  // re-read the club under the seller's lock (withTwoCharacters locked both chars): gone / changed hands → retry
+  const row = (await client.query('SELECT * FROM speakeasies WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!row || row.owner_character !== seller.id) throw new GameError('gone', 'The club changed hands — try again.');
+  if (row.sale_price == null) throw new GameError('not_for_sale', "That club isn't on the market.");
+  const price = Math.floor(Number(row.sale_price));
+  if (Number(ch.cash) < price) throw new GameError('cash', `That club runs $${price}.`);
+  // settle the SELLER's pending first (they earned it): resolve a pending raid, then bank pending income.
+  // A raid at handover shutters the club (income_at → shut_until) — the buyer inherits the (shut) venue.
+  const raid = await resolveRaid(seller, row, client, h);
+  if (!raid.raided) {
+    const inc = accruedIncome(row);
+    if (inc > 0) {
+      seller.cash = Number(seller.cash) + inc;
+      await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: inc, reason: 'speakeasy:income' });
+    }
+  }
+  // the standard 2% house take (1% street tax → buyback + 1% dev off-ledger), the round/bodyguard parity
+  const fee = Math.ceil(price * 0.01), tax = Math.ceil(price * 0.01);
+  const net = price - fee - tax;
+  ch.cash = Number(ch.cash) - price;
+  seller.cash = Number(seller.cash) + net;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'speakeasy:buyout', counterparty: seller.id });
+  await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: net, reason: 'speakeasy:buyout', counterparty: ch.id });
+  // a FRESH house: new proprietor, guest list cleared, sale + heat reset. Keep the physical build (tier,
+  // name, decor, prestige — the buyer bought the establishment). A SHUT club (raided at handover OR already
+  // dark) keeps income_at = shut_until so the new owner also waits out the shutter — consistent with the
+  // round/table isShut gate (else resetting income_at would let a buyer earn through a shutter rounds can't).
+  await client.query('DELETE FROM speakeasy_patrons WHERE district_id=$1', [districtId]);
+  if (isShut(row))
+    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, notoriety=0, notoriety_at=now() WHERE district_id=$1', [districtId, ch.id]);
+  else
+    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, notoriety=0, notoriety_at=now(), income_at=now() WHERE district_id=$1', [districtId, ch.id]);
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (canonical order)
+  await h.notify(client, seller.id, 'speakeasy_sold', { district: districtId, net });
+  bus.emit('streets', { type: 'speakeasy_buyout', by: ch.name, from: seller.name, district: districtId });
+  await h.track(client, ch.account_id, 'speakeasy_buyout', { district: districtId, price });
+  return { ok: true, district: districtId, paid: price, toSeller: net, tier: Number(row.tier), name: row.name || null, raid: raid.raided ? raid : undefined };
+}
+
+// APPLY a cosmetic decor style to your club (an OWNED Store entitlement; display-only). null clears to
+// stock (free — you own the club). Runs under withCharacter. The style must be in store_cosmetics.
+export async function applyDecor(ch, styleId, client, h) {
+  const style = styleId == null || styleId === '' ? null : String(styleId);
+  if (style !== null && !decorStyleOf(style)) throw new GameError('bad_style', 'No such decor style.');
+  const row = (await client.query('SELECT district_id FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!row) throw new GameError('no_club', "You don't run a house to decorate.");
+  if (style !== null) {
+    const owned = (await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [ch.account_id, style])).rows[0];
+    if (!owned) throw new GameError('locked', "You don't own that decor style — buy it in the Store.");
+  }
+  await client.query('UPDATE speakeasies SET decor_style=$2 WHERE district_id=$1', [row.district_id, style]);
+  return { ok: true, district: row.district_id, decor: style, decorName: style ? decorStyleOf(style) : null };
+}
+
+// GET /v1/leaderboard/nightlife — the scene ranked by RENOWN (the hitmen-board full-scan precedent). Two
+// flat queries + aggregate in JS (pg-mem GROUP BY-SUM is dicey — the /v1/gangs precedent). Living only.
+export async function nightlifeLeaderboard(pool, characterId) {
+  const patrons = (await pool.query(
+    `SELECT p.character_id, p.spent_cash, p.spent_omr, c.name FROM speakeasy_patrons p JOIN characters c ON c.id = p.character_id AND c.alive`)).rows;
+  const clubs = (await pool.query(
+    `SELECT s.owner_character, s.prestige, c.name FROM speakeasies s JOIN characters c ON c.id = s.owner_character AND c.alive`)).rows;
+  const agg = new Map();
+  const bump = (id, name, f) => { const e = agg.get(id) || { name, cash: 0, omr: 0, ownPrestige: 0 }; f(e); if (name && !e.name) e.name = name; agg.set(id, e); };
+  for (const p of patrons) bump(p.character_id, p.name, (e) => { e.cash += Number(p.spent_cash); e.omr += Number(p.spent_omr); });
+  for (const cl of clubs) bump(cl.owner_character, cl.name, (e) => { e.ownPrestige += Number(cl.prestige); });
+  const board = [...agg.entries()].map(([id, e]) => {
+    const score = renownScore(e.cash, e.omr, e.ownPrestige);
+    return { name: e.name, renown: score, rank: renownRankOf(score).name, you: id === characterId };
+  }).filter((x) => x.renown > 0).sort((a, b) => b.renown - a.renown).slice(0, 15);
+  return { board };
+}
+
 // the owner's club summary (for loadOwned + the character view). null if they run no house.
 export async function speakeasyOwnedOf(pool, characterId) {
   const row = (await pool.query('SELECT * FROM speakeasies WHERE owner_character=$1', [characterId])).rows[0];
@@ -285,6 +396,8 @@ export async function speakeasyOwnedOf(pool, characterId) {
     incomePerHr: tier?.incomePerHr || 0, pending: accruedIncome(row), prestige: Math.round(Number(row.prestige)),
     notoriety: Math.round(decayedNotoriety(row)), raidRisk: decayedNotoriety(row) >= SPEAKEASY.RAID_THRESHOLD,
     shutSeconds: shut ? Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) : 0,
+    salePrice: row.sale_price == null ? null : Math.floor(Number(row.sale_price)),
+    decor: row.decor_style || null, decorName: row.decor_style ? decorStyleOf(row.decor_style) : null,
     nextTier: next ? { tier: next.tier, name: next.name, cost: next.cost } : null };
 }
 
@@ -293,7 +406,7 @@ export async function speakeasyOwnedOf(pool, characterId) {
 // precedent). Ranked by prestige.
 export async function speakeasyBoard(pool, characterId) {
   const clubs = (await pool.query(
-    `SELECT s.district_id, s.owner_character, s.name, s.tier, s.prestige, s.shut_until, c.name AS owner_name
+    `SELECT s.district_id, s.owner_character, s.name, s.tier, s.prestige, s.shut_until, s.sale_price, s.decor_style, c.name AS owner_name
        FROM speakeasies s JOIN characters c ON c.id = s.owner_character`)).rows;
   const patrons = (await pool.query(
     `SELECT p.district_id, p.character_id, p.visits, p.spent_cash, p.spent_omr, c.name
@@ -311,12 +424,21 @@ export async function speakeasyBoard(pool, characterId) {
     const list = (byClub.get(s.district_id) || []).sort((a, b) => (b.spent + b.omr * 500) - (a.spent + a.omr * 500));
     return { district: s.district_id, owner: s.owner_name, name: s.name || null, mine: s.owner_character === characterId,
       tier: Number(s.tier), tierName: tier?.name || null, prestige: Math.round(Number(s.prestige)),
+      salePrice: s.sale_price == null ? null : Math.floor(Number(s.sale_price)),
+      decor: s.decor_style || null, decorName: s.decor_style ? decorStyleOf(s.decor_style) : null,
       shut: isShut(s), regulars: list.filter((x) => x.regular).length, guestList: list.slice(0, 8) };
   }).sort((a, b) => b.prestige - a.prestige);
   // the open districts (no club yet) — where a made man could plant a flag
   const open = DISTRICTS.filter((d) => !clubs.find((c) => c.district_id === d.id)).map((d) => d.id);
+  // your cross-club RENOWN (derived from your patronage + your own club's prestige) — the nightlife legend
+  let myCash = 0, myOmr = 0, myPrestige = 0;
+  for (const p of patrons) if (p.character_id === characterId) { myCash += Number(p.spent_cash); myOmr += Number(p.spent_omr); }
+  for (const s of clubs) if (s.owner_character === characterId) myPrestige += Number(s.prestige);
+  const myRenown = renownScore(myCash, myOmr, myPrestige);
   return { clubs: map, open, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
     table: { minBet: SPEAKEASY.TABLE.MIN_BET, maxBet: SPEAKEASY.TABLE.MAX_BET, rakeBps: SPEAKEASY.TABLE.RAKE_BPS },
+    yourRenown: { renown: myRenown, rank: renownRankOf(myRenown).name },
+    decorStyles: SPEAKEASY.DECOR_STYLES, saleMin: SPEAKEASY.SALE_MIN, saleMax: SPEAKEASY.SALE_MAX,
     openCost: SPEAKEASY.OPEN_COST, minLevel: SPEAKEASY.MIN_LEVEL };
 }
 

@@ -513,6 +513,14 @@ CREATE TABLE IF NOT EXISTS store_grants (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_store_grants_account ON store_grants (account_id);
+-- step-three cosmetics: account-level ownership of a cosmetic decor STYLE (a Store entitlement, the
+-- patron-badge precedent — SURVIVES DEATH). Display-only; applied to the owner's club (speakeasies.decor_style).
+CREATE TABLE IF NOT EXISTS store_cosmetics (
+  account_id TEXT NOT NULL,
+  style TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, style)
+);
 -- THE RWA RESERVE ACCOUNTING (R2, DORMANT) — the rwa share of Store revenue is recorded here and
 -- NEVER spent until R2 (a real RWA reserve backing the Dynasty shares) ships (legal-gated). This is
 -- the accounting seat R2's buy-bot will draw on — the vig_revenue twin on the RWA side. Out-of-band
@@ -595,6 +603,12 @@ CREATE TABLE IF NOT EXISTS speakeasies (
   notoriety NUMERIC NOT NULL DEFAULT 0,
   notoriety_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   shut_until TIMESTAMPTZ,
+  -- step three — the P2P BUYOUT: the owner lists a sale price (a consensual transfer, districts clear
+  -- without a death); a buyer completes it via a taxed cash transfer (the round pattern). null = not for sale.
+  sale_price NUMERIC,
+  -- step three — the ETH COSMETIC DECOR tier: a display-only club skin (Store entitlement, account-level
+  -- unlock in store_cosmetics, applied here). null = the stock look. Pure display — zero gameplay effect.
+  decor_style TEXT,
   opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_speakeasies_owner ON speakeasies (owner_character);

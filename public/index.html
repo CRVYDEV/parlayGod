@@ -251,6 +251,9 @@
     if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
     if (body.win !== undefined && body.bet !== undefined) bits.push(body.win ? `the wheel hit — +$${fmt(body.payout - body.bet)}` : `the wheel came up cold — −$${fmt(body.bet)}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
+    if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
+    if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
+    if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -1348,8 +1351,14 @@
     const mine = me.speakeasy;
     const here = (b.clubs || []).find((c) => c.district === me.loc);        // the club where you're standing
     const canOpenHere = !mine && b.open?.includes(me.loc);
+    const styles = sp.decorStyles || {};                                    // { id: displayName }
+    const store = (await api('GET', '/v1/store')).body || {};               // for owned cosmetics
+    const ownedDecor = store.owned?.cosmetics || [];
+    const rn = b.yourRenown || { renown: 0, rank: 'Nobody' };
     t.innerHTML = `
       ${!mine && !(b.clubs || []).length ? coachCard('Open a club — be the man to see', 'A speakeasy is the district\'s premier nightclub: it farms cash on its own AND is where the city gathers to be seen. One per district, level ' + (sp.minLevel || 15) + '+. Patrons buy rounds (you pocket the cut) and bottle service; the busiest room tops the nightlife. It dies with your street, so it\'s a marked man\'s prize.') : ''}
+      <div class="card" style="border-color:var(--gold)"><span class="t">Your renown: ${rn.rank} <span class="chip">${fmt(rn.renown)}</span></span>
+        <div class="d">The nightlife legend — earned by being seen (rounds + bottles) and running a room. <a href="#" id="sp-nl">the leaderboard →</a></div></div>
       <h2>You're at: ${distName(me.loc)}</h2>
       ${mine ? `
       <div class="card" style="border-color:var(--neon)"><span class="t">${mine.name || mine.tierName} <span class="chip good">YOUR HOUSE</span></span>
@@ -1358,7 +1367,10 @@
         <button class="act" data-do="POST /v1/speakeasy/collect" style="border-color:var(--neon)">collect the bar take</button>
         ${mine.nextTier ? `<button class="act" id="sp-up">redo the decor → ${mine.nextTier.name} ($${fmt(mine.nextTier.cost)})</button>` : '<span class="chip good">The Cathedral — finest room in the city</span>'}
         <div style="margin-top:6px"><input id="sp-name" placeholder="${mine.name ? 'rename the club' : 'name the club'}" size="18" maxlength="24">
-          <button class="act" id="sp-name-go">${mine.name ? 'rename' : 'name it'} (${sp.nameOmr} $OMR)</button></div></div>`
+          <button class="act" id="sp-name-go">${mine.name ? 'rename' : 'name it'} (${sp.nameOmr} $OMR)</button></div>
+        <div style="margin-top:6px" class="d">Decor style${mine.decor ? ` — currently <b>${mine.decorName}</b>` : ' — stock'}:
+          ${ownedDecor.length ? ownedDecor.map((s) => `<button class="act" data-decor="${s}"${mine.decor === s ? ' style="border-color:var(--neon)"' : ''}>${styles[s] || s}</button>`).join(' ') + (mine.decor ? ' <button class="act" data-decor="">clear to stock</button>' : '') : '<span style="color:var(--dim)">buy a cosmetic style in The Store</span>'}</div>
+        <div style="margin-top:6px" class="d">${mine.salePrice ? `On the market for $${fmt(mine.salePrice)} — <button class="act" id="sp-unlist">take it off</button>` : `Sell the house: <input id="sp-sale" placeholder="ask $" size="8"> <button class="act" id="sp-list">list it</button>`}</div></div>`
       : canOpenHere ? `<div class="card"><span class="t">Open a club here</span>
           <div class="d">${distName(me.loc)} has no house yet — plant your flag ($${fmt(sp.openCost)}, level ${sp.minLevel}+).</div>
           <button class="act" id="sp-open" style="border-color:var(--neon)">open the club ($${fmt(sp.openCost)})</button></div>`
@@ -1378,10 +1390,11 @@
 
       <h2 style="margin-top:12px">The Nightlife <span class="d" style="font-size:10px">(ranked by prestige — where the city goes to be seen)</span></h2>
       <div class="grid">${(b.clubs || []).map((c) => `
-        <div class="card"><span class="t">${c.name || distName(c.district)}</span>${c.mine ? '<span class="chip good">yours</span>' : ''}
+        <div class="card"><span class="t">${c.name || distName(c.district)}</span>${c.mine ? '<span class="chip good">yours</span>' : ''}${c.decorName ? `<span class="chip">${c.decorName}</span>` : ''}${c.salePrice && !c.mine ? `<span class="chip gold">for sale $${fmt(c.salePrice)}</span>` : ''}
           <div class="d">${distName(c.district)} · ${c.tierName} · ${c.owner} · prestige ${c.prestige} · ${c.regulars} regular${c.regulars === 1 ? '' : 's'}</div>
           ${c.guestList?.length ? `<div class="d">seen here: ${c.guestList.map((g) => `${g.you ? '<b>' + g.name + '</b>' : g.name}${g.regular ? '★' : ''}`).join(', ')}</div>` : '<div class="d" style="color:var(--dim)">quiet tonight</div>'}
-          ${!c.mine && c.district !== me.loc ? `<button class="act" data-travel="${c.district}">go there</button>` : ''}</div>`).join('')
+          ${!c.mine && c.district !== me.loc ? `<button class="act" data-travel="${c.district}">go there</button>` : ''}
+          ${c.salePrice && !c.mine && !mine && c.district === me.loc ? `<button class="act" data-buy="${c.district}" style="border-color:var(--gold)">buy it out ($${fmt(c.salePrice)})</button>` : ''}</div>`).join('')
         || '<span class="d" style="color:var(--dim)">no clubs open yet — be the first proprietor</span>'}</div>
       ${b.open?.length ? `<div class="d" style="color:var(--dim);margin-top:8px">Open districts: ${b.open.map(distName).join(', ')} — travel there to plant a flag.</div>` : ''}`;
 
@@ -1392,6 +1405,13 @@
     t.querySelectorAll('[data-bottle]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/bottle`, { bottle: x.dataset.bottle }).then(() => renderSpeakeasy()));
     t.querySelectorAll('[data-travel]').forEach((x) => x.onclick = () => act('POST', '/v1/travel', { district: x.dataset.travel }).then(() => renderSpeakeasy()));
     const tb = $('#sp-table'); if (tb) tb.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/table`, { bet: Number($('#sp-bet').value) }).then(() => renderSpeakeasy());
+    t.querySelectorAll('[data-decor]').forEach((x) => x.onclick = () => act('POST', '/v1/speakeasy/decor', { style: x.dataset.decor || null }).then(() => renderSpeakeasy()));
+    const li = $('#sp-list'); if (li) li.onclick = () => act('POST', '/v1/speakeasy/list', { price: Number($('#sp-sale').value) }).then(() => renderSpeakeasy());
+    const ul = $('#sp-unlist'); if (ul) ul.onclick = () => act('POST', '/v1/speakeasy/unlist', {}).then(() => renderSpeakeasy());
+    t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${x.dataset.buy}/buy`, {}).then(() => renderSpeakeasy()));
+    const nlLink = $('#sp-nl'); if (nlLink) nlLink.onclick = async (e) => { e.preventDefault();
+      const nl = (await api('GET', '/v1/leaderboard/nightlife')).body || {};
+      alert('THE NIGHTLIFE — top of the scene\n\n' + (nl.board || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${fmt(x.renown)})${x.you ? '  ← you' : ''}`).join('\n')); };
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

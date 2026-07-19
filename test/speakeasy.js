@@ -186,6 +186,60 @@ assert.equal((await call('POST', '/v1/speakeasy/neon/round', { token: patron.tok
 assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } })).body.error, 'shut', 'no table at a shuttered club');
 assert.equal((await call('POST', '/v1/speakeasy/collect', { token: owner.token })).body.collected, 0, 'a dark club earns nothing while shuttered');
 assert.equal((await call('POST', '/v1/speakeasy/upgrade', { token: owner.token })).body.error, 'shut', 'no renovating a shuttered club (audit MED-1: upgrade resolves the raid + honours the shutter)');
+await pool.query(`UPDATE speakeasies SET shut_until=NULL, notoriety=0, income_at=now() WHERE district_id='neon'`); // reopen for the step-three tests
+
+// ── STEP THREE — cross-club RENOWN (the nightlife legend, derived from patronage + ownership) ──
+board = (await call('GET', '/v1/speakeasy', { token: patron.token })).body;
+assert(board.yourRenown && board.yourRenown.renown > 100, `the patron built real renown from rounds + a bottle (was ${board.yourRenown?.renown})`);
+assert(typeof board.yourRenown.rank === 'string', 'renown carries a display rank');
+const nl = (await call('GET', '/v1/leaderboard/nightlife', { token: patron.token })).body;
+assert(nl.board.length >= 1 && nl.board.some((x) => x.you && x.renown > 0), 'the patron ranks on the nightlife leaderboard');
+assert(nl.board.some((x) => x.name === 'Nucky Thompson'), 'the proprietor ranks too (own-club prestige feeds renown)');
+
+// ── STEP THREE — the ETH COSMETIC DECOR tier (Store SKU → account unlock → apply to the club) ──
+assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'gilded' } })).body.error, 'locked', "you can't apply decor you don't own");
+assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'nope' } })).body.error, 'bad_style', 'no such decor style');
+// buy the Art Deco style with EARNED $OMR (the PLEX path — floor price 0.02 ETH × 5000 = 100 $OMR, no oracle)
+await grantOmr(owner.aid, 150);
+const buyDeco = await call('POST', '/v1/store/plex/decor_deco', { token: owner.token });
+assert.equal(buyDeco.code, 200, 'bought the Art Deco decor via PLEX ($OMR)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the cosmetic unlock landed (account-level, survives death)');
+assert.equal((await call('POST', '/v1/store/plex/decor_deco', { token: owner.token })).body.error, 'owned', 'a re-buy of an owned cosmetic is refused BEFORE the burn');
+const applied = await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } });
+assert.equal(applied.code, 200, 'the owner fitted out the club');
+assert.equal(applied.body.decorName, 'Art Deco', 'the decor name resolves');
+board = (await call('GET', '/v1/speakeasy', { token: owner.token })).body;
+assert.equal(board.clubs.find((c) => c.district === 'neon').decor, 'deco', 'the board shows the applied decor');
+assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: null } })).body.decor, null, 'clearing to stock is free (you own the club)');
+await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } }); // re-apply for the board
+
+// ── STEP THREE — the P2P BUYOUT (a district clears without a death; a taxed transfer) ──
+assert.equal((await call('POST', '/v1/speakeasy/list', { token: owner.token, body: { price: 1 } })).body.error, 'price', 'below the sale floor');
+assert.equal((await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token })).body.error, 'not_for_sale', "you can't buy a club that isn't listed");
+const salePrice = 500000;
+const listed = await call('POST', '/v1/speakeasy/list', { token: owner.token, body: { price: salePrice } });
+assert.equal(listed.code, 200, 'the owner lists the club');
+assert.equal(listed.body.salePrice, salePrice, 'at the asking price');
+// the buyer must be at the district
+await seed(rival.id, `loc='docks'`);
+assert.equal((await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token })).body.error, 'travel', 'the buyer shows up in person');
+await seed(rival.id, `loc='neon'`);
+const buyerCashPre = (await meOf(rival.token)).cash, sellerCashPre = (await meOf(owner.token)).cash;
+const poolPreBuy = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+const netSale = salePrice - Math.ceil(salePrice * 0.01) * 2;
+const buy = await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token });
+assert.equal(buy.code, 200, 'the club changes hands');
+assert.equal(buy.body.toSeller, netSale, 'the seller nets 98% of the sale');
+assert.equal((await meOf(rival.token)).cash, buyerCashPre - salePrice, 'the buyer paid the full price');
+const sellerAfter = (await meOf(owner.token)).cash; // net sale + any pending bar take collected at handover (ledgered speakeasy:income)
+assert(sellerAfter >= sellerCashPre + netSale && sellerAfter <= sellerCashPre + netSale + 2000, 'the seller got the cut (+ any pending take)');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolPreBuy + Math.ceil(salePrice * 0.01), 'the 1% street tax fed the buyback');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon' AND owner_character='${rival.id}'`)).rows[0].n), 1, 'the rival now runs the Neon club');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list reset for the new proprietor');
+assert.equal((await meOf(owner.token)).speakeasy, null, 'the seller runs no house now (freed to open/buy elsewhere)');
+assert.equal((await call('POST', '/v1/speakeasy/name', { token: owner.token, body: { name: 'x' } })).body.error, 'no_club', 'a seller has no club to name');
+board = (await call('GET', '/v1/speakeasy', { token: rival.token })).body;
+assert.equal(board.clubs.find((c) => c.district === 'neon').decor, 'deco', 'the club kept its physical decor through the sale');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
 let inv = await runLedgerInvariants(pool);
@@ -196,17 +250,19 @@ assert(vocab.ok, `speakeasy: rides the §10.4 vocabulary (${JSON.stringify(vocab
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, omrDrift, `the only $OMR drift is the test grants (${omrDrift}) — bottles/naming reconcile as vanity:% burns`);
 
-// ── DEATH: a dead proprietor's club goes dark (+ its guest list clears) ──
-await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: owner.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+// ── DEATH: a dead proprietor's club goes dark (+ its guest list clears). The rival owns Neon now. ──
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: rival.id }, headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon'`)).rows[0].n), 0, "the dead don's club is gone");
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list cleared with it');
 board = (await call('GET', '/v1/speakeasy', { token: patron.token })).body;
 assert(board.open.includes('neon'), 'the district is open for a new proprietor');
+// the cosmetic UNLOCK survives death (account-level) — the seller kept his Art Deco style even after the sale
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the decor cosmetic survives (account-level, the patron-badge precedent)');
 
 // §10.4 still holds after the estate (the club/guest-list wipe moves no currency)
 inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'vocabulary still closed');
 
-console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid; bottles/naming ride vanity:%)');
+console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income) + STEP THREE: cross-club RENOWN (derived from patronage + ownership, the leaderboard), the ETH COSMETIC DECOR tier (PLEX-bought unlock + own-gate + apply/clear + survives death), and the P2P BUYOUT (list/not_for_sale/travel gates, a taxed transfer, ownership + guest-list reset, the seller freed, the club keeps its build), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens; the cosmetic unlock survives), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid + buyout; bottles/naming/decor-PLEX ride vanity:%/plex:%)');
 await app.close();
