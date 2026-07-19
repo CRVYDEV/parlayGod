@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
 import { STORE, packageOf, passActive } from './rules.js';
+import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
@@ -163,6 +164,50 @@ export async function sweepUncreditedStore(pool) {
   return { granted };
 }
 
+// ── PLEX-for-packages: pay a SKU's fee from EARNED $OMR (a plex:* burn) for the SAME entitlement ──
+// The market-linked quote: max(floor, feeEth × latest-buyback-price × premium). `db` is a pool or an
+// open client (in-txn read). oracle null (static floor) until a first buyback prints a price.
+export async function plexPackageQuote(db, sku) {
+  const pkg = packageOf(sku);
+  if (!pkg) return null;
+  const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
+  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  if (!last) return { sku, price: floor, oracle: null };
+  const oracle = Number(last.price_omr_per_eth);
+  const price = Math.max(floor, round6(pkg.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000));
+  return { sku, price, oracle };
+}
+
+// POST /v1/store/plex/:sku — buy a Store package with EARNED $OMR. Runs under withCharacter (h.acct is
+// the account). BURNS the $OMR (plex:<sku>, a §10.4-legal deflationary sink via the plex:% term) and
+// grants the SAME non-§10.4 entitlement an ETH payer gets. The grant is done IN-CONTEXT: persisted
+// columns (mint_credits/respawn_tokens via persistAccount; wire_until via persistCharacter) are mutated
+// IN-MEMORY so the post-handler persist commits them; non-persisted state (patron/pass_*) is direct SQL
+// (no clobber). This is why we don't call the headless grantPackage here — it would be clobbered.
+export async function payPackagePlex(ch, sku, client, h) {
+  const pkg = packageOf(sku);
+  if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  const q = await plexPackageQuote(client, sku);
+  const price = q.price;
+  if (Number(h.acct.omr) < price) throw new GameError('omr', `That runs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
+  await spendOmr(client, h, price, `plex:${sku}`); // gates h.acct.omr, debits in-memory, ledgers the burn (plex:% term)
+  const g = pkg.grant || {}, now = Date.now();
+  if (g.mintCredits) h.acct.mint_credits = Number(h.acct.mint_credits || 0) + g.mintCredits;         // persistAccount commits
+  if (g.respawnTokens) h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + g.respawnTokens; // persistAccount commits
+  if (g.patron) { await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [ch.account_id]); if (h.acct) h.acct.patron = true; }
+  if (g.passDays) {
+    const cur = (await client.query('SELECT pass_until FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0];
+    const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
+    const until = new Date(laterMs(now, cur?.pass_until) + g.passDays * 86400000);
+    if (wasActive) await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [ch.account_id, until]);
+    else await client.query('UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL WHERE account_id=$1', [ch.account_id, until]);
+  }
+  if (g.wireDays) ch.wire_until = new Date(laterMs(now, ch.wire_until) + g.wireDays * 86400000); // persistCharacter commits
+  await client.query('INSERT INTO store_grants (id, account_id, sku, ref) VALUES ($1,$2,$3,NULL)', [uid(), ch.account_id, sku]);
+  await h.track(client, ch.account_id, 'plex_package', { sku, omr: price });
+  return { ok: true, sku, name: pkg.name, omrSpent: price };
+}
+
 // ── read model: the catalog + your live entitlements ──
 export async function storeBoard(pool, accountId) {
   const a = (await pool.query(
@@ -171,8 +216,15 @@ export async function storeBoard(pool, accountId) {
   const now = Date.now();
   const wireMs = ch?.wire_until ? new Date(ch.wire_until).getTime() : 0;
   const passMs = a.pass_until ? new Date(a.pass_until).getTime() : 0;
+  // the PLEX price (pay in earned $OMR) — one oracle read, derived per SKU
+  const last = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const oracle = last ? Number(last.price_omr_per_eth) : null;
+  const plexOf = (p) => {
+    const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
+    return oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
+  };
   return {
-    packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
+    packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: plexOf(p), grant: p.grant, blurb: p.blurb })),
     split: STORE.SPLIT_BPS,
     owned: {
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),

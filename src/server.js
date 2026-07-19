@@ -1010,6 +1010,9 @@ export async function buildServer() {
   // (dormant); the watcher observes StorePaid and calls recordStorePurchase (the mint/respawn fee
   // pattern). §10.4-neutral — the Store grants only entitlements/access/status, never currency.
   app.get('/v1/store', { preHandler: auth }, async (req) => Store.storeBoard(pool, req.user.sub));
+  // PLEX-for-packages — buy a Store SKU with EARNED $OMR (burns $OMR for the same entitlement)
+  app.post('/v1/store/plex/:sku', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Store.payPackagePlex(ch, req.params.sku, client, h)));
   // Mod/ops: the founder's three-way revenue split (founder / buyback / RWA), and the comp/simulate
   // path — drives recordStorePurchase with a synthetic nonce (for comps, QA, and until the paywall
   // ships). `nonce` must be unique; a duplicate is the idempotent no-op.

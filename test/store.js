@@ -131,5 +131,28 @@ assert(rev.buybackEth > 0, 'the buyback flywheel is funded by Store revenue');
 assert.equal(rev.rwaSpent, 0, 'the RWA reserve is recorded-only (R2 dormant)');
 assert(rev.bySku.find((s) => s.sku === 'made_man'), 'the ops view tallies sales by SKU');
 
+// ── PLEX-for-packages: pay a SKU with EARNED $OMR (a plex:* BURN) for the same entitlement ──
+// (runs AFTER the neutrality check because the test SQL-grants $OMR — an unledgered mint; the plex
+// burn itself IS ledgered, asserted directly below.)
+const plexer = await mk('Plex Pete');
+const paid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${plexer.id}'`)).rows[0].a;
+await pool.query(`UPDATE account_persistent SET omr=1000 WHERE account_id='${paid}'`);
+const sb = (await call('GET', '/v1/store', { token: plexer.token })).body;
+const mm = sb.packages.find((p) => p.sku === 'made_man');
+assert(mm.plexOmr > 0, 'the PLEX $OMR price is quoted (the floor, before any buyback prints an oracle)');
+const plexBurnBefore = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].s);
+const omrPre = (await meOf(plexer.token)).omr;
+r = await call('POST', '/v1/store/plex/made_man', { token: plexer.token });
+assert.equal(r.code, 200, 'PLEX-bought Made Man with earned $OMR');
+assert.equal(r.body.omrSpent, mm.plexOmr, 'burned exactly the quoted $OMR');
+assert.equal((await meOf(plexer.token)).omr, omrPre - mm.plexOmr, 'the $OMR left the account');
+assert.equal((await call('GET', '/v1/store', { token: plexer.token })).body.owned.mintCredits, 1, 'the entitlement granted — same as an ETH payer gets');
+// the spend is a LEDGERED plex:* burn (§10.4-legal deflationary sink; no clobber of the grant)
+const plexBurnAfter = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'plex:%'")).rows[0].s);
+assert.equal(plexBurnAfter - plexBurnBefore, mm.plexOmr, 'the PLEX spend is a ledgered plex:* burn');
+// insufficient earned $OMR + bad sku are clean refusals
+assert.equal((await call('POST', '/v1/store/plex/revive_5', { token: plexer.token })).body.error, 'omr', 'not enough earned $OMR is refused');
+assert.equal((await call('POST', '/v1/store/plex/nope', { token: plexer.token })).body.error, 'bad_sku', 'no such package');
+
 console.log('✅ The Store (ETH revenue packages) test passed — the catalog board, the three-way revenue split (founder/buyback/rwa, exact math), idempotent ingestion (re-delivered nonce = no-op), per-SKU grants (mint credit, revive bundle, ETH Street Wire window, the season pass + patron, the permanent patron badge), pay-before-link reconcile (claim-then-grant, exactly-once), zero-value no-grant, §10.4 NEUTRALITY (every check drift-0 — the Store mints no currency), and the buyback share funding the EXISTING Vig flywheel (spend ≤ revenue holds; RWA recorded-only, R2 dormant)');
 await app.close();

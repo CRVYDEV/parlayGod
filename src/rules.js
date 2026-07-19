@@ -1370,6 +1370,12 @@ export const STORE = {
       blurb: 'A permanent patron badge — a quiet flex on every screen you appear.' },
   ],
 };
+// PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH (the EVE "pay your rent in
+// ISK" path — ETH payers fund the Vig, $OMR payers BURN supply; both get the same entitlement). Price =
+// max(floor, feeEth × latest-buyback-oracle × premium) — market-linked like the vig PLEX, with a static
+// $OMR-per-ETH floor before the market prints a price. Sign-off levers.
+STORE.PLEX_FLOOR_OMR_PER_ETH = Number(process.env.STORE_PLEX_FLOOR || 5000); // 0.01 ETH → 50 $OMR floor
+STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); // 1.2× the ETH-equivalent
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
