@@ -57,6 +57,12 @@ async function grantPackage(client, accountId, sku, ref = null) {
   if (g.mintCredits) await client.query('UPDATE account_persistent SET mint_credits = mint_credits + $2 WHERE account_id=$1', [accountId, g.mintCredits]);
   if (g.respawnTokens) await client.query('UPDATE account_persistent SET respawn_tokens = respawn_tokens + $2 WHERE account_id=$1', [accountId, g.respawnTokens]);
   if (g.patron) await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [accountId]);
+  if (g.cosmetic) {
+    // account-level cosmetic UNLOCK (survives death). SELECT-then-INSERT (pg-mem ON CONFLICT unreliable);
+    // a re-grant of an already-owned style is a no-op (the entitlement is boolean-owned, not stacked).
+    if (!(await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [accountId, g.cosmetic])).rows[0])
+      await client.query('INSERT INTO store_cosmetics (account_id, style) VALUES ($1,$2)', [accountId, g.cosmetic]);
+  }
   if (g.passDays) {
     // EXTEND from the later of now / current end (the retainer/subscription precedent); absolute write
     // (pg-mem timestamp-interval arithmetic is unreliable — compute in JS, the setCargo discipline).
@@ -197,6 +203,9 @@ export async function payPackagePlex(ch, sku, client, h) {
   if (g.mintCredits && h.acct?.minted) throw new GameError('minted', 'This account is already made — the credit would be dead.');
   if (g.patron && !g.passDays && !g.mintCredits && !g.respawnTokens && h.acct?.patron)
     throw new GameError('patron', 'You already wear the ring.');
+  // a cosmetic you already own would be a dead re-buy — refuse BEFORE the burn (the mint-credit precedent)
+  if (g.cosmetic && (await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [ch.account_id, g.cosmetic])).rows[0])
+    throw new GameError('owned', 'You already own that decor style.');
   const q = await plexPackageQuote(client, sku);
   const price = q.price;
   if (Number(h.acct.omr) < price) throw new GameError('omr', `That runs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
@@ -204,6 +213,7 @@ export async function payPackagePlex(ch, sku, client, h) {
   if (g.mintCredits) h.acct.mint_credits = Number(h.acct.mint_credits || 0) + g.mintCredits;         // persistAccount commits
   if (g.respawnTokens) h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + g.respawnTokens; // persistAccount commits
   if (g.patron) { await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [ch.account_id]); if (h.acct) h.acct.patron = true; }
+  if (g.cosmetic) await client.query('INSERT INTO store_cosmetics (account_id, style) VALUES ($1,$2)', [ch.account_id, g.cosmetic]); // gated above → never a dup
   if (g.passDays) {
     const cur = (await client.query('SELECT pass_until FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0];
     const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
@@ -229,6 +239,7 @@ export async function storeBoard(pool, accountId) {
   const last = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
   const rawOracle = last ? Number(last.price_omr_per_eth) : null;
   const oracle = (rawOracle != null && Number.isFinite(rawOracle) && rawOracle > 0) ? rawOracle : null; // LOW-1 guard
+  const cosmetics = (await pool.query('SELECT style FROM store_cosmetics WHERE account_id=$1', [accountId])).rows.map((r) => r.style);
   const plexOf = (p) => {
     const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
     return oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
@@ -241,6 +252,7 @@ export async function storeBoard(pool, accountId) {
       patron: !!a.patron,
       pass: { active: passActive(a, now), seconds: Math.max(0, Math.ceil((passMs - now) / 1000)) },
       wire: { active: wireMs > now, seconds: Math.max(0, Math.ceil((wireMs - now) / 1000)) },
+      cosmetics, // owned decor styles (applied to your club via POST /v1/speakeasy/decor)
     },
     // real-money payments are on-chain (the OmertaFees paywall) — this endpoint is informational
     note: 'Purchases are made on-chain at the OmertaFees paywall; the watcher credits your account.',

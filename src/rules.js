@@ -1369,6 +1369,14 @@ export const STORE = {
       blurb: 'A month as a made patron — the badge, two revives, and the season track.' },
     { sku: 'patron', name: "Patron's Ring", priceEth: 0.10, grant: { patron: true },
       blurb: 'A permanent patron badge — a quiet flex on every screen you appear.' },
+    // ── the Speakeasy COSMETIC DECOR tier (step three) — an account-level style unlock (survives death),
+    // applied to your club (display-only, zero gameplay). Payable in ETH (dormant paywall) or PLEX ($OMR).
+    { sku: 'decor_deco', name: 'Art Deco Decor', priceEth: 0.02, grant: { cosmetic: 'deco' },
+      blurb: 'A sunburst-and-chrome Art Deco fit-out for your club — pure style, no power.' },
+    { sku: 'decor_gilded', name: 'Gilded Age Decor', priceEth: 0.04, grant: { cosmetic: 'gilded' },
+      blurb: 'Gold leaf and crystal — the Gilded Age look. A cosmetic skin for the house.' },
+    { sku: 'decor_midnight', name: 'Midnight Velvet Decor', priceEth: 0.06, grant: { cosmetic: 'midnight' },
+      blurb: 'Deep velvet and low light — the Midnight room. Cosmetic only.' },
   ],
 };
 // PLEX-for-packages: pay a Store SKU's fee from EARNED $OMR instead of ETH (the EVE "pay your rent in
@@ -1466,10 +1474,31 @@ export const SPEAKEASY = {
   // anti-grief: one patron can add at most this much notoriety to a club per rolling 24h (a token bucket).
   // Deliberately < RAID_THRESHOLD so no single account can force a raid — it takes distinct patron traffic.
   PATRON_NOTORIETY_CAP: 24,
+  // ── step three — the P2P BUYOUT (districts clear without a death). The owner lists a sale price; a
+  // buyer completes a consensual, TAXED cash transfer (the round pattern) to take the keys. Price bounds.
+  SALE_MIN: 100000, SALE_MAX: 50000000,
+  // ── step three — cross-club RENOWN (the nightlife legend, pure DERIVED status — no column, dies with the
+  // street). renown = floor(Σ spent_cash / CASH_PER + Σ spent_omr × OMR_WEIGHT + ownClubPrestige × OWNER_WEIGHT).
+  // Bottle-service ($OMR) is weighted heaviest — the flex is worth the most. RANKS is a display ladder.
+  RENOWN: {
+    CASH_PER: 10000, OMR_WEIGHT: 50, OWNER_WEIGHT: 0.5,
+    RANKS: [
+      { min: 0, name: 'Nobody' }, { min: 25, name: 'A Face' }, { min: 100, name: 'A Regular' },
+      { min: 300, name: 'High Roller' }, { min: 800, name: 'Big Shot' }, { min: 2000, name: 'King of the Night' },
+    ],
+  },
+  // ── step three — the ETH COSMETIC DECOR styles (Store SKUs grant the account-level unlock; the owner
+  // applies one to their club). Display-only — zero gameplay effect (the vanity/status posture). id → name.
+  DECOR_STYLES: { deco: 'Art Deco', gilded: 'Gilded Age', midnight: 'Midnight Velvet' },
 };
 export const speakeasyTierOf = (tier) => SPEAKEASY.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const speakeasyRoundOf = (id) => SPEAKEASY.ROUNDS.find((r) => r.id === id) || null;
 export const speakeasyBottleOf = (id) => SPEAKEASY.BOTTLES.find((b) => b.id === id) || null;
+export const renownRankOf = (score) =>
+  [...SPEAKEASY.RENOWN.RANKS].reverse().find((r) => Number(score) >= r.min) || SPEAKEASY.RENOWN.RANKS[0];
+// own-property lookup only (the landmarkOf precedent — else '__proto__'/'constructor' slip the validation gate)
+export const decorStyleOf = (id) =>
+  (Object.prototype.hasOwnProperty.call(SPEAKEASY.DECOR_STYLES, id) ? SPEAKEASY.DECOR_STYLES[id] : null);
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market

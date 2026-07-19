@@ -1998,11 +1998,37 @@ OTHER players' patronage, so a rival could flood the table/rounds to force ~$300
 new `speakeasy_patrons.noto_used`/`noto_at`) — legit play stays uncapped, only the HEAT one account can
 generate is bounded, so a hot club needs genuinely distinct traffic; **MED-1** — `upgradeSpeakeasy` now
 resolves a pending raid first + refuses while shuttered (an owner had dodged the raid roll, and resumed
-income mid-shutter, by upgrading instead of collecting). Suite 28/28 + sim drift-0. **Deferred (step
-three, the revenue layer)**:
-the **real-money (ETH) cosmetic decor + bottle-service** tier (the Store/GearVault rail — cosmetics-as-NFTs
-with resale royalties, the recurring-revenue engine), a P2P **buyout/contest** so districts clear without a
-death, and a cross-club **renown** axis — all chain work mainnet-gated (legal + audit), the M6 pattern.
+income mid-shutter, by upgrading instead of collecting). Suite 28/28 + sim drift-0. **Step three — the
+revenue layer + the endgame social loop — BUILT** (`src/speakeasy.js`/`src/store.js`; all off-chain,
+§10.4-clean, numbers sign-off levers). **(A) cross-club RENOWN** — a personal nightlife-legend axis, pure
+DERIVED status (no column, dies with the street — the Commission-seats "recompute on read" precedent):
+`floor(Σ spent_cash / RENOWN.CASH_PER + Σ spent_omr × OMR_WEIGHT + ownClubPrestige × OWNER_WEIGHT)` over
+every `speakeasy_patrons` row + own club (bottle-$OMR weighted heaviest — the flex pays the most);
+`RENOWN.RANKS` ladder (Nobody → King of the Night); `GET /v1/leaderboard/nightlife` (the hitmen-board
+full-scan); board `yourRenown`. Outside §10.4 + the sim-audited balance (the hitman-rep argument). **(B)
+the P2P BUYOUT** (a district clears without a death) — `listSpeakeasy(price)`/`unlistSpeakeasy` set
+`speakeasies.sale_price` (bounds `SALE_MIN`/`SALE_MAX`); `buySpeakeasy` (two-party
+`withTwoCharacters(buyer, seller)`) transfers ownership for a TAXED cash transfer buyer → seller (the
+round/bodyguard pattern EXACTLY — seller nets 98%, 1% tax → buyback, 1% dev off-ledger; `speakeasy:buyout`
+both sides, already vocabularied). The seller's pending take (+ any pending raid) settles for THEM first;
+the guest list resets (a fresh house); the club keeps its build (tier/name/decor/prestige). Buyer gated
+`MIN_LEVEL`/one-per-man/at-district/jailed/cash. A SHUT club (raided-at-handover or already dark) keeps
+`income_at = shut_until` so the buyer waits out the shutter (consistent with the round/table `isShut`
+gate). §10.4: a taxed transfer + a normal income collect — zero invariant change. **(C) the ETH COSMETIC
+DECOR tier** (the revenue foothold) — cosmetic club *decor styles* (display-only skins) sold through the
+EXISTING Store rail (the whole revenue mechanism — three-way split, PLEX-in-earned-$OMR, idempotency,
+reconcile-at-link — already built + audited): new `STORE.PACKAGES` SKUs (`decor_deco`/`decor_gilded`/
+`decor_midnight`, grant `{cosmetic}`) grant an account-level unlock (`store_cosmetics (account_id, style)`
+PK — SURVIVES DEATH, the patron-badge precedent); the owner `applyDecor(style)` swaps an OWNED style onto
+`speakeasies.decor_style` (free to re-apply; null clears to stock). §10.4-NEUTRAL (the Store writes ZERO
+`transactions` rows; the PLEX path burns the existing `plex:<sku>` term); a re-buy of an owned cosmetic is
+refused before the burn (the mint-credit precedent). Console: renown banner + leaderboard, a decor picker
+(owned cosmetics), list/unlist + buy-it-out on the nightlife board, decor/sale chips. `test/speakeasy.js`
+extended (renown, the cosmetic tier, the buyout — all gates + the taxed transfer + ownership/guest-list
+reset + survives death). Suite 28/28 + sim drift-0. **Deferred (step four)**: the cosmetics-as-NFT +
+resale-royalty market (the GearVault/chain rail — mainnet-gated, the M6 dormant pattern; the account-level
+unlock built here is exactly what that NFT represents, so it's forward-compatible), a HOSTILE
+buyout/contest, and a cross-club renown PERK axis (renown as access/status, never gameplay power).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

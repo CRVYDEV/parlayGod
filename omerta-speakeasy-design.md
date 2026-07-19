@@ -112,8 +112,67 @@ from one account cannot cross `RAID_THRESHOLD`). **Red-team fix (MED-1):** `upgr
 resolves a pending raid first and refuses while shuttered — otherwise an owner dodged the raid roll (and
 resumed income mid-shutter by resetting `income_at`) by upgrading instead of collecting.
 
-## Deferred (step three, the revenue layer)
-The **real-money (ETH) cosmetic decor + bottle-service tier** (the Store/GearVault rail — cosmetics-as-
-NFTs with resale royalties, the recurring-revenue engine), a **P2P buyout/contest** so districts clear
-without a death, and a cross-club **renown** axis. All chain work is mainnet-gated (legal + third-party
-audit), the M6 dormant pattern.
+---
+
+## Step three — the revenue layer + the endgame social loop (BUILT)
+
+Three mechanics that complete the Speakeasy: a real-money cosmetic tier (the revenue foothold), a P2P
+buyout (districts clear without a death), and a cross-club renown axis (the "being seen" payoff). All
+off-chain, §10.4-clean; the NFT/resale-royalty part of the cosmetic tier stays mainnet-gated (documented
+below). Numbers are founder sign-off levers.
+
+### (A) Cross-club RENOWN — the nightlife legend (pure status)
+The "being seen" economy needed a payoff. **Renown** is a personal nightlife-scene reputation, DERIVED
+live (no new column, no §10.4 surface — the Commission-seats "recompute on read" precedent) from the
+character's actual patronage + ownership: `floor(Σ spent_cash / RENOWN.CASH_PER + Σ spent_omr ×
+RENOWN.OMR_WEIGHT + ownClubPrestige × RENOWN.OWNER_WEIGHT)` across every `speakeasy_patrons` row +
+their own club. Bottle-service ($OMR) is weighted heaviest — the flex is worth the most renown. It
+DIES WITH THE STREET (the patron/club rows already wipe at death) — a nightlife legend is a living-man
+axis, like season kills. `RENOWN.RANKS` (Nobody → A Face → A Regular → High Roller → Big Shot → King of
+the Night) is a display ladder; `GET /v1/leaderboard/nightlife` ranks the scene (the hitmen-board
+full-scan precedent). Pure status — outside §10.4 and the sim-audited balance (the hitman-rep argument).
+
+### (B) The P2P BUYOUT (districts clear without a death)
+Today a district's club only frees up when the proprietor dies. **A consensual sale** lets an active
+market form: `listSpeakeasy(price)` sets `speakeasies.sale_price` (bounds `SALE_MIN`/`SALE_MAX`),
+`unlistSpeakeasy` pulls it, and `buySpeakeasy(district)` (two-party, `withTwoCharacters(buyer, seller)`)
+transfers ownership for the listed price — a TAXED cash transfer buyer → seller (the round/bodyguard
+pattern EXACTLY: seller nets 98%, 1% street tax → buyback, 1% dev off-ledger; `speakeasy:buyout` both
+sides, already in the `speakeasy:` cash vocabulary). The seller's pending bar take (and any pending
+raid) is resolved/collected for THEM first (they earned it); ownership flips to the buyer, the guest
+list resets (a new proprietor, a fresh house — `speakeasy_patrons` for the district cleared), and
+`sale_price`/notoriety/`shut_until`/`income_at` reset. The buyer must be `MIN_LEVEL`, not already own a
+club (one-per-man), at the district, not jailed, and carry the price. The club keeps its physical build
+(tier, name, decor, prestige — the buyer bought the establishment). §10.4: a taxed transfer + a normal
+income collect — no new reason, no invariant change. Deferred: a HOSTILE contest/takeover (a personal
+venue isn't gang turf — hostile seizure is a griefing-risk balance call, left for a later step; death
++ the consensual sale cover the district-lock problem).
+
+### (C) The ETH COSMETIC DECOR tier (the revenue foothold — Store rail, chain-dormant)
+Cosmetic club **decor styles** — display-only skins on the club — sold through the EXISTING Store rail
+(the M6 off-chain-first / chain-dormant pattern), so the whole revenue mechanism (the three-way split,
+PLEX-in-earned-$OMR, idempotency, reconcile-at-link) is already built + audited. New `STORE.PACKAGES`
+SKUs (`decor_deco`/`decor_gilded`/`decor_midnight`) grant an account-level cosmetic UNLOCK
+(`store_cosmetics (account_id, style)` PK pair — SURVIVES DEATH, the patron-badge/mint-credit
+precedent); the owner `applyDecor(style)` swaps an OWNED style onto their club (`speakeasies.decor_style`,
+display-only, free to re-apply — you own it). §10.4-NEUTRAL by construction: the Store writes ZERO
+`transactions` rows (the cosmetic is an out-of-band entitlement); the PLEX path burns `plex:<sku>` (the
+existing plex:% term). Payable in ETH (dormant paywall) OR earned $OMR (PLEX, live now) — the same
+anti-p2w posture as every Store SKU. **Deferred (mainnet-gated):** the cosmetics-as-NFT + resale-royalty
+market (the GearVault rail — cosmetics minted to the player's ERC-1155, tradeable P2P with a creator
+royalty) is the on-chain revenue engine, gated on legal + the third-party audit like all chain work; the
+account-level unlock built here is exactly what that NFT would represent, so it's forward-compatible.
+
+### §10.4 (step three)
+Renown: pure derived status, zero §10.4. Buyout: `speakeasy:buyout` (a taxed patron→owner TRANSFER, both
+character_id'd — check (a) reconciles, IDENTICAL to `speakeasy:round`) + a `speakeasy:income` collect for
+the seller — no new reason, no invariant change. Cosmetics: Store entitlement (no `transactions` row) +
+the PLEX `plex:<sku>` burn (existing plex:% term) — no invariant change. New columns
+`speakeasies.sale_price`/`decor_style` + the `store_cosmetics` table (account-level, survives death).
+`test/speakeasy.js` covers the buyout lifecycle (list/unlist/buy, the taxed transfer, ownership +
+guest-list reset, gates), decor (own-gate, apply/swap, board surface), renown (computed from patronage +
+ownership, the ladder, the leaderboard), and §10.4 (the buyout reconciles as a taxed transfer).
+
+## Deferred (step four)
+The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — mainnet-gated), the HOSTILE
+buyout/contest, and a cross-club **renown** perk axis (renown as access/status, never gameplay power).
