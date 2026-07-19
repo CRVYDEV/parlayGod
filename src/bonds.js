@@ -8,12 +8,14 @@
 // (`runBondInvariants`) on the real-value side. The chain layer (the OmertaBond contract + a Bonded watcher
 // + the POL pairing bot) is DORMANT, mainnet-gated on legal + a third-party audit.
 import crypto from 'node:crypto';
+import { getAddress } from 'viem';
 import { GameError } from './game.js';
 import { BONDS, bondPayout } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
 const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : NaN);
+const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
 
 // the live OMR-per-ETH oracle (the DEX TWAP on mainnet; the latest Vig buyback print off-chain). null if
 // no price has ever printed — bonding needs a price, so recordBond takes one explicitly (the watcher/mod
@@ -27,9 +29,13 @@ async function oraclePrice(db) {
 // ── ingest one bond (the recordFeePayment / Store recordStorePurchase twin; chain-dormant, mod/test-driven).
 // Idempotent on nonce. Prices the payout, ENFORCES the tranche cap (committed + payout ≤ capacity), splits
 // the ETH (POL + the Vig buyback), and books the vesting bond. account_id null parks it for reconcile-at-link.
-export async function recordBond(pool, { nonce, accountId = null, principalEth, priceOmrPerEth, discountBps }) {
+export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps }) {
   const n = Number(nonce);
   if (!Number.isInteger(n) || n < 0) throw new GameError('bad_nonce', 'Bad bond nonce.');
+  // the on-chain path supplies the depositing wallet; store it (normalized) so a pre-link bond can be
+  // reconciled at wallet-link (the Store precedent). The mod/test path supplies accountId directly.
+  const addr = payer == null ? null : norm(payer);
+  if (payer != null && !addr) throw new GameError('bad_payer', 'Payer is not a valid EVM address.');
   const eth = num(principalEth), price = num(priceOmrPerEth);
   if (!(eth >= BONDS.MIN_PRINCIPAL_ETH)) throw new GameError('min', `A bond takes at least ${BONDS.MIN_PRINCIPAL_ETH} ETH.`);
   if (!(price > 0)) throw new GameError('price', 'A bond needs a live OMR-ETH price.');
@@ -54,10 +60,14 @@ export async function recordBond(pool, { nonce, accountId = null, principalEth, 
       await client.query('ROLLBACK');
       throw new GameError('over_capacity', 'The bond tranche is exhausted — the treasury must top it up.');
     }
+    // attribute: an explicit accountId (mod/test) wins; else resolve the payer wallet → account (null = parked
+    // for reconcileBonds at link — the Store precedent; recordBond stays valid + tranche-committed either way).
+    let acct = accountId;
+    if (!acct && addr) acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0]?.account_id || null;
     const polEth = round6(eth * BONDS.POL_BPS / 10000), vigEth = round6(eth - polEth);
     await client.query(
-      'INSERT INTO bonds (id, nonce, account_id, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-      [uid(), n, accountId, round6(eth), payout, round6(price), disc, vestMs]);
+      'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [uid(), n, acct, addr, round6(eth), payout, round6(price), disc, vestMs]);
     await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2 WHERE id=1', [payout, polEth]);
     // the Vig share → the EXISTING flywheel (source 'bond'): runVigBuyback spends it → reserve + prize pool,
     // so bonds strengthen extraction-≤-inflow too. gross_eth == vig_eth (the bond only contributes its Vig
@@ -65,7 +75,7 @@ export async function recordBond(pool, { nonce, accountId = null, principalEth, 
     if (!(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
     await client.query('COMMIT');
-    return { recorded: true, payoutOmr: payout, polEth, vigEth, attributed: !!accountId };
+    return { recorded: true, payoutOmr: payout, polEth, vigEth, attributed: !!acct };
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 
@@ -86,6 +96,18 @@ export async function claimBond(pool, accountId, bondId) {
     await client.query('COMMIT');
     return { ok: true, claimed: claimable, note: 'Off-chain accounting — the on-chain OmertaBond contract releases the real OMR (mainnet, dormant).' };
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+}
+
+// ── reconcile-at-link (the reconcileStore twin) — attribute any PARKED bonds this wallet made BEFORE it was
+// linked, so a pre-link bonder can claim. Case-insensitive address match; claim-then-attribute is a single
+// UPDATE so two concurrent links can't both grab the same parked row. Called from walletVerify. ──
+export async function reconcileBonds(pool, accountId, address) {
+  const addr = norm(address);
+  if (!addr) return { attributed: 0 };
+  const claimed = (await pool.query(
+    'UPDATE bonds SET account_id=$2 WHERE lower(payer_address)=lower($1) AND account_id IS NULL RETURNING id',
+    [addr, accountId])).rows;
+  return { attributed: claimed.length };
 }
 
 // ── the treasury tops up the bond tranche (the budget the protocol will bond out). A treasury act (mod). ──

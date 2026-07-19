@@ -9,7 +9,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BONDS, bondPayout } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { runBondInvariants } from '../src/bonds.js';
+import { runBondInvariants, reconcileBonds } from '../src/bonds.js';
 import { runVigInvariants } from '../src/vig.js';
 
 const app = await buildServer();
@@ -83,6 +83,17 @@ assert.equal((await call('POST', `/v1/bonds/${bondId}/claim`, { token: bonder.to
 bi = await runBondInvariants(pool);
 assert(bi.ok, 'bond invariant holds after the claim');
 assert.equal(bi.checks.find((c) => c.name === 'bond claimed ≤ committed').ok, true, 'never over-claimed');
+
+// ── PARKED bond → reconcile-at-link (audit LOW-1): a bond made BEFORE the wallet linked is attributable + claimable ──
+const wallet = '0x0000000000000000000000000000000000000abc';
+const parked = await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 7, payer: wallet, principalEth: 1, price: 5000, discountBps: 800 } });
+assert.equal(parked.body.recorded, true, 'a bond from an unlinked wallet still records (committed against the tranche)');
+assert.equal(parked.body.attributed, false, 'but it is PARKED (no account yet)');
+assert.equal((await call('GET', '/v1/bonds', { token: bonder.token })).body.yours.length, 1, 'the parked bond is NOT on the bonder board yet');
+const rc = await reconcileBonds(pool, bonder.aid, wallet); // the wallet links → attribute the pre-link bond (walletVerify calls this)
+assert.equal(rc.attributed, 1, 'reconcile-at-link attributes the parked bond to the freshly-linked account');
+const after = (await call('GET', '/v1/bonds', { token: bonder.token })).body.yours;
+assert.equal(after.length, 2, 'the reconciled bond is now claimable by the bonder');
 
 // ── §10.4 in-game STILL untouched after claims ──
 assert(await inGameOk(), 'in-game §10.4 clean through the whole bond lifecycle');

@@ -1063,6 +1063,7 @@ CREATE TABLE IF NOT EXISTS bonds (
   id TEXT PRIMARY KEY,
   nonce BIGINT UNIQUE NOT NULL,        -- idempotency (the on-chain Bonded nonce; comps use a synthetic nonce)
   account_id TEXT,                     -- the bonder (null = parked for reconcile-at-link, the Store precedent)
+  payer_address TEXT,                  -- the depositing wallet (for reconcile-at-link when the bond pre-dates the link)
   principal_eth NUMERIC NOT NULL,      -- real ETH deposited
   payout_omr NUMERIC NOT NULL,         -- treasury OMR owed to the bonder (discounted), vested linearly
   oracle_price NUMERIC NOT NULL,       -- OMR-per-ETH at bond time (mainnet: the DEX TWAP; here a param)
