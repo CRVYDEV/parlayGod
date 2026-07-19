@@ -2011,8 +2011,10 @@ the P2P BUYOUT** (a district clears without a death) — `listSpeakeasy(price)`/
 `withTwoCharacters(buyer, seller)`) transfers ownership for a TAXED cash transfer buyer → seller (the
 round/bodyguard pattern EXACTLY — seller nets 98%, 1% tax → buyback, 1% dev off-ledger; `speakeasy:buyout`
 both sides, already vocabularied). The seller's pending take (+ any pending raid) settles for THEM first;
-the guest list resets (a fresh house); the club keeps its build (tier/name/decor/prestige). Buyer gated
-`MIN_LEVEL`/one-per-man/at-district/jailed/cash. A SHUT club (raided-at-handover or already dark) keeps
+the guest list resets (a fresh house); the club keeps its build (tier/name/prestige) but decor REVERTS to
+stock (a style is an account-level owner-bound entitlement — the seller keeps the unlock, the buyer brings
+their own). Buyer gated `MIN_LEVEL`/one-per-man/at-district/jailed/hospitalized/safehoused/cash. A SHUT
+club (raided-at-handover or already dark) keeps
 `income_at = shut_until` so the buyer waits out the shutter (consistent with the round/table `isShut`
 gate). §10.4: a taxed transfer + a normal income collect — zero invariant change. **(C) the ETH COSMETIC
 DECOR tier** (the revenue foothold) — cosmetic club *decor styles* (display-only skins) sold through the

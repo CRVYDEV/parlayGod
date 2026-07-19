@@ -308,6 +308,8 @@ export async function unlistSpeakeasy(ch, client, h) {
 // THEM first (they earned it); the guest list resets (a fresh house). District-pinned (you show up).
 export async function buySpeakeasy(ch, seller, districtId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You can't take the keys from a cell.");
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to be taking over a club.");
+  if (safeHoused(ch)) throw new GameError('safe', "You can't do a public sit-down while you're supposed to be to ground.");
   if (levelOf(Number(ch.respect)) < SPEAKEASY.MIN_LEVEL)
     throw new GameError('level', `Running a house of your own opens up at level ${SPEAKEASY.MIN_LEVEL}.`);
   if (ch.loc !== districtId) throw new GameError('travel', "You're not in that district — go there to take over.");
@@ -338,14 +340,17 @@ export async function buySpeakeasy(ch, seller, districtId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'speakeasy:buyout', counterparty: seller.id });
   await h.ledger(client, { characterId: seller.id, currency: 'cash', amount: net, reason: 'speakeasy:buyout', counterparty: ch.id });
   // a FRESH house: new proprietor, guest list cleared, sale + heat reset. Keep the physical build (tier,
-  // name, decor, prestige — the buyer bought the establishment). A SHUT club (raided at handover OR already
-  // dark) keeps income_at = shut_until so the new owner also waits out the shutter — consistent with the
-  // round/table isShut gate (else resetting income_at would let a buyer earn through a shutter rounds can't).
+  // name, prestige — the buyer bought the establishment) but REVERT decor to stock: a decor STYLE is an
+  // account-level, owner-BOUND entitlement (the seller keeps their store_cosmetics unlock for their next
+  // club), so the new owner brings — or buys — their own (audit LOW-2: no displaying a cosmetic you don't
+  // own). A SHUT club (raided at handover OR already dark) keeps income_at = shut_until so the new owner
+  // also waits out the shutter — consistent with the round/table isShut gate (else resetting income_at
+  // would let a buyer earn through a shutter rounds can't).
   await client.query('DELETE FROM speakeasy_patrons WHERE district_id=$1', [districtId]);
   if (isShut(row))
-    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, notoriety=0, notoriety_at=now() WHERE district_id=$1', [districtId, ch.id]);
+    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, decor_style=NULL, notoriety=0, notoriety_at=now() WHERE district_id=$1', [districtId, ch.id]);
   else
-    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, notoriety=0, notoriety_at=now(), income_at=now() WHERE district_id=$1', [districtId, ch.id]);
+    await client.query('UPDATE speakeasies SET owner_character=$2, sale_price=NULL, decor_style=NULL, notoriety=0, notoriety_at=now(), income_at=now() WHERE district_id=$1', [districtId, ch.id]);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (canonical order)
   await h.notify(client, seller.id, 'speakeasy_sold', { district: districtId, net });
   bus.emit('streets', { type: 'speakeasy_buyout', by: ch.name, from: seller.name, district: districtId });

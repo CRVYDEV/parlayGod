@@ -141,9 +141,13 @@ pattern EXACTLY: seller nets 98%, 1% street tax → buyback, 1% dev off-ledger; 
 sides, already in the `speakeasy:` cash vocabulary). The seller's pending bar take (and any pending
 raid) is resolved/collected for THEM first (they earned it); ownership flips to the buyer, the guest
 list resets (a new proprietor, a fresh house — `speakeasy_patrons` for the district cleared), and
-`sale_price`/notoriety/`shut_until`/`income_at` reset. The buyer must be `MIN_LEVEL`, not already own a
-club (one-per-man), at the district, not jailed, and carry the price. The club keeps its physical build
-(tier, name, decor, prestige — the buyer bought the establishment). §10.4: a taxed transfer + a normal
+`sale_price`/notoriety/`shut_until`/`income_at`/`decor_style` reset. The buyer must be `MIN_LEVEL`, not
+already own a club (one-per-man), at the district, not jailed / hospitalized / safehoused (a public
+sit-down — the round/table parity), and carry the price. The club keeps its physical build (tier, name,
+prestige — the buyer bought the establishment) but the **decor STYLE reverts to stock**: a style is an
+account-level, owner-BOUND cosmetic entitlement (the seller keeps their `store_cosmetics` unlock for their
+next club), so the new owner brings — or buys — their own (no displaying a cosmetic you don't own). §10.4:
+a taxed transfer + a normal
 income collect — no new reason, no invariant change. Deferred: a HOSTILE contest/takeover (a personal
 venue isn't gang turf — hostile seizure is a griefing-risk balance call, left for a later step; death
 + the consensual sale cover the district-lock problem).
@@ -172,6 +176,21 @@ the PLEX `plex:<sku>` burn (existing plex:% term) — no invariant change. New c
 `test/speakeasy.js` covers the buyout lifecycle (list/unlist/buy, the taxed transfer, ownership +
 guest-list reset, gates), decor (own-gate, apply/swap, board surface), renown (computed from patronage +
 ownership, the ladder, the leaderboard), and §10.4 (the buyout reconciles as a taxed transfer).
+
+### Step-three red-team (independent, five-lens)
+A focused adversarial review returned **CLEAN — no CRITICAL/HIGH/MED**: the buyout §10.4 reconciles
+byte-identically to the audited round/`bodyguard:hire` transfer, lock order is acyclic (chars → leaf club
+→ `street_tax` singleton, no AB-BA vs concurrent buyouts/rounds/collects), no persist-clobber (all
+character mutations are in-memory, only `speakeasies`/`speakeasy_patrons`/`street_tax` are SQL-written),
+the stale-seller race is handled (re-read under lock + owner compare → `gone`), `store_cosmetics` survives
+death (account-keyed, absent from `runEstate`), renown is power-free (no gameplay gate reads it), and
+`decorStyleOf` is proto-safe. Two LOW consistency items were fixed in-commit (regression each): **LOW-1**
+the buyer now gates `hospitalized`/`safeHoused` (parity with round/table/bottle — a public sit-down);
+**LOW-2** decor now REVERTS to stock on sale (a style is an owner-bound account entitlement, so no
+displaying a cosmetic you didn't buy — the seller keeps their unlock). Accepted (flagged, not patched):
+`list`/`unlist`/`decor` carry no jail gate (they move no value — matches `nameSpeakeasy`/`collect`/`upgrade`),
+and the buyout is a large-denomination 2%-taxed P2P cash rail (an RMT/gifting pipe — but the same rate
+class as the accepted uncapped `bodyguard:hire`, and TIGHTER with a hard `SALE_MAX` cap; §10.4-clean).
 
 ## Deferred (step four)
 The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — mainnet-gated), the HOSTILE

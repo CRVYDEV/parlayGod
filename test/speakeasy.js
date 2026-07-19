@@ -224,6 +224,10 @@ assert.equal(listed.body.salePrice, salePrice, 'at the asking price');
 await seed(rival.id, `loc='docks'`);
 assert.equal((await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token })).body.error, 'travel', 'the buyer shows up in person');
 await seed(rival.id, `loc='neon'`);
+// a safehoused buyer can't do a public sit-down (audit LOW-1: parity with round/table/bottle)
+await seed(rival.id, `safe_until = now() + interval '1 hour'`);
+assert.equal((await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token })).body.error, 'safe', 'no taking over a club from the bunker');
+await seed(rival.id, `safe_until = NULL`);
 const buyerCashPre = (await meOf(rival.token)).cash, sellerCashPre = (await meOf(owner.token)).cash;
 const poolPreBuy = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 const netSale = salePrice - Math.ceil(salePrice * 0.01) * 2;
@@ -239,7 +243,9 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons 
 assert.equal((await meOf(owner.token)).speakeasy, null, 'the seller runs no house now (freed to open/buy elsewhere)');
 assert.equal((await call('POST', '/v1/speakeasy/name', { token: owner.token, body: { name: 'x' } })).body.error, 'no_club', 'a seller has no club to name');
 board = (await call('GET', '/v1/speakeasy', { token: rival.token })).body;
-assert.equal(board.clubs.find((c) => c.district === 'neon').decor, 'deco', 'the club kept its physical decor through the sale');
+assert.equal(board.clubs.find((c) => c.district === 'neon').decor, null, 'the decor reverted to stock on sale (an owner-bound style — the new proprietor brings their own; audit LOW-2)');
+// the SELLER kept their cosmetic UNLOCK (account-level) — they can decorate a next club
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the seller keeps the Art Deco unlock after the sale');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
 let inv = await runLedgerInvariants(pool);
