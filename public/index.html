@@ -145,6 +145,7 @@
   <div id="top">
     <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
     <span id="whoami"></span>
+    <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
     <button class="act" id="btn-logout">burn the papers</button>
   </div>
@@ -186,7 +187,8 @@
   <p class="dim">A noir mob RPG. You start as a nobody. You end as a name people are afraid to say — or a body in the river. That part's up to you.</p>
   <p><b>The loop:</b> pull jobs for cash → train your muscle, cunning &amp; speed → bank what you earn (pocket cash gets jumped) → join a family → set up earners that pay while you sleep → climb, scheme, and take the city.</p>
   <p><b>Two things that matter:</b> <span style="color:var(--neon)">respect</span> is your level — everything gates on it. And when you die, your <span style="color:var(--neon)">street</span> dies with you, but your <span style="color:var(--neon)">account</span> (prestige, $OMR, gear, your legit portfolio) survives to your heir. Play like it counts.</p>
-  <p class="dim">The <b>Start Here</b> tab is your first-week checklist — it pays cash to teach you the ropes. Lost? Tap the <b>?</b> up top for the glossary. Now go make your bones.</p>
+  <p class="dim">This city is deep — kitchens, families, wars, the Law, loan sharks, casinos, going legit. Don't try to learn it all at once. Watch the <span style="color:var(--neon)">▸ coach line</span> on your sheet — it always names the one thing to do next. Two survival rules: <b>bank your cash</b>, and <b>don't carry a debt or a body you can't answer for.</b></p>
+  <p class="dim">The <b>Start Here</b> tab is your first-week checklist — it pays cash to teach you the ropes. Lost? Tap the <b>?</b> up top for the glossary, or open the <b>CODEX</b> for the full rulebook. Now go make your bones.</p>
   <div style="margin-top:14px;text-align:right"><button class="act" id="welcome-go" style="font-size:14px;padding:10px 22px">STEP OUT →</button></div>
 </div></div>
 
@@ -202,7 +204,18 @@
     <dt>Omertà</dt><dd>The code of silence — your family won't hunt you, and you can't contract a made brother… unless they turn rat.</dd>
     <dt>The Kitchen / Deal</dt><dd>Cook product, hire a crew, and move weight — the deepest cash engine. Watch the heat and the nut (crew wages).</dd>
     <dt>Going Legit</dt><dd>Wash dirty cash into clean $OMR, then into a real blue-chip portfolio that survives your death. The endgame.</dd>
-    <dt>Prestige / The Heir</dt><dd>Death isn't the end of your account — your heir inherits prestige, $OMR, gear, and your legit book. Only the street resets.</dd>
+    <dt>Prestige / The Heir</dt><dd>Death isn't the end of your account — your heir inherits prestige, $OMR, your legit book, your estate, and your standing with the fixers. Only the street resets: stats, skills, businesses, crew.</dd>
+    <dt>Safehouse</dt><dd>Pay to go to ground — untouchable by hits for a few hours. A shield, not a bunker: you can't run offense or move money from inside. Cost scales with your wealth.</dd>
+    <dt>Wanted / Welsher</dt><dd>Stiff a loan and you're a <b>welsher</b> — nobody lends to you again (square your name at the Shylock). Default under pursuit and you're <b>wanted</b>: even your own family can hunt you, and NPC guns come looking.</dd>
+    <dt>The Law / Indicted</dt><dd>Heat builds a case. Cross the line and the Bureau <b>indicts</b> you — a RICO trial that can seize your pocket and bank (staked $OMR and minted gear are safe). Bribe, retain a lawyer, pay the envelope, or lay low before it files.</dd>
+    <dt>The Pen</dt><dd>Jail is a place. Work the yard to shave your sentence, buy protection, bribe a guard, or shank a rival who's inside with you — then break out and run as a fugitive.</dd>
+    <dt>In transit / Unbonding</dt><dd>Fresh bank deposits and just-unstaked $OMR sit exposed for a window — a killer loots them. Wait for cash to <b>clear</b> and $OMR to finish <b>unbonding</b> before you count it safe.</dd>
+    <dt>Skills</dt><dd>Every four levels you earn a skill point. Spend them in <b>The Life</b> on a branch — Enforcer, Operator, or Wheelman — for permanent edges. They die with your street.</dd>
+    <dt>The Family / Turf / Commission</dt><dd>Join a family for backup, <b>turf</b> income, and <b>wars</b>. <b>Tribute</b> is what you kick up; the <b>Commission</b> is the five biggest families setting the week's rules.</dd>
+    <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect.</dd>
+    <dt>The Underworld</dt><dd>Named fixers — the Doc, Vinnie, Bella, Big Tuna, the Madame. Earn their <b>standing</b> by working their corner of the game for discounts and favors. Cross them and they hold a grudge.</dd>
+    <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> does the same to a laundering front. Watched heat — you can't just wait it out.</dd>
+    <dt>The Wire</dt><dd>Information you buy with $OMR: <b>tap</b> a rival to see what they're holding and whether they're hunting you; <b>sweep</b> your own lines clean; <b>subscribe</b> to the Street Wire for forecasts and threat chatter.</dd>
   </dl>
   <div style="margin-top:12px;text-align:right"><button class="act" id="glossary-close" style="padding:9px 18px">got it</button></div>
 </div></div>
@@ -218,9 +231,28 @@
   let me = null, rules = null, ws = null, session = null;
 
   // ── the street talks back: turn a raw response into one human line ──
+  // known single-word server rejections → plain talk (the server returns codes, not sentences)
+  const ERRMAP = {
+    safe: "they're in a safehouse — can't touch them there", no_search: "you haven't put a tail on them yet",
+    directed: "that contract's promised to a named gun right now", directed_exists: "there's already a named gun on that pot",
+    feds_watching: "the Bureau's watching that front — too hot to touch", cold: "that operation's gone cold — square the upkeep first",
+    pax: "the Commission called a peace — no new wars this week", vetoed: "the head of the table killed that decree",
+    again: "someone beat you to it — try again", contention: "the city's busy — try that again",
+    over_capacity: "the tranche is tapped out for now", not_for_sale: "that's not for sale", own_debt: "you can't buy your own paper",
+    crew_changed: "your crew changed — line it up again", hole: "you're in the hole — nothing doing from solitary",
+    witpro: "they're in witness protection — untouchable", welsher: "you welshed on a debt — square your name first",
+    wanted: "there's a price on you — lie low or square it", jailed: "not from lockup", hospitalized: "not from a hospital bed",
+    safehoused: "not from a safehouse — that's a shield, not a base", nerve: "not enough nerve", energy: "not enough energy",
+    broke: "you can't cover that", cash: "you can't cover that", omr: "not enough $OMR", rank: "your rank isn't high enough",
+    level: "you're not a high enough level yet", rookie: "you're too green for that yet", pledged: "that car's pledged as collateral",
+    listed: "that car's on the block — pull the listing first", bad_path: "pick The Gun, The Ledger, or The Kitchen",
+    self: "you can't do that to yourself", family: "omertà — you can't move on your own family", dry: "the pool's dry — check back after the next buyback",
+    nothing: "nothing to collect", no_contracts: "no contracts on your head", maxed: "you're already at the cap", spent: "already used up",
+    once: "one shot only — you've taken it", not_due: "that isn't due yet", too_soon: "not yet — the clock's still running", cooldown: "still on cooldown",
+  };
   function describe(body, code) {
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
-    if (code >= 400) return body.message || body.error || `the city said no (${code})`;
+    if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
     if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
     if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
@@ -432,6 +464,7 @@
     for (const b of $('#tabs').children) b.classList.toggle('on', b.dataset.tab === id);
     for (const t of $('#tabbodies').children) t.classList.toggle('on', t.id === 'tab-' + id);
     if (id === 'start') renderStart();
+    if (id === 'streets') renderStreets();
     if (id === 'city') renderCity();
     if (id === 'den') renderDen();
     if (id === 'kitchen') renderKitchen();
@@ -748,9 +781,11 @@
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
   }
 
-  // Streets: crimes, train, bank, travel
-  function renderStreets() {
+  // Streets: crimes, train, path, bank, trade goods, travel
+  async function renderStreets() {
     const t = $('#tab-streets');
+    const prices = (await api('GET', '/v1/market/prices')).body || {};
+    const spot = prices.goods?.[me?.loc] || {};
     const crimes = (rules?.crimes || []).map((c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
@@ -759,17 +794,46 @@
       `<button class="act" data-do="POST /v1/travel/${d.id || d}">${d.name || d.id || d}</button>`).join('');
     const train = (rules?.stats || []).map((s) =>
       `<button class="act" data-do="POST /v1/train/${s}">${s}</button>`).join('');
+    // the Path — declared once you make rank (lvl 5). Shapes how you earn for the rest of the street.
+    let pathBlock = '';
+    if (me && me.path) {
+      const p = (rules?.paths || []).find((x) => x.id === me.path);
+      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card"><span class="t" style="color:var(--neon)">${p ? p.name : me.path}</span><div class="d">${p ? p.desc : 'Chosen. It shapes how you earn.'}</div></div>`;
+    } else if (me && me.level >= 5) {
+      pathBlock = `<h2 style="margin-top:14px">Declare Your Path <span class="d" style="color:var(--dim);font-size:11px">— permanent, shapes how you earn</span></h2><div class="grid">` +
+        (rules?.paths || []).map((p) => `<div class="card"><span class="t" style="color:var(--neon)">${p.name}</span><div class="d">${p.desc}</div>
+          <button class="act" data-do="POST /v1/path" data-body='{"path":"${p.id}"}'>choose ${p.name}</button></div>`).join('') + `</div>`;
+    } else if (me) {
+      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card coach-card"><div class="d">At <b>level 5</b> you'll declare a Path — The Gun, The Ledger, or The Kitchen — a permanent bonus to how you earn. Keep grinding.</div></div>`;
+    }
+    // Trade goods — buy at the district spot price, carry weight in the trunk, sell high elsewhere.
+    // This is the on-ramp for the Black Market goods trade AND smuggling convoys (both need a stocked trunk).
+    const cargo = me?.cargo || {};
+    const goodsCards = (rules?.goods || []).map((g) => {
+      const price = spot[g.id], held = cargo[g.id] || 0;
+      return `<div class="card"><span class="t">${g.name}</span>
+        <div class="d">spot here: $${price != null ? fmt(price) : '—'} · in trunk: ${held}</div>
+        <input data-gd="${g.id}" placeholder="qty" size="5">
+        <button class="act" data-gdbuy="${g.id}">buy</button>
+        <button class="act" data-gdsell="${g.id}"${held ? '' : ' disabled'}>sell</button></div>`;
+    }).join('');
     t.innerHTML = `
       <h2>Crimes</h2><div class="grid">${crimes}</div>
       <h2 style="margin-top:14px">Train</h2>${train}
+      ${pathBlock}
       <h2 style="margin-top:14px">The Bank</h2>
       <input id="bank-amt" placeholder="amount" size="10">
       <button class="act" id="bank-dep">deposit</button>
       <button class="act" id="bank-wd">withdraw</button>
       <span class="d" style="color:var(--dim);font-size:11px"> deposits ride in transit (lootable) before they clear</span>
+      <h2 style="margin-top:14px">Trade Goods <span class="d" style="color:var(--dim);font-size:11px">— buy low here, haul it, sell high (feeds the Black Market &amp; convoys)</span></h2>
+      <div class="grid">${goodsCards}</div>
       <h2 style="margin-top:14px">Travel</h2>${travel}`;
     t.querySelector('#bank-dep').onclick = () => act('POST', '/v1/bank/deposit', { amount: Number(t.querySelector('#bank-amt').value) });
     t.querySelector('#bank-wd').onclick = () => act('POST', '/v1/bank/withdraw', { amount: Number(t.querySelector('#bank-amt').value) });
+    const gq = (id) => Number(t.querySelector(`[data-gd="${id}"]`)?.value) || 0;
+    t.querySelectorAll('[data-gdbuy]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/buy', { goodId: b.dataset.gdbuy, qty: gq(b.dataset.gdbuy) }).then(renderStreets));
+    t.querySelectorAll('[data-gdsell]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/sell', { goodId: b.dataset.gdsell, qty: gq(b.dataset.gdsell) }).then(renderStreets));
   }
 
   // The City board
@@ -924,7 +988,7 @@
     ],
     'World & Growth': [
       ['GET', '/v1/world'], ['POST', '/v1/world/:npcId/raid', {}], ['GET', '/v1/daily'],
-      ['POST', '/v1/daily/:id/claim', {}], ['POST', '/v1/missions/:id', {}], ['POST', '/v1/path', { path: 'earner' }],
+      ['POST', '/v1/daily/:id/claim', {}], ['POST', '/v1/missions/:id', {}], ['POST', '/v1/path', { path: 'gun' }],
       ['GET', '/v1/notifications'],
     ],
     'Chain': [
@@ -1850,12 +1914,14 @@
       act('POST', '/v1/pen/break/plan', {}).then(() => renderPen()));
   }
 
-  // data-do buttons (simple POST/GET with no body)
+  // data-do buttons (POST/GET; an optional data-body='{...}' rides along)
   document.addEventListener('click', (e) => {
-    const d = e.target?.dataset?.do;
-    if (!d) return;
+    const btn = e.target?.closest?.('[data-do]'); if (!btn) return;
+    const d = btn.dataset.do;
     const [m, p] = d.split(' ');
-    act(m, p, m === 'GET' ? undefined : {});
+    let body = m === 'GET' ? undefined : {};
+    if (btn.dataset.body) { try { body = JSON.parse(btn.dataset.body); } catch { /* keep {} */ } }
+    act(m, p, body);
   });
 
   // ── the wire (websocket feed) ──

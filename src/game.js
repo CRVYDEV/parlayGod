@@ -479,12 +479,19 @@ function coachOf(ch, acct, owned) {
   if (future(ch.jail_until)) return { label: 'You\'re in lockup', hint: 'Sit it out — or work the Pen: bribe the guard, work the yard, watch your back.', tab: 'pen' };
   if (future(ch.hosp_until)) return { label: 'Laid up in the hospital', hint: 'Patched up soon. Nothing to do but heal and wait.', tab: 'streets' };
   if (Number(ch.health) < 30) return { label: 'You\'re bleeding out', hint: 'Heal up before someone finishes the job (the Heal button, top-left).', tab: 'streets' };
+  // urgent, time-boxed threats — these cost you if you sit on them (all false for a fresh street)
+  if (future(ch.wanted_until)) return { label: 'There\'s a price on you', hint: 'You\'re WANTED — even your family can hunt you and NPC guns are out. Square your name at the Shylock, or lie low.', tab: 'loans' };
+  if (ch.indicted_at) return { label: 'The Bureau indicted you', hint: 'A RICO case is filed — the grace clock is running. Take a plea, buy the jury, or demand trial in The Law.', tab: 'law' };
+  if (ch.welsher) return { label: 'Your name is mud', hint: 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', tab: 'loans' };
   if (Number(ch.lc_crime || 0) < 1) return { label: 'Pull your first job', hint: 'Head to the Streets and run any crime — it\'s how everything starts. Then follow Start Here.', tab: 'streets' };
   if (lvl >= 5 && !ch.path) return { label: 'You\'ve made rank', hint: 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', tab: 'streets' };
   if (!owned.gangId && lvl >= 3) return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
   if (Number(ch.cash) > 25000 && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
   if (obDone < ONBOARD_TASKS.length) return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
   if (!ch.lab && !(owned.businesses || []).length && lvl >= 8) return { label: 'Make money while you sleep', hint: 'Set up a Kitchen or a front — passive income is how the big families grow.', tab: 'kitchen' };
+  // the bridge into the deep game — so the coach doesn't go silent once the basics are learned
+  if (lvl >= 4 && !(owned.skills || []).length) return { label: 'You\'ve earned skill points', hint: 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', tab: 'life' };
+  if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length) return { label: 'Time to go legit', hint: 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', tab: 'portfolio' };
   if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'You\'ve got energy to burn — go pull a job on the Streets.', tab: 'streets' };
   return null; // an established player who knows the ropes — no nag
 }
