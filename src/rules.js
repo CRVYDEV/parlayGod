@@ -1265,7 +1265,11 @@ export const npcHitmanOf = (id) => NPC_HITMEN.find((n) => n.id === id);
 // drift = the ± band the daily seed hash swings it. ALL numbers are founder sign-off levers.
 export const PORTFOLIO = {
   MIN_INVEST_OMR: 1, // no dust buys
-  // The board — a spread from a safe store of value (GLD, drift .05) to pure degen (BTC, drift .30).
+  // The board — a spread from a safe store of value (GLD, drift .05) to a volatile meme-stock (GME,
+  // drift .30). Every ticker id is a REAL Robinhood tokenized stock trading on Uniswap (Robinhood
+  // Chain / Arbitrum) — so R2/R3 map each 1:1 to an actual on-chain token (see the RWA design doc).
+  // BTC was dropped (crypto, not a tokenized STOCK); SPCX (SpaceX private-co token) + GLD (an ETF) are
+  // the two to VERIFY against the live catalog — private-company tokens + ETFs are the uncertain edge.
   // All DISPLAY-ONLY status collectibles (deterministic seed price, no sell, no cash-out — the R1
   // regulatory line). Names are lightly fictionalised (the AAPL→"Atlas Apple" house style). New
   // tickers are drop-in — the board/leaderboard/view iterate TICKERS generically. Sign-off levers.
@@ -1277,7 +1281,7 @@ export const PORTFOLIO = {
     { id: 'HOOD', name: 'The Green House',     base: 90,  drift: 0.16, blurb: 'The house that lets everybody play. You take a piece of the action.' },
     { id: 'NVDA', name: 'Nero Graphics',       base: 300, drift: 0.18, blurb: 'The chip runners. The whole city wants what they make.' },
     { id: 'SPCX', name: 'SpaceX',              base: 180, drift: 0.22, blurb: 'The moonshot. High risk, high status.' },
-    { id: 'BTC',  name: 'Digital Gold',        base: 400, drift: 0.30, blurb: 'Untraceable, unkillable, unhinged. The degens’ crown.' },
+    { id: 'GME',  name: 'The Arcade',          base: 25,  drift: 0.30, blurb: 'The people’s revolt — squeeze the shorts, crown the degens.' },
   ],
   // THE DYNASTY — your account-level book survives death (the heir inherits), so it IS a generational
   // fund. Name it (a $OMR vanity sink, ledgered under the existing rwa:% burn term — zero invariant
