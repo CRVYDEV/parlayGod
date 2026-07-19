@@ -80,6 +80,9 @@ export async function fightBout(ch, opponent, stake, client, h) {
   const of = (await client.query('SELECT * FROM fighters WHERE character_id=$1', [opponent.id])).rows[0];
   if (!f) throw new GameError('no_fighter', "You don't manage a fighter.");
   if (!of) throw new GameError('no_opponent', "They don't manage a fighter.");
+  // the counterparty must be available (the casino:pvp precedent — no draining a manager who's in lockup
+  // or laid up in the hospital and can't call it off, even though they consented by listing)
+  if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "Their manager can't make a match right now.");
   const limit = of.bout_limit != null ? Math.floor(Number(of.bout_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "Their fighter isn't taking bouts.");
   if (amt > limit) throw new GameError('limit', `Their fighter takes bouts up to $${limit}.`);
