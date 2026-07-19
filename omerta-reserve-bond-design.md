@@ -97,11 +97,21 @@ semantically correct (POL is not Vig revenue), breaks no invariant (`runVigInvar
 `gross_eth`); the full bond inflow is visible on `GET /v1/mod/bonds`. Bottom line: it cannot over-issue past
 the tranche, and it cannot perturb §10.4.
 
+## The on-chain contract (WRITTEN)
+`omerta-contracts/src/OmertaBond.sol` + Foundry tests `test/OmertaBond.t.sol` implement the on-chain half:
+EIP-712 server-signed `BondQuote`s (the VoucherClaim signer discipline), the tranche cap enforced on-chain
+(`committedOMR + payout ≤ omr.balanceOf(this)` — the payout TRANSFERS pre-funded OMR, never mints), linear
+vesting `claim`, the ETH split forwarded in-tx (POL + Vig, custodies no ETH — the OmertaFees pattern),
+immutable `polBps` + `MAX_DISCOUNT_BPS`/`MAX_VEST` backstops (kept in lockstep with the backend `BONDS.*`),
+Safe-owned + pausable, and a `sweep` that can pull ONLY the uncommitted tranche (never OMR backing an
+outstanding bond — the test proves a bond is fully honoured after a sweep). It **compiles clean** (solc
+0.8.26 + OZ 5.1, 0 warnings, via `tools/compile-contracts.js`); the contracts README carries the viem
+quote-signing parity snippet. `forge test` still needs a Foundry-capable environment (egress-blocked here —
+the established suite residual) before the third-party audit.
+
 ## Deferred (mainnet milestone — legal + audit gated)
-The on-chain **`OmertaBond`** contract (accept ETH/LP → vest OMR from a Safe-funded tranche → forward ETH
-to the POL pairing + the Vig split; pausable; per-bond-capacity capped like VoucherClaim), a **`Bonded`
-event watcher** (the `getLogs` cursor pattern, `watcher.js` precedent), the **POL pairing bot** (pairs the
-POL ETH share with treasury OMR into the DEX pool), and **liquidity bonds** (LP-token deposits). All of it
-is the M6 dormant pattern — recorded/modeled off-chain now, wired only after counsel + the third-party
-audit that already gates mainnet. Numbers (`DISCOUNT`, `MAX_DISCOUNT`, `VEST_HOURS`, the POL/Vig split, the
-tranche capacity) are founder sign-off levers.
+`forge test` execution (the pre-audit gate), the **`Bonded` event watcher** (the `getLogs` cursor pattern,
+`watcher.js` precedent → `recordBond`), the **POL pairing bot** (pairs the POL ETH share with treasury OMR
+into the DEX pool), and **liquidity bonds** (LP-token deposits). All wired only after counsel + the
+third-party audit that already gates mainnet. Numbers (`DISCOUNT`, `MAX_DISCOUNT`, `VEST_HOURS`, the POL/Vig
+split, the tranche capacity) are founder sign-off levers.

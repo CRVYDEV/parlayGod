@@ -63,7 +63,7 @@ for (const contracts of Object.values(out.contracts))
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'artifacts.json'), JSON.stringify(artifacts, null, 1));
-const suite = ['OMR', 'VoucherClaim', 'GearVault', 'OMRStaking', 'OmertaFees'];
+const suite = ['OMR', 'VoucherClaim', 'GearVault', 'OMRStaking', 'OmertaFees', 'OmertaBond'];
 const missing = suite.filter((n) => !artifacts[n]);
 if (missing.length) { console.error('missing contracts:', missing.join(', ')); process.exit(1); }
 console.log(`compiled ${suite.join(', ')} → omerta-contracts/out-js/artifacts.json (${warnings.length} warnings)`);
