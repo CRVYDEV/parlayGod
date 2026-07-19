@@ -7,7 +7,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf, tickerPriceOf } from './rules.js';
+         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -89,7 +89,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf, est] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -106,6 +106,8 @@ export async function loadOwned(client, ch) {
     client.query('SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
     // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
     client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id]),
+    // THE ESTATE — account-level too (survives death; the heir inherits the compound)
+    client.query('SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', [ch.account_id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -141,6 +143,7 @@ export async function loadOwned(client, ch) {
     // R1 — the Portfolio: account-level legit holdings (survive death; the price values a status
     // collectible, so nothing here touches §10.4). Array of { ticker, shares, cost_omr } rows.
     portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
+    estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
   };
 }
 
@@ -544,6 +547,10 @@ export function view(ch, acct = {}, owned = {}) {
       const holdings = pf.map((r) => { const price = tickerPriceOf(r.ticker);
         return { ticker: r.ticker, shares: Number(r.shares), price, bookValue: Math.round(Number(r.shares) * price * 100) / 100 }; });
       return { holdings, bookValue: Math.round(holdings.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 }; })(),
+    // THE ESTATE — your compound at a glance (GET /v1/estate is the full house). Account-level status,
+    // survives death (the heir inherits it). Null until you buy your first place.
+    estate: owned.estate ? { name: owned.estate.name || null, tier: Number(owned.estate.tier || 0),
+      tierName: estateTierOf(Number(owned.estate.tier || 0))?.name || null } : null,
     wallet: acct.wallet_address || null,
     minted: !!acct.minted, respawnTokens: Number(acct.respawn_tokens || 0), mintCredits: Number(acct.mint_credits || 0),
     hitmanRep: Number(acct.hitman_rep || 0), kills: Number(acct.kills || 0), seasonKills: Number(ch.season_kills || 0),

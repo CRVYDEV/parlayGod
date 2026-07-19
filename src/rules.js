@@ -1248,3 +1248,34 @@ export const tickerPriceOf = (id, day = dayOf()) => {
   const swing = (hash01(`rwa:${id}:${day}:${MARKET_SEED}`) * 2 - 1) * t.drift;
   return Math.max(1, Math.round(t.base * (1 + swing) * 100) / 100);
 };
+
+// ── THE ESTATE ("the compound"): the deep PERSONAL $OMR sink + a new "home" surface ──
+// The don's mansion — a tiered, furnishable home that DISPLAYS your legend. Pure STATUS (display-only,
+// no gameplay power → outside the sim-audited balance, the vanity/seal/Portfolio precedent); the only
+// §10.4 flow is the enumerated `estate:*` $OMR BURN through the vanity `spendOmr` till. Account-level,
+// so it SURVIVES DEATH — the compound passes to the heir. TIERS are bought SEQUENTIALLY (the seal
+// ladder); FEATURES are one-time unlocks gated by `minTier`. All numbers are founder sign-off levers.
+export const ESTATE = {
+  NAME_OMR: 3, // name / rename your compound
+  TIERS: [
+    { tier: 1, name: 'Safe House',        omr: 40,   blurb: 'A room over a social club. It\'s a start.' },
+    { tier: 2, name: 'Row House',         omr: 120,  blurb: 'Your name on the deed. Respectable.' },
+    { tier: 3, name: 'Uptown Brownstone', omr: 350,  blurb: 'Doormen who forget what they see.' },
+    { tier: 4, name: 'Country Estate',    omr: 900,  blurb: 'Gates, dogs, and a long driveway.' },
+    { tier: 5, name: 'The Compound',      omr: 2500, blurb: 'The kind of place they make movies about.' },
+  ],
+  FEATURES: [ // one-time $OMR unlocks; cosmetic, some display a real trophy. minTier gates each.
+    { id: 'trophy_room', name: 'Trophy Room',    omr: 60,  minTier: 2, blurb: 'Your rarest iron and finest guns, mounted.' },
+    { id: 'wine_cellar', name: 'Wine Cellar',    omr: 40,  minTier: 2, blurb: 'Vintages older than most grudges.' },
+    { id: 'garden',      name: 'Rose Garden',    omr: 30,  minTier: 2, blurb: 'Where quiet conversations happen.' },
+    { id: 'show_garage', name: 'Show Garage',    omr: 80,  minTier: 3, blurb: 'Glass walls for the collection.' },
+    { id: 'study',       name: 'The Study',      omr: 50,  minTier: 3, blurb: 'Leather, brass, and the family books.' },
+    { id: 'chapel',      name: 'Private Chapel', omr: 100, minTier: 4, blurb: 'Absolution, in-house.' },
+    { id: 'vault',       name: 'The Vault',      omr: 150, minTier: 4, blurb: 'What survives you sits behind a foot of steel.' },
+    { id: 'panic_room',  name: 'Panic Room',     omr: 120, minTier: 4, blurb: 'For when the doors come down.' },
+    { id: 'ballroom',    name: 'Grand Ballroom', omr: 200, minTier: 5, blurb: 'For weddings, wakes, and sit-downs.' },
+    { id: 'menagerie',   name: 'The Menagerie',  omr: 250, minTier: 5, blurb: 'A tiger. Because you can.' },
+  ],
+};
+export const estateTierOf = (tier) => ESTATE.TIERS.find((t) => t.tier === Number(tier)) || null;
+export const estateFeatureOf = (id) => ESTATE.FEATURES.find((f) => f.id === id) || null;

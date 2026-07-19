@@ -8,7 +8,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf,
+  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -1269,7 +1269,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
             // R1 — the Portfolio is LEGIT money: account-level, never in the wipe below, so the heir
             // keeps the book (the retirement fantasy, made legible at the moment of death). Its value
             // at today's price — a status figure, no §10.4 currency moves.
-            portfolio: Math.round(((h.victimOwned.portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)) * 100) / 100 },
+            portfolio: Math.round(((h.victimOwned.portfolio || []).reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)) * 100) / 100,
+            // THE ESTATE — account-level (keyed on account_id), never in the wipe: the heir inherits the
+            // compound. Report the tier name the bloodline keeps.
+            estate: h.victimOwned.estate ? (estateTierOf(Number(h.victimOwned.estate.tier || 0))?.name || null) : null },
     lost: { cash: lostCash, cars: h.victimOwned.cars.length, guns: h.victimOwned.guns.length,
             rackets: h.victimOwned.rackets.length, assets: h.victimOwned.assets.length, lvl },
   };
