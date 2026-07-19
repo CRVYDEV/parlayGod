@@ -361,7 +361,8 @@ export async function buildServer() {
       tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
       table: { minBet: SPEAKEASY.TABLE.MIN_BET, maxBet: SPEAKEASY.TABLE.MAX_BET, rakeBps: SPEAKEASY.TABLE.RAKE_BPS },
       raidThreshold: SPEAKEASY.RAID_THRESHOLD, saleMin: SPEAKEASY.SALE_MIN, saleMax: SPEAKEASY.SALE_MAX,
-      decorStyles: SPEAKEASY.DECOR_STYLES, renownRanks: SPEAKEASY.RENOWN.RANKS },
+      decorStyles: SPEAKEASY.DECOR_STYLES, renownRanks: SPEAKEASY.RENOWN.RANKS,
+      styleUnlocks: SPEAKEASY.RENOWN.STYLE_UNLOCKS, standoverFee: SPEAKEASY.STANDOVER.FEE },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -437,9 +438,16 @@ export async function buildServer() {
     return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, seller, client, h) =>
       Speakeasy.buySpeakeasy(ch, seller, req.params.districtId, client, h));
   });
-  // step three — apply an owned cosmetic decor style to your club (null clears to stock)
+  // step three — apply an owned/renown-earned cosmetic decor style to your club (null clears to stock)
   app.post('/v1/speakeasy/decor', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.applyDecor(ch, req.body?.style, client, h)));
+  // step four — the STANDOVER: a hostile forced-sale (two-party muscle contest), the challenger leans on the owner
+  app.post('/v1/speakeasy/:districtId/standover', { preHandler: auth }, async (req) => {
+    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
+    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
+    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
+      Speakeasy.standoverSpeakeasy(ch, owner, req.params.districtId, client, h));
+  });
   app.get('/v1/leaderboard/nightlife', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return Speakeasy.nightlifeLeaderboard(pool, cid || '');

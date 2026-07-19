@@ -192,6 +192,53 @@ displaying a cosmetic you didn't buy — the seller keeps their unlock). Accepte
 and the buyout is a large-denomination 2%-taxed P2P cash rail (an RMT/gifting pipe — but the same rate
 class as the accepted uncapped `bodyguard:hire`, and TIGHTER with a hard `SALE_MAX` cap; §10.4-clean).
 
-## Deferred (step four)
-The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — mainnet-gated), the HOSTILE
-buyout/contest, and a cross-club **renown** perk axis (renown as access/status, never gameplay power).
+---
+
+## Step four — the hostile takeover + the renown perk (BUILT)
+
+Two of the three deferred items, both off-chain (the NFT market stays mainnet-gated, below). §10.4-clean,
+numbers are founder sign-off levers.
+
+### The STANDOVER (the hostile forced-sale)
+The consensual buyout (step 3) lets willing owners trade clubs; the Standover forces an UNWILLING owner
+out — the "you're too weak to hold this" mechanic the Risk-to-Earn design wanted (your club is at stake).
+Deliberately designed to AVOID a new escrow §10.4 surface: it's an INSTANT muscle contest (the shakedown
+pattern), not a windowed auction. `standoverSpeakeasy(district)` (two-party `withTwoCharacters(challenger,
+owner)`): the challenger pays `STANDOVER.FEE` ($250k, a `speakeasy:standover` cash SINK that BURNS win or
+lose — the cost of trying, the npcHit-fee precedent), then rolls `p = clamp(BASE_P + (atk − def)/STAT_SCALE,
+MIN_P, MAX_P)` where atk/def are the muscle+cunning/2 effStat contest (the shakedown formula, BRUISER-boosted).
+A **WIN** forces the owner to SELL at the club's **ASSESSED (build) value** (`assessedValueOf(tier)` = open
+cost + every tier build climbed) — the owner is PAID (taxed, IDENTICAL to the `speakeasy:buyout` transfer:
+98% net, 1% tax → buyback, 1% dev), so it's a forced SALE, never theft. The challenger risks the fee AND
+must carry the full assessed price (gated up front) — so standing over a maxed Cathedral commits ~$19M, which
+economically bounds griefing. A **LOSS** burns only the fee, costs health, and the owner keeps the club.
+Either way the club goes on a per-club `STANDOVER.CD_MS` (24h) cooldown (`standover_cd_until`) so it can't be
+leaned on back-to-back. Gated: challenger `MIN_LEVEL`/at-district/not jailed/hosp/safe/one-per-man/not-owner/
+not-family(omertà); club exists/not shut/not on cooldown. `SPEAKEASY_STANDOVER_P` is a TEST-ONLY roll knob
+(the raid/npcHit precedent). §10.4: the fee is a `speakeasy:` SINK, the win reuses `speakeasy:buyout` — both
+under the existing prefix, so **no escrow bucket, no new invariant check, no vocab change**. The forced-out
+owner forfeits pending bar take (the raid/territory-seize precedent — uncollected income vanishes on a hostile
+event, never minted). No new death surface (instant — no pending state; the cooldown dies with the club).
+
+### The renown PERK — earned decor (access/status, never power)
+The renown axis (step 3) gets its one perk: **renown-EARNED decor styles** — cosmetic club skins you unlock
+by BEING SEEN, no ETH/PLEX. `RENOWN.STYLE_UNLOCKS` (`house` at 800 renown, `crown` at 2000) gate two new
+`DECOR_STYLES`; `applyDecor` accepts a style if you own it (a Store `store_cosmetics` unlock) OR your renown
+clears its threshold. Pure cosmetic — access, never gameplay power (the design's hard rule). §10.4 untouched
+(display-only, no currency). The console decor picker shows earned styles (★) alongside bought ones.
+
+### §10.4 (step four)
+Standover: `speakeasy:standover` (a fee SINK) + on-win the existing `speakeasy:buyout` taxed transfer — both
+character_id'd under the `speakeasy:` prefix, so check (a) reconciles with NO new escrow bucket / invariant /
+vocabulary. Renown decor: pure status, zero §10.4. New column `speakeasies.standover_cd_until`.
+`test/speakeasy.js` covers the standover (cash gate, the fee burns win/lose, a loss keeps the club + sets the
+cooldown, a win forces a taxed sale at the assessed value + transfers ownership + resets the guest list) and
+renown-earned decor (the renown gate + the earned-style apply).
+
+## Deferred (step five)
+The cosmetics-as-NFT + resale-royalty market (the GearVault/chain rail — cosmetics minted to the player's
+ERC-1155, tradeable P2P with a creator royalty; mainnet-gated on legal + the third-party audit, the M6
+dormant pattern — the account-level `store_cosmetics` unlock built in step 3 is exactly what that NFT
+represents, so it's forward-compatible), the WINDOWED contested auction variant of the takeover (an escrow
+bid the owner can defend/outbid — deferred in favour of the leaner instant Standover), and deeper renown
+perks (all constrained to access/status, never power).

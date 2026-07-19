@@ -609,6 +609,9 @@ CREATE TABLE IF NOT EXISTS speakeasies (
   -- step three — the ETH COSMETIC DECOR tier: a display-only club skin (Store entitlement, account-level
   -- unlock in store_cosmetics, applied here). null = the stock look. Pure display — zero gameplay effect.
   decor_style TEXT,
+  -- step four — the STANDOVER (a hostile forced-sale, an instant muscle contest): a per-club cooldown after
+  -- any standover attempt (win or lose) so a club can't be leaned on back-to-back. null = fair game.
+  standover_cd_until TIMESTAMPTZ,
   opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_speakeasies_owner ON speakeasies (owner_character);

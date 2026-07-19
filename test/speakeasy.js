@@ -34,6 +34,7 @@ const lvlRespect = (lvl) => 4 * (lvl - 1) * (lvl - 1);
 const owner = await mk('Nucky Thompson');
 const patron = await mk('Arnold Rothstein');
 const rival = await mk('Al Capone');
+const bruno = await mk('Bruno Tattaglia'); // the step-four standover challenger
 
 // ── OPEN: level-gated, one per district, one per man, cash sink ──
 assert.equal((await call('POST', '/v1/speakeasy/neon/open', { token: owner.token })).body.error, 'level', 'a nobody cannot open a club');
@@ -213,6 +214,15 @@ assert.equal(board.clubs.find((c) => c.district === 'neon').decor, 'deco', 'the 
 assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: null } })).body.decor, null, 'clearing to stock is free (you own the club)');
 await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } }); // re-apply for the board
 
+// ── STEP FOUR — renown-EARNED decor (a cosmetic you unlock by being SEEN, not bought; access-not-power) ──
+assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'house' } })).body.error, 'renown', "the House Favorite style is renown-gated — you can't just apply it");
+await pool.query(`UPDATE speakeasies SET prestige=2000 WHERE district_id='neon'`); // a storied club → the owner's renown clears the House Favorite bar (prestige×0.5=1000 ≥ 800)
+const houseDecor = await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'house' } });
+assert.equal(houseDecor.code, 200, 'with the renown earned, the House Favorite style applies — no purchase');
+assert.equal(houseDecor.body.decorName, 'House Favorite', 'the earned style resolves');
+assert.equal((await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'crown' } })).body.error, 'renown', 'The Crown needs more renown still (2000)');
+await call('POST', '/v1/speakeasy/decor', { token: owner.token, body: { style: 'deco' } }); // back to a bought style (the buyout reverts it anyway)
+
 // ── STEP THREE — the P2P BUYOUT (a district clears without a death; a taxed transfer) ──
 assert.equal((await call('POST', '/v1/speakeasy/list', { token: owner.token, body: { price: 1 } })).body.error, 'price', 'below the sale floor');
 assert.equal((await call('POST', '/v1/speakeasy/neon/buy', { token: rival.token })).body.error, 'not_for_sale', "you can't buy a club that isn't listed");
@@ -247,6 +257,41 @@ assert.equal(board.clubs.find((c) => c.district === 'neon').decor, null, 'the de
 // the SELLER kept their cosmetic UNLOCK (account-level) — they can decorate a next club
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the seller keeps the Art Deco unlock after the sale');
 
+// ── STEP FOUR — the STANDOVER (a hostile forced-sale: pay a fee, roll a muscle contest, a win forces a sale) ──
+// rival now owns neon (tier 1, The Lounge): the assessed BUILD value = open $750k + tier-1 $600k = $1.35M.
+const assessed = 1350000, S_FEE = SPEAKEASY.STANDOVER.FEE;
+await seed(bruno.id, `respect=${lvlRespect(20)}, loc='neon'`);
+// a fresh challenger can't afford the fee + the forced purchase
+assert.equal((await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token })).body.error, 'cash', 'no standover without the fee + the assessed price on hand');
+await grantCash(bruno.id, 2000000);
+// a man can't stand over his own house / a non-existent club — and the owner isn't at self (withTwoCharacters)
+assert.equal((await call('POST', '/v1/speakeasy/docks/standover', { token: bruno.token })).body.error, 'no_club', 'no club in that district to lean on');
+// LOSS (forced roll): the fee BURNS, the owner keeps the club
+process.env.SPEAKEASY_STANDOVER_P = '0';
+const brunoPreLoss = (await meOf(bruno.token)).cash;
+const lose = await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token });
+delete process.env.SPEAKEASY_STANDOVER_P;
+assert.equal(lose.body.won, false, 'the standover was repelled');
+assert.equal((await meOf(bruno.token)).cash, brunoPreLoss - S_FEE, 'only the fee burned on a loss (speakeasy:standover sink)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon' AND owner_character='${rival.id}'`)).rows[0].n), 1, 'the rival kept the club');
+// the club goes on cooldown after any attempt
+assert.equal((await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token })).body.error, 'cooldown', 'a leaned-on club goes on cooldown');
+await pool.query(`UPDATE speakeasies SET standover_cd_until=NULL WHERE district_id='neon'`);
+// WIN (forced roll): a forced sale — the owner is PAID the assessed value (taxed), bruno takes the club
+process.env.SPEAKEASY_STANDOVER_P = '1';
+const brunoPreWin = (await meOf(bruno.token)).cash, rivalPreWin = (await meOf(rival.token)).cash;
+const poolPreStandover = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+const netAssessed = assessed - Math.ceil(assessed * 0.01) * 2;
+const win = await call('POST', '/v1/speakeasy/neon/standover', { token: bruno.token });
+delete process.env.SPEAKEASY_STANDOVER_P;
+assert.equal(win.body.won, true, 'the standover landed');
+assert.equal(win.body.paid, assessed, 'bruno paid the assessed build value');
+assert.equal((await meOf(bruno.token)).cash, brunoPreWin - S_FEE - assessed, 'bruno paid the fee + the assessed price');
+assert.equal((await meOf(rival.token)).cash, rivalPreWin + netAssessed, 'the forced-out owner was PAID the assessed value (98%) — a forced SALE, not theft');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), poolPreStandover + Math.ceil(assessed * 0.01), 'the 1% street tax fed the buyback');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon' AND owner_character='${bruno.id}'`)).rows[0].n), 1, 'bruno now runs the Neon club');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list reset for the new proprietor');
+
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
 let inv = await runLedgerInvariants(pool);
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
@@ -256,8 +301,8 @@ assert(vocab.ok, `speakeasy: rides the §10.4 vocabulary (${JSON.stringify(vocab
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, omrDrift, `the only $OMR drift is the test grants (${omrDrift}) — bottles/naming reconcile as vanity:% burns`);
 
-// ── DEATH: a dead proprietor's club goes dark (+ its guest list clears). The rival owns Neon now. ──
-await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: rival.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+// ── DEATH: a dead proprietor's club goes dark (+ its guest list clears). Bruno owns Neon now (he stood over it). ──
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: bruno.id }, headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE district_id='neon'`)).rows[0].n), 0, "the dead don's club is gone");
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list cleared with it');
 board = (await call('GET', '/v1/speakeasy', { token: patron.token })).body;
@@ -270,5 +315,5 @@ inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'vocabulary still closed');
 
-console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income) + STEP THREE: cross-club RENOWN (derived from patronage + ownership, the leaderboard), the ETH COSMETIC DECOR tier (PLEX-bought unlock + own-gate + apply/clear + survives death), and the P2P BUYOUT (list/not_for_sale/travel gates, a taxed transfer, ownership + guest-list reset, the seller freed, the club keeps its build), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens; the cosmetic unlock survives), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid + buyout; bottles/naming/decor-PLEX ride vanity:%/plex:%)');
+console.log('✅ The Speakeasy test passed — open gates, the base bar take (lazy income + 24h cap + safehouse gate), the decor ladder, naming (vanity:speakeasy burn + no-op guard), buying a ROUND (two-party taxed patron→owner transfer + guest list + prestige + cooldown/travel/self/jail gates), the REGULAR status, BOTTLE service (a pure $OMR burn) + STEP TWO: the BACK-ROOM TABLE (min/max gates, the owner rake carved from the stake, win/lose, notoriety drawn, travel gate) and the PROHIBITION RAID (a hot club seized + fined + SHUTTERED on collect, the shutter blocking rounds/table/income) + STEP THREE: cross-club RENOWN (derived from patronage + ownership, the leaderboard), the ETH COSMETIC DECOR tier (PLEX-bought unlock + own-gate + apply/clear + survives death), and the P2P BUYOUT (list/not_for_sale/travel gates, a taxed transfer, ownership + guest-list reset, the seller freed, the club keeps its build) + STEP FOUR: renown-EARNED decor (unlocked by renown, not bought) and the STANDOVER (a hostile forced-sale — cash gate, the fee burns win/lose, a loss keeps the club + sets a cooldown, a win forces a taxed sale at the assessed build value + transfers ownership), the nightlife board, DEATH (the club goes dark + guest list clears + district reopens; the cosmetic unlock survives), and §10.4 (the per-character cash check reconciles speakeasy: incl. table:bet/rake/win + raid + buyout + standover; bottles/naming/decor-PLEX ride vanity:%/plex:%)');
 await app.close();
