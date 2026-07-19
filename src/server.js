@@ -17,6 +17,7 @@ import * as Territory from './territory.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
+import * as Bonds from './bonds.js';
 import * as Casino from './casino.js';
 import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
@@ -1050,6 +1051,14 @@ export async function buildServer() {
     const rng = await pool.query('SELECT * FROM rng_audit WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
     return { transactions: tx.rows, rng: rng.rows };
   });
+
+  // ── THE RESERVE BOND (Protocol-Owned Liquidity; off-chain accounting, chain DORMANT / mainnet-gated) ──
+  app.get('/v1/bonds', { preHandler: auth }, async (req) => Bonds.bondBoard(pool, req.user.sub));
+  app.post('/v1/bonds/:id/claim', { preHandler: auth }, async (req) => Bonds.claimBond(pool, req.user.sub, req.params.id));
+  app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
+  app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
+  app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
+    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps }));
 
   // ── M6-B: the chain service (§11, EVM) — withdrawals, gear mint, SIWE wallet link ──
   app.post('/v1/wallet/challenge', { preHandler: auth }, async (req) => Chain.walletChallenge(pool, req.user.sub));

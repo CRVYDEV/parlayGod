@@ -2085,6 +2085,37 @@ Deferred (step two): a STABLE (multiple fighters), NPC exhibition bouts (a bound
 the world-raid faucet), title belts, spectator betting on bouts (→ the den book), an account-level career-wins
 LEGEND surviving death (the hitman-rep precedent), and cornerman/trainer NPCs (the Underworld tie-in).
 
+**THE RESERVE BOND (Protocol-Owned Liquidity) — off-chain CORE BUILT, chain DORMANT** (`src/bonds.js`,
+`test/bonds.js` — the 30th suite; design `omerta-reserve-bond-design.md`; founder-directed "Option C").
+The durable half of OlympusDAO bonding (POL acquisition) WITHOUT the discredited half (a reflexive
+inflationary mint). A bonder deposits real ETH → receives DISCOUNTED treasury OMR, vested; the ETH deepens
+the OMR-ETH pool (POL) + feeds the Vig. Fits OMERTÀ's three walls: **(1)** OMR is fixed-supply on-chain, so
+the payout is a SALE from a **budgeted tranche** (`bond_reserve.capacity_omr`), NEVER a mint —
+`committed_omr ≤ capacity_omr` is enforced at bond time (the full-reserve-queue discipline; `over_capacity`
+past it), so emission is HARD-CAPPED and never reflexive; **(2)** §10.4 UNTOUCHED — `bonds.js` writes only
+`bonds`/`bond_reserve`/`vig_revenue(source='bond')`, ZERO `transactions` rows (the fees.js out-of-band
+precedent), so the in-game sweep stays drift-0 (the test proves it end-to-end); **(3)** legal — it ships
+off-chain-first / chain-DORMANT (the M6 pattern), the on-chain `OmertaBond` contract + a `Bonded` watcher +
+the POL-pairing bot **mainnet-gated on legal + a third-party audit**, and NO APY/price marketing.
+`bondPayout = principal × oracle_price / (1 − DISCOUNT)` (the DEX TWAP on mainnet, a param here). The ETH
+SPLITS (the Store precedent): `POL_BPS` (60%) → POL (`bond_reserve.pol_eth`, paired into the pool on
+mainnet), `VIG_BPS` (40%) → `vig_revenue(source='bond')` → the EXISTING buyback → reserve + prize pool (so
+bonds ALSO strengthen extraction-≤-inflow). `recordBond` (the recordFeePayment/Store twin — idempotent on
+nonce, tranche-capped, chain-dormant/mod-driven), `claimBond` (linear vesting; account-level "Treasury
+Backer" STATUS derived from holding a bond — no gameplay power, no §10.4), `fundBondTranche` (the treasury
+tops up the budget), `bondBoard` (`GET /v1/bonds` — offering + remaining capacity + oracle + your bonds),
+`bondStatus` (`GET /v1/mod/bonds` ops view), and **`runBondInvariants`** — the real-value-side invariant
+(the runVigInvariants twin): committed==Σpayout, committed≤capacity (the anti-Ponzi cap), claimed≤committed,
+POL+Vig==principal (the split reconciles), discounts≤MAX. Routes: `GET /v1/bonds`, `POST /v1/bonds/:id/claim`,
+`GET /v1/mod/bonds`, `POST /v1/mod/bond/fund`, `POST /v1/mod/bond/simulate` (QA/comp until the paywall — the
+Store `mod/store/grant` precedent). `test/bonds.js` proves the funded tranche, the discounted payout + the
+60/40 split, the anti-Ponzi cap, idempotency, the bond invariant, the Vig integration, claim vesting, and —
+crucially — **§10.4 IN-GAME UNTOUCHED** (drift-0 through the whole lifecycle). Suite 30/30 + sim drift-0.
+Numbers (`DISCOUNT_BPS`, `VEST_HOURS`, `POL_BPS`/`VIG_BPS`, the tranche capacity) are founder sign-off levers.
+Deferred (mainnet milestone, legal + audit gated): the on-chain `OmertaBond` contract + `Bonded` watcher +
+the POL-pairing bot + **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a
+financial primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

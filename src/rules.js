@@ -1388,6 +1388,25 @@ STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); //
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
+// ── THE RESERVE BOND (omerta-reserve-bond-design.md) — Protocol-Owned Liquidity via a budgeted treasury
+// bond (Olympus Pro, disciplined: a SALE of budgeted treasury OMR, NEVER a mint; real-value/out-of-band, so
+// §10.4 is untouched). The bonder deposits ETH → gets discounted OMR vested; the ETH deepens the pool (POL)
+// + feeds the Vig. Bounded by the tranche capacity. Chain layer DORMANT (mainnet-gated). Sign-off levers.
+export const BONDS = {
+  DISCOUNT_BPS: Number(process.env.BOND_DISCOUNT_BPS || 800),   // 8% bonus OMR (the incentive)
+  MAX_DISCOUNT_BPS: 2000,                                       // 20% hard cap (a rogue-discount backstop)
+  VEST_HOURS: Number(process.env.BOND_VEST_HOURS || 120),      // 5-day linear vest (the Olympus default)
+  POL_BPS: Number(process.env.BOND_POL_BPS || 6000),           // 60% of bonded ETH → Protocol-Owned Liquidity
+  VIG_BPS: Number(process.env.BOND_VIG_BPS || 4000),           // 40% → the Vig buyback (reserve + prizes). sum 10000
+  MIN_PRINCIPAL_ETH: 0.01,
+};
+// the discounted OMR a bond pays: principal's market OMR value, scaled UP by the discount (cheaper OMR)
+export const bondPayout = (principalEth, price, discountBps) =>
+  Math.round((Number(principalEth) * Number(price) / (1 - Number(discountBps) / 10000)) * 1e6) / 1e6;
+// validate the ETH split sums to 10000 at load (a misconfig would mis-route real revenue)
+(() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS;
+  if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS must sum to 10000 (got ${t})`); })();
+
 // ── THE LEDGER — the Season Pass reward track. A daily-claim track (the genre-standard "battle
 // pass"): while the pass is active, claim the NEXT tier once per CLAIM window, escalating rewards.
 // Anti-pay-to-win + §10.4-safe: rewards are STATUS (a street title), CONSUMABLES (revives out-of-band,

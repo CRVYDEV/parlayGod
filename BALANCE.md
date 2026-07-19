@@ -911,6 +911,22 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 **Fight Circuit red-team (independent) — CLEAN (no CRITICAL/HIGH).** §10.4 rake accounting byte-identical to the audited `casino:pvp`; persist-clobber, lock order, the dynamic-column train UPDATE (allowlist-gated, injection-safe), input validation, reroll termination, and death/estate all verified sound. **MED-1 FIXED** (regression added): `fightBout` now gates a jailed/hospitalized OPPONENT (the `casino:pvp` counterparty-gate precedent) — no draining an incapacitated lister who can't call it off. Two LOW balance items flagged for founder sign-off (NOT patched, ground rule #1): **(L1)** info-asymmetric consent — fighter form/record is public and the challenger self-selects, so listing at a real stake is −EV against a stronger challenger (self-correcting: list only a strong fighter; the incentive is to BUILD a strong one, not list a weak one — but a bout-attractiveness lever is the dial if listing dies out); **(L2)** no energy/nerve cost on the bout initiator (unlike `casino:pvp`'s `DICE_NERVE`), so a strong-fighter manager's only throughput gate is the opponent's 4h injury clock — add an initiator resource cost if leaderboard-farming is seen. Both are status-axis/redistribution concerns (rank is powerless; alt-collusion is −EV via the 5% rake, the signed `casino:pvp` posture), not §10.4 leaks.
 
+**The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `BONDS.DISCOUNT_BPS` / `MAX_DISCOUNT_BPS` | 8% / 20% cap | The bonder's incentive (cheaper OMR). The protocol accepts paying an OMR premium to acquire ETH/LP (the cost of POL); bounded by the tranche. MAX is a rogue-discount backstop (invariant-checked). | KEEP |
+| `BONDS.VEST_HOURS` | 120h (5d) | Linear vesting — stops an instant dump (the Olympus default). | KEEP |
+| `BONDS.POL_BPS` / `VIG_BPS` | 60% / 40% | The bonded-ETH split: 60% → Protocol-Owned Liquidity (deepens the OMR-ETH pool), 40% → the Vig buyback (reserve + prizes). Must sum to 10000 (load-validated). | KEEP |
+| `bond_reserve.capacity_omr` (the tranche) | set via `mod/bond/fund` | **The anti-Ponzi cap:** total OMR ever bonded out ≤ the treasury's budgeted allocation. `committed ≤ capacity` enforced at bond time; over it → `over_capacity` until the treasury tops up. This is the discipline that separates this from OlympusDAO's reflexive mint. | KEEP |
+
+**Notes (sign-off):** A bond is a REAL-VALUE / OUT-OF-BAND primitive — it writes ZERO in-game `transactions`
+rows, so §10.4 (the in-game sweep) is untouched by construction; it carries its OWN invariant
+(`runBondInvariants`) on the real-value side (the `runVigInvariants` twin). The payout is a SALE of budgeted
+treasury OMR, NEVER a mint (OMR is fixed-supply on-chain). The on-chain `OmertaBond` contract + `Bonded`
+watcher + POL-pairing bot are MAINNET-GATED on legal counsel + a third-party audit (the R2/R3/withdrawal-rail
+wall), and there is **no APY / price-appreciation marketing** until counsel signs off.
+
 **Notes (sign-off):**
 - The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);
   the win is a gambling faucet, the edge a net sink. All rows character_id'd → §10.4 check (a) reconciles.
