@@ -242,6 +242,7 @@
     if (body.task && body.cash !== undefined) bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
+    if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
@@ -1369,6 +1370,7 @@
     const t = $('#tab-estate');
     await refresh();
     const e = (await api('GET', '/v1/estate')).body || {};
+    const auc = (await api('GET', '/v1/auction')).body || {};
     const tr = e.trophies || {};
     t.innerHTML = `
       ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with clean $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
@@ -1391,13 +1393,24 @@
         <div class="card"><span class="t">${f.name}</span>
           ${f.owned ? '<span class="chip good">built</span>' : f.locked ? `<span class="chip cold">needs tier ${f.minTier}</span>` : ''}
           <div class="d">${f.blurb}</div>
-          ${f.owned ? '' : f.locked ? '' : `<button class="act" data-estfeat="${f.id}">build (${fmt(f.omr)} $OMR)</button>`}</div>`).join('')}</div>`;
+          ${f.owned ? '' : f.locked ? '' : `<button class="act" data-estfeat="${f.id}">build (${fmt(f.omr)} $OMR)</button>`}</div>`).join('')}</div>
+
+      <h2 style="margin-top:14px">The Auction Block <span class="d" style="font-size:10px">(this week's lots — highest $OMR bid wins, and burns · closes ${auc.closesInSeconds ? mins(auc.closesInSeconds) : 'soon'})</span></h2>
+      <div class="grid">${(auc.lots || []).map((l) => `
+        <div class="card" ${l.youLead ? 'style="border-color:var(--neon)"' : ''}><span class="t">${l.name} <span class="d">#${l.serial}</span></span>
+          ${l.youLead ? '<span class="chip good">you lead</span>' : ''}
+          <div class="d">${l.blurb}</div>
+          <div class="d">${l.currentBid > 0 ? `top bid ${fmt(l.currentBid)} $OMR` : 'no bids yet'} · next ≥ ${fmt(l.minNext)} $OMR</div>
+          <input data-aucamt="${l.id}" placeholder="${fmt(l.minNext)}" size="7"> <button class="act" data-aucbid="${l.id}">bid</button></div>`).join('')}</div>
+      ${(auc.wins || []).length ? `<div class="d" style="color:var(--dim);font-size:11px;margin-top:8px">your trophies: ${auc.wins.map((w) => `${w.name} #${w.serial} (${fmt(w.price)} $OMR)`).join(' · ')}</div>` : ''}`;
     const up = $('#est-up');
     if (up) up.onclick = () => act('POST', '/v1/estate/upgrade', {}).then(() => renderEstate());
     const nb = $('#est-name-go');
     if (nb) nb.onclick = () => act('POST', '/v1/estate/name', { name: $('#est-name').value }).then(() => renderEstate());
     t.querySelectorAll('[data-estfeat]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/estate/feature/${b.dataset.estfeat}`, {}).then(() => renderEstate()));
+    t.querySelectorAll('[data-aucbid]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/auction/${b.dataset.aucbid}/bid`, { amount: Number(t.querySelector(`[data-aucamt="${b.dataset.aucbid}"]`).value) }).then(() => renderEstate()));
   }
 
   // ── THE LIFE: the skill tree + the five fixtures who remember your name ──

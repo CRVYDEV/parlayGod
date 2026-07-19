@@ -812,6 +812,32 @@ CREATE TABLE IF NOT EXISTS estates (
   spent_omr NUMERIC NOT NULL DEFAULT 0      -- lifetime $OMR sunk into the estate (a status figure)
 );
 
+-- ── THE AUCTION HOUSE ("the sit-down"): the competitive, recurring $OMR sink ──
+-- A live auction row exists once a lot gets its first bid. `current_bid` on status='live' rows IS the
+-- $OMR escrow bucket (the bounty/loan/market-escrow twin, on the $OMR side — added to omrBuckets so
+-- $OMR conservation stays exact; reconciled by the 'auction escrow' invariant). bidder = account_id
+-- ($OMR is account-level → survives death, so a bid needs no death handling). Settled by the worker.
+CREATE TABLE IF NOT EXISTS auctions (
+  lot_id TEXT PRIMARY KEY,                  -- '<week>:<slot>'
+  week INT NOT NULL,
+  archetype TEXT NOT NULL,
+  current_bid NUMERIC NOT NULL DEFAULT 0,
+  bidder TEXT,                              -- account_id of the standing top bidder
+  status TEXT NOT NULL DEFAULT 'live',      -- 'live' | 'settled'
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Won lots — account-level trophies (survive death; the heir inherits the collection).
+CREATE TABLE IF NOT EXISTS auction_wins (
+  account_id TEXT NOT NULL,
+  lot_id TEXT NOT NULL,
+  archetype TEXT NOT NULL,
+  name TEXT NOT NULL,
+  serial TEXT NOT NULL,
+  price NUMERIC NOT NULL,
+  won_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, lot_id)
+);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in
