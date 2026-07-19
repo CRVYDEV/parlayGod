@@ -1515,7 +1515,9 @@
         <div class="d">reserve ${fmt(pf.family.reserve)} $OMR${pf.family.holdings.length ? ' · ' + pf.family.holdings.map((h) => `${h.ticker} ${h.shares}`).join(' · ') : ' · nothing yet'}</div>
         ${pf.family.canInvest ? `<select id="rwa-fam-t">${mkt.map((m) => `<option value="${m.ticker}">${m.ticker} — $${fmt(m.price)}</option>`).join('')}</select>
           <input id="rwa-fam-amt" placeholder="$OMR from reserve" size="14"> <button class="act" id="rwa-fam-buy">invest the family money</button>`
-        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money</div>'}</div>` : ''}
+        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money</div>'}
+        ${pf.family.dividend ? `<div class="d" style="margin-top:6px">family dividend: a daily yield to the reserve (funded by family investing).${pf.family.dividend.claimable ? '' : pf.family.dividend.cooldownSeconds ? ` next in ${mins(pf.family.dividend.cooldownSeconds)}` : ''}</div>
+          ${pf.family.dividend.claimable ? `<button class="act" id="fam-div" style="border-color:var(--neon)">draw the family dividend (~${fmt(pf.family.dividend.estimate)} $OMR)</button>` : ''}` : ''}</div>` : ''}
 
       <h2 style="margin-top:12px">Biggest Books</h2>
       <div class="grid">${(lb.board || []).slice(0, 8).map((row, i) => `
@@ -1533,6 +1535,8 @@
       { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
     const dc = $('#div-claim');
     if (dc) dc.onclick = () => act('POST', '/v1/portfolio/dividend', {}).then(() => renderPortfolio());
+    const fd = $('#fam-div');
+    if (fd) fd.onclick = () => act('POST', '/v1/gangs/portfolio/dividend', {}).then(() => renderPortfolio());
   }
 
   // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──

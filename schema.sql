@@ -235,6 +235,13 @@ CREATE TABLE IF NOT EXISTS gangs (
   war_until TIMESTAMPTZ,
   war_score_us INT NOT NULL DEFAULT 0,
   war_score_them INT NOT NULL DEFAULT 0,
+  -- THE DYNASTY FUND (family layer): the gang RWA book earns a ~daily dividend to the reserve
+  -- (dividend_at = the cooldown; the stake-pool transfer, never a mint). rwa_invested = cumulative
+  -- $OMR the FAMILY has invested (monotonic → the family crest tier). dynasty_name = the family fund's
+  -- name (a $OMR vanity sink; heads the family-legit leaderboard). All §10.4-clean / status.
+  dividend_at TIMESTAMPTZ,
+  rwa_invested NUMERIC NOT NULL DEFAULT 0,
+  dynasty_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- role is the source of truth for command: 'boss' | 'underboss' | 'capo' | 'soldier'
