@@ -4,11 +4,13 @@
 // JAILHOUSE SHANK: reach an enemy who's ALSO inside, bypassing the street defenses (safehouse can't
 // be entered from a cell; a street bodyguard isn't in the yard) but respecting paid revive insurance
 // and witness-protection segregation. Every action REQUIRES being jailed. Numbers are sign-off levers.
+import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { PEN, penContrabandOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
          yardEventOf, yardEventById, dayOf } from './rules.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
 
+const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -164,6 +166,183 @@ export async function attemptBreak(ch, client, h) {
   bus.emit('streets', { type: 'escape', who: ch.name });
   await h.track(client, ch.account_id, 'pen_break', { made: true });
   return { ok: true, escaped: true, wantedSeconds: Math.ceil(PEN.FUGITIVE_MS / 1000) };
+}
+
+// ── STEP FOUR — THE CO-OP BREAKOUT (the crew-heist pattern, inside) ──
+// A jailed leader stakes a cutkit and opens a break; jailed inmates join off the board; the leader
+// calls the go — ONE roll for the whole crew, odds scaling with crew size. Win = everyone's sentence
+// clears + everyone WANTED; loss = the whole crew eats the hole + a longer stretch + a beating.
+// §10.4-clean (the cutkit is contraband, not currency; refunded to a LIVING leader on disband/stale).
+// Lock discipline mirrors executeHeist exactly: leader (withCharacter) → member char rows SORTED →
+// the break row; one-active-break (UNIQUE character_id) makes concurrent executes disjoint (acyclic);
+// members are written by absolute UPDATEs under lock (never in-memory — no persistCharacter clobber).
+const coopStale = (row) => Date.now() - new Date(row.created_at).getTime() > PEN.COOP_TTL_MS;
+async function activeBreak(client, chId) {
+  return (await client.query(
+    `SELECT m.break_id FROM pen_break_members m JOIN pen_breaks b ON b.id = m.break_id
+      WHERE m.character_id=$1 AND b.status='planning'`, [chId])).rows[0] || null;
+}
+
+// POST /v1/pen/break/plan — a jailed leader stakes a cutkit and opens a break for the yard
+export async function planBreak(ch, client, h) {
+  insideOnly(ch);
+  if (await activeBreak(client, ch.id)) throw new GameError('busy', "You're already in on a break.");
+  const held = await contrabandOf(client, ch.id);
+  if (!(held.cutkit > 0)) throw new GameError('no_kit', 'A crew break needs a hacksaw & rope — see the commissary.');
+  await setContraband(client, ch.id, 'cutkit', held.cutkit - 1); // staked (refunded on disband/stale to a LIVING leader)
+  const id = uid();
+  await client.query('INSERT INTO pen_breaks (id, leader_character) VALUES ($1,$2)', [id, ch.id]);
+  await client.query('INSERT INTO pen_break_members (break_id, character_id) VALUES ($1,$2)', [id, ch.id]);
+  await h.track(client, ch.account_id, 'pen_break_plan', {});
+  return { ok: true, id, crewNeeded: PEN.COOP_MIN - 1, crewMax: PEN.COOP_MAX };
+}
+
+// POST /v1/pen/break/:id/join — a jailed inmate joins an open break
+export async function joinBreak(ch, breakId, client, h) {
+  insideOnly(ch);
+  const row = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning' FOR UPDATE", [breakId])).rows[0];
+  if (!row) throw new GameError('no_break', 'That break is gone.');
+  if (coopStale(row)) throw new GameError('stale', 'That plan went cold.');
+  if (await activeBreak(client, ch.id)) throw new GameError('busy', "You're already in on a break.");
+  const crew = (await client.query('SELECT character_id FROM pen_break_members WHERE break_id=$1', [breakId])).rows;
+  if (crew.length >= PEN.COOP_MAX) throw new GameError('full', 'The crew is set — no room on this one.');
+  await client.query('INSERT INTO pen_break_members (break_id, character_id) VALUES ($1,$2)', [breakId, ch.id]);
+  await h.track(client, ch.account_id, 'pen_break_join', {});
+  return { ok: true, id: breakId, crew: crew.length + 1 };
+}
+
+// POST /v1/pen/break/:id/leave — a member walks; the LEADER walking disbands and takes the kit back
+export async function leaveBreak(ch, breakId, client, h) {
+  const row = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning' FOR UPDATE", [breakId])).rows[0];
+  if (!row) throw new GameError('no_break', 'That break is gone.');
+  const mine = (await client.query('SELECT 1 FROM pen_break_members WHERE break_id=$1 AND character_id=$2', [breakId, ch.id])).rows[0];
+  if (!mine) throw new GameError('not_crew', "You're not in on that break.");
+  if (row.leader_character === ch.id) {
+    const held = await contrabandOf(client, ch.id);
+    await setContraband(client, ch.id, 'cutkit', (held.cutkit || 0) + 1); // the staked kit comes back to a living leader
+    await client.query("UPDATE pen_breaks SET status='abandoned' WHERE id=$1", [breakId]);
+    await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [breakId]);
+    return { ok: true, disbanded: true };
+  }
+  await client.query('DELETE FROM pen_break_members WHERE break_id=$1 AND character_id=$2', [breakId, ch.id]);
+  return { ok: true, left: true };
+}
+
+// POST /v1/pen/break/:id/go — leader-only. One roll for the whole crew.
+export async function executeBreak(ch, breakId, client, h) {
+  insideOnly(ch); // the leader must be inside + out of the hole
+  const ev = activeYardEvent();
+  if (ev.shankBlock) throw new GameError('lockdown', 'Lockdown — guards on every tier. No wall to go over today.');
+  const pre = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning'", [breakId])).rows[0];
+  if (!pre) throw new GameError('no_break', 'That break is gone.');
+  if (pre.leader_character !== ch.id) throw new GameError('not_leader', 'The one who planned it calls the go.');
+  if (coopStale(pre)) throw new GameError('stale', 'That plan went cold — walk away and start fresh.');
+  const preIds = (await client.query('SELECT character_id FROM pen_break_members WHERE break_id=$1', [breakId])).rows.map((r) => r.character_id);
+  // member character rows first, SORTED (leader already held by withCharacter; one-active-break keeps
+  // concurrent executes disjoint → acyclic; the residual leader-vs-PvP 40P01 maps to `contention`)
+  const others = {};
+  for (const id of preIds.filter((id) => id !== ch.id).sort()) {
+    const r = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+    if (!r) throw new GameError('crew_gone', 'One of the crew is in the ground. Recrew.');
+    others[id] = r;
+  }
+  const row = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning' FOR UPDATE", [breakId])).rows[0];
+  if (!row) throw new GameError('no_break', 'That break is gone.');
+  const members = (await client.query('SELECT character_id FROM pen_break_members WHERE break_id=$1', [breakId])).rows.map((r) => r.character_id);
+  if (members.slice().sort().join() !== [...preIds].sort().join())
+    throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
+  if (members.length < PEN.COOP_MIN) throw new GameError('crew_short', `A break needs at least ${PEN.COOP_MIN} — you have ${members.length}.`);
+  const crewRows = [ch, ...Object.values(others)];
+  for (const m of crewRows) {
+    if (!jailed(m)) throw new GameError('crew_free', 'One of the crew already walked — recrew.');
+    if (inHole(m)) throw new GameError('crew_hole', "One of the crew is in the hole — nobody moves without them.");
+    if (hospitalized(m)) throw new GameError('crew_hurt', 'One of the crew is in the infirmary. Wait for them.');
+  }
+  const held = await contrabandOf(client, ch.id);
+  await setContraband(client, ch.id, 'cutkit', Math.max(0, (held.cutkit || 0) - 1)); // the staked kit is spent win or lose
+  await client.query("UPDATE pen_breaks SET status='done' WHERE id=$1", [breakId]);
+  // PEN_BREAK_P is a TEST-ONLY knob (the SHANK_P precedent). Odds scale with crew + a riot's chaos.
+  const p = process.env.PEN_BREAK_P != null ? Number(process.env.PEN_BREAK_P)
+    : Math.max(0.05, Math.min(PEN.COOP_MAX_P, PEN.COOP_BASE + (crewRows.length - 1) * PEN.COOP_PER_EXTRA + (ev.shankAdd || 0)));
+  const roll = Math.random();
+  const made = roll < p;
+  await h.rngLog(client, ch.id, 'pen:coopbreak', roll, made ? `over the wall (crew ${crewRows.length})` : 'caught at the fence');
+  const setMember = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
+  if (made) {
+    const fug = Date.now() + PEN.FUGITIVE_MS;
+    for (const m of crewRows) {
+      const wanted = new Date(Math.max(fug, m.wanted_until ? new Date(m.wanted_until).getTime() : 0));
+      const heat = Math.min(100, Number(m.heat || 0) + PEN.BREAK_HEAT);
+      if (m.id === ch.id) { ch.jail_until = null; ch.wanted_until = wanted; ch.heat = heat; }
+      else { await setMember(m.id, 'jail_until=NULL, wanted_until=$2, heat=$3', [wanted, heat]); await h.notify(client, m.id, 'escaped', { wantedHours: Math.round(PEN.FUGITIVE_MS / 3600000) }); }
+    }
+    bus.emit('streets', { type: 'breakout', crew: crewRows.length });
+    await h.track(client, ch.account_id, 'pen_coop_break', { made: true, crew: crewRows.length });
+    return { ok: true, escaped: true, crew: crewRows.length, wantedSeconds: Math.ceil(PEN.FUGITIVE_MS / 1000) };
+  }
+  // caught — the whole crew eats the hole + a longer stretch + a beating
+  for (const m of crewRows) {
+    const dmg = rand(PEN.BREAK_FAIL_DMG[0], PEN.BREAK_FAIL_DMG[1]);
+    const health = Math.max(1, Number(m.health) - dmg);
+    const newJail = new Date(new Date(m.jail_until).getTime() + PEN.BREAK_CAUGHT_ADD_S * 1000);
+    const hole = new Date(Math.min(Date.now() + PEN.HOLE_MS, newJail.getTime())); // capped at the (extended) sentence
+    if (m.id === ch.id) { ch.health = health; ch.jail_until = newJail; ch.hole_until = hole; }
+    else { await setMember(m.id, 'health=$2, jail_until=$3, hole_until=$4', [health, newJail, hole]); await h.notify(client, m.id, 'break_failed', { addSeconds: PEN.BREAK_CAUGHT_ADD_S }); }
+  }
+  await h.track(client, ch.account_id, 'pen_coop_break', { made: false, crew: crewRows.length });
+  return { ok: true, escaped: false, caught: true, crew: crewRows.length };
+}
+
+// GET /v1/pen/breaks — the co-op board (open plans + your active break). Pool-level (the heist precedent).
+export async function breakBoard(pool, characterId) {
+  const openRows = (await pool.query(
+    `SELECT b.id, b.created_at, c.name AS leader FROM pen_breaks b JOIN characters c ON c.id = b.leader_character
+      WHERE b.status='planning' ORDER BY b.created_at DESC LIMIT 30`)).rows;
+  const memberRows = (await pool.query(
+    "SELECT m.break_id FROM pen_break_members m JOIN pen_breaks b2 ON b2.id = m.break_id AND b2.status='planning'")).rows;
+  const countBy = {};
+  for (const r of memberRows) countBy[r.break_id] = (countBy[r.break_id] || 0) + 1;
+  const open = openRows.filter((r) => Date.now() - new Date(r.created_at).getTime() <= PEN.COOP_TTL_MS)
+    .map((r) => ({ id: r.id, leader: r.leader, crew: countBy[r.id] || 0, crewMax: PEN.COOP_MAX }));
+  const mineRow = (await pool.query(
+    `SELECT b.id, b.leader_character FROM pen_breaks b JOIN pen_break_members m ON m.break_id = b.id
+      WHERE m.character_id=$1 AND b.status='planning'`, [characterId])).rows[0] || null;
+  let mine = null;
+  if (mineRow) {
+    const crew = (await pool.query('SELECT c.name FROM pen_break_members m JOIN characters c ON c.id = m.character_id WHERE m.break_id=$1', [mineRow.id])).rows;
+    mine = { id: mineRow.id, leader: mineRow.leader_character === characterId, crew: crew.map((c) => c.name) };
+  }
+  return { open, mine, min: PEN.COOP_MIN, max: PEN.COOP_MAX };
+}
+
+// Worker sweep: stale plans are abandoned and a LIVING leader's staked cutkit comes back (per-break
+// txn, leader row locked BEFORE the break row — the sweepStaleHeists discipline).
+export async function sweepStaleBreaks(pool) {
+  const client = await pool.connect();
+  let swept = 0;
+  try {
+    const staleRows = (await client.query(
+      `SELECT id, leader_character FROM pen_breaks WHERE status='planning' AND created_at < now() - interval '${Math.floor(PEN.COOP_TTL_MS / 1000)} seconds'`)).rows;
+    for (const s of staleRows) {
+      await client.query('BEGIN');
+      try {
+        const leader = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive FOR UPDATE', [s.leader_character])).rows[0];
+        const again = (await client.query("SELECT 1 FROM pen_breaks WHERE id=$1 AND status='planning' FOR UPDATE", [s.id])).rows[0];
+        if (!again) { await client.query('COMMIT'); continue; }
+        if (leader) { // refund the staked cutkit to a LIVING leader (a dead leader's kit stays sunk)
+          const cur = (await client.query("SELECT qty FROM pen_contraband WHERE character_id=$1 AND item='cutkit'", [s.leader_character])).rows[0];
+          const q = Number(cur?.qty || 0) + 1;
+          if (cur) await client.query("UPDATE pen_contraband SET qty=$2 WHERE character_id=$1 AND item='cutkit'", [s.leader_character, q]);
+          else await client.query("INSERT INTO pen_contraband (character_id, item, qty) VALUES ($1,'cutkit',$2)", [s.leader_character, q]);
+        }
+        await client.query("UPDATE pen_breaks SET status='abandoned' WHERE id=$1", [s.id]);
+        await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [s.id]);
+        await client.query('COMMIT');
+        swept++;
+      } catch (e) { await client.query('ROLLBACK'); throw e; }
+    }
+    return { swept };
+  } finally { client.release(); }
 }
 
 // POST /v1/pen/shank/:targetId — the jailhouse hit (two-party: both must be inside)

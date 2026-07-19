@@ -927,6 +927,14 @@ export const PEN = {
   BREAK_ENERGY: 30, BREAK_P: 0.35, BREAK_HEAT: 40,
   BREAK_CAUGHT_ADD_S: 900, BREAK_FAIL_DMG: [20, 45],
   FUGITIVE_MS: 2 * 24 * 3600 * 1000,                        // how long an escapee stays a hunted fugitive (reuses characters.wanted_until)
+  // step four — the CO-OP BREAKOUT (the crew-heist pattern, inside): a jailed leader stakes a cutkit,
+  // jailed inmates join, the leader calls the go — ONE roll for the whole crew, odds scaling with crew
+  // size (more hands = lookouts + diversion). Win = everyone's sentence clears + everyone WANTED; loss
+  // = the whole crew eats the hole + BREAK_CAUGHT_ADD_S + a beating. §10.4-clean (the cutkit is
+  // contraband, not currency; refunded to a LIVING leader on disband/stale). Numbers are sign-off levers.
+  COOP_MIN: 2, COOP_MAX: 4,                                 // crew size bounds (leader + 1..3)
+  COOP_BASE: 0.4, COOP_PER_EXTRA: 0.12, COOP_MAX_P: 0.9,    // p = COOP_BASE + (crew−1)×COOP_PER_EXTRA, clamped [.05, COOP_MAX_P] (+ riot shankAdd)
+  COOP_TTL_MS: 60 * 60 * 1000,                              // a plan goes cold after an hour (the worker sweeps it, refunds a living leader's cutkit)
   // step two — YARD INCIDENTS: a deterministic daily draw (the §7.11 seed) the whole block shares,
   // a modifier layer on the Pen (the cityEventOf pattern). Each is ONE touchpoint. Sign-off levers.
   YARD_EVENTS: [

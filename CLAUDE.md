@@ -1109,8 +1109,26 @@ post their own on a wanted man). Console: an "Over the Wall" card in the Pen tab
 `describe()` humanizes escaped/caught; the raw deck gained `/v1/pen/break`. `test/pen.js` covers the
 free/no-kit/lockdown gates, the cutkit sink→pool, a forced fail (hole + longer stretch + beating + kit
 spent + NOT wanted), and a forced win (sentence cleared + WANTED + heat spike + the sheet reads wanted).
-Suite 23/23 + sim drift-0. All numbers are founder sign-off levers. Step four deferred: prison factions/
-shot-callers, a CO-OP break-out (the crew-heist pattern), richer yard incidents.
+Suite 23/23 + sim drift-0. All numbers are founder sign-off levers.
+**THE PEN — step four: THE CO-OP BREAKOUT — BUILT** (`src/pen.js` planBreak/joinBreak/leaveBreak/
+executeBreak/breakBoard/sweepStaleBreaks; `pen_breaks` + `pen_break_members` tables; the crew-heist
+pattern INSIDE). A jailed **leader stakes a cutkit** (`POST /v1/pen/break/plan`); jailed inmates join off
+the board (`GET /v1/pen/breaks`, `POST /v1/pen/break/:id/join`); the leader calls the go
+(`POST /v1/pen/break/:id/go`) — ONE roll for the whole crew, `p = COOP_BASE 0.4 + (crew−1)×COOP_PER_EXTRA
+0.12 + riot`, clamped `[.05, COOP_MAX_P .9]` (`PEN_BREAK_P` pins it for tests); crew `COOP_MIN 2`…`COOP_MAX
+4`. **Win** → EVERYONE's sentence clears + EVERYONE walks out **WANTED** (the solo-break bound, crew-wide)
++ a heat spike; **loss** → the whole crew eats the hole + `BREAK_CAUGHT_ADD_S` + a beating. Lock discipline
+mirrors `executeHeist` exactly (leader → member char rows SORTED → the break row; one-active-break makes
+concurrent executes disjoint/acyclic; the residual leader-vs-PvP 40P01 → `contention`; members written by
+absolute UPDATEs under lock — no persist-clobber). The cutkit is **contraband, not currency** — staked at
+plan, spent win/lose at go, refunded to a LIVING leader on disband/stale (a dead leader's kit stays sunk —
+the heist-stake rule); `pen_break_members` joined the runEstate wipe; the worker `sweepStaleBreaks`
+(`COOP_TTL_MS` 1h, leader-before-break lock order) refunds stale plans. §10.4-clean (no currency moves —
+the only ledgered event was buying the cutkit). Console: a "Crew Break" section in the Pen tab. `test/pen.js`
+covers the gates (free/no-kit/crew_short/not_leader), the staked-kit lifecycle, a forced win (whole crew out
++ WANTED + heat), a forced fail (whole crew in the hole + longer stretch), and the disband + stale-sweep kit
+refund. Suite 23/23 + sim drift-0. Step five deferred: prison factions/shot-callers, richer yard incidents,
+the break RAT (the heist-rat twin).
 
 A **three-lens red-team over Pen step two** (`AUDIT-the-pen-step-two.md`: the burner bypass, the hole,
 yard incidents + §10.4) closed one HIGH + three MED/LOW (regression per fix): a $25k burner **defeated

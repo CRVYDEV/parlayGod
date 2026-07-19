@@ -8,6 +8,7 @@ process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { PEN, NPC_HITMEN } from '../src/rules.js';
+import { sweepStaleBreaks } from '../src/pen.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -317,9 +318,75 @@ assert(rr.wanted_until && new Date(rr.wanted_until) > new Date(), 'he is a hunte
 assert(Number(rr.heat) >= PEN.BREAK_HEAT, 'the alarm raised his heat');
 assert.equal((await call('GET', '/v1/me', { token: runner2.token })).body.character.wanted, true, 'the escapee reads WANTED on the sheet');
 
+// ── STEP FOUR — THE CO-OP BREAKOUT: a crew of inmates over the wall together ──
+process.env.PEN_YARD_EVENT = 'quiet';
+const cl = await mk('Crew Leader');
+const c1 = await mk('Crew One');
+const c2 = await mk('Crew Two');
+await seedCh(cl.id, `${jailFuture}, energy=200, cash=1000000, health=100, heat=0`);
+await seedCh(c1.id, `${jailFuture}, energy=100, health=100, heat=0`);
+await seedCh(c2.id, `${jailFuture}, energy=100, health=100, heat=0`);
+const freeGuy = await mk('Free Guy');
+assert.equal((await call('POST', '/v1/pen/break/plan', { token: freeGuy.token })).body.error, 'free', 'no crew break on the outside');
+assert.equal((await call('POST', '/v1/pen/break/plan', { token: cl.token })).body.error, 'no_kit', 'a crew break needs a cutkit');
+await call('POST', '/v1/pen/buy/cutkit', { token: cl.token });
+const plan = await call('POST', '/v1/pen/break/plan', { token: cl.token });
+assert.equal(plan.code, 200, 'the leader opens a break'); const bid = plan.body.id;
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${cl.id}' AND item='cutkit'`)).rows[0].q, 0, 'the cutkit is staked into the break');
+assert.equal((await call('POST', `/v1/pen/break/${bid}/go`, { token: cl.token })).body.error, 'crew_short', 'a break needs the minimum crew');
+assert.equal((await call('POST', `/v1/pen/break/${bid}/join`, { token: c1.token })).code, 200, 'one joins');
+assert.equal((await call('POST', `/v1/pen/break/${bid}/join`, { token: c2.token })).code, 200, 'two joins');
+const cboard = (await call('GET', '/v1/pen/breaks', { token: c1.token })).body;
+assert(cboard.mine && cboard.mine.crew.length === 3, 'the board shows the full crew to a member');
+assert.equal((await call('POST', `/v1/pen/break/${bid}/go`, { token: c1.token })).body.error, 'not_leader', 'only the leader calls the go');
+process.env.PEN_BREAK_P = '1';
+const go = await call('POST', `/v1/pen/break/${bid}/go`, { token: cl.token });
+delete process.env.PEN_BREAK_P;
+assert.equal(go.body.escaped, true, 'over the wall'); assert.equal(go.body.crew, 3, 'three walked');
+for (const m of [cl, c1, c2]) {
+  const row = await rawCh(m.id);
+  assert(!row.jail_until || new Date(row.jail_until) <= new Date(), 'a member sentence cleared');
+  assert(row.wanted_until && new Date(row.wanted_until) > new Date(), 'the whole crew walks out WANTED');
+  assert(Number(row.heat) >= PEN.BREAK_HEAT, 'the alarm spiked everyone\'s heat');
+}
+assert.equal((await pool.query(`SELECT status FROM pen_breaks WHERE id='${bid}'`)).rows[0].status, 'done', 'the break is resolved');
+// FORCED FAIL — the whole crew eats the hole + a longer stretch
+const fl = await mk('Fail Leader'); const f1 = await mk('Fail One');
+await seedCh(fl.id, `${jailFuture}, energy=200, cash=1000000, health=100`);
+await seedCh(f1.id, `${jailFuture}, energy=100, health=100`);
+await call('POST', '/v1/pen/buy/cutkit', { token: fl.token });
+const fplan = (await call('POST', '/v1/pen/break/plan', { token: fl.token })).body.id;
+await call('POST', `/v1/pen/break/${fplan}/join`, { token: f1.token });
+const fpre = await rawCh(f1.id);
+process.env.PEN_BREAK_P = '0';
+const fgo = await call('POST', `/v1/pen/break/${fplan}/go`, { token: fl.token });
+delete process.env.PEN_BREAK_P;
+assert.equal(fgo.body.escaped, false, 'caught at the fence');
+for (const m of [fl, f1]) {
+  const row = await rawCh(m.id);
+  assert(new Date(row.hole_until) > new Date(), 'the whole crew is in the hole');
+  assert(new Date(row.jail_until) > new Date(fpre.jail_until), 'and eats a longer stretch');
+}
+// DISBAND — the leader walking refunds the staked cutkit
+const dl = await mk('Disband Leader');
+await seedCh(dl.id, `${jailFuture}, cash=1000000`);
+await call('POST', '/v1/pen/buy/cutkit', { token: dl.token });
+const dplan = (await call('POST', '/v1/pen/break/plan', { token: dl.token })).body.id;
+assert.equal((await call('POST', `/v1/pen/break/${dplan}/leave`, { token: dl.token })).body.disbanded, true, 'the leader disbands');
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${dl.id}' AND item='cutkit'`)).rows[0].q, 1, 'the staked cutkit comes back on disband');
+// STALE SWEEP — an abandoned plan refunds a living leader's cutkit
+const sl = await mk('Stale Leader');
+await seedCh(sl.id, `${jailFuture}, cash=1000000`);
+await call('POST', '/v1/pen/buy/cutkit', { token: sl.token });
+const splan = (await call('POST', '/v1/pen/break/plan', { token: sl.token })).body.id;
+await pool.query(`UPDATE pen_breaks SET created_at = now() - interval '2 hours' WHERE id='${splan}'`);
+const sw = await sweepStaleBreaks(pool);
+assert(sw.swept >= 1, 'the sweep abandons the stale plan');
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${sl.id}' AND item='cutkit'`)).rows[0].q, 1, 'a living leader gets the cutkit back on sweep');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike)');
+console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit)');
 process.exit(0);

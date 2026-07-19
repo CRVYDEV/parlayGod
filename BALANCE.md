@@ -676,3 +676,23 @@ only ever extends, never shortens; `squareWanted` handles a bounty-less pen fugi
   escape near-certain over time. §10.4-clean (each cutkit is a `pen:commissary` sink → the pool,
   deflationary) and arguably matches the "trade a cell for a manhunt" intent. Dial if the alpha shows escape
   is too reliable: a `break_at` cooldown, `PEN.BREAK_P` down, or `FUGITIVE_MS` up.
+
+## Post-signing addendum — The Pen step four: THE CO-OP BREAKOUT (sign-off levers)
+
+The crew-heist pattern applied inside — 2–4 jailed inmates over the wall together. §10.4-clean (the
+cutkit is contraband, not currency; the only ledgered event is buying it, a `pen:commissary` sink).
+All numbers are founder sign-off levers:
+- `PEN.COOP_MIN` 2 / `COOP_MAX` 4 (crew bounds).
+- `PEN.COOP_BASE` 0.4, `COOP_PER_EXTRA` 0.12, `COOP_MAX_P` 0.9 — `p = base + (crew−1)×per_extra + riot`,
+  clamped. So a 2-crew ≈ 0.52, a full 4-crew ≈ 0.76 (a riot's `shankAdd` +0.2 helps). `PEN_BREAK_P` is
+  the TEST-ONLY roll knob.
+- `PEN.COOP_TTL_MS` 1h (a plan goes cold; the worker sweeps it and refunds a living leader's staked cutkit).
+- Shared with the solo break: `FUGITIVE_MS` 2d (everyone WANTED on a win), `BREAK_HEAT` 40,
+  `BREAK_CAUGHT_ADD_S` 900 + `BREAK_FAIL_DMG` on a miss (the whole crew).
+
+Design intent: a bigger crew improves odds but every escapee becomes a WANTED fugitive (omertà stripped +
+NPC bounty hunters), and a bust puts the WHOLE crew in the hole with a longer stretch — a shared,
+high-stakes gamble that trades cells for a coordinated manhunt. Watch in the alpha: whether a full 4-crew
+at ~0.76 makes group escape too reliable vs the RICO sink (dials: `COOP_BASE`/`COOP_PER_EXTRA` down,
+`COOP_MAX_P` down, or `FUGITIVE_MS` up). Same LOW-2 note as the solo break: no per-attempt cooldown
+(the hole on a miss + the cutkit cost are the pacing).
