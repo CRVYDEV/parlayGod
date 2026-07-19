@@ -2133,6 +2133,33 @@ gated): **`forge test` must run** (Foundry egress-blocked here — the establish
 `Bonded` watcher wiring (→ `recordBond`), the POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
 primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
 
+**UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
+`public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,
+§10.4 untouched, suite 30/30 + sim drift-0). A three-lens max-effort review (console UX, onboarding + flow,
+full feature inventory) found the backend enormous and correct but the CLIENT barely legible to a new player.
+Fixed in this pass: **(1)** the Path dead-end (a BLOCKER) — the coach + First-Week checklist sent a lvl-5
+player to Streets to declare a Path, but no Path control existed there and the raw deck shipped an invalid
+`{path:'earner'}` → `bad_path`; now a curated **Declare Your Path** card on Streets (live from a new
+`rules.paths` catalog), a "at level 5" teaser below it, deck template fixed, and `data-do` buttons honor an
+optional `data-body`. **(2)** the trade-goods economy had no UI while the Black Market + Convoys both say
+"buy goods on the Streets first" — added a **Trade Goods** buy/sell grid to Streets (unblocks the smuggling
+pillar). **(3)** raw error codes (`safe`/`pax`/`contention`/`feds_watching`/`cold`/`witpro`…) leaked to
+players — added a 40-code `ERRMAP` humanizer in `describe()`. **(4)** the coach went silent at ~lvl 8 and
+ignored urgent threats — added top-of-ladder **wanted/indicted/welsher** rungs and a late-game bridge toward
+**skills** + **going legit** (all false for a fresh street, so the tested first-job→path flow is unchanged).
+**(5)** the M4-era onboarding copy — expanded the glossary 9→21 terms (safehouse, wanted/welsher, the Law,
+the Pen, in-transit/unbonding, skills, family/Commission, vendetta, the Underworld, renown/notoriety/
+scrutiny, the Wire) and refreshed the welcome (depth warning, "watch the coach line", two survival rules).
+**THE CODEX** — a served, navigable in-game wiki at **`GET /wiki`** (`public/wiki.html`, 32 sections over
+every system + loop, noir-themed, sidebar + search; the `/admin` static-file precedent), linked from the
+console top bar, plus `docs/WIKI.md` as the canonical text. Verified live (`/wiki` serves, `/v1/rules`
+carries `paths`, the console shows the CODEX link) + `test/growth.js` (coach) green. The remaining
+UI/UX/flow findings are RANKED in `AUDIT-ux-gameplay-flow.md` as the backlog (the biggest: the 22 flat tabs
+need grouping/reordering; the deck-only core loops — swap/stake/rackets/dailies/missions — and the invisible
+endgame sinks — Bonds, family seals — need curated screens; idempotency-key + disable-in-flight on money
+actions; active-tab re-render on WS events; a real wallet-link widget) — flagged, not all built, since they
+touch no mechanic and are founder-prioritizable.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

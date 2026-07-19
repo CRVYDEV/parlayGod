@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMERTÀ — the codex</title>
+<style>
+  :root {
+    --bg: #0b0b0e; --panel: #131318; --panel2: #17171e; --line: #26262f;
+    --ink: #d6d2c4; --dim: #7d7a6f; --neon: #e8b34b; --blood: #c0392b;
+    --ok: #5fa96b; --bad: #d16055; --cold: #5b84a8; font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
+  code, .mono, input { font-family: 'Courier New', monospace; }
+  a { color: var(--neon); text-decoration: none; } a:hover { text-decoration: underline; }
+
+  #top { display: flex; align-items: baseline; gap: 14px; padding: 12px 18px;
+    border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  #top h1 { font-size: 21px; margin: 0; letter-spacing: 6px; color: var(--neon); font-weight: normal; }
+  #top .sub { color: var(--dim); font-size: 12px; }
+  #top .home { margin-left: auto; }
+
+  #wrap { display: grid; grid-template-columns: 280px 1fr; gap: 0; min-height: calc(100vh - 48px); }
+  #nav { border-right: 1px solid var(--line); background: var(--panel); padding: 14px 0; position: sticky; top: 48px;
+    height: calc(100vh - 48px); overflow-y: auto; }
+  #nav .search { padding: 0 14px 10px; }
+  #nav input { width: 100%; background: #0f0f13; border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; border-radius: 4px; font-size: 13px; }
+  #nav .grp { color: var(--dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 16px 4px; }
+  #nav a.item { display: block; padding: 5px 16px 5px 20px; color: var(--ink); font-size: 13px; border-left: 2px solid transparent; }
+  #nav a.item:hover { background: var(--panel2); text-decoration: none; }
+  #nav a.item.on { color: var(--neon); border-left-color: var(--neon); background: rgba(232,179,75,.06); }
+  #nav a.item.hide { display: none; }
+
+  #doc { padding: 26px 34px 80px; max-width: 900px; }
+  #doc section { scroll-margin-top: 60px; margin-bottom: 34px; border-bottom: 1px dashed var(--line); padding-bottom: 26px; }
+  #doc h2 { color: var(--neon); font-weight: normal; letter-spacing: 2px; font-size: 24px; margin: 0 0 4px; }
+  #doc .tag { color: var(--dim); font-size: 12px; font-style: italic; margin: 0 0 14px; }
+  #doc h3 { color: var(--ink); font-size: 15px; letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 6px; border-left: 3px solid var(--neon); padding-left: 8px; }
+  #doc p, #doc li { line-height: 1.6; font-size: 14px; color: var(--ink); }
+  #doc .dim { color: var(--dim); }
+  #doc ul { margin: 6px 0; padding-left: 22px; }
+  #doc code { background: #0f0f13; border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 12px; color: var(--neon); }
+  #doc .loop { background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--neon); border-radius: 4px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  #doc .loop b { color: var(--neon); }
+  #doc table { border-collapse: collapse; margin: 10px 0; font-size: 13px; width: 100%; }
+  #doc th, #doc td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+  #doc th { color: var(--dim); font-weight: normal; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+  #doc .warn { color: var(--bad); }
+  #doc .routes { color: var(--dim); font-size: 12px; font-family: 'Courier New', monospace; }
+  #doc .lead { font-size: 15px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; background: var(--panel); }
+
+  @media (max-width: 820px) {
+    #wrap { grid-template-columns: 1fr; }
+    #nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); max-height: 40vh; }
+    #doc { padding: 18px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div id="top">
+  <h1>OMERTÀ</h1><span class="sub">the codex · everything a made man should know</span>
+  <a class="home" href="/">← back to the city</a>
+</div>
+<div id="wrap">
+  <div id="nav">
+    <div class="search"><input id="q" placeholder="search the codex…" autocomplete="off"></div>
+    <div id="navlist"></div>
+  </div>
+  <div id="doc"></div>
+</div>
+
+<script>
+// ── The codex content. Each section: { id, group, title, tag, html }. Rendered into #doc + #nav. ──
+// GROUPS order the sidebar. Content authored from the verified feature inventory.
+const R = (s) => `<div class="routes">${s}</div>`;          // route line
+const L = (s) => `<div class="loop">${s}</div>`;            // loop / callout
+const SECTIONS = [
+  { id: 'welcome', group: 'Start', title: 'Welcome to the City', tag: 'what this is',
+    html: `<p class="lead">OMERTÀ is a deep multiplayer noir mafia RPG. You start as a nobody on the docks with $500 and
+      end as a name people are afraid to say — or a body in the river. This codex covers every system and every loop.</p>
+      <p>Use the search box to jump anywhere. Numbers here are the current tuning and can change. "Level N" is your
+      character level, which comes from respect: <code>level = floor(sqrt(respect/4)) + 1</code> — L5 ≈ 64 respect,
+      L10 ≈ 324, L20 ≈ 1444, L30 ≈ 3364.</p>` },
+
+  { id: 'coreloop', group: 'Start', title: 'The Core Loop', tag: 'how you make your bones',
+    html: `${L(`<b>Pull jobs</b> → <b>train</b> your stats → <b>bank</b> what you earn → set up <b>earners</b> that pay
+      while you're gone → <b>climb</b>.`)}
+      <p><b>Crimes</b> — 29 jobs from Pickpocket (L1) to Empty the Federal Depository (L110). Each has a level gate, a
+      nerve cost, a cash range, and a jail risk on failure. Success scales with cunning + speed, your gang level, some
+      districts, and rank. Jobs drop <b>crates</b> (buy guns / craft gear) and <b>makings</b> (kitchen ingredients).</p>
+      <p><b>Energy & nerve</b> fuel actions and refill over time. <b>Heat</b> is what crime draws — too much and the Law
+      opens a case. <b>Train</b> costs 10 energy (gains diminish as a stat climbs). <b>Heal</b> patches you to full.
+      <b>Check in</b> once a day for a streak bonus + energy.</p>
+      <p><b>The Bank:</b> pocket cash is looted when you die; banked cash is safe — but a fresh deposit rides
+      <b>"in transit" for 2 hours</b> (lootable until it clears). You can't bank from a safehouse.</p>
+      ${R(`POST /v1/crimes/:id · /train/:stat · /heal · /checkin · /bank/deposit|withdraw · /travel/:district`)}` },
+
+  { id: 'character', group: 'The Basics', title: 'Your Character, Death & the Heir', tag: 'respect, rank, the estate',
+    html: `<p>One living character per account. You start L1, 50 energy, 10 nerve, 100 health, $500, all stats 5.
+      <b>Respect</b> is your XP → your <b>level</b> → your <b>rank</b> (perks at L10 Hustler, L35 Enforcer, L65 Soldier
+      "made man", L95 Underboss, L125 Don). <b>Effective stats</b> = trained + gear + assets. <b>Firepower (fp)</b> from
+      your gun — you need ≥50 fp to fire a lethal hit.</p>
+      ${L(`<b>Death:</b> the street dies, the account survives.</b> An heir is born and inherits everything
+      account-level.`)}
+      <p><b>Dies with the street:</b> stats, skills, businesses, your speakeasy, kitchen crew, boxing fighter,
+      territory-op ownership, this season's kills. <b>Survives to the heir:</b> prestige, your legit Portfolio/Dynasty
+      book, your Estate, Store patron/pass, dynasty name, hitman rep + lifetime kills, minted status, revive tokens, and
+      25% of your Underworld standings.</p>
+      <p><b>Seasons</b> last 28 days; at rollover level → prestige (<code>floor(level/2)</code>) and respect resets.
+      <b>Respec</b> your stats for 15 $OMR (24h cooldown).</p>
+      ${R(`POST /v1/character · GET /v1/me · /v1/session · POST /v1/respec`)}` },
+
+  { id: 'cars', group: 'The Basics', title: 'Cars, Guns & Gear', tag: 'the garage & the armory',
+    html: `<p><b>Cars & the Garage</b> (cap 12). 60 models × trims. <b>Boost</b> steals a weighted random car (5-min
+      cooldown); <b>melt</b> scraps a car into ammo (25% tithes to your gang); <b>fence</b>/<b>repair</b> sell/fix.
+      Listed or pledged cars refuse melt/fence/repair.</p>
+      <p><b>Guns & the Armory.</b> 15 guns (Rusty .25 fp3 → 'Undertaker' fp60), cash + crates. <b>Vests</b> ($OMR)
+      multiply survival. <b>Ammo</b> is $2000/50 and <b>never discounted</b> — it anchors the kill economy.</p>
+      <p><b>Gear</b> (~55 items in $OMR) boosts stats and is the tradeable on-chain NFT. A fire-kill has a <b>15% chance
+      to strip one in-game gear piece</b> — but <b>on-chain-minted gear is safe</b>. Keep it in-game to use it (losable)
+      or extract it (safe + tradeable, but it leaves play).</p>
+      ${R(`POST /v1/garage/boost · /garage/:carId/melt|fence|repair · /armory/gun/:id/buy|equip · /armory/ammo · /workshop/craft/:id`)}` },
+
+  { id: 'city', group: 'The Basics', title: 'The City & the Living World', tag: 'events, weather, districts, NPC families',
+    html: `<p>The city runs on a <b>deterministic daily backdrop</b> — same for everyone, knowable ahead. <b>City events</b>
+      (16, one/day) modulate every loop (HEAT WAVE, DOCK STRIKE, THE CRACKDOWN, BUREAU SWEEP, OPEN CITY…). <code>GET /v1/city</code>
+      shows today + a 7-day forecast. <b>Regional weather</b> shocks trade-good prices; a <b>day/night clock</b> convicts
+      harder on patrol (UTC 13–22) and eases night raids.</p>
+      <table><tr><th>District</th><th>Perk</th></tr>
+      <tr><td>Docks</td><td>+50% contraband · wash district · start here</td></tr>
+      <tr><td>Neon Mile</td><td>+15% racket/front income · the vice district</td></tr>
+      <tr><td>Old Foundry</td><td>workshop −25%</td></tr>
+      <tr><td>Brick Yards</td><td>+2% crime success</td></tr>
+      <tr><td>Canal Row</td><td>+10% crime pay · wash district</td></tr>
+      <tr><td>Cathedral Hill</td><td>double nerve regen</td></tr></table>
+      <p><b>NPC rival families</b> — shared server-wide cash reservoirs the whole base grinds down together (Zappa L8,
+      Kryl L20, Moreau L40). A raid costs energy + ammo + heat and pays a rout bonus if you drain one below its floor.</p>
+      ${R(`GET /v1/city [public] · /v1/world · POST /v1/world/:npcId/raid · GET /v1/market/prices [public]`)}` },
+
+  { id: 'economy', group: 'Money', title: 'The Economy — $OMR, Laundering & Staking', tag: 'the money flywheel',
+    html: `<p><b>Currencies:</b> cash (pocket + bank), <b>$OMR</b> (premium, launderable, extractable, account-level →
+      survives death), crates, ammo. The sacred rule: value transfers, it is never minted.</p>
+      <p><b>The AMM swap.</b> <b>Buy (cash→$OMR) = laundering</b> — min $500, only at a wash district (Docks/Canal) or your
+      turf, +15 heat, blocked from a safehouse, $2.6M/day cap. <b>Sell ($OMR→cash)</b> — ungated, 2% take.</p>
+      ${L(`<b>Staking</b> pays up to 14% APY <b>from a funded pool</b> (not minted). Principal always returns whole but
+      <b>unbonds 6h</b> (lootable) before it's liquid. Staked $OMR is safe; unbonding is not.`)}
+      <p><b>The flywheel:</b> cash sinks → the street-tax pool → a 12h buyback buys $OMR → 30% to the stake pool, 25% to
+      protocol liquidity, 50% to a family split. <b>Flat passive income:</b> Rackets & Assets (buy once, drip forever).
+      <b>Trade goods</b> — buy low, haul, sell high (the on-ramp for the market & convoys).</p>
+      ${R(`POST /v1/swap · /stake · /unstake · /claim-rewards · /rackets|assets/:id/buy · /goods/buy|sell`)}` },
+
+  { id: 'kitchen', group: 'Money', title: 'The Kitchen', tag: 'the offline drug engine',
+    html: `${L(`buy <b>makings</b> → upgrade your <b>lab</b> → <b>cook</b> a batch → <b>collect</b> → <b>deal</b> (or let
+      your <b>crew</b> sell offline).`)}
+      <p>Gated by your <b>trade rank</b>. 8 drugs (rank-unlocked). Cook produces <code>demand×12</code>, with a fire risk.
+      <b>Deal</b> gross = demand × quality × event × trade bonus, and <b>adds heat</b> (feeds the Law); rank-0 dealers get
+      a +50% <b>corner premium</b>. <b>Crew</b> (up to 5) sell offline but draw <b>$1,200/hr wages ("the nut")</b> — unpaid
+      3 days they go <b>cold</b> and stop. <b>Lay low</b> and <b>clean papers</b> cool heat; past heat 60 the Bureau can raid.</p>
+      ${R(`POST /v1/kitchen/makings/:drugId · /lab/upgrade · /cook · /collect · /deal · /crew/hire · /crew/wages · /laylow · /cleanpapers`)}` },
+
+  { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
+    html: `<p>Level-gated, upgradeable venues (Laundromat L15 → Casino L58) that farm cash <b>and</b> launder privately.
+      <code>GET /v1/catalog</code> lists them.</p>
+      ${L(`<b>buy</b> → <b>collect</b> (24h cap) → <b>upgrade</b> → <b>launder</b> → <b>pay the pad</b>.`)}
+      <p><b>Launder</b> through your front draws <b>less heat (8 vs 15)</b> but is capped daily. <b>Upkeep ("the pad")</b> is
+      20%/hr of income; unpaid 3 days → <b>cold</b>. <b>Scrutiny</b> from laundering past 60 risks a <b>Bureau raid</b>
+      (seizes pending + fines + shutters). A rival can <b>shakedown</b> 30% of pending income in a stat contest.</p>
+      ${R(`GET /v1/catalog [public] · POST /v1/business/:kind/buy · /business/collect · /upkeep · /:id/upgrade|launder|shakedown`)}` },
+
+  { id: 'territory', group: 'Money', title: 'Territory Rackets', tag: 'seizable gang capital',
+    html: `<p>One seizable income operation per district, owned by whoever holds the turf — so wars fight over income, not
+      just a treasury cut. Ladder: Numbers ($50k) → Protection ($250k) → Smuggling ($1M).</p>
+      <p>A boss/underboss <b>establishes</b> on held turf, income accrues (24h cap), <b>collects to the treasury</b>,
+      <b>upgrades</b>, and pays <b>upkeep</b> (20%, cold past 3 days). <b>On a seizure the whole operation transfers to the
+      victor</b> (+ a 50%-of-build-cost war premium).</p>
+      ${R(`GET /v1/territory · POST /v1/territory/:districtId/establish|upgrade · /territory/collect · /upkeep`)}` },
+
+  { id: 'families', group: 'Crews & Family', title: 'Families', tag: 'gangs, wars, turf, the treasury',
+    html: `<p><b>Found</b> for $25k at L5 (max 20); joining is immediate. Roles: boss / underboss / capo / crew.
+      <b>Tribute</b> (cash bumps the weekly task; $OMR pools into the reserve). <b>Wars</b> — declare $10k, run 30 min,
+      winner takes 20% spoils; a fire-kill on a war rival scores 3 points (a jump scores 1). <b>Turf</b> — seize a
+      district for its perks + its territory racket.</p>
+      <p>The reserve buys status: <b>seals</b> (Wax 25 → Obsidian 1500 $OMR) and the <b>Foundation</b> (60 → 3000 $OMR) —
+      the Foundation is real power: it softens every member's RICO conviction (only members present when a case was filed).
+      The family also holds a legit <b>RWA book</b> that earns a dividend.</p>
+      ${R(`POST /v1/gangs · /gangs/:id/join · /leave · /kick · /promote · /gangs/tribute[/omr] · /war/:id · /districts/:id/seize · /gangs/foundation · /gangs/vanity/*`)}` },
+
+  { id: 'commission', group: 'Crews & Family', title: 'The Commission', tag: 'server politics',
+    html: `<p>Zero-money weekly governance. The <b>top 5 families by this season's standing</b> hold seats. Each seated
+      boss/underboss casts one <b>public weekly vote</b>; last week's majority governs this week. The head-seat boss can
+      <b>veto</b> once a week.</p>
+      <p><b>Decrees:</b> Open Season (safehouse ×0.5), Pax (no new wars), Amnesty (lay-low ×0.5), Lockdown (convoy defense +20).</p>
+      ${R(`GET /v1/commission [public] · POST /v1/commission/vote · /veto`)}` },
+
+  { id: 'den', group: 'Money', title: 'The Den (Casino)', tag: 'cash-only gambling',
+    html: `<p><b>CASH ONLY, never $OMR.</b> Server-side + audited; the house tips 1% to the street-tax pool from realized
+      profit only.</p>
+      <ul><li><b>Craps</b> — pass line in one call, 1:1, ~1.41% edge, 1 nerve, up to $250k ($2M high-stakes at L30+).</li>
+      <li><b>The Numbers</b> — pick 0–999, one ticket/day, pays 600:1.</li>
+      <li><b>Back-room PvP dice</b> — consent by listing a fade limit; winner takes the pot − 5% rake.</li>
+      <li><b>The weekly Fight</b> — one $5k bet on a favorite; the Neon-holding boss can <b>fix</b> it for $50k.</li></ul>
+      ${R(`GET /v1/casino [public] · POST /v1/casino/dice · /numbers[/claim] · /fade · /dice/:id · /fight[/claim|/fix]`)}` },
+
+  { id: 'speakeasy', group: 'Money', title: 'The Speakeasy', tag: 'the social hub',
+    html: `<p>One prestige nightclub per district (open at L15, $750k) — front + casino + social. Dies with the owner's street.</p>
+      <p><b>Collect</b> the bar take, <b>upgrade</b> decor, <b>name</b> it. <b>Be seen:</b> buy a <b>round</b> (a taxed
+      transfer to the owner, joins the guest list; 10 visits → "regular") or throw <b>bottle service</b> ($OMR status burn).
+      The <b>back-room table</b> rakes 3% and draws <b>notoriety</b> → a <b>Prohibition raid</b> past 60. Build <b>renown</b>
+      (Nobody → King of the Night). <b>Buyout</b> a club consensually, or <b>Standover</b> it — pay $250k (burns), win a
+      contest, force the sale.</p>
+      ${R(`GET /v1/speakeasy [public] · POST /v1/speakeasy/:d/round|bottle|table|standover · /collect|upgrade|name|list|unlist · /:d/buy · /decor`)}` },
+
+  { id: 'boxing', group: 'Money', title: 'The Fights (Boxing)', tag: 'manage a fighter',
+    html: `<p>Sign one boxer (L8, $50k), <b>train</b> them ($20k + energy, +1 stat, cap 25), <b>list</b> a bout limit, and
+      <b>fight</b> other managers. The winner takes 2× stake − 5% rake (a taxed transfer, no minting); the loser's fighter
+      is laid up 4h. The fighter dies with your street. Ranks: Prospect → Hall of Famer.</p>
+      ${R(`GET /v1/boxing · POST /v1/boxing/recruit|train|list · /fight/:opponentId · GET /v1/leaderboard/boxing`)}` },
+
+  { id: 'pvp', group: 'The Underworld', title: 'PvP — Jumps, Hits & Contracts', tag: 'wet work',
+    html: `<p><b>Jump</b> — non-lethal; energy + ammo; steals up to $25k pocket; hospitalizes ~3 min; 1 war point.</p>
+      ${L(`<b>The hit:</b> place a <b>search</b> (~3h to mature) → <b>fire</b> (≥50 fp, 2h cooldown, +20 heat).`)}
+      <p>A fire-<b>kill</b> runs the estate, <b>chops 40% of the fleet</b>, <b>loots cash + $OMR</b>, 15% strips a gear
+      piece, swears a <b>vendetta</b>, pays open kill contracts, scores war points, earns <b>hitman rep</b>. <b>NPC hit</b>
+      — pay a fee (burns win/lose) for a server-rolled hit; zero rep; blocks family/self/rookies/safehoused marks.</p>
+      <p><b>The Contract Board</b> — escrow pots per (target, kind). Post one (min $500; +3 $OMR anonymous); a
+      <b>directed</b> named hitman gets an exclusive window (floor $10k, waived on a vendetta/rat/welsher/wanted kill).
+      The mark can <b>peek</b> (5 $OMR) to name every funder. <b>Hitman rep</b> is a status ladder (Associate → The
+      Undertaker); lifetime rep survives death.</p>
+      ${R(`POST /v1/streets/:id/jump|search|fire|npchit|bounty · DELETE /streets/search · GET /v1/contracts [public] · /contracts/peek · /gangs/contract/:id`)}` },
+
+  { id: 'riskpay', group: 'Risk & Death', title: 'Make Risk Pay — Loot, Safehouse, Revive', tag: 'the payoff & the shields',
+    html: `${L(`A player fire-kill loots <b>25% of pocket + in-transit cash</b> and <b>20% of liquid + unbonding $OMR</b>.
+      Cleared bank cash and staked $OMR are <b>safe</b>. NPC/mod kills loot nothing.`)}
+      <p>This is why banking is a <b>timed</b> act: deposits are exposed 2h, unstaked $OMR 6h. <b>Safehouse</b> — cost
+      scales with wealth, per 4h; untargetable by hits but still jumpable, and <b>a shield not a bunker</b> (no offense or
+      money-moving inside). <b>Bodyguard</b> — absorbs one lethal hit (never the guard's own shot). <b>Revive insurance</b>
+      (real-ETH token) — absorbs a killing blow entirely.</p>
+      ${R(`POST /v1/safehouse · /bodyguard/offer · /bodyguard/hire/:guardId`)}` },
+
+  { id: 'law', group: 'The Law', title: 'The Law & RICO', tag: 'the state antagonist',
+    html: `<p>Everything downstream of your <b>heat</b>. The <b>investigation meter</b> builds from high heat and bleeds
+      slowly: clean → watched → investigation → <b>indicted</b>. <code>GET /v1/law</code> is your rap sheet.</p>
+      <p><b>Escapes:</b> <b>bribe</b> (wealth-scaled), the <b>lawyer retainer</b> ($150k/3d, softens bust + forfeiture),
+      the <b>envelope</b> (15 $OMR/7d — halves the meter's gain, doubles its bleed).</p>
+      ${L(`<b>The RICO bust</b> seizes 30% of pocket + bank — but <b>staked $OMR and minted gear are safe, and it is NOT
+      death.</b> Stay offline past the grace window and you're force-busted.`)}
+      <p><b>Courtroom:</b> plea, buy the jury ($OMR), demand trial. <b>Informants:</b> <b>flip</b> a rival (drop your case,
+      seed their meter, earn the permanent <b>rat</b> badge — a rat loses omertà); <b>witness protection</b> makes you
+      briefly untargetable. The Foundation softens family convictions; patrol hours convict harder.</p>
+      ${R(`GET /v1/law [public] · POST /v1/law/bribe|retainer|envelope|plea|jury|trial|witpro|flip/:id`)}` },
+
+  { id: 'pen', group: 'The Law', title: 'The Pen (Prison)', tag: 'jail is a place',
+    html: `<p>Every Pen action requires being jailed. <b>Work the yard</b> (shaves your sentence), the <b>commissary</b>
+      (shiv $5k, burner $25k, cutkit $50k), <b>protection</b> ($15k no-shank window — a shield, so you can't shank either),
+      <b>bribe the guard</b> (per-second exit).</p>
+      <p><b>The shank</b> — both jailed, spend a shiv + energy in a muscle contest. Respects revive tokens, witpro, omertà
+      (unless a rat), protection/the hole. A kill is real death (no loot/chop/rep); a caught miss costs the shiv, more time,
+      and <b>the hole</b> (solitary — can't act, can't be shanked). <b>Yard incidents</b> (Lockdown/Riot/Visit/Toss) change
+      the odds daily. The <b>burner phone</b> calls in an outside NPC hit. <b>Breakout</b> — solo (win → a WANTED fugitive
+      2d) or co-op (a crew of 2–4).</p>
+      ${R(`GET /v1/pen · POST /v1/pen/work|protection|bribe · /buy/:item · /shank/:id · /burner/:id · /break[/plan] · /break/:id/join|go`)}` },
+
+  { id: 'loans', group: 'The Underworld', title: 'Loan Sharking (The Shylock)', tag: 'the PvP credit market',
+    html: `<p><b>Offer</b> escrows the principal ($5k–$1M, rate ≤50%, 1–72h; optional <b>directed</b> or
+      <b>collateralized</b> by a car). A borrower <b>takes</b> it (one at a time; pledges a car if secured). Owe =
+      <code>principal × (1+rate)</code>.</p>
+      <p><b>Repay</b> (5% vig → the buyback pool). <b>Default → collect</b> — seize pocket + in-transit cash and the
+      pledged car, break the deadbeat's legs, brand them a permanent <b>welsher</b>. A default also marks them <b>WANTED</b>
+      3 days (omertà stripped, a pool bounty if ≥L20, NPC hunters). <b>Square your name</b> ($50k) clears both. A <b>paper
+      market</b> lets you sell an active claim.</p>
+      ${R(`GET /v1/loans [public] · POST /v1/loans · /:id/take|repay|cancel|collect|sell|buy|unsell · /loans/square`)}` },
+
+  { id: 'convoys', group: 'The Underworld', title: 'Smuggling Convoys', tag: 'bulk goods on a clock',
+    html: `${L(`<b>open</b> (with a first load) → <b>load more</b> (beats the trunk cap) → <b>depart</b> with <b>guards</b>
+      (none/crew $5k/heavy $20k) + optional <b>insurance</b> → rides 30 min → <b>collect</b> at the destination.`)}
+      <p>The route + a value band are announced, never the manifest. <b>Ambush</b> — energy + ammo + heat in a contest of
+      your muscle+speed vs guards + turf defense; win takes goods to your trunk cap. Up to 3 hijacks/convoy. <b>Tolls</b> —
+      collecting at another family's docks pays 5% to their treasury. <b>Insured</b> freight pays out on a hijack (capped
+      against alt-collusion).</p>
+      ${R(`GET /v1/convoys [public] · POST /v1/convoy · /convoy/load · /depart · /cancel · /:id/ambush|collect`)}` },
+
+  { id: 'heists', group: 'The Underworld', title: 'Crew Heists (The Big Score)', tag: 'co-op raids',
+    html: `<p>Jobs: Payroll (crew 2, L8) → Inside Job (on a player business) → Bank Vault (crew 3, L20) → Reserve Train
+      (crew 4, L40). Each slot is a <b>role</b> (brains/muscle/wheelman/gun) and the roll reads each member's stat for
+      their role.</p>
+      ${L(`a leader <b>plans</b> + stakes → crew <b>join</b> by role → the leader <b>executes</b> (one roll for all).`)}
+      <p>Success splits the pot (1.2× leader); failure jails everyone. <b>The Rat</b> — any member can silently flag; the
+      job blows, the rat walks with half the stake, the rest eat double jail, and the feed only says "somebody talked." A
+      standard heist also parks a small legit <b>AAPL</b> cut per crewman. The <b>solo Daily Score</b> shares an 8h cooldown.</p>
+      ${R(`GET /v1/heists [public] · POST /v1/heists/plan · /:id/join|leave|rat|execute · POST /v1/heist (solo)`)}` },
+
+  { id: 'market', group: 'The Underworld', title: 'The Black Market', tag: 'P2P trade',
+    html: `<p><b>Cars sell by auction; goods sell fixed-price with a district-pinned pickup; buy orders (WTB) let buyers
+      name a price.</b> (Gear is excluded — its market is the on-chain GearVault.)</p>
+      <ul><li><b>Car auction</b> — one bid, optional buy-now, hidden reserve, anti-snipe; an outbid bidder is refunded
+      instantly. A listed car locks.</li>
+      <li><b>Goods</b> — fixed price; the buyer must stand at the listing's dock with trunk space (partial buys).</li>
+      <li><b>Buy orders</b> — escrow qty×price at your dock; sellers fill from the trunk and are paid on the spot.</li></ul>
+      ${R(`GET /v1/market [public] · POST /v1/market · /:id/bid|buy|cancel · /market/order · /:id/fill|claim`)}` },
+
+  { id: 'vendettas', group: 'The Underworld', title: 'Vendettas & Blood Feuds', tag: 'status, no money',
+    html: `<p>A player fire-kill swears the victim's bloodline against the killer's <b>for 7 days</b>; the heir inherits the
+      feud. A <b>revenge fire-kill inside the window</b> closes it, pays 2× feared-rep, and feeds the streets. Vengeance
+      also <b>waives the directed-contract floor</b> on a kill contract against your target. NPC/mod kills don't swear.</p>
+      ${R(`GET /v1/feud/:characterId [public]`)}` },
+
+  { id: 'skills', group: 'The Underworld', title: 'Skills & Specializations', tag: 'your build',
+    html: `<p>Three branches × three tiers; points <b>derive from level</b> (<code>floor(level/4)</code>). Skills die with
+      the street. Respec 10 $OMR (shared 24h cooldown).</p>
+      <ul><li><b>Enforcer</b> — Bruiser (jump/shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search ×0.8).</li>
+      <li><b>Operator</b> — Fast Talker (lay-low ×0.8) · Fence Network (fence/melt +8%) · Broker (listing fees ×0.5).</li>
+      <li><b>Wheelman</b> — Pack Mule (+3 trunk) · Getaway (crime jail ×0.8) · Road Captain (own convoys 20% faster).</li></ul>
+      ${R(`GET /v1/skills · POST /v1/skills/:id · /skills/respec`)}` },
+
+  { id: 'underworld', group: 'The Underworld', title: 'The Underworld (Fixers)', tag: 'who you know',
+    html: `<p>Five named fixers you build standing with (0–100, per character): <b>Doc Moretti</b> (survival), <b>Vinnie
+      the Match</b> (contracts), <b>Bella Bang-Bang</b> (gear), <b>Big Tuna</b> (trade), <b>The Madame</b> (the den).</p>
+      <p>Standing is <b>earned by working their corner</b> (capped 25 raw/day). Tiers at 25/60/90 unlock discounts and
+      favors. <b>Gifts</b> ($5k → +5) only work below 50 — the top tiers are earned. A <b>daily lead</b>, a <b>weekly
+      favor</b>, and an <b>errand chain</b> reward loyalty. <b>Grudges</b> (killing a fixer's friend) cap your tier until
+      you pay <b>penance</b> ($25k). Your heir inherits 25% of your standings.</p>
+      ${R(`GET /v1/underworld · POST /v1/underworld/:npc/gift|penance|favor|errand · /discharge · /gun/:id/sell`)}` },
+
+  { id: 'wire', group: 'The Underworld', title: 'The Wire', tag: 'information you buy',
+    html: `<p><b>Wiretap</b> (8 $OMR, 12h, up to 5) — reveals a rival's Law stage + heat, wealth band, operations, WANTED
+      status, and <b>whether they're hunting you</b>. <b>Sweep</b> (5 $OMR) clears taps on you (free when clean). The
+      <b>Street Wire subscription</b> (12 $OMR, 7d) gives a ticker tape, Law forecasts, and threat chatter (a count of
+      hunters on your head — a count, never a name).</p>
+      ${R(`GET /v1/wire · POST /v1/wire/tap/:targetId · /wire/sweep · /wire/subscribe`)}` },
+
+  { id: 'store', group: 'Endgame & Going Legit', title: 'The Store, PLEX & the Ledger', tag: 'real-money packages',
+    html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency things</b> (anti-pay-to-win: entitlements,
+      access, cosmetics, status — never cash/$OMR/gear/power): Made Man (a mint credit), revive bundles, Street Wire, the
+      Season Pass, the Patron badge, decor. Revenue splits 40% founder / 40% buyback / 20% RWA reserve.</p>
+      <p><b>PLEX</b> — pay a SKU or fee from <b>earned $OMR</b> instead of ETH. <b>The Season Pass / Ledger</b> — while
+      active, claim the next of 12 tiers daily (titles, revives, energy, small backed $OMR stipends); account-level, survives death.</p>
+      ${R(`GET /v1/store [public] · POST /v1/store/plex/:sku · GET /v1/pass · /pass/claim · GET /v1/plex/price [public]`)}` },
+
+  { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — the Portfolio & Dynasty', tag: 'the death-proof endgame',
+    html: `<p>Turn dirty cash → laundered $OMR → a <b>legitimate, death-proof stock book</b>. The tickers are real
+      Robinhood tokenized stocks (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME) — in-game a <b>pure-status collectible</b>
+      with a deterministic price; <b>no sell, no cash-out</b> (a real KYC'd extraction is a legal-gated future phase).</p>
+      <p><b>Invest</b> burns clean $OMR for shares; a big move draws heat + is safehouse-blocked; 15% funds a <b>dividend
+      pool</b>. <b>Dividend</b> — a ~daily payout of your book value (pool-bounded). <b>The Dynasty</b> — name your
+      account-level book and it passes to your heir (a generational fund + a crest tier). <b>Landmarks</b> — dedicate a
+      district plaque bearing your dynasty name. Earned (never by chance): a heist AAPL cut, a season SPCX prize.</p>
+      ${R(`GET /v1/portfolio [public] · POST /v1/portfolio/invest · /portfolio/dividend · /dynasty/name · /landmarks/:id · GET /v1/leaderboard/portfolio`)}` },
+
+  { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
+    html: `<p><b>The Estate ("the compound")</b> — a deep, account-level (death-proof) $OMR sink and a home: buy tiers
+      (Safe House 40 → The Compound 2500 $OMR), unlock features, name it, display <b>trophies</b> from your real holdings.</p>
+      <p><b>The Auction House ("the sit-down")</b> — a competitive weekly $OMR sink: 3 unique lots/week, highest <b>$OMR
+      bid wins</b>, and <b>the winning bid burns</b>. Outbid bidders are refunded instantly; won trophies survive death.</p>
+      ${R(`GET /v1/estate · POST /v1/estate/upgrade|feature/:id|name · GET /v1/auction [public] · POST /v1/auction/:lotId/bid`)}` },
+
+  { id: 'chain', group: 'The Chain', title: 'The Chain — Withdrawal & Bonds', tag: 'settling on-chain (dormant)',
+    html: `<p>OMERTÀ settles on Robinhood Chain (an EVM L2). The chain layer is built but <b>dormant until mainnet</b>
+      (legal + audit gated). Off-chain stays authoritative; the chain settles withdrawals + ownership; nothing mints.</p>
+      <p><b>Withdraw $OMR</b> — debits your $OMR and signs a voucher <b>only if the reserve can back it</b> (else it
+      queues). <b>Only a minted account can extract.</b> <b>Gear withdrawal</b> mints your gear as an NFT (it leaves play).
+      <b>Wallet link</b> is SIWE; <b>character mint</b> (0.01 ETH) makes a trial character permanent. <b>Bonds</b> — deposit
+      ETH → discounted, vested treasury $OMR; the ETH deepens the pool + feeds the <b>Vig</b> (the real-revenue engine that
+      backs withdrawals, so extraction ≤ inflow holds). Bonds never mint (a budgeted tranche).</p>
+      ${R(`POST /v1/withdraw · /gear/:id/withdraw · /wallet/challenge|verify · /character/mint · GET /v1/bonds [public] · /bonds/:id/claim`)}` },
+
+  { id: 'growth', group: 'Reference', title: 'Growth — Paths, Missions, the First Week', tag: 'progression scaffolding',
+    html: `<p><b>Paths</b> (L5, $10k; switch 25 $OMR) — a permanent earning specialty: The Gun (fights/contracts), The
+      Ledger (racket/front/trade income), The Kitchen (cook quality, −deal heat). <b>Missions</b> — 29 pay-once jobs
+      (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3/day + an all-three $OMR bonus. <b>The Daily
+      Score</b> is the best low-level repeatable (8h cooldown).</p>
+      <p><b>Referrals</b> — a recruit qualifies after 4 gates; milestones pay cash + $OMR + titles. <b>The First Week</b>
+      — a 9-task checklist that pays cash to teach the ropes, with a capstone. <b>The Coach</b> (the ▸ line on your sheet)
+      always names your best next step.</p>
+      ${R(`POST /v1/path · /missions/:id · GET /v1/daily · /daily/:id/claim · POST /v1/heist · GET /v1/onboard · /onboard/:taskId/claim`)}` },
+
+  { id: 'reference', group: 'Reference', title: 'Quick Reference', tag: 'the things to remember',
+    html: `<h3>What's safe from looting</h3><p>Cleared <b>bank</b> cash · <b>staked</b> $OMR · <b>minted (on-chain)</b>
+      gear · your account-level <b>portfolio / estate / prestige</b>. Everything in your pocket is at risk when you die.</p>
+      <h3>Status chips on your sheet</h3><p><b>wanted</b> (hunted, even by family — square it) · <b>welsher</b> (defaulted,
+      can't borrow — square it) · <b>indicted</b> (a RICO case — go to The Law) · <b>in transit</b> (a deposit hasn't
+      cleared — lootable) · <b>unbonding</b> ($OMR isn't liquid — lootable) · <b>safehouse</b> (untargetable, but you can't
+      act) · <b>hospital / lockup / the hole</b> (wait it out).</p>
+      <h3>Currencies</h3><p><b>Cash</b> (pocket lootable, bank safe) · <b>$OMR</b> (premium, launderable, extractable,
+      account-level → survives death; staked safe, liquid lootable) · <b>crates</b> (guns/gear) · <b>ammo</b> (jumps/fires/raids).</p>
+      <h3>Don't confuse these</h3><p>A flat Racket/Asset "Speakeasy/Nightclub/Casino" (buy-once income) ≠ a Business
+      casino/nightclub (upgradeable front) ≠ The Speakeasy (the deep club) ≠ The Den (the games).</p>
+      <h3>Discovery</h3>${R(`GET /v1/rules [public] · /v1/catalog [public] · GET / (console) · /wiki (this codex) · /admin (ops, mod-key)`)}` },
+];
+
+const GROUP_ORDER = ['Start','The Basics','Money','Crews & Family','The Underworld','Risk & Death',
+  'The Law','Endgame & Going Legit','The Chain','Reference'];
+
+function render() {
+  const doc = document.getElementById('doc');
+  const nav = document.getElementById('navlist');
+  doc.innerHTML = ''; nav.innerHTML = '';
+  const groups = {};
+  for (const s of SECTIONS) (groups[s.group] = groups[s.group] || []).push(s);
+  const order = [...GROUP_ORDER.filter((g) => groups[g]), ...Object.keys(groups).filter((g) => !GROUP_ORDER.includes(g))];
+  for (const g of order) {
+    const gl = document.createElement('div'); gl.className = 'grp'; gl.textContent = g; nav.appendChild(gl);
+    for (const s of groups[g]) {
+      const a = document.createElement('a'); a.className = 'item'; a.href = '#' + s.id; a.dataset.id = s.id;
+      a.textContent = s.title; nav.appendChild(a);
+      const sec = document.createElement('section'); sec.id = s.id;
+      sec.innerHTML = `<h2>${s.title}</h2>${s.tag ? `<div class="tag">${s.tag}</div>` : ''}${s.html}`;
+      doc.appendChild(sec);
+    }
+  }
+  wireScroll();
+}
+function wireScroll() {
+  const links = [...document.querySelectorAll('#nav a.item')];
+  const secs = [...document.querySelectorAll('#doc section')];
+  const io = new IntersectionObserver((ents) => {
+    for (const e of ents) if (e.isIntersecting) {
+      links.forEach((l) => l.classList.toggle('on', l.dataset.id === e.target.id));
+    }
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  secs.forEach((s) => io.observe(s));
+}
+document.getElementById('q').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  for (const sec of document.querySelectorAll('#doc section')) {
+    const hit = !q || sec.textContent.toLowerCase().includes(q);
+    sec.style.display = hit ? '' : 'none';
+    const link = document.querySelector(`#nav a.item[data-id="${sec.id}"]`);
+    if (link) link.classList.toggle('hide', !hit);
+  }
+});
+render();
+</script>
+</body>
+</html>
