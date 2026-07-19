@@ -1452,6 +1452,17 @@ export const SPEAKEASY = {
     { id: 'magnum',  name: 'a magnum of champagne',     omr: 8,  prestige: 35 },
     { id: 'reserve', name: 'the reserve — top of the top', omr: 20, prestige: 90 },
   ],
+  // ── step two — THE BACK-ROOM TABLE: the club hosts a house game (the wheel). A patron plays, the OWNER
+  // takes a RAKE (carved from the stake, a transfer — never minted on top; the casino discipline), the
+  // rest wagers at WIN_P and the edge BURNS (deflationary, CASH only — the Den's hard rule). Draws heat.
+  TABLE: { MIN_BET: 1000, MAX_BET: 100000, RAKE_BPS: 300, WIN_P: 0.48, NOTORIETY: 8 },
+  ROUND_NOTORIETY: 2,          // a busy bar draws a little heat too
+  // ── step two — THE PROHIBITION RAID (the business-raid pattern): notoriety past the threshold rolls a
+  // lazy raid on the owner's collect — seizes pending income (never minted, no ledger row), fines the
+  // owner (a §10.4 sink), and SHUTTERS the club for RAID_SHUT_MS (no income / table / rounds until it
+  // reopens). `SPEAKEASY_RAID_P` env overrides the per-minute p for tests (the BUSINESS_RAID_P precedent).
+  RAID_THRESHOLD: 60, RAID_P_PER_MIN: 0.0025, RAID_FINE_RATE: 0.15, RAID_SHUT_MS: 7200000,
+  NOTORIETY_DECAY_HR: 4, NOTORIETY_MAX: 100,
 };
 export const speakeasyTierOf = (tier) => SPEAKEASY.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const speakeasyRoundOf = (id) => SPEAKEASY.ROUNDS.find((r) => r.id === id) || null;

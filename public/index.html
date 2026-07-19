@@ -249,6 +249,8 @@
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     if (body.toOwner !== undefined) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
     if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
+    if (body.win !== undefined && body.bet !== undefined) bits.push(body.win ? `the wheel hit — +$${fmt(body.payout - body.bet)}` : `the wheel came up cold — −$${fmt(body.bet)}`);
+    if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -1351,7 +1353,8 @@
       <h2>You're at: ${distName(me.loc)}</h2>
       ${mine ? `
       <div class="card" style="border-color:var(--neon)"><span class="t">${mine.name || mine.tierName} <span class="chip good">YOUR HOUSE</span></span>
-        <div class="d">${distName(mine.district)} · ${mine.tierName} · prestige ${mine.prestige} · $${fmt(mine.incomePerHr)}/hr · pending $${fmt(mine.pending)}</div>
+        ${mine.shutSeconds ? `<span class="chip bad">RAIDED — dark ${mins(mine.shutSeconds)}</span>` : mine.raidRisk ? '<span class="chip bad">HOT — the Prohibition boys are watching</span>' : ''}
+        <div class="d">${distName(mine.district)} · ${mine.tierName} · prestige ${mine.prestige} · $${fmt(mine.incomePerHr)}/hr · pending $${fmt(mine.pending)} · notoriety ${mine.notoriety}</div>
         <button class="act" data-do="POST /v1/speakeasy/collect" style="border-color:var(--neon)">collect the bar take</button>
         ${mine.nextTier ? `<button class="act" id="sp-up">redo the decor → ${mine.nextTier.name} ($${fmt(mine.nextTier.cost)})</button>` : '<span class="chip good">The Cathedral — finest room in the city</span>'}
         <div style="margin-top:6px"><input id="sp-name" placeholder="${mine.name ? 'rename the club' : 'name the club'}" size="18" maxlength="24">
@@ -1362,12 +1365,15 @@
       : ''}
 
       ${here && !here.mine ? `
-      <h2 style="margin-top:12px">Tonight at ${here.name || distName(here.district)} <span class="d" style="font-size:10px">(${here.owner}'s house)</span></h2>
+      <h2 style="margin-top:12px">Tonight at ${here.name || distName(here.district)} <span class="d" style="font-size:10px">(${here.owner}'s house${here.shut ? ' · DARK — raided' : ''})</span></h2>
+      ${here.shut ? '<div class="d" style="color:var(--bad)">The place is shuttered — the Prohibition boys shut it down. Come back later.</div>' : `
       <div class="card"><div class="d">Buy the house a round — the owner keeps 98%, and your name goes up on the guest list.</div>
         ${(sp.rounds || []).map((r) => `<button class="act" data-round="${r.id}">${r.name} ($${fmt(r.cost)})</button>`).join(' ')}
         <div style="margin-top:6px" class="d">Bottle service — burn $OMR for pure prestige:</div>
-        ${(sp.bottles || []).map((x) => `<button class="act" data-bottle="${x.id}">${x.name} (${x.omr} $OMR)</button>`).join(' ')}</div>`
-      : here && here.mine ? '<div class="d" style="color:var(--dim);margin-top:8px">You own this room — order a bottle to flex, but you don\'t buy your own rounds.</div>' : ''}
+        ${(sp.bottles || []).map((x) => `<button class="act" data-bottle="${x.id}">${x.name} (${x.omr} $OMR)</button>`).join(' ')}
+        <div style="margin-top:6px" class="d">The back-room table — the wheel ($${fmt(sp.table?.minBet || 1000)}–$${fmt(sp.table?.maxBet || 100000)}, the house takes ${(sp.table?.rakeBps || 300) / 100}%):</div>
+        <input id="sp-bet" placeholder="bet $" size="8"> <button class="act" id="sp-table">spin the wheel</button></div>`}`
+      : here && here.mine ? '<div class="d" style="color:var(--dim);margin-top:8px">You own this room — order a bottle to flex, but you don\'t buy your own rounds or play your own table.</div>' : ''}
       ${here && here.mine ? `<div class="card">${(sp.bottles || []).map((x) => `<button class="act" data-bottle="${x.id}">${x.name} (${x.omr} $OMR)</button>`).join(' ')}</div>` : ''}
 
       <h2 style="margin-top:12px">The Nightlife <span class="d" style="font-size:10px">(ranked by prestige — where the city goes to be seen)</span></h2>
@@ -1385,6 +1391,7 @@
     t.querySelectorAll('[data-round]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/round`, { round: x.dataset.round }).then(() => renderSpeakeasy()));
     t.querySelectorAll('[data-bottle]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/bottle`, { bottle: x.dataset.bottle }).then(() => renderSpeakeasy()));
     t.querySelectorAll('[data-travel]').forEach((x) => x.onclick = () => act('POST', '/v1/travel', { district: x.dataset.travel }).then(() => renderSpeakeasy()));
+    const tb = $('#sp-table'); if (tb) tb.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/table`, { bet: Number($('#sp-bet').value) }).then(() => renderSpeakeasy());
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

@@ -61,3 +61,47 @@ The club hosts the games (fight/dice nights with a rake to the owner — ties ca
 (the Law busts the club — ties the Law meter); a P2P **buyout/contest** so districts clear without a death;
 a personal cross-club **renown** axis; and the **real-money (ETH) cosmetic decor + bottle-service** tier
 (the Store rail — the revenue layer). All numbers are founder sign-off levers.
+
+---
+
+## Step two — the games + the risk (BUILT)
+
+Two mechanics that turn the club from a passive front into a **living gaming venue** with real risk.
+
+### The back-room table (the casino tie)
+`playTable` (`POST /v1/speakeasy/:district/table`) — the club hosts a house game (the wheel). A patron
+bets CASH (district-pinned, `TABLE.MIN_BET`..`MAX_BET`), the **owner takes a rake** carved from the stake
+(`TABLE.RAKE_BPS` 3%, ledgered `speakeasy:table:rake` — a TRANSFER patron→owner, never minted on top; the
+casino discipline), the remaining wager plays at `TABLE.WIN_P` (0.48) and a win pays 2× (the edge BURNS,
+deflationary). Two-party (`withTwoCharacters(patron, owner)`). **CASH only** — the Den's hard rule; no
+$OMR at the table. §10.4: `speakeasy:table:bet` (sink) / `:rake` (transfer to owner) / `:win` (faucet) —
+all character_id'd, so check (a) reconciles like the casino; the rake is carved from the bet (not minted),
+so no mint-on-top (the econ-pass anti-precedent). Gated: shut / travel / jailed / hospitalized / safehoused
+/ self (withTwoCharacters). Collusion is −EV (a patron alt loses the ~7% edge+rake to funnel 3% to an
+owner alt), so no laundering angle. Draws `TABLE.NOTORIETY` heat (the raid tie).
+
+### The Prohibition raid (the risk layer)
+A hopping club draws the Law. **Notoriety** (`speakeasies.notoriety`) accrues from the club's illicit
+activity — the back-room table (`TABLE.NOTORIETY` 8) + patronage (`ROUND_NOTORIETY` 2) — and decays
+hourly (`NOTORIETY_DECAY_HR` 4). Past `RAID_THRESHOLD` (60), the owner's `collectSpeakeasy` rolls a lazy
+raid over the above-threshold window (the **business-raid pattern** exactly — `resolveRaid`): a raid
+SEIZES the pending bar take (clock reset — never minted, no ledger row, the business/territory precedent),
+FINES the owner `RAID_FINE_RATE` (15%) of the value sunk (open + decor), clamped to pocket+bank
+(`speakeasy:raid`, a §10.4 cash sink), and SHUTTERS the club for `RAID_SHUT_MS` (2h) — while dark it
+serves no rounds/table and earns nothing (`income_at` is pushed to `shut_until`). `SPEAKEASY_RAID_P` is a
+TEST-ONLY roll knob (the `BUSINESS_RAID_P` precedent — never in production). This makes the passive income
+EARNED: the more you monetize (table + patrons), the hotter the club, the bigger the raid risk.
+
+### §10.4
+`speakeasy:table:*` + `speakeasy:raid` all ride the `speakeasy:` cash prefix already in the vocabulary
+(zero invariant change); the table's rake is a taxed transfer and the win a gambling faucet (both
+character_id'd → check (a) reconciles); the raid fine is a character_id'd sink; the seized pending is
+never ledgered (never minted). New `speakeasies` columns `notoriety`/`notoriety_at`/`shut_until` (wiped
+with the row at the owner's death). `test/speakeasy.js` covers the table (rake/win/notoriety/gates) and
+the raid (forced seize + fine + shutter + the shut gate on rounds/table/income).
+
+## Deferred (step three, the revenue layer)
+The **real-money (ETH) cosmetic decor + bottle-service tier** (the Store/GearVault rail — cosmetics-as-
+NFTs with resale royalties, the recurring-revenue engine), a **P2P buyout/contest** so districts clear
+without a death, and a cross-club **renown** axis. All chain work is mainnet-gated (legal + third-party
+audit), the M6 dormant pattern.

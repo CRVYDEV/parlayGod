@@ -358,7 +358,9 @@ export async function buildServer() {
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
     speakeasy: { minLevel: SPEAKEASY.MIN_LEVEL, openCost: SPEAKEASY.OPEN_COST, nameOmr: SPEAKEASY.NAME_OMR,
-      tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES },
+      tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
+      table: { minBet: SPEAKEASY.TABLE.MIN_BET, maxBet: SPEAKEASY.TABLE.MAX_BET, rakeBps: SPEAKEASY.TABLE.RAKE_BPS },
+      raidThreshold: SPEAKEASY.RAID_THRESHOLD },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -414,6 +416,13 @@ export async function buildServer() {
     if (!club) throw new G.GameError('no_club', "There's no club in that district.");
     return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
       Speakeasy.visitSpeakeasy(ch, owner, req.params.districtId, req.body?.round, client, h));
+  });
+  // the back-room table: two-party (patron plays, owner takes the rake)
+  app.post('/v1/speakeasy/:districtId/table', { preHandler: auth }, async (req) => {
+    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
+    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
+    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
+      Speakeasy.playTable(ch, owner, req.params.districtId, req.body?.bet, client, h));
   });
 
   // THE COMMISSION — the top families' weekly city decree (votes public, effect next week).
