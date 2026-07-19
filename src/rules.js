@@ -1279,3 +1279,36 @@ export const ESTATE = {
 };
 export const estateTierOf = (tier) => ESTATE.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const estateFeatureOf = (id) => ESTATE.FEATURES.find((f) => f.id === id) || null;
+
+// ── THE AUCTION HOUSE ("the sit-down"): the COMPETITIVE, RECURRING $OMR sink ──
+// Server-run weekly auctions of UNIQUE, numbered prestige items — highest $OMR bid wins, the winning
+// bid BURNS (deflationary). Competitive (whales bid each other up), recurring (fresh lots each week),
+// self-balancing (scales with wealth), status-only (won items are account-level trophies, no gameplay
+// power → outside the sim-audited balance). Bids escrow $OMR (the bounty/loan/market-escrow twin, on
+// the $OMR side); §10.4: auction:bid (account→escrow) + auction:refund (escrow→account) are TRANSFERS
+// (both inside omrBuckets via the escrow term), auction:win (escrow→burn) is the only deflation. $OMR
+// is account-level (survives death) → a bid needs NO death handling. All numbers are sign-off levers.
+export const AUCTION = {
+  LOTS_PER_WEEK: 3,
+  MIN_RAISE_BPS: 500, // a raise must beat the standing bid by ≥ 5%
+  ARCHETYPES: [
+    { id: 'plate',    name: 'Numbered Vanity Plate', min: 20,  blurb: 'A single-digit plate. Everyone knows what it cost.' },
+    { id: 'watch',    name: "A Dead Don's Watch",    min: 30,  blurb: 'Still keeps perfect time.' },
+    { id: 'pistol',   name: 'Engraved Sidearm',      min: 40,  blurb: 'A one-off, gold-inlaid. Never fired, always shown.' },
+    { id: 'ring',     name: "A Made Man's Ring",     min: 60,  blurb: 'Heavy gold. It opens doors.' },
+    { id: 'painting', name: 'A Stolen Masterwork',   min: 100, blurb: 'It "fell off a truck" at the Met.' },
+    { id: 'car',      name: 'A Concours Classic',    min: 150, blurb: 'Too beautiful to drive. So you don\'t.' },
+  ],
+};
+export const auctionArchetypeOf = (id) => AUCTION.ARCHETYPES.find((a) => a.id === id) || null;
+// This week's block: LOTS_PER_WEEK lots drawn deterministically off the §7.11 seed (the same set
+// town-wide, verifiable after). Each lot is a unique NUMBERED instance (id '<week>:<slot>', serial
+// 'W<week>-<n>') — duplicate archetypes across a week are fine, the serial keeps each one distinct.
+export const auctionLotsOf = (week = weekOf()) => {
+  const lots = [];
+  for (let slot = 0; slot < AUCTION.LOTS_PER_WEEK; slot++) {
+    const a = AUCTION.ARCHETYPES[Math.floor(hash01(`auction:${week}:${slot}:${MARKET_SEED}`) * AUCTION.ARCHETYPES.length) % AUCTION.ARCHETYPES.length];
+    lots.push({ id: `${week}:${slot}`, week, slot, archetype: a.id, name: a.name, serial: `W${week}-${slot + 1}`, min: a.min, blurb: a.blurb });
+  }
+  return lots;
+};

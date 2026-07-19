@@ -1586,6 +1586,30 @@ the pad/nut precedent), the gala, an estate leaderboard. **NEXT: the Auction Hou
 competitive/recurring $OMR sink (weekly lots, $OMR bid escrow → its own §10.4 escrow check → burn the
 winning bid; design already written, build + red-team the new $OMR-escrow surface before it's done).
 
+**THE AUCTION HOUSE ("the sit-down") — BUILT** (`src/auction.js`, `test/auction.js` — the 23rd suite;
+completes the pair in `omerta-estate-auction-design.md`). The COMPETITIVE, RECURRING $OMR sink — the
+economically strongest of the pair (whales bid each other up; fresh lots weekly; scales with wealth).
+Server-run weekly auctions of UNIQUE numbered prestige items — highest $OMR bid wins, the winning bid
+BURNS (deflationary). Status-only (won lots are account-level trophies, no gameplay power → outside the
+sim-audited balance). **Lots** (`auctionLotsOf(week)` — `AUCTION.LOTS_PER_WEEK` 3 drawn deterministically
+off the §7.11 seed from `AUCTION.ARCHETYPES`; each a unique numbered instance, id `<week>:<slot>`, serial
+`W<week>-<n>`). **Bids ESCROW $OMR** — the bounty/loan/market-escrow twin on the $OMR side: `auction:bid`
+(account→escrow) + `auction:refund` (escrow→account, the outbid player refunded EXACTLY inline) are
+TRANSFERS, `auction:win` (escrow→burn, at settle) is the only deflation. A self-raise refunds in-memory
+(persistAccount commits the actor); an outbid to a DIFFERENT account is a direct SQL credit (third party,
+no clobber). The auction row is `FOR UPDATE`-locked (serializes same-lot bids); the cross-lot cross-refund
+AB-BA maps to a clean `contention` retry. **$OMR is account-level (survives death) → a live bid needs NO
+death handling** (unlike cash escrow); won trophies survive death (the heir inherits the collection).
+**Settle** is worker-only (`sweepAuctions` — lots whose week is over: top bidder wins the account trophy,
+winning bid burns, `status='settled'`, per-lot txn, lot row locked; the loser was already refunded on
+every outbid). §10.4: `auction:` joined the `omr` vocabulary; `auctionEscrow` (SUM `current_bid` on live
+lots) ADDED to `omrBuckets` so `$OMR conservation` stays exact; `auction:win` joined `omrBurns`; a NEW
+**auction escrow** check (escrow == bid − refunded − won). Routes `GET /v1/auction`, `POST /v1/auction/
+:lotId/bid`; `/v1/rules` catalog; console: an "Auction Block" in the Estate tab (this week's lots, bid
+forms, your trophies). `test/auction.js` proves lot determinism, the floor + min-raise, outbid-refund-
+exact, the self-raise net, the escrow §10.4 check mid-auction, settle (burn + grant, no extra debit),
+death survival, and the closed vocabulary. Suite 23/23 + sim drift-0. All numbers are sign-off levers.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

@@ -18,6 +18,7 @@ import { reclaimExpiredVouchers } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
+import { sweepAuctions } from './auction.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -183,6 +184,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
+    // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
+    const auc = await safe('auction sweep', () => sweepAuctions(pool));
+    if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
     // THE LAW: force the RICO bust on an indicted player past the grace window (reaches the offline whale)
     const law = await safe('law sweep', () => sweepLaw(pool));
     if (law && law.cases > 0) console.log(`⚖️  law: tried ${law.cases} case(s) — ${law.convicted} convicted ($${Math.round(law.seized)} seized), ${law.acquitted} walked`);
