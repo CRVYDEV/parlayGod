@@ -12,6 +12,7 @@ import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddre
 import { privateKeyToAccount } from 'viem/accounts';
 import { GameError, ledger } from './game.js';
 import { reconcileFees } from './fees.js';
+import { reconcileStore } from './store.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -344,7 +345,8 @@ export async function walletVerify(pool, accountId, address, signature) {
     throw e;
   }
   await pool.query('DELETE FROM wallet_challenges WHERE account_id=$1', [accountId]);
-  // pay-before-link ordering: grant any fees this wallet paid before it was attributable
+  // pay-before-link ordering: grant any fees + Store purchases this wallet made before it was attributable
   const { credited } = await reconcileFees(pool, accountId, addr);
-  return { ok: true, wallet: addr, verified: true, feesCredited: credited };
+  const { granted } = await reconcileStore(pool, accountId, addr);
+  return { ok: true, wallet: addr, verified: true, feesCredited: credited, storeGranted: granted };
 }

@@ -1796,10 +1796,51 @@ humanizes tap/sweep/subscribe; `/v1/rules` gained a `wire` block; the raw deck g
 sweep (free-clean vs charged-clears), the subscription + premium feed, the worker sweep, and the §10.4
 vocabulary + conservation. Suite 24/24 + sim drift-0. All numbers are founder sign-off levers.
 
-**STILL NEXT (needs founder call — spec'd in `omerta-the-wire-and-revenue-design.md`):** the ETH-revenue
-packages (Season Pass / Vanity Store / Premium Wire sub in ETH / revive bundles / Made-Man tiers / named
-landmarks) with a configurable Founder/Buyback/RWA-reserve split — all off-chain-first / chain-dormant,
-mainnet gated on legal + audit; and the Dynasty Fund's dividends/tiers/family-book vision.
+**THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
+`omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),
+**§10.4-neutral BY CONSTRUCTION**, mainnet gated on legal + a third-party audit of contracts AND the
+payment signer. **The one design decision that makes it safe: the Store grants ONLY non-§10.4 things** —
+entitlements (`mint_credit`/`respawn_token`), access windows (`pass_until`/`wire_until`), and status
+(`patron`); **never** cash / $OMR / gear / sim-audited power. So it writes ZERO `transactions` rows (the
+`fees.js` out-of-band precedent — those entitlements were always outside the conservation set), needs no
+new §10.4 reason/bucket/vocabulary, and a full purchase run leaves EVERY §10.4 check at drift-0 (proven
+in the test). Also anti-pay-to-win (a skilled free player still tops the boards) and legally clean (ETH
+buys cosmetics/access/consumables, never tokens/securities/RWA-by-chance). **The three-way revenue split**
+(`STORE.SPLIT_BPS`, env `REVENUE_{FOUNDER,BUYBACK,RWA}_BPS`, default 4000/4000/2000, validated to sum to
+10000 at load): each payment's ETH already hit the dev wallet on-chain (the `OmertaFees` tollbooth); the
+Store records the *earmark* — **founder** (profit, recorded), **buyback** (→ the EXISTING `vig_revenue`,
+source `store`, so `runVigBuyback` buys $OMR → funds the reserve + season prize pool — this is how
+"spenders fund earners", and `runVigInvariants` `spend ≤ revenue` absorbs Store revenue unchanged), and
+**rwa** (→ a new `rwa_revenue` bucket, **R2 DORMANT** — recorded, never spent until the legal-gated real-
+RWA reserve ships). The existing mint/respawn gameplay fees keep their legacy `VIG_BPS` posture (they're
+gameplay fees, not Store SKUs). **Packages** (`STORE.PACKAGES`, all sign-off levers): `made_man` (0.01 →
+mint credit), `revive_3`/`revive_5` (0.25/0.40 → respawn tokens), `wire_month` (0.03 → +30d Street Wire),
+`season_pass` (0.05 → +30d `pass_until` + 2 revives + the `patron` badge), `patron` (0.10 → permanent
+patron badge). `pass_until`/`patron` are `account_persistent` (SURVIVE DEATH — a paid benefit carries to
+the heir, the `minted` precedent). **The mechanism** (`recordStorePurchase`, the `recordFeePayment` twin):
+idempotent on `store_payments.nonce` (a re-delivered event is a no-op; non-23505 rethrows so the watcher
+cursor never advances past an unrecorded payment — the fees.js F1 discipline); `splitRevenue` records the
+three-way earmark same-txn; grant now if the wallet's linked + value carried, else the row waits for
+`reconcileStore` (claim-then-grant, exactly-once, case-insensitive — run at SIWE link in `walletVerify`
++ swept by `sweepUncreditedStore`). Grants are headless direct-SQL (the fees.js no-clobber discipline).
+**Chain layer DORMANT** (the on-chain `OmertaFees.payForPackage` + a `StorePaid` watcher are the mainnet
+milestone, unbuilt — Foundry-gated); this drop ships the full backend + a mod comp/simulate route
+(`POST /v1/mod/store/grant`, mod-key, synthetic nonce) for comps/QA/until-the-paywall-ships, which the
+test drives directly (the test/chain.js fee precedent). Routes: `GET /v1/store` (catalog + your
+entitlements), `GET /v1/mod/revenue` (the founder's three-way split — also on the admin dashboard's
+chain panel), `POST /v1/mod/store/grant`. Console: a **"The Store"** tab (the anti-p2w pitch, what you
+hold, the shelf, the pay-before-link note); `/v1/rules` gained a `store` catalog; the raw deck's Chain
+group gained store + PLEX routes. `test/store.js` covers the board, exact split math, idempotency,
+per-SKU grants, pay-before-link reconcile (exactly-once), zero-value no-grant, §10.4 NEUTRALITY (every
+check drift-0), and the buyback share funding the Vig flywheel (spend ≤ revenue holds; RWA recorded-only).
+Suite 25/25 + sim drift-0. All prices/splits are founder sign-off levers.
+
+**STILL NEXT (deferred, ranked in `omerta-eth-store-design.md`):** the on-chain `OmertaFees.payForPackage`
++ the `StorePaid` watcher wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a
+SKU from earned $OMR, the `payPlex` pattern); the Season Pass reward *track* + a per-pass prize-pool $OMR
+stipend (needs the backed `payPrizes` rail per-buyer — a balance call); named landmarks / Founder's
+charter numbers; and R2 (the `rwa_revenue` → real-RWA-buy bot + the reserve backing Dynasty shares —
+legal-gated). Plus the Dynasty Fund's dividends/tiers/family-book vision.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

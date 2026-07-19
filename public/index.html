@@ -400,7 +400,7 @@
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
-    wire: 'The Wire', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+    wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -435,6 +435,7 @@
     if (id === 'life') renderLife();
     if (id === 'pen') renderPen();
     if (id === 'wire') renderWire();
+    if (id === 'store') renderStore();
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
@@ -905,6 +906,7 @@
       ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', { address: '' }],
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['GET', '/v1/fees/status'],
+      ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
     ],
   };
   function renderDeck() {
@@ -1184,6 +1186,36 @@
       const tgt = $('#wire-target').value;
       if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
     };
+  }
+
+  // ── THE STORE: ETH revenue packages (informational — purchases are made at the on-chain paywall) ──
+  async function renderStore() {
+    const t = $('#tab-store');
+    await refresh();
+    const r = await api('GET', '/v1/store');
+    if (r.code >= 400) { t.innerHTML = '<span class="d">the store is closed.</span>'; return; }
+    const S = r.body, o = S.owned;
+    const eth = (n) => `Ξ${n}`;
+    t.innerHTML = `
+      <h2>The Store</h2>
+      <div class="card"><div class="d">Support the family with real ETH — for consumables, access, and status.
+        <b>Never</b> for power: everything here is a revive, a credit, a subscription, or a badge, so a
+        skilled free player still tops the boards. Your spend also funds the token buyback + the prize
+        pool that pays earners.</div></div>
+      <h2 style="margin-top:12px">What You Hold</h2>
+      <div class="grid">
+        <div class="card"><span class="t">${o.minted ? 'MADE' : 'Free Trial'}</span><div class="d">${o.minted ? 'a made man — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend on the chain to get made' : ''}`}</div></div>
+        <div class="card"><span class="t">Revives</span><div class="d">${o.respawnTokens} pre-paid revive token(s)</div></div>
+        <div class="card"><span class="t">${o.patron ? '★ PATRON' : 'Patron'}</span><div class="d">${o.patron ? 'the permanent patron badge is yours' : 'not a patron yet'}</div></div>
+        <div class="card"><span class="t">Season Pass</span><div class="d">${o.pass.active ? `active — ${mins(o.pass.seconds)} left` : 'no active pass'}</div></div>
+        <div class="card"><span class="t">Street Wire</span><div class="d">${o.wire.active ? `subscribed — ${mins(o.wire.seconds)} left` : 'not subscribed'}</div></div>
+      </div>
+      <h2 style="margin-top:12px">The Shelf</h2>
+      <div class="grid">${S.packages.map((p) => `
+        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>
+          <div class="d">${p.blurb}</div></div>`).join('')}</div>
+      <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
+      <div class="d" style="font-size:10px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>`;
   }
 
   // ── THE GARAGE: your iron + the armory ──

@@ -1313,6 +1313,43 @@ export const WIRE = {
 };
 export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
 
+// ── THE STORE (ETH revenue packages) — real-money purchases that grant ONLY non-§10.4 things
+// (entitlements / access windows / status), so §10.4 is untouched by construction (design
+// omerta-eth-store-design.md). Each SKU's ETH price is enforced ON-CHAIN by the OmertaFees tollbooth
+// (dormant); the backend records the payment (three-way revenue split) + grants the entitlement.
+// `grant` is a spec the backend applies: mintCredits/respawnTokens ADD; wireDays/passDays EXTEND;
+// patron SETS true. All numbers are founder sign-off levers. NB anti-pay-to-win: nothing here grants
+// cash / $OMR / gear / sim-audited power — only convenience, access, consumables, and status.
+export const STORE = {
+  // the founder's three-way revenue split (must sum to 10000): founder profit / $OMR buyback
+  // flywheel / RWA reserve (R2, dormant). Env-overridable; validated at module load.
+  SPLIT_BPS: {
+    founder: Number(process.env.REVENUE_FOUNDER_BPS || 4000),
+    buyback: Number(process.env.REVENUE_BUYBACK_BPS || 4000),
+    rwa: Number(process.env.REVENUE_RWA_BPS || 2000),
+  },
+  PACKAGES: [
+    { sku: 'made_man', name: 'Made Man', priceEth: 0.01, grant: { mintCredits: 1 },
+      blurb: 'Get made — a mint credit unlocks on-chain extraction (withdraw $OMR, take gear).' },
+    { sku: 'revive_3', name: 'Revive Bundle (3)', priceEth: 0.25, grant: { respawnTokens: 3 },
+      blurb: 'Three pre-paid revives — a killing blow is absorbed, you keep everything.' },
+    { sku: 'revive_5', name: 'Revive Bundle (5)', priceEth: 0.40, grant: { respawnTokens: 5 },
+      blurb: 'Five pre-paid revives, the bulk rate.' },
+    { sku: 'wire_month', name: 'The Street Wire (30d)', priceEth: 0.03, grant: { wireDays: 30 },
+      blurb: 'A month on the premium intelligence feed — forecasts, threat chatter, the war room.' },
+    { sku: 'season_pass', name: 'The Ledger (Season Pass)', priceEth: 0.05,
+      grant: { passDays: 30, respawnTokens: 2, patron: true },
+      blurb: 'A month as a made patron — the badge, two revives, and the season track.' },
+    { sku: 'patron', name: "Patron's Ring", priceEth: 0.10, grant: { patron: true },
+      blurb: 'A permanent patron badge — a quiet flex on every screen you appear.' },
+  ],
+};
+export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
+export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
+// validate the split sums to 10000 at load — a misconfig would silently mis-earmark real revenue
+(() => { const s = STORE.SPLIT_BPS; const t = s.founder + s.buyback + s.rwa;
+  if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`); })();
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it

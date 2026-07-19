@@ -740,3 +740,39 @@ funders. Each tier sells strictly more identity for strictly more cost — don't
 - The premium threat-chatter is a COUNT of hunters, by design (the peek stays the only name-piercer).
   If whales want names on the sub, that's a deliberate re-pricing of the peek, not a free add.
 - All numbers are new/tunable — sim + founder sign-off before production (ground rule #1).
+
+## THE STORE — ETH revenue packages (proposed levers, sign-off pending)
+
+Off-chain-first / chain-dormant, **§10.4-neutral** (the Store grants only entitlements / access / status
+— zero `transactions` rows, zero new faucet). Real ETH is out-of-band. All prices/splits are sign-off
+levers; the anti-pay-to-win guardrail (nothing here grants cash/$OMR/gear/power) is a HARD design rule,
+not a lever.
+
+**The three-way revenue split** (`STORE.SPLIT_BPS`, env `REVENUE_{FOUNDER,BUYBACK,RWA}_BPS`, must sum 10000):
+
+| Share | Default | What it does | Rec |
+|---|---|---|---|
+| founder | 40% | Profit — the ETH already hit the dev wallet on-chain; recorded as the earmark. | KEEP (raise for more near-term profit) |
+| buyback | 40% | → the EXISTING Vig flywheel (`vig_revenue`): buys $OMR → reserve + season prize pool. This is "spenders fund earners" + the token support; `extraction ≤ inflow` still holds by construction. | KEEP (raise for a hotter token + happier earners) |
+| rwa | 20% | → `rwa_revenue`, **R2 DORMANT** (recorded, never spent until the legal-gated real-RWA reserve ships). | KEEP (raise as you build toward a backed Dynasty Fund) |
+
+**The packages** (`STORE.PACKAGES` — priced as consumables / access / status, never power):
+
+| SKU | Price (ETH) | Grants | Note |
+|---|---|---|---|
+| `made_man` | 0.01 | +1 mint credit | = the existing mint fee, now a Store SKU on the new split |
+| `revive_3` | 0.25 | +3 respawn tokens | bundle vs 0.10 ea (~17% off) |
+| `revive_5` | 0.40 | +5 respawn tokens | deeper bulk (20% off) |
+| `wire_month` | 0.03 | +30d Street Wire | ETH convenience vs the 7d $OMR sub |
+| `season_pass` | 0.05 | +30d pass + 2 revives + patron badge | recurring monthly; status + consumables (no cash/$OMR stipend in v1 — deferred) |
+| `patron` | 0.10 | permanent patron badge | the pure Vanity flex; survives death |
+
+**Notes / watch-items (not patched — sign-off):**
+- The Season Pass deliberately grants NO cash/$OMR stipend in v1 (a per-buyer prize-pool draw would
+  complicate the backed prize accounting — deferred). The pass's value is status + consumables + access;
+  the *earner* reward is the prize pool the buyback share already funds.
+- `pass_until` + `patron` survive death (account-level, the `minted` precedent) — a real-money purchase
+  carries to the heir.
+- The Store's real payment path is the on-chain paywall (dormant, mainnet-gated); today's live path is the
+  mod comp/simulate route. Deploy note: nothing extracts real value until the `OmertaFees.payForPackage`
+  contract + the `StorePaid` watcher ship — both gated on legal + the third-party audit.
