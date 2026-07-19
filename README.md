@@ -38,7 +38,8 @@ fee reverts) → the getLogs cursor watcher credits it → character MINTED → 
 ERC-20 in the player's wallet; replay + tampering revert) → the `Claimed` watcher closes the
 reserve accounting → gear voucher mints the ERC-1155 (uncapped ids fail closed; only VoucherClaim
 mints) → §10.4 $OMR conservation holds with the chain live. The Foundry unit+fuzz suite
-(`omerta-contracts/test`) still needs a Foundry-capable environment before the third-party audit.
+(`omerta-contracts/test`) now **passes 29/29 (incl. a 512-run fuzz) in CI** — `.github/workflows/forge.yml`
+runs `forge test` on GitHub's runners on every contracts push; run it locally with `omerta-contracts/run-forge-test.sh`.
 
 ## Try it
 ```
