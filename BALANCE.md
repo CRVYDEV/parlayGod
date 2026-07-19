@@ -534,3 +534,31 @@ DESIGN: the kill economy is CONTRACT-driven — pots, the $25k WANTED house boun
 vendettas pay for wet work; loot is the tip. The sim now prints a standing `contract break-even`
 probe (pot ≥ ~$72k turns a mid-mark job +EV) so the number is tracked at every economy change. No
 lever moved.
+
+## Post-signing addendum — the Estate & the Auction House ($OMR sinks, sign-off levers)
+
+Two new $OMR sinks (both status-only, outside the sim-audited gameplay balance — the hitman-rep /
+family-seal / Portfolio precedent). All numbers are the founder sign-off levers in the `ESTATE` /
+`AUCTION` rules-tail blocks.
+
+- **The Estate** — a one-time-then-upgradeable personal compound (`estate:tier`/`estate:feature`/
+  `estate:name` $OMR burns). Account-level, survives death (the heir inherits). No escrow, no §10.4
+  faucet — pure deflation.
+- **The Auction House** — the competitive, recurring $OMR sink. Weekly server-drawn lots; the
+  highest $OMR bid wins and **the winning bid BURNS** (`auction:win` — the only deflation). Bids
+  ESCROW $OMR (`auction:bid` account→escrow, `auction:refund` escrow→outbid-account — both transfers;
+  the escrow bucket is in `omrBuckets`, reconciled by the new `auction escrow` invariant). $OMR is
+  account-level → a live bid survives death, so no death handling is needed. Numbers: `LOTS_PER_WEEK`
+  3, `MIN_RAISE_BPS` 500 (+5%), the archetype floors (20–150 $OMR).
+
+**Auction-escrow red-team (accepted-as-designed, founder call — NOT patched, ground rule #1):**
+The bid escrow is a **windowless loot-shelter for the P1.1 $OMR loot surface** — parking liquid $OMR
+in a standing bid moves it out of the fire-kill `OMR_LOOT_RATE` reach one block ahead of a hit, with
+no exposure window (unlike a bank deposit's `BANK_CLEAR_MS` in-transit or an unstake's `UNSTAKE_CD_MS`
+unbonding). It is **self-limiting**: there is no bid-cancel (you can only be outbid, which refunds you
+but hands the lead — and thus the shelter — to a rival), and a lot you actually win BURNS 100% of the
+bid, so the "shelter" costs the full amount if it closes on you. A future sign-off lever could add an
+`auction:refund` exposure window (park the refund in-transit like a bank deposit) if whale $OMR-
+sheltering via perpetual outbid-churn is observed in the alpha. Two correctness fixes shipped from the
+same red-team: the concurrent-first-bid materialize race (`23505` → clean `contention` retry via
+`deadlockToRetry`, was a raw 500) and the ops dashboard `$OMR supply` gauge omitting the live escrow.

@@ -10,7 +10,16 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { AUCTION, auctionLotsOf, weekOf } from '../src/rules.js';
 import { sweepAuctions } from '../src/auction.js';
+import { deadlockToRetry } from '../src/game.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+
+// ── F1 regression: a concurrent FIRST bid on a fresh lot locks nothing under FOR UPDATE, so both
+// txns INSERT and the loser 23505s. That can't be produced single-threaded on pg-mem, so unit-test
+// the wrapper mapping directly: a bare 23505 must become a clean retryable `contention`, not a 500.
+assert.equal(deadlockToRetry({ code: '23505' }).code, 'contention', '23505 (materialize race) → clean retry');
+assert.equal(deadlockToRetry({ code: '40P01' }).code, 'contention', '40P01 (deadlock) still → clean retry');
+const unrelated = { code: '22P02' };
+assert.equal(deadlockToRetry(unrelated), unrelated, 'an unrelated error passes through untouched');
 
 const app = await buildServer();
 const pool = app.pool;

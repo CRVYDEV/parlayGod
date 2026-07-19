@@ -17,8 +17,14 @@ export class GameError extends Error { constructor(code, msg) { super(msg); this
 // Postgres resolves a rare lock-order cycle (e.g. a crew execute racing a member's own PvP
 // action) by aborting one transaction with SQLSTATE 40P01. Nothing committed — surface it as a
 // clean retryable error instead of a raw 500. pg-mem never deadlocks, so tests can't hit this.
+// 23505 (unique_violation) belongs here too: a materialize-on-first-touch race (two concurrent
+// FIRST bids on a fresh auction lot both lock nothing under FOR UPDATE, both INSERT, and the loser
+// 23505s) — the losing txn rolled back cleanly (no §10.4 impact), so retrying finds the row present
+// and proceeds through the raise path. Genuine business duplicates SELECT-check first and throw a
+// specific error before the constraint, so a raw 23505 reaching a wrapper catch is a race.
 export const deadlockToRetry = (e) =>
-  e?.code === '40P01' ? new GameError('contention', 'The streets got crowded for a second — try that again.') : e;
+  (e?.code === '40P01' || e?.code === '23505')
+    ? new GameError('contention', 'The streets got crowded for a second — try that again.') : e;
 
 // In-process pub/sub feeding the websocket gateway (§5.6): 'me:{characterId}'
 // for notifications, 'streets' for the public kill/bust feed, 'gang:{id}' updates.
