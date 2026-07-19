@@ -30,6 +30,11 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice Vesting-window backstop, so a leaked (then-rotated) signer's pre-signed quotes can't
     ///         lock OMR in a decade-long vest. The server signs much shorter windows.
     uint256 public constant MAX_VEST = 30 days;
+    /// @notice Deadline backstop (the VoucherClaim MAX_VOUCHER_TTL mirror): a quote can't be signed
+    ///         with a deadline arbitrarily far in the future, so a leaked-then-rotated signer's
+    ///         pre-signed `deadline=2100` quotes can't stay bondable at a stale favorable price. The
+    ///         server signs minute/hour-scale deadlines; this only bounds abuse.
+    uint256 public constant MAX_QUOTE_TTL = 30 days;
 
     bytes32 public constant QUOTE_TYPEHASH = keccak256(
         "BondQuote(address payer,uint256 principal,uint256 priceOmrPerEth,uint256 discountBps,uint256 vestSeconds,uint256 nonce,uint256 deadline)"
@@ -78,6 +83,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     error NotPayer();
     error WrongValue(uint256 sent, uint256 required);
     error Expired();
+    error DeadlineTooFar();
     error VestTooLong();
     error Replay();
     error BadSignature();
@@ -121,6 +127,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (msg.sender != q.payer) revert NotPayer();
         if (msg.value != q.principal || msg.value == 0) revert WrongValue(msg.value, q.principal);
         if (block.timestamp > q.deadline) revert Expired();
+        if (q.deadline > block.timestamp + MAX_QUOTE_TTL) revert DeadlineTooFar();
         if (q.discountBps > MAX_DISCOUNT_BPS) revert BadBps();
         if (q.vestSeconds == 0 || q.vestSeconds > MAX_VEST) revert VestTooLong();
         if (usedNonce[q.nonce]) revert Replay();
@@ -197,5 +204,17 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (amount > omr.balanceOf(address(this)) - committedOMR) revert OverSweep();
         omr.safeTransfer(to, amount);
         emit Swept(to, amount);
+    }
+
+    /// @notice Rescue any ETH that somehow lands here outside `bond()` (e.g. a selfdestruct push) —
+    ///         the bond path forwards its full msg.value in-tx and never leaves a balance behind.
+    ///         Routes to `owner()` (the Safe), NOT a recipient, so a misconfigured recipient can't
+    ///         also trap the rescue (the OmertaFees.sweep pattern).
+    function sweepETH() external onlyOwner nonReentrant {
+        uint256 bal = address(this).balance;
+        if (bal > 0) {
+            (bool ok, ) = payable(owner()).call{value: bal}("");
+            if (!ok) revert ForwardFailed();
+        }
     }
 }
