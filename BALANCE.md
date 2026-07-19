@@ -644,3 +644,20 @@ bleed math floored, §10.4-neutral, no lock/regression). Three flagged items (NO
   indicted BEFORE the migration transiently reads `joined_at > indicted_at` and loses their foundation
   soften for that in-flight case (one-time, player-unfavorable). If a live migration is ever needed,
   backfill `joined_at` from `gangs.created_at` or a sentinel epoch instead of `now()`.
+
+## Post-signing addendum — The Pen step three: THE BREAKOUT (sign-off levers)
+
+A solo, high-risk jailbreak that trades a cell for a MANHUNT, so it never trivialises the RICO sink.
+§10.4-clean (no currency moves in the break itself; the cutkit is a normal `pen:commissary` sink).
+All numbers are founder sign-off levers:
+- `PEN.BREAK_P` 0.35 (base success; a riot's `shankAdd` adds; `PEN_BREAK_P` is a TEST-ONLY roll knob).
+- Cutkit cost $50k (a `pen:commissary` cash sink → the buyback pool, burned win or lose).
+- `PEN.BREAK_HEAT` 40, `PEN.BREAK_CAUGHT_ADD_S` 900 (15min added stretch on a miss),
+  `PEN.BREAK_FAIL_DMG` [20,45], `PEN.FUGITIVE_MS` 2d (the WANTED window on a win).
+
+Design intent: a win FREES you but makes you a WANTED fugitive (omertà stripped + NPC bounty hunters —
+the loan-WANTED machinery), so the escape is +EV only if being hunted-but-playable beats waiting out the
+cell. A miss is punishing (the hole + a long stretch + a beating). No pool bounty is posted (kept
+§10.4-clean); the escapee can clear the warrant by lying low or paying the existing `loans/square`
+($50k → pool). Watch in the alpha: whether 0.35 makes breakouts too common vs the RICO sink's intent
+(the dial is `PEN.BREAK_P` down, or `FUGITIVE_MS` up to make the manhunt bite harder).
