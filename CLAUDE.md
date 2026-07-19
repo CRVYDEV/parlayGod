@@ -1452,6 +1452,34 @@ one gated extraction boundary. Deferred R1 step-two (never-by-chance earn hooks)
 skill/season leaderboard payouts, the laundering-graduation tier that draws RICO scrutiny, an automatic
 "Envelope" tithe on taxed flows.
 
+**THE PORTFOLIO — R1 step-two (EARNED exposure) + the console screen — BUILT** (`src/portfolio.js`,
+`src/heists.js`, `src/worker.js`, `public/index.html`; `test/portfolio.js` + `test/heists.js`). Three
+earn hooks, each **earned/vested/skill, never a chance draw for stock** (so the R3 "never distribute
+securities by chance" rule holds by construction), plus a curated client tab. New shared helper
+`portfolio.js:grantShares(client, accountId, ticker, omrWorth)` — a $OMR-worth-denominated STATUS
+grant (`shares = omrWorth/price`, **cost basis 0** — a free legit kickback), no `h`, headless-safe, no
+§10.4 (shares aren't a currency). **(1) THE BIG-SCORE CUT** (`heists.js` success branch): a completed
+STANDARD crew heist (not the shakedown-style inside job) parks a legit AAPL sliver for every crewman,
+`SCORE_CUT_PER_LVL × avg crew level` $OMR-worth — granted ON TOP of the audited cash pot (a status
+kickback, so the sim-audited payout is untouched), account-level so it survives death; the leader's
+in-memory `owned.portfolio` is refreshed (portfolio is never persist-clobbered) so their own view stays
+honest; `rwaCut` on the response + members' `heist_score` notify. **(2) THE SEASON PRIZE**
+(`worker.js:runSeasonRollover`): the top `SEASON_PRIZES.length` season grinders by respect —
+snapshotted BEFORE the reset zeroes it — win the champion's moonshot (SPCX), a skill-RANKED status
+grant (rank 1/2/3 → 500/250/100 $OMR-worth), notified `season_prize`. **(3) THE RICO GRADUATION**
+(`portfolio.js:invest`): a BIG legit move (invest ≥ `SCRUTINY_MIN_OMR` 1000 at once) is the classic
+laundering red flag — it adds `SCRUTINY_HEAT` (12) to the actor's heat (the launder-heat precedent,
+feeds the Law meter) and is **safehouse-blocked** (P1.3 — hiding, not moving money); small buys fly
+under the radar; `scrutiny` flag on the response. All numbers are `PORTFOLIO` rules-tail founder
+sign-off levers; §10.4 untouched (grants aren't currency; invest's `rwa:invest` burn is unchanged).
+**The console** (`public/index.html`): a new **"Going Legit"** tab — your book (value + cost basis +
+liquid $OMR + the death-proof note), the market board (live price + day-change chips + per-ticker
+invest, with the ≥1000-$OMR heat warning), the family book (reserve + boss/underboss invest), the
+biggest-books leaderboard, and an earned-exposure/cash-out-is-a-later-phase footnote; `describe()`
+humanizes invest + the heist cut; `GET /v1/rules` gained a `portfolio` block (tickers + thresholds,
+the /v1/catalog discoverability precedent). Verified live end-to-end (guest → rules → board → big
+invest draws heat → leaderboard). Suite 21/21 + sim drift-0.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

@@ -16,8 +16,9 @@
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
-         HEIST_INSIDE_CD_MS, CONSTANTS, M4, levelOf } from './rules.js';
+         HEIST_INSIDE_CD_MS, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
 import { accrued, decayedScrutiny } from './business.js';
+import { grantShares } from './portfolio.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -249,19 +250,36 @@ export async function executeHeist(ch, heistId, client, h) {
     // an inside job that cracked an EMPTY till earns nothing to brag about (audit L4 —
     // zero-pot rep farming); standard jobs always carry a pot
     const rep = biz && pot === 0 ? 0 : job.rep;
+    // R1 step-two — THE BIG-SCORE CUT: a completed STANDARD heist (not a shakedown-style inside job)
+    // parks a LEGIT sliver in AAPL for every crewman, scaled by the crew's standing — granted ON TOP
+    // of the cash (a pure status kickback, so the sim-audited pot isn't touched). Deterministic: a
+    // fixed cut of an earned, skill-influenced win, never a random draw for stock (the R3 rule).
+    const cutOmr = biz ? 0 : Math.round(PORTFOLIO.SCORE_CUT_PER_LVL *
+      (crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length));
+    let leaderCut = 0;
     for (const m of crewRows) {
       if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
       else {
         // absolute writes off the locked row (the pg-mem arithmetic discipline)
         await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
           [Number(m.cash) + shares[m.id], Number(m.respect) + rep, doneAt]);
-        await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id] });
+        await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id], rwaCut: cutOmr || undefined });
       }
       await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
+      if (cutOmr > 0) { // the legit cut — a status grant (no §10.4 currency), account-level so it survives death
+        const g = await grantShares(client, m.account_id, PORTFOLIO.SCORE_TICKER, cutOmr);
+        if (m.id === ch.id && g) { // keep the leader's own returned view fresh (portfolio isn't persist-clobbered)
+          leaderCut = g.granted;
+          const pf = (h.owned.portfolio || []).filter((r) => r.ticker !== PORTFOLIO.SCORE_TICKER);
+          pf.push({ ticker: PORTFOLIO.SCORE_TICKER, shares: g.shares, cost_omr: g.cost_omr });
+          h.owned.portfolio = pf;
+        }
+      }
     }
-    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length });
+    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, rwaCut: cutOmr });
     bus.emit('streets', { type: 'heist_score', job: job.name, pot, crew: crewRows.length });
-    return { ok: true, score: true, job: job.id, pot, share: shares[ch.id], rep: job.rep };
+    return { ok: true, score: true, job: job.id, pot, share: shares[ch.id], rep: job.rep,
+      ...(cutOmr > 0 ? { rwaCut: { ticker: PORTFOLIO.SCORE_TICKER, shares: leaderCut } } : {}) };
   }
 
   // the bust — the whole crew goes down together (an inside-job mark hears about the attempt)

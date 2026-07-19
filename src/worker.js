@@ -8,7 +8,8 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { levelOf, dayOf, CONSTANTS } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, PORTFOLIO } from './rules.js';
+import { grantShares } from './portfolio.js';
 import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
@@ -119,6 +120,22 @@ export async function runSeasonRollover(pool, opts = {}) {
   let converted = 0;
   try {
     await client.query('BEGIN');
+    // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the
+    // reset below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so
+    // no §10.4 currency moves and no chance is involved (rank is earned). Account-level → survives
+    // death. Only characters actually rolling over this season (season < current) and with respect
+    // to their name are eligible.
+    const leaders = (await client.query(
+      'SELECT id, account_id, name, respect FROM characters WHERE alive AND season < $1 AND respect > 0 ORDER BY respect DESC, id LIMIT $2',
+      [current, PORTFOLIO.SEASON_PRIZES.length])).rows;
+    for (let i = 0; i < leaders.length; i++) {
+      const omrWorth = PORTFOLIO.SEASON_PRIZES[i];
+      const g = await grantShares(client, leaders[i].account_id, PORTFOLIO.SEASON_TICKER, omrWorth);
+      if (g) {
+        await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
+          [crypto.randomUUID(), leaders[i].id, 'season_prize', JSON.stringify({ rank: i + 1, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
+      }
+    }
     const rows = (await client.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
     for (const { id } of rows) {
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];

@@ -73,6 +73,11 @@ while ((!scored || !busted) && guard++ < 60) {
     assert.equal(ex.body.share, Math.floor(unit * 1.2), 'the leader takes the weighted share');
     assert.equal((await meOf(hank.token)).cash, hankPre + Math.floor(unit * 1.2), "the leader's cut landed");
     assert.equal((await meOf(cara.token)).cash, caraPre + Math.floor(unit), "cara's cut landed");
+    // R1 step-two — THE BIG-SCORE CUT: a standard score parks a legit AAPL sliver for the crew (a
+    // status grant on top of the cash, so the pot is untouched) — it shows on the leader's book.
+    assert(ex.body.rwaCut && ex.body.rwaCut.ticker === 'AAPL' && ex.body.rwaCut.shares > 0, 'the score parks a legit AAPL cut');
+    const book = (await meOf(hank.token)).portfolio;
+    assert(book.holdings.some((x) => x.ticker === 'AAPL' && x.shares > 0), "the leader's legit book carries the cut");
     assert.equal((await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } })).body.error, 'cooldown', 'one Score per window');
   } else if (!ex.body.score && !ex.body.blown && !busted) {
     busted = true;

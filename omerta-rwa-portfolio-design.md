@@ -119,8 +119,22 @@ survival** (heir keeps the book — a two-character kill scenario); the board + 
 `$OMR conservation` §10.4 check holding with `rwa:invest` as a burn. Full suite must stay green +
 `node tools/sim.js` drift-0.
 
-## Deferred to R1 step two (not this build)
-Gameplay-earned exposure that keeps the "never by chance" rule: the big-score cut (heist/convoy/war
-spoils drop a sliver into the crew book), skill/season leaderboard payouts, the laundering-graduation
-tier that draws RICO scrutiny (ties RWA to the Law antagonist), an automatic "Envelope" tithe skim
-on taxed flows. All are earned/vested/skill payouts, never RNG.
+## R1 step two — EARNED exposure (BUILT)
+Each keeps the "never by chance" rule (earned/vested/skill, never a chance draw for stock). Shared
+helper `grantShares` — a $OMR-worth status grant, cost basis 0, no §10.4 (shares aren't a currency).
+- **The big-score cut** (`heists.js`): a completed STANDARD crew heist parks `SCORE_CUT_PER_LVL × avg
+  crew level` $OMR-worth of AAPL for every crewman — granted ON TOP of the audited cash pot (a status
+  kickback; the sim-audited payout is untouched), account-level (survives death). A deterministic cut
+  of a skill-influenced win, not a random draw.
+- **The season prize** (`worker.js:runSeasonRollover`): the top `SEASON_PRIZES` grinders by respect
+  (snapshotted before the reset) win SPCX — a skill-RANKED status grant (500/250/100 $OMR-worth).
+- **The RICO graduation** (`invest`): a big legit move (≥ `SCRUTINY_MIN_OMR`) draws `SCRUTINY_HEAT`
+  (the launder-heat precedent, feeds the Law meter) and is safehouse-blocked (P1.3); small buys are
+  unwatched. Going legit in a big way is an exposed act — ties the Portfolio to the Law antagonist.
+
+The console **"Going Legit"** tab (`public/index.html`) surfaces the whole layer.
+
+## Still deferred (R1 step three / R2)
+An automatic "Envelope" tithe skim on taxed flows; convoy-arrival / war-spoils cuts (trivial
+`grantShares` extensions of the big-score hook). R2 (real RWA reserve backing) and R3 (KYC'd on-chain
+extraction) remain legal-gated.

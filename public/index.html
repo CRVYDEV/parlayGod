@@ -194,6 +194,8 @@
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
     if (body.heat) bits.push(`heat +${body.heat}`);
+    if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
+    if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
@@ -331,8 +333,8 @@
   // ── tabs ──
   const TABS = { streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
-    loans: 'The Shylock', life: 'The Life', pen: 'The Pen', law: 'The Law', city: 'The City',
-    den: 'The Den', deck: 'Everything Else' };
+    loans: 'The Shylock', portfolio: 'Going Legit', life: 'The Life', pen: 'The Pen', law: 'The Law',
+    city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
@@ -359,6 +361,7 @@
     if (id === 'empire') renderEmpire();
     if (id === 'scores') renderScores();
     if (id === 'loans') renderLoans();
+    if (id === 'portfolio') renderPortfolio();
     if (id === 'life') renderLife();
     if (id === 'pen') renderPen();
   }
@@ -1207,6 +1210,50 @@
     });
     t.querySelectorAll('[data-loansell]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/loans/${btn.dataset.loansell}/sell`, { price: Number(t.querySelector(`[data-loanask="${btn.dataset.loansell}"]`).value) }).then(() => renderLoans()));
+  }
+
+  // ── GOING LEGIT: the Portfolio — clean $OMR washed into legit, death-proof RWA holdings ──
+  async function renderPortfolio() {
+    const t = $('#tab-portfolio');
+    await refresh();
+    const pf = (await api('GET', '/v1/portfolio')).body || {};
+    const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
+    const mkt = pf.market || [];
+    const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+    const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
+    t.innerHTML = `
+      <h2>Going Legit <span class="d" style="font-size:10px">(clean $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
+      <div class="card"><span class="t">Your Book — $${fmt(pf.portfolio?.bookValue || 0)}</span>
+        <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)</div></div>
+
+      <h2 style="margin-top:12px">The Board <span class="d" style="font-size:10px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
+      <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
+        <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
+          <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
+          <div class="d">${m.blurb}</div>
+          ${h ? `<div class="d">you hold <b>${h.shares}</b> · book $${fmt(h.bookValue)}</div>` : ''}
+          <input data-rwaamt="${m.ticker}" placeholder="$OMR" size="7"> <button class="act" data-rwabuy="${m.ticker}">invest</button></div>`; }).join('')}</div>
+
+      ${pf.family ? `
+      <h2 style="margin-top:12px">The Family Book <span class="d" style="font-size:10px">(${pf.family.name} — a seize-resistant flex, bought from the reserve)</span></h2>
+      <div class="card"><span class="t">$${fmt(pf.family.bookValue || 0)}</span>
+        <div class="d">reserve ${fmt(pf.family.reserve)} $OMR${pf.family.holdings.length ? ' · ' + pf.family.holdings.map((h) => `${h.ticker} ${h.shares}`).join(' · ') : ' · nothing yet'}</div>
+        ${pf.family.canInvest ? `<select id="rwa-fam-t">${mkt.map((m) => `<option value="${m.ticker}">${m.ticker} — $${fmt(m.price)}</option>`).join('')}</select>
+          <input id="rwa-fam-amt" placeholder="$OMR from reserve" size="14"> <button class="act" id="rwa-fam-buy">invest the family money</button>`
+        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money</div>'}</div>` : ''}
+
+      <h2 style="margin-top:12px">Biggest Books</h2>
+      <div class="grid">${(lb.board || []).slice(0, 8).map((row, i) => `
+        <div class="card"><span class="t">#${i + 1} ${row.name || 'a ghost'}</span> <span class="d">$${fmt(row.bookValue)}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no books yet — be the first to go legit</span>'}</div>
+
+      <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
+        Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
+
+    t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/portfolio/invest', { ticker: b.dataset.rwabuy, omr: Number(t.querySelector(`[data-rwaamt="${b.dataset.rwabuy}"]`).value) }).then(() => renderPortfolio()));
+    const fb = $('#rwa-fam-buy');
+    if (fb) fb.onclick = () => act('POST', '/v1/gangs/portfolio/invest',
+      { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
   }
 
   // ── THE LIFE: the skill tree + the five fixtures who remember your name ──
