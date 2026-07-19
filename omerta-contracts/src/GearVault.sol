@@ -25,6 +25,10 @@ contract GearVault is ERC1155, Ownable2Step {
     }
 
     function setMinter(address m) external onlyOwner {
+        // AUDIT hardening: never let the minter be zeroed — a mis-set/zero minter silently bricks
+        // gear claims (GearVault has no cap of its own; all fail-closed cap logic lives in the
+        // minter, VoucherClaim). To retire minting, pause VoucherClaim; don't strand the slot.
+        require(m != address(0), "GearVault: zero minter");
         minter = m;
         emit MinterSet(m);
     }
