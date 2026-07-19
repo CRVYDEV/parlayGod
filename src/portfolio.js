@@ -160,13 +160,18 @@ export async function invest(ch, ticker, omr, client, h) {
 // serialize on it. The book value is the deterministic display price × shares (no sell, no cash-out —
 // R1 stays status; only the yield is $OMR).
 export async function claimDividend(ch, client, h) {
-  const rows = (await client.query('SELECT ticker, shares FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id])).rows;
-  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0));
-  if (!(book > 0)) throw new GameError('nothing', 'Buy into the fund before it pays you.');
+  const rows = (await client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id])).rows;
+  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)); // market book (display)
+  // The yield accrues on INVESTED PRINCIPAL (Σ cost_omr), NOT market book — so free GRANTED shares
+  // (the heist cut / season prize, cost_omr=0) earn NOTHING (cross-system audit HIGH: else a free-rider
+  // who never invested skims the pool that paying investors fill). "Spenders fund holders" now means
+  // spenders fund SPENDERS — a fund pays yield on principal, not on the paper value of a free kickback.
+  const basis = round2(rows.reduce((a, r) => a + Number(r.cost_omr || 0), 0));
+  if (!(basis > 0)) throw new GameError('nothing', 'Invest your own $OMR into the fund before it pays you — a free kickback earns no dividend.');
   const now = Date.now();
   if (h.acct.dividend_at && new Date(h.acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
     throw new GameError('cooldown', 'The dividend pays about once a day — come back later.');
-  const gross = round6(book * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
+  const gross = round6(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
   const pp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
   const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
   if (!(pay > 0)) throw new GameError('dry', 'The dividend pool is dry right now — it fills as the family invests. Try again later.'); // don't burn the cooldown on a $0 day
@@ -189,19 +194,20 @@ export async function claimFamilyDividend(ch, client, h) {
     throw new GameError('rank', 'Only the boss or underboss draws the family dividend.');
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (!g) throw new GameError('gang', 'No family.');
-  const rows = (await client.query('SELECT ticker, shares FROM gang_portfolios WHERE gang_id=$1 AND shares>0', [g.id])).rows;
-  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0));
-  if (!(book > 0)) throw new GameError('nothing', 'The family has no legit book to draw from.');
+  const rows = (await client.query('SELECT ticker, shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND shares>0', [g.id])).rows;
+  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)); // market book (display)
+  const basis = round2(rows.reduce((a, r) => a + Number(r.cost_omr || 0), 0)); // yield on invested principal (audit HIGH — parity with the personal claim; the family book has no free grants today, kept consistent + price-drift-proof)
+  if (!(basis > 0)) throw new GameError('nothing', 'The family has no invested book to draw from.');
   const now = Date.now();
   if (g.dividend_at && new Date(g.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
     throw new GameError('cooldown', 'The family dividend pays about once a day.');
-  const gross = round6(book * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
-  const pp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const gross = round6(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
+  const pp = (await client.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
   const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
-  if (!(pay > 0)) throw new GameError('dry', 'The dividend pool is dry — it fills as families invest. Try again later.');
+  if (!(pay > 0)) throw new GameError('dry', 'The family dividend pool is dry — it fills as the family invests. Try again later.');
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2, dividend_at=$3 WHERE id=$1', [g.id, pay, new Date(now)]);
-  await h.ledger(client, { currency: 'omr', amount: pay, reason: 'dividend:omr', counterparty: g.id }); // transfer (pool→reserve), not a mint
-  await client.query('UPDATE rwa_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
+  await h.ledger(client, { currency: 'omr', amount: pay, reason: 'dividend:omr', counterparty: g.id }); // transfer (family-pool→reserve), not a mint
+  await client.query('UPDATE rwa_family_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
   if (h.owned.gang) h.owned.gang.omr_reserve = Number(g.omr_reserve) + pay;
   await h.track(client, ch.account_id, 'rwa_family_dividend', { omr: pay, book });
   return { ok: true, paid: pay, gross, bookValue: book, reserve: Math.floor(Number(g.omr_reserve) + pay), dividendPaid: pay };
@@ -224,15 +230,16 @@ export async function familyInvest(ch, ticker, omr, client, h) {
   const price = tickerPriceOf(ticker);
   const bought = round6(amt / price);
   // the Dynasty Fund split (the personal-invest twin, gang side): DIVIDEND_BPS of the family invest
-  // funds the SHARED dividend pool (a §10.4 transfer, reserve→pool), the rest burns. So the family's
-  // own investing pays the family dividend (claimFamilyDividend). counterparty=g.id, no character_id.
+  // funds the FAMILY dividend pool (a §10.4 transfer, reserve→family-pool), the rest burns. The family
+  // pool is SEPARATE from the personal one (audit MED) so reserve $OMR can never reach a personal
+  // account through the dividend — the family's own investing pays the family dividend. counterparty=g.id.
   const toPool = Math.floor(amt * PORTFOLIO.DIVIDEND_BPS / 10000);
   const toBurn = amt - toPool;
   await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, rwa_invested = rwa_invested + $2 WHERE id=$1', [g.id, amt]);
   await h.ledger(client, { currency: 'omr', amount: -toBurn, reason: 'rwa:invest', counterparty: g.id });
   if (toPool > 0) {
     await h.ledger(client, { currency: 'omr', amount: -toPool, reason: 'dividend:fund', counterparty: g.id });
-    await client.query('UPDATE rwa_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
+    await client.query('UPDATE rwa_family_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
   }
   const cur = (await client.query('SELECT shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND ticker=$2', [g.id, ticker])).rows[0];
   const shares = round6(Number(cur?.shares || 0) + bought);
@@ -265,10 +272,11 @@ export async function portfolioBoard(ch, client, h) {
     const fam = (await client.query('SELECT ticker, shares, cost_omr FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [h.owned.gangId])).rows;
     const fh = fam.map((r) => bookRow(r, priceMap));
     const famBook = round2(fh.reduce((a, r) => a + r.bookValue, 0));
+    const famBasis = round2(fam.reduce((a, r) => a + Number(r.cost_omr || 0), 0)); // yield on invested principal (parity w/ the personal claim)
     const gd = h.owned.gang?.dividend_at;
     const now2 = Date.now();
     const gcd = gd ? Math.max(0, Math.ceil((new Date(gd).getTime() + PORTFOLIO.DIVIDEND_MS - now2) / 1000)) : 0;
-    const poolNow = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
+    const poolNow = round2(Number((await client.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
     const canManage = h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
     const famInvested = Math.floor(Number(h.owned.gang?.rwa_invested || 0));
     const famCrest = dynastyTierOf(famInvested);
@@ -278,8 +286,8 @@ export async function portfolioBoard(ch, client, h) {
       canInvest: canManage,
       reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
       holdings: fh, bookValue: famBook,
-      dividend: { claimable: canManage && famBook > 0 && gcd === 0, cooldownSeconds: gcd,
-        estimate: round2(Math.min(famBook * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolNow)) } };
+      dividend: { claimable: canManage && famBasis > 0 && gcd === 0, cooldownSeconds: gcd, pool: poolNow,
+        estimate: round2(Math.min(famBasis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolNow)) } };
   }
   // THE DYNASTY — the account-level book is generational (survives death). Surface its name + how many
   // generations the bloodline has weathered (deaths + 1) + the cost to name it + the status TIER.
@@ -295,11 +303,13 @@ export async function portfolioBoard(ch, client, h) {
   const now = Date.now();
   const poolBal = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
   const cd = acct.dividend_at ? Math.max(0, Math.ceil((new Date(acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS - now) / 1000)) : 0;
-  const bookValue = portfolio.bookValue;
+  // the dividend accrues on INVESTED PRINCIPAL (Σ cost_omr), not market book — free granted shares
+  // earn nothing (cross-system audit HIGH). Mirror the claimDividend basis here so the estimate is honest.
+  const basis = round2(mine.reduce((a, r) => a + Number(r.cost_omr || 0), 0));
   const dividend = {
-    pool: poolBal, rateBps: PORTFOLIO.DIVIDEND_DAILY_BPS,
-    estimate: round2(Math.min(bookValue * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolBal)),
-    claimable: bookValue > 0 && cd === 0, cooldownSeconds: cd,
+    pool: poolBal, rateBps: PORTFOLIO.DIVIDEND_DAILY_BPS, basis,
+    estimate: round2(Math.min(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolBal)),
+    claimable: basis > 0 && cd === 0, cooldownSeconds: cd,
   };
   return { market, portfolio, family, dynasty, dividend };
 }

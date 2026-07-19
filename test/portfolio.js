@@ -106,12 +106,13 @@ assert(famBoard.dividend, 'the family dividend surfaces on the board');
 assert.equal(famBoard.dividend.claimable, true, 'the boss can draw it (book funded, no cooldown)');
 assert.equal((await call('POST', '/v1/gangs/portfolio/dividend', { token: soldier.token })).body.error, 'rank', 'a soldier does not draw the family dividend');
 const gResBefore = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve);
-const gPoolBefore = Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool);
+const gPoolBefore = Number((await pool.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1')).rows[0].pool);
+assert(gPoolBefore > 0, 'the SEPARATE family pool was fed by the family invest (audit MED: reserve $OMR never reaches the personal pool)');
 const famDiv = await call('POST', '/v1/gangs/portfolio/dividend', { token: boss.token });
 assert.equal(famDiv.code, 200, 'the boss drew the family dividend');
 assert(famDiv.body.paid > 0, 'it paid $OMR into the reserve');
 assert.equal(Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve), gResBefore + famDiv.body.paid, 'the reserve grew by exactly the dividend');
-assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((gPoolBefore - famDiv.body.paid) * 1e6) / 1e6, 'paid from the SHARED pool (a transfer, not a mint)');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_family_dividend_pool WHERE id=1')).rows[0].pool), Math.round((gPoolBefore - famDiv.body.paid) * 1e6) / 1e6, 'paid from the FAMILY pool (a transfer, not a mint)');
 assert.equal((await call('POST', '/v1/gangs/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the family dividend pays about once a day');
 
 // ── FAMILY DYNASTY (F4): name the fund + the crest tier + the family-legit leaderboard ──
@@ -217,11 +218,23 @@ assert.equal((await meOf(boss.token)).omr, omrPreDiv + dr.body.paid, 'the yield 
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((poolPre - dr.body.paid) * 1e6) / 1e6, 'paid from the pool (a transfer, not a mint)');
 // the ~daily cooldown blocks an immediate re-claim
 assert.equal((await call('POST', '/v1/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the dividend pays about once a day');
+// cross-system audit HIGH: a FREE granted book (cost_omr=0 — the heist cut / season prize) earns NO
+// dividend — the yield is on invested principal, so a free-rider can't skim the pool investors fill
+const freebie = await mk('Freebie Fred');
+const ffid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${freebie.id}'`)).rows[0].a;
+await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${ffid}','AAPL',50,0)`); // a granted book, cost basis 0
+const ffBoard = (await call('GET', '/v1/portfolio', { token: freebie.token })).body;
+assert(ffBoard.portfolio.bookValue > 0, 'the free grant has market book value (a status holding)');
+assert.equal(ffBoard.dividend.claimable, false, 'but it is NOT dividend-claimable (no invested basis)');
+assert.equal((await call('POST', '/v1/portfolio/dividend', { token: freebie.token })).body.error, 'nothing', 'a free-grant book earns no dividend — the yield is on invested principal only');
 // the DRY-pool refusal — drained the §10.4-clean way (a whale claims the pool empty via a ledgered
 // transfer; shares aren't §10.4 currency, so the big book is a status grant with no ledger row)
 const drainer = await mk('Vault Vic');
 const daid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${drainer.id}'`)).rows[0].a;
-await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${daid}','GLD',100000,0)`);
+// cost_omr is NOT a §10.4 currency (just the invested-basis metric the dividend now accrues on) — seed a
+// huge basis so gross > pool and the whale drains it via a legit ledgered transfer (audit HIGH: the yield
+// is on invested principal, so a cost_omr=0 free-grant book would earn NOTHING — that's the point)
+await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${daid}','GLD',100000,10000000)`);
 assert(Number((await call('POST', '/v1/portfolio/dividend', { token: drainer.token })).body.paid) > 0, 'the whale drew a dividend');
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the whale drained the pool (a ledgered transfer, not a mint)');
 // a fresh holder now finds it dry — a clean refusal, not a wasted claim (the cooldown isn't burned)

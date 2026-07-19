@@ -352,8 +352,15 @@ export async function squareWanted(ch, client, h) {
 // ACTIVE loans (as lender or borrower) void with no ledger (the principal already moved — §10.4-neutral);
 // both sides are notified. Called inside the estate txn (victim + killer rows already locked).
 export async function voidLoansAtDeath(client, victimId, h, killerCh = null, lootRate = 0) {
-  const openEscrow = Number((await client.query(
-    "SELECT COALESCE(SUM(principal),0) s FROM loans WHERE lender_character=$1 AND status='open'", [victimId])).rows[0].s);
+  // LOCK the open offers, then sum over the LOCKED set (the bounty-sweep precedent, social.js) — takeLoan
+  // locks the loan row FOR UPDATE but NOT the lender's character, so it doesn't serialize with the estate
+  // on the char lock; without this lock a concurrent open→active take could be counted in openEscrow here
+  // AND kept by the borrower (double-resolution: the escrow check drifts −principal and loot mints cash).
+  // FOR UPDATE re-evaluates status='open' under the lock, so a just-committed take is excluded and an
+  // in-flight one blocks until this estate txn deletes the row (the take then finds no row → 'gone').
+  const openRows = (await client.query(
+    "SELECT principal FROM loans WHERE lender_character=$1 AND status='open' FOR UPDATE", [victimId])).rows;
+  const openEscrow = openRows.reduce((a, r) => a + Number(r.principal), 0);
   let looted = 0;
   if (openEscrow > 0) {
     const loot = killerCh && lootRate > 0 ? Math.floor(openEscrow * lootRate) : 0;
