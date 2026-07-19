@@ -272,10 +272,52 @@ assert.equal(sweep2.cases, 0, 'the sweep leaves anyone still inside the grace wi
 assert(!!(await rawCh(fresh.id)).indicted_at, 'Fred keeps his window to lawyer up / flip / plea');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §10.4 — the law: vocabulary is closed (law:* cash sinks + law:jury $OMR burn enrolled)
+// THE ENVELOPE — the standing graft ($OMR sink) that slows the investigation meter
+// ─────────────────────────────────────────────────────────────────────────────
+// the gain-mult modifier: an enveloped character builds LESS of a case than a bare one from the same
+// hot state (direct accrue() check — evMult cancels in the comparison; the bleed is untouched).
+{
+  const { accrue } = await import('../src/accrual.js');
+  const base = () => ({ respect: 2000, energy: 0, nerve: 0, health: 0, cash: 0, bank: 0, heat: 100,
+    heat_exposure: 0, crew: 0, racket_credit_ms: 0, bank_credit_ms: 0,
+    last_accrued_at: new Date(Date.now() - 5 * 60000), path: null, loc: 'downtown', indicted_at: null });
+  const plain = base(); accrue(plain, { staked: 0 }, { stash: [], rackets: [], assets: [], held: [] });
+  const paid = base(); paid.envelope_until = new Date(Date.now() + 3600000);
+  accrue(paid, { staked: 0 }, { stash: [], rackets: [], assets: [], held: [] });
+  assert(paid.heat_exposure > 0, 'the envelope is NOT immunity — a reckless street still builds a case');
+  assert(paid.heat_exposure < plain.heat_exposure,
+    `the envelope slows the case build (${Math.round(paid.heat_exposure)} < ${Math.round(plain.heat_exposure)})`);
+}
+// pay it — a ledgered $OMR sink, the window live on the docket, extends on re-pay
+const gil = await mk('Grifter Gil');
+await seedAcct(gil.id, 'omr=100');
+let lb = await lawOf(gil.token);
+assert.equal(lb.envelope.active, false, 'no envelope on a fresh street');
+assert.equal(lb.envelope.cost, LAW.ENVELOPE_OMR, 'the envelope quote is published');
+r = await call('POST', '/v1/law/envelope', { token: gil.token });
+assert.equal(r.code, 200, 'the envelope is paid');
+assert.equal(r.body.spent, LAW.ENVELOPE_OMR, 'costs the sticker $OMR');
+assert.equal(await omrLedgerOf(gil.id, 'law:envelope'), -LAW.ENVELOPE_OMR, 'the envelope is a ledgered $OMR burn');
+lb = await lawOf(gil.token);
+assert.equal(lb.envelope.active, true, 'the envelope is current on the docket');
+assert(lb.envelope.seconds > 0, 'the window is live');
+const secs1 = lb.envelope.seconds;
+await seedAcct(gil.id, 'omr=100');
+r = await call('POST', '/v1/law/envelope', { token: gil.token });
+assert(r.body.envelopeSeconds > secs1, 'paying again extends the window from the current end');
+// gates: broke can't pay, and no reaching the precinct from a cell
+await seedAcct(gil.id, 'omr=0');
+assert.equal((await call('POST', '/v1/law/envelope', { token: gil.token })).body.error, 'omr', "a broke street can't keep the envelope current");
+await seedCh(gil.id, "jail_until = now() + interval '1 hour'");
+await seedAcct(gil.id, 'omr=100');
+assert.equal((await call('POST', '/v1/law/envelope', { token: gil.token })).body.error, 'jailed', 'no reaching the precinct from lockup');
+await seedCh(gil.id, 'jail_until=NULL');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §10.4 — the law: vocabulary is closed (law:* cash sinks + law:jury/envelope $OMR burns enrolled)
 // ─────────────────────────────────────────────────────────────────────────────
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `law:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/law.js — the Law/RICO/informants across all four phases');
+console.log('✅ test/law.js — the Law/RICO/informants across all four phases + THE ENVELOPE (the standing graft: a $OMR sink that slows the case build, ledgered law:envelope burn, window extends on re-pay, jailed/broke gates)');
 process.exit(0);

@@ -791,6 +791,13 @@ export const LAW = {
   FLIP_SEED: 1500,             // exposure the rat's testimony adds to the named target
   FLIP_JAIL_S: 120,            // the rat does a short, soft stretch
   WITPRO_MS: 48 * 3600 * 1000, // witness protection: a one-time (per street) untargetable relocation window
+  // ── THE ENVELOPE (going-legit sink) — the standing graft you slip the cops so they bury your file.
+  // PROACTIVE (vs the reactive one-shot bribe): pay $OMR to keep the envelope current for a window;
+  // while current, the investigation meter GAINS at ENVELOPE_GAIN_MULT rate (the cops write less
+  // down). NOT immunity — a reckless player still builds a case, just slower. A $OMR sink (law:envelope).
+  ENVELOPE_OMR: 15,                     // $OMR to keep the envelope current
+  ENVELOPE_MS: 7 * 24 * 3600 * 1000,    // how long one payment buys
+  ENVELOPE_GAIN_MULT: 0.5,              // exposure gain scaled by this while the envelope is current
 };
 // the rap sheet's stage — a pure function of the meter, except INDICTED which LATCHES (an
 // indictment doesn't un-file when heat drops; only a bust/plea/flip clears it).
@@ -805,12 +812,30 @@ export const rapStageOf = (exposure, indictedAt = null) => {
 export const bribeCostOf = (exposure) => Math.max(LAW.BRIBE_MIN, Math.floor(Number(exposure || 0) * LAW.BRIBE_BPS / 10000));
 export const retainerActive = (ch, now = Date.now()) => !!ch.retainer_until && new Date(ch.retainer_until).getTime() > now;
 export const witproActive = (ch, now = Date.now()) => !!ch.witpro_until && new Date(ch.witpro_until).getTime() > now;
+export const envelopeActive = (ch, now = Date.now()) => !!ch.envelope_until && new Date(ch.envelope_until).getTime() > now;
+// ── THE FOUNDATION (the family charity) — a tiered institution the boss buys sequentially from the
+// gang $OMR reserve (the GANG_SEALS precedent). Public philanthropy STATUS (gangs.foundation) + it
+// launders the family's collective RICO exposure: every member's conviction odds × the tier bustMult.
+// A NEW Law lever (real power, not pure status) — founder sign-off levers, sim before production.
+export const FOUNDATION = {
+  TIERS: [
+    { tier: 1, name: 'Community Fund', omr: 60,   bustMult: 0.97, blurb: 'A soup kitchen, a little goodwill.' },
+    { tier: 2, name: 'Youth League',   omr: 180,  bustMult: 0.93, blurb: 'Ball fields with the family name on them.' },
+    { tier: 3, name: 'City Trust',     omr: 500,  bustMult: 0.88, blurb: 'Grants, ribbons, a friend on the council.' },
+    { tier: 4, name: 'The Institute',  omr: 1200, bustMult: 0.82, blurb: 'A wing at the hospital. Judges attend the galas.' },
+    { tier: 5, name: 'The Legacy',     omr: 3000, bustMult: 0.75, blurb: 'Pillars of the community. The DA takes the call.' },
+  ],
+};
+export const foundationOf = (tier) => FOUNDATION.TIERS.find((t) => t.tier === Number(tier)) || null;
+export const foundationBustMult = (tier) => foundationOf(tier)?.bustMult ?? 1;
 // conviction probability for the current case (Phase 2/3): scales with exposure over the
-// indictment threshold, softened by an active lawyer retainer and (once) a bought jury.
-export const bustProbOf = (ch, now = Date.now()) => {
+// indictment threshold, softened by an active lawyer retainer, (once) a bought jury, and the
+// family's FOUNDATION tier (the charity buys softer trials — sourced at the two bust call sites).
+export const bustProbOf = (ch, now = Date.now(), foundationTier = 0) => {
   let p = LAW.BUST_P_MIN + Math.max(0, Number(ch.heat_exposure || 0) - LAW.INDICT_AT) * LAW.BUST_P_PER;
   if (retainerActive(ch)) p *= LAW.RETAINER_BUST_MULT;
   if (ch.jury_bought) p *= LAW.JURY_BUST_MULT;
+  if (foundationTier) p *= foundationBustMult(foundationTier); // THE FOUNDATION: the family charity softens the trial
   if (cityHourOf(now).patrol) p *= LIVING.PATROL_BUST_MULT; // THE LIVING WORLD P4: the Bureau works business hours
   return Math.min(LAW.BUST_P_MAX, Math.max(LAW.BUST_P_MIN * LAW.RETAINER_BUST_MULT * LAW.JURY_BUST_MULT, p));
 };

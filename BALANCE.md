@@ -562,3 +562,30 @@ bid, so the "shelter" costs the full amount if it closes on you. A future sign-o
 sheltering via perpetual outbid-churn is observed in the alpha. Two correctness fixes shipped from the
 same red-team: the concurrent-first-bid materialize race (`23505` → clean `contention` retry via
 `deadlockToRetry`, was a raw 500) and the ops dashboard `$OMR supply` gauge omitting the live escrow.
+
+## Post-signing addendum — the Envelope & the Foundation (Law-surface $OMR sinks, sign-off levers)
+
+Two recurring $OMR sinks that buy LEGITIMACY — the counterweight to the RICO antagonist. Both are NEW
+Law levers (real gameplay effect, not pure status), so every number is a founder sign-off lever — sim
++ this file before production. They are NOT retunes of any signed BALANCE.md surface.
+
+- **The Envelope** (`LAW.ENVELOPE_OMR` 15 / `ENVELOPE_MS` 7d / `ENVELOPE_GAIN_MULT` 0.5) — a personal
+  recurring $OMR sink (`law:envelope` burn) that, while paid up, halves the investigation-meter GAIN
+  (the cops bury the file). NOT immunity (a reckless player still indicts; the bleed is untouched) and
+  NOT a trial modifier (it's preventive — the bribe/lawyer/jury/foundation handle a filed case). A
+  proactive standing arrangement vs the reactive one-shot bribe. Deliberately not safehouse-gated (a
+  wire, not a sit-down). Deflationary — helps extraction-≤-inflow.
+- **The Foundation** (`FOUNDATION.TIERS` Community Fund 60 → Youth League 180 → City Trust 500 → The
+  Institute 1200 → The Legacy 3000 $OMR; `bustMult` 0.97 → 0.75) — a family/gang tiered $OMR sink from
+  the `omr_reserve` (`foundation:tier` burn, the family-seal precedent). Public philanthropy status +
+  it softens EVERY member's RICO conviction odds by the tier's `bustMult` (the one gameplay
+  touchpoint, threaded into `bustProbOf`; bottoms out at the existing min-clamp floor, composes with
+  retainer/jury). Reaches the offline whale via `resolveBust`'s `familyFoundationTier` lookup.
+
+**Balance notes (founder sign-off items):** (1) The Foundation is a wealth-gated defense — a rich
+family buys down its members' bust odds; deliberately bounded by the min-clamp floor and the sequential
+$OMR cost (Obsidian-tier is 3000 reserve $OMR, a real pool sink). If it proves too strong vs the Law
+antagonist, `bustMult` is the dial (or gate the top tiers behind season standing like the Commission
+fix). (2) The Envelope's 0.5 gain-mult + 7d window at 15 $OMR is cheap standing protection; if it
+neuters the RICO loop for whales, raise `ENVELOPE_OMR` or weaken `ENVELOPE_GAIN_MULT` toward 1. Both
+were sim-clean at drift-0 on build; watch the RICO conviction rate in the alpha.

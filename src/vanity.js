@@ -10,7 +10,7 @@
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
 import { GameError } from './game.js';
-import { VANITY, GANG_SEALS, sealOf } from './rules.js';
+import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
 // ledger the burn. An unknown reason is itself an invariant alert, so every item gets an
@@ -95,6 +95,37 @@ export async function buySeal(ch, client, h) {
   await h.track(client, ch.account_id, 'gang_seal', { tier: next.tier, omr: next.omr });
   return { ok: true, seal: { tier: next.tier, name: next.name }, reserve: Number(g.omr_reserve) - next.omr,
            nextSeal: sealOf(next.tier + 1) || null };
+}
+
+// ── THE FOUNDATION — the family charity: a tiered institution bought SEQUENTIALLY by the boss/
+// underboss from the family $OMR reserve (the buySeal precedent, exactly). Public philanthropy STATUS
+// (gangs.foundation) AND it launders the family's collective RICO exposure — every member's conviction
+// odds × the tier's bustMult (read in bustProbOf). A NEW Law lever, not pure vanity — its own ledger
+// reason ('foundation:tier') so the audit trail stays legible; still a $OMR burn against the reserve.
+export async function buyFoundation(ch, client, h) {
+  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
+    throw new GameError('rank', 'Only the boss or underboss endows the family foundation.');
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('gang', 'No family to endow.');
+  const next = FOUNDATION.TIERS.find((t) => t.tier === Number(g.foundation || 0) + 1);
+  if (!next) throw new GameError('maxed', 'The family is already the highest pillar of the community there is.');
+  if (Number(g.omr_reserve) < next.omr)
+    throw new GameError('reserve', `The ${next.name} takes ${next.omr} $OMR from the family reserve (${Math.floor(Number(g.omr_reserve))} on hand). Tribute $OMR to fill it.`);
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, foundation = $3 WHERE id=$1', [g.id, next.omr, next.tier]);
+  await h.ledger(client, { currency: 'omr', amount: -next.omr, reason: 'foundation:tier', counterparty: g.id });
+  if (h.owned.gang) { h.owned.gang.foundation = next.tier; h.owned.gang.omr_reserve = Number(g.omr_reserve) - next.omr; }
+  await h.track(client, ch.account_id, 'gang_foundation', { tier: next.tier, omr: next.omr });
+  return { ok: true, foundation: { tier: next.tier, name: next.name, bustMult: next.bustMult },
+           reserve: Number(g.omr_reserve) - next.omr, nextFoundation: foundationOf(next.tier + 1) || null };
+}
+
+// The philanthropy board — families ranked by their FOUNDATION tier (a STATUS leaderboard, the
+// hitmen/portfolio-board precedent). Two flat queries (pg-mem can't do the correlated count).
+export async function foundationLeaderboard(pool) {
+  const rows = (await pool.query(
+    'SELECT id, name, tag, foundation FROM gangs WHERE foundation > 0 ORDER BY foundation DESC, name ASC LIMIT 25')).rows;
+  return { board: rows.map((g) => ({ name: g.name, tag: g.tag, tier: Number(g.foundation),
+    foundation: foundationOf(g.foundation)?.name || null })) };
 }
 
 // Family rename/retag — founding-rules validation (name 3–24, tag 2–4 A–Z/0–9) and the same

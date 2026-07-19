@@ -17,11 +17,20 @@
 // founder sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, ledger, rngLog, notify, track, bus } from './game.js';
-import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, bustProbOf,
+import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, envelopeActive, bustProbOf,
          cityEventOf, dayOf, cityHourOf } from './rules.js';
+import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
+
+// THE FOUNDATION: the character's family charity tier (softens their conviction odds). One small
+// lookup on the (rare) bust path — covers the OFFLINE whale the worker force-busts (no h.owned there).
+async function familyFoundationTier(client, characterId) {
+  const r = (await client.query(
+    'SELECT g.foundation FROM gang_members gm JOIN gangs g ON g.id = gm.gang_id WHERE gm.character_id=$1', [characterId])).rows[0];
+  return Number(r?.foundation || 0);
+}
 
 // ── GET /v1/law — the public rap sheet + docket ──
 export function lawBoard(ch, h) {
@@ -29,6 +38,7 @@ export function lawBoard(ch, h) {
   const exposure = Number(ch.heat_exposure || 0);
   const ev = cityEventOf(dayOf());
   const indicted = !!ch.indicted_at;
+  const foundationTier = Number(h.owned?.gang?.foundation || 0); // THE FOUNDATION: the family charity softens the trial
   return {
     stage: rapStageOf(exposure, ch.indicted_at),
     exposure: Math.round(exposure),
@@ -40,10 +50,14 @@ export function lawBoard(ch, h) {
     retainer: { cost: LAW.RETAINER_COST,
       active: retainerActive(ch),
       seconds: retainerActive(ch) ? Math.max(0, Math.ceil((new Date(ch.retainer_until) - Date.now()) / 1000)) : 0 },
+    // THE ENVELOPE — the standing graft that buries your file (the meter builds slower while current)
+    envelope: { cost: LAW.ENVELOPE_OMR, gainMult: LAW.ENVELOPE_GAIN_MULT,
+      active: envelopeActive(ch),
+      seconds: envelopeActive(ch) ? Math.max(0, Math.ceil((new Date(ch.envelope_until) - Date.now()) / 1000)) : 0 },
     // Phase 2/3 — the case, once filed
     indicted,
     graceSeconds: indicted ? Math.max(0, Math.ceil((new Date(ch.indicted_at).getTime() + LAW.INDICT_GRACE_MS - Date.now()) / 1000)) : 0,
-    convictionOdds: indicted ? Math.round(bustProbOf(ch) * 100) : null,
+    convictionOdds: indicted ? Math.round(bustProbOf(ch, Date.now(), foundationTier) * 100) : null,
     forfeitRate: LAW.FORFEIT_RATE,
     plea: indicted ? { forfeitRate: LAW.PLEA_FORFEIT_RATE, jailSeconds: LAW.PLEA_JAIL_S } : null,
     jury: { bought: !!ch.jury_bought, cost: LAW.JURY_COST_OMR, cuts: LAW.JURY_BUST_MULT },
@@ -90,13 +104,29 @@ export async function retainer(ch, client, h) {
   return { ok: true, cost, retainerSeconds: Math.ceil((new Date(ch.retainer_until) - Date.now()) / 1000) };
 }
 
+// ── THE ENVELOPE — the standing graft: pay $OMR to keep the cops burying your file ──
+// PROACTIVE (unlike the reactive one-shot bribe): while current, the investigation meter builds at
+// ENVELOPE_GAIN_MULT rate (accrual.js). A $OMR sink (law:envelope, account bucket). Paying while
+// current extends from the later of now / the current end (the retainer precedent). NOT a safehouse
+// gate — a standing wire, not a face-to-face sit-down (the D2 gate is for *meeting* the man).
+export async function payEnvelope(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No reaching the precinct from lockup.');
+  await spendOmr(client, h, LAW.ENVELOPE_OMR, 'law:envelope'); // gates on h.acct.omr, debits in-memory, ledgers the burn
+  const base = envelopeActive(ch) ? new Date(ch.envelope_until).getTime() : Date.now();
+  ch.envelope_until = new Date(base + LAW.ENVELOPE_MS);
+  await track(client, ch.account_id, 'envelope', { omr: LAW.ENVELOPE_OMR });
+  return { ok: true, spent: LAW.ENVELOPE_OMR, gainMult: LAW.ENVELOPE_GAIN_MULT,
+    envelopeSeconds: Math.ceil((new Date(ch.envelope_until) - Date.now()) / 1000) };
+}
+
 // ── the §10.4 heart: a conviction seizes pocket+bank into the confiscation buffer ──
 // Shared by the worker sweep (forced), a demanded trial, and any future lazy resolve. Mutates ch;
 // the caller persists it (withCharacter → persistCharacter; the worker → persistBust below).
 async function resolveBust(client, h, ch, { forced = false } = {}) {
   // LAW_BUST_P is a TEST-ONLY knob (the BUSINESS_RAID_P / GEAR_LOOT_CHANCE precedent) that pins the
   // conviction probability so the courtroom is deterministic in tests — never set in production.
-  const p = process.env.LAW_BUST_P != null ? Number(process.env.LAW_BUST_P) : bustProbOf(ch);
+  const foundationTier = await familyFoundationTier(client, ch.id); // the family charity softens the trial (covers the offline whale)
+  const p = process.env.LAW_BUST_P != null ? Number(process.env.LAW_BUST_P) : bustProbOf(ch, Date.now(), foundationTier);
   const roll = Math.random();
   const convicted = roll < p;
   await rngLog(client, ch.id, 'rico', roll, convicted ? `convicted (P ${p.toFixed(3)})` : `acquitted (P ${p.toFixed(3)})`);
@@ -163,7 +193,7 @@ export async function buyJury(ch, client, h) {
   acct.omr = Number(acct.omr) - LAW.JURY_COST_OMR;
   ch.jury_bought = true;
   await ledger(client, { accountId: ch.account_id, currency: 'omr', amount: -LAW.JURY_COST_OMR, reason: 'law:jury' });
-  return { ok: true, spent: LAW.JURY_COST_OMR, convictionOdds: Math.round(bustProbOf(ch) * 100) };
+  return { ok: true, spent: LAW.JURY_COST_OMR, convictionOdds: Math.round(bustProbOf(ch, Date.now(), Number(h.owned?.gang?.foundation || 0)) * 100) };
 }
 
 // ── Phase 3 — demand trial now (resolve the indictment immediately, player agency) ──
