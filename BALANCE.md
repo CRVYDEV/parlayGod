@@ -808,7 +808,7 @@ of every invest (a transfer, account→pool). `PORTFOLIO` block additions:
 | Lever | Default | Rationale | Rec |
 |---|---|---|---|
 | `DIVIDEND_BPS` | 1500 (15%) | Slice of every personal invest redirected from the burn into the dividend pool. New capital pays holders' yield (a real fund). Reduces the RWA deflationary sink by 15% (still 85% burns). | KEEP |
-| `DIVIDEND_DAILY_BPS` | 30 (0.30%/day) | A claim pays this % of book value, POOL-BOUNDED (the real cap). ~110%/yr nominal, but the pool bound means true yield = what invests fund. | KEEP |
+| `DIVIDEND_DAILY_BPS` | 30 (0.30%/day) | A claim pays this % of INVESTED PRINCIPAL (cost basis, not market book — free granted shares earn nothing; the round-2 free-rider fix), POOL-BOUNDED. True yield = what invests fund. | KEEP |
 | `DIVIDEND_MS` | ~20h | The ~daily claim cooldown (a login reason). | KEEP |
 | `DYNASTY_TIERS` | 100 / 500 / 2500 / 10000 / 50000 $OMR | Pure STATUS on cumulative $OMR invested (monotonic). Outside §10.4 and the sim-audited balance. | KEEP |
 
