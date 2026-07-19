@@ -213,14 +213,25 @@ for (let i = 0; i < 3; i++) {
 
 // ── First Week (§5.1): server-checked claims, capstone, cash-only rewards ──
 await seedCh(chef.id, 'cash=500000, energy=50, jail_until=NULL');
+// the guided board (the client's Start Here funnel): nine tasks, none claimed, crime not yet ready
+let ob = (await call('GET', '/v1/onboard', { token: chef.token })).body;
+assert.equal(ob.total, 9, 'nine first-week tasks on the board');
+assert.equal(ob.claimed, 0, 'a fresh street has claimed nothing');
+assert.equal(ob.allDone, false, 'and is not done');
+assert.equal(ob.tasks.find((t) => t.id === 'ob_crime').ready, false, 'pull-a-job is not ready before any crime');
+assert.equal(ob.tasks.find((t) => t.id === 'ob_x').ready, true, 'social tasks are always ready to claim');
 assert.equal((await call('POST', '/v1/onboard/ob_crime/claim', { token: chef.token })).code, 400, 'no crime yet, no pay');
 for (let i = 0; i < 20; i++) { // land one clean job
   await seedCh(chef.id, 'nerve=50, energy=200, jail_until=NULL');
   const c = await call('POST', '/v1/crimes/pick', { token: chef.token });
   if (c.body.success) break;
 }
+// after landing a job the board flips ob_crime to ready
+ob = (await call('GET', '/v1/onboard', { token: chef.token })).body;
+assert.equal(ob.tasks.find((t) => t.id === 'ob_crime').ready, true, 'the board sees the job — reward ready');
 assert.equal((await call('POST', '/v1/onboard/ob_crime/claim', { token: chef.token })).code, 200, 'first job claimed');
 assert.equal((await call('POST', '/v1/onboard/ob_crime/claim', { token: chef.token })).code, 400, 'claims pay once');
+assert.equal((await call('GET', '/v1/onboard', { token: chef.token })).body.tasks.find((t) => t.id === 'ob_crime').claimed, true, 'the board marks it claimed');
 await seedCh(chef.id, 'gta_at=NULL, energy=200, jail_until=NULL');
 await call('POST', '/v1/garage/boost', { token: chef.token }); // gta_at set win or lose
 await call('POST', '/v1/bank/deposit', { token: chef.token, body: { amount: 100 } });

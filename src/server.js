@@ -787,6 +787,8 @@ export async function buildServer() {
   });
   app.post('/v1/daily/:id/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
+  app.get('/v1/onboard', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // Wallet linking is SIWE now (EVM migration): the base58/no-proof path is retired. A real

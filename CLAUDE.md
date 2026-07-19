@@ -1502,6 +1502,24 @@ deadlock); **F2 LOW** — `familyInvest` `if (!g)` guard; **F4b LOW** — `inves
 farmability (status axis, Sybil posture), the chain daily-cap liveness + `OmertaFees` forward-DoS.
 Suite 21/21 + sim drift-0.
 
+**NEW-PLAYER ONBOARDING — the guided funnel surfaced — BUILT** (`src/growth.js`, `src/server.js`,
+`public/index.html`). The First-Week checklist (`ONBOARD_TASKS` / `claimOnboard` — nine tasks: pull a
+job, boost a car, bank cash, declare a Path, join a family, link a wallet + three social) was fully
+built and tested since M4 but had **zero client surface**, so no new player ever saw it — the deepest
+retention lever sat dark behind the 15-tab console. This drop is purely additive (no schema, no new
+faucet, no balance change, §10.4 untouched — reuses the tested `onboard:` cash faucet): a read-only
+`onboardBoard(ch, h)` (`growth.js`) + `GET /v1/onboard` return each task's server-authoritative
+`ready`/`claimed`/`social` state (the client never re-derives game state), and the console gained a
+**"Start Here"** guided tab (`public/index.html`) — the FIRST tab, auto-selected for any player who
+isn't `allDone` (veterans land on Streets). It renders the checklist with reward-ready (neon) vs
+do-it-first (grey → jumps to the relevant tab) states, claim buttons on the existing route, social
+links, live progress + the capstone bonus; `describe()` humanizes the claim toast. `test/growth.js`
+gained board assertions (nine tasks, readiness flips on the first job, claimed marks). Verified live
+end-to-end in Chromium (fresh guest → lands on Start Here → job → board flips ready → claim pays
+$500 +10 energy → 1/9). Suite 21/21 + sim drift-0. Deferred onboarding polish: per-tab empty-state
+coaching, a first-session interstitial, funnel-drop-off analytics view (the telemetry rows already
+land — `first_week_step`).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

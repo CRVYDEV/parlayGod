@@ -164,6 +164,20 @@ const CHECKS = {
   ob_wallet: (ch, h) => !!h.acct.wallet_address,
 };
 
+// The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
+// readiness (the same CHECKS claimOnboard enforces) so the client never re-derives game state:
+// each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.
+export function onboardBoard(ch, h) {
+  const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
+  const tasks = ONBOARD_TASKS.map((t) => ({
+    id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: t.social || null,
+    claimed: !!onboard[t.id],
+    ready: t.social ? true : !!(CHECKS[t.id] && CHECKS[t.id](ch, h)), // social tasks verify at claim time
+  }));
+  return { tasks, claimed: tasks.filter((t) => t.claimed).length, total: tasks.length,
+    allDone: tasks.every((t) => t.claimed), capstone: CONSTANTS.ONBOARD_CAPSTONE };
+}
+
 export async function claimOnboard(ch, taskId, client, h) {
   const t = ONBOARD_TASKS.find((x) => x.id === taskId);
   if (!t) throw new GameError('bad_task', 'Not on the checklist.');

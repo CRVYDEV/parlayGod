@@ -194,6 +194,7 @@
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
     if (body.heat) bits.push(`heat +${body.heat}`);
+    if (body.task && body.cash !== undefined) bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
@@ -331,7 +332,7 @@
   }
 
   // ── tabs ──
-  const TABS = { streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
+  const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', life: 'The Life', pen: 'The Pen', law: 'The Law',
     city: 'The City', den: 'The Den', deck: 'Everything Else' };
@@ -346,10 +347,13 @@
     }
     renderStreets(); renderCity(); renderDen(); renderDeck();
     setTab('streets');
+    // new players land on the guided funnel; veterans (all-done) stay on the Streets
+    api('GET', '/v1/onboard').then((r) => { if (r.body && !r.body.allDone) setTab('start'); });
   }
   function setTab(id) {
     for (const b of $('#tabs').children) b.classList.toggle('on', b.dataset.tab === id);
     for (const t of $('#tabbodies').children) t.classList.toggle('on', t.id === 'tab-' + id);
+    if (id === 'start') renderStart();
     if (id === 'city') renderCity();
     if (id === 'den') renderDen();
     if (id === 'kitchen') renderKitchen();
@@ -609,6 +613,41 @@
       act('POST', '/v1/market', { goodId: t.querySelector('#mk-good').value, qty: Number(t.querySelector('#mk-gqty').value), price: Number(t.querySelector('#mk-gprice').value) }).then(rerender);
     t.querySelector('#mk-order').onclick = () =>
       act('POST', '/v1/market/order', { goodId: t.querySelector('#mk-ogood').value, qty: Number(t.querySelector('#mk-oqty').value), price: Number(t.querySelector('#mk-oprice').value) }).then(rerender);
+  }
+
+  // ── START HERE: the guided First-Week funnel — the new-player on-ramp over the /v1/onboard board ──
+  async function renderStart() {
+    const t = $('#tab-start');
+    const ob = (await api('GET', '/v1/onboard')).body || { tasks: [], total: 0, claimed: 0 };
+    // task → [tab to jump to, the coaching line] for the not-yet-done "do it" button
+    const go = {
+      ob_crime: ['streets', 'Pull any job on the Streets'],
+      ob_boost: ['garage', 'Boost a car in the Garage'],
+      ob_bank: ['streets', 'Bank some cash — Streets → deposit'],
+      ob_path: ['streets', 'Reach level 5, then declare your Path'],
+      ob_family: ['family', 'Found or join a family'],
+      ob_wallet: ['deck', 'Link a wallet (the wallet is what survives you)'],
+    };
+    const reward = (r) => `$${fmt(r.cash || 0)}${r.cb ? ` + ${r.cb} crate${r.cb > 1 ? 's' : ''}` : ''}${r.en ? ` + ${r.en} energy` : ''}`;
+    t.innerHTML = `
+      <h2>Make Your Bones <span class="d" style="font-size:11px">(${ob.claimed}/${ob.total} done — the first week pays cash to learn the ropes)</span></h2>
+      ${ob.allDone ? `<div class="card" style="border-color:var(--neon)"><span class="t">✓ THE FIRST WEEK IS DONE</span>
+        <div class="d">you've made your bones — the city's yours to take. this list is behind you now.</div></div>` : `
+        <div class="d" style="color:var(--dim);font-size:12px;margin-bottom:6px">Work down the list. Green means the reward is waiting — claim it. Grey means do the thing first; tap it to jump there.</div>`}
+      <div class="grid">${ob.tasks.map((x) => `
+        <div class="card" ${!x.claimed && x.ready ? 'style="border-color:var(--neon)"' : ''}>
+          <span class="t">${x.claimed ? '✓ ' : ''}${x.name}</span>
+          ${x.claimed ? '<span class="chip good">claimed</span>' : x.ready ? '<span class="chip good">reward ready</span>' : ''}
+          <div class="d">${x.desc} · pays ${reward(x.reward)}</div>
+          ${x.claimed ? ''
+            : x.social ? `<a href="${x.social}" target="_blank" rel="noopener noreferrer"><button class="act">open</button></a> <button class="act" data-obclaim="${x.id}">claim</button>`
+            : x.ready ? `<button class="act" data-obclaim="${x.id}">claim reward</button>`
+            : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
+        </div>`).join('')}</div>
+      <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>`;
+    t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
+    t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
   }
 
   // Streets: crimes, train, bank, travel
