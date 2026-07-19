@@ -80,6 +80,23 @@ cost is hard-capped by the treasury's own budget. Unlike Olympus, there is no mi
 - `GET /v1/mod/bonds` — the ops view: capacity/committed/remaining, POL ETH acquired, Vig ETH routed, the
   bond invariant. On the admin dashboard's chain panel.
 
+## Red-team (independent)
+A focused audit of the financial primitive returned CLEAN — **no CRITICAL/HIGH/MED**. Verified: the
+anti-Ponzi cap **cannot be breached even under concurrency** (`bond_reserve` is `FOR UPDATE`-locked before
+the capacity check; a second bond re-reads the first's commitment and correctly `over_capacity`-rejects);
+§10.4 is genuinely untouched (`bonds.js` writes zero `transactions` rows and `claimBond` credits NO in-game
+`account_persistent.omr` — it only advances the bond's accounting); the ETH split + payout are
+NaN/negative/zero-divisor-proof (discount ≤ 20% ⇒ divisor ≥ 0.8); idempotency is double-backstopped
+(`bonds.nonce` PK + the `vig_revenue(source,ref)` guard, under the tranche lock); claim vesting is clamped
+`[0, payout]` and account-scoped; and the five bond invariants each bite. **LOW-1 FIXED** (regression added):
+`reconcileBonds` (the `reconcileStore` twin) is now built + wired into `walletVerify` + `bonds.payer_address`
+added, so a bond ingested for an unlinked wallet (the on-chain pre-link case) is attributed + made claimable
+at wallet-link instead of stranded. **LOW-2 (accepted, reporting-only):** `vigStatus.grossRevenueEth` counts
+only the bond's 40% Vig share (the 60% POL share lives in `bond_reserve.pol_eth`, outside Vig accounting) —
+semantically correct (POL is not Vig revenue), breaks no invariant (`runVigInvariants` reads `vig_eth`, never
+`gross_eth`); the full bond inflow is visible on `GET /v1/mod/bonds`. Bottom line: it cannot over-issue past
+the tranche, and it cannot perturb §10.4.
+
 ## Deferred (mainnet milestone — legal + audit gated)
 The on-chain **`OmertaBond`** contract (accept ETH/LP → vest OMR from a Safe-funded tranche → forward ETH
 to the POL pairing + the Vig split; pausable; per-bond-capacity capped like VoucherClaim), a **`Bonded`

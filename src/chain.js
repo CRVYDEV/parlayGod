@@ -13,6 +13,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { GameError, ledger } from './game.js';
 import { reconcileFees } from './fees.js';
 import { reconcileStore } from './store.js';
+import { reconcileBonds } from './bonds.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -348,5 +349,6 @@ export async function walletVerify(pool, accountId, address, signature) {
   // pay-before-link ordering: grant any fees + Store purchases this wallet made before it was attributable
   const { credited } = await reconcileFees(pool, accountId, addr);
   const { granted } = await reconcileStore(pool, accountId, addr);
-  return { ok: true, wallet: addr, verified: true, feesCredited: credited, storeGranted: granted };
+  const { attributed } = await reconcileBonds(pool, accountId, addr); // attribute pre-link bonds (LOW-1)
+  return { ok: true, wallet: addr, verified: true, feesCredited: credited, storeGranted: granted, bondsAttributed: attributed };
 }
