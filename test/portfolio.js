@@ -114,6 +114,20 @@ assert.equal(Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='$
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((gPoolBefore - famDiv.body.paid) * 1e6) / 1e6, 'paid from the SHARED pool (a transfer, not a mint)');
 assert.equal((await call('POST', '/v1/gangs/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the family dividend pays about once a day');
 
+// ── FAMILY DYNASTY (F4): name the fund + the crest tier + the family-legit leaderboard ──
+assert.equal((await call('POST', '/v1/gangs/portfolio/name', { token: soldier.token, body: { name: 'The Empire' } })).body.error, 'rank', 'a soldier does not name the family fund');
+const gResPreName = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve);
+const fn = await call('POST', '/v1/gangs/portfolio/name', { token: boss.token, body: { name: 'The Blue Chip Fund' } });
+assert.equal(fn.code, 200, 'the boss named the family fund');
+assert.equal(Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve), gResPreName - PORTFOLIO.FAMILY_DYNASTY_NAME_OMR, 'the naming burned from the reserve');
+assert.equal((await pool.query(`SELECT dynasty_name FROM gangs WHERE id='${gangId}'`)).rows[0].dynasty_name, 'The Blue Chip Fund', 'the fund name took');
+const fBoard = (await call('GET', '/v1/portfolio', { token: boss.token })).body.family;
+assert.equal(fBoard.fundName, 'The Blue Chip Fund', 'the board shows the fund name');
+assert(fBoard.crest, 'the family crest tier is surfaced (family invested 5000 → a tier)');
+assert.equal(fBoard.invested, 5000, 'cumulative family invested tracked');
+const flb = (await call('GET', '/v1/leaderboard/family-portfolio', { token: boss.token })).body;
+assert(flb.board.find((e) => e.name === 'The Blue Chip Fund'), 'the fund heads the family-legit leaderboard');
+
 // ── DEATH SURVIVAL: the legit book is account-level, so the heir keeps it (the retirement fantasy) ──
 const bookBefore = (await call('GET', '/v1/portfolio', { token: boss.token })).body.portfolio;
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: boss.id },

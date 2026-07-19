@@ -24,6 +24,45 @@ export async function nameDynasty(ch, name, client, h) {
   return { ok: true, dynasty: n, spent: PORTFOLIO.DYNASTY_NAME_OMR };
 }
 
+// name the FAMILY fund — a $OMR sink from the gang RESERVE (boss/underboss, the buySeal precedent).
+// The name heads the family-legit leaderboard; the crest is the tier on cumulative family invested.
+export async function nameFamilyDynasty(ch, name, client, h) {
+  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
+    throw new GameError('rank', 'Only the boss or underboss names the family fund.');
+  const n = String(name || '').trim();
+  if (n.length < 3 || n.length > 24) throw new GameError('name', 'A fund name runs 3–24 characters.');
+  if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
+  const cost = PORTFOLIO.FAMILY_DYNASTY_NAME_OMR;
+  const g = (await client.query('SELECT omr_reserve FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('gang', 'No family.');
+  if (Number(g.omr_reserve) < cost) throw new GameError('reserve', `The reserve holds ${Math.floor(Number(g.omr_reserve))} $OMR — naming the fund runs ${cost}.`);
+  await client.query('UPDATE gangs SET omr_reserve = omr_reserve - $2, dynasty_name=$3 WHERE id=$1', [h.owned.gangId, cost, n]);
+  await h.ledger(client, { currency: 'omr', amount: -cost, reason: 'rwa:dynasty', counterparty: h.owned.gangId }); // burn (rwa:% term), reserve bucket
+  if (h.owned.gang) { h.owned.gang.omr_reserve = Number(g.omr_reserve) - cost; h.owned.gang.dynasty_name = n; }
+  await h.track(client, ch.account_id, 'family_dynasty_name', {});
+  return { ok: true, dynasty: n, spent: cost, reserve: Math.floor(Number(g.omr_reserve) - cost) };
+}
+
+// The biggest FAMILY legit books — a status leaderboard (the portfolioLeaderboard twin, gang side).
+export async function familyPortfolioLeaderboard(pool) {
+  const day = dayOf();
+  const priceMap = Object.fromEntries(PORTFOLIO.TICKERS.map((t) => [t.id, tickerPriceOf(t.id, day)]));
+  const rows = (await pool.query(
+    `SELECT gp.gang_id, gp.ticker, gp.shares, g.name, g.dynasty_name, g.rwa_invested
+       FROM gang_portfolios gp JOIN gangs g ON g.id = gp.gang_id WHERE gp.shares > 0`)).rows;
+  const byGang = new Map();
+  for (const r of rows) {
+    const e = byGang.get(r.gang_id) || { name: r.name, dynasty: r.dynasty_name || null, invested: Math.floor(Number(r.rwa_invested || 0)), bookValue: 0 };
+    e.bookValue += Number(r.shares) * (priceMap[r.ticker] || 0);
+    byGang.set(r.gang_id, e);
+  }
+  const board = [...byGang.values()]
+    .map((e) => ({ name: e.dynasty || e.name, family: e.name, dynasty: e.dynasty || null,
+      crest: dynastyTierOf(e.invested)?.name || null, bookValue: round2(e.bookValue) }))
+    .filter((e) => e.bookValue > 0).sort((a, b) => b.bookValue - a.bookValue).slice(0, 25);
+  return { day, board };
+}
+
 const round2 = (n) => Math.round(n * 100) / 100;
 const round6 = (n) => Math.round(n * 1e6) / 1e6; // fractional shares to 6 places
 
@@ -229,7 +268,11 @@ export async function portfolioBoard(ch, client, h) {
     const gcd = gd ? Math.max(0, Math.ceil((new Date(gd).getTime() + PORTFOLIO.DIVIDEND_MS - now2) / 1000)) : 0;
     const poolNow = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
     const canManage = h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
+    const famInvested = Math.floor(Number(h.owned.gang?.rwa_invested || 0));
+    const famCrest = dynastyTierOf(famInvested);
     family = { name: h.owned.gang?.name || null,
+      fundName: h.owned.gang?.dynasty_name || null, nameCost: PORTFOLIO.FAMILY_DYNASTY_NAME_OMR,
+      invested: famInvested, crest: famCrest ? { tier: famCrest.tier, name: famCrest.name } : null,
       canInvest: canManage,
       reserve: Math.floor(Number(h.owned.gang?.omr_reserve || 0)),
       holdings: fh, bookValue: famBook,
