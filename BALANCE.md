@@ -898,6 +898,17 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 | `SPEAKEASY.RENOWN.STYLE_UNLOCKS` (step 4) | `house` 800 / `crown` 2000 | Renown-EARNED decor styles (access/status, never power) — a cosmetic unlocked by being seen, no purchase. §10.4-untouched (display-only). | KEEP |
 | `assessedValueOf` — standover forced-sale price (step 4, **sign-off flag F2**) | build cost (open + tiers) | A hostile standover forces a sale at BUILD cost, below a high-income/prestige club's going-concern value (the "hostile discount"). Bounded by the ≤75% stat-gated roll + one-per-man + 24h cooldown + the challenger carrying the full price. **Founder call:** add a goodwill/prestige premium to the assessed value if whale-club predation is seen in the alpha. NOT patched (ground rule #1). | FLAG |
 
+**The Fight Circuit (`BOXING`, mob boxing — a PvP staking loop, the `casino:pvp` transfer pattern):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `BOXING.MANAGER_MIN_LEVEL` / `RECRUIT_COST` | 8 / $50k | Sign a contender at level 8+ for a $50k cash SINK (`boxing:recruit`). | KEEP |
+| `BOXING.STAT_MIN`/`STAT_MAX` / `STAT_CAP` | 6–14 / 25 | Stats rolled at signing; trainable to 25 (max form 75). | KEEP |
+| `BOXING.TRAIN_COST` / `TRAIN_ENERGY` / `TRAIN_GAIN` | $20k / 15 / +1 | A training session (cash+energy SINK `boxing:train`) adds +1 to one stat. Progression = build a better fighter over time. | KEEP |
+| `BOXING.MIN_STAKE`/`MAX_STAKE` / `RAKE_BPS` | $5k–$500k / 5% | Bout purse bounds + the vig (half → the buyback pool, half burns — the `casino:pvp` rate). A pure taxed TRANSFER, never a new faucet. | KEEP |
+| `BOXING.VARIANCE` / `INJURY_MS` | 22 / 4h | rng added to each fighter's form (upsets happen, form still tells); a lost bout lays the fighter up 4h (no spam). | KEEP |
+| `BOXING.RANKS` | Prospect → Hall of Famer (by wins) | Pure STATUS ladder — the circuit leaderboard, outside §10.4 + the sim balance. | KEEP |
+
 **Notes (sign-off):**
 - The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);
   the win is a gambling faucet, the edge a net sink. All rows character_id'd → §10.4 check (a) reconciles.

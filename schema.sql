@@ -632,6 +632,23 @@ CREATE TABLE IF NOT EXISTS speakeasy_patrons (
 );
 CREATE INDEX IF NOT EXISTS ix_speakeasy_patrons_char ON speakeasy_patrons (character_id);
 
+-- THE FIGHT CIRCUIT (omerta-fight-circuit-design.md): a manager signs ONE contender — a persistent owned
+-- asset with stats + a W/L record — and stakes them in PvP bouts (the casino:pvp transfer pattern). Dies
+-- with the street (joins the runEstate wipe). bout_limit = consent-by-listing (the fade/bodyguard pattern).
+CREATE TABLE IF NOT EXISTS fighters (
+  character_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  power INT NOT NULL,
+  chin INT NOT NULL,
+  speed INT NOT NULL,
+  wins INT NOT NULL DEFAULT 0,
+  losses INT NOT NULL DEFAULT 0,
+  injured_until TIMESTAMPTZ,        -- a lost bout lays the fighter up (no spam)
+  bout_limit NUMERIC,               -- the stake this fighter will take (null = not taking bouts)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_fighters_wins ON fighters (wins DESC);
+
 -- ── The Gambling Den: the Numbers (daily lottery tickets; dice are stateless) ──
 -- One ticket per street per day; resolves lazily against the day's seed-drawn number when
 -- claimed. CASH ONLY (stake ledgered casino:bet:numbers, a win casino:win:numbers) — the Den
