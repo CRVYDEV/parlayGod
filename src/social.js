@@ -15,6 +15,7 @@ import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
 import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
+import { wipeSpeakeasyAtDeath } from './speakeasy.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -1318,6 +1319,8 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // wiretaps die with either party (audit: a dead WATCHER's taps are dead-code row-leak; a dead TARGET's
   // taps wasted a live watcher's concurrency slot with no untap route — deleting the target's frees it)
   await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
+  // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
+  await wipeSpeakeasyAtDeath(client, victim.id);
   // a dead shipper's freight is scattered on the highway — goods die with the street
   await client.query("DELETE FROM convoy_cargo WHERE convoy_id IN (SELECT id FROM convoys WHERE owner_character=$1)", [victim.id]);
   await client.query("UPDATE convoys SET status='lost' WHERE owner_character=$1 AND status IN ('loading','transit')", [victim.id]);

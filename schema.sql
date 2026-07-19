@@ -577,6 +577,33 @@ CREATE TABLE IF NOT EXISTS businesses (
 );
 CREATE INDEX IF NOT EXISTS ix_businesses_character ON businesses (character_id);
 
+-- ── THE SPEAKEASY: the social hub (omerta-speakeasy-design.md) ──
+-- ONE club per district (district_id PK, the territory-racket pattern), owned by a character. The base
+-- bar take accrues lazily (income_at, capped 24h) → the owner's pocket. Prestige (stored) is bumped by
+-- rounds + bottles and floored by the decor tier; it ranks the nightlife. Dies with the proprietor's
+-- street (the business precedent). §10.4: all cash flows carry a character_id (speakeasy: vocabulary).
+CREATE TABLE IF NOT EXISTS speakeasies (
+  district_id TEXT PRIMARY KEY,
+  owner_character TEXT NOT NULL,
+  name TEXT,
+  tier INT NOT NULL DEFAULT 0,                      -- decor tier (0 = The Backroom, as opened)
+  prestige NUMERIC NOT NULL DEFAULT 0,             -- bumped by rounds/bottles, floored by tier — the nightlife rank
+  income_at TIMESTAMPTZ NOT NULL DEFAULT now(),    -- base bar-take accrual clock (lazy, capped)
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_speakeasies_owner ON speakeasies (owner_character);
+-- the guest list: who frequents each club, what they've spent, whether they're a REGULAR (status).
+CREATE TABLE IF NOT EXISTS speakeasy_patrons (
+  district_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  visits INT NOT NULL DEFAULT 0,
+  spent_cash NUMERIC NOT NULL DEFAULT 0,
+  spent_omr NUMERIC NOT NULL DEFAULT 0,
+  last_at TIMESTAMPTZ NOT NULL DEFAULT now(),       -- per-(patron,club) round cooldown
+  PRIMARY KEY (district_id, character_id)
+);
+CREATE INDEX IF NOT EXISTS ix_speakeasy_patrons_char ON speakeasy_patrons (character_id);
+
 -- ── The Gambling Den: the Numbers (daily lottery tickets; dice are stateless) ──
 -- One ticket per street per day; resolves lazily against the day's seed-drawn number when
 -- claimed. CASH ONLY (stake ledgered casino:bet:numbers, a win casino:win:numbers) — the Den

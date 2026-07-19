@@ -10,6 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
+import { speakeasyOwnedOf } from './speakeasy.js';
 
 const uid = () => crypto.randomUUID();
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -122,6 +123,7 @@ export async function loadOwned(client, ch) {
     held = idList((await client.query('SELECT id FROM districts WHERE holder_gang=$1', [gangId])).rows, 'id');
   }
   const businesses = await businessesOf(client, ch.id); // late-game personal fronts (usually empty)
+  const speakeasy = await speakeasyOwnedOf(client, ch.id); // the district's club, if this man runs one
   // active vendettas this bloodline holds — joined to the target bloodline's CURRENT street
   const vendettas = (await client.query(
     `SELECT v.sworn, v.expires_at, c.name AS target_name, c.id AS target_id
@@ -129,6 +131,7 @@ export async function loadOwned(client, ch) {
       WHERE v.avenger_account=$1 AND v.expires_at > now()`, [ch.account_id])).rows;
   return {
     businesses,
+    speakeasy,
     vendettas,
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
@@ -530,7 +533,7 @@ export function view(ch, acct = {}, owned = {}) {
     skillPoints: (() => { const total = Math.floor(lvl / SKILLS.LVL_PER_POINT);
       const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
       return { total, spent, available: Math.max(0, total - spent) }; })(),
-    rackets: owned.rackets || [], assets, businesses: owned.businesses || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
+    rackets: owned.rackets || [], assets, businesses: owned.businesses || [], speakeasy: owned.speakeasy || null, cargo: owned.cargo || {}, items: owned.items || {}, gear,
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
