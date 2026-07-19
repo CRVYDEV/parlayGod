@@ -589,3 +589,24 @@ antagonist, `bustMult` is the dial (or gate the top tiers behind season standing
 fix). (2) The Envelope's 0.5 gain-mult + 7d window at 15 $OMR is cheap standing protection; if it
 neuters the RICO loop for whales, raise `ENVELOPE_OMR` or weaken `ENVELOPE_GAIN_MULT` toward 1. Both
 were sim-clean at drift-0 on build; watch the RICO conviction rate in the alpha.
+
+### Envelope/Foundation red-team — accepted design/balance calls (founder sign-off items)
+
+A four-lens red-team returned no CRITICAL/HIGH (§10.4, locks, Law-math, abuse all clean). Three lower
+findings, all flagged (NOT patched — ground rule #1):
+- **(MED) Foundation freeload via immediate join** — an indicted player can join a high-tier-foundation
+  family right before `demandTrial` to grab the members' bust-soften, then leave. This is the
+  already-accepted "joining is immediate (no apply/accept queue)" posture that EVERY family perk shares
+  (turf perks, war participation, contract protection). A real gate needs per-member join timestamps
+  (`gang_members` has none today) + a design decision (does the charity protect brand-new members?).
+  Mitigated in practice: needs a genuine high-tier foundation (endgame, 3000+ reserve $OMR), the
+  freeloader is publicly in that family, and the effect is bounded by the min-clamp floor. Dial: add
+  join timestamps + gate the soften on membership predating `indicted_at` if the alpha shows abuse.
+- **(LOW) Foundation wasted at the clamp floor when stacked** — `bustProbOf`'s min floor is
+  `BUST_P_MIN × RETAINER_BUST_MULT × JURY_BUST_MULT` and omits `foundationBustMult`, so a member
+  already stacking retainer+jury at extreme exposure gets zero marginal reduction from even a tier-5
+  foundation. Narrow corner. Dial: fold `foundationBustMult(tier)` into the floor if the charity should
+  compose below the standard-defense floor.
+- **(LOW) Envelope payable while indicted** — the envelope only scales the meter GAIN, so it can't help
+  a FILED case; but an active window still slows the post-acquittal exposure rebuild, so it is NOT
+  wasted for a savvy player and the card copy never claims to fix a filed trial. Left as-is.

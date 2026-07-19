@@ -1659,8 +1659,22 @@ window extends on re-pay, jailed/broke gates, closed vocabulary); `test/social.j
 foundation (rank gate, empty-reserve rejection, sequential tiers with exact reserve deltas, badge on
 all three views + the philanthropy leaderboard, the monotonic `bustProbOf` odds drop, ledgered
 `foundation:tier` burns). Suite 23/23 + sim drift-0. All numbers are founder sign-off levers. A
-focused red-team is in flight; any findings land in a follow-up. Deferred (step two): a per-precinct
-envelope; the Foundation bleeding members' heat passively + a Commission-standing angle + naming.
+focused four-lens red-team returned CLEAN — **no CRITICAL/HIGH**: §10.4 conservation exact on both
+burns (account bucket + gang-reserve bucket, no cross-contamination with the cash treasury check, no
+orphan on dissolution), lock order sound (`buyFoundation`'s `FOR UPDATE` is the FIRST gang lock since
+`loadOwned` reads the gang unlocked — no self-deadlock; `familyFoundationTier` is an unlocked MVCC read
+so no cycle on the bust path), persist paths clobber-free, and the `bustProbOf` math correct (mults
+&lt;1, clamped, `LAW_BUST_P` bypasses). Three lower findings, all DESIGN/BALANCE calls (flagged for
+founder sign-off, NOT patched per ground rule #1): **(MED)** an indicted player can freeload a
+high-tier family's bust-soften by joining right before `demandTrial` (an instance of the already-flagged
+immediate-join posture that every family perk shares; a real gate needs join-timestamp state — a
+schema+design call); **(LOW)** the `bustProbOf` min-clamp floor omits `foundationBustMult`, so a
+maxed foundation delivers zero marginal reduction to a member already stacking retainer+jury at extreme
+exposure (a narrow corner; the dial is whether the charity composes below the standard-defense floor);
+**(LOW)** the envelope is payable while indicted where it can't help the FILED case — but it's not
+wasted (an active window still slows the post-acquittal exposure rebuild), so left as-is. Deferred
+(step two): a per-precinct envelope; the Foundation bleeding members' heat passively + a
+Commission-standing angle + naming; a foundation-freeload gate (join timestamps) if the alpha shows abuse.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
