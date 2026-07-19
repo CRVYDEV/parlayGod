@@ -251,6 +251,23 @@ assert.equal(r.code, 200, 'ninth claim');
 assert.equal(r.body.capstone, true, 'THE FIRST WEEK IS DONE');
 assert.equal(r.body.cash, 1500 + 5000, 'task + capstone cash (cash-only, never $OMR)');
 
+// ── onboarding polish: the COACH (server next-step) + the founder FUNNEL ──
+const rook = await mk('Rookie Ray');
+let rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
+assert(rm.coach && rm.coach.label === 'Pull your first job', 'a fresh street is coached to its first job');
+assert.equal(rm.coach.tab, 'streets', 'and pointed at the Streets');
+// land a job → the coach moves off "first job"
+await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL');
+for (let i = 0; i < 20; i++) { const c = await call('POST', '/v1/crimes/pick', { token: rook.token }); if (c.body.success) break; await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL'); }
+rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
+assert.notEqual(rm.coach?.label, 'Pull your first job', 'once the first job is pulled the coach advances');
+// the funnel (mod-gated): counts characters + first-week claims, refuses without the key
+assert.equal((await call('GET', '/v1/mod/funnel', { token: rook.token })).code, 401, 'the funnel needs the mod key');
+const funnel = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+assert(funnel.characters.total >= 1 && funnel.characters.alive >= 1, 'funnel counts characters');
+assert(funnel.progression.pulled_a_job >= 1, 'funnel sees at least one job pulled');
+assert(funnel.firstWeek.ob_crime >= 1, 'funnel tallies first-week claims from telemetry');
+
 // ── referrals (§7.13): all four gates, atomic payout, milestone, exclusions ──
 const mentor = await mk('Mentor Max');
 const recruit = await mk('Fresh Blood', 'Mentor Max');

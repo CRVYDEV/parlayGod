@@ -866,6 +866,7 @@ export async function buildServer() {
     return { codes, uses };
   });
   app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
+  app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
   app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
     const cid = req.query?.characterId;
     const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
