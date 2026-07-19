@@ -1,6 +1,6 @@
 # OMERTÀ Contracts — M6-A
 
-Four contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630, mainnet 4663). Chain-agnostic EVM — deployable unchanged to Arbitrum One/Base as fallback. See `omerta-chain-migration-evm.md` in the backend repo for the architecture.
+Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630, mainnet 4663). Chain-agnostic EVM — deployable unchanged to Arbitrum One/Base as fallback. See `omerta-chain-migration-evm.md` in the backend repo for the architecture.
 
 | Contract | Role |
 |---|---|
@@ -8,6 +8,8 @@ Four contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 
 | `VoucherClaim.sol` | THE bridge. EIP-712 vouchers signed by the game server; replay-proof, deadline-bound, daily-capped, pausable, tranche-funded. Nothing mints. |
 | `GearVault.sol` | ERC-1155 gear (one tokenId per gear class). Mints only via VoucherClaim, which is **fail-closed**: a gearId only mints up to a per-class supply cap the Safe sets (`vc.setGearSupplyCap`). |
 | `OMRStaking.sol` | 14% APY (owner-set, 50% hard ceiling), pre-funded reward pool, principal always withdrawable. |
+| `OmertaFees.sol` | The inbound entry/revive fee rail (§11). Forwards each exact ETH fee straight to the dev + Vig wallets in the same tx; custodies nothing, mints nothing; emits a nonce'd event the backend watches. |
+| `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + Vig) and forwarded in-tx (custodies no ETH). **Nothing mints**: the payout TRANSFERS from a Safe-funded tranche — `committedOMR + payout <= omr.balanceOf(this)` is enforced at bond time, so total OMR bonded out is hard-capped by the funded balance (the Olympus reflexive-mint failure mode is structurally excluded). EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_DISCOUNT_BPS`/`MAX_VEST` backstops; Safe-owned, pausable; `sweep` can pull only the UNCOMMITTED tranche, never OMR backing outstanding bonds. |
 
 ## Test & deploy
 ```
@@ -44,6 +46,27 @@ const signature = await account.signTypedData({
 });
 ```
 `nonce` = the `vouchers.nonce` column (server-unique). Store `signed_payload`, hand `(voucher, signature)` to the client, watch `Claimed(nonce,...)` to set `claimed_onchain`.
+
+### OmertaBond quote signing (backend `src/bonds.js` parity — mainnet wiring)
+The bond service signs `BondQuote`s the contract accepts; domain `OmertaBond`/`1`, chainId from the live
+chain (never hardcode), `verifyingContract` = the deployed `OmertaBond`. **On-chain/off-chain must not
+drift:** the contract's immutable `polBps` == the backend `BONDS.POL_BPS`, and `MAX_DISCOUNT_BPS` (2000) ==
+`BONDS.MAX_DISCOUNT_BPS`. The backend prices `payout = principal × priceOmrPerEth / 1e18 × 1e4/(1e4−discountBps)`
+(the exact integer math the contract recomputes), watches `Bonded(bondId, payer, nonce, principal, payout,…)`
+→ `recordBond` (attributes/reconciles the bonder), and the `bond_reserve` tranche mirrors the on-chain
+`committedOMR ≤ omr.balanceOf(bond)` cap.
+```ts
+const signature = await account.signTypedData({
+  domain: { name: 'OmertaBond', version: '1', chainId, verifyingContract: OMERTA_BOND_ADDRESS },
+  types: { BondQuote: [
+    { name: 'payer', type: 'address' }, { name: 'principal', type: 'uint256' },
+    { name: 'priceOmrPerEth', type: 'uint256' }, { name: 'discountBps', type: 'uint256' },
+    { name: 'vestSeconds', type: 'uint256' }, { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' } ] },
+  primaryType: 'BondQuote',
+  message: { payer, principal, priceOmrPerEth, discountBps, vestSeconds, nonce, deadline },
+});
+```
 
 ## Before mainnet (non-negotiable)
 Third-party audit of all four contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; daily cap + OMR tranche + **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.

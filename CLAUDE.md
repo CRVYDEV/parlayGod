@@ -2112,9 +2112,18 @@ Store `mod/store/grant` precedent). `test/bonds.js` proves the funded tranche, t
 60/40 split, the anti-Ponzi cap, idempotency, the bond invariant, the Vig integration, claim vesting, and —
 crucially — **§10.4 IN-GAME UNTOUCHED** (drift-0 through the whole lifecycle). Suite 30/30 + sim drift-0.
 Numbers (`DISCOUNT_BPS`, `VEST_HOURS`, `POL_BPS`/`VIG_BPS`, the tranche capacity) are founder sign-off levers.
-Deferred (mainnet milestone, legal + audit gated): the on-chain `OmertaBond` contract + `Bonded` watcher +
-the POL-pairing bot + **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a
-financial primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
+The on-chain **`OmertaBond` contract is now WRITTEN** (`omerta-contracts/src/OmertaBond.sol` + Foundry tests
+`test/OmertaBond.t.sol`): EIP-712 server-signed `BondQuote`s (the VoucherClaim signer discipline), the
+tranche cap on-chain (`committedOMR + payout ≤ omr.balanceOf(this)` — NEVER mints, the pre-funded-transfer
+discipline), linear vesting `claim`, the ETH split forwarded in-tx (POL + Vig, custodies no ETH — the
+OmertaFees pattern), immutable `polBps` + `MAX_DISCOUNT_BPS`/`MAX_VEST` backstops kept in lockstep with the
+backend `BONDS.*`, Safe-owned + pausable, and `sweep` that can pull only the UNCOMMITTED tranche (never OMR
+backing outstanding bonds). It **compiles clean** (solc 0.8.26 + OZ 5.1, 0 warnings, via
+`tools/compile-contracts.js` — the no-Foundry path); the README carries the viem quote-signing parity
+snippet. Still deferred (mainnet milestone, legal + audit gated): **`forge test` must run** (Foundry
+egress-blocked here — the established suite residual), the `Bonded` watcher wiring (→ `recordBond`), the
+POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
+primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
