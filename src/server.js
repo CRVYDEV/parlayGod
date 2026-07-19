@@ -529,6 +529,10 @@ export async function buildServer() {
   // the FAMILY dividend — the gang book's yield, drawn to the reserve by the boss/underboss
   app.post('/v1/gangs/portfolio/dividend', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.claimFamilyDividend(ch, client, h)));
+  // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)
+  app.post('/v1/gangs/portfolio/name', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameFamilyDynasty(ch, req.body?.name, client, h)));
+  app.get('/v1/leaderboard/family-portfolio', { preHandler: auth }, async () => Portfolio.familyPortfolioLeaderboard(pool));
   app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
   app.post('/v1/dynasty/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameDynasty(ch, req.body?.name, client, h)));

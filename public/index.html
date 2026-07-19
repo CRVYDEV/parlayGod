@@ -1494,6 +1494,7 @@
     await refresh();
     const pf = (await api('GET', '/v1/portfolio')).body || {};
     const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
+    const flb = (await api('GET', '/v1/leaderboard/family-portfolio')).body || {};
     const mkt = pf.market || [];
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
@@ -1525,18 +1526,27 @@
           <input data-rwaamt="${m.ticker}" placeholder="$OMR" size="7"> <button class="act" data-rwabuy="${m.ticker}">invest</button></div>`; }).join('')}</div>
 
       ${pf.family ? `
-      <h2 style="margin-top:12px">The Family Book <span class="d" style="font-size:10px">(${pf.family.name} — a seize-resistant flex, bought from the reserve)</span></h2>
+      <h2 style="margin-top:12px">${pf.family.fundName ? pf.family.fundName : 'The Family Book'} <span class="d" style="font-size:10px">(${pf.family.name} — a seize-resistant flex, bought from the reserve)</span>
+        ${pf.family.crest ? `<span class="chip good">★ ${pf.family.crest.name}</span>` : ''}</h2>
       <div class="card"><span class="t">$${fmt(pf.family.bookValue || 0)}</span>
-        <div class="d">reserve ${fmt(pf.family.reserve)} $OMR${pf.family.holdings.length ? ' · ' + pf.family.holdings.map((h) => `${h.ticker} ${h.shares}`).join(' · ') : ' · nothing yet'}</div>
+        <div class="d">reserve ${fmt(pf.family.reserve)} $OMR${pf.family.holdings.length ? ' · ' + pf.family.holdings.map((h) => `${h.ticker} ${h.shares}`).join(' · ') : ' · nothing yet'}${pf.family.invested ? ` · ${fmt(pf.family.invested)} $OMR lifetime into the fund` : ''}</div>
         ${pf.family.canInvest ? `<select id="rwa-fam-t">${mkt.map((m) => `<option value="${m.ticker}">${m.ticker} — $${fmt(m.price)}</option>`).join('')}</select>
-          <input id="rwa-fam-amt" placeholder="$OMR from reserve" size="14"> <button class="act" id="rwa-fam-buy">invest the family money</button>`
-        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money</div>'}
+          <input id="rwa-fam-amt" placeholder="$OMR from reserve" size="14"> <button class="act" id="rwa-fam-buy">invest the family money</button>
+          <div style="margin-top:6px"><input id="fam-fund-name" placeholder="${pf.family.fundName ? 'rename the fund' : 'name the family fund'}" size="18" maxlength="24">
+            <button class="act" id="fam-fund-go">${pf.family.fundName ? 'rename' : 'name it'} (${pf.family.nameCost} $OMR)</button>
+            <span class="d" style="font-size:10px;color:var(--dim)">the fund name heads the family-legit board · crest tier climbs with cumulative family investing</span></div>`
+        : '<div class="d" style="color:var(--dim)">only the boss or underboss invests the family money or names the fund</div>'}
         ${pf.family.dividend ? `<div class="d" style="margin-top:6px">family dividend: a daily yield to the reserve (funded by family investing).${pf.family.dividend.claimable ? '' : pf.family.dividend.cooldownSeconds ? ` next in ${mins(pf.family.dividend.cooldownSeconds)}` : ''}</div>
           ${pf.family.dividend.claimable ? `<button class="act" id="fam-div" style="border-color:var(--neon)">draw the family dividend (~${fmt(pf.family.dividend.estimate)} $OMR)</button>` : ''}` : ''}</div>` : ''}
 
       <h2 style="margin-top:12px">Biggest Books</h2>
       <div class="grid">${(lb.board || []).slice(0, 8).map((row, i) => `
         <div class="card"><span class="t">#${i + 1} ${row.name || 'a ghost'}</span> <span class="d">$${fmt(row.bookValue)}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no books yet — be the first to go legit</span>'}</div>
+
+      <h2 style="margin-top:12px">Biggest Family Funds <span class="d" style="font-size:10px">(a dynasty's collective book — war-proof, boss-built)</span></h2>
+      <div class="grid">${(flb.board || []).slice(0, 8).map((row, i) => `
+        <div class="card"><span class="t">#${i + 1} ${row.name || 'a family'}</span> ${row.crest ? `<span class="chip good">★ ${row.crest}</span>` : ''}
+          <span class="d">$${fmt(row.bookValue)}${row.dynasty && row.family !== row.name ? ` · ${row.family}` : ''}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no family funds yet</span>'}</div>
 
       <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
@@ -1552,6 +1562,8 @@
     if (dc) dc.onclick = () => act('POST', '/v1/portfolio/dividend', {}).then(() => renderPortfolio());
     const fd = $('#fam-div');
     if (fd) fd.onclick = () => act('POST', '/v1/gangs/portfolio/dividend', {}).then(() => renderPortfolio());
+    const ffg = $('#fam-fund-go');
+    if (ffg) ffg.onclick = () => act('POST', '/v1/gangs/portfolio/name', { name: $('#fam-fund-name').value.trim() }).then(() => renderPortfolio());
   }
 
   // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──

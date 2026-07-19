@@ -1309,6 +1309,7 @@ export const PORTFOLIO = {
   // stake-pool "backed emission" rule — never mints, so the fund pays only what investment funds it).
   // So spenders (investors) fund holders' yield: new capital pays the dividend, like a real fund. TIERS
   // are pure STATUS on cumulative $OMR invested (the estate/seal precedent — outside §10.4). All levers.
+  FAMILY_DYNASTY_NAME_OMR: 15,   // name the FAMILY fund from the reserve (boss/underboss; rwa:dynasty burn)
   DIVIDEND_BPS: 1500,            // 15% of each personal invest → the dividend pool (85% still burns)
   DIVIDEND_DAILY_BPS: 30,        // a claim pays 0.30% of book value, capped by the pool
   DIVIDEND_MS: 20 * 3600 * 1000, // the ~daily claim cooldown (DIVIDEND_MS test knob? no — fixed lever)
