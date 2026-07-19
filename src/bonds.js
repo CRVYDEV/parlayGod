@@ -1,0 +1,165 @@
+// THE RESERVE BOND (omerta-reserve-bond-design.md) — Protocol-Owned Liquidity via a disciplined treasury
+// bond (Olympus Pro, without the reflexive mint). A bonder deposits real ETH → receives DISCOUNTED treasury
+// OMR, vested; the ETH deepens the OMR-ETH pool (POL) + feeds the Vig. The payout OMR is a SALE from a
+// BUDGETED tranche (`bond_reserve.capacity_omr`), NEVER a mint, and `committed ≤ capacity` is enforced at
+// bond time — so bond emission is hard-capped and never reflexive. REAL-VALUE / OUT-OF-BAND: this module
+// writes only bonds / bond_reserve / vig_revenue(source='bond') — ZERO `transactions` rows — so the in-game
+// §10.4 sweep is untouched by construction (the fees.js precedent). It carries its OWN invariant
+// (`runBondInvariants`) on the real-value side. The chain layer (the OmertaBond contract + a Bonded watcher
+// + the POL pairing bot) is DORMANT, mainnet-gated on legal + a third-party audit.
+import crypto from 'node:crypto';
+import { GameError } from './game.js';
+import { BONDS, bondPayout } from './rules.js';
+
+const uid = () => crypto.randomUUID();
+const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
+const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : NaN);
+
+// the live OMR-per-ETH oracle (the DEX TWAP on mainnet; the latest Vig buyback print off-chain). null if
+// no price has ever printed — bonding needs a price, so recordBond takes one explicitly (the watcher/mod
+// supplies the TWAP), and the board falls back to this read for display.
+async function oraclePrice(db) {
+  const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+  const p = last ? Number(last.price_omr_per_eth) : null;
+  return (p != null && Number.isFinite(p) && p > 0) ? p : null;
+}
+
+// ── ingest one bond (the recordFeePayment / Store recordStorePurchase twin; chain-dormant, mod/test-driven).
+// Idempotent on nonce. Prices the payout, ENFORCES the tranche cap (committed + payout ≤ capacity), splits
+// the ETH (POL + the Vig buyback), and books the vesting bond. account_id null parks it for reconcile-at-link.
+export async function recordBond(pool, { nonce, accountId = null, principalEth, priceOmrPerEth, discountBps }) {
+  const n = Number(nonce);
+  if (!Number.isInteger(n) || n < 0) throw new GameError('bad_nonce', 'Bad bond nonce.');
+  const eth = num(principalEth), price = num(priceOmrPerEth);
+  if (!(eth >= BONDS.MIN_PRINCIPAL_ETH)) throw new GameError('min', `A bond takes at least ${BONDS.MIN_PRINCIPAL_ETH} ETH.`);
+  if (!(price > 0)) throw new GameError('price', 'A bond needs a live OMR-ETH price.');
+  const disc = discountBps == null ? BONDS.DISCOUNT_BPS : Number(discountBps);
+  if (!(Number.isFinite(disc) && disc >= 0 && disc <= BONDS.MAX_DISCOUNT_BPS))
+    throw new GameError('discount', `The discount runs 0–${BONDS.MAX_DISCOUNT_BPS} bps.`);
+  const payout = bondPayout(eth, price, disc);
+  const vestMs = BONDS.VEST_HOURS * 3600000;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // idempotency FIRST (under the tranche lock) — a re-delivered bond is a clean no-op even if the tranche
+    // has since filled (never re-reject a valid, already-booked bond as over_capacity).
+    await client.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1 FOR UPDATE');
+    if ((await client.query('SELECT 1 FROM bonds WHERE nonce=$1', [n])).rows[0]) {
+      await client.query('ROLLBACK'); return { recorded: false, duplicate: true };
+    }
+    const res = (await client.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0];
+    // THE ANTI-PONZI CAP: the treasury can never promise more OMR than it budgeted (the full-reserve-queue
+    // discipline). Over the tranche → reject; the treasury must top up (mod/bond/fund) first.
+    if (Number(res.committed_omr) + payout > Number(res.capacity_omr) + 1e-6) {
+      await client.query('ROLLBACK');
+      throw new GameError('over_capacity', 'The bond tranche is exhausted — the treasury must top it up.');
+    }
+    const polEth = round6(eth * BONDS.POL_BPS / 10000), vigEth = round6(eth - polEth);
+    await client.query(
+      'INSERT INTO bonds (id, nonce, account_id, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uid(), n, accountId, round6(eth), payout, round6(price), disc, vestMs]);
+    await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2 WHERE id=1', [payout, polEth]);
+    // the Vig share → the EXISTING flywheel (source 'bond'): runVigBuyback spends it → reserve + prize pool,
+    // so bonds strengthen extraction-≤-inflow too. gross_eth == vig_eth (the bond only contributes its Vig
+    // share to the Vig accounting; the POL share lives in bond_reserve.pol_eth). Idempotent on (source,ref).
+    if (!(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
+      await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
+    await client.query('COMMIT');
+    return { recorded: true, payoutOmr: payout, polEth, vigEth, attributed: !!accountId };
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+}
+
+// vested OMR for a bond row at `now` (linear over vest_ms)
+const vestedOf = (b, now = Date.now()) =>
+  round6(Number(b.payout_omr) * Math.min(1, Math.max(0, now - new Date(b.opened_at).getTime()) / Number(b.vest_ms)));
+
+// ── claim vested OMR (accounting off-chain; the real release is the OmertaBond contract on mainnet). ──
+export async function claimBond(pool, accountId, bondId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const b = (await client.query('SELECT * FROM bonds WHERE id=$1 AND account_id=$2 FOR UPDATE', [bondId, accountId])).rows[0];
+    if (!b) { await client.query('ROLLBACK'); throw new GameError('not_found', 'No such bond of yours.'); }
+    const claimable = round6(vestedOf(b) - Number(b.claimed_omr));
+    if (!(claimable > 0)) { await client.query('ROLLBACK'); throw new GameError('nothing', 'Nothing vested to claim yet.'); }
+    await client.query('UPDATE bonds SET claimed_omr = claimed_omr + $2 WHERE id=$1', [bondId, claimable]);
+    await client.query('COMMIT');
+    return { ok: true, claimed: claimable, note: 'Off-chain accounting — the on-chain OmertaBond contract releases the real OMR (mainnet, dormant).' };
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+}
+
+// ── the treasury tops up the bond tranche (the budget the protocol will bond out). A treasury act (mod). ──
+export async function fundBondTranche(pool, omr) {
+  const amt = num(omr);
+  if (!(amt > 0)) throw new GameError('bad_amount', 'Fund a positive OMR amount.');
+  await pool.query('UPDATE bond_reserve SET capacity_omr = capacity_omr + $1 WHERE id=1', [round6(amt)]);
+  const r = (await pool.query('SELECT capacity_omr, committed_omr FROM bond_reserve WHERE id=1')).rows[0];
+  return { ok: true, added: round6(amt), capacityOmr: round6(Number(r.capacity_omr)), committedOmr: round6(Number(r.committed_omr)) };
+}
+
+// ── GET /v1/bonds — public: the offering + remaining capacity + the oracle + your bonds. Informational
+// (real bonds are on-chain at the mainnet paywall — the Store's on-chain-note precedent). ──
+export async function bondBoard(pool, accountId) {
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
+  const remaining = round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0)));
+  const oracle = await oraclePrice(pool);
+  const mine = accountId ? (await pool.query('SELECT * FROM bonds WHERE account_id=$1 ORDER BY opened_at DESC', [accountId])).rows : [];
+  const now = Date.now();
+  return {
+    offering: { discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS, polBps: BONDS.POL_BPS, vigBps: BONDS.VIG_BPS, minEth: BONDS.MIN_PRINCIPAL_ETH },
+    oracle, // OMR per ETH (null until a Vig buyback prints a price)
+    reserve: { capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)), remainingOmr: remaining, polEth: round6(Number(r.pol_eth || 0)) },
+    // an illustrative quote for 1 ETH at the current oracle + discount (display only)
+    quote: oracle ? { forEth: 1, payoutOmr: bondPayout(1, oracle, BONDS.DISCOUNT_BPS) } : null,
+    yours: mine.map((b) => {
+      const vested = vestedOf(b, now);
+      return { id: b.id, principalEth: round6(Number(b.principal_eth)), payoutOmr: round6(Number(b.payout_omr)),
+        discountBps: Number(b.discount_bps), vestedOmr: vested, claimedOmr: round6(Number(b.claimed_omr)),
+        claimableOmr: round6(Math.max(0, vested - Number(b.claimed_omr))),
+        fullyVested: now - new Date(b.opened_at).getTime() >= Number(b.vest_ms) };
+    }),
+    isBacker: mine.length > 0, // "Treasury Backer" — pure STATUS (derived; no gameplay power, no §10.4 surface)
+    note: 'Bonds are purchased on-chain at the OmertaBond paywall (mainnet, dormant); this endpoint is informational.',
+  };
+}
+
+// ── ops view (the founder's bond dashboard) — capacity/committed/remaining + POL + the Vig share + the invariant. ──
+export async function bondStatus(pool) {
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
+  const bonds = Number((await pool.query('SELECT COUNT(*) n FROM bonds')).rows[0].n);
+  const claimed = round6(Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s));
+  const vigEth = round6(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s));
+  const inv = await runBondInvariants(pool);
+  return {
+    capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)),
+    remainingOmr: round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0))),
+    polEth: round6(Number(r.pol_eth || 0)), vigEth, bonds, claimedOmr: claimed,
+    invariant: inv.ok, checks: inv.checks,
+    chainDormant: true, // the OmertaBond contract + watcher + POL bot are the mainnet milestone (legal + audit gated)
+  };
+}
+
+// ── runBondInvariants — the real-value side (the runVigInvariants twin). Proves the bond is disciplined:
+// committed matches the rows, never over-budget, never over-claimed, the ETH split reconciles, discounts capped. ──
+export async function runBondInvariants(pool) {
+  const checks = [];
+  const push = (name, lhs, rhs, tol = 0.01) => checks.push({ name, lhs: round6(lhs), rhs: round6(rhs), ok: Math.abs(lhs - rhs) <= tol });
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0] || { capacity_omr: 0, committed_omr: 0, pol_eth: 0 };
+  const sumPayout = Number((await pool.query('SELECT COALESCE(SUM(payout_omr),0) s FROM bonds')).rows[0].s);
+  const sumClaimed = Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s);
+  const sumEth = Number((await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds')).rows[0].s);
+  const vigEth = Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s);
+  const committed = Number(r.committed_omr), capacity = Number(r.capacity_omr), polEth = Number(r.pol_eth);
+  // (1) committed matches the rows
+  push('bond committed == Σ payout', committed, sumPayout);
+  // (2) THE CAP: committed ≤ capacity (one-sided — never over-budget)
+  checks.push({ name: 'bond committed ≤ capacity', lhs: round6(committed), rhs: round6(capacity), ok: committed <= capacity + 0.01 });
+  // (3) never over-claimed
+  checks.push({ name: 'bond claimed ≤ committed', lhs: round6(sumClaimed), rhs: round6(committed), ok: sumClaimed <= committed + 0.01 });
+  // (4) the ETH split reconciles (POL + Vig == principal — nothing skimmed)
+  push('bond ETH split == principal', polEth + vigEth, sumEth);
+  // (5) discounts capped
+  const badDisc = Number((await pool.query('SELECT COUNT(*) n FROM bonds WHERE discount_bps > $1', [BONDS.MAX_DISCOUNT_BPS])).rows[0].n);
+  checks.push({ name: 'bond discounts ≤ MAX', lhs: badDisc, rhs: 0, ok: badDisc === 0 });
+  return { ok: checks.every((c) => c.ok), checks };
+}

@@ -1055,6 +1055,33 @@ CREATE TABLE IF NOT EXISTS vig_prize_pool (
 );
 INSERT INTO vig_prize_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM vig_prize_pool);
 
+-- THE RESERVE BOND (omerta-reserve-bond-design.md) — Protocol-Owned Liquidity via a disciplined treasury
+-- bond. Real-value / OUT-OF-BAND (the fees.js precedent): these tables + vig_revenue(source='bond') are the
+-- ONLY writes; §10.4 (in-game `transactions`) is untouched. The chain layer (the OmertaBond contract + a
+-- Bonded watcher) is DORMANT, mainnet-gated on legal + audit. Numbers are founder sign-off levers.
+CREATE TABLE IF NOT EXISTS bonds (
+  id TEXT PRIMARY KEY,
+  nonce BIGINT UNIQUE NOT NULL,        -- idempotency (the on-chain Bonded nonce; comps use a synthetic nonce)
+  account_id TEXT,                     -- the bonder (null = parked for reconcile-at-link, the Store precedent)
+  principal_eth NUMERIC NOT NULL,      -- real ETH deposited
+  payout_omr NUMERIC NOT NULL,         -- treasury OMR owed to the bonder (discounted), vested linearly
+  oracle_price NUMERIC NOT NULL,       -- OMR-per-ETH at bond time (mainnet: the DEX TWAP; here a param)
+  discount_bps INT NOT NULL,           -- the bonder's incentive (≤ MAX_DISCOUNT_BPS)
+  claimed_omr NUMERIC NOT NULL DEFAULT 0,
+  vest_ms BIGINT NOT NULL,             -- linear vesting window
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_bonds_account ON bonds (account_id);
+-- the tranche: the treasury's budgeted OMR for bonding (the anti-Ponzi cap — committed can never exceed it),
+-- + the POL ETH acquired (paired into the OMR-ETH pool on mainnet).
+CREATE TABLE IF NOT EXISTS bond_reserve (
+  id INT PRIMARY KEY,
+  capacity_omr NUMERIC NOT NULL DEFAULT 0,   -- the budgeted OMR the treasury will bond out (set via mod/bond/fund)
+  committed_omr NUMERIC NOT NULL DEFAULT 0,  -- Σ payout_omr of all bonds (invariant: ≤ capacity_omr)
+  pol_eth NUMERIC NOT NULL DEFAULT 0          -- Σ POL share of bonded ETH (deepens the OMR-ETH pool on mainnet)
+);
+INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);
+
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.
 CREATE TABLE IF NOT EXISTS amm_pool (

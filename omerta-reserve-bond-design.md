@@ -1,0 +1,90 @@
+# The Reserve Bond — design (Option C: disciplined treasury bonding for Protocol-Owned Liquidity)
+
+**Goal:** deepen and OWN the OMR-ETH pool (Protocol-Owned Liquidity) instead of renting it from mercenary
+farmers — the durable half of the OlympusDAO idea — **without** the discredited half (a reflexive,
+inflationary token mint). This document specifies a bond that fits OMERTÀ's three hard walls:
+
+1. **OMR is fixed-supply on-chain — there is no mint.** A bond therefore SELLS a *budgeted allocation of
+   existing treasury OMR*, never mints. Total OMR ever bonded out is hard-capped by the tranche.
+2. **§10.4 is sacred ("value transfers, never minted").** The bond is REAL-VALUE, OUT-OF-BAND (real ETH in,
+   treasury OMR out) — the `fees.js` precedent: it writes ZERO `transactions` rows, so the in-game §10.4
+   sweep is untouched by construction. It carries its OWN invariant on the real-value side (the
+   `runVigInvariants` twin).
+3. **Legal posture.** A bond is a financial primitive that could read as a yield product. It ships
+   **off-chain-first / chain-dormant** (the M6/Vig/Store pattern), and the on-chain contract + real ETH are
+   **MAINNET-GATED on legal counsel + a third-party audit**, exactly like R2/R3 and the withdrawal rail.
+   **No APY / price-appreciation marketing** — the bond is framed as "help capitalize the treasury," not
+   "earn X%." (Same rule the whole codebase already holds.)
+
+## The mechanism (Olympus Pro, disciplined)
+A bonder deposits **ETH** (a "reserve bond") or **OMR-ETH LP tokens** (a "liquidity bond") and receives
+**OMR at a discount, vested linearly** over `VEST_HOURS`. The protocol keeps the ETH/LP forever as POL +
+treasury. The discount is the bonder's incentive; the vesting stops an instant dump.
+
+**Sourcing (the anti-Ponzi discipline):** the payout OMR comes from a **budgeted tranche**
+(`bond_reserve.capacity_omr` — real treasury OMR the team pre-allocated, exactly like the VoucherClaim
+tranche). The invariant `committed_omr ≤ capacity_omr` is enforced at bond time (the full-reserve-queue
+discipline applied to bonds): **the protocol can never promise more OMR than it budgeted.** When the tranche
+is exhausted, bonding pauses until the treasury refills it. So bond emission is BOUNDED and never reflexive.
+
+**Pricing.** `payout_omr = principal_eth × oracle_price × 1/(1 − DISCOUNT)`, where `oracle_price` is the live
+OMR-ETH market rate (mainnet: the DEX TWAP the Vig bot already reads; off-chain: a param). `DISCOUNT` (≤
+`MAX_DISCOUNT`) is the incentive — the protocol accepts paying a premium in OMR to acquire the ETH/LP. That
+premium IS the cost of owning liquidity; it is bounded by the tranche.
+
+**Where the ETH goes (the split — the Store's three-way-split precedent):**
+- `POL_BPS` → **Protocol-Owned Liquidity**: paired with treasury OMR into the OMR-ETH pool (deepens the pool,
+  the whole point — recorded as `bond_pol.eth`).
+- `VIG_BPS` → **`vig_revenue` (source `bond`)**: feeds the EXISTING Vig buyback → the withdrawal reserve +
+  the prize pool, so bonds ALSO strengthen "extraction ≤ inflow" (the Store precedent — `runVigInvariants`'
+  `spend ≤ revenue` absorbs bond revenue unchanged).
+- (POL_BPS + VIG_BPS = 10000.)
+
+So a bond STRENGTHENS the economy on two axes — pool depth (POL) and reserve backing (Vig) — while its OMR
+cost is hard-capped by the treasury's own budget. Unlike Olympus, there is no mint and no reflexive APY.
+
+## §10.4 & the bond invariant
+**In-game §10.4: UNTOUCHED.** `bonds.js` writes only `bonds` / `bond_reserve` / `bond_pol` /
+`vig_revenue(source='bond')` — never `transactions`. Real ETH + treasury OMR are out-of-band value (the
+`fees.js` rule). The test asserts the full in-game §10.4 sweep stays drift-0 through a bond run.
+
+**`runBondInvariants` (the real-value side, the `runVigInvariants` twin):**
+- (1) `bond_reserve.committed_omr == Σ bonds.payout_omr` (accounting matches the rows).
+- (2) `committed_omr ≤ capacity_omr` (**never over-budget** — the hard anti-Ponzi cap).
+- (3) `Σ bonds.claimed_omr ≤ committed_omr` (never release more than owed).
+- (4) `Σ bonds.principal_eth == bond_pol.eth + Σ vig_revenue.gross_eth(source='bond')` (the ETH split
+  reconciles — nothing skimmed).
+- (5) every bond's `discount_bps ≤ MAX_DISCOUNT` (no rogue discount).
+
+## Lifecycle (off-chain-first, chain-dormant)
+- **`recordBond`** (the `recordFeePayment`/Store `recordStorePurchase` twin) — ingest a bond: idempotent on
+  `nonce`; price the payout; **reject if `committed + payout > capacity`** (`over_capacity`); split the ETH
+  (POL + Vig); insert the vesting bond; bump `committed_omr`. Attributes to the payer's linked wallet →
+  account (the Store reconcile-at-link precedent), else parks for `reconcileBonds` at link.
+- **`claimBond`** — vested = `payout × min(1, elapsed/VEST_MS)`; claimable = vested − claimed. Off-chain this
+  is accounting only; on mainnet the on-chain contract releases the real OMR from the tranche. A bonder
+  becomes a **"Treasury Backer"** (a pure STATUS badge, account-level like `patron` — no gameplay power, no
+  §10.4 surface — derived from holding any bond).
+- **Worker**: `runBondBuyback`/POL pairing is the on-chain bot's job (mainnet). Off-chain, `sweepBonds` is a
+  no-op placeholder; the Vig buyback already spends the bond's Vig share.
+
+## Routes
+- `GET /v1/bonds` — public: the offerings (discount, vest, **remaining capacity**), the current oracle
+  price, and your bonds (principal, payout, vested, claimable). Informational — real purchases are on-chain
+  at the (mainnet, dormant) bond paywall, the Store's on-chain-note precedent.
+- `POST /v1/bonds/:id/claim` — claim vested OMR (accounting off-chain; the real release is the on-chain
+  contract).
+- `POST /v1/mod/bond/fund` — set/top-up the tranche capacity (a treasury act; the reserve/fund precedent).
+- `POST /v1/mod/bond/simulate` — mod/QA: drive `recordBond` directly with a synthetic nonce + a price
+  (the Store `mod/store/grant` comp precedent — how the off-chain layer is exercised until the paywall).
+- `GET /v1/mod/bonds` — the ops view: capacity/committed/remaining, POL ETH acquired, Vig ETH routed, the
+  bond invariant. On the admin dashboard's chain panel.
+
+## Deferred (mainnet milestone — legal + audit gated)
+The on-chain **`OmertaBond`** contract (accept ETH/LP → vest OMR from a Safe-funded tranche → forward ETH
+to the POL pairing + the Vig split; pausable; per-bond-capacity capped like VoucherClaim), a **`Bonded`
+event watcher** (the `getLogs` cursor pattern, `watcher.js` precedent), the **POL pairing bot** (pairs the
+POL ETH share with treasury OMR into the DEX pool), and **liquidity bonds** (LP-token deposits). All of it
+is the M6 dormant pattern — recorded/modeled off-chain now, wired only after counsel + the third-party
+audit that already gates mainnet. Numbers (`DISCOUNT`, `MAX_DISCOUNT`, `VEST_HOURS`, the POL/Vig split, the
+tranche capacity) are founder sign-off levers.
