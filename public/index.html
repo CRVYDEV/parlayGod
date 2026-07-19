@@ -240,6 +240,8 @@
     if (body.readyAt) bits.push('the batch is on the burner');
     if (body.heat) bits.push(`heat +${body.heat}`);
     if (body.task && body.cash !== undefined) bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
+    if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
+    if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
@@ -389,7 +391,7 @@
   // ── tabs ──
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
-    loans: 'The Shylock', portfolio: 'Going Legit', life: 'The Life', pen: 'The Pen', law: 'The Law',
+    loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
     city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
@@ -421,6 +423,7 @@
     if (id === 'scores') renderScores();
     if (id === 'loans') renderLoans();
     if (id === 'portfolio') renderPortfolio();
+    if (id === 'estate') renderEstate();
     if (id === 'life') renderLife();
     if (id === 'pen') renderPen();
   }
@@ -1359,6 +1362,42 @@
     const fb = $('#rwa-fam-buy');
     if (fb) fb.onclick = () => act('POST', '/v1/gangs/portfolio/invest',
       { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
+  }
+
+  // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──
+  async function renderEstate() {
+    const t = $('#tab-estate');
+    await refresh();
+    const e = (await api('GET', '/v1/estate')).body || {};
+    const tr = e.trophies || {};
+    t.innerHTML = `
+      ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with clean $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
+      <h2>${e.name ? e.name : (e.tierName || 'No Compound Yet')}
+        <span class="d" style="font-size:11px">${e.tierName ? `· ${e.tierName} · ${fmt(e.spent)} $OMR sunk` : ''}</span></h2>
+      <div class="card"><span class="t">The Deed</span>
+        <div class="d">${e.tierName ? `You hold a ${e.tierName}.` : 'You don\'t own a thing worth showing.'} · ${fmt(Math.floor(e.omr || 0))} $OMR on hand</div>
+        ${e.nextTier ? `<button class="act" id="est-up">move up → ${e.nextTier.name} (${fmt(e.nextTier.omr)} $OMR)</button> <span class="d">${e.nextTier.blurb}</span>` : '<span class="chip good">THE COMPOUND — top of the world</span>'}
+        ${e.tier > 0 ? `<div style="margin-top:6px"><input id="est-name" placeholder="name the place" size="18"> <button class="act" id="est-name-go">name it (${fmt(rules?.estate?.nameOmr ?? 3)} $OMR)</button></div>` : ''}</div>
+
+      <h2 style="margin-top:12px">The Legend <span class="d" style="font-size:10px">(what the place shows off)</span></h2>
+      <div class="card">
+        <div class="d">fleet: ${tr.fleet || 0}${tr.rarestCar ? ` · finest: ${tr.rarestCar}` : ''}</div>
+        <div class="d">arsenal: ${tr.arsenal || 0} gun${tr.arsenal === 1 ? '' : 's'} · legit book: $${fmt(tr.portfolioValue || 0)}</div>
+        <div class="d">bodies: ${tr.kills || 0} · ${tr.hitmanTitle || 'Associate'}${tr.crest ? ` · ${tr.crest}` : ''}</div>
+      </div>
+
+      <h2 style="margin-top:12px">The Wings <span class="d" style="font-size:10px">(one-time $OMR, tier-gated)</span></h2>
+      <div class="grid">${(e.features || []).map((f) => `
+        <div class="card"><span class="t">${f.name}</span>
+          ${f.owned ? '<span class="chip good">built</span>' : f.locked ? `<span class="chip cold">needs tier ${f.minTier}</span>` : ''}
+          <div class="d">${f.blurb}</div>
+          ${f.owned ? '' : f.locked ? '' : `<button class="act" data-estfeat="${f.id}">build (${fmt(f.omr)} $OMR)</button>`}</div>`).join('')}</div>`;
+    const up = $('#est-up');
+    if (up) up.onclick = () => act('POST', '/v1/estate/upgrade', {}).then(() => renderEstate());
+    const nb = $('#est-name-go');
+    if (nb) nb.onclick = () => act('POST', '/v1/estate/name', { name: $('#est-name').value }).then(() => renderEstate());
+    t.querySelectorAll('[data-estfeat]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/estate/feature/${b.dataset.estfeat}`, {}).then(() => renderEstate()));
   }
 
   // ── THE LIFE: the skill tree + the five fixtures who remember your name ──

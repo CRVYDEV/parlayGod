@@ -27,12 +27,13 @@ import * as World from './world.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
+import * as Estate from './estate.js';
 import * as Ops from './ops.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO } from './rules.js';
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -348,6 +349,7 @@ export async function buildServer() {
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX },
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
+    estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -491,6 +493,16 @@ export async function buildServer() {
   app.post('/v1/gangs/portfolio/invest', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.familyInvest(ch, req.body?.ticker, req.body?.omr, client, h)));
   app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
+
+  // THE ESTATE ("the compound"): the deep personal $OMR sink + a "home" that displays your legend.
+  app.get('/v1/estate', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.estateBoard(ch, client, h)));
+  app.post('/v1/estate/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.upgradeEstate(ch, client, h)));
+  app.post('/v1/estate/feature/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.unlockFeature(ch, req.params.id, client, h)));
+  app.post('/v1/estate/name', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.nameEstate(ch, req.body?.name, client, h)));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));

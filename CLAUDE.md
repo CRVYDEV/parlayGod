@@ -1561,6 +1561,31 @@ drift-0. Deferred: per-player drill-down (the `/v1/mod/audit` tx/rng view exists
 charts/history (telemetry rows are there), a lever-tuning surface (BALANCE.md is still the source of
 truth; live retune needs a config store).
 
+**THE ESTATE ("the compound") — BUILT** (`src/estate.js`, `test/estate.js` — the 22nd suite; design
+`omerta-estate-auction-design.md`, which also specs the paired Auction House, NOT yet built). A deep
+PERSONAL $OMR sink + a new "home" surface — the first answer to the standing economy flag (every prior
+burn was one-time; supply pools into staking). PURE STATUS (display-only, no gameplay power → outside
+the sim-audited balance, the vanity/seal/Portfolio precedent); the ONLY §10.4 flow is the enumerated
+`estate:*` $OMR BURN through the vanity `spendOmr` till (account bucket). **Account-level** (`estates
+(account_id)` PK) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe;
+`kept.estate` in the report, the Portfolio precedent). **Tiers** (`ESTATE.TIERS`, sequential like family
+seals — Safe House 40 → Row House 120 → Uptown Brownstone 350 → Country Estate 900 → The Compound 2500
+$OMR; `upgradeEstate` `estate:tier`); **features** (`ESTATE.FEATURES`, 10 one-time tier-gated unlocks —
+Trophy Room, Wine Cellar, …, The Menagerie; `unlockFeature` `estate:feature`, `minTier`-gated + no
+double-buy); **name it** (`nameEstate` `estate:name`, needs a place first); **trophies** — the board
+computes a display of your ACTUAL legend from holdings (rarest car, arsenal, portfolio book value,
+kills + hitman rank, family seal — display-only, moves nothing); **estate value** = lifetime $OMR sunk
+(`spent_omr`). §10.4: `estate:` joined the `omr` vocabulary + `omrBurns` (status, no new bucket/faucet —
+`$OMR conservation` exact with one burn term). Routes `GET /v1/estate`, `POST /v1/estate/upgrade|feature/
+:id|name`; surfaced on the view (a one-line summary) + `/v1/rules` (the catalog); console gained a "The
+Estate" tab (the deed, the tier ladder, the Legend trophies, the wings, naming). `test/estate.js` proves
+the ladder + gates, trophies from real holdings, DEATH SURVIVAL (heir inherits), spends == ledgered
+`estate:*` burns, and the §10.4 vocabulary + conservation. Suite 22/22 + sim drift-0. All numbers are
+founder sign-off levers. Deferred (Estate step two): recurring **staff & upkeep** (a $OMR wage roster,
+the pad/nut precedent), the gala, an estate leaderboard. **NEXT: the Auction House** — the paired
+competitive/recurring $OMR sink (weekly lots, $OMR bid escrow → its own §10.4 escrow check → burn the
+winning bid; design already written, build + red-team the new $OMR-escrow surface before it's done).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

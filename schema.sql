@@ -800,6 +800,18 @@ CREATE TABLE IF NOT EXISTS gang_portfolios (
   PRIMARY KEY (gang_id, ticker)
 );
 
+-- ── THE ESTATE ("the compound"): the deep personal $OMR sink + "home" display ──
+-- Account-level (keyed on account_id) so it SURVIVES DEATH — the heir inherits the compound (the
+-- Portfolio precedent, never in the runEstate wipe). PURE STATUS: tier + comma-joined feature ids +
+-- lifetime $OMR sunk (the "estate value"). The only ledgered flow is the 'estate:*' $OMR burn.
+CREATE TABLE IF NOT EXISTS estates (
+  account_id TEXT PRIMARY KEY,
+  name TEXT,
+  tier INT NOT NULL DEFAULT 0,
+  features TEXT NOT NULL DEFAULT '',        -- comma-joined feature ids (pg-mem-safe; avoid arrays)
+  spent_omr NUMERIC NOT NULL DEFAULT 0      -- lifetime $OMR sunk into the estate (a status figure)
+);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in
