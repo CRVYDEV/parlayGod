@@ -113,20 +113,29 @@ assert(r.body.board.length >= 1, 'the investor is on it');
 assert.equal(r.body.board[0].name, heir.name, 'the heir\'s book leads (it carried over)');
 assert(r.body.board[0].bookValue > 0, 'valued at the daily price');
 
-// ── STEP TWO (1) — the RICO GRADUATION: a BIG legit move draws heat + is safehouse-blocked ──
+// ── STEP TWO (1) — the RICO GRADUATION + audit F1 (STRUCTURING is caught) + F4 (jail gate) ──
 const whale = await mk('Made Man Moe');
 await acctOmr(whale.id, 6000); grantDrift += 6000;
-await pool.query(`UPDATE characters SET heat=0, safe_until=NULL WHERE id='${whale.id}'`);
-r = await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR } });
-assert.equal(r.code, 200, 'a big legit move goes through');
-assert.equal(r.body.scrutiny, true, 'but it draws scrutiny');
-assert((await meOf(whale.token)).heat > 0, 'the paper trail raised heat');
-// a small buy flies under the radar (no scrutiny flag)
-assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR - 1 } })).body.scrutiny, false, 'small buys go unnoticed');
-// a big move from a safehouse is blocked (P1.3 — hiding, not moving money); a small one is fine
+await pool.query(`UPDATE characters SET heat=0, safe_until=NULL, rwa_used=0, rwa_at=NULL WHERE id='${whale.id}'`);
+// a single SMALL buy flies under the radar
+r = await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR - 1 } });
+assert.equal(r.body.scrutiny, false, 'one small buy goes unnoticed');
+assert.equal((await meOf(whale.token)).heat, 0, 'no heat under the radar');
+// STRUCTURING: a SECOND sub-threshold buy crosses the ROLLING-WINDOW sum → scrutiny trips (F1 fix —
+// the per-call-only threshold used to let 999-on-repeat convert unlimited $OMR heat-free)
+r = await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR - 1 } });
+assert.equal(r.body.scrutiny, true, 'structuring is caught — the windowed sum crossed the line');
+assert((await meOf(whale.token)).heat > 0, 'the paper trail finally raised heat');
+// once flagged (windowed sum still over), even a small follow-up from a safehouse is blocked (P1.3)
 await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${whale.id}'`);
-assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR } })).body.error, 'safe', 'no big legit moves from the safehouse');
-assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: 10 } })).code, 200, 'a small buy still flies under the radar');
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: 10 } })).body.error, 'safe', 'no moving money into fronts from a safehouse once under the microscope');
+// F4 — a jailed player can't invest at all (consistency with other extraction-adjacent acts)
+await pool.query(`UPDATE characters SET safe_until=NULL, jail_until = now() + interval '1 hour' WHERE id='${whale.id}'`);
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: whale.token, body: { ticker: 'AAPL', omr: 10 } })).body.error, 'jailed', "can't move money into fronts from a cell");
+// a FRESH account: a single BIG buy trips scrutiny at once
+const bigshot = await mk('Big Sal');
+await acctOmr(bigshot.id, 3000); grantDrift += 3000;
+assert.equal((await call('POST', '/v1/portfolio/invest', { token: bigshot.token, body: { ticker: 'AAPL', omr: PORTFOLIO.SCRUTINY_MIN_OMR } })).body.scrutiny, true, 'a single big move trips it immediately');
 
 // ── STEP TWO (2) — the SEASON PRIZE: the top season grinder earns the champion's moonshot (SPCX) ──
 const champ = await mk('Season King Sal');
