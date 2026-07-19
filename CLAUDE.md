@@ -2027,10 +2027,34 @@ PK — SURVIVES DEATH, the patron-badge precedent); the owner `applyDecor(style)
 refused before the burn (the mint-credit precedent). Console: renown banner + leaderboard, a decor picker
 (owned cosmetics), list/unlist + buy-it-out on the nightlife board, decor/sale chips. `test/speakeasy.js`
 extended (renown, the cosmetic tier, the buyout — all gates + the taxed transfer + ownership/guest-list
-reset + survives death). Suite 28/28 + sim drift-0. **Deferred (step four)**: the cosmetics-as-NFT +
-resale-royalty market (the GearVault/chain rail — mainnet-gated, the M6 dormant pattern; the account-level
-unlock built here is exactly what that NFT represents, so it's forward-compatible), a HOSTILE
-buyout/contest, and a cross-club renown PERK axis (renown as access/status, never gameplay power).
+reset + survives death). Suite 28/28 + sim drift-0. **Step four — the hostile takeover + the renown perk —
+BUILT** (`src/speakeasy.js`; off-chain, §10.4-clean, sign-off levers). **The STANDOVER** (`standoverSpeakeasy`,
+`POST /v1/speakeasy/:district/standover`, two-party) — the hostile forced-sale, deliberately an INSTANT
+muscle contest (the shakedown pattern) NOT a windowed escrow auction, so it adds NO new §10.4 escrow surface:
+the challenger pays `STANDOVER.FEE` ($250k, a `speakeasy:standover` cash SINK that BURNS win or lose — the
+npcHit-fee precedent), rolls `p = clamp(BASE_P + (atk−def)/STAT_SCALE, MIN_P, MAX_P)` (the muscle+cunning/2
+effStat contest, BRUISER-boosted); a WIN forces the owner to SELL at the club's ASSESSED build value
+(`assessedValueOf(tier)` = open cost + every tier climbed) — the owner is PAID (taxed, IDENTICAL to
+`speakeasy:buyout`), a forced SALE not theft; the challenger risks the fee AND must carry the full assessed
+price (so a Cathedral standover commits ~$19M — griefing is economically bounded), a LOSS burns only the fee
++ costs health. Per-club `STANDOVER.CD_MS` (24h) cooldown (`standover_cd_until`) win or lose. Gated
+`MIN_LEVEL`/at-district/jailed/hosp/safe/one-per-man/not-owner/family-omertà; club exists/not shut/not on
+cooldown. `SPEAKEASY_STANDOVER_P` is a TEST-ONLY roll knob (the raid precedent). §10.4: fee SINK + on-win the
+existing `speakeasy:buyout` transfer — both under the `speakeasy:` prefix → **no escrow bucket, no invariant,
+no vocab change**; the forced-out owner forfeits pending take (the raid/territory-seize precedent, never
+minted); no new death surface (instant). **The renown PERK** — renown-EARNED decor styles (access/status,
+never power): `RENOWN.STYLE_UNLOCKS` (`house` 800 / `crown` 2000) gate two new `DECOR_STYLES`; `applyDecor`
+accepts a style if you OWN it (store_cosmetics) OR your renown clears the threshold — a cosmetic earned by
+being seen, no ETH/PLEX. §10.4 untouched. New column `speakeasies.standover_cd_until`; the buyout's
+ownership-transfer is refactored into a shared `resetClubToNewOwner` helper (used by buyout + standover).
+Console: a "stand over it" button on the nightlife board (fee + assessed price shown; hidden while protected)
++ earned decor (★) in the picker. `test/speakeasy.js` covers the standover (cash gate, fee-burns-win/lose, a
+loss keeps the club + cooldown, a win forces a taxed sale + ownership/guest-list reset) + renown-earned decor.
+Suite 28/28 + sim drift-0. **Deferred (step five)**: the cosmetics-as-NFT + resale-royalty market (the
+GearVault/chain rail — mainnet-gated, the M6 dormant pattern; the step-3 `store_cosmetics` unlock is exactly
+what that NFT represents, so it's forward-compatible), the WINDOWED contested-auction takeover variant
+(escrow the owner can defend/outbid — deferred for the leaner instant Standover), and deeper renown perks
+(access/status only).
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

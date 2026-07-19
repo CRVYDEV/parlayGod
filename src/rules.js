@@ -1486,10 +1486,19 @@ export const SPEAKEASY = {
       { min: 0, name: 'Nobody' }, { min: 25, name: 'A Face' }, { min: 100, name: 'A Regular' },
       { min: 300, name: 'High Roller' }, { min: 800, name: 'Big Shot' }, { min: 2000, name: 'King of the Night' },
     ],
+    // ── step four — renown PERK (access/status, never power): EARNED decor styles unlocked by renown (no
+    // ETH/PLEX — a cosmetic you earn by being seen). id → the renown threshold to apply it. Style-name in DECOR_STYLES.
+    STYLE_UNLOCKS: { house: 800, crown: 2000 },
   },
   // ── step three — the ETH COSMETIC DECOR styles (Store SKUs grant the account-level unlock; the owner
-  // applies one to their club). Display-only — zero gameplay effect (the vanity/status posture). id → name.
-  DECOR_STYLES: { deco: 'Art Deco', gilded: 'Gilded Age', midnight: 'Midnight Velvet' },
+  // applies one to their club) + step-four renown-EARNED styles (house/crown, gated by RENOWN.STYLE_UNLOCKS).
+  // Display-only — zero gameplay effect (the vanity/status posture). id → name.
+  DECOR_STYLES: { deco: 'Art Deco', gilded: 'Gilded Age', midnight: 'Midnight Velvet', house: 'House Favorite', crown: 'The Crown' },
+  // ── step four — the STANDOVER (a hostile forced-sale). A challenger pays a FEE (burns win or lose) and
+  // rolls a muscle/cunning contest vs the owner; a WIN forces the owner to SELL at the club's ASSESSED
+  // (build) value — the owner is PAID (taxed, the buyout pattern), so it's a forced sale, never theft. The
+  // challenger risks the fee + must carry the full assessed price. Per-club cooldown bounds spam. Levers.
+  STANDOVER: { FEE: 250000, BASE_P: 0.35, STAT_SCALE: 400, MIN_P: 0.05, MAX_P: 0.75, HEAT: 15, CD_MS: 86400000 },
 };
 export const speakeasyTierOf = (tier) => SPEAKEASY.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const speakeasyRoundOf = (id) => SPEAKEASY.ROUNDS.find((r) => r.id === id) || null;
@@ -1499,6 +1508,15 @@ export const renownRankOf = (score) =>
 // own-property lookup only (the landmarkOf precedent — else '__proto__'/'constructor' slip the validation gate)
 export const decorStyleOf = (id) =>
   (Object.prototype.hasOwnProperty.call(SPEAKEASY.DECOR_STYLES, id) ? SPEAKEASY.DECOR_STYLES[id] : null);
+// the renown threshold to APPLY an earned style (undefined → a bought/Store style, gated by store_cosmetics)
+export const styleUnlockOf = (id) =>
+  (Object.prototype.hasOwnProperty.call(SPEAKEASY.RENOWN.STYLE_UNLOCKS, id) ? SPEAKEASY.RENOWN.STYLE_UNLOCKS[id] : null);
+// the STANDOVER forced-sale price = what the owner sank into the club (open cost + every tier build climbed)
+export const assessedValueOf = (tier) => {
+  let v = SPEAKEASY.OPEN_COST;
+  for (const t of SPEAKEASY.TIERS) if (t.tier > 0 && t.tier <= Number(tier)) v += t.cost;
+  return v;
+};
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market

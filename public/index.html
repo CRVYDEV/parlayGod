@@ -252,6 +252,7 @@
     if (body.win !== undefined && body.bet !== undefined) bits.push(body.win ? `the wheel hit — +$${fmt(body.payout - body.bet)}` : `the wheel came up cold — −$${fmt(body.bet)}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
     if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
+    if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
     if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
@@ -1369,7 +1370,10 @@
         <div style="margin-top:6px"><input id="sp-name" placeholder="${mine.name ? 'rename the club' : 'name the club'}" size="18" maxlength="24">
           <button class="act" id="sp-name-go">${mine.name ? 'rename' : 'name it'} (${sp.nameOmr} $OMR)</button></div>
         <div style="margin-top:6px" class="d">Decor style${mine.decor ? ` — currently <b>${mine.decorName}</b>` : ' — stock'}:
-          ${ownedDecor.length ? ownedDecor.map((s) => `<button class="act" data-decor="${s}"${mine.decor === s ? ' style="border-color:var(--neon)"' : ''}>${styles[s] || s}</button>`).join(' ') + (mine.decor ? ' <button class="act" data-decor="">clear to stock</button>' : '') : '<span style="color:var(--dim)">buy a cosmetic style in The Store</span>'}</div>
+          ${(() => { const earned = Object.keys(b.styleUnlocks || {}).filter((s) => (rn.renown || 0) >= b.styleUnlocks[s]);
+            const avail = [...new Set([...ownedDecor, ...earned])];
+            return avail.length ? avail.map((s) => `<button class="act" data-decor="${s}"${mine.decor === s ? ' style="border-color:var(--neon)"' : ''}>${styles[s] || s}${earned.includes(s) && !ownedDecor.includes(s) ? ' ★' : ''}</button>`).join(' ') + (mine.decor ? ' <button class="act" data-decor="">clear to stock</button>' : '')
+              : '<span style="color:var(--dim)">buy a style in The Store, or earn one with renown (★)</span>'; })()}</div>
         <div style="margin-top:6px" class="d">${mine.salePrice ? `On the market for $${fmt(mine.salePrice)} — <button class="act" id="sp-unlist">take it off</button>` : `Sell the house: <input id="sp-sale" placeholder="ask $" size="8"> <button class="act" id="sp-list">list it</button>`}</div></div>`
       : canOpenHere ? `<div class="card"><span class="t">Open a club here</span>
           <div class="d">${distName(me.loc)} has no house yet — plant your flag ($${fmt(sp.openCost)}, level ${sp.minLevel}+).</div>
@@ -1394,7 +1398,8 @@
           <div class="d">${distName(c.district)} · ${c.tierName} · ${c.owner} · prestige ${c.prestige} · ${c.regulars} regular${c.regulars === 1 ? '' : 's'}</div>
           ${c.guestList?.length ? `<div class="d">seen here: ${c.guestList.map((g) => `${g.you ? '<b>' + g.name + '</b>' : g.name}${g.regular ? '★' : ''}`).join(', ')}</div>` : '<div class="d" style="color:var(--dim)">quiet tonight</div>'}
           ${!c.mine && c.district !== me.loc ? `<button class="act" data-travel="${c.district}">go there</button>` : ''}
-          ${c.salePrice && !c.mine && !mine && c.district === me.loc ? `<button class="act" data-buy="${c.district}" style="border-color:var(--gold)">buy it out ($${fmt(c.salePrice)})</button>` : ''}</div>`).join('')
+          ${c.salePrice && !c.mine && !mine && c.district === me.loc ? `<button class="act" data-buy="${c.district}" style="border-color:var(--gold)">buy it out ($${fmt(c.salePrice)})</button>` : ''}
+          ${!c.mine && !mine && c.district === me.loc && !c.shut ? (c.standoverProtected ? '<span class="chip">just leaned on — cooling off</span>' : `<button class="act" data-standover="${c.district}" style="border-color:var(--bad)">stand over it (fee $${fmt(b.standover?.fee || 250000)}, forces a sale at $${fmt(c.assessedValue)})</button>`) : ''}</div>`).join('')
         || '<span class="d" style="color:var(--dim)">no clubs open yet — be the first proprietor</span>'}</div>
       ${b.open?.length ? `<div class="d" style="color:var(--dim);margin-top:8px">Open districts: ${b.open.map(distName).join(', ')} — travel there to plant a flag.</div>` : ''}`;
 
@@ -1409,6 +1414,7 @@
     const li = $('#sp-list'); if (li) li.onclick = () => act('POST', '/v1/speakeasy/list', { price: Number($('#sp-sale').value) }).then(() => renderSpeakeasy());
     const ul = $('#sp-unlist'); if (ul) ul.onclick = () => act('POST', '/v1/speakeasy/unlist', {}).then(() => renderSpeakeasy());
     t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${x.dataset.buy}/buy`, {}).then(() => renderSpeakeasy()));
+    t.querySelectorAll('[data-standover]').forEach((x) => x.onclick = () => { if (confirm('Stand over this club? The fee burns win or lose; a win forces a sale at the assessed value.')) act('POST', `/v1/speakeasy/${x.dataset.standover}/standover`, {}).then(() => renderSpeakeasy()); });
     const nlLink = $('#sp-nl'); if (nlLink) nlLink.onclick = async (e) => { e.preventDefault();
       const nl = (await api('GET', '/v1/leaderboard/nightlife')).body || {};
       alert('THE NIGHTLIFE — top of the scene\n\n' + (nl.board || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${fmt(x.renown)})${x.you ? '  ← you' : ''}`).join('\n')); };
