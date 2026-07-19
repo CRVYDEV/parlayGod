@@ -45,7 +45,13 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- makes the account a contract magnet — it VOIDS FAMILY OMERTÀ (fire/npcHit/postBounty on a rat
   -- ignore the family check, so even their own family — and the whole town, via the waived
   -- directed-contract floor — can hunt them). Pure status — no §10.4 surface.
-  rat BOOLEAN NOT NULL DEFAULT false
+  rat BOOLEAN NOT NULL DEFAULT false,
+  -- THE STORE (ETH revenue packages) — account-level entitlements a real-ETH purchase grants. Both
+  -- SURVIVE DEATH (a paid-for benefit carries to the heir, the `minted` precedent). `pass_until` is
+  -- the Season Pass window; `patron` is the permanent ETH-patron status badge. NEITHER is §10.4
+  -- currency — the Store grants only entitlements/access/status, so it writes zero `transactions` rows.
+  pass_until TIMESTAMPTZ,
+  patron BOOLEAN NOT NULL DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
@@ -446,6 +452,44 @@ CREATE TABLE IF NOT EXISTS fee_payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_fee_payments_payer ON fee_payments (payer_address) WHERE NOT credited;
+-- THE STORE (ETH revenue packages) — the fee_payments twin for arbitrary Store SKUs. A player pays
+-- an ETH price to the OmertaFees tollbooth (dormant on-chain), the watcher observes a StorePaid event
+-- and calls recordStorePurchase. Idempotent on nonce (a re-delivered event is a no-op). If the payer's
+-- wallet is linked the entitlement is granted now; else the row waits (account_id NULL) until
+-- reconcileStore runs at link. §10.4-neutral — the grant is an entitlement/access/status, never currency.
+CREATE TABLE IF NOT EXISTS store_payments (
+  nonce BIGINT PRIMARY KEY,
+  sku TEXT NOT NULL,                  -- a STORE.PACKAGES id
+  payer_address TEXT NOT NULL,
+  amount_wei TEXT NOT NULL,
+  tx_hash TEXT,
+  account_id TEXT,
+  granted BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_store_payments_payer ON store_payments (payer_address) WHERE NOT granted;
+-- A log of every entitlement the Store granted (history + the ops feed). Not a §10.4 ledger — no
+-- currency moves; the durable state is on account_persistent (pass_until/patron/mint_credits/…).
+CREATE TABLE IF NOT EXISTS store_grants (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  ref BIGINT,                         -- the store_payments nonce (comps use a synthetic nonce)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_store_grants_account ON store_grants (account_id);
+-- THE RWA RESERVE ACCOUNTING (R2, DORMANT) — the rwa share of Store revenue is recorded here and
+-- NEVER spent until R2 (a real RWA reserve backing the Dynasty shares) ships (legal-gated). This is
+-- the accounting seat R2's buy-bot will draw on — the vig_revenue twin on the RWA side. Out-of-band
+-- real value (like vig_revenue): zero §10.4 rows. Idempotent on (source, ref).
+CREATE TABLE IF NOT EXISTS rwa_revenue (
+  source TEXT NOT NULL,               -- 'store'
+  ref TEXT NOT NULL,                  -- the Store payment nonce
+  rwa_eth NUMERIC NOT NULL,           -- the rwa share (gross × RWA_BPS)
+  spent_eth NUMERIC NOT NULL DEFAULT 0, -- R2 (dormant): always 0 until the buy-bot ships
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, ref)
+);
 -- §11 watcher cursor: last on-chain block fully processed per event stream ('fees','claimed').
 -- Lets the worker resume after downtime (getLogs backfill from here) instead of losing events
 -- that fired while it was down, and stay `confirmations` behind head so a reorg can't be acted on.

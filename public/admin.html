@@ -109,15 +109,15 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
-      j('GET', '/v1/mod/activity?limit=60'),
+      j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body);
-    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body);
+    renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
     renderActivity(act.body); renderMod();
   }
 
@@ -184,7 +184,7 @@
       + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${g.name} [${g.tag}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
   }
 
-  function renderChain(res, vig, em) {
+  function renderChain(res, vig, em, rev) {
     const v = vig?.invariants || {}, vs = vig?.status || {};
     const extractOk = v.ok !== false;
     $('#p-chain').querySelector('.body').innerHTML =
@@ -196,7 +196,12 @@
       + rowHtml('extraction ≤ inflow', `<span class="${extractOk ? '' : ''}" style="color:${extractOk ? 'var(--ok)' : 'var(--bad)'}">${extractOk ? '✓ holds' : '⚠ VIOLATED'}</span>`)
       + rowHtml('prize pool', `${fmt(vs.prizePool ?? vs.prize_pool ?? '?')} $OMR`)
       + `<div class="note" style="margin-top:8px">staking emission</div>`
-      + rowHtml('pool / backed', `${fmt(em?.poolBalance)} $OMR · ${Math.round((em?.backed ?? 1) * 100)}%`);
+      + rowHtml('pool / backed', `${fmt(em?.poolBalance)} $OMR · ${Math.round((em?.backed ?? 1) * 100)}%`)
+      + (rev ? `<div class="note" style="margin-top:8px">the Store (ETH revenue, split ${rev.split.founder / 100}/${rev.split.buyback / 100}/${rev.split.rwa / 100})</div>`
+        + rowHtml('gross ETH', `Ξ${fmt(rev.grossEth)}`)
+        + rowHtml('founder / buyback / rwa', `Ξ${fmt(rev.founderEth)} · Ξ${fmt(rev.buybackEth)} · Ξ${fmt(rev.rwaEth)}`)
+        + rowHtml('rwa reserve', `Ξ${fmt(rev.rwaEth)} <span class="note">${rev.rwaDormant ? 'dormant (R2)' : '⚠ spent'}</span>`)
+        + (rev.pendingLinks ? rowHtml('pending links', `${rev.pendingLinks} unclaimed purchase(s)`) : '') : '');
   }
 
   function renderActivity(act) {

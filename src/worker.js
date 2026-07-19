@@ -13,6 +13,7 @@ import { grantShares } from './portfolio.js';
 import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
+import { sweepUncreditedStore } from './store.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepWire } from './wire.js';
@@ -180,6 +181,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (sw?.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
     const fs = await safe('fee reconcile', () => sweepUncreditedFees(pool));
     if (fs?.credited > 0) console.log(`💳 fees: reconciled ${fs.credited} stranded payment(s) to linked wallets`);
+    // THE STORE: grant any ETH-package purchases whose wallet linked after the payment landed
+    const st = await safe('store reconcile', () => sweepUncreditedStore(pool));
+    if (st?.granted > 0) console.log(`🛒 store: granted ${st.granted} stranded purchase(s) to linked wallets`);
     // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
     await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
