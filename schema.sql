@@ -325,6 +325,17 @@ CREATE TABLE IF NOT EXISTS wiretaps (
   PRIMARY KEY (watcher_character, target_character)
 );
 CREATE INDEX IF NOT EXISTS ix_wiretaps_target ON wiretaps (target_character);
+-- NAMED LANDMARKS — one dedicable plaque per district, held by the highest $OMR flex. Pure STATUS
+-- (display-only, outside §10.4 and the sim-audited balance — the seal/estate precedent): dedicating
+-- BURNS the paid $OMR (a deflationary sink, vanity:landmark), a bigger flex takes the plaque over. The
+-- name borne is the ACCOUNT's dynasty name (or the living street) — account-level, so it survives death.
+CREATE TABLE IF NOT EXISTS landmarks (
+  district_id TEXT PRIMARY KEY,
+  holder_account TEXT NOT NULL,
+  holder_name TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  dedicated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 -- Escrowed Exchange order book (§5.4): cb | ammo | item; product is rejected.
 CREATE TABLE IF NOT EXISTS listings (
   id TEXT PRIMARY KEY,

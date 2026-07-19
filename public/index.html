@@ -246,6 +246,7 @@
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
     if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
+    if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -776,7 +777,17 @@
         `<div class="card"><span class="t">${d}</span><div class="d">shock ×${Number(w).toFixed(3)}</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">Forecast</h2>
       <div class="grid">${(c.forecast || []).map((f) =>
-        `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>`;
+        `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>
+      <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:10px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
+      <div id="landmark-slot"></div>`;
+    // NAMED LANDMARKS — dedicate a district plaque to your dynasty (a $OMR status flex)
+    const lm = (await api('GET', '/v1/landmarks')).body;
+    $('#landmark-slot').innerHTML = `<div class="grid">${(lm?.landmarks || []).map((l) => `
+      <div class="card"><span class="t">${l.place}</span>
+        <div class="d">${l.holder ? `held by <b>${l.holder}</b> (${fmt(l.amount)} $OMR)` : 'open — no plaque yet'}</div>
+        <input data-lmamt="${l.district}" placeholder="≥${fmt(l.nextMin)} $OMR" size="8"> <button class="act" data-lm="${l.district}">dedicate</button></div>`).join('')}</div>`;
+    $('#landmark-slot').querySelectorAll('[data-lm]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/landmarks/${b.dataset.lm}`, { amount: Number($('#landmark-slot').querySelector(`[data-lmamt="${b.dataset.lm}"]`).value) }).then(() => renderCity()));
   }
 
   // The Den

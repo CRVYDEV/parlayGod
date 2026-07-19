@@ -1408,6 +1408,18 @@ export const passClaimMs = () => Number(process.env.PASS_CLAIM_MS ?? (20 * 3600 
 (() => { const s = STORE.SPLIT_BPS; const t = s.founder + s.buyback + s.rwa;
   if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`); })();
 
+// ── NAMED LANDMARKS — one dedicable plaque per district (a deflationary $OMR STATUS sink). Dedicate
+// by burning $OMR; a bigger flex takes the plaque. The name borne is the account's dynasty (or street).
+// Pure status — outside §10.4 (the burn rides vanity:%) and outside the sim-audited balance. Levers.
+export const LANDMARKS = {
+  MIN_DEDICATE: 20, // the first-dedication floor; a takeover must strictly exceed the current flex
+  PLACES: {
+    docks: 'The Harbor Gate', neon: 'The Neon Arch', foundry: 'The Ironworks Obelisk',
+    brick: 'The Brickyard Monument', canal: 'The Canal Bridge', cathedral: 'The Cathedral Steps',
+  },
+};
+export const landmarkOf = (districtId) => LANDMARKS.PLACES[districtId] || null;
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
