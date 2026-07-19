@@ -172,8 +172,10 @@ export async function plexPackageQuote(db, sku) {
   if (!pkg) return null;
   const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
   const last = (await db.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  if (!last) return { sku, price: floor, oracle: null };
-  const oracle = Number(last.price_omr_per_eth);
+  const oracle = last ? Number(last.price_omr_per_eth) : null;
+  // defense-in-depth (audit LOW-1): a non-finite/≤0 oracle (only reachable via a hand-corrupted buyback
+  // row — runVigBuyback guards price>0) must never propagate NaN into the price → the spend → §10.4.
+  if (oracle == null || !Number.isFinite(oracle) || oracle <= 0) return { sku, price: floor, oracle: null };
   const price = Math.max(floor, round6(pkg.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000));
   return { sku, price, oracle };
 }
@@ -218,7 +220,8 @@ export async function storeBoard(pool, accountId) {
   const passMs = a.pass_until ? new Date(a.pass_until).getTime() : 0;
   // the PLEX price (pay in earned $OMR) — one oracle read, derived per SKU
   const last = (await pool.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-  const oracle = last ? Number(last.price_omr_per_eth) : null;
+  const rawOracle = last ? Number(last.price_omr_per_eth) : null;
+  const oracle = (rawOracle != null && Number.isFinite(rawOracle) && rawOracle > 0) ? rawOracle : null; // LOW-1 guard
   const plexOf = (p) => {
     const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
     return oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;

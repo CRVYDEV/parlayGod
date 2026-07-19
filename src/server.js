@@ -32,6 +32,7 @@ import * as Auction from './auction.js';
 import * as Wire from './wire.js';
 import * as Store from './store.js';
 import * as Pass from './pass.js';
+import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
@@ -548,6 +549,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.auctionBoard(ch, client, h)));
   app.post('/v1/auction/:lotId/bid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidAuction(ch, req.params.lotId, req.body?.amount, client, h)));
+
+  // NAMED LANDMARKS — one dedicable plaque per district, held by the highest $OMR flex (a status sink).
+  app.get('/v1/landmarks', async () => Landmarks.landmarkBoard(pool));
+  app.post('/v1/landmarks/:districtId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Landmarks.dedicateLandmark(ch, req.params.districtId, req.body?.amount, client, h)));
 
   // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
   app.get('/v1/wire', { preHandler: auth }, async (req) =>
