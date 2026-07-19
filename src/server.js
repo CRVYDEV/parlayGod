@@ -1018,9 +1018,11 @@ export async function buildServer() {
   app.get('/v1/pass', { preHandler: auth }, async (req) => Pass.passBoard(pool, req.user.sub));
   app.post('/v1/pass/claim', { preHandler: auth }, async (req) => {
     const res = await G.withCharacter(pool, req.user.sub, (ch, client, h) => Pass.claimPass(ch, client, h));
-    if (res?.stipendOmr > 0) {
-      const p = await Vig.payPrizes(pool, [{ accountId: req.user.sub, omr: res.stipendOmr }]);
-      res.stipendPaid = p.paid; // pool-bounded: pays min(stipend, pool balance), backs it in the reserve
+    // pay down any accrued stipend from the BACKED pool — BEST-EFFORT (the owe is durably recorded, so
+    // a failure/dry-pool never loses the reward or mis-advances the track; the worker sweep is the net)
+    if (res?.owed > 0) {
+      try { const s = await Pass.settlePassStipend(pool, req.user.sub); res.stipendPaid = s.paid; res.owed = s.owed; }
+      catch { /* leave it owed — sweepPassStipends will pay it when the pool funds. Never fail the claim. */ }
     }
     return res;
   });

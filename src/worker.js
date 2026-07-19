@@ -14,6 +14,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepUncreditedStore } from './store.js';
+import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepWire } from './wire.js';
@@ -184,6 +185,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE STORE: grant any ETH-package purchases whose wallet linked after the payment landed
     const st = await safe('store reconcile', () => sweepUncreditedStore(pool));
     if (st?.granted > 0) console.log(`🛒 store: granted ${st.granted} stranded purchase(s) to linked wallets`);
+    // THE LEDGER: pay down any owed Season Pass stipend as the prize pool funds (backed, pool-bounded)
+    const ps = await safe('pass stipend sweep', () => sweepPassStipends(pool));
+    if (ps?.paid > 0) console.log(`🎟  pass: paid ${ps.paid} $OMR of owed Ledger stipend`);
     // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
     await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));

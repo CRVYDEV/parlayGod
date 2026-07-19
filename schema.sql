@@ -57,7 +57,12 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- the last claim (the ~daily cooldown). Account-level → the track survives death (the heir keeps
   -- claiming what the pass paid for). Rewards are status/consumables + a backed prize-pool $OMR stipend.
   pass_tier INT NOT NULL DEFAULT 0,
-  pass_at TIMESTAMPTZ
+  pass_at TIMESTAMPTZ,
+  -- the Ledger's $OMR stipend is ACCRUED here at claim (in the same txn as the tier advance — never
+  -- lost), then paid down from the backed prize pool by settlePassStipend (pool-bounded). Decoupling
+  -- the durable owe from the pool payout means an empty/contended pool never consumes a reward and a
+  -- payout failure never mis-advances the track (the stake-pool "pending, no forfeit" precedent).
+  pass_owed NUMERIC NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS characters (
   id TEXT PRIMARY KEY,
