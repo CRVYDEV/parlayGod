@@ -27,6 +27,7 @@ import * as World from './world.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
+import * as Ops from './ops.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -50,6 +51,10 @@ export async function buildServer() {
   let clientHtml = '<!doctype html><title>OMERTA</title><p>API up. Client file missing (public/index.html).</p>';
   try { clientHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'index.html'), 'utf8'); } catch { /* headless */ }
   app.get('/', async (req, reply) => reply.type('text/html; charset=utf-8').send(clientHtml));
+  // the LIVE-OPS dashboard (mod-key gated client-side; every call carries x-mod-key) — public/admin.html
+  let adminHtml = '<!doctype html><title>OMERTA ops</title><p>Ops console file missing (public/admin.html).</p>';
+  try { adminHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'admin.html'), 'utf8'); } catch { /* headless */ }
+  app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').send(adminHtml));
   const pool = await makeDb();
   app.decorate('pool', pool);
   await app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret-change-me' });
@@ -867,6 +872,8 @@ export async function buildServer() {
   });
   app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
   app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
+  app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot
+  app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
   app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
     const cid = req.query?.characterId;
     const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);

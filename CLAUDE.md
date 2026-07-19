@@ -1540,6 +1540,27 @@ claim tallies from the `first_week_step` telemetry — so the alpha can be run a
 a developer. `test/growth.js` covers the coach (fresh → "pull your first job", advances after a job) and
 the funnel (counts + mod-gate). Verified live end-to-end in Chromium. Suite 21/21 + sim drift-0.
 
+**LIVE-OPS DASHBOARD — "the Books" — BUILT** (`src/ops.js`, `public/admin.html`, `src/server.js`).
+The founder-facing console to run the alpha without a developer — one screen for integrity, the
+economy, players, and moderation. All read-only aggregation + the existing mod actions; no schema,
+no §10.4 surface. Served at **`GET /admin`** (a second static file, the index.html pattern), mod-key
+gated CLIENT-side — every call carries the `x-mod-key` header (stored in sessionStorage), so it
+reuses the same `modAuth` the mod endpoints already enforce (no player token). Two new read
+endpoints in `ops.js`: **`GET /v1/mod/overview`** (`opsOverview` — players: accounts/alive/dead/
+active-24h/jailed/indicted/agents/banned; economy: AMM spot + reserves, street-tax pool, event
+fund, stake pool, den book, gang-treasury total, player-wealth total, the true `$OMR` supply = the
+invariants `omrBuckets`; top-8 players by respect + gangs by treasury) and **`GET /v1/mod/activity`**
+(`opsActivity` — the last N telemetry rows as a live feed). The dashboard fans out to those plus the
+EXISTING mod endpoints — `/v1/mod/invariants` (the §10.4 sweep, rendered as a big OK/DRIFT banner +
+per-check drift), `/v1/mod/funnel` (onboarding drop-off bars), `/v1/mod/reserve` + `/v1/mod/vig`
+(extraction≤inflow) + `/v1/mod/emission` (backed ratio) — and wires the mod ACTIONS behind confirm
+dialogs (mint invites, confiscate, mod-kill, ban, fund reserve). Auto-refreshes every 15s.
+`test/hardening.js` covers the two new endpoints (mod-gate + shape); verified live end-to-end
+(genesis reads $500/$OMR + 20k supply, activity feed, a mint-invites action). Suite 21/21 + sim
+drift-0. Deferred: per-player drill-down (the `/v1/mod/audit` tx/rng view exists — not yet surfaced),
+charts/history (telemetry rows are there), a lever-tuning surface (BALANCE.md is still the source of
+truth; live retune needs a config store).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
