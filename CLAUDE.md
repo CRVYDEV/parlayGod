@@ -1911,3 +1911,15 @@ wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a 
   counsel signs off on Phase 2. The mechanics change; the promises don't.
 - Social/onboarding rewards pay in-game cash only, never $OMR (v24 rule) — unchanged.
 - Agent-flagged accounts: excluded from referral payouts, harder rate limits, public badge.
+- **The RWA tickers are REAL Robinhood tokenized stocks trading on Uniswap** (ERC-20s, `stocks`
+  category, Arbitrum / Robinhood Chain) — founder clarification 2026-07-19, recorded in
+  `omerta-rwa-portfolio-design.md`. Implications: R2's buy-bot swaps ETH → the actual stock-token on
+  Uniswap into the reserve (backing price = the live Uniswap TWAP, the oracle the Vig bot already
+  reads); R3's extraction delivers that real token to the player's wallet (the one KYC'd securities
+  event). **R1's in-game price stays the deterministic §7.11 hash proxy — NOT the live Uniswap price —
+  on purpose** (a price tracking a real security weakens the "pure status" posture that keeps R1
+  shippable everywhere; the real oracle only appears in R2 behind the KYC line). **Jurisdiction is a
+  hard gate:** Robinhood tokenized stocks are EU-facing and NOT for US persons (counsel/Robinhood
+  confirm current status), so R3 must be KYC'd AND geofenced — a US-person account plays/earns/holds
+  the status fully but can never extract. R1 (status only) ships to everyone. Never distribute the
+  token by chance (RNG/loot/casino stay in cash/$OMR) — unchanged, now with a real security at stake.
