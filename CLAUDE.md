@@ -1904,6 +1904,46 @@ wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a 
 `payPlex` pattern); named landmarks / Founder's charter numbers; R2 (the `rwa_revenue` → real-RWA-buy bot
 + the reserve backing Dynasty shares — legal-gated); and the Dynasty Fund's family-book dividend + crest.
 
+**NIGHT-SESSION FEATURES F1–F4 — BUILT** (`src/portfolio.js`, `src/store.js`, `src/landmarks.js` — the
+27th suite `test/landmarks.js`; all off-chain, §10.4-clean, numbers are founder sign-off levers). Clears
+four items off the STILL-NEXT list. **F1 — family-book dividend** (`portfolio.js:claimFamilyDividend`,
+`POST /v1/gangs/portfolio/dividend`): the gang RWA book yields a ~daily $OMR dividend to the treasury
+RESERVE, paid from the shared sink-fed `rwa_dividend_pool` (a §10.4 TRANSFER pool→reserve, pool-bounded,
+never a mint; boss/underboss; gang→pool lock order). **F2 — PLEX-for-packages** (`store.js:payPackagePlex`,
+`POST /v1/store/plex/:sku`): pay a Store SKU from EARNED $OMR — a `plex:<sku>` burn (the plex:% term) for
+the SAME non-§10.4 entitlement an ETH payer gets ($OMR shrinks supply, ETH funds the Vig). Market-linked
+quote (`plexPackageQuote` = max(floor, feeEth × latest-buyback-oracle × `PLEX_PREMIUM_BPS` 1.2); floor
+`PLEX_FLOOR_OMR_PER_ETH` 5000 before a first buyback prints). In-context grant routes persisted columns
+through memory (mint_credits/respawn_tokens via h.acct, wire_until via ch) — no clobber; patron/pass_*
+direct SQL. **F3 — named landmarks** (`src/landmarks.js:dedicateLandmark`, `GET /v1/landmarks` +
+`POST /v1/landmarks/:districtId`): ONE dedicable plaque per district (`LANDMARKS.PLACES`), held by the
+biggest $OMR flex; dedicating BURNS the $OMR (`vanity:landmark` → vanity:% term, deflationary, a flex not
+escrow — no refund on takeover), bears the account dynasty name → survives death (a monument). **F4 —
+family dynasty** (`portfolio.js:nameFamilyDynasty`, `POST /v1/gangs/portfolio/name`; `familyPortfolioLeaderboard`,
+`GET /v1/leaderboard/family-portfolio`): the boss/underboss names the family RWA book from the reserve
+(`FAMILY_DYNASTY_NAME_OMR` 15, `rwa:dynasty` burn — rides rwa:%, zero invariant change); the crest tier
+(`dynastyTierOf` on monotonic `gangs.rwa_invested`) + a family-legit leaderboard. Console: F1 dividend
+button, F2 PLEX buttons, F3 City-tab Landmarks section, F4 fund-naming + crest + family board on the Going
+Legit tab. `TICKERS` also went 3→8 and BTC→GME (the Robinhood-tradeable set). Suite 27/27 + sim drift-0.
+
+A **four-lens max-effort SHAKEDOWN** (F4 dynasty; dividend-pool + PLEX economics; death/estate +
+dissolution across every new surface; walkthrough softlock/gate) found **no CRITICAL/HIGH** and fixed
+three real bugs in-commit (regression each): **F4 MED-1** — `nameFamilyDynasty`/`nameDynasty` gained a
+same-name no-op guard (the `changeName` precedent) so an accidental double-click / same-name spam no
+longer re-burns $OMR (the family one drained the SHARED reserve); **Store PLEX MED-1** — `payPackagePlex`
+now refuses `made_man` while already `minted` (a dead, unspendable credit) and a pure `patron` re-buy,
+BEFORE the burn (the `vig.js:116` precedent it had dropped), so the player keeps their earned $OMR;
+**Estate L2** — a dead break-leader's co-op plan is abandoned AT DEATH (the crew_heists precedent), and
+the regression uncovered a latent brick — abandonment left orphaned `pen_break_members` rows that blocked
+stranded crew from planning a fresh break (UNIQUE collision); now DELETEs them like disband/sweep already
+do. §10.4 verified exact across all death/dissolution paths (every new account-level holding survives the
+estate wipe + heir inherits; every gang-level holding burns/releases on dissolution, no orphan). Flagged
+for founder sign-off (NOT patched, ground rule #1, in BALANCE.md): **A1** the shared dividend-pool has no
+per-account allocation so the biggest book can starve small funders (§10.4-CLEAN redistribution, not a
+leak — a per-contributor cap is the dial); uncapped underboss fund-renames (boss-only is the dial); and
+the dormant on-chain Store `grantPackage` guard + wire_month-before-character reconcile + concurrent
+extension lost-update (the on-chain Store wiring milestone, mainnet-gated). Shakedown loop continues.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

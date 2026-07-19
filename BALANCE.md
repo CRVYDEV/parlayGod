@@ -820,3 +820,28 @@ of every invest (a transfer, account→pool). `PORTFOLIO` block additions:
 - Economic watch-item: the 15% redirect slightly softens the RWA $OMR sink (deflation). Bounded, and the
   dial (`DIVIDEND_BPS`) is the lever if the sim shows supply pooling. `DIVIDEND_DAILY_BPS` is the yield dial.
 - Both dividends (via the account) and tiers (via `rwa_invested`) are account-level → survive death.
+
+---
+
+## Night-session features F1–F4 + shakedown flags (2026-07-19)
+
+Four features shipped this session (all off-chain, §10.4-clean, numbers are proposed defaults —
+sign-off levers): **F1** family-book dividend (the Dynasty dividend at the GANG level — reserve yield,
+`DIVIDEND_BPS`/`DIVIDEND_DAILY_BPS` reused), **F2** PLEX-for-packages (`PLEX_FLOOR_OMR_PER_ETH` 5000,
+`PLEX_PREMIUM_BPS` 12000 — $OMR stays the premium rail, ETH the economical one), **F3** named landmarks
+(`LANDMARKS.MIN_DEDICATE` 20, a per-district plaque $OMR flex — a pure deflationary vanity burn),
+**F4** family dynasty (`FAMILY_DYNASTY_NAME_OMR` 15 — name the gang RWA book from the reserve + crest tier
++ family-legit leaderboard). All KEEP pending founder sim sign-off.
+
+**Shakedown flags (four max-effort red-teams; no CRITICAL/HIGH; real bugs fixed in-commit, these are the
+founder BALANCE decisions):**
+
+| # | Item | Nature | Rec |
+|---|---|---|---|
+| A1 | **Shared dividend-pool fairness** | The single `rwa_dividend_pool` has no per-account allocation, so the largest book can capture the daily inflow (`book × DIVIDEND_DAILY_BPS`, pool-bounded, first-come each cooldown) and starve small funders who fed 15% into the same pot. **§10.4-CLEAN** (pool never mints, pay ≤ pool always) — a redistribution, not a leak. The structural dial is a per-claim cap tied to the claimant's OWN lifetime `dividend:fund` contributions (needs a new column). | FLAG — decide if small-holder fairness matters for alpha; else KEEP as "spenders fund the biggest holders" |
+| — | **Underboss fund-rename drain** | `nameFamilyDynasty` is boss/underboss + uncapped by distinct name (15 $OMR/reserve/rename). A same-name no-op is now guarded (fixed); a rogue underboss spamming DIFFERENT names still drains the reserve — but underbosses already move reserve value via `familyInvest`/tribute, so it's an accepted insider-trust posture. Boss-only is the dial. | KEEP (boss-only if abuse seen) |
+| — | **PLEX oracle staleness** | `plexPackageQuote` reads the latest buyback price with no staleness bound — a player can time a buy to a low-oracle print, but always pays ≥ floor AND ≥ 1.2× market. Market-linking by design. | KEEP |
+
+The on-chain Store `grantPackage` guard (made_man-while-minted) + wire_month-before-character reconcile +
+the concurrent window-extension lost-update are **dormant-path items for the on-chain Store wiring
+milestone** (mainnet-gated; throwing there would break idempotent ingestion) — not balance levers.
