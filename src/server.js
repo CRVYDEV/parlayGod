@@ -26,11 +26,12 @@ import * as Law from './law.js';
 import * as World from './world.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
+import * as Portfolio from './portfolio.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf } from './rules.js';
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -474,6 +475,16 @@ export async function buildServer() {
   app.post('/v1/underworld/:npc/errand', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.startErrand(ch, req.params.npc, client, h)));
 
+  // R1 — THE PORTFOLIO ("going legit"): burn clean $OMR into legit, death-proof RWA/blue-chip
+  // holdings (pure STATUS in R1 — no sell, no cash-out; the only §10.4 flow is the 'rwa:invest' burn).
+  app.get('/v1/portfolio', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.portfolioBoard(ch, client, h)));
+  app.post('/v1/portfolio/invest', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.invest(ch, req.body?.ticker, req.body?.omr, client, h)));
+  app.post('/v1/gangs/portfolio/invest', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.familyInvest(ch, req.body?.ticker, req.body?.omr, client, h)));
+  app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
+
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));
   app.post('/v1/market', { preHandler: auth }, async (req) =>
@@ -577,6 +588,10 @@ export async function buildServer() {
         'SELECT m.character_id, m.role, c.name FROM gang_members m JOIN characters c ON c.id = m.character_id WHERE m.gang_id=$1', [req.params.id])).rows;
       const held = (await client.query('SELECT id FROM districts WHERE holder_gang=$1', [req.params.id])).rows.map((d) => d.id);
       const territory = await Territory.territoryOf(client, req.params.id); // Phase 3 productive operations
+      // R1 — the family's legit book: a seize-resistant status flex, valued at today's price.
+      const famBook = (await client.query('SELECT ticker, shares FROM gang_portfolios WHERE gang_id=$1 AND shares>0 ORDER BY ticker', [req.params.id])).rows
+        .map((r) => ({ ticker: r.ticker, shares: Math.round(Number(r.shares) * 1e6) / 1e6, price: tickerPriceOf(r.ticker),
+          bookValue: Math.round(Number(r.shares) * tickerPriceOf(r.ticker) * 100) / 100 }));
       await client.query('COMMIT');
       return { gang: { id: g.id, name: g.name, tag: g.tag, color: g.color || null,
         seal: sealOf(g.seal)?.name || null, sealTier: Number(g.seal || 0),
@@ -585,7 +600,8 @@ export async function buildServer() {
         ammoBank: Number(g.ammo_bank), omrReserve: Number(g.omr_reserve), warsWon: Number(g.wars_won),
         war: g.war_with ? { with: g.war_with, until: g.war_until, us: g.war_score_us, them: g.war_score_them } : null,
         weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
-        members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held, territory } };
+        members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held, territory,
+        portfolio: { holdings: famBook, bookValue: Math.round(famBook.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 } } };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   });

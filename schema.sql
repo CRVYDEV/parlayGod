@@ -774,6 +774,28 @@ CREATE TABLE IF NOT EXISTS npc_hits (
   PRIMARY KEY (payer, target)
 );
 
+-- ── R1 — THE PORTFOLIO ("going legit"): personal + family RWA / blue-chip holdings ──
+-- Account-level (keyed on account_id, NOT character_id) so it SURVIVES DEATH — the "legit money is
+-- untouchable" retirement fantasy (never in the runEstate wipe; the heir inherits the book). PURE
+-- STATUS in R1: `shares` is a ticker-denominated collectible (not a §10.4 currency), `cost_omr` the
+-- lifetime $OMR spent (display cost basis). The only ledgered flow is the 'rwa:invest' $OMR burn.
+CREATE TABLE IF NOT EXISTS portfolios (
+  account_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  shares NUMERIC NOT NULL DEFAULT 0,
+  cost_omr NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, ticker)
+);
+-- The FAMILY book: the gang's legit holdings — a seize-resistant status flex bought by the boss/
+-- underboss from the family $OMR reserve (the seal precedent). Dies with a dissolved family.
+CREATE TABLE IF NOT EXISTS gang_portfolios (
+  gang_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  shares NUMERIC NOT NULL DEFAULT 0,
+  cost_omr NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (gang_id, ticker)
+);
+
 -- ── Risk-to-Earn Phase 2: THE VIG (real-revenue redistribution accounting) ──
 -- A real-value ledger SEPARATE from the §10.4 in-game set: it tracks real ETH revenue in and the
 -- HARD (on-chain ERC-20) $OMR the buyback bought with it — never in-game currency. Amounts are in

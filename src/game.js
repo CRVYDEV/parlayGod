@@ -7,7 +7,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf } from './rules.js';
+         cityHourOf, cityLawEventOf, tickerPriceOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 
@@ -89,7 +89,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge] = await Promise.all([
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf] = await Promise.all([
     client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
@@ -104,6 +104,8 @@ export async function loadOwned(client, ch) {
     client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
     client.query('SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]),
     client.query('SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
+    // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
+    client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id]),
   ]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
@@ -136,6 +138,9 @@ export async function loadOwned(client, ch) {
     grudges: Object.fromEntries(grudge.rows
       .map((r) => [r.npc_id, decayedGrudges(Number(r.count), r.since)])
       .filter(([, c]) => c > 0)),
+    // R1 — the Portfolio: account-level legit holdings (survive death; the price values a status
+    // collectible, so nothing here touches §10.4). Array of { ticker, shares, cost_omr } rows.
+    portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
   };
 }
 
@@ -506,6 +511,13 @@ export function view(ch, acct = {}, owned = {}) {
     tradeRank: tradeRankIdx(Number(ch.trade_rep || 0)),
     heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
     prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
+    // R1 — THE PORTFOLIO: your legit book at a glance (GET /v1/portfolio is the full board). Pure
+    // status — the price values a collectible; it survives death (account-level), so it's the one
+    // wealth line an heir keeps. Book value at today's deterministic price.
+    portfolio: (() => { const pf = owned.portfolio || [];
+      const holdings = pf.map((r) => { const price = tickerPriceOf(r.ticker);
+        return { ticker: r.ticker, shares: Number(r.shares), price, bookValue: Math.round(Number(r.shares) * price * 100) / 100 }; });
+      return { holdings, bookValue: Math.round(holdings.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 }; })(),
     wallet: acct.wallet_address || null,
     minted: !!acct.minted, respawnTokens: Number(acct.respawn_tokens || 0), mintCredits: Number(acct.mint_credits || 0),
     hitmanRep: Number(acct.hitman_rep || 0), kills: Number(acct.kills || 0), seasonKills: Number(ch.season_kills || 0),

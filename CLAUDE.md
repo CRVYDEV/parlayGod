@@ -1418,6 +1418,40 @@ environment — the REAL bytecode + core security properties have now run on a r
 test` remains a pre-audit gate; and mainnet stays gated on legal counsel + the third-party audit of
 contracts AND signer. Suite 20/20.
 
+**THE PORTFOLIO — "going legit" (R1, off-chain, ZERO regulatory surface) — BUILT** (`src/portfolio.js`,
+`test/portfolio.js` — the 21st suite; design `omerta-rwa-portfolio-design.md`). Founder-directed:
+incorporate Robinhood Chain's RWA stocks (AAPL/TSLA/SPCX) as something players ACQUIRE by playing —
+the narrative apex of the game's own laundering arc (dirty cash → laundered $OMR → legitimate,
+death-proof equity; the mob "goes legit"). Model **C** (earn-in-game → graduate-to-real, the exact
+$OMR architecture): R1 is the in-game layer only. **Pure STATUS** — a ticker-denominated collectible
+with a deterministic server-authoritative price (`tickerPriceOf` off the §7.11 seed hash — display-
+only, moves no value), **no sell, no cash-out** — so it touches NO securities/derivative law (the
+hitman-rep / family-seal precedent: outside §10.4 on the reward side and outside the sim-audited
+balance). Holdings live at the **ACCOUNT level** (`portfolios (account_id,ticker)` PK), so they
+SURVIVE DEATH — never in the runEstate wipe; the heir inherits the book (the retirement fantasy,
+surfaced as `kept.portfolio`). **`invest`** (`POST /v1/portfolio/invest`) burns clean $OMR → fractional
+`shares = omr/price` — the ONLY §10.4 flow, an enumerated **`rwa:invest` $OMR BURN** through the vanity
+`spendOmr` till (personal → account bucket; family → gang omr_reserve). **`familyInvest`**
+(`POST /v1/gangs/portfolio/invest`, boss/underboss from the **reserve**, gang row locked — the buySeal
+pattern) builds a seize-resistant family book (dies with a dissolved family). `GET /v1/portfolio` is the
+board (market price + day-change, your book, the family book); `GET /v1/leaderboard/portfolio` the biggest
+legit books (a status board); surfaced on the character `view`, `GET /v1/gangs/:id`, and the estate report.
+§10.4: `rwa:` joined the `omr` vocabulary + `omrBurns` (shares are not a currency → zero new bucket, zero
+faucet; the deterministic price moves no value), so `$OMR conservation` stays exact — the test proves the
+burn reconciles by asserting the only drift is the SQL grant itself. A deep, UNCAPPED, **deflationary $OMR
+sink** the late game lacked (helps extraction-≤-inflow), a death-proof endgame store + graceful exit, and
+family politics (a war-proof book). Suite 21/21 + sim drift-0. ALL numbers (tickers, base/drift,
+MIN_INVEST_OMR) are founder sign-off levers. **R2** (a real ETH-fee `RWA_BPS` slice → a buy bot → a real
+RWA reserve backing the shares via the full-reserve invariant) and **R3** (the KYC'd on-chain extraction
+through Robinhood's broker-dealer rails — the one securities event) are **legal-gated** (Robinhood
+partnership + securities counsel + the third-party audit that already gates mainnet) and NOT built. The
+three hard rules the design respects so R3 stays inside the lines: never distribute securities by CHANCE
+(every RNG/loot/casino layer stays in cash/$OMR; RWA is purchase/earned/vested only), receiving stock is a
+taxable KYC-gated event (Robinhood's KYC is the enabling asset), and the regulated surface is confined to
+one gated extraction boundary. Deferred R1 step-two (never-by-chance earn hooks): the big-score cut,
+skill/season leaderboard payouts, the laundering-graduation tier that draws RICO scrutiny, an automatic
+"Envelope" tithe on taxed flows.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

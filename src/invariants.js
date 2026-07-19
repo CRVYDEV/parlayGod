@@ -16,7 +16,7 @@ const KNOWN_REASONS = {
     'law:', 'world:', 'pen:', 'loan:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'rwa:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:'],
 };
@@ -100,7 +100,10 @@ export async function runLedgerInvariants(pool) {
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
   // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury')"));
+  // rwa:invest (R1 — the Portfolio) is a $OMR BURN: clean $OMR washed into legit, death-proof
+  // status holdings (personal → account bucket; family → gang omr_reserve). The shares are not a
+  // §10.4 currency (a status collectible, the hitman-rep/seal precedent), so only the burn is here.
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason LIKE 'rwa:%')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // (e) CAR CONSERVATION: boost is the only faucet; melt, fence, and death the only
