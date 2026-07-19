@@ -3,3 +3,9 @@ node_modules/
 *.log
 econ-sim.json
 omerta-contracts/out-js/
+
+# Foundry (CI/local build artifacts — deps + out are fetched/generated, never committed)
+omerta-contracts/lib/
+omerta-contracts/out/
+omerta-contracts/cache/
+omerta-contracts/broadcast/
