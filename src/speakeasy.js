@@ -129,9 +129,9 @@ export async function visitSpeakeasy(ch, owner, districtId, roundId, client, h) 
   owner.cash = Number(owner.cash) + net;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -round.cost, reason: 'speakeasy:round', counterparty: owner.id });
   await h.ledger(client, { characterId: owner.id, currency: 'cash', amount: net, reason: 'speakeasy:round', counterparty: ch.id });
-  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
-  await client.query('UPDATE speakeasies SET prestige = prestige + $2 WHERE district_id=$1', [districtId, round.prestige]);
-  const p = await bumpPatron(client, districtId, ch.id, { cash: round.cost }); // now on the guest list
+  await client.query('UPDATE speakeasies SET prestige = prestige + $2 WHERE district_id=$1', [districtId, round.prestige]); // club row already locked
+  const p = await bumpPatron(client, districtId, ch.id, { cash: round.cost }); // the patron leaf row
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (audit LOW-1: keep the canonical characters→leaves→singletons order — no latent deadlock trap)
   const regular = p.visits >= SPEAKEASY.REGULAR_VISITS;
   await h.notify(client, owner.id, 'speakeasy_round', { from: ch.name, round: round.name, net });
   bus.emit('streets', { type: 'speakeasy_round', by: ch.name, at: row.name || districtId });
