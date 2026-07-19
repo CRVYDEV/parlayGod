@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- claiming what the pass paid for). Rewards are status/consumables + a backed prize-pool $OMR stipend.
   pass_tier INT NOT NULL DEFAULT 0,
   pass_at TIMESTAMPTZ,
+  -- THE DYNASTY FUND (RWA dividends + tiers): rwa_invested = cumulative $OMR ever invested (monotonic
+  -- — drives the status tier ladder, never decreases). dividend_at = the last dividend claim (the
+  -- ~daily cooldown). Dividends are paid from the sink-fed rwa_dividend_pool (a §10.4 transfer, never
+  -- a mint — the stake-pool precedent), so holding RWA becomes a productive, generational asset.
+  rwa_invested NUMERIC NOT NULL DEFAULT 0,
+  dividend_at TIMESTAMPTZ,
   -- the Ledger's $OMR stipend is ACCRUED here at claim (in the same txn as the tier advance — never
   -- lost), then paid down from the backed prize pool by settlePassStipend (pool-bounded). Decoupling
   -- the durable owe from the pool payout means an empty/contended pool never consumes a reward and a
@@ -982,12 +988,23 @@ CREATE TABLE IF NOT EXISTS stake_pool (
   lifetime_funded NUMERIC NOT NULL DEFAULT 0,
   lifetime_paid NUMERIC NOT NULL DEFAULT 0
 );
+-- THE DYNASTY FUND dividend pool (a §10.4 $OMR bucket, the stake_pool twin): fed by a slice of every
+-- personal RWA invest (dividend:fund — a TRANSFER, not a burn) and paid out to holders as dividends
+-- (dividend:omr — a TRANSFER, both sides inside omrBuckets). So RWA becomes a productive asset that
+-- pays a $OMR yield, bounded by what invests fund (pool-capped, the stake-pool "backed emission" rule).
+CREATE TABLE IF NOT EXISTS rwa_dividend_pool (
+  id INT PRIMARY KEY,
+  pool NUMERIC NOT NULL DEFAULT 0,
+  lifetime_funded NUMERIC NOT NULL DEFAULT 0,
+  lifetime_paid NUMERIC NOT NULL DEFAULT 0
+);
 -- Seed the singletons once (idempotent; virtual pool ≈ $500 / $OMR).
 INSERT INTO amm_pool (id, cash_reserve, omr_reserve)
   SELECT 1, 10000000, 20000 WHERE NOT EXISTS (SELECT 1 FROM amm_pool);
 INSERT INTO street_tax (id, pool, fund)
   SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
 INSERT INTO stake_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM stake_pool);
+INSERT INTO rwa_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_dividend_pool);
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   at TIMESTAMPTZ NOT NULL DEFAULT now(),

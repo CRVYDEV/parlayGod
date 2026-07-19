@@ -244,6 +244,7 @@
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
+    if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -1489,6 +1490,17 @@
           <button class="act" id="dyn-go">${pf.dynasty?.name ? 'rename' : 'name it'} (${pf.dynasty?.nameCost ?? 5} $OMR)</button>
           <span class="d" style="font-size:10px;color:var(--dim)">the name outlives every character & heads the legit board</span></div></div>
 
+      ${pf.dividend ? `
+      <div class="card" style="border-color:var(--neon)">
+        <span class="t">The Dynasty Fund</span>
+        ${pf.dynasty?.tier ? `<span class="chip">★ ${pf.dynasty.tier.name}</span>` : ''}
+        <div class="d">${pf.dynasty?.tier ? `you're <b>${pf.dynasty.tier.name}</b> (invested ${fmt(pf.dynasty.invested)} $OMR)` : `invest ${fmt(pf.dynasty?.nextTier?.min || 100)} $OMR lifetime to make ${pf.dynasty?.nextTier?.name || 'the first tier'}`}${pf.dynasty?.nextTier ? ` · next: ${pf.dynasty.nextTier.name} at ${fmt(pf.dynasty.nextTier.min)}` : ' · top tier'}</div>
+        <div class="d" style="margin-top:4px">a daily dividend pays ${(pf.dividend.rateBps / 100)}% of your book — funded by the family's own investing, so the fund pays you back. Pool: ${fmt(pf.dividend.pool)} $OMR.</div>
+        ${pf.dividend.claimable ? `<button class="act" id="div-claim" style="border-color:var(--neon)">collect the dividend (~${fmt(pf.dividend.estimate)} $OMR)</button>`
+          : pf.dividend.cooldownSeconds ? `<span class="d">next dividend in ${mins(pf.dividend.cooldownSeconds)}</span>`
+          : '<span class="d">buy into the fund to earn a dividend</span>'}
+      </div>` : ''}
+
       <h2 style="margin-top:12px">The Board <span class="d" style="font-size:10px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
         <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
@@ -1519,6 +1531,8 @@
     const fb = $('#rwa-fam-buy');
     if (fb) fb.onclick = () => act('POST', '/v1/gangs/portfolio/invest',
       { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
+    const dc = $('#div-claim');
+    if (dc) dc.onclick = () => act('POST', '/v1/portfolio/dividend', {}).then(() => renderPortfolio());
   }
 
   // ── THE ESTATE: the compound — a tiered, furnishable home that displays your legend ──

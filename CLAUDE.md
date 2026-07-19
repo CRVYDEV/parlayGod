@@ -1870,11 +1870,39 @@ holds end-to-end through the backed rail) and flagged the post-commit-payout sea
 mis-advance on a payout failure or dry pool) — fixed by the owed-accrual + `settlePassStipend` +
 worker-sweep design above. All numbers are sign-off levers.
 
+**THE DYNASTY FUND (dividends + tiers) — BUILT** (`src/portfolio.js`, `test/portfolio.js`; the RWA "going
+legit" endgame turned from pure status into a PRODUCTIVE, generational asset — the deferred Dynasty vision).
+RWA holders now earn a **~daily $OMR DIVIDEND** on their book, paid from a sink-fed pool — §10.4-clean via
+the **stake-pool pattern** (a transfer, never a mint). **Funding:** a `PORTFOLIO.DIVIDEND_BPS` (15%) slice
+of every PERSONAL `invest` is redirected from the burn into the new `rwa_dividend_pool` singleton (a §10.4
+$OMR bucket, added to `omrBuckets`) — ledgered `dividend:fund` (a TRANSFER, account→pool, in neither the
+mint nor burn term), the rest still burns `rwa:invest`. So **new capital pays existing holders' yield, like
+a real fund** ("spenders fund holders"). **Claim** (`claimDividend`, `POST /v1/portfolio/dividend`): pays
+`min(bookValue × DIVIDEND_DAILY_BPS (0.30%), pool)` — POOL-BOUNDED (the stake-pool "backed emission" rule —
+the fund pays only what investment funded it), ledgered `dividend:omr` (a TRANSFER, pool→account), on a
+~daily cooldown (`DIVIDEND_MS`); a dry pool is a clean `dry` refusal that doesn't burn the cooldown, a
+no-book is `nothing`. Locks the pool singleton under the withCharacter account lock (canonical singletons-
+last; concurrent claims serialize on it, no AB-BA — nothing else locks pool-then-account). **TIERS:**
+`DYNASTY_TIERS` (Nest Egg 100 → Trust Fund 500 → Blue Blood 2500 → Old Money 10000 → The Dynasty 50000
+$OMR) is pure STATUS on the monotonic `account_persistent.rwa_invested` (bumped each personal invest — the
+estate/seal precedent, outside §10.4). Both survive death (account-level → the heir keeps the fund + the
+tier). §10.4: `dividend:` joined the omr `KNOWN_REASONS` (a transfer prefix, in NEITHER `omrMints` nor
+`omrBurns`) + `rwa_dividend_pool` joined `omrBuckets` — so `$OMR conservation` stays exact (the test proves
+the ONLY drift is the SQL grants; the dividend split + claim reconcile as transfers). Board (`GET
+/v1/portfolio`) gained `dividend {pool, rateBps, estimate, claimable, cooldown}` + `dynasty {invested,
+tier, nextTier}`; console: a "The Dynasty Fund" card on the Going Legit tab (tier badge + the daily
+dividend claim); `describe()` humanizes the payout. `test/portfolio.js`: the invest split (85% burns / 15%
+funds the pool, both ledgered), the tier ladder, the dividend claim (pool→account transfer, exact pool
+decrement), the ~daily cooldown, the dry-pool refusal (drained the §10.4-clean way — a whale claims it
+empty), and §10.4 conservation holding with the dividend transfers in the mix. Suite 26/26 + sim drift-0.
+All numbers (`DIVIDEND_BPS`, `DIVIDEND_DAILY_BPS`, `DIVIDEND_MS`, the tier floors) are founder sign-off
+levers. Deferred (Dynasty step two): the FAMILY dividend (the gang book earns too), dividend compounding/
+auto-reinvest, a dynasty crest cosmetic.
+
 **STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
 wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
 `payPlex` pattern); named landmarks / Founder's charter numbers; R2 (the `rwa_revenue` → real-RWA-buy bot
-+ the reserve backing Dynasty shares — legal-gated); and the Dynasty Fund's dividends/tiers/family-book
-vision.
++ the reserve backing Dynasty shares — legal-gated); and the Dynasty Fund's family-book dividend + crest.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

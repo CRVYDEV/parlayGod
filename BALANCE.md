@@ -798,3 +798,25 @@ are status / consumables / a backed $OMR stipend (via the prize-pool rail — ne
   can cover (possibly 0) and still advances — the track is never blocked. In a live economy the pool has
   funds. The stipend amounts + tier placement are the dials if the alpha shows the pool straining.
 - The track is account-level (survives death); a fresh pass season (bought after lapse) resets it.
+
+## THE DYNASTY FUND — RWA dividends + tiers (proposed levers, sign-off pending)
+
+Turns the R1 Portfolio from pure status into a productive, generational asset. §10.4-clean via the
+stake-pool pattern: dividends are a TRANSFER (pool→account), never a mint; the pool is fed by a slice
+of every invest (a transfer, account→pool). `PORTFOLIO` block additions:
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `DIVIDEND_BPS` | 1500 (15%) | Slice of every personal invest redirected from the burn into the dividend pool. New capital pays holders' yield (a real fund). Reduces the RWA deflationary sink by 15% (still 85% burns). | KEEP |
+| `DIVIDEND_DAILY_BPS` | 30 (0.30%/day) | A claim pays this % of book value, POOL-BOUNDED (the real cap). ~110%/yr nominal, but the pool bound means true yield = what invests fund. | KEEP |
+| `DIVIDEND_MS` | ~20h | The ~daily claim cooldown (a login reason). | KEEP |
+| `DYNASTY_TIERS` | 100 / 500 / 2500 / 10000 / 50000 $OMR | Pure STATUS on cumulative $OMR invested (monotonic). Outside §10.4 and the sim-audited balance. | KEEP |
+
+**Notes (sign-off):**
+- The dividend is self-bounding: the pool can only pay what investment funded it (the stake-pool
+  "backed emission" rule). A dry pool is a clean refusal — the fund never mints to pay a dividend.
+- "Spenders fund holders": late-game investors' capital pays existing holders' yield, so the RWA layer
+  now has a reason to hold beyond the flex — the retirement-fund fantasy realized.
+- Economic watch-item: the 15% redirect slightly softens the RWA $OMR sink (deflation). Bounded, and the
+  dial (`DIVIDEND_BPS`) is the lever if the sim shows supply pooling. `DIVIDEND_DAILY_BPS` is the yield dial.
+- Both dividends (via the account) and tiers (via `rwa_invested`) are account-level → survive death.

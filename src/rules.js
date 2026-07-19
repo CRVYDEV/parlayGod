@@ -1299,6 +1299,28 @@ export const PORTFOLIO = {
   // — many sub-threshold buys — still trips it once the window sum crosses SCRUTINY_MIN_OMR. Ties RWA
   // to the Law. (audit F1: a per-call-only threshold was trivially dodged by investing 999 on repeat.)
   SCRUTINY_MIN_OMR: 1000, SCRUTINY_HEAT: 12, SCRUTINY_WINDOW_MS: 24 * 3600 * 1000,
+  // ── THE DYNASTY FUND (dividends + tiers) — RWA becomes a PRODUCTIVE, generational asset. A slice of
+  // every personal invest (DIVIDEND_BPS) feeds the rwa_dividend_pool (a §10.4 transfer, not a burn);
+  // holders claim a ~daily dividend = DIVIDEND_DAILY_BPS of their book value, POOL-BOUNDED (the
+  // stake-pool "backed emission" rule — never mints, so the fund pays only what investment funds it).
+  // So spenders (investors) fund holders' yield: new capital pays the dividend, like a real fund. TIERS
+  // are pure STATUS on cumulative $OMR invested (the estate/seal precedent — outside §10.4). All levers.
+  DIVIDEND_BPS: 1500,            // 15% of each personal invest → the dividend pool (85% still burns)
+  DIVIDEND_DAILY_BPS: 30,        // a claim pays 0.30% of book value, capped by the pool
+  DIVIDEND_MS: 20 * 3600 * 1000, // the ~daily claim cooldown (DIVIDEND_MS test knob? no — fixed lever)
+  DYNASTY_TIERS: [
+    { tier: 1, name: 'Nest Egg', min: 100 },
+    { tier: 2, name: 'Trust Fund', min: 500 },
+    { tier: 3, name: 'Blue Blood', min: 2500 },
+    { tier: 4, name: 'Old Money', min: 10000 },
+    { tier: 5, name: 'The Dynasty', min: 50000 },
+  ],
+};
+// the status tier for a given cumulative $OMR invested (highest tier whose floor you've crossed)
+export const dynastyTierOf = (invested = 0) => {
+  const n = Number(invested || 0); let cur = null;
+  for (const t of PORTFOLIO.DYNASTY_TIERS) if (n >= t.min) cur = t;
+  return cur;
 };
 // ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
 // Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
