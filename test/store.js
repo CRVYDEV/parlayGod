@@ -57,7 +57,8 @@ assert.equal((await call('POST', '/v1/mod/store/grant', { mod: true, body: { non
 // ── link alice's wallet, then a Made Man purchase (0.01 ETH) — granted now, split recorded ──
 await setWallet(alice.aid, W1);
 let n1 = nonce();
-r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'made_man', payer: W1, amountWei: ethWei(0.01) } });
+// a REAL on-chain purchase carries a txHash (the StorePaid event) → it records the revenue split
+r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sku: 'made_man', payer: W1, amountWei: ethWei(0.01), txHash: '0xrealtx1' } });
 assert.equal(r.code, 200, 'the purchase landed');
 assert.equal(r.body.granted, true, 'a linked wallet is granted immediately');
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'the mint credit is on the account');
@@ -75,9 +76,11 @@ r = await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: n1, sk
 assert.equal(r.body.duplicate, true, 'a re-delivered event is a no-op');
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'still just one mint credit');
 
-// ── a revive bundle (3-pack) ──
+// ── a COMP (no txHash — the mod tool, not a real payment): grants the entitlement but records NO
+// Vig revenue, so a free comp can never fabricate buyback basis (audit MED) ──
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_3', payer: W1, amountWei: ethWei(0.25) } });
-assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.respawnTokens, 3, 'three revives');
+assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.respawnTokens, 3, 'the comp granted three revives');
+assert.equal((await revenueStatus(pool)).grossEth, 0.01, 'a comp (no txHash) records NO revenue — only real on-chain payments (with a tx) feed the flywheel');
 
 // ── the ETH Street Wire — a 30-day access window on the living character ──
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'wire_month', payer: W1, amountWei: ethWei(0.03) } });
