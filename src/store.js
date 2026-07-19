@@ -189,11 +189,18 @@ export async function plexPackageQuote(db, sku) {
 export async function payPackagePlex(ch, sku, client, h) {
   const pkg = packageOf(sku);
   if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
+  const g = pkg.grant || {}, now = Date.now();
+  // GATE BEFORE THE BURN (walkthrough MED-1, the vig.js:116 precedent): a mint credit bought while
+  // already made is DEAD (mintCharacter short-circuits on acct.minted, never spending it), and a pure
+  // Patron's Ring re-buy is a no-op — refuse both so the player keeps their earned $OMR. (season_pass
+  // still grants patron alongside pass days + revives, so it's never a no-op — don't gate it.)
+  if (g.mintCredits && h.acct?.minted) throw new GameError('minted', 'This account is already made — the credit would be dead.');
+  if (g.patron && !g.passDays && !g.mintCredits && !g.respawnTokens && h.acct?.patron)
+    throw new GameError('patron', 'You already wear the ring.');
   const q = await plexPackageQuote(client, sku);
   const price = q.price;
   if (Number(h.acct.omr) < price) throw new GameError('omr', `That runs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
   await spendOmr(client, h, price, `plex:${sku}`); // gates h.acct.omr, debits in-memory, ledgers the burn (plex:% term)
-  const g = pkg.grant || {}, now = Date.now();
   if (g.mintCredits) h.acct.mint_credits = Number(h.acct.mint_credits || 0) + g.mintCredits;         // persistAccount commits
   if (g.respawnTokens) h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + g.respawnTokens; // persistAccount commits
   if (g.patron) { await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [ch.account_id]); if (h.acct) h.acct.patron = true; }

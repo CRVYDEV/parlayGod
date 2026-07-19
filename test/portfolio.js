@@ -127,6 +127,13 @@ assert(fBoard.crest, 'the family crest tier is surfaced (family invested 5000 �
 assert.equal(fBoard.invested, 5000, 'cumulative family invested tracked');
 const flb = (await call('GET', '/v1/leaderboard/family-portfolio', { token: boss.token })).body;
 assert(flb.board.find((e) => e.name === 'The Blue Chip Fund'), 'the fund heads the family-legit leaderboard');
+// MED-1 regression: re-naming to the SAME name is a no-op that must NOT re-burn the shared reserve
+const gResPreNoop = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve);
+assert.equal((await call('POST', '/v1/gangs/portfolio/name', { token: boss.token, body: { name: 'The Blue Chip Fund' } })).body.error, 'same', 'a same-name re-name is refused');
+assert.equal(Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${gangId}'`)).rows[0].omr_reserve), gResPreNoop, 'the no-op re-name burned nothing from the reserve');
+// LOW-2 coverage: an empty reserve is rejected (drain it §10.4-cleanly — an unledgered negative grant, tallied)
+await pool.query(`UPDATE gangs SET omr_reserve=0 WHERE id='${gangId}'`); grantDrift -= gResPreNoop; // destroying reserve $OMR is a negative grant
+assert.equal((await call('POST', '/v1/gangs/portfolio/name', { token: boss.token, body: { name: 'Broke Money' } })).body.error, 'reserve', 'an empty reserve cannot name the fund');
 
 // ── DEATH SURVIVAL: the legit book is account-level, so the heir keeps it (the retirement fantasy) ──
 const bookBefore = (await call('GET', '/v1/portfolio', { token: boss.token })).body.portfolio;
