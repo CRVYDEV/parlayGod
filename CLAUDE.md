@@ -1990,7 +1990,16 @@ club `RAID_SHUT_MS` (2h — no rounds/table/income while dark, `income_at` pushe
 the existing `speakeasy:` cash prefix (zero invariant change — the rake is a transfer, the win a faucet,
 all character_id'd; the fine a sink; seized pending never ledgered). Console: the table + notoriety/raid
 status on the tab. `test/speakeasy.js` extended (table rake/win/notoriety/gates + the forced raid seize+
-fine+shutter + the shut gate). Suite 28/28 + sim drift-0. **Deferred (step three, the revenue layer)**:
+fine+shutter + the shut gate). A focused step-two red-team then closed two findings (regression each):
+**HIGH-1 (anti-grief)** — unlike the business raid (owner-only scrutiny), a club's notoriety comes from
+OTHER players' patronage, so a rival could flood the table/rounds to force ~$300k raids on the owner at
+~$70/play; now each `(patron, club)` pair adds at most `PATRON_NOTORIETY_CAP` (24, deliberately <
+`RAID_THRESHOLD`) notoriety per rolling 24h via a `chargeNotoriety` token bucket (the D3-wash pattern,
+new `speakeasy_patrons.noto_used`/`noto_at`) — legit play stays uncapped, only the HEAT one account can
+generate is bounded, so a hot club needs genuinely distinct traffic; **MED-1** — `upgradeSpeakeasy` now
+resolves a pending raid first + refuses while shuttered (an owner had dodged the raid roll, and resumed
+income mid-shutter, by upgrading instead of collecting). Suite 28/28 + sim drift-0. **Deferred (step
+three, the revenue layer)**:
 the **real-money (ETH) cosmetic decor + bottle-service** tier (the Store/GearVault rail — cosmetics-as-NFTs
 with resale royalties, the recurring-revenue engine), a P2P **buyout/contest** so districts clear without a
 death, and a cross-club **renown** axis — all chain work mainnet-gated (legal + audit), the M6 pattern.
