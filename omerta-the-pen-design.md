@@ -89,10 +89,32 @@ hit rides the existing `npchit:hire` sink). `test/pen.js` covers the hole (caugh
 actions blocked, untouchable), every incident touchpoint (lockdown/toss/riot/visit, discounted charges
 ledgered), and the burner (jail-gated npcHit refused without it, one call consumes it, the fee burns).
 
-## 5. Step three (deferred — the roadmap)
+## 5. Step three — THE BREAKOUT (BUILT)
+`attemptBreak` (`POST /v1/pen/break`) — a solo, high-risk escape. Buy a **cutkit** (Hacksaw & Rope,
+$50k, a normal `pen:commissary` cash sink → the pool); burn it win or lose on a break attempt. A
+LOCKDOWN yard event blocks it; a riot's chaos (`shankAdd`) helps. Roll `PEN.BREAK_P` (0.35 base;
+`PEN_BREAK_P` is a TEST-ONLY knob, the SHANK_P precedent).
+- **Over the wall (win):** the sentence CLEARS (`jail_until = null`) — but you walk out a **WANTED
+  fugitive** (`characters.wanted_until = now + FUGITIVE_MS` 2d), which the existing loan-WANTED
+  machinery already enforces: omertà stripped (`isWanted` in fire/jump/npcHit/postBounty) + NPC bounty
+  hunters (`huntWanted` worker sweep). A heat spike raises the alarm. You trade a cell for a manhunt —
+  so it never trivialises the RICO sink. To clear it: lie low for `FUGITIVE_MS`, or pay the existing
+  `POST /v1/loans/square` ($50k → the pool) which handles a bounty-less fugitive cleanly.
+- **Caught at the fence (loss):** the hole (`hole_until`, capped at the sentence), a long added stretch
+  (`BREAK_CAUGHT_ADD_S` 15min), a beating (`BREAK_FAIL_DMG`), the kit spent — no fugitive mark.
+
+§10.4: **clean** — `attemptBreak` moves no currency (the cutkit was the ledgered sink; wanted/heat/
+jail are not §10.4). NO schema change (cutkit is a `pen_contraband` row; `wanted_until` already
+exists). No pool bounty is posted (kept §10.4-clean); players may still post their own on a wanted man.
+Console: an "Over the Wall" card in the Pen tab (with the fugitive warning). `test/pen.js` covers the
+free/no-kit/lockdown gates, the cutkit sink → pool, a forced fail (the hole + longer stretch + beating +
+kit spent + NOT wanted) and a forced win (sentence cleared + WANTED + heat spike + the sheet reads wanted).
+
+## 6. Step four (deferred — the roadmap)
 - **Prison factions / shot-callers** — your family's rep sets the pecking order; a yard boss taxes
   new fish; controlling the yard is a mini-turf game.
-- **The riot / the break-out** — a rare, co-op Pen event (the crew-heist pattern) to spring the yard.
+- **Co-op break-out** — a crew of inmates over the wall together (the crew-heist pattern); odds scale
+  with the crew, everyone walks (or everyone eats the hole).
 - **Richer yard incidents** — a hostage, a snitch, a work-strike; incident-specific rewards.
 - **Protective custody** — witpro as an explicit in-Pen segregation tier (today the shank already
   respects `witproActive`).

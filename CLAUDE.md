@@ -1091,8 +1091,26 @@ stands, the fee still burns win/lose, the burner is spent only if the call goes 
 reasons (burner rides `pen:commissary`, the burner hit rides `npchit:hire`); `hole_until` is a new
 character column. `test/pen.js` covers the hole (caught → solitary, actions blocked, untouchable), every
 incident touchpoint (discounted charges ledgered), and the burner (jail-gated npcHit refused without it,
-one call consumes it). Suite 19/19 + sim drift-0. Step three deferred: prison factions/shot-callers, the
-co-op break-out, richer yard incidents.
+one call consumes it). Suite 19/19 + sim drift-0.
+**THE PEN — step three: THE BREAKOUT — BUILT** (`src/pen.js:attemptBreak`, `POST /v1/pen/break`;
+`PEN` rules-tail additions; NO schema change). A solo high-risk escape that closes the Law→conviction→
+Pen arc without trivialising the RICO sink — you trade a cell for a MANHUNT. Buy a **cutkit** (Hacksaw &
+Rope, $50k — a normal `pen:commissary` cash sink → pool), burn it win or lose. A LOCKDOWN blocks it; a
+riot's `shankAdd` chaos helps; roll `PEN.BREAK_P` (0.35; `PEN_BREAK_P` TEST-ONLY, the SHANK_P precedent).
+**Win** → the sentence CLEARS (`jail_until=null`) but you walk out a **WANTED fugitive**
+(`characters.wanted_until = now + FUGITIVE_MS` 2d) — the existing loan-WANTED machinery already enforces
+it: omertà stripped (`isWanted` in fire/jump/npcHit/postBounty) + NPC bounty hunters (`huntWanted`
+worker), plus a heat spike. Clear it by lying low `FUGITIVE_MS` or the existing `POST /v1/loans/square`
+($50k → pool, which handles a bounty-less fugitive cleanly — verified live). **Loss** → caught: the hole
+(capped at the sentence), `BREAK_CAUGHT_ADD_S` (15min) added stretch, a beating (`BREAK_FAIL_DMG`), the
+kit spent, no fugitive mark. §10.4: **clean** — `attemptBreak` moves no currency (the cutkit was the
+ledgered sink; wanted/heat/jail aren't §10.4); NO pool bounty posted (kept §10.4-clean; players may still
+post their own on a wanted man). Console: an "Over the Wall" card in the Pen tab (fugitive warning);
+`describe()` humanizes escaped/caught; the raw deck gained `/v1/pen/break`. `test/pen.js` covers the
+free/no-kit/lockdown gates, the cutkit sink→pool, a forced fail (hole + longer stretch + beating + kit
+spent + NOT wanted), and a forced win (sentence cleared + WANTED + heat spike + the sheet reads wanted).
+Suite 23/23 + sim drift-0. All numbers are founder sign-off levers. Step four deferred: prison factions/
+shot-callers, a CO-OP break-out (the crew-heist pattern), richer yard incidents.
 
 A **three-lens red-team over Pen step two** (`AUDIT-the-pen-step-two.md`: the burner bypass, the hole,
 yard incidents + §10.4) closed one HIGH + three MED/LOW (regression per fix): a $25k burner **defeated

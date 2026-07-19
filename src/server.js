@@ -429,6 +429,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.payProtection(ch, client, h)));
   app.post('/v1/pen/bribe', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.bribeGuard(ch, req.body?.seconds, client, h)));
+  app.post('/v1/pen/break', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.attemptBreak(ch, client, h)));
   app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h)));
   // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)

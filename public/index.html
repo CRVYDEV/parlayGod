@@ -245,6 +245,8 @@
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
+    if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
+    if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
@@ -869,7 +871,7 @@
     ],
     'The Pen': [
       ['GET', '/v1/pen'], ['POST', '/v1/pen/work', {}], ['POST', '/v1/pen/buy/:item', {}],
-      ['POST', '/v1/pen/protection', {}], ['POST', '/v1/pen/bribe', { seconds: 60 }],
+      ['POST', '/v1/pen/protection', {}], ['POST', '/v1/pen/bribe', { seconds: 60 }], ['POST', '/v1/pen/break', {}],
       ['POST', '/v1/pen/shank/:targetId', {}], ['POST', '/v1/pen/burner/:targetId', { tier: 'legbreaker' }],
     ],
     'Loans': [
@@ -1488,6 +1490,9 @@
           <button class="act" data-do="POST /v1/pen/protection">pay</button></div>
         <div class="card"><span class="t">Bribe the Guard</span><div class="d">$${fmt(p.bribePerSecond)}/second off the sentence</div>
           <input id="pen-secs" placeholder="seconds" size="8"> <button class="act" id="pen-bribe">pay</button></div>
+        <div class="card" style="border-color:var(--blood)"><span class="t">Over the Wall</span>
+          <div class="d">${p.breakout?.blocked ? 'LOCKDOWN — no wall to go over today.' : p.breakout?.ready ? `you've got the kit. A win CLEARS the sentence but you walk out a WANTED fugitive (~${p.breakout?.fugitiveHours}h — no family cover, NPC bounty hunters). Caught = the hole + a long stretch + a beating.` : `buy a Hacksaw &amp; Rope ($${fmt(p.breakout?.cost || 0)}) at the commissary first. High risk — a win frees you but marks you WANTED.`}</div>
+          ${p.breakout?.ready && !p.breakout?.blocked ? '<button class="act" data-do="POST /v1/pen/break" style="border-color:var(--blood)">GO over the wall</button>' : ''}</div>
       </div>
       <h2 style="margin-top:10px">The Commissary</h2>
       <div class="grid">${(p.commissary || []).map((it) => `

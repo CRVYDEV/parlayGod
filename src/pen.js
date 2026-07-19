@@ -53,6 +53,9 @@ export async function penBoard(ch, client, h) {
     protectionCost: Math.round(PEN.PROTECTION_COST * (ev.protMult || 1)), bribePerSecond: Math.round(PEN.BRIBE_PER_S * (ev.bribeMult || 1)),
     // step two: today's yard incident (the block-wide modifier everyone shares)
     incident: { id: ev.id, name: ev.name, desc: ev.desc },
+    // step three: THE BREAKOUT — buy a cutkit, go over the wall (become a WANTED fugitive on a win)
+    breakout: { cost: penContrabandOf('cutkit')?.cost || 0, ready: (held.cutkit || 0) > 0,
+      blocked: !!ev.shankBlock, fugitiveHours: Math.round(PEN.FUGITIVE_MS / 3600000) },
     yard: roster,
   };
 }
@@ -117,6 +120,50 @@ export async function bribeGuard(ch, seconds, client, h) {
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [cost]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'pen:bribe' });
   return { ok: true, cost, cutSeconds: cut, sentenceSeconds: jailSecondsLeft(ch) };
+}
+
+// POST /v1/pen/break — THE BREAKOUT (step three): a solo high-risk escape. Burn a cutkit; on a win
+// the sentence CLEARS but you walk out a WANTED fugitive (omertà stripped + NPC bounty hunters — the
+// loan-WANTED machinery); on a loss you're caught, thrown in the hole with a long added stretch and a
+// beating. §10.4-clean — no currency moves here (the kit was a ledgered commissary sink); the escape
+// trades a cell for a manhunt, so it never trivialises the RICO sink. Squaring the warrant later is the
+// existing POST /v1/loans/square ($50k → the pool), or you wait out FUGITIVE_MS lying low.
+export async function attemptBreak(ch, client, h) {
+  insideOnly(ch);
+  const ev = activeYardEvent();
+  if (ev.shankBlock) throw new GameError('lockdown', 'Lockdown — guards on every tier, wall to wall. No wall to go over today.');
+  const held = await contrabandOf(client, ch.id);
+  if (!(held.cutkit > 0)) throw new GameError('no_kit', 'You need a hacksaw and rope — see the guard at the commissary.');
+  if (Number(ch.energy) < PEN.BREAK_ENERGY) throw new GameError('energy', `Going over the wall takes ${PEN.BREAK_ENERGY} energy.`);
+  ch.energy = Number(ch.energy) - PEN.BREAK_ENERGY;
+  await setContraband(client, ch.id, 'cutkit', held.cutkit - 1); // the kit is spent whether you make it or not
+  // PEN_BREAK_P is a TEST-ONLY knob (the SHANK_P precedent). A riot's chaos is cover for a run.
+  const p = process.env.PEN_BREAK_P != null ? Number(process.env.PEN_BREAK_P)
+    : Math.max(0.05, Math.min(0.9, PEN.BREAK_P + (ev.shankAdd || 0)));
+  const roll = Math.random();
+  const made = roll < p;
+  await h.rngLog(client, ch.id, 'pen:break', roll, made ? 'over the wall' : 'caught at the fence');
+  ch.heat = Math.min(100, Number(ch.heat || 0) + PEN.BREAK_HEAT); // the alarm goes up either way
+  if (!made) {
+    // caught at the fence — a beating, a long added stretch, and the hole (capped at the new sentence)
+    const dmg = rand(PEN.BREAK_FAIL_DMG[0], PEN.BREAK_FAIL_DMG[1]);
+    ch.health = Math.max(1, Number(ch.health) - dmg);
+    ch.jail_until = new Date(new Date(ch.jail_until).getTime() + PEN.BREAK_CAUGHT_ADD_S * 1000);
+    ch.hole_until = new Date(Math.min(Date.now() + PEN.HOLE_MS, new Date(ch.jail_until).getTime()));
+    await h.notify(client, ch.id, 'break_failed', { addSeconds: PEN.BREAK_CAUGHT_ADD_S });
+    return { ok: true, escaped: false, caught: true, dmg,
+      holeSeconds: Math.max(0, Math.ceil((new Date(ch.hole_until) - Date.now()) / 1000)), sentenceSeconds: jailSecondsLeft(ch) };
+  }
+  // over the wall — the sentence is cleared, but you're a fugitive now (WANTED: omertà stripped + NPC
+  // hunters). Refresh, never shorten, an existing warrant. No pool bounty here (§10.4-clean); anyone
+  // can still post one on a wanted man.
+  ch.jail_until = null;
+  const fug = Date.now() + PEN.FUGITIVE_MS;
+  ch.wanted_until = new Date(Math.max(fug, ch.wanted_until ? new Date(ch.wanted_until).getTime() : 0));
+  await h.notify(client, ch.id, 'escaped', { wantedHours: Math.round(PEN.FUGITIVE_MS / 3600000) });
+  bus.emit('streets', { type: 'escape', who: ch.name });
+  await h.track(client, ch.account_id, 'pen_break', { made: true });
+  return { ok: true, escaped: true, wantedSeconds: Math.ceil(PEN.FUGITIVE_MS / 1000) };
 }
 
 // POST /v1/pen/shank/:targetId — the jailhouse hit (two-party: both must be inside)

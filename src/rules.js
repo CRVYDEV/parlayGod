@@ -910,6 +910,7 @@ export const PEN = {
   CONTRABAND: [
     { id: 'shiv',   name: 'Sharpened Toothbrush', cost: 5000,  desc: 'The price of admission to a conversation nobody walks away from.' },
     { id: 'burner', name: 'Burner Phone',         cost: 25000, desc: "Locked up, not out of the game. One call, one contract — then you eat the SIM." },
+    { id: 'cutkit', name: 'Hacksaw & Rope',       cost: 50000, desc: 'A blade for the bars, a rope for the wall. The long way out — if you make it.' },
   ],
   PROTECTION_COST: 15000, PROTECTION_MS: 2 * 3600 * 1000,   // pay the yard boss for a no-shank window
   BRIBE_PER_S: 200,                                         // bribe the guard: $/second shaved off the remaining sentence
@@ -917,6 +918,15 @@ export const PEN = {
   SHANK_MIN: 0.15, SHANK_MAX: 0.9,
   KILL_ADD_S: 600, CAUGHT_ADD_S: 300, FAIL_DMG: [15, 35],   // a body / getting caught both add time; a miss hurts
   HOLE_MS: 30 * 60 * 1000,                                  // step two: solitary — a caught shank throws you in the hole (no yard actions, untouchable)
+  // step three — THE BREAKOUT: a high-risk escape. Needs a 'cutkit' (bought from the commissary),
+  // burns it win or lose. Success CLEARS the sentence but makes you a WANTED fugitive (omertà stripped
+  // + NPC bounty hunters — the loan-WANTED machinery); failure = the hole + a long added stretch + a
+  // beating. §10.4-clean (no currency moves — the kit was already a ledgered commissary sink). You
+  // trade a cell for a manhunt, so it never trivialises the RICO sink. PEN_BREAK_P is a TEST-ONLY roll
+  // knob (the SHANK_P / LAW_BUST_P precedent). All numbers are founder sign-off levers.
+  BREAK_ENERGY: 30, BREAK_P: 0.35, BREAK_HEAT: 40,
+  BREAK_CAUGHT_ADD_S: 900, BREAK_FAIL_DMG: [20, 45],
+  FUGITIVE_MS: 2 * 24 * 3600 * 1000,                        // how long an escapee stays a hunted fugitive (reuses characters.wanted_until)
   // step two — YARD INCIDENTS: a deterministic daily draw (the §7.11 seed) the whole block shares,
   // a modifier layer on the Pen (the cityEventOf pattern). Each is ONE touchpoint. Sign-off levers.
   YARD_EVENTS: [

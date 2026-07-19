@@ -277,9 +277,49 @@ delete process.env.SHANK_P;
 const stRow = await rawCh(shortTimer.id);
 assert(new Date(stRow.hole_until) <= new Date(stRow.jail_until), 'the hole is capped at the sentence — it can’t leak into a future stretch');
 
+// ── STEP THREE — THE BREAKOUT: burn a cutkit, go over the wall (a WANTED fugitive on a win) ──
+process.env.PEN_YARD_EVENT = 'quiet';
+const runner = await mk('Runner Ricky');
+assert.equal((await call('POST', '/v1/pen/break', { token: runner.token })).body.error, 'free', 'no breakout on the outside');
+await seedCh(runner.id, `${jailFuture}, energy=200, cash=1000000, health=100`);
+assert.equal((await call('POST', '/v1/pen/break', { token: runner.token })).body.error, 'no_kit', 'no wall to go over without a cutkit');
+const poolB0 = await poolCash();
+r = await call('POST', '/v1/pen/buy/cutkit', { token: runner.token });
+assert.equal(r.code, 200, 'the guard moves a hacksaw & rope');
+assert.equal((await poolCash()) - poolB0, PEN.CONTRABAND[2].cost, 'the cutkit cash reaches the pool (a ledgered commissary sink)');
+process.env.PEN_YARD_EVENT = 'lockdown';
+assert.equal((await call('POST', '/v1/pen/break', { token: runner.token })).body.error, 'lockdown', 'no going over the wall during a lockdown');
+process.env.PEN_YARD_EVENT = 'quiet';
+// FORCED FAIL — caught at the fence: the hole + a longer stretch + a beating, the kit spent, NOT wanted
+const preSent = await rawCh(runner.id);
+process.env.PEN_BREAK_P = '0';
+r = await call('POST', '/v1/pen/break', { token: runner.token });
+delete process.env.PEN_BREAK_P;
+assert.equal(r.body.escaped, false, 'the roll catches him at the fence');
+assert(r.body.caught && r.body.holeSeconds > 0, 'caught → the hole');
+let rr = await rawCh(runner.id);
+assert(new Date(rr.jail_until) > new Date(preSent.jail_until), 'a caught break adds a long stretch');
+assert(Number(rr.health) < 100, 'and a beating');
+assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${runner.id}' AND item='cutkit'`)).rows[0].q, 0, 'the kit is spent win or lose');
+assert(!rr.wanted_until || new Date(rr.wanted_until) <= new Date(), 'a FAILED break does not make you a fugitive');
+// FORCED WIN — over the wall: the sentence clears, but he walks out a WANTED fugitive
+const runner2 = await mk('Runner Two');
+await seedCh(runner2.id, `${jailFuture}, energy=200, cash=1000000, health=100, heat=0`);
+await call('POST', '/v1/pen/buy/cutkit', { token: runner2.token });
+process.env.PEN_BREAK_P = '1';
+r = await call('POST', '/v1/pen/break', { token: runner2.token });
+delete process.env.PEN_BREAK_P;
+assert.equal(r.body.escaped, true, 'over the wall');
+assert(r.body.wantedSeconds > 0, 'and WANTED now');
+rr = await rawCh(runner2.id);
+assert(!rr.jail_until || new Date(rr.jail_until) <= new Date(), 'the sentence is cleared — he walked');
+assert(rr.wanted_until && new Date(rr.wanted_until) > new Date(), 'he is a hunted fugitive (wanted_until set — omertà stripped + NPC hunters key on it)');
+assert(Number(rr.heat) >= PEN.BREAK_HEAT, 'the alarm raised his heat');
+assert.equal((await call('GET', '/v1/me', { token: runner2.token })).body.character.wanted, true, 'the escapee reads WANTED on the sheet');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone)');
+console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike)');
 process.exit(0);
