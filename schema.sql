@@ -606,6 +606,11 @@ CREATE TABLE IF NOT EXISTS speakeasy_patrons (
   spent_cash NUMERIC NOT NULL DEFAULT 0,
   spent_omr NUMERIC NOT NULL DEFAULT 0,
   last_at TIMESTAMPTZ NOT NULL DEFAULT now(),       -- per-(patron,club) round cooldown
+  -- step two anti-grief (audit HIGH-1): a per-(patron,club) daily notoriety BUDGET (token bucket) caps how
+  -- much heat ONE patron can add to a club below the raid threshold — so no single account can force a raid;
+  -- a hot club needs genuine distinct traffic (a busy den). Legit play is uncapped; only the heat it adds is.
+  noto_used NUMERIC NOT NULL DEFAULT 0,
+  noto_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (district_id, character_id)
 );
 CREATE INDEX IF NOT EXISTS ix_speakeasy_patrons_char ON speakeasy_patrons (character_id);

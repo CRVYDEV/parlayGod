@@ -83,7 +83,15 @@ owner alt), so no laundering angle. Draws `TABLE.NOTORIETY` heat (the raid tie).
 ### The Prohibition raid (the risk layer)
 A hopping club draws the Law. **Notoriety** (`speakeasies.notoriety`) accrues from the club's illicit
 activity — the back-room table (`TABLE.NOTORIETY` 8) + patronage (`ROUND_NOTORIETY` 2) — and decays
-hourly (`NOTORIETY_DECAY_HR` 4). Past `RAID_THRESHOLD` (60), the owner's `collectSpeakeasy` rolls a lazy
+hourly (`NOTORIETY_DECAY_HR` 4). **Anti-grief (`PATRON_NOTORIETY_CAP` 24):** unlike the business raid
+(owner-only scrutiny, ungriefable), a club's notoriety comes from OTHER players' patronage, so a rival
+could otherwise flood the table/rounds to force ~$300k raids on the owner at ~$70/play. So each
+`(patron, club)` pair contributes at most `PATRON_NOTORIETY_CAP` notoriety per rolling 24h — a token
+bucket (the D3-wash/business-launder pattern, `chargeNotoriety`), deliberately **< `RAID_THRESHOLD`** so
+no single account can push a club to a raid. Legit play stays uncapped (unlimited rounds/hands); only the
+HEAT one account can generate is bounded, so a hot club needs genuinely distinct traffic — thematically
+"a busy den draws the cops," not "one griefer with a bankroll can torch your front." Past
+`RAID_THRESHOLD` (60), the owner's `collectSpeakeasy` rolls a lazy
 raid over the above-threshold window (the **business-raid pattern** exactly — `resolveRaid`): a raid
 SEIZES the pending bar take (clock reset — never minted, no ledger row, the business/territory precedent),
 FINES the owner `RAID_FINE_RATE` (15%) of the value sunk (open + decor), clamped to pocket+bank
@@ -97,8 +105,12 @@ EARNED: the more you monetize (table + patrons), the hotter the club, the bigger
 (zero invariant change); the table's rake is a taxed transfer and the win a gambling faucet (both
 character_id'd → check (a) reconciles); the raid fine is a character_id'd sink; the seized pending is
 never ledgered (never minted). New `speakeasies` columns `notoriety`/`notoriety_at`/`shut_until` (wiped
-with the row at the owner's death). `test/speakeasy.js` covers the table (rake/win/notoriety/gates) and
-the raid (forced seize + fine + shutter + the shut gate on rounds/table/income).
+with the row at the owner's death); `speakeasy_patrons` gained `noto_used`/`noto_at` for the per-patron
+cap. `test/speakeasy.js` covers the table (rake/win/notoriety/gates) and the raid (forced seize + fine +
+shutter + the shut gate on rounds/table/income/**upgrade**), plus the anti-grief regression (12 hands
+from one account cannot cross `RAID_THRESHOLD`). **Red-team fix (MED-1):** `upgradeSpeakeasy` also
+resolves a pending raid first and refuses while shuttered — otherwise an owner dodged the raid roll (and
+resumed income mid-shutter by resetting `income_at`) by upgrading instead of collecting.
 
 ## Deferred (step three, the revenue layer)
 The **real-money (ETH) cosmetic decor + bottle-service tier** (the Store/GearVault rail — cosmetics-as-

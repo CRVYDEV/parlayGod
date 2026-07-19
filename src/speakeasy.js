@@ -121,6 +121,11 @@ export async function upgradeSpeakeasy(ch, client, h) {
   if (!row) throw new GameError('no_club', "You don't run a house.");
   const next = speakeasyTierOf(Number(row.tier) + 1);
   if (!next) throw new GameError('maxed', 'The Cathedral is the top of the world — no finer room in the city.');
+  // resolve the raid FIRST (the business:upgradeBusiness precedent — audit MED-1): a hot club can't dodge
+  // the raid roll by upgrading instead of collecting, and a shuttered club can't renovate to resume income.
+  const raid = await resolveRaid(ch, row, client, h);
+  if (raid.raided) return { ok: true, district: row.district_id, raid };
+  if (isShut(row)) throw new GameError('shut', 'The place is dark — wait out the shutter before you renovate.');
   const pending = accruedIncome(row);
   if (Number(ch.cash) + pending < next.cost) throw new GameError('cash', `The ${next.name} runs $${next.cost} to build out.`);
   ch.cash = Number(ch.cash) + pending - next.cost;
@@ -162,6 +167,22 @@ async function bumpPatron(client, districtId, charId, { cash = 0, omr = 0 }) {
   return { visits: 1, prior: null };
 }
 
+// per-(patron,club) daily notoriety BUDGET (a token bucket — the wash/launder precedent). Charges the club
+// ONLY the portion the patron still has budget for (cap < RAID_THRESHOLD), so no single account can force a
+// raid (audit HIGH-1) — a hot club needs distinct traffic. Legit play is uncapped; only its heat is.
+async function chargeNotoriety(client, districtId, row, charId, want) {
+  const now = Date.now();
+  const cur = (await client.query('SELECT noto_used, noto_at FROM speakeasy_patrons WHERE district_id=$1 AND character_id=$2 FOR UPDATE', [districtId, charId])).rows[0];
+  const refill = cur ? (now - new Date(cur.noto_at).getTime()) / (24 * 3600 * 1000) * SPEAKEASY.PATRON_NOTORIETY_CAP : SPEAKEASY.PATRON_NOTORIETY_CAP;
+  const usedAfter = Math.max(0, Number(cur?.noto_used || 0) - Math.max(0, refill));
+  const allowed = Math.max(0, Math.min(want, SPEAKEASY.PATRON_NOTORIETY_CAP - usedAfter));
+  const newUsed = usedAfter + allowed;
+  if (cur) await client.query('UPDATE speakeasy_patrons SET noto_used=$3, noto_at=now() WHERE district_id=$1 AND character_id=$2', [districtId, charId, newUsed]);
+  else if (allowed > 0) await client.query('INSERT INTO speakeasy_patrons (district_id, character_id, noto_used, noto_at) VALUES ($1,$2,$3,now())', [districtId, charId, newUsed]);
+  if (allowed > 0) await bumpNotoriety(client, row, allowed);
+  return allowed;
+}
+
 // BUY A ROUND — a taxed cash transfer patron → owner (the bodyguard-hire pattern: owner nets 98%, 1%
 // street tax → the buyback, 1% dev off-ledger), a flex on the guest list + prestige to the club. Runs
 // under withTwoCharacters(patron, owner) — the owner arrives locked as the second row. District-pinned.
@@ -191,8 +212,8 @@ export async function visitSpeakeasy(ch, owner, districtId, roundId, client, h) 
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -round.cost, reason: 'speakeasy:round', counterparty: owner.id });
   await h.ledger(client, { characterId: owner.id, currency: 'cash', amount: net, reason: 'speakeasy:round', counterparty: ch.id });
   await client.query('UPDATE speakeasies SET prestige = prestige + $2 WHERE district_id=$1', [districtId, round.prestige]); // club row already locked
-  await bumpNotoriety(client, row, SPEAKEASY.ROUND_NOTORIETY); // a busy bar draws the Prohibition boys (the raid tie)
-  const p = await bumpPatron(client, districtId, ch.id, { cash: round.cost }); // the patron leaf row
+  const p = await bumpPatron(client, districtId, ch.id, { cash: round.cost }); // the patron leaf row (ensures it exists)
+  await chargeNotoriety(client, districtId, row, ch.id, SPEAKEASY.ROUND_NOTORIETY); // a busy bar draws heat — capped per patron (anti-grief)
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (audit LOW-1: keep the canonical characters→leaves→singletons order — no latent deadlock trap)
   const regular = p.visits >= SPEAKEASY.REGULAR_VISITS;
   await h.notify(client, owner.id, 'speakeasy_round', { from: ch.name, round: round.name, net });
@@ -248,7 +269,7 @@ export async function playTable(ch, owner, districtId, stake, client, h) {
   let payout = 0;
   if (win) { payout = wager * 2; ch.cash = Number(ch.cash) + payout; await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'speakeasy:table:win' }); }
   await h.rngLog(client, ch.id, `speakeasy:table:${districtId}`, Math.round(roll * 1e4) / 1e4, win ? `win $${payout}` : 'loss');
-  await bumpNotoriety(client, row, SPEAKEASY.TABLE.NOTORIETY); // gambling draws the Prohibition boys
+  await chargeNotoriety(client, districtId, row, ch.id, SPEAKEASY.TABLE.NOTORIETY); // gambling draws heat — capped per patron so a rival can't flood a club into a raid (audit HIGH-1)
   bus.emit('streets', { type: 'speakeasy_table', by: ch.name, at: row.name || districtId, win });
   await h.track(client, ch.account_id, 'speakeasy_table', { district: districtId, bet, win });
   return { ok: true, district: districtId, bet, rake, win, payout, net: (win ? payout : 0) - bet, toOwner: rake };
@@ -279,6 +300,7 @@ export async function speakeasyBoard(pool, characterId) {
        FROM speakeasy_patrons p JOIN characters c ON c.id = p.character_id AND c.alive`)).rows;
   const byClub = new Map();
   for (const p of patrons) {
+    if (Number(p.visits) <= 0) continue; // a pure table-player (no rounds/bottles) isn't "seen" on the guest list
     if (!byClub.has(p.district_id)) byClub.set(p.district_id, []);
     byClub.get(p.district_id).push({ name: p.name, visits: Number(p.visits),
       spent: Math.floor(Number(p.spent_cash)), omr: Math.floor(Number(p.spent_omr)),

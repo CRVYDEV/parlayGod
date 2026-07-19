@@ -888,6 +888,7 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 | `SPEAKEASY.RAID_P_PER_MIN` | 0.0025 | Per-minute raid prob over the above-threshold window (the BUSINESS_RAID_P_PER_MIN precedent; `SPEAKEASY_RAID_P` is a TEST-ONLY knob). | KEEP |
 | `SPEAKEASY.RAID_FINE_RATE` | 0.15 | Fine = 15% of the value sunk (open + decor), clamped to pocket+bank. | KEEP |
 | `SPEAKEASY.RAID_SHUT_MS` | 2h | The shutter — no rounds/table/income while dark. | KEEP |
+| `SPEAKEASY.PATRON_NOTORIETY_CAP` | 24 | Anti-grief (step-two red-team HIGH-1): max notoriety one `(patron, club)` pair adds per rolling 24h (a token bucket). Deliberately < `RAID_THRESHOLD` so no single account can force a raid — a hot club needs distinct patron traffic. Legit play is uncapped; only the heat per account is bounded. | KEEP |
 
 **Notes (sign-off):**
 - The table's RAKE is carved from the stake (never minted on top — the econ-pass casino anti-precedent);

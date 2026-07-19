@@ -160,6 +160,14 @@ assert(Number((await pool.query(`SELECT notoriety FROM speakeasies WHERE distric
 await seed(patron.id, `loc='docks'`);
 assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } })).body.error, 'travel', 'no table from across town');
 await seed(patron.id, `loc='neon'`);
+// audit HIGH-1: ONE patron can only add PATRON_NOTORIETY_CAP notoriety (< RAID_THRESHOLD) — a single account
+// can NEVER flood a club into a raid; a hot club needs distinct traffic. Play the table many times, assert cap.
+await grantCash(patron.id, 300000);
+for (let i = 0; i < 12; i++) await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: 1000 } });
+const floodNoto = Number((await pool.query(`SELECT notoriety FROM speakeasies WHERE district_id='neon'`)).rows[0].notoriety);
+assert(floodNoto <= SPEAKEASY.PATRON_NOTORIETY_CAP, `one patron's heat is capped at ${SPEAKEASY.PATRON_NOTORIETY_CAP} (was ${floodNoto}) — no solo grief`);
+assert(floodNoto < SPEAKEASY.RAID_THRESHOLD, 'one patron can never push a club to the raid threshold');
+await pool.query(`UPDATE speakeasies SET notoriety=0 WHERE district_id='neon'`); // reset for the forced-raid test below
 
 // ── STEP TWO — THE PROHIBITION RAID: a hot club is seized + fined + shuttered on the owner's collect ──
 await grantCash(owner.id, 500000); // cover the fine
@@ -177,6 +185,7 @@ assert(shutRow.shut_until && new Date(shutRow.shut_until) > new Date(), 'the clu
 assert.equal((await call('POST', '/v1/speakeasy/neon/round', { token: patron.token, body: { round: 'round' } })).body.error, 'shut', 'no rounds at a shuttered club');
 assert.equal((await call('POST', '/v1/speakeasy/neon/table', { token: patron.token, body: { bet: tbet } })).body.error, 'shut', 'no table at a shuttered club');
 assert.equal((await call('POST', '/v1/speakeasy/collect', { token: owner.token })).body.collected, 0, 'a dark club earns nothing while shuttered');
+assert.equal((await call('POST', '/v1/speakeasy/upgrade', { token: owner.token })).body.error, 'shut', 'no renovating a shuttered club (audit MED-1: upgrade resolves the raid + honours the shutter)');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
 let inv = await runLedgerInvariants(pool);

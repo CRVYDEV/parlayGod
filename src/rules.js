@@ -1463,6 +1463,9 @@ export const SPEAKEASY = {
   // reopens). `SPEAKEASY_RAID_P` env overrides the per-minute p for tests (the BUSINESS_RAID_P precedent).
   RAID_THRESHOLD: 60, RAID_P_PER_MIN: 0.0025, RAID_FINE_RATE: 0.15, RAID_SHUT_MS: 7200000,
   NOTORIETY_DECAY_HR: 4, NOTORIETY_MAX: 100,
+  // anti-grief: one patron can add at most this much notoriety to a club per rolling 24h (a token bucket).
+  // Deliberately < RAID_THRESHOLD so no single account can force a raid — it takes distinct patron traffic.
+  PATRON_NOTORIETY_CAP: 24,
 };
 export const speakeasyTierOf = (tier) => SPEAKEASY.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const speakeasyRoundOf = (id) => SPEAKEASY.ROUNDS.find((r) => r.id === id) || null;
