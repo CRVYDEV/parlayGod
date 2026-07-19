@@ -60,8 +60,12 @@ async function grantPackage(client, accountId, sku, ref = null) {
     // EXTEND from the later of now / current end (the retainer/subscription precedent); absolute write
     // (pg-mem timestamp-interval arithmetic is unreliable — compute in JS, the setCargo discipline).
     const cur = (await client.query('SELECT pass_until FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
+    const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
     const until = new Date(laterMs(now, cur?.pass_until) + g.passDays * 86400000);
-    await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [accountId, until]);
+    // buying the pass while it's LAPSED starts a FRESH season — reset the Ledger track. Renewing an
+    // ACTIVE pass keeps your progress (the track just runs longer).
+    if (wasActive) await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [accountId, until]);
+    else await client.query('UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL WHERE account_id=$1', [accountId, until]);
   }
   if (g.wireDays) {
     // the ETH Street Wire — extend the LIVING character's wire_until (character-level access window)

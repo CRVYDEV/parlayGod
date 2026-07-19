@@ -1835,12 +1835,36 @@ per-SKU grants, pay-before-link reconcile (exactly-once), zero-value no-grant, �
 check drift-0), and the buyback share funding the Vig flywheel (spend ≤ revenue holds; RWA recorded-only).
 Suite 25/25 + sim drift-0. All prices/splits are founder sign-off levers.
 
-**STILL NEXT (deferred, ranked in `omerta-eth-store-design.md`):** the on-chain `OmertaFees.payForPackage`
-+ the `StorePaid` watcher wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a
-SKU from earned $OMR, the `payPlex` pattern); the Season Pass reward *track* + a per-pass prize-pool $OMR
-stipend (needs the backed `payPrizes` rail per-buyer — a balance call); named landmarks / Founder's
-charter numbers; and R2 (the `rwa_revenue` → real-RWA-buy bot + the reserve backing Dynasty shares —
-legal-gated). Plus the Dynasty Fund's dividends/tiers/family-book vision.
+**THE LEDGER — the Season Pass reward track — BUILT** (`src/pass.js`, `test/pass.js` — the 26th suite;
+finishes the Store's flagship recurring product, the deferred item from the Store drop). A daily-claim
+"battle pass": while the Season Pass is active (bought in the Store for ETH), `POST /v1/pass/claim`
+grants the NEXT tier once per `passClaimMs()` (~20h; `PASS_CLAIM_MS` is a TEST-ONLY knob read per-call,
+the SEARCH_MS precedent), escalating up a 12-tier `PASS.TRACK` (rules tail). **Anti-pay-to-win +
+§10.4-safe by construction:** rewards are STATUS (a street title into the `characters.title` slot),
+CONSUMABLES (revive tokens — out-of-band account entitlements; an energy refill — not currency), and a
+small **$OMR STIPEND** on three tiers (2/3/5, capstone) paid through the EXISTING backed prize-pool rail
+(`Vig.payPrizes` → `prize:omr`, pool-bounded — a redistribution the pass's OWN buyback share funds, NEVER
+an unbacked mint). So the pass closes the "spenders fund earners" loop end-to-end: the buyer's ETH →
+buyback → prize pool → their own stipend (bounded below what the pass contributed). **Self-contained** —
+the track advances only on claim (zero touchpoints in other modules, lowest risk). The $OMR stipend is
+paid by the ROUTE post-commit (`claimPass` returns `stipendOmr`; the route calls `payPrizes` in its own
+connection) — so no `vig_prize_pool` lock nests inside the withCharacter txn (which would invert
+payPrizes' singleton→account lock order → deadlock). Account-level state (`account_persistent.pass_tier`/
+`pass_at`) → **the track SURVIVES DEATH** (the heir keeps claiming what the pass paid for), and buying the
+pass while LAPSED starts a **fresh season** (`store.js:grantPackage` resets the track; renewing an ACTIVE
+pass keeps progress). Routes: `GET /v1/pass` (the board — tier/track/cooldown/stipend pool), `POST
+/v1/pass/claim`; `/v1/rules` gained a `pass` block; console: a **"The Ledger"** section on the Store tab
+(progress bar + the tier grid + claim); `describe()` humanizes the claim; raw deck gained the pass routes.
+`test/pass.js` covers the no-pass gate, the board, the daily claim (title/revives/energy), the ~daily
+cooldown, the backed $OMR stipend (funded by the pass's own buyback, pool-bounded, totalling 10 $OMR —
+never minted), completing the track + the complete gate, §10.4 (`prize:omr` reconciles at drift-0),
+DEATH SURVIVAL, and the fresh-season reset. Suite 26/26 + sim drift-0. All numbers are sign-off levers.
+
+**STILL NEXT (deferred, ranked):** the on-chain `OmertaFees.payForPackage` + the `StorePaid` watcher
+wiring (the mainnet milestone, Foundry + audit gated); PLEX-for-packages (pay a SKU from earned $OMR, the
+`payPlex` pattern); named landmarks / Founder's charter numbers; R2 (the `rwa_revenue` → real-RWA-buy bot
++ the reserve backing Dynasty shares — legal-gated); and the Dynasty Fund's dividends/tiers/family-book
+vision.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a

@@ -1346,6 +1346,32 @@ export const STORE = {
 };
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
+
+// ── THE LEDGER — the Season Pass reward track. A daily-claim track (the genre-standard "battle
+// pass"): while the pass is active, claim the NEXT tier once per CLAIM window, escalating rewards.
+// Anti-pay-to-win + §10.4-safe: rewards are STATUS (a street title), CONSUMABLES (revives out-of-band,
+// an energy refill — not currency), and a small $OMR STIPEND on a few tiers paid through the EXISTING
+// backed prize-pool rail (`prize:omr`, pool-bounded — never a mint). The track is account-level (it
+// survives death — the heir keeps claiming). All numbers are founder sign-off levers.
+export const PASS = {
+  TRACK: [
+    { tier: 1, reward: { title: 'Ledger Initiate' } },
+    { tier: 2, reward: { respawnTokens: 1 } },
+    { tier: 3, reward: { energy: true } },
+    { tier: 4, reward: { omr: 2 } },
+    { tier: 5, reward: { title: 'Bag Man' } },
+    { tier: 6, reward: { respawnTokens: 1 } },
+    { tier: 7, reward: { energy: true } },
+    { tier: 8, reward: { omr: 3 } },
+    { tier: 9, reward: { title: 'The Bookkeeper' } },
+    { tier: 10, reward: { respawnTokens: 2 } },
+    { tier: 11, reward: { energy: true } },
+    { tier: 12, reward: { title: 'Made of the Ledger', omr: 5 } }, // the capstone
+  ],
+};
+// the per-tier claim cooldown (~daily). A TEST-ONLY env knob shrinks it (the SEARCH_MS precedent) —
+// read per-call so a test can toggle it; NEVER set PASS_CLAIM_MS in production.
+export const passClaimMs = () => Number(process.env.PASS_CLAIM_MS ?? (20 * 3600 * 1000));
 // validate the split sums to 10000 at load — a misconfig would silently mis-earmark real revenue
 (() => { const s = STORE.SPLIT_BPS; const t = s.founder + s.buyback + s.rwa;
   if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`); })();
