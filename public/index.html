@@ -247,6 +247,8 @@
     if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
     if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
+    if (body.toOwner !== undefined) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
+    if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -402,7 +404,7 @@
 
   // ── tabs ──
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
-    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', scores: 'Big Scores',
+    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
     wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', deck: 'Everything Else' };
   function buildTabs() {
@@ -432,6 +434,7 @@
     if (id === 'law') renderLaw();
     if (id === 'garage') renderGarage();
     if (id === 'empire') renderEmpire();
+    if (id === 'speakeasy') renderSpeakeasy();
     if (id === 'scores') renderScores();
     if (id === 'loans') renderLoans();
     if (id === 'portfolio') renderPortfolio();
@@ -1331,6 +1334,57 @@
       act('POST', `/v1/business/${b.dataset.bizup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizwash]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizwash}/launder`, { amount: Number(t.querySelector(`[data-bizamt="${b.dataset.bizwash}"]`).value) }).then(() => renderEmpire()));
+  }
+
+  // ── THE SPEAKEASY: the social hub — your club, the nightlife map, buying rounds where you stand ──
+  async function renderSpeakeasy() {
+    const t = $('#tab-speakeasy');
+    await refresh();
+    const b = (await api('GET', '/v1/speakeasy')).body || {};
+    const sp = rules?.speakeasy || {};
+    const distName = (id) => (rules?.districts || []).find((d) => d.id === id)?.name || id;
+    const mine = me.speakeasy;
+    const here = (b.clubs || []).find((c) => c.district === me.loc);        // the club where you're standing
+    const canOpenHere = !mine && b.open?.includes(me.loc);
+    t.innerHTML = `
+      ${!mine && !(b.clubs || []).length ? coachCard('Open a club — be the man to see', 'A speakeasy is the district\'s premier nightclub: it farms cash on its own AND is where the city gathers to be seen. One per district, level ' + (sp.minLevel || 15) + '+. Patrons buy rounds (you pocket the cut) and bottle service; the busiest room tops the nightlife. It dies with your street, so it\'s a marked man\'s prize.') : ''}
+      <h2>You're at: ${distName(me.loc)}</h2>
+      ${mine ? `
+      <div class="card" style="border-color:var(--neon)"><span class="t">${mine.name || mine.tierName} <span class="chip good">YOUR HOUSE</span></span>
+        <div class="d">${distName(mine.district)} · ${mine.tierName} · prestige ${mine.prestige} · $${fmt(mine.incomePerHr)}/hr · pending $${fmt(mine.pending)}</div>
+        <button class="act" data-do="POST /v1/speakeasy/collect" style="border-color:var(--neon)">collect the bar take</button>
+        ${mine.nextTier ? `<button class="act" id="sp-up">redo the decor → ${mine.nextTier.name} ($${fmt(mine.nextTier.cost)})</button>` : '<span class="chip good">The Cathedral — finest room in the city</span>'}
+        <div style="margin-top:6px"><input id="sp-name" placeholder="${mine.name ? 'rename the club' : 'name the club'}" size="18" maxlength="24">
+          <button class="act" id="sp-name-go">${mine.name ? 'rename' : 'name it'} (${sp.nameOmr} $OMR)</button></div></div>`
+      : canOpenHere ? `<div class="card"><span class="t">Open a club here</span>
+          <div class="d">${distName(me.loc)} has no house yet — plant your flag ($${fmt(sp.openCost)}, level ${sp.minLevel}+).</div>
+          <button class="act" id="sp-open" style="border-color:var(--neon)">open the club ($${fmt(sp.openCost)})</button></div>`
+      : ''}
+
+      ${here && !here.mine ? `
+      <h2 style="margin-top:12px">Tonight at ${here.name || distName(here.district)} <span class="d" style="font-size:10px">(${here.owner}'s house)</span></h2>
+      <div class="card"><div class="d">Buy the house a round — the owner keeps 98%, and your name goes up on the guest list.</div>
+        ${(sp.rounds || []).map((r) => `<button class="act" data-round="${r.id}">${r.name} ($${fmt(r.cost)})</button>`).join(' ')}
+        <div style="margin-top:6px" class="d">Bottle service — burn $OMR for pure prestige:</div>
+        ${(sp.bottles || []).map((x) => `<button class="act" data-bottle="${x.id}">${x.name} (${x.omr} $OMR)</button>`).join(' ')}</div>`
+      : here && here.mine ? '<div class="d" style="color:var(--dim);margin-top:8px">You own this room — order a bottle to flex, but you don\'t buy your own rounds.</div>' : ''}
+      ${here && here.mine ? `<div class="card">${(sp.bottles || []).map((x) => `<button class="act" data-bottle="${x.id}">${x.name} (${x.omr} $OMR)</button>`).join(' ')}</div>` : ''}
+
+      <h2 style="margin-top:12px">The Nightlife <span class="d" style="font-size:10px">(ranked by prestige — where the city goes to be seen)</span></h2>
+      <div class="grid">${(b.clubs || []).map((c) => `
+        <div class="card"><span class="t">${c.name || distName(c.district)}</span>${c.mine ? '<span class="chip good">yours</span>' : ''}
+          <div class="d">${distName(c.district)} · ${c.tierName} · ${c.owner} · prestige ${c.prestige} · ${c.regulars} regular${c.regulars === 1 ? '' : 's'}</div>
+          ${c.guestList?.length ? `<div class="d">seen here: ${c.guestList.map((g) => `${g.you ? '<b>' + g.name + '</b>' : g.name}${g.regular ? '★' : ''}`).join(', ')}</div>` : '<div class="d" style="color:var(--dim)">quiet tonight</div>'}
+          ${!c.mine && c.district !== me.loc ? `<button class="act" data-travel="${c.district}">go there</button>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no clubs open yet — be the first proprietor</span>'}</div>
+      ${b.open?.length ? `<div class="d" style="color:var(--dim);margin-top:8px">Open districts: ${b.open.map(distName).join(', ')} — travel there to plant a flag.</div>` : ''}`;
+
+    const up = $('#sp-up'); if (up) up.onclick = () => act('POST', '/v1/speakeasy/upgrade', {}).then(() => renderSpeakeasy());
+    const op = $('#sp-open'); if (op) op.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/open`, {}).then(() => renderSpeakeasy());
+    const ng = $('#sp-name-go'); if (ng) ng.onclick = () => act('POST', '/v1/speakeasy/name', { name: $('#sp-name').value.trim() }).then(() => renderSpeakeasy());
+    t.querySelectorAll('[data-round]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/round`, { round: x.dataset.round }).then(() => renderSpeakeasy()));
+    t.querySelectorAll('[data-bottle]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/bottle`, { bottle: x.dataset.bottle }).then(() => renderSpeakeasy()));
+    t.querySelectorAll('[data-travel]').forEach((x) => x.onclick = () => act('POST', '/v1/travel', { district: x.dataset.travel }).then(() => renderSpeakeasy()));
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

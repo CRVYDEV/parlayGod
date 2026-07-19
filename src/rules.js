@@ -1424,6 +1424,39 @@ export const LANDMARKS = {
 export const landmarkOf = (districtId) =>
   (Object.prototype.hasOwnProperty.call(LANDMARKS.PLACES, districtId) ? LANDMARKS.PLACES[districtId] : null);
 
+// ── THE SPEAKEASY: the social hub (omerta-speakeasy-design.md) ──
+// ONE club per district, opened by a made man (MIN_LEVEL). The base bar take drips lazily (capped 24h)
+// to the owner; patrons buy ROUNDS (cash → the owner, a taxed transfer) and bottle service (a pure-status
+// $OMR burn), both flexed on the club's guest list. Prestige (TIERS floor + round/bottle bumps) ranks the
+// nightlife. All numbers are founder sign-off levers — sim before production.
+export const SPEAKEASY = {
+  MIN_LEVEL: 15,             // a made man's venue
+  OPEN_COST: 750000,         // $ to establish the club (a cash sink)
+  INCOME_CAP_MS: 86400000,   // 24h base bar-take cap (the business pattern)
+  VISIT_CD_MS: 3600000,      // 1h per-(patron,club) round cooldown
+  NAME_OMR: 8,               // name the club ($OMR vanity burn)
+  REGULAR_VISITS: 10,        // visits to become a "regular" (status)
+  TIERS: [
+    { tier: 0, name: 'The Backroom',  cost: 0,        incomePerHr: 8000,   prestige: 10 },  // as opened
+    { tier: 1, name: 'The Lounge',    cost: 600000,   incomePerHr: 16000,  prestige: 30 },
+    { tier: 2, name: 'The Blue Room', cost: 1800000,  incomePerHr: 34000,  prestige: 80 },
+    { tier: 3, name: 'The Copa',      cost: 4500000,  incomePerHr: 68000,  prestige: 175 },
+    { tier: 4, name: 'The Cathedral', cost: 11000000, incomePerHr: 130000, prestige: 375 },
+  ],
+  ROUNDS: [ // buying a round — CASH to the owner (taxed transfer) + a flex
+    { id: 'round',    name: 'a round for the house', cost: 8000,  prestige: 1 },
+    { id: 'topshelf', name: 'top-shelf all night',   cost: 40000, prestige: 4 },
+  ],
+  BOTTLES: [ // bottle service — $OMR, a PURE-STATUS deflationary burn (rides vanity:%), no owner cut
+    { id: 'bottle',  name: 'bottle service',            omr: 3,  prestige: 12 },
+    { id: 'magnum',  name: 'a magnum of champagne',     omr: 8,  prestige: 35 },
+    { id: 'reserve', name: 'the reserve — top of the top', omr: 20, prestige: 90 },
+  ],
+};
+export const speakeasyTierOf = (tier) => SPEAKEASY.TIERS.find((t) => t.tier === Number(tier)) || null;
+export const speakeasyRoundOf = (id) => SPEAKEASY.ROUNDS.find((r) => r.id === id) || null;
+export const speakeasyBottleOf = (id) => SPEAKEASY.BOTTLES.find((b) => b.id === id) || null;
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it

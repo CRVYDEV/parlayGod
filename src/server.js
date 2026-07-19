@@ -15,6 +15,7 @@ import * as V from './vanity.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Business from './business.js';
+import * as Speakeasy from './speakeasy.js';
 import * as Casino from './casino.js';
 import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
@@ -39,7 +40,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS } from './rules.js';
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -356,6 +357,8 @@ export async function buildServer() {
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
+    speakeasy: { minLevel: SPEAKEASY.MIN_LEVEL, openCost: SPEAKEASY.OPEN_COST, nameOmr: SPEAKEASY.NAME_OMR,
+      tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -387,6 +390,30 @@ export async function buildServer() {
   app.get('/v1/business', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
+  });
+
+  // THE SPEAKEASY — the social hub: a club per district, the proprietor's front + the being-seen economy.
+  app.get('/v1/speakeasy', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    return Speakeasy.speakeasyBoard(pool, cid || '');
+  });
+  app.post('/v1/speakeasy/:districtId/open', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.openSpeakeasy(ch, req.params.districtId, client, h)));
+  app.post('/v1/speakeasy/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.collectSpeakeasy(ch, client, h)));
+  app.post('/v1/speakeasy/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.upgradeSpeakeasy(ch, client, h)));
+  app.post('/v1/speakeasy/name', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.nameSpeakeasy(ch, req.body?.name, client, h)));
+  app.post('/v1/speakeasy/:districtId/bottle', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.bottleService(ch, req.params.districtId, req.body?.bottle, client, h)));
+  // buy a round: two-party (patron → owner) — look up the club's owner first, then withTwoCharacters
+  // locks both sides in sorted order (the shakedown precedent).
+  app.post('/v1/speakeasy/:districtId/round', { preHandler: auth }, async (req) => {
+    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
+    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
+    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
+      Speakeasy.visitSpeakeasy(ch, owner, req.params.districtId, req.body?.round, client, h));
   });
 
   // THE COMMISSION — the top families' weekly city decree (votes public, effect next week).

@@ -845,3 +845,32 @@ founder BALANCE decisions):**
 The on-chain Store `grantPackage` guard (made_man-while-minted) + wire_month-before-character reconcile +
 the concurrent window-extension lost-update are **dormant-path items for the on-chain Store wiring
 milestone** (mainnet-gated; throwing there would break idempotent ingestion) — not balance levers.
+
+---
+
+## The Speakeasy — step one (2026-07-19; the social hub)
+
+The game's first place-based social venue (`omerta-speakeasy-design.md`). All numbers are proposed
+defaults — sim + founder sign-off before production (ground rule #1). §10.4-clean, off-chain.
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `SPEAKEASY.MIN_LEVEL` | 15 | A made man's venue — mid-game+. | KEEP |
+| `SPEAKEASY.OPEN_COST` | $750,000 | Cash sink to establish the district's one club (scarce → prestige). | KEEP |
+| `SPEAKEASY.TIERS` incomePerHr | 8k → 130k/hr (Backroom→Cathedral) | Base bar take, capped 24h — between a laundromat and a restaurant; the club's real draw is patronage. | KEEP |
+| `SPEAKEASY.TIERS` cost | 0 → $11M | Decor ladder — a deep cash sink for a prestige venue. | KEEP |
+| `SPEAKEASY.ROUNDS` | round $8k / topshelf $40k | Buying a round: a TAXED transfer patron→owner (owner nets 98%, the bodyguard-hire mechanism) — "spenders fund proprietors". | KEEP |
+| `SPEAKEASY.VISIT_CD_MS` | 1h | Per-(patron,club) cooldown — bounds the taxed transfer rail (an alt→alt cash pipe is already 2%-taxed like bodyguard). | KEEP |
+| `SPEAKEASY.BOTTLES` | 3 / 8 / 20 $OMR | Bottle service — a PURE-STATUS deflationary $OMR burn (rides vanity:%), no owner cut. A recurring $OMR sink. | KEEP |
+| `SPEAKEASY.NAME_OMR` | 8 | Name the club (a $OMR vanity burn). | KEEP |
+| `SPEAKEASY.REGULAR_VISITS` | 10 | Visits to become a "regular" (status). | KEEP |
+
+**Notes (sign-off):**
+- The only NET cash faucet is the base bar take (capped 24h, the business pattern); rounds are
+  player-funded taxed TRANSFERS (deflationary overall), not a faucet.
+- A club **dies with the proprietor's street** (the business precedent) — a marked man's $750k+ is at
+  stake; death frees the district for a new proprietor (no seizure/buyout in step one).
+- The round transfer is the audited `bodyguard:hire` mechanism verbatim (1% street tax → buyback + 1%
+  dev off-ledger + 98% net) — an untaxed unlimited P2P transfer is the cheapest value pipe in the game.
+- Step two is the **revenue layer**: real-money (ETH) cosmetic decor + bottle service, and the club
+  hosting the games with a rake to the owner — both gated on the Store/chain rail (mainnet, legal + audit).

@@ -1944,6 +1944,39 @@ leak — a per-contributor cap is the dial); uncapped underboss fund-renames (bo
 the dormant on-chain Store `grantPackage` guard + wire_month-before-character reconcile + concurrent
 extension lost-update (the on-chain Store wiring milestone, mainnet-gated). Shakedown loop continues.
 
+**THE SPEAKEASY (step one) — BUILT** (`src/speakeasy.js`, `test/speakeasy.js` — the 28th suite; design
+`omerta-speakeasy-design.md`). The game's first SOCIAL HUB — a place to *be seen*. A scarce, prestigious
+nightclub a made man opens and runs; ties **business** (a front that farms cash), **casino** (hosts the
+games — deferred), and **social** (where you're seen with your family). Founder-directed; numbers are
+sign-off levers; off-chain, §10.4-clean. **ONE club per district** (`speakeasies.district_id` PK — the
+territory-racket pattern), owned by a character (`MIN_LEVEL` 15, `OPEN_COST` $750k cash SINK
+`speakeasy:open`); **dies with the proprietor's street** (the business precedent — a marked man's club is
+at stake; `wipeSpeakeasyAtDeath` in runEstate wipes the club + its guest list), which frees the district.
+No turf/seizure in step one. **The proprietor**: `collectSpeakeasy` banks the base bar take (lazy, capped
+`INCOME_CAP_MS` 24h, faucet `speakeasy:income`, safehouse-blocked D2); `upgradeSpeakeasy` climbs the decor
+ladder (`TIERS` Backroom → Lounge → Blue Room → Copa → Cathedral — income + prestige, collects pending at
+the old rate first, sink `speakeasy:decor`); `nameSpeakeasy` is a $OMR vanity burn `vanity:speakeasy`
+(rides vanity:%, no-op guard). **The patron (being seen)**: `visitSpeakeasy` — **buy a round**, district-
+pinned (`ch.loc`), a two-party CASH transfer patron→owner (the `bodyguard:hire` pattern EXACTLY: owner
+nets 98%, 1% street tax → buyback, 1% dev off-ledger; `speakeasy:round` both sides), joining the club's
+**guest list** + bumping its prestige; gates own-club (withTwoCharacters `self`) / owner-alive (re-read
+under lock) / jailed / hospitalized / safe-housed / per-(patron,club) cooldown `VISIT_CD_MS` 1h.
+`bottleService` — the ultra-premium **$OMR** flex: a pure-status deflationary BURN `vanity:speakeasy`
+(no owner cut) + big prestige, prominent on the guest list (allowed at your own club). `REGULAR_VISITS`
+(10) makes a patron a **regular** (status); the club's stored **prestige** (tier floor + round/bottle
+bumps) ranks the nightlife on `GET /v1/speakeasy`. §10.4: `speakeasy:` joined the cash `KNOWN_REASONS`
+(all character_id'd — check (a) reconciles; the tax/dev split is the audited `bodyguard:hire` mechanism),
+bottles/naming ride `vanity:%` (zero omr change). Routes `POST /v1/speakeasy/:district/open|round|bottle`,
+`/v1/speakeasy/collect|upgrade|name`, `GET /v1/speakeasy`; surfaced on the view + `/v1/rules` + a "The
+Speakeasy" console tab (your club, the nightlife map, buy-a-round/bottle where you stand). `test/speakeasy.js`
+covers the open gates, the capped bar take + safehouse gate, the decor ladder, naming + no-op, the round
+(two-party taxed transfer + guest list + cooldown/travel/self/jail gates), the regular status, bottle
+service, the board, DEATH (club goes dark + guest list clears + district reopens), and §10.4 (per-character
+cash reconciles + vocabulary + the $OMR burns). Suite 28/28 + sim drift-0. **Deferred (step two, the
+revenue layer)**: the club hosts the games (a rake to the owner), a Prohibition **raid** (the Law busts
+the club), a P2P buyout/contest, a cross-club **renown** axis, and the **real-money (ETH) cosmetic decor +
+bottle-service** tier (the Store/GearVault rail — cosmetics-as-NFTs with resale royalties).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
