@@ -5,7 +5,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          levelOf, rankIdxOf, cityEventOf, dayOf,
          assetEnergyCap, effStat, assetsValue, cargoCapacity, tradeRankIdx,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
-         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf,
+         gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf } from './rules.js';
 import { accrue } from './accrual.js';
@@ -449,6 +449,30 @@ async function persistCharacter(client, ch) {
      ch.rwa_used ?? 0, ch.rwa_at ?? null]);
 }
 
+// THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
+// never guesses. A priority ladder: emergencies first (lockup, hospital, bleeding), then the big
+// progression unlocks (a Path, a family), then safety (bank your cash), then finishing the First Week,
+// then just staying active. Pure guidance — reads state, moves nothing. Returns { label, hint, tab }.
+function coachOf(ch, acct, owned) {
+  const lvl = levelOf(Number(ch.respect));
+  const maxEnergy = 50 + 2 * lvl + assetEnergyCap(owned.assets || []);
+  const now = Date.now();
+  const future = (t) => t && new Date(t) > new Date(now);
+  const onboard = typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {});
+  const obDone = ONBOARD_TASKS.filter((t) => onboard[t.id]).length;
+  if (future(ch.jail_until)) return { label: 'You\'re in lockup', hint: 'Sit it out — or work the Pen: bribe the guard, work the yard, watch your back.', tab: 'pen' };
+  if (future(ch.hosp_until)) return { label: 'Laid up in the hospital', hint: 'Patched up soon. Nothing to do but heal and wait.', tab: 'streets' };
+  if (Number(ch.health) < 30) return { label: 'You\'re bleeding out', hint: 'Heal up before someone finishes the job (the Heal button, top-left).', tab: 'streets' };
+  if (Number(ch.lc_crime || 0) < 1) return { label: 'Pull your first job', hint: 'Head to the Streets and run any crime — it\'s how everything starts. Then follow Start Here.', tab: 'streets' };
+  if (lvl >= 5 && !ch.path) return { label: 'You\'ve made rank', hint: 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', tab: 'streets' };
+  if (!owned.gangId && lvl >= 3) return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
+  if (Number(ch.cash) > 25000 && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
+  if (obDone < ONBOARD_TASKS.length) return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
+  if (!ch.lab && !(owned.businesses || []).length && lvl >= 8) return { label: 'Make money while you sleep', hint: 'Set up a Kitchen or a front — passive income is how the big families grow.', tab: 'kitchen' };
+  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'You\'ve got energy to burn — go pull a job on the Streets.', tab: 'streets' };
+  return null; // an established player who knows the ropes — no nag
+}
+
 export function view(ch, acct = {}, owned = {}) {
   const lvl = levelOf(Number(ch.respect));
   const assets = owned.assets || [];
@@ -525,6 +549,7 @@ export function view(ch, acct = {}, owned = {}) {
     hitmanRep: Number(acct.hitman_rep || 0), kills: Number(acct.kills || 0), seasonKills: Number(ch.season_kills || 0),
     hitmanTitle: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
     onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
+    coach: coachOf(ch, acct, owned), // the guided next-step advisor (the sheet surfaces it)
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id,
     // THE LIVING WORLD — the city at a glance: the two event tracks + the intraday clock (GET /v1/city

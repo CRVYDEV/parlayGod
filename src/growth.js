@@ -164,6 +164,41 @@ const CHECKS = {
   ob_wallet: (ch, h) => !!h.acct.wallet_address,
 };
 
+// FOUNDER FUNNEL ANALYTICS (mod-gated) — where new players get stuck. Pure read aggregation over the
+// tables + the first_week_step telemetry the checklist already emits; no PII, no §10.4 surface. Level
+// buckets use the respect thresholds (levelOf = floor(sqrt(respect/4))+1: lvl5=respect 64, 10=324, 20=1444).
+export async function funnelStats(pool) {
+  const one = async (q, p = []) => Number((await pool.query(q, p)).rows[0].n);
+  const characters = {
+    total: await one('SELECT COUNT(*) n FROM characters'),
+    alive: await one('SELECT COUNT(*) n FROM characters WHERE alive'),
+    dead: await one('SELECT COUNT(*) n FROM characters WHERE NOT alive'),
+  };
+  const levels = { // alive, by respect band
+    lvl_1_4: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect < 64'),
+    lvl_5_9: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 64 AND respect < 324'),
+    lvl_10_19: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 324 AND respect < 1444'),
+    lvl_20_plus: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 1444'),
+  };
+  const progression = {
+    pulled_a_job: await one('SELECT COUNT(*) n FROM characters WHERE alive AND lc_crime > 0'),
+    declared_path: await one('SELECT COUNT(*) n FROM characters WHERE alive AND path IS NOT NULL'),
+    in_a_family: await one('SELECT COUNT(DISTINCT character_id) n FROM gang_members'),
+    linked_wallet: await one('SELECT COUNT(*) n FROM account_persistent WHERE wallet_address IS NOT NULL'),
+  };
+  // First-Week claims per task (+ capstone completions), from the telemetry the checklist emits
+  const firstWeek = {};
+  let capstone = 0;
+  for (const t of ONBOARD_TASKS) firstWeek[t.id] = 0;
+  const fw = (await pool.query("SELECT props FROM telemetry WHERE event='first_week_step'")).rows;
+  for (const r of fw) {
+    const p = typeof r.props === 'string' ? JSON.parse(r.props) : (r.props || {});
+    if (p.task && firstWeek[p.task] !== undefined) firstWeek[p.task]++;
+    if (p.capstone) capstone++;
+  }
+  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone } };
+}
+
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
 // readiness (the same CHECKS claimOnboard enforces) so the client never re-derives game state:
 // each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.

@@ -1516,9 +1516,29 @@ do-it-first (grey → jumps to the relevant tab) states, claim buttons on the ex
 links, live progress + the capstone bonus; `describe()` humanizes the claim toast. `test/growth.js`
 gained board assertions (nine tasks, readiness flips on the first job, claimed marks). Verified live
 end-to-end in Chromium (fresh guest → lands on Start Here → job → board flips ready → claim pays
-$500 +10 energy → 1/9). Suite 21/21 + sim drift-0. Deferred onboarding polish: per-tab empty-state
-coaching, a first-session interstitial, funnel-drop-off analytics view (the telemetry rows already
-land — `first_week_step`).
+$500 +10 energy → 1/9). Suite 21/21 + sim drift-0.
+
+**ONBOARDING POLISH — "the On-Ramp" — BUILT** (`src/game.js`, `src/growth.js`, `src/server.js`,
+`public/index.html`). A max-effort package turning the deep-but-overwhelming console into something a
+first-timer can navigate. All additive: no schema, no new faucet, no §10.4 surface (a status view
+field + read endpoints). **(1) THE COACH** — `coachOf(ch, acct, owned)` in `game.js`, surfaced as
+`view.coach = { label, hint, tab }`: a server-authoritative priority ladder for the single highest-value
+next step (emergencies: lockup/hospital/bleeding → pull your first job (`lc_crime<1`) → declare a Path at
+5 → join a family at 3 → bank a big pocket → finish the First Week → set up an earner at 8 → full-tank
+nudge → silent for vets). The client renders it as a neon "▸ …" banner on the sheet with a "take me
+there →" jump. **(2) FIRST-SESSION WELCOME** — a one-time modal (localStorage `omerta_welcomed`) that
+orients a brand-new player (the loop, respect=level, the account-survives-death rule, the Start Here
+pointer). **(3) THE GLOSSARY** — a "?" in the top bar opens a jargon panel (respect/energy/nerve/heat/
+cash-vs-bank-vs-$OMR/omertà/kitchen/going-legit/prestige). **(4) EMPTY-STATE COACHING** — a `coachCard`
+helper drops a "what this is / do this first" card into the Kitchen (no lab), Garage (no iron/guns),
+Empire (no fronts), Black Market (empty board), and Shylock (nothing posted) instead of a blank grid.
+**(5) START HERE "DO THIS NEXT"** — the guided tab now leads with the single most actionable task
+(claim-ready first, else the next thing to go do). **(6) FOUNDER FUNNEL** — `GET /v1/mod/funnel`
+(`growth.js:funnelStats`, mod-gated): character counts, alive/dead, respect-band level buckets, the
+progression funnel (pulled-a-job / declared-path / in-a-family / linked-wallet), and per-task First-Week
+claim tallies from the `first_week_step` telemetry — so the alpha can be run and drop-off watched without
+a developer. `test/growth.js` covers the coach (fresh → "pull your first job", advances after a job) and
+the funnel (counts + mod-gate). Verified live end-to-end in Chromium. Suite 21/21 + sim drift-0.
 
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
