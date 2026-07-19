@@ -399,8 +399,9 @@ export async function applyDecor(ch, styleId, client, h) {
 export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
   const S = SPEAKEASY.STANDOVER;
   if (jailed(ch)) throw new GameError('jailed', 'No muscle work from lockup.');
-  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to lean on anyone.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're in no shape to lean on anyone.");
   if (safeHoused(ch)) throw new GameError('safe', "You can't run a standover while you're supposed to be to ground.");
+  if (hospitalized(owner)) throw new GameError('hosp', "They're under the Doc's care — even we have rules."); // audit F1: shakedown parity
   if (levelOf(Number(ch.respect)) < SPEAKEASY.MIN_LEVEL) throw new GameError('level', `Standing over a made man's club takes level ${SPEAKEASY.MIN_LEVEL}.`);
   if (ch.loc !== districtId) throw new GameError('travel', "You're not in that district — go there to lean on the place.");
   if (owner.id === ch.id) throw new GameError('own_club', "You don't stand over your own joint.");
@@ -437,7 +438,10 @@ export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
     await h.track(client, ch.account_id, 'speakeasy_standover', { district: districtId, won: false });
     return { ok: true, won: false, feePaid: S.FEE };
   }
-  // WON — a forced sale at the assessed (build) value: the owner is PAID (taxed, the buyout pattern), loses the club
+  // WON — a forced sale at the assessed (build) value: the owner is PAID (taxed, the buyout pattern), loses the club.
+  // Resolve the owner's pending raid FIRST (the buySpeakeasy precedent — audit F3): a WON standover must NOT wipe a
+  // hot club clean, else a friendly standover would launder a pending raid (the outgoing owner escaping the fine).
+  await resolveRaid(owner, row, client, h); // fines the owner + may shutter the club before handover (isShut carried below)
   const fee = Math.ceil(price * 0.01), tax = Math.ceil(price * 0.01), net = price - fee - tax;
   ch.cash = Number(ch.cash) - price;
   owner.cash = Number(owner.cash) + net;
