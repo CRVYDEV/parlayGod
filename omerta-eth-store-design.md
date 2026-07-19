@@ -93,6 +93,13 @@ backend + a **mod comp/simulate route** (`POST /v1/mod/store/grant`, mod-key) th
 `recordStorePurchase` with a synthetic nonce — for comps, QA, and until the paywall ships. The test
 drives `recordStorePurchase` directly (the `test/chain.js` fee precedent).
 
+**Comp vs real payment (revenue is gated on a `txHash`).** The revenue split is recorded ONLY when the
+payment carries a `txHash` — i.e. a REAL on-chain `StorePaid` event (the watcher always passes the tx).
+A **comp** through the mod route (no `txHash`) grants the entitlement but records ZERO Vig buyback
+basis. Without this, a free comp would fabricate real-ETH "revenue" that `runVigBuyback` (which sums
+`vig_revenue` across all sources) could then spend, unbacking the withdrawal reserve on the real-money
+side. So: real ETH → revenue + grant; comp → grant only.
+
 ## §10.4 / invariants
 
 - The Store writes zero `transactions` rows (ETH + entitlements are out-of-band). No new §10.4 reason,

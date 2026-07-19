@@ -102,7 +102,12 @@ export async function recordStorePurchase(pool, { nonce, sku, payer, amountWei, 
       if (e?.code === '23505') return { recorded: false, duplicate: true };
       throw e;
     }
-    await splitRevenue(client, { ref: n, amountWei }); // three-way accounting, same txn as the payment
+    // Record the three-way revenue split ONLY for a REAL on-chain payment (one carrying a txHash from
+    // the StorePaid event). A comp / QA grant via the mod route has no txHash → it grants the
+    // entitlement but injects NO Vig buyback basis (audit MED: else a free comp would fabricate real-ETH
+    // "revenue" that runVigBuyback — which sums vig_revenue with no source filter — could then spend,
+    // unbacking the withdrawal reserve). Real ETH only ever comes with a tx.
+    if (txHash) await splitRevenue(client, { ref: n, amountWei });
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let granted = false;
     if (acct) {
