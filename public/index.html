@@ -245,6 +245,7 @@
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
     if (body.bought !== undefined && body.ticker) bits.push(`bought ${body.bought} ${body.ticker} — clean money${body.scrutiny ? ' (a big move — drew heat)' : ''}`);
     if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
+    if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
@@ -1215,8 +1216,9 @@
       </div>
       <h2 style="margin-top:12px">The Shelf</h2>
       <div class="grid">${S.packages.map((p) => `
-        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>
-          <div class="d">${p.blurb}</div></div>`).join('')}</div>
+        <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>${p.plexOmr ? ` <span class="chip cold">or ${fmt(p.plexOmr)} $OMR</span>` : ''}
+          <div class="d">${p.blurb}</div>
+          ${p.plexOmr ? `<button class="act" data-plex="${p.sku}">pay ${fmt(p.plexOmr)} $OMR (PLEX)</button>` : ''}</div>`).join('')}</div>
       <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
       <div class="d" style="font-size:10px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>
       <div id="pass-slot"></div>`;
@@ -1239,6 +1241,8 @@
             <span class="t">${t.claimed ? '✓ ' : ''}Tier ${t.tier}</span><div class="d">${t.reward}</div></div>`).join('')}</div>`;
       const cb = $('#pass-claim'); if (cb) cb.onclick = () => act('POST', '/v1/pass/claim', {}).then(() => renderStore());
     }
+    t.querySelectorAll('[data-plex]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/store/plex/${b.dataset.plex}`, {}).then(() => renderStore()));
   }
 
   // ── THE GARAGE: your iron + the armory ──
