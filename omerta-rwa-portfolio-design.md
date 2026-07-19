@@ -42,6 +42,26 @@ fractional AAPL instead of $OMR."
   rewards program distributing THROUGH Robinhood, not an independent issuer). **Hard-gated on a
   Robinhood partnership + securities counsel + the third-party audit that already gates mainnet.**
 
+**WHAT THE RWAs ACTUALLY ARE (founder clarification, 2026-07-19).** The tickers (AAPL / TSLA / SPCX /
+HOOD / …) are **Robinhood's tokenized stocks — real ERC-20 tokens trading on Uniswap** (the `stocks`
+category, on Arbitrum / Robinhood Chain), NOT abstract collectibles. This makes R2/R3 concrete:
+- **R2's buy-bot swaps ETH → the actual stock-token on the Uniswap pool** and holds it in the reserve
+  wallet; "backed 1:1" means the reserve literally holds the same token the in-game credit represents.
+  The backing price is the **live Uniswap pool price (a TWAP)** — the same oracle the Vig buyback bot
+  already reads for $OMR. (`RWA_BPS` of ETH revenue → this swap.)
+- **R3's extraction delivers that real Uniswap-traded token to the player's own wallet** — a genuine
+  tokenized-security transfer, hence the KYC / jurisdiction gate below.
+- **The R1 in-game price stays the deterministic §7.11 hash (a PROXY), NOT the live Uniswap price** —
+  deliberately. A display price that TRACKS a real security's live price weakens the "pure status,
+  outside securities law" posture that keeps R1 shippable everywhere; the hash proxy is the safer
+  choice until R2 introduces the real oracle behind the KYC boundary. (Open decision if the founder
+  wants R1 to "feel real" — flagged, counsel call.)
+- **Jurisdiction is a hard gate, not a nicety.** Robinhood's tokenized stocks are offered to EU
+  customers and are **not available to US persons** (as of the knowledge cutoff — counsel/Robinhood
+  confirm current status). So R3 extraction must be **KYC'd AND geofenced** to eligible jurisdictions;
+  a US-person account can play + earn + hold the in-game status fully but can never cross the
+  extraction boundary. R1 (status only) has no such restriction — it ships to everyone.
+
 The three hard rules the whole design respects, so R3 stays inside the lines:
 1. **Never distribute securities by chance.** Every RNG/loot/casino layer stays in cash/$OMR; RWA
    acquisition is a *purchase* or an *earned/vested/skill* payout only — never a spin-to-win.
