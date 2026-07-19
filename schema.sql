@@ -1016,6 +1016,16 @@ CREATE TABLE IF NOT EXISTS rwa_dividend_pool (
   lifetime_funded NUMERIC NOT NULL DEFAULT 0,
   lifetime_paid NUMERIC NOT NULL DEFAULT 0
 );
+-- The FAMILY dividend pool is SEPARATE from the personal one (cross-system audit MED): family invests
+-- fund it, family reserves draw it — so collective/seizable reserve $OMR can NEVER reach a personal
+-- account through the dividend (the "no reserve→personal path" guarantee), and the family dividend is
+-- genuinely funded by the family's OWN investing. Same shape, same §10.4 bucket treatment.
+CREATE TABLE IF NOT EXISTS rwa_family_dividend_pool (
+  id INT PRIMARY KEY,
+  pool NUMERIC NOT NULL DEFAULT 0,
+  lifetime_funded NUMERIC NOT NULL DEFAULT 0,
+  lifetime_paid NUMERIC NOT NULL DEFAULT 0
+);
 -- Seed the singletons once (idempotent; virtual pool ≈ $500 / $OMR).
 INSERT INTO amm_pool (id, cash_reserve, omr_reserve)
   SELECT 1, 10000000, 20000 WHERE NOT EXISTS (SELECT 1 FROM amm_pool);
@@ -1023,6 +1033,7 @@ INSERT INTO street_tax (id, pool, fund)
   SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
 INSERT INTO stake_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM stake_pool);
 INSERT INTO rwa_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_dividend_pool);
+INSERT INTO rwa_family_dividend_pool (id, pool) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM rwa_family_dividend_pool);
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY,
   at TIMESTAMPTZ NOT NULL DEFAULT now(),
