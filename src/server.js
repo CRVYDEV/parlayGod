@@ -431,6 +431,20 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.bribeGuard(ch, req.body?.seconds, client, h)));
   app.post('/v1/pen/break', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.attemptBreak(ch, client, h)));
+  // step four — the CO-OP BREAKOUT (the crew-heist pattern, inside)
+  app.get('/v1/pen/breaks', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
+    return Pen.breakBoard(pool, cid);
+  });
+  app.post('/v1/pen/break/plan', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.planBreak(ch, client, h)));
+  app.post('/v1/pen/break/:id/join', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.joinBreak(ch, req.params.id, client, h)));
+  app.post('/v1/pen/break/:id/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveBreak(ch, req.params.id, client, h)));
+  app.post('/v1/pen/break/:id/go', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.executeBreak(ch, req.params.id, client, h)));
   app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h)));
   // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)

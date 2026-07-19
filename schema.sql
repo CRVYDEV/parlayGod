@@ -556,6 +556,21 @@ CREATE TABLE IF NOT EXISTS pen_contraband (
   qty INT NOT NULL DEFAULT 0,
   PRIMARY KEY (character_id, item)
 );
+-- THE PEN step four — the CO-OP BREAKOUT (the crew-heist pattern, inside): a jailed leader stakes a
+-- cutkit; jailed inmates join off the board; the leader calls the go — one roll for the whole crew
+-- (odds scale with crew size). Win = everyone's sentence clears + everyone WANTED; loss = the whole
+-- crew eats the hole + a longer stretch. §10.4-clean (the cutkit is contraband, not currency).
+CREATE TABLE IF NOT EXISTS pen_breaks (
+  id TEXT PRIMARY KEY,
+  leader_character TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'planning',   -- planning | done | abandoned
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS pen_break_members (
+  break_id TEXT NOT NULL,
+  character_id TEXT NOT NULL UNIQUE,         -- one active break per inmate (the heist precedent)
+  PRIMARY KEY (break_id, character_id)
+);
 
 -- LOAN SHARKING — the Shylock. An OPEN row is an escrowed offer (principal held like a bounty pot);
 -- a TAKEN row is an ACTIVE debt (principal already with the borrower). Escrow (SUM principal WHERE

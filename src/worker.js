@@ -14,6 +14,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepStaleHeists } from './heists.js';
+import { sweepStaleBreaks } from './pen.js';
 import { reclaimExpiredVouchers } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
@@ -182,6 +183,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
+    // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded
+    const pb = await safe('pen break sweep', () => sweepStaleBreaks(pool));
+    if (pb?.swept > 0) console.log(`🔓 pen: swept ${pb.swept} stale break plan(s), cutkits returned to living leaders`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns

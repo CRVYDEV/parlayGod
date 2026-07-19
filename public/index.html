@@ -872,6 +872,7 @@
     'The Pen': [
       ['GET', '/v1/pen'], ['POST', '/v1/pen/work', {}], ['POST', '/v1/pen/buy/:item', {}],
       ['POST', '/v1/pen/protection', {}], ['POST', '/v1/pen/bribe', { seconds: 60 }], ['POST', '/v1/pen/break', {}],
+      ['GET', '/v1/pen/breaks'], ['POST', '/v1/pen/break/plan', {}], ['POST', '/v1/pen/break/:id/join', {}], ['POST', '/v1/pen/break/:id/leave', {}], ['POST', '/v1/pen/break/:id/go', {}],
       ['POST', '/v1/pen/shank/:targetId', {}], ['POST', '/v1/pen/burner/:targetId', { tier: 'legbreaker' }],
     ],
     'Loans': [
@@ -1470,6 +1471,7 @@
     await refresh();
     const r = await api('GET', '/v1/pen');
     const p = r.body || {};
+    const bb = (await api('GET', '/v1/pen/breaks')).body || {};
     if (!p.inside) {
       t.innerHTML = `<h2>The Pen</h2><div class="card"><div class="d">You're on the outside. The yard only opens from a cell —
         get busted (or don't) and this tab becomes your world: work the yard, buy contraband, pay the yard boss,
@@ -1498,6 +1500,15 @@
       <div class="grid">${(p.commissary || []).map((it) => `
         <div class="card"><span class="t">${it.name}</span><div class="d">$${fmt(it.cost)} — ${it.desc}</div>
           <button class="act" data-penbuy="${it.id}">buy</button></div>`).join('')}</div>
+      <h2 style="margin-top:10px">Crew Break <span class="d">${bb.min || 2}–${bb.max || 4} inmates over the wall together — bigger crew, better odds</span></h2>
+      ${bb.mine ? `<div class="card" style="border-color:var(--blood)"><span class="t">Your break — crew ${bb.mine.crew.length}/${bb.max} (${bb.mine.crew.join(', ')})</span>
+          <div class="d">${bb.mine.leader ? 'you planned it. Go when the crew\'s set — a win frees EVERYONE (all WANTED); a bust puts the whole crew in the hole.' : 'wait for the leader to call the go.'}</div>
+          ${bb.mine.leader ? `<button class="act" data-pengo="${bb.mine.id}" style="border-color:var(--blood)">CALL THE GO</button>` : ''}
+          <button class="act" data-penleave="${bb.mine.id}">${bb.mine.leader ? 'disband (kit back)' : 'walk away'}</button></div>`
+        : `${(bb.open || []).length ? `<div class="grid">${(bb.open || []).map((b) => `
+          <div class="card"><span class="t">${b.leader}'s crew — ${b.crew}/${b.crewMax}</span>
+            <button class="act" data-penjoin="${b.id}">join the break</button></div>`).join('')}</div>` : '<span class="d" style="color:var(--dim)">no crew forming — plan one (needs a cutkit)</span>'}
+          ${p.breakout?.ready ? '<div style="margin-top:6px"><button class="act" data-penplan="1" style="border-color:var(--blood)">plan a crew break (stake your cutkit)</button></div>' : '<div class="d" style="color:var(--dim);margin-top:4px">buy a cutkit to plan a crew break</div>'}`}
       <h2 style="margin-top:10px">The Roster (${(p.yard || []).length})</h2>
       <div class="grid">${(p.yard || []).map((y) => `
         <div class="card"><span class="t">${y.name}</span> <span class="d">lvl ${y.level ?? '?'}${y.gang ? ' · made' : ''}</span>
@@ -1511,6 +1522,14 @@
       act('POST', `/v1/pen/shank/${btn.dataset.shank}`, {}).then(() => renderPen()));
     t.querySelectorAll('[data-burner]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/pen/burner/${btn.dataset.burner}`, { tier: 'legbreaker' }).then(() => renderPen()));
+    t.querySelectorAll('[data-penjoin]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/break/${btn.dataset.penjoin}/join`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-penleave]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/break/${btn.dataset.penleave}/leave`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-pengo]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/break/${btn.dataset.pengo}/go`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-penplan]').forEach((btn) => btn.onclick = () =>
+      act('POST', '/v1/pen/break/plan', {}).then(() => renderPen()));
   }
 
   // data-do buttons (simple POST/GET with no body)

@@ -110,13 +110,35 @@ Console: an "Over the Wall" card in the Pen tab (with the fugitive warning). `te
 free/no-kit/lockdown gates, the cutkit sink → pool, a forced fail (the hole + longer stretch + beating +
 kit spent + NOT wanted) and a forced win (sentence cleared + WANTED + heat spike + the sheet reads wanted).
 
-## 6. Step four (deferred — the roadmap)
+## 6. Step four — THE CO-OP BREAKOUT (BUILT)
+The crew-heist pattern, INSIDE (`pen.js` `planBreak`/`joinBreak`/`leaveBreak`/`executeBreak`/
+`breakBoard`/`sweepStaleBreaks`; `pen_breaks` + `pen_break_members` tables). A jailed **leader stakes a
+cutkit** (`POST /v1/pen/break/plan`); jailed inmates **join** off the board (`GET /v1/pen/breaks`,
+`POST /v1/pen/break/:id/join`); the leader **calls the go** (`POST /v1/pen/break/:id/go`) — ONE roll for
+the whole crew, `p = COOP_BASE 0.4 + (crew−1)×COOP_PER_EXTRA 0.12 + riot`, clamped `[.05, COOP_MAX_P .9]`
+(`PEN_BREAK_P` still pins it for tests). Crew `COOP_MIN 2` … `COOP_MAX 4`.
+- **Win** → EVERYONE's sentence clears + EVERYONE walks out **WANTED** (the solo-break bound, applied
+  crew-wide) + a heat spike each.
+- **Loss** → the WHOLE crew eats the hole + `BREAK_CAUGHT_ADD_S` + a beating (per-member).
+
+Lock discipline mirrors `executeHeist` exactly: leader (withCharacter) → member char rows **sorted** →
+the break row; one-active-break (`UNIQUE character_id`) makes concurrent executes disjoint (acyclic);
+the residual leader-vs-PvP `40P01` maps to a clean `contention` retry; members are written by absolute
+`UPDATE`s under lock (never in-memory — no persistCharacter clobber). The cutkit is **contraband, not
+currency** — staked at plan, spent win or lose at go, **refunded to a LIVING leader** on disband/stale
+(a dead leader's kit stays sunk — the heist-stake rule); a member's membership dies with the estate
+(`pen_break_members` joined the runEstate wipe). The worker sweeps stale plans (`sweepStaleBreaks`,
+`COOP_TTL_MS` 1h, leader-before-break lock order). §10.4-clean (no currency moves — the only ledgered
+event was buying the cutkit). Console: a "Crew Break" section in the Pen tab (plan/join/leave/go).
+`test/pen.js` covers the free/no-kit/crew_short/not_leader gates, the staked-kit lifecycle, a forced win
+(whole crew out + WANTED + heat), a forced fail (whole crew in the hole + longer stretch), and the
+disband + stale-sweep kit refund.
+
+## 7. Step five (deferred — the roadmap)
 - **Prison factions / shot-callers** — your family's rep sets the pecking order; a yard boss taxes
   new fish; controlling the yard is a mini-turf game.
-- **Co-op break-out** — a crew of inmates over the wall together (the crew-heist pattern); odds scale
-  with the crew, everyone walks (or everyone eats the hole).
 - **Richer yard incidents** — a hostage, a snitch, a work-strike; incident-specific rewards.
-- **Protective custody** — witpro as an explicit in-Pen segregation tier (today the shank already
-  respects `witproActive`).
+- **The break RAT** — a crew informer (the heist-rat twin): tips the guards, the break auto-blows,
+  the rat walks while the crew eats the hole.
 
 All numbers are founder sign-off levers — sim + sign-off into BALANCE.md before production.
