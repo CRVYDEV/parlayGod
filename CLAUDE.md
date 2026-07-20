@@ -387,6 +387,21 @@ are kept honest so the estate report + killer effStat stay right; test forces th
 **Design note:** gear IS the tradeable on-chain NFT (GearVault, already delivered in M6); territory
 rackets are intentionally NOT independently tradeable NFTs — that would conflict with in-game seizure,
 so they stay seizable in-game capital (the two asset types serve different Risk-to-Earn roles).
+**Territory step two — the ladder + THE EMPIRE — BUILT** (`src/territory.js`, `src/rules.js`,
+`test/social.js`; a content expansion for the thinnest income catalog). **(1) Ladder 3→5** — two on-curve
+operations (`Vice Empire` t4 $4M/200k/hr, `The Syndicate` t5 $15M/600k/hr) on the continuing ROI taper (the
+car-catalog precedent — `upgradeRacket`/`territoryTierOf` already handle any tier, so the extension is
+**zero-code**: content, not a rebalance). **(2) THE EMPIRE** — `gangs.territory_earned` (lifetime
+territory-racket income, bumped alongside the treasury on every `territory:income` collect + the
+upgrade-pending, NUMERIC = arith-safe) + `TERRITORY_RANKS` (Corner Crew → The Cosa Nostra, `territoryRankOf`)
++ `GET /v1/leaderboard/territory` (`territoryLeaderboard` — the biggest territorial families; the
+world/wire status-board twin). PURE STATUS — **zero §10.4 surface** (`territory_earned` isn't a currency;
+the income still rides `territory:income`, so the sim's `gang treasuries` check stays drift-0; the test
+asserts `empire.earned == the family's lifetime collect`). Gang-level → dies with the family. Surfaced on
+`GET /v1/gangs/:id` (`empire {earned, rank}`) + the console Family tab (an Empire banner + leaderboard).
+`test/social.js` proves the 5-tier ladder + the two new operations, the empire earned/rank, and the
+leaderboard (both territorial families, §10.4-clean). Suite 30/30 + sim drift-0. All numbers are founder
+sign-off levers. Deferred: per-district racket-TYPE choice + a Bureau-crackdown risk layer.
 
 **Phase 4 (Backed emission) — BUILT** (`src/economy.js`, `src/worker.js`, `test/economy.js`;
 design `omerta-phase4-emission-design.md`). Closes the audit's #1 finding — the fixed 14% staking

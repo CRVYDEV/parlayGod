@@ -7,7 +7,7 @@
 // the character-cash check is untouched and the treasury check reconciles them. The on-chain
 // tradeable-NFT layer (minted_onchain) is dormant/deferred, the M6 pattern.
 import { GameError } from './game.js';
-import { DISTRICTS, TERRITORY_RACKETS, territoryTierOf, CONSTANTS } from './rules.js';
+import { DISTRICTS, TERRITORY_RACKETS, territoryTierOf, territoryRankOf, CONSTANTS } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 
@@ -65,8 +65,9 @@ export async function upgradeRacket(ch, districtId, client, h) {
   if (isCold(r)) throw new GameError('cold', 'That operation is dark — pay its pad before you pour money into it.');
   if (Number(g.treasury) < next.cost) throw new GameError('treasury', `The ${next.name} takes $${next.cost} from the treasury.`);
   const pending = accrued(r);
-  // the upgrade squares the pad too (upkeep_at=now): a fresh clock at the new rate, no retroactive bump
-  await client.query('UPDATE gangs SET treasury = treasury - $2 + $3 WHERE id=$1', [h.owned.gangId, next.cost, pending]);
+  // the upgrade squares the pad too (upkeep_at=now): a fresh clock at the new rate, no retroactive bump.
+  // the pending collect also banks lifetime territory income (THE EMPIRE — step two).
+  await client.query('UPDATE gangs SET treasury = treasury - $2 + $3, territory_earned = territory_earned + $3 WHERE id=$1', [h.owned.gangId, next.cost, pending]);
   await client.query('UPDATE territory_rackets SET tier=$2, last_income_at=now(), upkeep_at=now() WHERE district_id=$1', [districtId, next.tier]);
   await h.ledger(client, { currency: 'cash', amount: -next.cost, reason: 'territory:establish', counterparty: h.owned.gangId });
   if (pending > 0) await h.ledger(client, { currency: 'cash', amount: pending, reason: 'territory:income', counterparty: h.owned.gangId });
@@ -92,7 +93,8 @@ export async function collectTerritory(ch, client, h) {
     if (inc > 0) { total += inc; await client.query('UPDATE territory_rackets SET last_income_at=now() WHERE district_id=$1', [r.district_id]); }
   }
   if (total <= 0) return { ok: true, collected: 0, ...(cold ? { cold } : {}) };
-  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, total]);
+  // THE EMPIRE (step two): bank the lifetime territory income too (a gang status axis, NUMERIC = arith-safe)
+  await client.query('UPDATE gangs SET treasury = treasury + $2, territory_earned = territory_earned + $2 WHERE id=$1', [h.owned.gangId, total]);
   await h.ledger(client, { currency: 'cash', amount: total, reason: 'territory:income', counterparty: h.owned.gangId });
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
   return { ok: true, collected: total, rackets: rackets.length, ...(cold ? { cold } : {}) };
@@ -138,6 +140,14 @@ export async function seizeTerritoryRackets(client, districtId, newGang) {
 // re-establishes). Called from removeMember's dissolution branch.
 export async function releaseTerritoryRackets(client, gangId) {
   await client.query('DELETE FROM territory_rackets WHERE owner_gang=$1', [gangId]);
+}
+
+// GET /v1/leaderboard/territory — THE EMPIRE board: the biggest territorial families by lifetime
+// territory-racket income (a gang-level status axis; dies with the family). Pure status.
+export async function territoryLeaderboard(pool) {
+  const rows = (await pool.query(
+    'SELECT name, territory_earned FROM gangs WHERE territory_earned > 0 ORDER BY territory_earned DESC LIMIT 15')).rows;
+  return { empires: rows.map((r) => ({ family: r.name, earned: Number(r.territory_earned), rank: territoryRankOf(r.territory_earned).name })) };
 }
 
 // list a family's operations (for the gang/district views)

@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -860,6 +860,19 @@ await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'the new owner earns the tier-2 rate ($16k/hr)');
 // §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
 assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
+
+// ══ STEP TWO — the ladder extended 3→5 + THE EMPIRE (gang status) ══
+// the ladder grew 3→5 (content); upgradeRacket/territoryTierOf already handle any tier generically, so
+// the extension is zero-code — a tier-3 operation can now climb to Vice Empire → The Syndicate.
+assert.equal(TERRITORY_RACKETS.length, 5, 'the ladder grew to five tiers (content)');
+assert(TERRITORY_RACKETS.find((t) => t.tier === 4 && t.name === 'Vice Empire') && TERRITORY_RACKETS.find((t) => t.tier === 5 && t.name === 'The Syndicate'), 'the two new operations (Vice Empire / The Syndicate) are on the ladder');
+// THE EMPIRE — the raider's family banked 16000 of lifetime territory income (its single tier-2 collect)
+const empView = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.empire;
+assert(empView && empView.earned === 16000, 'the gang view shows lifetime territory income (THE EMPIRE)');
+assert.equal(empView.rank, territoryRankOf(16000).name, 'the empire rank is derived from lifetime income');
+// THE EMPIRE leaderboard — both families that earned territory income appear, ranked by lifetime take
+const terrLb = (await call('GET', '/v1/leaderboard/territory', { token: raider.token })).body;
+assert(terrLb.empires.find((e) => e.family === 'The Claimants') && terrLb.empires.find((e) => e.family === 'The New Fabrizi'), 'both territorial families rank on the Empire board (§10.4-clean — territory_earned is a status counter, not currency)');
 // BALANCE D2: collecting the district take is an exposed act — not from a safehouse
 await seedCh(raider.id, "safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.error, 'safe', 'no collecting territory income from a safehouse');

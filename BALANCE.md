@@ -965,6 +965,15 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-two note:* all three are **$OMR sinks through the EXISTING `intel:` vocabulary** (zero `invariants.js` change) or **pure status** (`intel_ops`), so §10.4 is untouched — every wire spend reconciles as an `intel:*` burn. These are deflationary $OMR sinks that add depth to the terminal (counter-intel, a deep read, a progression axis) without touching any signed economic surface. Nothing to watch on §10.4; the only balance question is the trace/dossier pricing relative to the tap (8) — priced to make the terminal a meaningful recurring $OMR drain for information-hungry players.
 
+**Territory rackets — STEP TWO (`TERRITORY_RACKETS` ladder + THE EMPIRE):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `TERRITORY_RACKETS` ladder | 5 tiers (was 3) | Two new operations — `Vice Empire` (t4, $4M → 200k/hr, ~112% marginal ROI/day) + `The Syndicate` (t5, $15M → 600k/hr, ~87%) on the continuing taper. Content, not a rebalance (`upgradeRacket` already handles any tier). The endgame operations a dominant family climbs to. | Sign-off |
+| `TERRITORY_RANKS` | Corner Crew → The Cosa Nostra | The Empire ladder off `gangs.territory_earned` (lifetime territory income). PURE STATUS (gang-level, dies with the family) — outside §10.4 + the sim balance. | Sign-off |
+
+*Step-two note:* the ladder extension continues the SIGNED ROI taper (marginal ROI keeps declining — 192%→…→87%/day — so higher tiers are a bigger commitment for a smaller marginal return, never a runaway). THE EMPIRE is **pure status** (`territory_earned` isn't a currency; the income still rides `territory:income`, so the gang-treasuries §10.4 check stays drift-0 — the test asserts `empire.earned == the family's lifetime collect`). Nothing to watch on §10.4; the t4/t5 income curves are the sim sign-off item (confirm the endgame operations don't over-supply cash to a turf-dominant family beyond what the 24h income cap + the 20% upkeep pad already bound). Deferred: per-district racket-TYPE choice + a Bureau-crackdown risk layer (the business-raid pattern at the gang level).
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |

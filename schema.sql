@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS gangs (
   ammo_bank INT NOT NULL DEFAULT 0,
   lifetime_tribute NUMERIC NOT NULL DEFAULT 0,   -- standing for buyback payouts
   wars_won INT NOT NULL DEFAULT 0,               -- +10,000 standing each
+  territory_earned NUMERIC NOT NULL DEFAULT 0,   -- (Territory step two) lifetime territory-racket income — THE EMPIRE (gang status)
   -- econ pass (audit: purchasable Commission standing): the CHAMBER ranks by THIS SEASON's showing
   -- (reset at rollover) — parked lifetime wealth no longer owns the head seat. The buyback family
   -- split keeps the lifetime formula (a different, signed surface). NUMERIC (pg-mem INT-arith quirk).
