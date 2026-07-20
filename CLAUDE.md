@@ -2184,6 +2184,22 @@ prices; the expectation now models the server's per-buy rounding (date-independe
 idempotency-key + disable-in-flight, active-tab re-render on WS events, the wallet-link widget, and the
 street-vanity (name/title/plate) tail — all flagged, none touch a mechanic.
 
+**CONSOLE UX BACKLOG — CLEARED** (`public/index.html`; UI-only, §10.4 untouched, suite 30/30). The four
+remaining UX-audit items: **(1) idempotency + double-submit guard** — `api()` sends a fresh
+`Idempotency-Key` on every mutation (the server already honors it), and `act()` holds a global in-flight
+lock (money moves one at a time; a double-tap toasts "easy — one move at a time" instead of firing twice).
+**(2) active-tab re-render on live events** — `setTab` now dispatches through a `RENDERERS` map + tracks
+`currentTab`; a debounced `renderActive()` re-renders the OPEN board on a WS event (your own OR streets/gang)
+and on the 30s poll / visibility-return, so a board you're staring at (contracts, nightlife, the market)
+doesn't go stale — skipped while you're focused in an input so it never nukes a half-typed amount. **(3) the
+wallet-link widget** — a "Your Wallet" card in Going Legit runs the real SIWE flow (`eth_requestAccounts` →
+`POST /v1/wallet/challenge` → `personal_sign` → `POST /v1/wallet/verify`); no `window.ethereum` → a clean
+"install a browser wallet" pointer; `ob_wallet`'s First-Week task now routes here instead of the raw deck,
+closing the last onboarding dead-end. **(4) street vanity** — a "Vanity" card on The Life tab (name change /
+custom title / car plate — the `vanity:*` $OMR sinks). Verified in Chromium: all 22 tabs render with **zero
+page errors**, the grouped tab bar shows (Streets · Earners · Vice · Blood · Family · Legit), and every tab
+GET returns 2xx for a fresh guest. The UX-audit backlog is now empty.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
