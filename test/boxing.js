@@ -6,9 +6,9 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { BOXING } from '../src/rules.js';
+import { BOXING, UNDERWORLD } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepMainEvents } from '../src/boxing.js';
+import { sweepMainEvents, enforceBeltDefense } from '../src/boxing.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -191,13 +191,53 @@ let inv4 = await runLedgerInvariants(pool);
 assert(esc(inv4).ok && esc(inv4).lhs === 0, 'escrow reconciles through the death-cancel');
 assert.equal(inv4.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles through the cancel');
 
+// ══ STEP FOUR — THE CORNERMAN (Underworld) + BELT DEFENSE ══
+// (A) THE CORNERMAN — training discount (T1) + build bonus (T3). aa earned some standing from earlier
+// boxing actions (the row exists); force a known tier.
+const sugar = (await pool.query(`SELECT id FROM fighters WHERE character_id='${aa.id}' AND name='Sugar Ray'`)).rows[0];
+await pool.query(`UPDATE fighters SET power=10 WHERE id='${sugar.id}'`);
+await seed(aa.id, `energy=200`); await grantCash(aa.id, 1000000);
+await pool.query(`UPDATE npc_standing SET standing=30, touched_at=now() WHERE character_id='${aa.id}' AND npc_id='cornerman'`); // tier 1
+const t1Pre = (await meOf(aa.token)).cash;
+const t1 = await call('POST', '/v1/boxing/train', { token: aa.token, body: { fighter: sugar.id, stat: 'power' } });
+assert.equal(t1.code, 200, 'cornerman-discounted training session');
+assert.equal((await meOf(aa.token)).cash, t1Pre - Math.round(BOXING.TRAIN_COST * UNDERWORLD.FX.CORNER_TRAIN_MULT), 'Mickey the Corner discounts the session (train ×0.9), the discounted number ledgered');
+assert.equal(t1.body.value, 11, 'tier 1 still builds +1 (10 → 11)');
+await pool.query(`UPDATE npc_standing SET standing=90, touched_at=now() WHERE character_id='${aa.id}' AND npc_id='cornerman'`); // tier 3
+const t3 = await call('POST', '/v1/boxing/train', { token: aa.token, body: { fighter: sugar.id, stat: 'power' } });
+assert.equal(t3.body.value, 13, 'tier 3 builds +2 a session (11 → 13)');
+// (B) BELT DEFENSE — The Bull holds the belt; a win while champ is a DEFENSE (reign++); an inactive champ is STRIPPED
+await pool.query(`UPDATE fighters SET injured_until=NULL WHERE id='${palooka}'`); // heal for a rematch
+await call('POST', '/v1/boxing/list', { token: bb.token, body: { fighter: palooka, stake: 50000 } });
+await seed(aa.id, `energy=200`); await grantCash(aa.id, 100000); await grantCash(bb.id, 100000);
+const def = await call('POST', `/v1/boxing/fight/${bb.id}`, { token: aa.token, body: { myFighter: bull, theirFighter: palooka, stake: 10000 } });
+assert.equal(def.body.win, true, 'the champion wins the rematch');
+assert.equal(def.body.defended, true, 'a win while HOLDING the belt is a DEFENSE (not a new title)');
+assert.equal(def.body.belt, false, 'the champ keeps — no new coronation');
+const champ = (await call('GET', '/v1/boxing', { token: aa.token })).body.champion;
+assert.equal(champ.defenses, 1, 'the reign counts one title defense');
+assert(champ.defendSeconds > 0 && champ.contender, 'the mandatory-defense clock ticks + a #1 contender is surfaced');
+// an inactive champ is stripped by the worker (warp the defense clock into the past)
+await pool.query(`UPDATE boxing_title SET last_defense = now() - interval '30 days', since = now() - interval '30 days' WHERE id=1`);
+const strip = await enforceBeltDefense(pool);
+assert.equal(strip.stripped, true, 'the inactive champion forfeits the belt');
+assert.equal((await pool.query('SELECT holder_fighter FROM boxing_title WHERE id=1')).rows[0].holder_fighter, null, 'the belt goes vacant');
+// (C) the cornerman's weekly FAVOR — patch up the whole stable (heals injuries)
+await pool.query(`UPDATE npc_standing SET standing=90, touched_at=now() WHERE character_id='${aa.id}' AND npc_id='cornerman'`);
+await pool.query(`UPDATE fighters SET injured_until = now() + interval '2 hours' WHERE id='${sugar.id}'`);
+const fav = await call('POST', '/v1/underworld/cornerman/favor', { token: aa.token });
+assert.equal(fav.code, 200, 'the corner does a favor for the inner circle'); assert.equal(fav.body.healedFighters, 1, 'one laid-up fighter patched up');
+assert.equal((await pool.query(`SELECT injured_until FROM fighters WHERE id='${sugar.id}'`)).rows[0].injured_until, null, 'the fighter is off the injured list');
+// re-crown The Bull so the DEATH belt-vacate below stays meaningful (the strip above left it vacant)
+await pool.query(`UPDATE boxing_title SET holder_fighter='${bull}', holder_char='${aa.id}', holder_name='The Bull', since=now(), last_defense=now(), defenses=0 WHERE id=1`);
+
 // ── DEATH: a dead manager's whole STABLE is done + the belt VACATES; the career legend SURVIVES ──
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: aa.id }, headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM fighters WHERE character_id='${aa.id}'`)).rows[0].n), 0, "the dead manager's stable is gone");
 assert.equal((await pool.query('SELECT holder_fighter FROM boxing_title WHERE id=1')).rows[0].holder_fighter, null, 'the belt is vacated when the champion dies');
-assert.equal(await boxingWins(aa.aid), 2, 'the career legend (account-level) SURVIVES death — the heir keeps it');
+assert.equal(await boxingWins(aa.aid), 3, 'the career legend (account-level) SURVIVES death — the heir keeps it (exhibition + bout + belt defense)');
 inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 
-console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
+console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), STEP FOUR — THE CORNERMAN (Underworld fixture — training ×0.9 cash at tier 1, +2 build at tier 3, the weekly stable patch-up favor) + BELT DEFENSE (a win while holding the belt is a DEFENSE that grows the reign; the mandatory-defense clock + #1 contender on the board; an inactive champion is STRIPPED by the worker), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
 await app.close();

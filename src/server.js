@@ -411,7 +411,7 @@ export async function buildServer() {
       trainEnergy: BOXING.TRAIN_ENERGY, statCap: BOXING.STAT_CAP, stats: BOXING.STATS,
       minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, ranks: BOXING.RANKS, rakeBps: BOXING.RAKE_BPS,
       stableMax: BOXING.STABLE_MAX, npcTiers: BOXING.NPC_TIERS, legendRanks: BOXING.LEGEND_RANKS,
-      betMin: BOXING.BET_MIN, betMax: BOXING.BET_MAX, betRakeBps: BOXING.BET_RAKE_BPS },
+      betMin: BOXING.BET_MIN, betMax: BOXING.BET_MAX, betRakeBps: BOXING.BET_RAKE_BPS, defenseMs: BOXING.DEFENSE_MS },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),

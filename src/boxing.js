@@ -6,8 +6,8 @@
 // status), and a MANAGER career LEGEND (lifetime fighter wins, account-level → SURVIVES DEATH, the
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog } from './game.js';
-import { BOXING, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
+import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
+import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -25,6 +25,47 @@ const mainEventMs = () => Number(process.env.MAIN_EVENT_MS) || BOXING.MAIN_EVENT
 const bumpLegend = (client, accountId) =>
   client.query('UPDATE account_persistent SET boxing_wins = boxing_wins + 1 WHERE account_id=$1', [accountId]);
 
+// the world TITLE BELT bookkeeping — shared by PvP bouts + main events (step four adds the REIGN +
+// the mandatory-defense clock). Locks the singleton (singletons-last). Returns {belt, defended}:
+//   - the champ won while HOLDING the belt → a successful DEFENSE (reign++, clock reset)
+//   - vacant OR they beat the champion     → the belt changes hands (fresh reign, clock starts)
+async function applyBeltResult(client, winnerF, winnerChar, loserF) {
+  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
+  if (!title) return { belt: false, defended: false };
+  if (title.holder_fighter === winnerF.id) { // the champ defended
+    await client.query('UPDATE boxing_title SET defenses=$1, last_defense=now() WHERE id=1', [Number(title.defenses) + 1]);
+    return { belt: false, defended: true };
+  }
+  if (title.holder_fighter == null || title.holder_fighter === loserF.id) { // vacant / beat the champ
+    await client.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now(), defenses=0, last_defense=now() WHERE id=1',
+      [winnerF.id, winnerChar, winnerF.name]);
+    return { belt: true, defended: false };
+  }
+  return { belt: false, defended: false };
+}
+
+// worker — STRIP an inactive champion (the mandatory-defense clock). A champ who doesn't win a bout
+// within DEFENSE_MS forfeits the belt (it goes vacant). Pure status, no §10.4.
+export async function enforceBeltDefense(pool) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const t = (await client.query('SELECT * FROM boxing_title WHERE id=1 AND holder_fighter IS NOT NULL FOR UPDATE')).rows[0];
+    if (!t) { await client.query('ROLLBACK'); return { stripped: false }; }
+    const clock = t.last_defense || t.since;
+    if (clock && Date.now() - new Date(clock).getTime() > BOXING.DEFENSE_MS) {
+      await client.query('UPDATE boxing_title SET holder_fighter=NULL, holder_char=NULL, holder_name=NULL, since=NULL, defenses=0, last_defense=NULL WHERE id=1');
+      if (t.holder_char) await notify(client, t.holder_char, 'belt_stripped', { fighter: t.holder_name, defenses: Number(t.defenses) });
+      bus.emit('streets', { type: 'belt_stripped', fighter: t.holder_name });
+      await client.query('COMMIT');
+      return { stripped: true, fighter: t.holder_name };
+    }
+    await client.query('ROLLBACK');
+    return { stripped: false };
+  } catch (e) { await client.query('ROLLBACK'); return { stripped: false }; }
+  finally { client.release(); }
+}
+
 // ── the stable: sign a contender (up to STABLE_MAX). A cash SINK; stats rolled. ──
 export async function recruitFighter(ch, name, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You can't sign a fighter from a cell.");
@@ -41,6 +82,7 @@ export async function recruitFighter(ch, name, client, h) {
   const power = rand(BOXING.STAT_MIN, BOXING.STAT_MAX), chin = rand(BOXING.STAT_MIN, BOXING.STAT_MAX), speed = rand(BOXING.STAT_MIN, BOXING.STAT_MAX);
   await client.query('INSERT INTO fighters (id, character_id, name, power, chin, speed) VALUES ($1,$2,$3,$4,$5,$6)', [id, ch.id, n, power, chin, speed]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -BOXING.RECRUIT_COST, reason: 'boxing:recruit' });
+  await bumpStanding(client, h, ch, 'cornerman', 3, { action: 'sign' }); // signing a contender is big business with the corner
   await h.track(client, ch.account_id, 'boxing_recruit', {});
   return { ok: true, id, name: n, power, chin, speed, stable: count + 1 };
 }
@@ -61,12 +103,16 @@ export async function trainFighter(ch, fighterId, stat, client, h) {
   if (booked(f)) throw new GameError('booked', "That fighter is on a card — no changing their form before the bell."); // freeze form during the betting window
   if (Number(f[s]) >= BOXING.STAT_CAP) throw new GameError('maxed', `Their ${s} is already maxed (${BOXING.STAT_CAP}).`);
   if (Number(ch.energy) < BOXING.TRAIN_ENERGY) throw new GameError('energy', `Need ${BOXING.TRAIN_ENERGY} energy to run a session.`);
-  if (Number(ch.cash) < BOXING.TRAIN_COST) throw new GameError('cash', `A training session runs $${BOXING.TRAIN_COST}.`);
-  ch.cash = Number(ch.cash) - BOXING.TRAIN_COST;
+  // the Cornerman (Underworld): T1 discounts the session; T3 makes it build harder (actor-local pacing)
+  const cost = Math.round(BOXING.TRAIN_COST * npcMult(h, 'cornerman', 1, UNDERWORLD.FX.CORNER_TRAIN_MULT));
+  const gain = BOXING.TRAIN_GAIN + (npcTier(h, 'cornerman') >= 3 ? UNDERWORLD.FX.CORNER_GAIN : 0);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A training session runs $${cost}.`);
+  ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - BOXING.TRAIN_ENERGY;
-  const nv = Math.min(BOXING.STAT_CAP, Number(f[s]) + BOXING.TRAIN_GAIN); // absolute write (pg-mem INT-arith quirk)
+  const nv = Math.min(BOXING.STAT_CAP, Number(f[s]) + gain); // absolute write (pg-mem INT-arith quirk)
   await client.query(`UPDATE fighters SET ${s}=$2 WHERE id=$1`, [f.id, nv]);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -BOXING.TRAIN_COST, reason: 'boxing:train' });
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'boxing:train' });
+  await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'train' }); // gym work is the corner's business (the daily-lead task)
   await h.track(client, ch.account_id, 'boxing_train', { stat: s });
   return { ok: true, fighter: f.name, stat: s, value: nv };
 }
@@ -100,7 +146,8 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
   let mine, theirs;
   do { mine = form(f) + rand(0, BOXING.VARIANCE); theirs = tier.form + rand(0, BOXING.VARIANCE); } while (mine === theirs);
   const win = mine > theirs;
-  await client.query('UPDATE fighters SET exhib_at=$2 WHERE id=$1', [f.id, new Date(Date.now() + BOXING.EXHIBITION_CD_MS)]);
+  const cd = Math.round(BOXING.EXHIBITION_CD_MS * npcMult(h, 'cornerman', 2, UNDERWORLD.FX.CORNER_CD_MULT)); // the Cornerman's cutman rests them faster
+  await client.query('UPDATE fighters SET exhib_at=$2 WHERE id=$1', [f.id, new Date(Date.now() + cd)]);
   if (win) {
     ch.cash = Number(ch.cash) + tier.purse;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: tier.purse, reason: 'boxing:purse' });
@@ -109,6 +156,7 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
   } else {
     await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [f.id, Number(f.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   }
+  await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'exhibition' }); // working the card is the corner's business
   await h.rngLog(client, ch.id, `boxing:exhibition:${tier.id}`, mine, `${win ? 'win' : 'loss'} vs ${tier.name} (${mine} vs ${theirs})`);
   await h.track(client, ch.account_id, 'boxing_exhibition', { tier: tier.id, win });
   return { ok: true, win, opponent: tier.name, fee: tier.fee, purse: win ? tier.purse : 0, net: win ? tier.purse - tier.fee : -tier.fee,
@@ -160,18 +208,14 @@ export async function fightBout(ch, opponent, body, client, h) {
   await client.query('UPDATE fighters SET wins=$2 WHERE id=$1', [winnerF.id, Number(winnerF.wins) + 1]);
   await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [loserF.id, Number(loserF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   await bumpLegend(client, winner.account_id);
-  // the world TITLE BELT — the winner takes it if the belt is VACANT or they just beat the champion (pure status)
-  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
-  let beltWon = false;
-  if (title && (title.holder_fighter == null || title.holder_fighter === loserF.id)) {
-    beltWon = title.holder_fighter !== winnerF.id;
-    await client.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now() WHERE id=1', [winnerF.id, winner.id, winnerF.name]);
-  }
-  await h.rngLog(client, ch.id, `boxing:bout:${of.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})${beltWon ? ' — TITLE' : ''}`);
+  // the world TITLE BELT — win it, or DEFEND it if you're the champ (step four: the reign + clock)
+  const { belt: beltWon, defended } = await applyBeltResult(client, winnerF, winner.id, loserF);
+  await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'fight' }); // fight night is the corner's business
+  await h.rngLog(client, ch.id, `boxing:bout:${of.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})${beltWon ? ' — TITLE' : defended ? ' — TITLE DEFENDED' : ''}`);
   await h.notify(client, opponent.id, 'boxing_bout', { from: ch.name, yours: of.name, mine: f.name, amount: amt, theyWon: !win, belt: beltWon && winner.id === opponent.id });
   bus.emit('streets', { type: 'boxing_bout', by: ch.name, fighters: `${f.name} v ${of.name}`, amount: pot, win, belt: beltWon });
   await h.track(client, ch.account_id, 'boxing_bout', { amt, win, belt: beltWon });
-  return { ok: true, win, purse: amt, rake, net: win ? amt - rake : -amt, belt: beltWon && winner.id === ch.id,
+  return { ok: true, win, purse: amt, rake, net: win ? amt - rake : -amt, belt: beltWon && winner.id === ch.id, defended: defended && winner.id === ch.id,
     you: { name: f.name, score: mine }, them: { name: of.name, score: theirs },
     yourFighter: win ? `${Number(f.wins) + 1}-${f.losses}` : `${f.wins}-${Number(f.losses) + 1}` };
 }
@@ -210,6 +254,7 @@ export async function announceMainEvent(ch, opponent, body, client, h) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [id, ch.id, f.id, f.name, opponent.id, of.id, of.name, resolvesAt]);
   await client.query('UPDATE fighters SET booked_until=$2 WHERE id IN ($1,$3)', [f.id, resolvesAt, of.id]);
+  await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'announce' }); // booking a card is the corner's business
   await h.notify(client, opponent.id, 'boxing_main_event', { from: ch.name, yours: of.name, mine: f.name });
   bus.emit('streets', { type: 'boxing_main_event', card: `${f.name} v ${of.name}`, by: ch.name });
   await h.track(client, ch.account_id, 'boxing_main_event', {});
@@ -292,13 +337,8 @@ export async function resolveMainEvent(client, boutId) {
     [loseF.id, Number(loseF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   const winnerAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [winnerChar])).rows[0]?.account_id;
   if (winnerAcct) await client.query('UPDATE account_persistent SET boxing_wins = boxing_wins + 1 WHERE account_id=$1', [winnerAcct]);
-  // the TITLE BELT — the winner takes it if vacant or they just beat the champion (pure status)
-  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
-  let belt = false;
-  if (title && (title.holder_fighter == null || title.holder_fighter === loseF.id)) {
-    belt = title.holder_fighter !== winF.id;
-    await client.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now() WHERE id=1', [winF.id, winnerChar, winF.name]);
-  }
+  // the TITLE BELT — win it, or DEFEND it if the champ headlined (step four: the reign + clock)
+  const { belt } = await applyBeltResult(client, winF, winnerChar, loseF);
   // ── the SPECTATOR pot (a CASH parimutuel) ──
   const bets = (await client.query(
     'SELECT b.bettor_char, b.fighter, b.amount, c.alive FROM boxing_bets b LEFT JOIN characters c ON c.id=b.bettor_char WHERE b.bout_id=$1', [boutId])).rows;
@@ -420,7 +460,15 @@ export async function boxingBoard(pool, characterId) {
     stable: rows.filter((f) => f.character_id === characterId).sort((a, b) => Number(b.wins) - Number(a.wins)).map((f) => fighterView(f, beltId)),
     circuit,
     mainEvents: await openMainEvents(pool, characterId),
-    champion: beltId ? { fighter: title.holder_name, heldSeconds: title.since ? Math.floor((Date.now() - new Date(title.since).getTime()) / 1000) : null } : null,
+    champion: beltId ? {
+      fighter: title.holder_name,
+      heldSeconds: title.since ? Math.floor((Date.now() - new Date(title.since).getTime()) / 1000) : null,
+      defenses: Number(title.defenses || 0),
+      // the mandatory-defense clock — win a bout before it runs out or forfeit the belt
+      defendSeconds: secsTo(new Date(new Date(title.last_defense || title.since).getTime() + BOXING.DEFENSE_MS)),
+      // the #1 contender — the top-ranked fighter who isn't the champ (the natural challenger)
+      contender: (() => { const c = circuit.filter((f) => !f.belt && f.wins >= 0).sort((a, b) => b.wins - a.wins || b.form - a.form)[0]; return c ? { name: c.name, manager: c.manager, record: c.record } : null; })(),
+    } : null,
     npcTiers: BOXING.NPC_TIERS,
     recruitCost: BOXING.RECRUIT_COST, trainCost: BOXING.TRAIN_COST, minLevel: BOXING.MANAGER_MIN_LEVEL,
     minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, statCap: BOXING.STAT_CAP, stats: BOXING.STATS, stableMax: BOXING.STABLE_MAX,
