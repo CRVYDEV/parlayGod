@@ -72,6 +72,21 @@ function signerAccount() {
   return privateKeyToAccount(pk.startsWith('0x') ? pk : `0x${pk}`);
 }
 
+// AUDIT (deploy hardening): assert the configured CHAIN_ID matches the RPC's ACTUAL chain at boot. A
+// wrong-but-nonzero CHAIN_ID silently signs every voucher under the wrong EIP-712 domain → all on-chain
+// claims revert while the backend has already burned the $OMR (a fail-closed-for-funds but INVISIBLE
+// withdrawal outage). Better to refuse to boot the chain service than to sign dead vouchers. Dormant
+// (no RPC) → nothing to check. Called from the worker's chain startup.
+export async function assertChainId() {
+  if (!process.env.CHAIN_RPC_URL || !process.env.CHAIN_ID) return;
+  const { createPublicClient, http } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  const rpcChainId = Number(await client.getChainId());
+  if (Number(process.env.CHAIN_ID) !== rpcChainId)
+    throw new Error(`CHAIN_ID mismatch: env CHAIN_ID=${process.env.CHAIN_ID} but the RPC reports ${rpcChainId} — refusing to sign vouchers under the wrong EIP-712 domain (they would all revert on-chain while $OMR is burned).`);
+  return rpcChainId;
+}
+
 // Build the on-chain voucher tuple (amount in wei) from a stored row.
 function toVoucherMessage(row) {
   return {

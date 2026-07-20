@@ -2413,3 +2413,35 @@ patched, ground rule #1): OmertaBond per-day cap (Solidity — the pre-mainnet c
 `CHAIN_ID`-vs-RPC boot assert (deploy hardening), the `wire_month` grant dropped in the death→heir gap,
 tier-2 paying a grandrecruiter whose middle link never qualified, the agent leaderboard's exact-net-worth
 disclosure, and the two-drifting-codices process gap. Suite 30/30 + sim drift-0.
+
+**AUDIT FLAGGED-ITEMS — ALL ADDRESSED** (founder-directed "address all the flagged items"). The six
+sign-off items from AUDIT-full-surface.md, now built + tested: **(1)** OmertaBond gained a per-UTC-day
+OMR cap (`dailyCapOMR` + `bondedOnDay`, owner-settable, `require("OB: daily cap")` in `bond()`) — the
+`VoucherClaim.dailyCapOMR` twin bounding a leaked signer's daily blast radius; constructor takes
+`dailyCapOMR_`, a Foundry test (`test_daily_cap_blocks_over_budget`) added, suite **compiles clean**
+(solc 0.8.26, 0 warnings — `forge test` still the pre-mainnet gate). **(2)** `assertChainId()` (chain.js)
+compares `CHAIN_ID` to the RPC's real `getChainId()` and the worker refuses to start the chain sync on a
+mismatch — a wrong-but-nonzero CHAIN_ID can no longer sign vouchers under the wrong EIP-712 domain.
+**(3)** the `wire_month` grant is no longer dropped in the death→heir/pre-creation gap: with no living
+character it PARKS on `account_persistent.wire_pending_days`, and `store.js:claimPendingWire` applies it
+at the next character's birth (wired into `POST /v1/character`); `test/store.js` covers park→apply.
+**(4)** tier-2 "family tree" now requires the MIDDLE LINK to be a qualified recruit (`r.ref_paid`) — every
+level of the tree must be a real made man; `test/growth.js` qualifies the middle link first. **(5)** the
+agent leaderboard now publishes WEALTH BANDS (`wealthBand`/`omrBand`), not exact liquid, so a hunter can't
+compute precise kill-EV on a named agent (the convoy value-band precedent; rank still uses the exact
+figure server-side). **(6)** the two-codices drift is now guarded by a `test/hardening.js` drift-detector
+that fails if a re-synced system falls out of EITHER `docs/WIKI.md` or `public/wiki.html`. Suite 30/30 +
+sim drift-0; contracts compile clean.
+
+**CONTENT-DEPTH SURVEY (2026-07-20)** — a build-depth ranking of every gameplay system to find expansion
+candidates. **Thinnest (most due for a content drop), ranked:** (1) **Boxing** — 1 fighter/manager,
+recruit/train/list/fight only; defers stable, belts, NPC exhibition bouts, spectator betting, career
+legend. (2) **World / rival families** — one `raid` verb over 3 shared-reservoir NPCs; the seizable-NPC
+frontier is deferred. (3) **The Wire** — tap/sweep/subscribe are flat, no progression/tiers/leaderboard.
+(4) **Territory rackets** — the thinnest income catalog (3 kinds vs businesses' 5, assets' 30). (5)
+**Skills** — a clean 3×3 tree capped at tier 3; defers tier-4 capstones + active abilities. Stubs:
+Landmarks (one-shot flex), Dynasty naming, Vanity (complete for their narrow cosmetic role). Deep / need
+nothing: Social-PvP core (29 crimes + contracts/hitmen/vendettas), Economy (60 cars/30 assets/18 rackets),
+Kitchen, Casino, Pen (4 steps), Speakeasy (4 steps), Loans (4 steps), Law/RICO (4 phases), Underworld (5
+steps), Gangs, Market, Portfolio. The sharpest thin-vs-deep signal is catalog size: `TERRITORY_RACKETS`=3
+and `WORLD_NPCS`=3 and boxing's zero fighter-catalog vs `CARS`=60 / `ASSETS`=30 / `CRIMES`=29.

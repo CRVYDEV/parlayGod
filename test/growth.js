@@ -349,13 +349,19 @@ await pool.query('UPDATE referral_push SET until=NULL, mult=1 WHERE id=1'); // e
 const gTony = await mk('Grand Tony');                    // A — the grandrecruiter (root)
 const mMike = await mk('Middle Mike', 'Grand Tony');     // R — brought in by A
 const bBenny = await mk('Bottom Benny', 'Middle Mike');  // R2 — brought in by R
+// the middle link must ITSELF qualify (audit: every level of the tree is a real made man) — qualify Mike first
+await seedCh(mMike.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${mMike.id}')`);
+for (let i = 0; i < 20; i++) { await seedCh(mMike.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: mMike.token }); if (r.body.success) break; }
+assert.equal((await pool.query(`SELECT ref_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${mMike.id}')`)).rows[0].ref_paid, true, 'the middle link qualified');
 await seedCh(bBenny.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
 await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`);
-const tonyBefore = (await meOf(gTony.token)).cash;
+const tonyMe0 = await meOf(gTony.token); // captured AFTER Mike's qualification already paid Tony
+const tonyBefore = tonyMe0.cash, tonyOmrBefore = tonyMe0.omr;
 for (let i = 0; i < 20; i++) { await seedCh(bBenny.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: bBenny.token }); if (r.body.success) break; }
 const tonyAfter = await meOf(gTony.token);
 assert.equal(tonyAfter.cash, tonyBefore + 5000, 'the grandrecruiter earns the one-time tier-2 fee ($5k) when their recruit\'s recruit qualifies');
-assert.equal(tonyAfter.omr, 0, 'tier-2 is CASH ONLY (no $OMR — the anti-MLM/legal line)');
+assert.equal(tonyAfter.omr, tonyOmrBefore, 'tier-2 adds NO $OMR — CASH ONLY (the anti-MLM/legal line)');
 assert.equal((await pool.query(`SELECT ref_l2_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`)).rows[0].ref_l2_paid, true, 'the tier-2 latch is set');
 assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE character_id='${gTony.id}' AND reason='referral:tier2'`)).rows[0].amount), 5000, 'the tier-2 fee is ledgered referral:tier2');
 await call('POST', '/v1/crimes/pick', { token: bBenny.token });

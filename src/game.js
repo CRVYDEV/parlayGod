@@ -924,8 +924,10 @@ export async function maybeGrandReferral(pool, r2AccountId) {
   const r2 = (await pool.query('SELECT referred_by, ref_paid, ref_l2_paid, agent_flag FROM account_persistent WHERE account_id=$1', [r2AccountId])).rows[0];
   if (!r2 || !r2.ref_paid || r2.ref_l2_paid || r2.agent_flag || !r2.referred_by) return null; // only a QUALIFIED, non-agent recruit; once ever
   const rAccountId = r2.referred_by; // the direct recruiter (the "parent")
-  const r = (await pool.query('SELECT referred_by, agent_flag FROM account_persistent WHERE account_id=$1', [rAccountId])).rows[0];
-  if (!r || r.agent_flag || !r.referred_by) return null; // the parent must exist, be human, and themselves have a referrer
+  const r = (await pool.query('SELECT referred_by, agent_flag, ref_paid FROM account_persistent WHERE account_id=$1', [rAccountId])).rows[0];
+  // the middle link (R) must exist, be human, themselves have a referrer, AND be a QUALIFIED recruit
+  // (audit: every level of the tree must be a real made man — a dead-signup middle link earns nobody)
+  if (!r || r.agent_flag || !r.referred_by || !r.ref_paid) return null;
   const aAccountId = r.referred_by; // the grandrecruiter — the one we pay
   if (aAccountId === r2AccountId || aAccountId === rAccountId) return null; // distinct chain (defense-in-depth vs a cycle)
   const client = await pool.connect();

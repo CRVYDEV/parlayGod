@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- currency — the Store grants only entitlements/access/status, so it writes zero `transactions` rows.
   pass_until TIMESTAMPTZ,
   patron BOOLEAN NOT NULL DEFAULT false,
+  wire_pending_days INT NOT NULL DEFAULT 0,  -- Store wire window bought with no living character (audit): parked here, applied at the next character's birth so a paid benefit is never dropped
+
   -- THE LEDGER (Season Pass reward track): a daily-claim track unlocked while the pass is active.
   -- pass_tier = highest tier claimed THIS season (reset when a fresh pass season starts); pass_at =
   -- the last claim (the ~daily cooldown). Account-level → the track survives death (the heir keeps

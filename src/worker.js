@@ -18,7 +18,7 @@ import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepWire } from './wire.js';
-import { reclaimExpiredVouchers } from './chain.js';
+import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
@@ -235,6 +235,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // CHAIN_START_BLOCK to the contracts' deploy block so the first run doesn't scan from genesis.
   const source = await makeViemSource();
   if (source) {
+    // deploy hardening (audit): refuse to run the chain service if CHAIN_ID doesn't match the RPC —
+    // a wrong-but-nonzero CHAIN_ID would sign every voucher under the wrong EIP-712 domain.
+    await assertChainId();
     const startBlock = process.env.CHAIN_START_BLOCK ? Number(process.env.CHAIN_START_BLOCK) : undefined;
     const syncTick = async () => {
       try {

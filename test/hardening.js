@@ -8,9 +8,22 @@ process.env.RATE_HUMAN_BURST = '8';
 process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
+
+// audit (process): the two codices (canonical docs/WIKI.md + served public/wiki.html) drifted — a
+// system landed in one but not the other. This drift-detector fails if a system this audit re-synced
+// falls out of EITHER, so a future doc edit can't silently desync them again.
+{
+  const wm = readFileSync(new URL('../docs/WIKI.md', import.meta.url), 'utf8').toLowerCase();
+  const wh = readFileSync(new URL('../public/wiki.html', import.meta.url), 'utf8').toLowerCase();
+  for (const term of ['spread the word', 'family tree', 'opportunity', '/agents']) {
+    assert(wm.includes(term), `docs/WIKI.md must document "${term}" (codex drift)`);
+    assert(wh.includes(term), `public/wiki.html must document "${term}" (codex drift)`);
+  }
+}
 
 const app = await buildServer();
 const pool = app.pool;
@@ -249,7 +262,8 @@ assert(opp.niches.arbitrage[0].buyIn && opp.niches.arbitrage[0].sellIn && opp.ni
 assert(Array.isArray(opp.opportunities) && opp.counts && typeof opp.niches.laundering.ammSpot === 'number', 'the board carries the ranked opportunities + AMM spot');
 const agLb = (await call('GET', '/v1/leaderboard/agents', { token: agtToken })).body;
 assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine Malone'), 'the agent leaderboard lists agent_flag players');
-assert(agLb.agents.every((a) => typeof a.netWorth === 'number' && typeof a.extracted === 'number'), 'agents carry net worth + $OMR extracted');
+// audit: liquid is published as a BAND, not an exact figure (so a hunter can't compute precise kill-EV)
+assert(agLb.agents.every((a) => typeof a.wealthBand === 'string' && typeof a.omrBand === 'string' && a.netWorth === undefined), 'agents carry banded wealth (no exact net worth leaked)');
 
 console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
 await app.close();

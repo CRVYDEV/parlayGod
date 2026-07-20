@@ -77,7 +77,10 @@ claim can exist); locks account → reserve (serializes with `drainQueue`). `tes
 
 ---
 
-## FLAGGED — design / balance / pre-mainnet calls (NOT patched, per ground rule #1)
+## FLAGGED — ALL ADDRESSED (founder-directed 2026-07-20)
+
+Every item below was subsequently built + tested (see the CLAUDE.md "AUDIT FLAGGED-ITEMS — ALL ADDRESSED" note): OmertaBond per-day cap (compiles clean; forge test is the pre-mainnet gate), the CHAIN_ID-vs-RPC boot assert, the parked-wire grant, tier-2 requiring a qualified middle link, agent-leaderboard wealth banding, and a codex drift-detector test. Original list retained for the record:
+
 
 Ranked; each is bounded and non-urgent. Founder sign-off before changing.
 

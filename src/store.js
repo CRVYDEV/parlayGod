@@ -80,12 +80,30 @@ async function grantPackage(client, accountId, sku, ref = null) {
     if (ch) {
       const until = new Date(laterMs(now, ch.wire_until) + g.wireDays * 86400000);
       await client.query('UPDATE characters SET wire_until=$2 WHERE id=$1', [ch.id, until]);
+    } else {
+      // no living character (bought pre-creation, or in a death→heir gap): PARK the days on the
+      // account so the paid benefit isn't dropped — applied at the next character's birth (audit).
+      await client.query('UPDATE account_persistent SET wire_pending_days = wire_pending_days + $2 WHERE account_id=$1', [accountId, g.wireDays]);
     }
   }
   await client.query('INSERT INTO store_grants (id, account_id, sku, ref) VALUES ($1,$2,$3,$4)', [uid(), accountId, sku, ref]);
   // tell the player their real-ETH purchase landed (offline-durable + live push); skip if no living street yet
   const liveCh = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
   if (liveCh) await notify(client, liveCh.id, 'store_grant', { sku, name: pkg.name });
+}
+
+// Apply any parked Store Street-Wire window to a freshly-born character (audit — a wire bought while
+// the account had no living character isn't dropped). Called at character creation; zeroes the parked
+// days. Computed in JS (no pg-mem interval math). No §10.4 surface (an access window, not currency).
+export async function claimPendingWire(client, accountId, characterId) {
+  const a = (await client.query('SELECT wire_pending_days FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
+  const days = Number(a?.wire_pending_days || 0);
+  if (days <= 0) return 0;
+  const ch = (await client.query('SELECT wire_until FROM characters WHERE id=$1', [characterId])).rows[0];
+  const until = new Date(Math.max(Date.now(), ch?.wire_until ? new Date(ch.wire_until).getTime() : 0) + days * 86400000);
+  await client.query('UPDATE characters SET wire_until=$2 WHERE id=$1', [characterId, until]);
+  await client.query('UPDATE account_persistent SET wire_pending_days=0 WHERE account_id=$1', [accountId]);
+  return days;
 }
 
 // ── ingestion: record one on-chain Store purchase (the recordFeePayment twin) ──

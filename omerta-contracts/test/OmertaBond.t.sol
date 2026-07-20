@@ -37,7 +37,7 @@ contract OmertaBondTest is Test {
     function setUp() public {
         signer = vm.addr(signerPk);
         omr = new OMR(safe);
-        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, pol, vig);
+        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, pol, vig, 0); // 0 = uncapped (existing tests)
         vm.prank(safe);
         omr.transfer(address(bond), TRANCHE); // fund the tranche (the pre-funded discipline)
         vm.deal(bonder, 100 ether);
@@ -309,5 +309,36 @@ contract OmertaBondTest is Test {
         assertEq(bond.owner(), safe);
         assertEq(bond.signer(), signer);
         assertEq(bond.polBps(), POL_BPS);
+    }
+
+    // ── the per-UTC-day cap (leaked-signer daily blast-radius backstop) ──
+    function test_daily_cap_blocks_over_budget() public {
+        // a fresh bond contract with a tight daily cap of 6,000 OMR
+        OmertaBond capped = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, pol, vig, 6_000e18);
+        vm.prank(safe);
+        omr.transfer(address(capped), TRANCHE); // fund the tranche generously — the CAP, not the tranche, must bind
+        // 1 ETH @ 5000, 8% disc → payout ≈ 5,434 OMR — under the cap, accepted
+        OmertaBond.BondQuote memory q1 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 1, block.timestamp + 1 hours);
+        vm.prank(bonder);
+        capped.bond{value: 1 ether}(q1, _sign2(capped, q1));
+        // a second 1-ETH bond the same day → cumulative ≈ 10,869 > 6,000 cap → reverts
+        OmertaBond.BondQuote memory q2 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 2, block.timestamp + 1 hours);
+        vm.prank(bonder);
+        vm.expectRevert("OB: daily cap");
+        capped.bond{value: 1 ether}(q2, _sign2(capped, q2));
+        // next UTC day → the budget resets, the same bond now lands
+        vm.warp(block.timestamp + 1 days);
+        OmertaBond.BondQuote memory q3 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 3, block.timestamp + 1 hours);
+        vm.prank(bonder);
+        capped.bond{value: 1 ether}(q3, _sign2(capped, q3));
+        // the Safe can retune the cap
+        vm.prank(safe);
+        capped.setDailyCap(0);
+        assertEq(capped.dailyCapOMR(), 0);
+    }
+
+    function _sign2(OmertaBond target, OmertaBond.BondQuote memory q) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, target.hashQuote(q));
+        return abi.encodePacked(r, s, v);
     }
 }

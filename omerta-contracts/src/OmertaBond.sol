@@ -68,6 +68,12 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
     /// @notice OMR promised to outstanding (unclaimed) bonds. INVARIANT: <= omr.balanceOf(this).
     uint256 public committedOMR;
+    /// @notice Max OMR bondable per UTC day (0 = unlimited). Bounds a COMPROMISED SIGNER's per-day
+    ///         blast radius the way the tranche cap bounds it in total — the VoucherClaim.dailyCapOMR
+    ///         twin (audit: OmertaBond otherwise gave weaker containment than its sibling for the same
+    ///         leaked-key threat). Owner-settable; keep in step with the backend BONDS daily budget.
+    uint256 public dailyCapOMR;
+    mapping(uint256 => uint256) public bondedOnDay; // UTC day => OMR payout bonded that day
     mapping(uint256 => bool) public usedNonce; // quote replay protection
     mapping(uint256 => Bond) public bonds;     // bondId => Bond
     uint256 public nextBondId = 1;
@@ -76,6 +82,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     event BondClaimed(uint256 indexed bondId, address indexed owner, uint256 amount);
     event SignerSet(address indexed signer);
     event RecipientsSet(address indexed pol, address indexed vig);
+    event DailyCapSet(uint256 cap);
     event Swept(address indexed to, uint256 amount);
 
     error ZeroAddress();
@@ -99,7 +106,8 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         IERC20 omr_,
         uint256 polBps_,
         address payable polRecipient_,
-        address payable vigRecipient_
+        address payable vigRecipient_,
+        uint256 dailyCapOMR_
     ) EIP712("OmertaBond", "1") Ownable(owner_) {
         if (signer_ == address(0) || address(omr_) == address(0)) revert ZeroAddress();
         if (polBps_ > 10000) revert BadBps();
@@ -110,8 +118,16 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         polBps = polBps_;
         polRecipient = polRecipient_;
         vigRecipient = vigRecipient_;
+        dailyCapOMR = dailyCapOMR_;
         emit SignerSet(signer_);
         emit RecipientsSet(polRecipient_, vigRecipient_);
+        emit DailyCapSet(dailyCapOMR_);
+    }
+
+    /// @notice The Safe tunes the per-day OMR bond cap (0 = unlimited) — the leaked-signer backstop.
+    function setDailyCap(uint256 cap) external onlyOwner {
+        dailyCapOMR = cap;
+        emit DailyCapSet(cap);
     }
 
     // ── the bond ──
@@ -142,6 +158,15 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         // cover every outstanding payout PLUS this one. Never mints; bounded by the funded balance.
         if (committedOMR + payout > omr.balanceOf(address(this))) revert TrancheExhausted();
         committedOMR += payout;
+
+        // per-UTC-day cap: bound a compromised signer's DAILY blast radius (the tranche bounds the
+        // total; this bounds one day) — the VoucherClaim.dailyCapOMR twin.
+        if (dailyCapOMR != 0) {
+            uint256 day = block.timestamp / 1 days;
+            uint256 dayTotal = bondedOnDay[day] + payout;
+            require(dayTotal <= dailyCapOMR, "OB: daily cap");
+            bondedOnDay[day] = dayTotal;
+        }
 
         bondId = nextBondId++;
         bonds[bondId] = Bond({ owner: q.payer, payout: payout, claimed: 0, start: uint64(block.timestamp), vestSeconds: uint64(q.vestSeconds) });
