@@ -741,6 +741,8 @@
         <div class="d">${g.nextFoundation.blurb || ''} · softens odds ×${g.nextFoundation.bustMult}</div>
         ${boss ? `<button class="act" data-do="POST /v1/gangs/foundation">endow ${g.nextFoundation.name} (${g.nextFoundation.omr} $OMR from reserve)</button>` : '<span class="d" style="color:var(--dim)">the boss/underboss endows the foundation</span>'}</div>`
         : '<span class="d" style="color:var(--dim)">the family is the highest pillar of the community there is.</span>'}
+      <div class="d" style="margin-top:4px"><a href="#" id="foundation-lb-link">the philanthropy leaderboard →</a></div>
+      <div id="foundation-lb"></div>
 
       <h2 style="margin-top:12px">Family Regalia <span class="d" style="font-size:10px">(status badges bought from the $OMR reserve — the boss's call)</span></h2>
       <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>
@@ -752,6 +754,13 @@
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
     { const cg = $('#crest-go'); if (cg) cg.onclick = () => act('POST', '/v1/gangs/vanity/color', { color: $('#crest-color').value.trim() }).then(() => renderFamily()); }
     { const fr = $('#fam-rename-go'); if (fr) fr.onclick = () => act('POST', '/v1/gangs/vanity/name', { name: $('#fam-rename').value.trim(), tag: $('#fam-retag').value.trim() }).then(() => renderFamily()); }
+    { const flb = $('#foundation-lb-link'); if (flb) flb.onclick = async (e) => {
+      e.preventDefault(); const el = $('#foundation-lb'); if (!el) return;
+      const rows = (await api('GET', '/v1/leaderboard/foundation')).body?.board || [];
+      el.innerHTML = rows.length
+        ? `<div class="grid">${rows.slice(0, 10).map((f, i) => `<div class="card"><span class="t">${i + 1}. ${f.tag ? `[${f.tag}] ` : ''}${f.name}</span><div class="d">${f.foundation || ''}</div></div>`).join('')}</div>`
+        : '<div class="d" style="color:var(--dim);font-size:11px">No family has endowed a foundation yet — be the first pillar of the city.</div>';
+    }; }
     t.querySelector('#trib-go').onclick = () =>
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>

@@ -2384,3 +2384,32 @@ next-tier ideas (not requested): agent-specific rate-tier tuning, a sandbox/test
   confirm current status), so R3 must be KYC'd AND geofenced — a US-person account plays/earns/holds
   the status fully but can never extract. R1 (status only) ships to everyone. Never distribute the
   token by chance (RNG/loot/casino stay in cash/$OMR) — unchanged, now with a real security at stake.
+
+**FULL-SURFACE RED-TEAM (`AUDIT-full-surface.md`, 2026-07-20)** — a max-effort whole-project audit,
+FIVE independent lenses in parallel (§10.4/economy, concurrency/locks, smart-contracts+chain,
+auth/infra/agent-surface, wiki-gaps/completeness), every finding re-verified against source before any
+fix. **No CRITICAL.** Fixed in-commit (regression each): **HIGH** — a two-party post-commit
+double-spend seam (`game.js:443` `maybeQualifyReferral` was a bare await in the withTwoCharacters hook
+vs the wrapped solo path — a 40P01/DB error after COMMIT → idempotency release → retry re-runs the
+two-party action; now swallowed non-fatal); **MED (auth)** — the public `/openapi.json` enumerated the
+whole `/v1/mod/*` surface + declared the `x-mod-key` header (now excluded; 249 paths) AND derived
+security from a URL heuristic instead of the real preHandler (the onRoute hook now captures
+`auth`/`modAuth` by name; `buildOpenApi` derives security + mod-exclusion from those flags); **MED
+(chain)** — `mod/bond/simulate` fabricated unbacked Vig revenue (`recordBond` injected
+`vig_revenue(source='bond')` unconditionally → `runVigBuyback` spends it → unbacked withdrawal reserve,
+invisible to `runVigInvariants`; the Store fixed this exact class via a txHash gate — bonds now mirror
+it: a new `bonds.tx_hash` column + a `real` gate books the OMR tranche for QA but ZERO pol/vig for a
+comp, and `runBondInvariants` reconciles the ETH split over real bonds only); **LOW (chain)** — a
+`queued` withdrawal burned $OMR with no reclaim if the reserve never funds (new
+`POST /v1/withdraw/:id/cancel` → `cancelQueuedWithdraw` reverses the burn net-0, safe since a queued
+voucher was never signed; locks account→reserve, serializes with drainQueue); **docs/client** — Spread
+the Word + the referral-funnel expansion were undocumented in BOTH codices (now in `docs/WIKI.md` +
+`public/wiki.html`), the Agent Gateway was missing from the canonical doc (now in both), and
+`GET /v1/leaderboard/foundation` had no console surface (added to the Family tab). Verified SOUND: the
+chain core walls (EIP-712 parity, full-reserve queue, no owner-mint, CEI/reentrancy, the minted-only
+extraction gate), the referral once-ever latches + atomic tier-2 claim + push-can't-mint + the
+grand-referral lock order, and the read-only agent aggregators. Flagged for founder sign-off (NOT
+patched, ground rule #1): OmertaBond per-day cap (Solidity — the pre-mainnet contract pass), a
+`CHAIN_ID`-vs-RPC boot assert (deploy hardening), the `wire_month` grant dropped in the death→heir gap,
+tier-2 paying a grandrecruiter whose middle link never qualified, the agent leaderboard's exact-net-worth
+disclosure, and the two-drifting-codices process gap. Suite 30/30 + sim drift-0.

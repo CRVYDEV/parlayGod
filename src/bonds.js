@@ -29,7 +29,7 @@ async function oraclePrice(db) {
 // ── ingest one bond (the recordFeePayment / Store recordStorePurchase twin; chain-dormant, mod/test-driven).
 // Idempotent on nonce. Prices the payout, ENFORCES the tranche cap (committed + payout ≤ capacity), splits
 // the ETH (POL + the Vig buyback), and books the vesting bond. account_id null parks it for reconcile-at-link.
-export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps }) {
+export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps, txHash = null }) {
   const n = Number(nonce);
   if (!Number.isInteger(n) || n < 0) throw new GameError('bad_nonce', 'Bad bond nonce.');
   // the on-chain path supplies the depositing wallet; store it (normalized) so a pre-link bond can be
@@ -64,18 +64,23 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     // for reconcileBonds at link — the Store precedent; recordBond stays valid + tranche-committed either way).
     let acct = accountId;
     if (!acct && addr) acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0]?.account_id || null;
-    const polEth = round6(eth * BONDS.POL_BPS / 10000), vigEth = round6(eth - polEth);
+    // REAL-ETH accounting (POL + the Vig buyback basis) is booked ONLY for a bond driven by a real
+    // on-chain Bonded event (one carrying a txHash) — the store.js:121 precedent (audit MED). A mod
+    // comp/QA `simulate` has NO txHash: it books the bond + the OMR tranche commitment (bounded by the
+    // treasury-funded capacity, so the OMR side stays backed) but injects ZERO pol_eth / vig_revenue.
+    // Else a comp with no real ETH behind it would fabricate Vig revenue that runVigBuyback (which sums
+    // vig_revenue with no source filter) would spend → unbacking the withdrawal reserve, invisible to
+    // runVigInvariants. Real ETH only ever comes with a tx.
+    const real = !!txHash;
+    const polEth = real ? round6(eth * BONDS.POL_BPS / 10000) : 0, vigEth = real ? round6(eth - round6(eth * BONDS.POL_BPS / 10000)) : 0;
     await client.query(
-      'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [uid(), n, acct, addr, round6(eth), payout, round6(price), disc, vestMs]);
+      'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms, tx_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [uid(), n, acct, addr, round6(eth), payout, round6(price), disc, vestMs, txHash]);
     await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2 WHERE id=1', [payout, polEth]);
-    // the Vig share → the EXISTING flywheel (source 'bond'): runVigBuyback spends it → reserve + prize pool,
-    // so bonds strengthen extraction-≤-inflow too. gross_eth == vig_eth (the bond only contributes its Vig
-    // share to the Vig accounting; the POL share lives in bond_reserve.pol_eth). Idempotent on (source,ref).
-    if (!(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
+    if (real && !(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
     await client.query('COMMIT');
-    return { recorded: true, payoutOmr: payout, polEth, vigEth, attributed: !!acct };
+    return { recorded: true, payoutOmr: payout, polEth, vigEth, real, attributed: !!acct };
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 
@@ -169,7 +174,9 @@ export async function runBondInvariants(pool) {
   const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0] || { capacity_omr: 0, committed_omr: 0, pol_eth: 0 };
   const sumPayout = Number((await pool.query('SELECT COALESCE(SUM(payout_omr),0) s FROM bonds')).rows[0].s);
   const sumClaimed = Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s);
-  const sumEth = Number((await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds')).rows[0].s);
+  // REAL bonds only (tx_hash present): a mod comp/QA bond books no pol_eth/vig_eth, so the ETH-split
+  // check (4) must reconcile over the real bonds that actually moved ETH (audit MED).
+  const sumEth = Number((await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds WHERE tx_hash IS NOT NULL')).rows[0].s);
   const vigEth = Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s);
   const committed = Number(r.committed_omr), capacity = Number(r.capacity_omr), polEth = Number(r.pol_eth);
   // (1) committed matches the rows

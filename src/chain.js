@@ -164,6 +164,33 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
   finally { client.release(); }
 }
 
+// Cancel a still-QUEUED $OMR withdrawal and refund the burned $OMR (audit LOW: a queued voucher
+// debits $OMR but has no reclaim path — reclaimExpiredVouchers only reverses SIGNED-past-deadline
+// vouchers — so if the reserve never funds to the FIFO position, the player's $OMR is stuck). SAFE
+// because a queued voucher was NEVER signed → no on-chain claim can exist → no double-spend. Locks
+// account → chain_reserve (requestWithdraw's order; serializes with drainQueue on the reserve
+// singleton so a concurrent sign and this cancel can't both resolve the same voucher).
+export async function cancelQueuedWithdraw(pool, accountId, voucherId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT omr FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct) throw new GameError('no_account', 'No such account.');
+    await client.query('SELECT id FROM chain_reserve WHERE id=1 FOR UPDATE'); // serialize with drainQueue
+    const v = (await client.query('SELECT * FROM vouchers WHERE id=$1 AND account_id=$2', [voucherId, accountId])).rows[0];
+    if (!v) throw new GameError('no_voucher', 'No such withdrawal on your account.');
+    if (v.kind !== 'omr') throw new GameError('not_omr', 'Only a queued $OMR withdrawal can be cancelled here.');
+    if (v.status !== 'queued') throw new GameError('not_queued', 'Only an unsigned (queued) withdrawal can be cancelled — a signed voucher may already be claimable on-chain.');
+    // reverse the burn (net 0): +withdraw:omr credits the $OMR back — the reclaimExpiredVouchers pattern
+    await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [accountId, Number(v.amount)]);
+    await ledger(client, { accountId, currency: 'omr', amount: Number(v.amount), reason: 'withdraw:omr' });
+    await client.query("UPDATE vouchers SET status='cancelled' WHERE id=$1", [voucherId]);
+    await client.query('COMMIT');
+    return { cancelled: true, refunded: Number(v.amount) };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 // ── Gear withdrawal (mint voucher) — not reserve-bounded; the contract caps supply ──
 export async function requestGearWithdraw(pool, accountId, gearId, toAddress) {
   gearNumId(gearId); // validates the class exists

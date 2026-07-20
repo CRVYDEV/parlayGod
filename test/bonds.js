@@ -37,7 +37,8 @@ assert(await inGameOk(), 'in-game §10.4 clean before bonds');
 const fund = await call('POST', '/v1/mod/bond/fund', { modkey: mod, body: { omr: 100000 } });
 assert.equal(fund.body.capacityOmr, 100000, 'the treasury budgeted 100k OMR for bonding');
 const expectPayout = bondPayout(2, 5000, 800); // 2 ETH × 5000 / 0.92 = 10,869.565…
-const rec = await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 1, account: bonder.aid, principalEth: 2, price: 5000, discountBps: 800 } });
+// a REAL on-chain-driven bond (txHash present) books the full POL/Vig accounting
+const rec = await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 1, account: bonder.aid, principalEth: 2, price: 5000, discountBps: 800, txHash: '0xrealbond01' } });
 assert.equal(rec.code, 200, 'the bond is recorded');
 assert.equal(rec.body.payoutOmr, expectPayout, 'the discounted payout is right (2 ETH @5000, 8% discount)');
 assert.equal(rec.body.polEth, 1.2, '60% of the ETH → Protocol-Owned Liquidity');
@@ -94,6 +95,18 @@ const rc = await reconcileBonds(pool, bonder.aid, wallet); // the wallet links �
 assert.equal(rc.attributed, 1, 'reconcile-at-link attributes the parked bond to the freshly-linked account');
 const after = (await call('GET', '/v1/bonds', { token: bonder.token })).body.yours;
 assert.equal(after.length, 2, 'the reconciled bond is now claimable by the bonder');
+
+// ── audit MED: a COMP bond (mod simulate with NO txHash) books the OMR tranche for QA but injects
+//    ZERO real-ETH Vig/POL — else a comp fabricates buyback basis that unbacks the withdrawal reserve. ──
+const vigBefore = Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s);
+const comp = await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 3, account: bonder.aid, principalEth: 1, price: 5000, discountBps: 800 } });
+assert.equal(comp.body.recorded, true, 'the comp bond records (books the tranche commitment)');
+assert.equal(comp.body.real, false, 'the comp bond is not real-ETH-backed');
+assert.equal(comp.body.vigEth, 0, 'the comp injects ZERO Vig buyback basis');
+assert.equal(comp.body.polEth, 0, 'the comp injects ZERO POL');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s), vigBefore, 'the vig_revenue basis is UNMOVED by a comp — the reserve can never be unbacked by a comp');
+assert((await runBondInvariants(pool)).ok, 'the bond invariant still holds with a comp in the mix (ETH split reconciles over REAL bonds only)');
+assert((await runVigInvariants(pool)).ok, 'the Vig invariant holds — a comp added no spendable buyback basis');
 
 // ── §10.4 in-game STILL untouched after claims ──
 assert(await inGameOk(), 'in-game §10.4 clean through the whole bond lifecycle');
