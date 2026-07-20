@@ -12,6 +12,7 @@ import {
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
+import { releaseFrontierHolds, abandonRaidsAtDeath } from './world.js';
 import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
@@ -88,6 +89,7 @@ export async function removeMember(client, gangId, characterId) {
     }
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0 WHERE holder_gang=$1', [gangId]);
     await releaseTerritoryRackets(client, gangId); // Phase 3: the operations die with the family (turf released)
+    await releaseFrontierHolds(client, gangId);    // World step three: the frontier flags drop (the house takes its turf back)
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
     // the Commission forgets a dead family: its ballots die with it (audit H1 — a dissolved
     // gang's frozen vote must not govern next week from beyond the grave, invisible to the
@@ -1296,8 +1298,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband'])
+  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
+  // World step three: a dead co-op raid leader's plan is abandoned so the crew can recrew (the
+  // crew_heists precedent — the member rows above are already wiped; this frees the leadership).
+  await abandonRaidsAtDeath(client, victim.id);
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
   const orphaned = (await client.query(

@@ -910,12 +910,15 @@ export const cityForecast = (day = dayOf()) => Array.from({ length: LIVING.FOREC
 // The whole server grinds the same pool; routing it (strength → floor) pays a one-time bonus + a
 // streets event. Numbers are founder SIM sign-off levers (the only emission surface in this pillar).
 // Roster (step two expanded the set 3→5, on-curve — the car-catalog precedent: content, not a rebalance).
+// `coop`: the APEX outfits (step three) — too well-defended to solo reliably, so a crew's combined
+// firepower is the practical way to crack (and ROUT) them. Solo raids still work on any outfit; co-op
+// is the alternative that carries a crew of qualified raiders past a heavy defense (never an auto-win).
 export const WORLD_NPCS = [
   { id: 'dockrats', name: 'The Dock Rats',      minLvl: 4,  max: 150000,   regenPerHr: 5000,   base: 0.60, def: 20,  routBonus: 5000 },
   { id: 'zappa',    name: 'The Zappa Crew',     minLvl: 8,  max: 400000,   regenPerHr: 12000,  base: 0.55, def: 40,  routBonus: 15000 },
-  { id: 'kryl',     name: 'The Kryl Syndicate', minLvl: 20, max: 1500000,  regenPerHr: 40000,  base: 0.45, def: 90,  routBonus: 60000 },
-  { id: 'moreau',   name: 'The Moreau Cartel',  minLvl: 40, max: 5000000,  regenPerHr: 90000,  base: 0.35, def: 150, routBonus: 200000 },
-  { id: 'volkov',   name: 'The Volkov Bratva',  minLvl: 55, max: 12000000, regenPerHr: 180000, base: 0.30, def: 220, routBonus: 500000 },
+  { id: 'kryl',     name: 'The Kryl Syndicate', minLvl: 20, max: 1500000,  regenPerHr: 40000,  base: 0.45, def: 90,  routBonus: 60000,  coop: true },
+  { id: 'moreau',   name: 'The Moreau Cartel',  minLvl: 40, max: 5000000,  regenPerHr: 90000,  base: 0.35, def: 150, routBonus: 200000, coop: true },
+  { id: 'volkov',   name: 'The Volkov Bratva',  minLvl: 55, max: 12000000, regenPerHr: 180000, base: 0.30, def: 220, routBonus: 500000, coop: true },
 ];
 export const worldNpcOf = (id) => WORLD_NPCS.find((n) => n.id === id) || null;
 export const WORLD = {
@@ -936,6 +939,21 @@ export const WORLD = {
     { min: 0, name: 'Civilian' }, { min: 100000, name: 'Cartel Raider' }, { min: 1000000, name: 'Kingpin Hunter' },
     { min: 10000000, name: 'Warlord' }, { min: 50000000, name: 'The Scourge' },
   ],
+  // ── STEP THREE — CO-OP CREW RAIDS + THE FRONTIER ──
+  // The crew-heist machinery applied to an apex-outfit raid: a leader opens the op, made raiders join
+  // off the board, the leader calls the go and ONE roll pays the whole crew. Combined firepower (SUM of
+  // raider power, not avg) is what beats a heavy apex defense — so it stacks, but the clamp keeps even a
+  // full crew short of a sure thing. No stake: each raider pays their OWN energy/ammo/heat at execute
+  // (the solo-raid cost), so the loot is the SAME bounded reservoir slice, just shared. §10.4-neutral vs
+  // solo — every share/ammo row rides the existing `world:raid` vocabulary.
+  COOP_MIN: 2, COOP_MAX_CREW: 4,          // a raid crew is 2–4 made raiders
+  COOP_SCALE: 600,                        // combined firepower over the outfit's defense (higher than solo's 400 — many guns)
+  COOP_MAX_P: 0.85,                       // even a full crew is never certain
+  COOP_LEADER_WEIGHT: 1.2,                // the leader who fronts the op takes a bigger cut (the heist precedent)
+  COOP_TTL_MS: 60 * 60 * 1000,            // a stale plan is swept (nothing staked → nothing to refund)
+  // THE FRONTIER (family conquest, PURE STATUS — no §10.4 surface): whoever lands the ROUT (solo or
+  // co-op) plants their FAMILY'S flag on the outfit's turf; the next rout topples it. A dominance
+  // leaderboard (families ranked by outfits held, weighted by the outfit's scale). Dies with the family.
 };
 export const worldRankOf = (dmg) =>
   [...WORLD.WAR_RANKS].reverse().find((r) => Number(dmg) >= r.min) || WORLD.WAR_RANKS[0];

@@ -17,6 +17,7 @@ import { sweepUncreditedStore } from './store.js';
 import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
+import { sweepStaleRaids } from './world.js';
 import { sweepWire } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
@@ -196,6 +197,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded
     const pb = await safe('pen break sweep', () => sweepStaleBreaks(pool));
     if (pb?.swept > 0) console.log(`🔓 pen: swept ${pb.swept} stale break plan(s), cutkits returned to living leaders`);
+    // THE FRONTIER co-op raids: stale raid plans cleared off the board (no stake — nothing to refund)
+    const wrd = await safe('world raid sweep', () => sweepStaleRaids(pool));
+    if (wrd?.swept > 0) console.log(`🗡  world: swept ${wrd.swept} stale co-op raid plan(s)`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
