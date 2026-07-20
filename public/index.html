@@ -58,11 +58,14 @@
   .chip.good { border-color: var(--ok); color: var(--ok); }
   .chip.cold { border-color: var(--cold); color: var(--cold); }
 
-  /* tabs */
-  #tabs { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 10px; }
+  /* tabs — grouped into labeled clusters (Core · Earners · Vice · Blood · Family · Legit) */
+  #tabs { display: flex; gap: 3px 2px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   #tabs button { background: var(--panel2); color: var(--dim); border: 1px solid var(--line);
     padding: 6px 12px; cursor: pointer; border-radius: 4px 4px 0 0; font-size: 12px; }
   #tabs button.on { color: var(--neon); border-bottom-color: var(--panel); }
+  #tabs .tabgrp { color: var(--dim); font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    padding: 0 5px 0 8px; opacity: .7; border-left: 1px solid var(--line); align-self: center; }
+  #tabs .tabgrp:first-child { border-left: none; padding-left: 2px; }
   .tab { display: none; } .tab.on { display: block; }
 
   button.act { background: #1d1d25; border: 1px solid var(--line); color: var(--ink);
@@ -446,14 +449,28 @@
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
     wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+  // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
+  const TAB_GROUPS = [
+    ['', ['start']],
+    ['Streets', ['streets', 'garage', 'life', 'city']],
+    ['Earners', ['kitchen', 'empire', 'scores', 'market']],
+    ['Vice', ['den', 'speakeasy', 'boxing']],
+    ['Blood', ['pvp', 'loans', 'law', 'pen', 'wire']],
+    ['Family', ['family']],
+    ['Legit', ['portfolio', 'estate', 'store']],
+    ['', ['deck']],
+  ];
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
-    for (const [id, label] of Object.entries(TABS)) {
-      const b = el(`<button data-tab="${id}">${label}</button>`);
-      b.onclick = () => { setTab(id); };
-      tabs.appendChild(b);
-      bodies.appendChild(el(`<div class="tab" id="tab-${id}"></div>`));
+    for (const [group, ids] of TAB_GROUPS) {
+      if (group) tabs.appendChild(el(`<span class="tabgrp">${group}</span>`));
+      for (const id of ids) {
+        const b = el(`<button data-tab="${id}">${TABS[id]}</button>`);
+        b.onclick = () => { setTab(id); };
+        tabs.appendChild(b);
+        bodies.appendChild(el(`<div class="tab" id="tab-${id}"></div>`));
+      }
     }
     renderStreets(); renderCity(); renderDen(); renderDeck();
     setTab('streets');
@@ -640,7 +657,16 @@
         ${boss ? `<button class="act" data-do="POST /v1/gangs/foundation">endow ${g.nextFoundation.name} (${g.nextFoundation.omr} $OMR from reserve)</button>` : '<span class="d" style="color:var(--dim)">the boss/underboss endows the foundation</span>'}</div>`
         : '<span class="d" style="color:var(--dim)">the family is the highest pillar of the community there is.</span>'}
 
+      <h2 style="margin-top:12px">Family Regalia <span class="d" style="font-size:10px">(status badges bought from the $OMR reserve — the boss's call)</span></h2>
+      <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>
+        ${g.nextSeal ? (boss ? `<button class="act" data-do="POST /v1/gangs/vanity/seal">commission the ${g.nextSeal.name} (${g.nextSeal.omr} $OMR)</button>` : '<span class="d" style="color:var(--dim)"> — the boss commissions seals</span>') : '<span class="chip good"> Obsidian — the finest seal in the city</span>'}</div>
+      ${boss ? `<div class="card" style="margin-top:6px"><span class="t">Crest &amp; Name</span>
+        <div style="margin-top:4px"><input id="crest-color" placeholder="#rrggbb" size="9"> <button class="act" id="crest-go">recolor the crest (10 $OMR)</button></div>
+        <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (25 $OMR)</button></div></div>` : ''}
+
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
+    { const cg = $('#crest-go'); if (cg) cg.onclick = () => act('POST', '/v1/gangs/vanity/color', { color: $('#crest-color').value.trim() }).then(() => renderFamily()); }
+    { const fr = $('#fam-rename-go'); if (fr) fr.onclick = () => act('POST', '/v1/gangs/vanity/name', { name: $('#fam-rename').value.trim(), tag: $('#fam-retag').value.trim() }).then(() => renderFamily()); }
     t.querySelector('#trib-go').onclick = () =>
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>
@@ -775,10 +801,21 @@
             : x.ready ? `<button class="act" data-obclaim="${x.id}">claim reward</button>`
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
-      <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>`;
+      <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+
+      <h2 style="margin-top:14px">Missions <span class="d" style="font-size:10px">— one-time scripted jobs (cash + respect, sometimes $OMR &amp; a title)</span></h2>
+      <div class="grid">${(rules?.missions || []).filter((m) => (m.req?.lvl || 0) <= (me?.level || 1)).map((m) => {
+        const statReq = ['muscle', 'cunning', 'speed'].map((s) => m.req?.[s] ? `${s} ${m.req[s]}` : null).filter(Boolean).join(', ');
+        const meets = ['muscle', 'cunning', 'speed'].every((s) => !m.req?.[s] || (me?.stats?.[s] || 0) >= m.req[s]);
+        return `<div class="card"><span class="t">${m.name}</span>
+          <div class="d">${m.brief || ''}</div>
+          <div class="d">needs lvl ${m.req?.lvl || 1}${statReq ? ` · ${statReq}` : ''} · pays $${fmt(m.reward?.cash || 0)}${m.reward?.omr ? ` + ${m.reward.omr} $OMR` : ''}${m.reward?.title ? ' + a title' : ''}</div>
+          <button class="act" data-mission="${m.id}"${meets ? '' : ' disabled'}>attempt${meets ? '' : ' (train up first)'}</button></div>`;
+      }).join('') || '<span class="d" style="color:var(--dim)">level up to unlock your first mission</span>'}</div>`;
     t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
+    t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
   }
 
   // Streets: crimes, train, path, bank, trade goods, travel
@@ -786,6 +823,7 @@
     const t = $('#tab-streets');
     const prices = (await api('GET', '/v1/market/prices')).body || {};
     const spot = prices.goods?.[me?.loc] || {};
+    const daily = (await api('GET', '/v1/daily')).body || {};
     const crimes = (rules?.crimes || []).map((c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
@@ -817,8 +855,19 @@
         <button class="act" data-gdbuy="${g.id}">buy</button>
         <button class="act" data-gdsell="${g.id}"${held ? '' : ' disabled'}>sell</button></div>`;
     }).join('');
+    // Daily Work — the repeatable early-game faucet: 3 rotating contracts + the level-scaled Daily Score
+    const dailyCards = (daily.jobs || []).map((j) => {
+      const ready = j.progress >= j.goal;
+      return `<div class="card"><span class="t">${j.name}</span>
+        <div class="d">${Math.min(j.progress, j.goal)}/${j.goal}${j.claimed ? ' · claimed' : ready ? ' · READY' : ''}</div>
+        ${!j.claimed && ready ? `<button class="act" data-daily="${j.id}">claim</button>` : ''}</div>`;
+    }).join('') + `<div class="card"><span class="t">The Daily Score</span>
+        <div class="d">${me?.heistSeconds ? `cooling down (${mins(me.heistSeconds)})` : 'ready — a big score, level-scaled'}</div>
+        ${me?.heistSeconds ? '' : '<button class="act" data-do="POST /v1/heist">pull the score</button>'}</div>`;
     t.innerHTML = `
       <h2>Crimes</h2><div class="grid">${crimes}</div>
+      <h2 style="margin-top:14px">Daily Work <span class="d" style="color:var(--dim);font-size:11px">— 3 contracts a day (all three pays a $OMR bonus) + the Daily Score</span></h2>
+      <div class="grid">${dailyCards}</div>
       <h2 style="margin-top:14px">Train</h2>${train}
       ${pathBlock}
       <h2 style="margin-top:14px">The Bank</h2>
@@ -834,6 +883,7 @@
     const gq = (id) => Number(t.querySelector(`[data-gd="${id}"]`)?.value) || 0;
     t.querySelectorAll('[data-gdbuy]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/buy', { goodId: b.dataset.gdbuy, qty: gq(b.dataset.gdbuy) }).then(renderStreets));
     t.querySelectorAll('[data-gdsell]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/sell', { goodId: b.dataset.gdsell, qty: gq(b.dataset.gdsell) }).then(renderStreets));
+    t.querySelectorAll('[data-daily]').forEach((b) => b.onclick = () => act('POST', `/v1/daily/${b.dataset.daily}/claim`, {}).then(renderStreets));
   }
 
   // The City board
@@ -842,6 +892,7 @@
     const r = await api('GET', '/v1/city');
     if (r.code >= 400) { t.innerHTML = '<p class="d">the city is quiet.</p>'; return; }
     const c = r.body;
+    const w = (await api('GET', '/v1/world')).body || {};
     t.innerHTML = `
       <h2>Today</h2>
       <div class="card"><span class="t">${c.event?.name || c.event?.id || '—'}</span>
@@ -853,8 +904,14 @@
       <h2 style="margin-top:12px">Forecast</h2>
       <div class="grid">${(c.forecast || []).map((f) =>
         `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>
+      <h2 style="margin-top:12px">Rival Families <span class="d" style="font-size:10px">(NPC crews the whole city grinds down — raid for cash + ammo${w.phase === 'night' ? ' · night: their guard is down' : ''})</span></h2>
+      <div class="grid">${(w.npcs || []).map((n) => `
+        <div class="card"><span class="t">${n.name}</span>${n.routed ? '<span class="chip good">ROUTED</span>' : ''}
+          <div class="d">strength ${n.strengthPct}% · lvl ${n.minLvl}+${n.odds != null ? ` · your odds ${n.odds}%` : ''}</div>
+          ${n.canRaid ? `<button class="act" data-raid="${n.id}">raid (energy + ammo)</button>` : `<span class="chip">need lvl ${n.minLvl}</span>`}</div>`).join('') || '<span class="d" style="color:var(--dim)">the streets are quiet</span>'}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:10px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
+    t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
     // NAMED LANDMARKS — dedicate a district plaque to your dynasty (a $OMR status flex)
     const lm = (await api('GET', '/v1/landmarks')).body;
     $('#landmark-slot').innerHTML = `<div class="grid">${(lm?.landmarks || []).map((l) => `
@@ -1399,13 +1456,27 @@
       <div class="grid">${cat.map((c) => `
         <div class="card"><span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
           <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr, wash $${fmt(c.tiers[0].launderCapDay)}/day</div>
-          ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>`;
+          ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
+
+      <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:10px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
+      <div class="grid">${(rules?.rackets || []).map((r) => { const owned = (me.rackets || []).includes(r.id), locked = me.level < r.lvl;
+        return `<div class="card"><span class="t">${r.name}</span>${owned ? '<span class="chip good">owned</span>' : locked ? `<span class="chip">lvl ${r.lvl}+</span>` : ''}
+          <div class="d">$${fmt(r.income)}/hr · $${fmt(r.cost)} · ${r.desc}</div>
+          ${owned || locked ? '' : `<button class="act" data-rkbuy="${r.id}">buy</button>`}</div>`; }).join('')}</div>
+
+      <h2 style="margin-top:14px">Assets <span class="d" style="font-size:10px">— wheels (cargo/speed), property (energy cap) & legit fronts (income)</span></h2>
+      <div class="grid">${(rules?.assets || []).map((a) => { const owned = (me.assets || []).includes(a.id);
+        return `<div class="card"><span class="t">${a.name}</span>${owned ? '<span class="chip good">owned</span>' : `<span class="chip">${a.cat}</span>`}
+          <div class="d">$${fmt(a.price)}${a.boost ? ` · +${a.boost} ${a.stat}` : ''}${a.cargo ? ` · +${a.cargo} cargo` : ''} · ${a.desc}</div>
+          ${owned ? '' : `<button class="act" data-asbuy="${a.id}">buy</button>`}</div>`; }).join('')}</div>`;
     t.querySelectorAll('[data-bizbuy]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizbuy}/buy`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizup]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizwash]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizwash}/launder`, { amount: Number(t.querySelector(`[data-bizamt="${b.dataset.bizwash}"]`).value) }).then(() => renderEmpire()));
+    t.querySelectorAll('[data-rkbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkbuy}/buy`, {}).then(() => renderEmpire()));
+    t.querySelectorAll('[data-asbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/assets/${b.dataset.asbuy}/buy`, {}).then(() => renderEmpire()));
   }
 
   // ── THE SPEAKEASY: the social hub — your club, the nightlife map, buying rounds where you stand ──
@@ -1493,7 +1564,7 @@
     const b = (await api('GET', '/v1/boxing')).body || {};
     const y = b.yours;
     t.innerHTML = `
-      ${!y ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\\' fighters. Win the purse (minus the house vig); a loss lays your man up. Your fighter dies with your street.') : ''}
+      ${!y ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\' fighters. Win the purse (minus the house vig); a loss lays your man up. Your fighter dies with your street.') : ''}
       <h2>The Fight Circuit</h2>
       ${y ? `
       <div class="card" style="border-color:var(--neon)"><span class="t">${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
@@ -1689,6 +1760,7 @@
     const t = $('#tab-portfolio');
     await refresh();
     const pf = (await api('GET', '/v1/portfolio')).body || {};
+    const bd = (await api('GET', '/v1/bonds')).body || {};
     const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
     const flb = (await api('GET', '/v1/leaderboard/family-portfolio')).body || {};
     const mkt = pf.market || [];
@@ -1712,6 +1784,25 @@
           : pf.dividend.cooldownSeconds ? `<span class="d">next dividend in ${mins(pf.dividend.cooldownSeconds)}</span>`
           : '<span class="d">buy into the fund to earn a dividend</span>'}
       </div>` : ''}
+
+      <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat)</span></h2>
+      <div class="card"><div class="d">pocket $${fmt(me.cash)} · $OMR on hand ${fmt(Math.floor(me.omr || 0))}</div>
+        <input id="swap-amt" placeholder="amount" size="9">
+        <button class="act" id="swap-buy">wash cash → $OMR</button>
+        <button class="act" id="swap-sell">$OMR → cash</button></div>
+
+      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:10px">(stake $OMR for yield — staked is loot-proof; unstaking unbonds 6h before it's liquid)</span></h2>
+      <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR · rewards ${fmt(Math.floor(me.rewards || 0))}${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
+        <input id="stake-amt" placeholder="$OMR" size="8">
+        <button class="act" id="stake-in">stake</button>
+        <button class="act" id="stake-out">unstake</button>
+        <button class="act" data-do="POST /v1/claim-rewards">claim rewards</button></div>
+
+      <h2 style="margin-top:12px">Reserve Bonds <span class="d" style="font-size:10px">(deposit ETH → discounted, vested treasury $OMR — deepens the OMR-ETH pool)</span></h2>
+      <div class="card">
+        <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
+        <div class="d" style="color:var(--dim);font-size:10px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
+        ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>
 
       <h2 style="margin-top:12px">The Board <span class="d" style="font-size:10px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
@@ -1747,6 +1838,12 @@
       <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
+    const swapAmt = () => Number($('#swap-amt').value);
+    $('#swap-buy').onclick = () => act('POST', '/v1/swap', { direction: 'buy', amount: swapAmt() }).then(() => renderPortfolio());
+    $('#swap-sell').onclick = () => act('POST', '/v1/swap', { direction: 'sell', amount: swapAmt() }).then(() => renderPortfolio());
+    $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
+    $('#stake-out').onclick = () => act('POST', '/v1/unstake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
+    t.querySelectorAll('[data-bondclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/bonds/${b.dataset.bondclaim}/claim`, {}).then(() => renderPortfolio()));
     $('#dyn-go').onclick = () =>
       act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
     t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>

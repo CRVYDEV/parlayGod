@@ -2160,6 +2160,30 @@ endgame sinks — Bonds, family seals — need curated screens; idempotency-key 
 actions; active-tab re-render on WS events; a real wallet-link widget) — flagged, not all built, since they
 touch no mechanic and are founder-prioritizable.
 
+**CONSOLE TAB RESTRUCTURE + DECK-ONLY SURFACING — BUILT** (`public/index.html`, `src/server.js`,
+`test/portfolio.js`; UI + read-only catalogs only, no mechanic retuned, §10.4 untouched, suite 30/30 + sim
+drift-0). Cleared the top two UX-audit backlog items. **(1) Tab restructure** — the 22 flat tabs are now
+rendered in labeled, journey-ordered clusters (`TAB_GROUPS` + a `.tabgrp` separator): Start · **Streets**
+(streets/garage/life/city) · **Earners** (kitchen/empire/scores/market) · **Vice** (den/speakeasy/boxing) ·
+**Blood** (pvp/loans/law/pen/wire) · **Family** · **Legit** (portfolio/estate/store) · deck — so the wall of
+tabs reads as groups, core screens lead, niche endgame trails. **(2) Deck-only systems surfaced** into curated
+screens (all were reachable only through the raw "Everything Else" deck, or not at all): **swap/stake/claim +
+Reserve Bonds** → "Going Legit" (The Exchange + The Vault + a Bonds card, claim wired); **rackets + assets** →
+"The Empire" (buy-once passive-income catalogs from the new `rules.rackets`/`rules.assets`); **daily contracts
++ the Daily Score** → Streets ("Daily Work" — the repeatable early faucet); **NPC rival-family raids** → "The
+City" (odds board + raid); **family seals + crest color + rename** → "The Family" ("Family Regalia", boss-gated,
+from the reserve); **missions** → "Start Here" (level-eligible list from the new `rules.missions`). `/v1/rules`
+gained `rackets`/`assets`/`missions`/`seals` catalogs; `data-do` already honors `data-body`. **Also fixed a
+pre-existing BLOCKER**: `renderBoxing` had `managers\\'` (double-backslash-quote) — a hard JS syntax error that
+broke the ENTIRE console script in a browser (it was in HEAD; the earlier "verified live" only string-checked
+the served HTML, never parsed the script). Fixed to `\'`; the client script now parses clean (verified via
+node --check on the extracted script + a live boot exercising every new screen's data endpoint). One
+pre-existing **date-flaky test** fixed en route: `test/portfolio.js` "shares accumulate" compared
+`round6(total/price)` to the server's `round6(cur + round6(amt/price))` — a 1-ULP mismatch on some days'
+prices; the expectation now models the server's per-buy rounding (date-independent). Still deferred (backlog):
+idempotency-key + disable-in-flight, active-tab re-render on WS events, the wallet-link widget, and the
+street-vanity (name/title/plate) tail — all flagged, none touch a mechanic.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
