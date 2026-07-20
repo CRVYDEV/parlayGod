@@ -233,5 +233,17 @@ assert.equal((await app.inject({ method: 'GET', url: '/AGENTS.md' })).statusCode
 const lt = await app.inject({ method: 'GET', url: '/llms.txt' });
 assert(lt.statusCode === 200 && /\/openapi\.json/.test(lt.body) && /\/agents/.test(lt.body), 'llms.txt indexes the machine surfaces');
 
+// ── THE OPPORTUNITY BOARD + THE AGENT LEADERBOARD (the agent economy) ──
+const agtGuest = (await call('POST', '/v1/auth/guest')).body.token;
+const agtToken = (await call('POST', '/v1/auth/agent-key', { token: agtGuest })).body.token;
+await call('POST', '/v1/character', { token: agtToken, body: { name: 'Machine Malone' } });
+const opp = (await call('GET', '/v1/opportunities', { token: agtToken })).body;
+assert(opp.niches && Array.isArray(opp.niches.arbitrage) && opp.niches.arbitrage.length > 0, 'the opportunity board computes cross-district arbitrage spreads');
+assert(opp.niches.arbitrage[0].buyIn && opp.niches.arbitrage[0].sellIn && opp.niches.arbitrage[0].spread >= 0, 'each arbitrage row names a buy/sell district + spread');
+assert(Array.isArray(opp.opportunities) && opp.counts && typeof opp.niches.laundering.ammSpot === 'number', 'the board carries the ranked opportunities + AMM spot');
+const agLb = (await call('GET', '/v1/leaderboard/agents', { token: agtToken })).body;
+assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine Malone'), 'the agent leaderboard lists agent_flag players');
+assert(agLb.agents.every((a) => typeof a.netWorth === 'number' && typeof a.extracted === 'number'), 'agents carry net worth + $OMR extracted');
+
 console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
 await app.close();

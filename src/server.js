@@ -38,6 +38,7 @@ import * as Pass from './pass.js';
 import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
+import { opportunityBoard } from './opportunities.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -852,6 +853,14 @@ export async function buildServer() {
   app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
     recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool),
     push: await G.referralPushStatus(pool) })); // the active recruitment DRIVE (2×… payouts), publicly visible
+  // THE AGENT LEADERBOARD: a SEPARATE machine hall of fame (net worth / kills / $OMR extracted). See AGENTS.md.
+  app.get('/v1/leaderboard/agents', { preHandler: auth }, async () => ({ agents: await W.agentLeaderboard(pool) }));
+  // THE OPPORTUNITY BOARD (the agent-liquidity feature): every open economic action + standing
+  // skill-loop with EV/risk signals, in ONE read. Read-only; the caller's character scopes filters.
+  app.get('/v1/opportunities', { preHandler: auth }, async (req) => {
+    const ch = (await pool.query('SELECT id, loc FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0] || null;
+    return opportunityBoard(pool, ch);
+  });
   // THE BLOOD-FEUD LEDGER: the public tally between MY bloodline and theirs — kills each way
   // (from kill_log), net bloodOwed (positive = they owe us bodies), and any active vendetta in
   // either direction. Pure reader; vendettas themselves are created by the estate.
