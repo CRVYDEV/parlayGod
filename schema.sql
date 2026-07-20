@@ -405,6 +405,14 @@ CREATE TABLE IF NOT EXISTS referrals (
   recruiter_account TEXT NOT NULL,
   qualified_at TIMESTAMPTZ
 );
+-- daily "Spread the Word" social tasks: one claim per (account, day, task). Day-partitioned +
+-- self-cleaning conceptually; petty cash faucet to grow organic word-of-mouth + referral volume.
+CREATE TABLE IF NOT EXISTS social_claims (
+  account_id TEXT NOT NULL,
+  day INT NOT NULL,
+  task_id TEXT NOT NULL,
+  PRIMARY KEY (account_id, day, task_id)
+);
 CREATE TABLE IF NOT EXISTS telemetry (
   id TEXT PRIMARY KEY,
   at TIMESTAMPTZ NOT NULL DEFAULT now(),

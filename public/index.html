@@ -274,7 +274,8 @@
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
     if (body.heat) bits.push(`heat +${body.heat}`);
-    if (body.task && body.cash !== undefined) bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
+    if (body.kind === 'social' && body.cash !== undefined) bits.push(`thanks for spreading the word — +$${fmt(body.cash)}${body.allDone ? ' (all done today!)' : ''}`);
+    if (body.task && body.cash !== undefined && body.kind !== 'social') bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
     if (body.bid !== undefined && body.name && body.youLead) bits.push(`bid ${fmt(body.bid)} $OMR on ${body.name} — you lead`);
@@ -801,6 +802,7 @@
   async function renderStart() {
     const t = $('#tab-start');
     const ob = (await api('GET', '/v1/onboard')).body || { tasks: [], total: 0, claimed: 0 };
+    const sw = (await api('GET', '/v1/social')).body || { tasks: [] };
     // task → [tab to jump to, the coaching line] for the not-yet-done "do it" button
     const go = {
       ob_crime: ['streets', 'Pull any job on the Streets'],
@@ -832,6 +834,16 @@
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
 
+      <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:10px">— daily: share OMERTÀ for petty cash. Your code is your name; a recruit who sticks pays you real cash + $OMR</span></h2>
+      ${!sw.enabled ? '<div class="d" style="color:var(--dim);font-size:11px;margin-bottom:4px">Reward payouts go live soon — but sharing still brings in new blood (and referral cash) right now.</div>' : ''}
+      <div class="grid">${(sw.tasks || []).map((s) => `
+        <div class="card" ${!s.claimed && sw.enabled ? 'style="border-color:var(--neon)"' : ''}><span class="t">${s.claimed ? '✓ ' : ''}${s.name}</span>
+          ${s.claimed ? '<span class="chip good">done today</span>' : ''}
+          <div class="d">${s.desc} · pays $${fmt(s.cash)}</div>
+          <a href="${s.share}" target="_blank" rel="noopener noreferrer"><button class="act">share ↗</button></a>
+          ${s.claimed ? '' : `<button class="act" data-swclaim="${s.id}">claim</button>`}</div>`).join('')}</div>
+      ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus.</div>` : ''}
+
       <h2 style="margin-top:14px">Missions <span class="d" style="font-size:10px">— one-time scripted jobs (cash + respect, sometimes $OMR &amp; a title)</span></h2>
       <div class="grid">${(rules?.missions || []).filter((m) => (m.req?.lvl || 0) <= (me?.level || 1)).map((m) => {
         const statReq = ['muscle', 'cunning', 'speed'].map((s) => m.req?.[s] ? `${s} ${m.req[s]}` : null).filter(Boolean).join(', ');
@@ -845,6 +857,7 @@
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
     t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
+    t.querySelectorAll('[data-swclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/social/${b.dataset.swclaim}/claim`, {}).then(() => renderStart()));
   }
 
   // Streets: crimes, train, path, bank, trade goods, travel

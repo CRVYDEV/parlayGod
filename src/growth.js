@@ -2,7 +2,7 @@
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
 import { GameError } from './game.js';
 import {
-  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8,
+  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap,
 } from './rules.js';
 import { verifySocial } from './verify.js';
@@ -234,6 +234,47 @@ export async function claimOnboard(ch, taskId, client, h) {
   if (cb > 0) await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: cb, reason: `onboard:${taskId}` });
   await h.track(client, h.accountId, 'first_week_step', { task: taskId, capstone: allDone });
   return { ok: true, task: taskId, cash, cb, en, capstone: allDone };
+}
+
+// ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──────────────
+// The reward is gated behind SOCIAL_VERIFY_MODE!=='off' (the verify.js philosophy: never pay a
+// social-task faucet with no verification configured), agent-flagged accounts are excluded, and
+// each task pays ONCE per (account, day). Cash only — never $OMR (the v24 rule). Share URLs carry
+// the player's living name as their referral code, so sharing feeds the §7.13 referral loop.
+export function socialRewardsLive() { return (process.env.SOCIAL_VERIFY_MODE || 'off') !== 'off'; }
+
+export async function socialBoard(pool, accountId, ch) {
+  const day = dayOf();
+  const done = new Set(accountId
+    ? (await pool.query('SELECT task_id FROM social_claims WHERE account_id=$1 AND day=$2', [accountId, day])).rows.map((r) => r.task_id)
+    : []);
+  const code = ch?.name || '';
+  const tasks = SOCIAL_TASKS.TASKS.map((t) => ({
+    id: t.id, name: t.name, desc: t.desc, cash: SOCIAL_TASKS.CASH,
+    claimed: done.has(t.id), share: socialShareUrl(t.kind, code),
+  }));
+  return { enabled: socialRewardsLive(), code, cash: SOCIAL_TASKS.CASH, allBonus: SOCIAL_TASKS.ALL_BONUS,
+    tasks, allDone: tasks.length > 0 && tasks.every((t) => t.claimed) };
+}
+
+export async function claimSocial(ch, taskId, proof, client, h) {
+  if (!socialRewardsLive()) throw new GameError('social_off', "Word-of-mouth rewards aren't live on this server yet — but sharing still helps.");
+  if (h.acct.agent_flag) throw new GameError('agent', "Agent accounts don't earn word-of-mouth rewards.");
+  const t = SOCIAL_TASKS.TASKS.find((x) => x.id === taskId);
+  if (!t) throw new GameError('bad_task', 'Not a word-of-mouth task.');
+  const day = dayOf();
+  // withCharacter row-locks the character (one living character per account), so an account's
+  // claims serialize — the SELECT-then-INSERT can't double-pay; the PK is the backstop.
+  const dup = await client.query('SELECT 1 FROM social_claims WHERE account_id=$1 AND day=$2 AND task_id=$3', [h.accountId, day, taskId]);
+  if (dup.rowCount) throw new GameError('claimed', 'Already spread that word today — come back tomorrow.');
+  await client.query('INSERT INTO social_claims (account_id, day, task_id) VALUES ($1,$2,$3)', [h.accountId, day, taskId]);
+  const claimedIds = (await client.query('SELECT task_id FROM social_claims WHERE account_id=$1 AND day=$2', [h.accountId, day])).rows.map((r) => r.task_id);
+  const allDone = SOCIAL_TASKS.TASKS.every((x) => claimedIds.includes(x.id));
+  const cash = SOCIAL_TASKS.CASH + (allDone ? SOCIAL_TASKS.ALL_BONUS : 0); // fold the all-done bonus in (the onboard-capstone precedent)
+  ch.cash = Number(ch.cash) + cash;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: `social:${taskId}` });
+  await h.track(client, h.accountId, 'social_task', { task: taskId, allDone, proof: String(proof || '').slice(0, 300) });
+  return { ok: true, kind: 'social', task: taskId, cash, allDone };
 }
 
 // WALLET LINK is SIWE now — see chain.js walletChallenge/walletVerify. The legacy

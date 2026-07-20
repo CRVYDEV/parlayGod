@@ -977,6 +977,13 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
+  // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet
+  app.get('/v1/social', { preHandler: auth }, async (req) => {
+    const me = (await pool.query('SELECT id, name FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    return W.socialBoard(pool, req.user.sub, me);
+  });
+  app.post('/v1/social/:taskId/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimSocial(ch, req.params.taskId, req.body?.proof, client, h)));
   // Wallet linking is SIWE now (EVM migration): the base58/no-proof path is retired. A real
   // 0x link — the only thing that sets wallet_address and satisfies the ob_wallet reward —
   // goes through POST /v1/wallet/challenge → POST /v1/wallet/verify (chain.js).
