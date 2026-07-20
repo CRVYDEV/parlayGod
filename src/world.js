@@ -441,8 +441,12 @@ export async function releaseFrontierHolds(client, gangId) {
   await client.query('UPDATE world_npcs SET held_by_gang=NULL, held_since=NULL WHERE held_by_gang=$1', [gangId]);
 }
 
-// runEstate: a dead co-op raid leader's plan is abandoned (the crew_heists precedent). Member rows are
-// wiped by the estate table sweep; this releases any raid this street was LEADING so its crew can recrew.
+// runEstate: a dead co-op raid leader's plan is abandoned (the crew_heists precedent) so its crew can
+// recrew. The dead leader's own membership is wiped by the estate table sweep; this also clears the
+// STRANDED crew's member rows (audit LOW-1 — else they linger forever in an abandoned raid the sweep
+// never touches, since sweepStaleRaids only reaps status='planning'; the pen-break death precedent).
 export async function abandonRaidsAtDeath(client, characterId) {
   await client.query("UPDATE world_raids SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [characterId]);
+  await client.query(
+    "DELETE FROM world_raid_members WHERE raid_id IN (SELECT id FROM world_raids WHERE leader_character=$1 AND status='abandoned')", [characterId]);
 }
