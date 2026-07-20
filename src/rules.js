@@ -1615,6 +1615,10 @@ export const BOXING = {
   // The belt tracks a REIGN (defenses since winning it) and carries a MANDATORY-DEFENSE clock: a champ
   // who doesn't win a bout within DEFENSE_MS is STRIPPED (the belt goes vacant — hold it or fight).
   DEFENSE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days to defend or forfeit
+  // ── STEP FIVE — THE CALLOUT (the mandatory #1-contender challenge; pure status, no §10.4) ──
+  // The #1 contender forces a title fight. The champ has CALLOUT_MS to ACCEPT (books a title main event)
+  // or DUCK it — a ducked callout past the deadline forfeits the belt straight to the challenger.
+  CALLOUT_MS: 48 * 60 * 60 * 1000,   // the champ's window to accept a callout (CALLOUT_MS env is TEST-ONLY)
 };
 export const boxerRankOf = (wins) =>
   [...BOXING.RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.RANKS[0];

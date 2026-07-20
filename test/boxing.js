@@ -228,8 +228,36 @@ await pool.query(`UPDATE fighters SET injured_until = now() + interval '2 hours'
 const fav = await call('POST', '/v1/underworld/cornerman/favor', { token: aa.token });
 assert.equal(fav.code, 200, 'the corner does a favor for the inner circle'); assert.equal(fav.body.healedFighters, 1, 'one laid-up fighter patched up');
 assert.equal((await pool.query(`SELECT injured_until FROM fighters WHERE id='${sugar.id}'`)).rows[0].injured_until, null, 'the fighter is off the injured list');
-// re-crown The Bull so the DEATH belt-vacate below stays meaningful (the strip above left it vacant)
+// re-crown The Bull so the callout + DEATH belt tests below stay meaningful (the strip above left it vacant)
 await pool.query(`UPDATE boxing_title SET holder_fighter='${bull}', holder_char='${aa.id}', holder_name='The Bull', since=now(), last_defense=now(), defenses=0 WHERE id=1`);
+
+// ══ STEP FIVE — THE CALLOUT (the mandatory #1-contender challenge) ══
+// The Bull (aa) holds the belt; Goliath (cc, 1 win from the step-three main event) is the #1 contender.
+assert.equal((await call('POST', `/v1/boxing/callout/${bull}`, { token: aa.token })).body.error, 'self', "the champ can't call themselves out");
+assert.equal((await call('POST', `/v1/boxing/callout/${palooka}`, { token: bb.token })).body.error, 'not_contender', 'only the #1 contender can call out the champ');
+const co = await call('POST', `/v1/boxing/callout/${goliath}`, { token: cc.token });
+assert.equal(co.code, 200, 'the #1 contender calls out the champ'); assert.equal(co.body.champion, 'The Bull', 'the callout names the champ');
+assert.equal((await call('POST', `/v1/boxing/callout/${goliath}`, { token: cc.token })).body.error, 'callout_exists', 'one callout at a time');
+let champB = (await call('GET', '/v1/boxing', { token: aa.token })).body.champion;
+assert(champB.callout && champB.callout.challenger === 'Goliath' && champB.callout.deadlineSeconds > 0, 'the board shows the pending callout + the accept clock');
+// (A) DUCK IT — the champ ignores the mandatory challenge past the deadline → the belt forfeits to the challenger
+await pool.query(`UPDATE boxing_title SET callout_deadline = now() - interval '1 hour' WHERE id=1`);
+const duck = await enforceBeltDefense(pool);
+assert.equal(duck.ducked, true, 'a ducked callout forfeits the belt');
+assert.equal(duck.newChampion, 'Goliath', 'the challenger is crowned — you can\'t duck the #1 contender');
+assert.equal((await pool.query('SELECT holder_char FROM boxing_title WHERE id=1')).rows[0].holder_char, cc.id, 'Goliath\'s manager is the new champion');
+// (B) ACCEPT IT — re-crown The Bull, call out again, the champ accepts → a TITLE main event is booked
+await pool.query(`UPDATE boxing_title SET holder_fighter='${bull}', holder_char='${aa.id}', holder_name='The Bull', since=now(), last_defense=now(), defenses=0, callout_fighter=NULL, callout_char=NULL, callout_deadline=NULL WHERE id=1`);
+await pool.query(`UPDATE fighters SET injured_until=NULL, booked_until=NULL WHERE id='${goliath}'`); // Goliath ready to challenge
+await call('POST', `/v1/boxing/callout/${goliath}`, { token: cc.token });
+assert.equal((await call('POST', '/v1/boxing/callout/accept', { token: cc.token })).body.error, 'not_champ', 'only the champion can accept');
+const acc = await call('POST', '/v1/boxing/callout/accept', { token: aa.token });
+assert.equal(acc.code, 200, 'the champ accepts the challenge'); assert.equal(acc.body.title, true, 'it books a TITLE main event');
+const titleBout = acc.body.bout;
+assert.equal((await pool.query('SELECT callout_fighter FROM boxing_title WHERE id=1')).rows[0].callout_fighter, null, 'the callout is consumed into the booked card');
+const meBout = (await call('GET', '/v1/boxing', { token: cc.token })).body.mainEvents.find((m) => m.id === titleBout);
+assert(meBout && meBout.title === true, 'the board flags it as a title fight (the belt is on the line)');
+assert(Number((await pool.query(`SELECT COUNT(*) n FROM fighters WHERE id IN ('${bull}','${goliath}') AND booked_until > now()`)).rows[0].n) === 2, 'both fighters are locked into the card');
 
 // ── DEATH: a dead manager's whole STABLE is done + the belt VACATES; the career legend SURVIVES ──
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: aa.id }, headers: { 'x-mod-key': 'test-mod-key' } });
@@ -239,5 +267,5 @@ assert.equal(await boxingWins(aa.aid), 3, 'the career legend (account-level) SUR
 inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 
-console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), STEP FOUR — THE CORNERMAN (Underworld fixture — training ×0.9 cash at tier 1, +2 build at tier 3, the weekly stable patch-up favor) + BELT DEFENSE (a win while holding the belt is a DEFENSE that grows the reign; the mandatory-defense clock + #1 contender on the board; an inactive champion is STRIPPED by the worker), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
+console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), STEP FOUR — THE CORNERMAN (Underworld fixture — training ×0.9 cash at tier 1, +2 build at tier 3, the weekly stable patch-up favor) + BELT DEFENSE (a win while holding the belt is a DEFENSE that grows the reign; the mandatory-defense clock + #1 contender on the board; an inactive champion is STRIPPED by the worker), STEP FIVE — THE CALLOUT (only the #1 contender can call out the champ, self/not-contender/one-at-a-time gates, the board shows the pending challenge + accept clock; DUCK IT → the belt forfeits straight to the challenger; ACCEPT IT → a TITLE main event is booked, the callout consumed, both fighters locked, the board flags the title fight), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
 await app.close();

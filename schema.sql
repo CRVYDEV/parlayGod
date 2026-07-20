@@ -672,7 +672,10 @@ CREATE TABLE IF NOT EXISTS boxing_title (
   id INT PRIMARY KEY,
   holder_fighter TEXT, holder_char TEXT, holder_name TEXT, since TIMESTAMPTZ,
   defenses INT NOT NULL DEFAULT 0,   -- (step four) the reign: successful title defenses since winning it
-  last_defense TIMESTAMPTZ           -- (step four) the mandatory-defense clock — an inactive champ is stripped
+  last_defense TIMESTAMPTZ,          -- (step four) the mandatory-defense clock — an inactive champ is stripped
+  -- (step five) THE CALLOUT — the #1 contender forces a mandatory title challenge; the champ accepts
+  -- (books a title main event) or DUCKS it past the deadline and forfeits the belt to the challenger.
+  callout_fighter TEXT, callout_char TEXT, callout_deadline TIMESTAMPTZ
 );
 INSERT INTO boxing_title (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM boxing_title);
 -- THE MAIN EVENT (step three): a SCHEDULED prestige bout the crowd bets on. No principal cash wager —
