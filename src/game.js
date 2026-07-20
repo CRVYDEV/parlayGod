@@ -440,7 +440,10 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     await client.query('COMMIT');
     if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) {
       try { await maybeSparkReferral(pool, accountId); } catch (e) { console.error('referral spark (post-commit, non-fatal)', e?.code || e); }
-      await maybeQualifyReferral(pool, accountId);
+      // post-commit + non-fatal: a throw here (a 40P01 on the char/street_tax locks under load, any
+      // DB error) after the two-party action already COMMITTED would surface a non-2xx → idempotency
+      // release → retry re-executes the action = double-spend. Swallow, exactly like the solo path.
+      try { await maybeQualifyReferral(pool, accountId); } catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
       try { await maybeGrandReferral(pool, accountId); } catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
     return { character: view(ch, acct, owned), events: h.events, ...result };
