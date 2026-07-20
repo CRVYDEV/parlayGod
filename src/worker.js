@@ -23,6 +23,7 @@ import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
+import { sweepMainEvents } from './boxing.js';
 import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -200,6 +201,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
     const auc = await safe('auction sweep', () => sweepAuctions(pool));
     if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
+    // THE FIGHT CIRCUIT (step three): resolve any past-window MAIN EVENT card — roll the fight + pay the crowd
+    const me = await safe('main event sweep', () => sweepMainEvents(pool));
+    if (me && me.resolved > 0) console.log(`🥊 boxing: resolved ${me.resolved} main event(s)`);
     // THE WIRE: expire stale wiretaps (row hygiene — reads already filter expires_at)
     const wr = await safe('wire sweep', () => sweepWire(pool));
     if (wr?.swept > 0) console.log(`📡 wire: swept ${wr.swept} expired wiretap(s)`);

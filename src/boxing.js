@@ -6,16 +6,19 @@
 // status), and a MANAGER career LEGEND (lifetime fighter wins, account-level → SURVIVES DEATH, the
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
+import { GameError, bus, ledger, notify, rngLog } from './game.js';
 import { BOXING, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const injured = (f) => f.injured_until && new Date(f.injured_until) > new Date();
 const onCooldown = (f) => f.exhib_at && new Date(f.exhib_at) > new Date();
+const booked = (f) => f.booked_until && new Date(f.booked_until) > new Date(); // (step three) on a MAIN EVENT card
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const form = (f) => Number(f.power) + Number(f.chin) + Number(f.speed);
 const secsTo = (t) => (t && new Date(t) > new Date()) ? Math.ceil((new Date(t).getTime() - Date.now()) / 1000) : 0;
+// the betting window; MAIN_EVENT_MS env is TEST-ONLY (the SEARCH_MS/CONVOY_MS precedent — never in production)
+const mainEventMs = () => Number(process.env.MAIN_EVENT_MS) || BOXING.MAIN_EVENT_MS;
 
 // bump the MANAGER's lifetime fighter wins (account-level, survives death — never through the in-memory
 // acct, so persistAccount can't clobber it — the kills precedent).
@@ -55,6 +58,7 @@ export async function trainFighter(ch, fighterId, stat, client, h) {
   if (!BOXING.STATS.includes(s)) throw new GameError('bad_stat', 'Train power, chin or speed.');
   if (jailed(ch)) throw new GameError('jailed', 'No gym time from lockup.');
   const f = await myFighter(client, ch, fighterId);
+  if (booked(f)) throw new GameError('booked', "That fighter is on a card — no changing their form before the bell."); // freeze form during the betting window
   if (Number(f[s]) >= BOXING.STAT_CAP) throw new GameError('maxed', `Their ${s} is already maxed (${BOXING.STAT_CAP}).`);
   if (Number(ch.energy) < BOXING.TRAIN_ENERGY) throw new GameError('energy', `Need ${BOXING.TRAIN_ENERGY} energy to run a session.`);
   if (Number(ch.cash) < BOXING.TRAIN_COST) throw new GameError('cash', `A training session runs $${BOXING.TRAIN_COST}.`);
@@ -87,6 +91,7 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
   if (!tier) throw new GameError('bad_tier', 'No such exhibition card.');
   const f = await myFighter(client, ch, fighterId);
   if (injured(f)) throw new GameError('injured', 'Your fighter is laid up — let them heal.');
+  if (booked(f)) throw new GameError('booked', "That fighter is booked on a main event card.");
   if (onCooldown(f)) throw new GameError('cooldown', `${f.name} needs to rest before another exhibition.`);
   if (Number(ch.cash) < tier.fee) throw new GameError('cash', `The ${tier.name} card runs a $${tier.fee} sanction fee.`);
   // the sanction fee burns win or lose
@@ -135,6 +140,8 @@ export async function fightBout(ch, opponent, body, client, h) {
   if (amt > limit) throw new GameError('limit', `Their fighter takes bouts up to $${limit}.`);
   if (injured(f)) throw new GameError('injured_self', 'Your fighter is laid up — let them heal.');
   if (injured(of)) throw new GameError('injured_them', 'Their fighter is laid up right now.');
+  if (booked(f)) throw new GameError('booked_self', 'Your fighter is booked on a main event card.');
+  if (booked(of)) throw new GameError('booked_them', 'Their fighter is booked on a main event card.');
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket for the purse.');
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover the purse right now.");
   let mine, theirs;
@@ -169,11 +176,223 @@ export async function fightBout(ch, opponent, body, client, h) {
     yourFighter: win ? `${Number(f.wins) + 1}-${f.losses}` : `${f.wins}-${Number(f.losses) + 1}` };
 }
 
+// ══ STEP THREE — THE MAIN EVENT (spectator betting) ══
+// A SCHEDULED prestige bout the crowd bets on. No principal cash wager — the fighters fight for the
+// belt/legend/record; the money is a CASH parimutuel among spectators. The worker resolves it at
+// window close (the auction-settle model: single-writer, no player lock races). Every peso is a
+// TRANSFER (bettors → winning bettors + the winning manager's promoter cut + the house vig); nothing
+// is minted. The `boxing:` cash reasons ride check (a) per bettor; a new escrow check reconciles the pot.
+
+// ── announce a MAIN EVENT — the challenger books their fighter vs a LISTED opponent fighter (consent-by-
+// listing, the fightBout precedent). Two-party. Locks both fighters for the betting window; NO cash moves. ──
+export async function announceMainEvent(ch, opponent, body, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No promoting from a cell.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to promote a card.");
+  if (opponent.id === ch.id) throw new GameError('self', "You can't headline your own stable against itself.");
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family — no family matchups.");
+  if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "Their manager can't make a match right now.");
+  const [first, second] = [String(body?.myFighter || ''), String(body?.theirFighter || '')].sort();
+  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [first]);
+  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [second]);
+  const f = (await client.query('SELECT * FROM fighters WHERE id=$1', [body?.myFighter])).rows[0];
+  const of = (await client.query('SELECT * FROM fighters WHERE id=$1', [body?.theirFighter])).rows[0];
+  if (!f || f.character_id !== ch.id) throw new GameError('no_fighter', 'Pick one of your own fighters.');
+  if (!of || of.character_id !== opponent.id) throw new GameError('no_opponent', "That fighter isn't in their stable.");
+  if (of.bout_limit == null) throw new GameError('not_listed', "Their fighter isn't taking bouts.");
+  if (injured(f)) throw new GameError('injured_self', 'Your fighter is laid up — let them heal.');
+  if (injured(of)) throw new GameError('injured_them', 'Their fighter is laid up right now.');
+  if (booked(f)) throw new GameError('booked_self', 'Your fighter is already on a card.');
+  if (booked(of)) throw new GameError('booked_them', 'Their fighter is already on a card.');
+  const id = crypto.randomUUID();
+  const resolvesAt = new Date(Date.now() + mainEventMs());
+  await client.query(
+    `INSERT INTO boxing_bouts (id, a_char, a_fighter, a_name, b_char, b_fighter, b_name, resolves_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [id, ch.id, f.id, f.name, opponent.id, of.id, of.name, resolvesAt]);
+  await client.query('UPDATE fighters SET booked_until=$2 WHERE id IN ($1,$3)', [f.id, resolvesAt, of.id]);
+  await h.notify(client, opponent.id, 'boxing_main_event', { from: ch.name, yours: of.name, mine: f.name });
+  bus.emit('streets', { type: 'boxing_main_event', card: `${f.name} v ${of.name}`, by: ch.name });
+  await h.track(client, ch.account_id, 'boxing_main_event', {});
+  return { ok: true, bout: id, card: `${f.name} vs ${of.name}`, closesSeconds: Math.ceil(mainEventMs() / 1000),
+    form: { [f.name]: form(f), [of.name]: form(of) } };
+}
+
+// ── place a CASH bet on a fighter in an open main event (escrow → the pot). One bet per bettor per card;
+// principals can't bet their own card (inside stake). The bout row is locked to serialize/one-per-bettor. ──
+export async function placeBoutBet(ch, boutId, body, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No action from a cell.');
+  const bout = (await client.query("SELECT * FROM boxing_bouts WHERE id=$1 FOR UPDATE", [boutId])).rows[0];
+  if (!bout || bout.status !== 'booked') throw new GameError('no_bout', 'No such open card.');
+  if (new Date(bout.resolves_at) <= new Date()) throw new GameError('closed', 'Betting on that card is closed.');
+  if (ch.id === bout.a_char || ch.id === bout.b_char) throw new GameError('own_event', "You can't bet on your own card.");
+  const fighter = String(body?.fighter || '');
+  if (fighter !== bout.a_fighter && fighter !== bout.b_fighter) throw new GameError('bad_fighter', 'Bet on one of the two fighters.');
+  const amt = Math.floor(Number(body?.amount));
+  if (!(Number.isFinite(amt) && amt >= BOXING.BET_MIN && amt <= BOXING.BET_MAX))
+    throw new GameError('amount', `Bets run $${BOXING.BET_MIN}–$${BOXING.BET_MAX}.`);
+  if ((await client.query('SELECT 1 FROM boxing_bets WHERE bout_id=$1 AND bettor_char=$2', [boutId, ch.id])).rows[0])
+    throw new GameError('already_bet', "You've already got action on this card.");
+  if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
+  ch.cash = Number(ch.cash) - amt;
+  await client.query('INSERT INTO boxing_bets (bout_id, bettor_char, fighter, amount) VALUES ($1,$2,$3,$4)', [boutId, ch.id, fighter, amt]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'boxing:bet', counterparty: boutId });
+  await h.track(client, ch.account_id, 'boxing_bet', { amt });
+  return { ok: true, bout: boutId, on: fighter === bout.a_fighter ? bout.a_name : bout.b_name, amount: amt };
+}
+
+// ── cancel a booked bout — refund LIVING bettors (escrow → back), burn DEAD bettors' stakes (the
+// dead-funder precedent), unlock the surviving fighter. Shared by the estate hook + a belt-and-suspenders
+// path in resolve. A bettor who is the in-memory KILLER is credited in memory (the refundPot discipline). ──
+async function cancelBout(client, bout, killerCh) {
+  const bets = (await client.query(
+    'SELECT b.bettor_char, b.amount, c.alive FROM boxing_bets b LEFT JOIN characters c ON c.id=b.bettor_char WHERE b.bout_id=$1', [bout.id])).rows;
+  for (const b of bets) {
+    const amt = Number(b.amount);
+    if (b.alive) {
+      if (killerCh && killerCh.id === b.bettor_char) killerCh.cash = Number(killerCh.cash) + amt; // no persistCharacter clobber
+      else await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, amt]);
+      await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: amt, reason: 'boxing:bet:refund', counterparty: bout.id });
+    } else {
+      await ledger(client, { currency: 'cash', amount: -amt, reason: 'boxing:bet:death', counterparty: bout.id });
+    }
+  }
+  await client.query('UPDATE fighters SET booked_until=NULL WHERE id IN ($1,$2)', [bout.a_fighter, bout.b_fighter]);
+  await client.query("UPDATE boxing_bouts SET status='cancelled' WHERE id=$1", [bout.id]);
+}
+
+// estate hook — a dead manager's booked main events are cancelled (their fighter is gone). Refund the
+// crowd. Called in runEstate; the killer, if they bet on this very card, is mirrored in memory.
+export async function cancelMainEventsAtDeath(client, characterId, killerCh) {
+  const bouts = (await client.query(
+    "SELECT * FROM boxing_bouts WHERE status='booked' AND (a_char=$1 OR b_char=$1)", [characterId])).rows;
+  for (const bout of bouts) await cancelBout(client, bout, killerCh);
+}
+
+// ── worker resolution — the fight is rolled at window close; the spectator pot pays out (parimutuel).
+// CHAR→BOUT lock order (players lock char-then-bout via withCharacter/placeBoutBet) → no AB-BA with a
+// live bettor. The bet set is FROZEN (placeBoutBet rejects a past-window bout), so the unlocked pre-read
+// is stable. A dead principal's bout was already cancelled by runEstate (belt-and-suspenders below). ──
+export async function resolveMainEvent(client, boutId) {
+  const bout0 = (await client.query('SELECT * FROM boxing_bouts WHERE id=$1', [boutId])).rows[0];
+  if (!bout0 || bout0.status !== 'booked') return null; // already resolved/cancelled (idempotent)
+  const betChars = (await client.query('SELECT bettor_char FROM boxing_bets WHERE bout_id=$1', [boutId])).rows.map((r) => r.bettor_char);
+  const chars = [...new Set([bout0.a_char, bout0.b_char, ...betChars])].sort();
+  for (const cid of chars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  const bout = (await client.query("SELECT * FROM boxing_bouts WHERE id=$1 AND status='booked' FOR UPDATE", [boutId])).rows[0];
+  if (!bout) return null;
+  const fa = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [bout.a_fighter])).rows[0];
+  const fb = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [bout.b_fighter])).rows[0];
+  if (!fa || !fb) { await cancelBout(client, bout); return { bout: boutId, cancelled: true }; } // a fighter went missing (dead manager)
+  let sa, sb;
+  do { sa = form(fa) + rand(0, BOXING.VARIANCE); sb = form(fb) + rand(0, BOXING.VARIANCE); } while (sa === sb);
+  const aWon = sa > sb;
+  const winF = aWon ? fa : fb, loseF = aWon ? fb : fa, winnerChar = aWon ? bout.a_char : bout.b_char;
+  await client.query('UPDATE fighters SET wins=$2, booked_until=NULL WHERE id=$1', [winF.id, Number(winF.wins) + 1]);
+  await client.query('UPDATE fighters SET losses=$2, booked_until=NULL, injured_until=$3 WHERE id=$1',
+    [loseF.id, Number(loseF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
+  const winnerAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [winnerChar])).rows[0]?.account_id;
+  if (winnerAcct) await client.query('UPDATE account_persistent SET boxing_wins = boxing_wins + 1 WHERE account_id=$1', [winnerAcct]);
+  // the TITLE BELT — the winner takes it if vacant or they just beat the champion (pure status)
+  const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
+  let belt = false;
+  if (title && (title.holder_fighter == null || title.holder_fighter === loseF.id)) {
+    belt = title.holder_fighter !== winF.id;
+    await client.query('UPDATE boxing_title SET holder_fighter=$1, holder_char=$2, holder_name=$3, since=now() WHERE id=1', [winF.id, winnerChar, winF.name]);
+  }
+  // ── the SPECTATOR pot (a CASH parimutuel) ──
+  const bets = (await client.query(
+    'SELECT b.bettor_char, b.fighter, b.amount, c.alive FROM boxing_bets b LEFT JOIN characters c ON c.id=b.bettor_char WHERE b.bout_id=$1', [boutId])).rows;
+  const live = [];
+  for (const b of bets) {
+    if (b.alive) live.push(b);
+    else await ledger(client, { currency: 'cash', amount: -Number(b.amount), reason: 'boxing:bet:death', counterparty: boutId }); // dead bettor's escrow burns
+  }
+  const winners = live.filter((b) => b.fighter === winF.id);
+  const losers = live.filter((b) => b.fighter !== winF.id);
+  const totalWin = winners.reduce((a, b) => a + Number(b.amount), 0);
+  const totalLose = losers.reduce((a, b) => a + Number(b.amount), 0);
+  let purse = 0, houseCut = 0;
+  if (totalWin === 0) {
+    // no action on the winner — nobody to pay out; refund every LIVE bettor their stake (the one-sided book)
+    for (const b of live) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, Number(b.amount)]);
+      await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: Number(b.amount), reason: 'boxing:bet:refund', counterparty: boutId });
+    }
+  } else {
+    const rake = Math.floor(totalLose * BOXING.BET_RAKE_BPS / 10000);
+    purse = Math.floor(rake / 2);                 // the winning manager's promoter cut (from the rake)
+    houseCut = rake - purse;                       // → half street-tax buyback, half burns
+    const distributable = totalLose - rake;        // the losing pot, net of vig, split pro-rata among winners
+    let handedOut = 0;
+    for (let i = 0; i < winners.length; i++) {
+      const b = winners[i];
+      const share = i === winners.length - 1 ? distributable - handedOut
+        : Math.floor(distributable * Number(b.amount) / totalWin); // last winner mops up the rounding remainder
+      handedOut += share;
+      const payout = Number(b.amount) + share;     // their stake back + their pro-rata cut of the losers
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, payout]);
+      await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: payout, reason: 'boxing:bet:win', counterparty: boutId });
+    }
+    if (purse > 0) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [winnerChar, purse]);
+      await ledger(client, { characterId: winnerChar, currency: 'cash', amount: purse, reason: 'boxing:purse:main', counterparty: boutId });
+    }
+    if (houseCut > 0) {
+      await ledger(client, { currency: 'cash', amount: -houseCut, reason: 'boxing:bet:take', counterparty: boutId });
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(houseCut / 2)]); // half → the buyback, half burns
+    }
+  }
+  await client.query("UPDATE boxing_bouts SET status='resolved', winner_fighter=$2 WHERE id=$1", [boutId, winF.id]);
+  await rngLog(client, winnerChar, `boxing:main:${boutId}`, sa, `${winF.name} beat ${loseF.name} (${sa} vs ${sb})${belt ? ' — TITLE' : ''}`);
+  bus.emit('streets', { type: 'boxing_main_result', card: `${fa.name} v ${fb.name}`, winner: winF.name, belt });
+  await notify(client, bout.a_char, 'boxing_main_result', { won: aWon, card: `${fa.name} v ${fb.name}`, belt: belt && winnerChar === bout.a_char, purse: winnerChar === bout.a_char ? purse : 0 });
+  await notify(client, bout.b_char, 'boxing_main_result', { won: !aWon, card: `${fa.name} v ${fb.name}`, belt: belt && winnerChar === bout.b_char, purse: winnerChar === bout.b_char ? purse : 0 });
+  return { bout: boutId, winner: winF.name, belt, bettors: live.length, pot: totalWin + totalLose, purse, houseCut };
+}
+
+// worker sweep — resolve every past-window booked card (per-bout txn; a poison card can't starve the rest).
+export async function sweepMainEvents(pool) {
+  const due = (await pool.query("SELECT id FROM boxing_bouts WHERE status='booked' AND resolves_at <= now() ORDER BY resolves_at")).rows;
+  let resolved = 0;
+  for (const { id } of due) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await resolveMainEvent(client, id);
+      await client.query('COMMIT');
+      resolved++;
+    } catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → the next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved };
+}
+
+// the open cards (for the board) — the two fighters, forms, and the LIVE parimutuel pools per side.
+async function openMainEvents(pool, characterId) {
+  const bouts = (await pool.query("SELECT * FROM boxing_bouts WHERE status='booked' ORDER BY resolves_at")).rows;
+  if (!bouts.length) return [];
+  const out = [];
+  for (const o of bouts) {
+    const bets = (await pool.query('SELECT bettor_char, fighter, amount FROM boxing_bets WHERE bout_id=$1', [o.id])).rows;
+    const poolA = bets.filter((b) => b.fighter === o.a_fighter).reduce((a, b) => a + Number(b.amount), 0);
+    const poolB = bets.filter((b) => b.fighter === o.b_fighter).reduce((a, b) => a + Number(b.amount), 0);
+    const mine = bets.find((b) => b.bettor_char === characterId);
+    out.push({
+      id: o.id, a: { fighterId: o.a_fighter, name: o.a_name, pool: poolA }, b: { fighterId: o.b_fighter, name: o.b_name, pool: poolB },
+      closesSeconds: secsTo(o.resolves_at),
+      isPrincipal: o.a_char === characterId || o.b_char === characterId,
+      yourBet: mine ? { fighter: mine.fighter, on: mine.fighter === o.a_fighter ? o.a_name : o.b_name, amount: Number(mine.amount) } : null,
+    });
+  }
+  return out;
+}
+
 const fighterView = (f, beltId) => ({
   id: f.id, name: f.name, power: Number(f.power), chin: Number(f.chin), speed: Number(f.speed), form: form(f),
   wins: Number(f.wins), losses: Number(f.losses), record: `${Number(f.wins)}-${Number(f.losses)}`, rank: boxerRankOf(f.wins).name,
   boutLimit: f.bout_limit == null ? null : Math.floor(Number(f.bout_limit)),
-  injuredSeconds: secsTo(f.injured_until), exhibitionCdSeconds: secsTo(f.exhib_at), belt: !!beltId && f.id === beltId,
+  injuredSeconds: secsTo(f.injured_until), exhibitionCdSeconds: secsTo(f.exhib_at), bookedSeconds: secsTo(f.booked_until),
+  belt: !!beltId && f.id === beltId,
 });
 
 // the manager's STABLE (loadOwned + the character view). [] if they run no fighter.
@@ -194,16 +413,18 @@ export async function boxingBoard(pool, characterId) {
     record: `${Number(f.wins)}-${Number(f.losses)}`, wins: Number(f.wins), rank: boxerRankOf(f.wins).name,
     mine: f.character_id === characterId, belt: f.id === beltId,
     boutLimit: f.bout_limit == null ? null : Math.floor(Number(f.bout_limit)),
-    injured: !!injured(f),
-    taking: f.bout_limit != null && !injured(f) && f.character_id !== characterId,
+    injured: !!injured(f), booked: !!booked(f),
+    taking: f.bout_limit != null && !injured(f) && !booked(f) && f.character_id !== characterId,
   })).sort((a, b) => (b.belt - a.belt) || b.wins - a.wins || b.form - a.form);
   return {
     stable: rows.filter((f) => f.character_id === characterId).sort((a, b) => Number(b.wins) - Number(a.wins)).map((f) => fighterView(f, beltId)),
     circuit,
+    mainEvents: await openMainEvents(pool, characterId),
     champion: beltId ? { fighter: title.holder_name, heldSeconds: title.since ? Math.floor((Date.now() - new Date(title.since).getTime()) / 1000) : null } : null,
     npcTiers: BOXING.NPC_TIERS,
     recruitCost: BOXING.RECRUIT_COST, trainCost: BOXING.TRAIN_COST, minLevel: BOXING.MANAGER_MIN_LEVEL,
     minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, statCap: BOXING.STAT_CAP, stats: BOXING.STATS, stableMax: BOXING.STABLE_MAX,
+    betMin: BOXING.BET_MIN, betMax: BOXING.BET_MAX, betRakeBps: BOXING.BET_RAKE_BPS,
   };
 }
 

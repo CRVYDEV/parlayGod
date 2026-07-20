@@ -1712,8 +1712,21 @@
           <div class="d">${f.manager} · ${f.record} · form ${f.form}${f.injured ? ' · <span style="color:var(--bad)">laid up</span>' : ''}${f.boutLimit ? ' · takes $' + fmt(f.boutLimit) : ''}</div>
           ${f.taking && ready.length ? `<div style="margin-top:4px" class="d">
             <select id="bx-my-${f.fighterId}">${ready.map((m) => `<option value="${m.id}">${m.name} (${m.form})</option>`).join('')}</select>
-            <input id="bx-purse-${f.fighterId}" placeholder="purse $" size="7"> <button class="act" data-fight="${f.managerId}" data-oppf="${f.fighterId}" style="border-color:var(--bad)">make the match${f.belt ? ' (TITLE)' : ''}</button></div>` : ''}</div>`).join('')
+            <input id="bx-purse-${f.fighterId}" placeholder="purse $" size="7"> <button class="act" data-fight="${f.managerId}" data-oppf="${f.fighterId}" style="border-color:var(--bad)">make the match${f.belt ? ' (TITLE)' : ''}</button>
+            <button class="act" data-announce="${f.managerId}" data-oppf="${f.fighterId}" title="book a scheduled card the crowd bets on — no cash wager, just the belt/legend/record">headline it 🥊</button></div>` : ''}</div>`).join('')
         || '<span class="d" style="color:var(--dim)">no other fighters on the circuit yet</span>'}</div>
+
+      <h2 style="margin-top:12px">The Main Event <span class="d" style="font-size:10px">(scheduled cards — bet CASH on a fighter; the crowd's pot pays out at the bell)</span></h2>
+      <div class="grid">${(b.mainEvents || []).map((m) => {
+        const total = m.a.pool + m.b.pool, oddsA = total ? Math.round(m.a.pool / total * 100) : 50;
+        return `<div class="card"><span class="t">${m.a.name} vs ${m.b.name}</span> <span class="chip">closes ${mins(m.closesSeconds)}</span>${m.isPrincipal ? ' <span class="chip good">your card</span>' : ''}
+          <div class="d">pot $${fmt(total)} — ${m.a.name}: $${fmt(m.a.pool)} (${oddsA}%) · ${m.b.name}: $${fmt(m.b.pool)} (${100 - oddsA}%)</div>
+          ${m.yourBet ? `<div class="d" style="color:var(--neon)">your bet: $${fmt(m.yourBet.amount)} on ${m.yourBet.on}</div>`
+            : (m.isPrincipal || m.closesSeconds <= 0) ? '' : `<div style="margin-top:4px" class="d">
+              <input id="bx-bet-${m.id}" placeholder="$${fmt(b.betMin)}–${fmt(b.betMax)}" size="9">
+              <button class="act" data-bet="${m.id}" data-bf="${m.a.fighterId}">on ${m.a.name}</button>
+              <button class="act" data-bet="${m.id}" data-bf="${m.b.fighterId}">on ${m.b.name}</button></div>`}</div>`;
+      }).join('') || '<span class="d" style="color:var(--dim)">no cards booked — headline a matchup above to draw a crowd</span>'}</div>
       <div style="margin-top:8px"><a href="#" id="bx-lb">the circuit leaderboard + the manager legend →</a></div>`;
 
     const bx = $('#bx-sign'); if (bx) bx.onclick = () => act('POST', '/v1/boxing/recruit', { name: $('#bx-name').value.trim() }).then(() => renderBoxing());
@@ -1725,6 +1738,12 @@
       const oppF = x.dataset.oppf, myF = ($(`#bx-my-${oppF}`) || {}).value, stake = Number(($(`#bx-purse-${oppF}`) || {}).value || 0);
       act('POST', `/v1/boxing/fight/${x.dataset.fight}`, { myFighter: myF, theirFighter: oppF, stake }).then(() => renderBoxing());
     });
+    t.querySelectorAll('[data-announce]').forEach((x) => x.onclick = () => {
+      const oppF = x.dataset.oppf, myF = ($(`#bx-my-${oppF}`) || {}).value;
+      act('POST', `/v1/boxing/announce/${x.dataset.announce}`, { myFighter: myF, theirFighter: oppF }).then(() => renderBoxing());
+    });
+    t.querySelectorAll('[data-bet]').forEach((x) => x.onclick = () =>
+      act('POST', `/v1/boxing/bout/${x.dataset.bet}/bet`, { fighter: x.dataset.bf, amount: Number(($(`#bx-bet-${x.dataset.bet}`) || {}).value || 0) }).then(() => renderBoxing()));
     const lb = $('#bx-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/boxing')).body || {};
       const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');

@@ -1596,6 +1596,15 @@ export const BOXING = {
     { min: 0, name: 'Unknown' }, { min: 10, name: 'Cornerman' }, { min: 25, name: 'Fight Fixer' },
     { min: 60, name: 'Boxing Kingpin' }, { min: 120, name: 'The Don of the Ring' },
   ],
+  // ── STEP THREE — THE MAIN EVENT (spectator betting) ──
+  // A scheduled prestige bout the crowd bets on. No principal cash wager (the fighters fight for the
+  // belt/legend/record); the money is a CASH parimutuel among spectators. The worker resolves it at
+  // window close (the auction-settle model). All numbers are sim + founder sign-off levers.
+  MAIN_EVENT_MS: 30 * 60 * 1000,   // the betting window (MAIN_EVENT_MS env override is TEST-ONLY)
+  BET_MIN: 500, BET_MAX: 250000,   // a single spectator bet's bounds (CASH only)
+  // the house vig on the LOSING pot — half → the winning manager's promoter purse, half → the house
+  // (of which half street-tax buyback, half burns). A pure taxed TRANSFER (redistribution), never a mint.
+  BET_RAKE_BPS: 800,
 };
 export const boxerRankOf = (wins) =>
   [...BOXING.RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.RANKS[0];
