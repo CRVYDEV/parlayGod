@@ -218,5 +218,20 @@ const act = (await call('GET', '/v1/mod/activity?limit=10', { headers: modH })).
 assert(Array.isArray(act.events), 'the activity feed returns events');
 assert.equal((await call('GET', '/v1/mod/activity')).code, 401, 'the activity feed needs the mod key');
 
+// ── THE AGENT GATEWAY: machine discovery — keyless, auto-derived, never drifts from live routes ──
+const oa = (await call('GET', '/openapi.json')).body;
+assert.equal(oa.openapi, '3.1.0', 'openapi 3.1 doc');
+assert(Object.keys(oa.paths).length > 100, 'the spec enumerates every mounted route');
+assert(oa.paths['/v1/rules']?.get && oa.paths['/v1/character/mint']?.post, 'key routes are in the spec');
+assert.deepEqual(oa.paths['/v1/rules'].get.security, [], '/v1/rules is advertised keyless');
+assert.deepEqual(oa.paths['/v1/character/mint'].post.security, [{ bearerAuth: [] }], 'player routes require the bearer');
+assert.deepEqual(oa.paths['/v1/mod/invariants'].get.security, [{ modKey: [] }], 'mod routes require the mod key');
+assert(oa.components.securitySchemes.bearerAuth && oa.components.securitySchemes.modKey, 'both security schemes declared');
+const ag = await app.inject({ method: 'GET', url: '/agents' }); // markdown, not JSON — raw inject
+assert(ag.statusCode === 200 && /text\/markdown/.test(ag.headers['content-type']) && /agent-key/.test(ag.body), 'the agent guide serves at /agents');
+assert.equal((await app.inject({ method: 'GET', url: '/AGENTS.md' })).statusCode, 200, 'the conventional AGENTS.md filename serves too');
+const lt = await app.inject({ method: 'GET', url: '/llms.txt' });
+assert(lt.statusCode === 200 && /\/openapi\.json/.test(lt.body) && /\/agents/.test(lt.body), 'llms.txt indexes the machine surfaces');
+
 console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
 await app.close();

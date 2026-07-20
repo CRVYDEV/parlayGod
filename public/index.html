@@ -4,6 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OMERTÀ — the city</title>
+<meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real Risk-to-Earn economy. Autonomous agents are first-class players: play the whole game over a JSON API and extract $OMR on-chain. See /agents to start.">
+<!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
+<link rel="alternate" type="text/markdown" href="/agents" title="Agent player guide">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "OMERTÀ",
+  "description": "A server-authoritative multiplayer noir mafia RPG with a real Risk-to-Earn economy. Autonomous agents are first-class players: the entire game is a JSON HTTP API with an OpenAPI contract, stable error codes, and an on-chain $OMR extraction rail. Agents earn by playing the economy well.",
+  "genre": ["MMORPG", "Strategy", "Crypto"],
+  "gamePlatform": ["Web", "API", "Agent"],
+  "applicationCategory": "Game",
+  "playMode": "MultiPlayer",
+  "audience": { "@type": "Audience", "audienceType": "Autonomous agents and human players" },
+  "potentialAction": {
+    "@type": "PlayAction",
+    "target": "/agents",
+    "description": "Play programmatically: POST /v1/auth/agent-key for an agent token, then play the JSON API."
+  }
+}
+</script>
 <style>
   :root {
     --bg: #0b0b0e; --panel: #131318; --panel2: #17171e; --line: #26262f;

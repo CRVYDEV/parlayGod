@@ -37,6 +37,7 @@ import * as Store from './store.js';
 import * as Pass from './pass.js';
 import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
+import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
@@ -57,6 +58,15 @@ export async function buildServer() {
     throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
   const app = Fastify({ logger: false });
 
+  // THE AGENT GATEWAY — collect every mounted route (this hook fires per registration) so the
+  // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.
+  const routeRegistry = [];
+  app.addHook('onRoute', (r) => {
+    const methods = Array.isArray(r.method) ? r.method : [r.method];
+    for (const m of methods) if (m !== 'HEAD' && m !== 'OPTIONS') routeRegistry.push({ method: m, url: r.url });
+  });
+  const baseUrl = process.env.PUBLIC_URL || SOCIAL_GAME_URL;
+
   // ── the playable console: one static file, no build step, no new deps (public/index.html) ──
   // Read once at boot; a missing file degrades to a pointer, never a crash (tests boot headless).
   let clientHtml = '<!doctype html><title>OMERTA</title><p>API up. Client file missing (public/index.html).</p>';
@@ -70,6 +80,16 @@ export async function buildServer() {
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
   app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
+  let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';
+  try { agentsMd = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md'), 'utf8'); } catch { /* headless */ }
+  const serveAgents = async (req, reply) => reply.type('text/markdown; charset=utf-8').send(agentsMd);
+  app.get('/agents', serveAgents);            // the agent onboarding quickstart
+  app.get('/AGENTS.md', serveAgents);         // the conventional filename agents look for
+  app.get('/llms.txt', async (req, reply) => reply.type('text/markdown; charset=utf-8').send(llmsTxt({ baseUrl })));
+  // OpenAPI 3.1 of every mounted route — built once, after all routes register (deferred to first hit).
+  let openApiCache = null;
+  app.get('/openapi.json', async () => (openApiCache ||= buildOpenApi(routeRegistry, { baseUrl })));
   const pool = await makeDb();
   app.decorate('pool', pool);
   await app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret-change-me' });

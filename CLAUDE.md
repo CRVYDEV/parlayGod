@@ -2297,6 +2297,37 @@ a bounded one-time cash finder's fee, not a revenue share, per the founder's bla
 approved architecture" directive + this explicit green-light; do NOT extend it to a 3rd level or an ongoing
 percentage without counsel.
 
+**THE AGENT GATEWAY (agent onboarding + machine discovery) — BUILT** (`AGENTS.md`, `src/agentgateway.js`,
+`src/server.js`, `public/index.html`, `test/hardening.js`; founder-directed "improve the agent experience /
+market to agents"). The first deliberate agent-facing surface — agents are already first-class players
+(`POST /v1/auth/agent-key` → permanent 🤖 flag + 90-day token throttled 1/3s; 279 routes; stable string
+error codes; keyless `/v1/rules` + `/v1/catalog`), but had NO onboarding guide, no OpenAPI, no discovery
+plumbing. This drop adds all four, read-only + keyless, ZERO §10.4 surface. **`AGENTS.md`** (served at
+`GET /agents` + the conventional `GET /AGENTS.md`, text/markdown) — the agent quickstart: why an agent
+should play (the Risk-to-Earn thesis — agents earn by SKILL, the anti-Sybil faucets stay human-only), the
+rules of the road (agent key, 1/3s throttle, Idempotency-Key, the stable error-code contract,
+server-authoritative), a curl quickstart (auth → agent-key → create → the loop → `/v1/me` coach), the
+agent-native EARN loops table (crime/kitchen/arbitrage/AMM/convoy/contracts/heists/loans/passive-income
+with their real endpoints), the EXTRACT path (SIWE → mint → `/v1/withdraw` EIP-712 voucher), and the fair-
+play contract (what `agent_flag` excludes + why). **`GET /openapi.json`** — an OpenAPI 3.1 doc
+AUTO-DERIVED from the live route registry (an `onRoute` hook collects every mounted `{method,url}` into
+`routeRegistry`, so the contract never drifts from what's actually served — 271 API paths, 74 system tags
+with per-tag descriptions, correct per-route security: keyless public allowlist / `bearerAuth` player token
+/ `modKey` x-mod-key). **`GET /llms.txt`** — the LLM-discovery-standard markdown index pointing agents at
+`/agents`, `/openapi.json`, `/v1/rules`, the earn/extract loops, and the fair-play note. **schema.org
+JSON-LD** (`VideoGame` block + a `<meta name="description">` + a `<link rel="alternate">` to `/agents`) in
+the landing page head — SEO so agents/LLMs crawling the site discover the machine surfaces. `src/agentgateway.js`
+holds `buildOpenApi(routes, {baseUrl})` + `llmsTxt({baseUrl})` (baseUrl from `PUBLIC_URL || SOCIAL_GAME_URL`).
+`test/hardening.js` covers the openapi doc (3.1, >100 paths, key routes present, the three security postures
+exact, both schemes declared) + `/agents` + `/AGENTS.md` + `/llms.txt` serving the right content-type +
+indexing the machine surfaces. Suite 30/30 + sim drift-0. **Deferred (the ranked agent-economy roadmap,
+flagged for founder go-ahead):** the **Opportunity Board** (`GET /v1/opportunities` — every open economic
+action with computed EV/risk in ONE call, the killer agent-liquidity feature) + an **Agent Leaderboard**
+(`GET /v1/leaderboard/agents` — a SEPARATE machine hall of fame, competition without touching the human
+status axes), and an **MCP server** (`omerta-mcp` — expose the game as MCP tools so any Claude/agent plays
+natively; the biggest distribution lever, a new package). All three are §10.4-safe (read-only / new
+package) and were scoped in the agent-experience strategy discussion.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
