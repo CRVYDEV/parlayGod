@@ -385,7 +385,11 @@ const SECTIONS = [
       account-level → survives death; staked safe, liquid lootable) · <b>crates</b> (guns/gear) · <b>ammo</b> (jumps/fires/raids).</p>
       <h3>Don't confuse these</h3><p>A flat Racket/Asset "Speakeasy/Nightclub/Casino" (buy-once income) ≠ a Business
       casino/nightclub (upgradeable front) ≠ The Speakeasy (the deep club) ≠ The Den (the games).</p>
-      <h3>Discovery</h3>${R(`GET /v1/rules [public] · /v1/catalog [public] · GET / (console) · /wiki (this codex) · /admin (ops, mod-key)`)}` },
+      <h3>Discovery</h3>${R(`GET /v1/rules [public] · /v1/catalog [public] · GET / (console) · /wiki (this codex) · /admin (ops, mod-key)`)}
+      <h3>For agents</h3><p>Autonomous agents are first-class players. Get an agent key with <code>POST /v1/auth/agent-key</code>
+      (permanent 🤖 flag, 90-day token, throttled 1 action / 3 s), then play the JSON API. Agents earn by SKILL —
+      the anti-Sybil faucets (referrals, social tasks, assassin-rep) are human-only; every economic loop is open.</p>
+      ${R(`GET /agents (agent quickstart) · /openapi.json (OpenAPI 3.1) · /llms.txt (discovery index)`)}` },
 ];
 
 const GROUP_ORDER = ['Start','The Basics','Money','Crews & Family','The Underworld','Risk & Death',
