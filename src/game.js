@@ -368,6 +368,8 @@ export async function withCharacter(pool, accountId, fn) {
     // committed, and the idempotency hook would release the key → a retry re-executes the action
     // (double-spend). It's idempotent (ref_paid-guarded, re-checks every gate), so swallow failures.
     if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) {
+      try { await maybeSparkReferral(pool, accountId); }
+      catch (e) { console.error('referral spark (post-commit, non-fatal)', e?.code || e); }
       try { await maybeQualifyReferral(pool, accountId); }
       catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
     }
@@ -433,7 +435,10 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     }
     for (const [accId, a] of Object.entries(accts)) await persistAccount(client, accId, a);
     await client.query('COMMIT');
-    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) await maybeQualifyReferral(pool, accountId);
+    if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) {
+      try { await maybeSparkReferral(pool, accountId); } catch (e) { console.error('referral spark (post-commit, non-fatal)', e?.code || e); }
+      await maybeQualifyReferral(pool, accountId);
+    }
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
@@ -827,6 +832,51 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, funded });
     await client.query('COMMIT');
     return { qualified: true, funded };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// STEPPED PAYOUT — "the spark" (§7.13 addendum): a small EARLY cash bonus the moment a referred
+// recruit shows real early engagement (REF_SPARK gates: level 3 + 10 jobs) — long before the full
+// qualification — so the referrer gets fast feedback and keeps referring. CASH ONLY (never $OMR,
+// which stays on the full gate), ONCE ever (ref_spark), agent-excluded, same sorted two-party lock
+// as maybeQualifyReferral so the two can't deadlock. Called post-commit, non-fatal (swallowed).
+export async function maybeSparkReferral(pool, recruitAccountId) {
+  const pre = (await pool.query('SELECT referred_by, ref_spark, ref_paid, agent_flag FROM account_persistent WHERE account_id=$1', [recruitAccountId])).rows[0];
+  if (!pre || !pre.referred_by || pre.ref_spark || pre.ref_paid || pre.agent_flag) return null;
+  const recruiterAccountId = pre.referred_by;
+  if (recruiterAccountId === recruitAccountId) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ids = (await client.query('SELECT id, account_id FROM characters WHERE account_id = ANY($1) AND alive', [[recruitAccountId, recruiterAccountId]])).rows;
+    const recruitId = ids.find((r) => r.account_id === recruitAccountId)?.id;
+    const recruiterId = ids.find((r) => r.account_id === recruiterAccountId)?.id;
+    if (!recruitId || !recruiterId) { await client.query('ROLLBACK'); return null; }
+    const lockedC = {};
+    for (const id of [recruitId, recruiterId].sort()) // characters → accounts, sorted (the qualify path's order)
+      lockedC[id] = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+    const lockedA = {};
+    for (const id of [recruitAccountId, recruiterAccountId].sort())
+      lockedA[id] = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [id])).rows[0];
+    const recruit = lockedC[recruitId], recruiter = lockedC[recruiterId];
+    const acct = lockedA[recruitAccountId], recruiterAcct = lockedA[recruiterAccountId];
+    if (!recruit || !recruiter || !acct || !recruiterAcct) { await client.query('ROLLBACK'); return null; }
+    if (acct.referred_by !== recruiterAccountId || acct.ref_spark || acct.ref_paid || acct.agent_flag || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
+    // the early gate — real playtime, well short of full qualification (keeps it Sybil-bounded)
+    if (!(levelOf(Number(recruit.respect)) >= M4.REF_SPARK.level && Number(recruit.lc_crime) >= M4.REF_SPARK.jobs)) { await client.query('ROLLBACK'); return null; }
+    recruit.cash = Number(recruit.cash) + M4.REF_SPARK.recruitCash;
+    recruiter.cash = Number(recruiter.cash) + M4.REF_SPARK.recruiterCash;
+    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: M4.REF_SPARK.recruitCash, reason: 'referral:spark' });
+    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: M4.REF_SPARK.recruiterCash, reason: 'referral:spark', counterparty: recruit.id });
+    await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
+    await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruiter.id, recruiter.cash]);
+    await client.query('UPDATE account_persistent SET ref_spark=true WHERE account_id=$1', [recruitAccountId]);
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: M4.REF_SPARK.recruiterCash, spark: true });
+    await notify(client, recruit.id, 'ref', { made: true, amt: M4.REF_SPARK.recruitCash, spark: true });
+    await track(client, recruitAccountId, 'referral_spark', { recruiter: recruiterAccountId });
+    await client.query('COMMIT');
+    return { sparked: true };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

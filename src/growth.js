@@ -196,7 +196,21 @@ export async function funnelStats(pool) {
     if (p.task && firstWeek[p.task] !== undefined) firstWeek[p.task]++;
     if (p.capstone) capstone++;
   }
-  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone } };
+  // REFERRAL FUNNEL + viral coefficient (K) — how the organic loop is compounding
+  const accounts = await one('SELECT COUNT(*) n FROM account_persistent');
+  const referral = {
+    accounts,
+    referred: await one('SELECT COUNT(*) n FROM account_persistent WHERE referred_by IS NOT NULL'), // came in on a code
+    sparked: await one('SELECT COUNT(*) n FROM account_persistent WHERE ref_spark'),               // hit the early gate
+    qualified: await one('SELECT COUNT(*) n FROM account_persistent WHERE ref_paid'),               // hit the full gate (paid out)
+    recruiters: await one('SELECT COUNT(*) n FROM account_persistent WHERE recruits > 0'),          // brought at least one made man in
+    totalRecruits: await one('SELECT COALESCE(SUM(recruits),0) n FROM account_persistent'),         // qualified recruits, all-time
+    reReferred: await one('SELECT COUNT(*) n FROM account_persistent WHERE referred_by IS NOT NULL AND recruits > 0'), // a recruit who then recruited (viral depth)
+  };
+  // K-factor ≈ qualified recruits per account (>1 means the loop compounds); spark→qualify conversion
+  referral.kFactor = accounts ? Math.round((referral.totalRecruits / accounts) * 100) / 100 : 0;
+  referral.sparkToQualified = referral.sparked ? Math.round((referral.qualified / referral.sparked) * 100) / 100 : 0;
+  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral };
 }
 
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative

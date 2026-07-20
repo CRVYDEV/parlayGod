@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   onboard TEXT NOT NULL DEFAULT '{}',
   checkins_lifetime INT NOT NULL DEFAULT 0,
   referred_by TEXT, ref_paid BOOLEAN NOT NULL DEFAULT false,
+  ref_spark BOOLEAN NOT NULL DEFAULT false,  -- the stepped EARLY referral payout fired (before full qualification)
   agent_flag BOOLEAN NOT NULL DEFAULT false,
   deaths INT NOT NULL DEFAULT 0,
   -- §11 real-ETH entry fees (paid on-chain to OmertaFees, forwarded straight to the dev

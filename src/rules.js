@@ -636,6 +636,11 @@ export const M4 = {
   REF_RECRUITER_CASH: 10000, REF_RECRUIT_CASH: 5000,
   REF_FUND_OMR: 4, REF_RECRUITER_OMR: 3, REF_RECRUIT_OMR: 1,  // fund ≥4 → 3 + 1 split (v24)
   REF_GATES: { level: 8, jobs: 40, checkins: 3, netWorth: 25000 },
+  // STEPPED PAYOUT — "the spark": a small, EARLY cash payout the moment a recruit shows real early
+  // engagement (level 3 + 10 jobs), so the referrer gets fast feedback long before the full
+  // qualification (L8/40 jobs/3 check-ins/$25k). Cash only (never $OMR — that stays on the full
+  // gate), agent-excluded, ONCE ever. Still requires real playtime, not raw signup → Sybil-bounded.
+  REF_SPARK: { level: 3, jobs: 10, recruiterCash: 2500, recruitCash: 1500 },
 };
 // crew wages ("the nut"): owed = crew × CREW_WAGE_PER_HR × elapsed-since-crew_paid_at (capped),
 // and the crew goes COLD (accrual stops their sales) once the nut is unpaid past the cold window.
