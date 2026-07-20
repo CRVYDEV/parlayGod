@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   checkins_lifetime INT NOT NULL DEFAULT 0,
   referred_by TEXT, ref_paid BOOLEAN NOT NULL DEFAULT false,
   ref_spark BOOLEAN NOT NULL DEFAULT false,  -- the stepped EARLY referral payout fired (before full qualification)
+  ref_l2_paid BOOLEAN NOT NULL DEFAULT false,  -- the tier-2 "family tree" finder's fee (to the grandrecruiter) fired for THIS account's qualification
   agent_flag BOOLEAN NOT NULL DEFAULT false,
   deaths INT NOT NULL DEFAULT 0,
   -- §11 real-ETH entry fees (paid on-chain to OmertaFees, forwarded straight to the dev
@@ -1136,8 +1137,16 @@ CREATE TABLE IF NOT EXISTS rwa_family_dividend_pool (
   lifetime_paid NUMERIC NOT NULL DEFAULT 0
 );
 -- Seed the singletons once (idempotent; virtual pool ≈ $500 / $OMR).
+-- Time-boxed RECRUITMENT DRIVE ("the push") — a mod-started window during which referral CASH
+-- payouts multiply. A singleton; inactive when `until` is null/past (mult reads as 1).
+CREATE TABLE IF NOT EXISTS referral_push (
+  id INT PRIMARY KEY,
+  until TIMESTAMPTZ,
+  mult NUMERIC NOT NULL DEFAULT 1
+);
 INSERT INTO amm_pool (id, cash_reserve, omr_reserve)
   SELECT 1, 10000000, 20000 WHERE NOT EXISTS (SELECT 1 FROM amm_pool);
+INSERT INTO referral_push (id, mult) SELECT 1, 1 WHERE NOT EXISTS (SELECT 1 FROM referral_push);
 INSERT INTO street_tax (id, pool, fund)
   SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM street_tax);
 INSERT INTO stake_pool (id, balance) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM stake_pool);

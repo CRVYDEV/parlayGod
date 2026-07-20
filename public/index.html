@@ -892,15 +892,16 @@
       }).join('') || '<span class="d" style="color:var(--dim)">level up to unlock your first mission</span>'}</div>`;
     api('GET', '/v1/leaderboard/recruiters').then((r) => {
       const el = $('#recruit-lb'); if (!el) return;
-      const rc = r.body?.recruiters || [], fam = r.body?.families || [];
-      if (!rc.length && !fam.length) { el.innerHTML = 'Nobody\'s brought anyone in yet. Be the first — share your code (it\'s your name).'; return; }
+      const rc = r.body?.recruiters || [], fam = r.body?.families || [], push = r.body?.push;
+      const drive = push?.active ? `<div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">🔥 RECRUITMENT DRIVE — ${push.mult}× referral cash</span><div class="d">Bring people in NOW — every referral payout pays ${push.mult}× for the next ${Math.ceil(push.seconds / 3600)}h. Your code is your name.</div></div>` : '';
+      if (!rc.length && !fam.length) { el.innerHTML = drive + '<div class="d" style="color:var(--dim);font-size:11px">Nobody\'s brought anyone in yet. Be the first — share your code (it\'s your name).</div>'; el.style.color = ''; el.style.fontSize = ''; return; }
       const top = rc.slice(0, 10).map((x, i) =>
         `<div class="card"><span class="t">${i + 1}. ${x.name}${x.rank ? ` <span class="chip">${x.rank}</span>` : ''}</span>
           <div class="d">${x.recruits} made ${x.recruits === 1 ? 'man' : 'men'} brought in${x.gang ? ` · ${x.tag ? `[${x.tag}] ` : ''}${x.gang}` : ''}</div></div>`).join('');
       const fams = fam.slice(0, 5).map((f, i) =>
         `<div class="card"><span class="t">${i + 1}. ${f.tag ? `[${f.tag}] ` : ''}${f.name}</span>
           <div class="d">${f.recruits} recruited by ${f.members} made ${f.members === 1 ? 'man' : 'men'}</div></div>`).join('');
-      el.innerHTML = `<div class="grid">${top}</div>${fam.length ? `<h2 style="margin-top:12px;font-size:13px">Family Recruitment</h2><div class="grid">${fams}</div>` : ''}`;
+      el.innerHTML = drive + `<div class="grid">${top}</div>${fam.length ? `<h2 style="margin-top:12px;font-size:13px">Family Recruitment</h2><div class="grid">${fams}</div>` : ''}`;
       el.style.color = ''; el.style.fontSize = '';
     });
     t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>

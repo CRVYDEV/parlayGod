@@ -649,6 +649,16 @@ export const M4 = {
   // qualification (L8/40 jobs/3 check-ins/$25k). Cash only (never $OMR — that stays on the full
   // gate), agent-excluded, ONCE ever. Still requires real playtime, not raw signup → Sybil-bounded.
   REF_SPARK: { level: 3, jobs: 10, recruiterCash: 2500, recruitCash: 1500 },
+  // TIER-2 ("the family tree", §7.13 addendum): when a recruit YOU brought in then brings in their
+  // OWN qualified recruit, you earn a BOUNDED, ONE-TIME finder's fee. Deliberately a flat one-shot —
+  // NOT an ongoing percentage of the grandrecruit's earnings — so it's a referral bonus, not a
+  // revenue-share pyramid (the anti-MLM line). CASH ONLY, capped at depth 2 (no third level), agents
+  // excluded at every level. Sensitive design: recorded as counsel-gated; founder green-lit.
+  REF_TIER2_CASH: 5000,
+  // Time-boxed RECRUITMENT DRIVE ("the push"): a mod starts a window during which every referral
+  // CASH payout (spark + full + milestone + tier-2) is multiplied. $OMR is untouched (fund-bounded).
+  // Bounded by real qualified recruits (each needs real playtime) → Sybil-bounded like the base loop.
+  REF_PUSH_MAX_MULT: 5, REF_PUSH_MAX_HOURS: 336,
 };
 // crew wages ("the nut"): owed = crew × CREW_WAGE_PER_HR × elapsed-since-crew_paid_at (capped),
 // and the crew goes COLD (accrual stops their sales) once the nut is unpaid past the cold window.

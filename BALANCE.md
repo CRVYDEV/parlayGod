@@ -972,3 +972,21 @@ NUMBERS ARE SIGN-OFF LEVERS.
 - Anti-abuse: the spark still requires REAL play (L3 + 10 jobs — not a create-time trigger), cash-only
   (launder-bounded), agent-excluded, once-ever — the same Sybil posture as the full referral. If ring-farmed
   in the alpha, the dial is the spark gate/amount; the full-qualify gate is the harder backstop.
+
+## Referral drive + tier-2 "family tree" (founder green-lit 2026-07-20; numbers are sign-off levers)
+Two additions on the §7.13 loop. Both CASH ONLY (v24 rule), agent-excluded, Sybil-bounded by real
+qualified recruits (each needs L8/40 jobs/3 check-ins/$25k of real playtime).
+- **The recruitment DRIVE ("the push")** — a mod-started, time-boxed window (`REF_PUSH_MAX_HOURS` 336 /
+  `REF_PUSH_MAX_MULT` 5 caps) that MULTIPLIES every referral CASH payout (spark + full recruiter/recruit +
+  milestone). $OMR is untouched (fund-bounded — the drive never widens the $OMR faucet). The multiplied
+  cash is ordinary ledgered `referral:*` — §10.4-exact (credited == ledgered). Faucet magnitude during a
+  drive is a founder lever; it's bounded by real qualified recruits, so a 2× drive is a temporary +100% on
+  a loop that already requires genuine playtime per payout. Recommended alpha use: short 2× windows to
+  seed word-of-mouth, watch `kFactor` on the funnel.
+- **Tier-2 "the family tree"** — `REF_TIER2_CASH` **$5,000**, a FLAT one-time finder's fee to the
+  grandrecruiter (A) when their recruit's recruit (R2) fully qualifies. Deliberately NOT a percentage and
+  NOT ongoing (the anti-MLM line — recorded in the Sensitive design notes); DEPTH 2 only; agents excluded
+  at every level (A, R, R2); once ever per R2 (`ref_l2_paid` atomic claim). Ledgered `referral:tier2`
+  (rides the `referral:` cash vocabulary). At $5k it's half the direct recruiter payout ($10k) — a modest
+  incentive to grow the tree one level, not a living. LEVER: raise/lower `REF_TIER2_CASH`, or set 0 to
+  disable the second level entirely if the alpha shows ring-farming (the full-qualify gate is the backstop).

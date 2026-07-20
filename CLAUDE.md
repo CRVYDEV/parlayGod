@@ -2269,6 +2269,34 @@ the recruiter appearing with count + milestone rank, agent exclusion, and the fa
 roster's recruits. Suite 30/30 + sim drift-0. Still deferred (flagged): the time-boxed double-referral
 push, and the counsel-gated 2-level "family tree" referral.
 
+**THE RECRUITMENT DRIVE + TIER-2 "FAMILY TREE" (§7.13 addendum) — BUILT** (`src/game.js`, `src/rules.js`,
+`schema.sql`, `src/server.js`, `public/index.html`, `public/admin.html`, `test/growth.js`; founder green-lit
+both). Clears the last two deferred funnel items. **(1) The recruitment DRIVE ("the push")** — a mod starts
+a time-boxed window (`POST /v1/mod/referral/push {hours, mult}`, clamped `REF_PUSH_MAX_HOURS` 336 /
+`REF_PUSH_MAX_MULT` 5; a `referral_push` singleton) during which EVERY referral CASH payout multiplies —
+`referralPushMult(client)` reads the singleton and `maybeSparkReferral`/`maybeQualifyReferral` scale the
+spark + full recruiter/recruit + milestone cash by it (the credited amount == the ledgered amount). **$OMR
+is UNTOUCHED** (fund-bounded — the drive never widens the $OMR faucet). Bounded by REAL qualified recruits
+(each needs L8/40 jobs/3 check-ins/$25k) → Sybil-bounded like the base loop. Publicly visible on
+`GET /v1/leaderboard/recruiters` (`push`) + a "🔥 RECRUITMENT DRIVE" banner on the console's Recruiters
+section + a founder control on the admin dashboard. **(2) TIER-2 "the family tree"** — when a recruit YOU
+brought in (R) then brings in their OWN qualified recruit (R2), you — the grandrecruiter (A) — earn a
+BOUNDED, ONE-TIME finder's fee (`REF_TIER2_CASH` $5k). Deliberately a FLAT one-shot cash bonus, **NOT an
+ongoing percentage of R2's earnings — the anti-MLM line** (a referral bonus, not a revenue-share pyramid);
+**CASH ONLY**, capped at **DEPTH 2** (no third level), **agents excluded at EVERY level** (A, R, R2), once
+ever per R2 (`account_persistent.ref_l2_paid`, an atomic claim-then-credit). `maybeGrandReferral(pool, r2)`
+runs post-commit non-fatal in BOTH game.js hooks right after `maybeQualifyReferral` (the hook only fires
+while R2 is unpaid, so the tier-2 fires in the same turn R2 qualifies); its OWN transaction locks A's char
+then the two accounts sorted (characters → accounts — the qualify path's order, no AB-BA). §10.4:
+`referral:tier2` rides the existing `referral:` cash prefix (zero vocab change); the drive's larger payouts
+are still ordinary ledgered `referral:*` cash. `test/growth.js` proves the drive doubles both sides (ledger-
+exact) with $OMR untouched, and the tier-2 fee lands once to the grandrecruiter (cash-only, ledgered,
+latched). Suite 30/30 + sim drift-0. All numbers (`REF_TIER2_CASH`, `REF_PUSH_MAX_*`) are founder sign-off
+levers. **Sensitive: the tier-2 is recorded counsel-gated** (a 2-level referral has MLM-resemblance) — kept
+a bounded one-time cash finder's fee, not a revenue share, per the founder's blanket "assume counsel
+approved architecture" directive + this explicit green-light; do NOT extend it to a 3rd level or an ongoing
+percentage without counsel.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
@@ -2276,6 +2304,12 @@ push, and the counsel-gated 2-level "family tree" referral.
   counsel signs off on Phase 2. The mechanics change; the promises don't.
 - Social/onboarding rewards pay in-game cash only, never $OMR (v24 rule) — unchanged.
 - Agent-flagged accounts: excluded from referral payouts, harder rate limits, public badge.
+- **The tier-2 "family tree" referral is intentionally a FLAT, one-time cash finder's fee — NOT an
+  ongoing percentage of the grandrecruit's earnings.** That distinction is the anti-MLM line and it is
+  load-bearing: a bounded per-recruit bonus is a referral incentive, an ongoing revenue share down a
+  multi-level tree is a pyramid. Keep it CASH ONLY, DEPTH 2 (never a 3rd level), agent-excluded at every
+  level, once ever per recruit. The founder green-lit it under the blanket "assume counsel approved
+  architecture" directive; do NOT deepen the tree or convert the fee to a percentage without counsel.
 - **The RWA tickers are REAL Robinhood tokenized stocks trading on Uniswap** (ERC-20s, `stocks`
   category, Arbitrum / Robinhood Chain) — founder clarification 2026-07-19, recorded in
   `omerta-rwa-portfolio-design.md`. Implications: R2's buy-bot swaps ETH → the actual stock-token on

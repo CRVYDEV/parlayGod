@@ -830,7 +830,8 @@ export async function buildServer() {
   app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
   // The RECRUITERS (§7.13): the organic-growth hall of fame + the family recruitment board. Status only.
   app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
-    recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool) }));
+    recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool),
+    push: await G.referralPushStatus(pool) })); // the active recruitment DRIVE (2×… payouts), publicly visible
   // THE BLOOD-FEUD LEDGER: the public tally between MY bloodline and theirs — kills each way
   // (from kill_log), net bloodOwed (positive = they owe us bodies), and any active vendetta in
   // either direction. Pure reader; vendettas themselves are created by the estate.
@@ -1063,6 +1064,10 @@ export async function buildServer() {
     }
     return { codes, uses };
   });
+  // Start a time-boxed RECRUITMENT DRIVE — referral CASH payouts multiply for the window. Also readable.
+  app.post('/v1/mod/referral/push', { preHandler: modAuth }, async (req) =>
+    G.startReferralPush(pool, req.body?.hours, req.body?.mult));
+  app.get('/v1/mod/referral/push', { preHandler: modAuth }, async () => G.referralPushStatus(pool));
   app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
   app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
   app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot

@@ -329,6 +329,38 @@ const lb2 = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.tok
 const fam = lb2.families.find((f) => f.name === 'The Rainmakers');
 assert(fam && fam.recruits === 1 && fam.members >= 1, 'the family recruitment board sums the roster\'s recruits');
 
+// ── THE RECRUITMENT DRIVE ("the push"): a mod-started window doubles referral CASH ──
+await app.inject({ method: 'POST', url: '/v1/mod/referral/push', payload: { hours: 6, mult: 2 }, headers: { 'x-mod-key': 'test-mod-key' } });
+const drive = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.token })).body.push;
+assert(drive.active && drive.mult === 2 && drive.seconds > 0, 'the drive is live + publicly visible on the board');
+const dMentor = await mk('Drive Dana');
+const dRecruit = await mk('Doubled Danny', 'Drive Dana');
+await seedCh(dRecruit.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${dRecruit.id}')`);
+const dMentorBefore = (await meOf(dMentor.token)).cash;
+for (let i = 0; i < 20; i++) { await seedCh(dRecruit.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: dRecruit.token }); if (r.body.success) break; }
+const dMentorMe = await meOf(dMentor.token);
+assert.equal(dMentorMe.cash, dMentorBefore + (2500 + 10000 + 5000) * 2, 'the drive DOUBLES the recruiter cash (spark + full + milestone)');
+assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE character_id='${dRecruit.id}' AND reason='referral:recruit'`)).rows[0].amount), 10000, 'the recruit side is doubled too ($5k → $10k) — and ledgered');
+assert.equal(dMentorMe.omr, 3, 'the drive leaves $OMR untouched (fund-bounded)');
+await pool.query('UPDATE referral_push SET until=NULL, mult=1 WHERE id=1'); // end the drive — later payouts back to base
+
+// ── TIER-2 "the family tree": a BOUNDED one-time finder's fee to the grandrecruiter (anti-MLM: flat, not %) ──
+const gTony = await mk('Grand Tony');                    // A — the grandrecruiter (root)
+const mMike = await mk('Middle Mike', 'Grand Tony');     // R — brought in by A
+const bBenny = await mk('Bottom Benny', 'Middle Mike');  // R2 — brought in by R
+await seedCh(bBenny.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`);
+const tonyBefore = (await meOf(gTony.token)).cash;
+for (let i = 0; i < 20; i++) { await seedCh(bBenny.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: bBenny.token }); if (r.body.success) break; }
+const tonyAfter = await meOf(gTony.token);
+assert.equal(tonyAfter.cash, tonyBefore + 5000, 'the grandrecruiter earns the one-time tier-2 fee ($5k) when their recruit\'s recruit qualifies');
+assert.equal(tonyAfter.omr, 0, 'tier-2 is CASH ONLY (no $OMR — the anti-MLM/legal line)');
+assert.equal((await pool.query(`SELECT ref_l2_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`)).rows[0].ref_l2_paid, true, 'the tier-2 latch is set');
+assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE character_id='${gTony.id}' AND reason='referral:tier2'`)).rows[0].amount), 5000, 'the tier-2 fee is ledgered referral:tier2');
+await call('POST', '/v1/crimes/pick', { token: bBenny.token });
+assert.equal((await meOf(gTony.token)).cash, tonyBefore + 5000, 'the tier-2 fee fires once, not per-action');
+
 // ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──
 const promoter = await mk('Promoter Pete');
 let sw = (await call('GET', '/v1/social', { token: promoter.token })).body;
