@@ -8,6 +8,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BOXING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { sweepMainEvents } from '../src/boxing.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -109,6 +110,87 @@ let inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, `the only cash drift is the test grants (${cashDrift}) — boxing: (bout/purse/fee/train/recruit) all reconcile`);
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'boxing: rides the §10.4 vocabulary');
 
+// ══ STEP THREE — THE MAIN EVENT (spectator parimutuel betting) ══
+const cc = await mk('Promoter Cus');    // headlines the card (the challenger)
+const dd = await mk('Angelo Dundee');   // takes the card (lists a fighter)
+await seed(cc.id, `respect=${lvlRespect(12)}`); await seed(dd.id, `respect=${lvlRespect(12)}`);
+await grantCash(cc.id, 2000000); await grantCash(dd.id, 2000000);
+const goliath = (await call('POST', '/v1/boxing/recruit', { token: cc.token, body: { name: 'Goliath' } })).body.id;
+const david = (await call('POST', '/v1/boxing/recruit', { token: dd.token, body: { name: 'David' } })).body.id;
+await pool.query(`UPDATE fighters SET power=25,chin=25,speed=25 WHERE id='${goliath}'`); // form 75
+await pool.query(`UPDATE fighters SET power=6,chin=6,speed=6 WHERE id='${david}'`);        // form 18 — Goliath is a lock
+// announce gates: the opponent's fighter must be LISTED (consent-by-listing)
+assert.equal((await call('POST', `/v1/boxing/announce/${dd.id}`, { token: cc.token, body: { myFighter: goliath, theirFighter: david } })).body.error, 'not_listed', 'the opponent fighter must be taking bouts');
+await call('POST', '/v1/boxing/list', { token: dd.token, body: { fighter: david, stake: 50000 } });
+assert.equal((await call('POST', `/v1/boxing/announce/${dd.id}`, { token: cc.token, body: { myFighter: david, theirFighter: goliath } })).body.error, 'no_fighter', "you can only headline your OWN fighter");
+const ann = await call('POST', `/v1/boxing/announce/${dd.id}`, { token: cc.token, body: { myFighter: goliath, theirFighter: david } });
+assert.equal(ann.code, 200, 'the main event is booked'); const boutId = ann.body.bout;
+assert.equal((await call('POST', `/v1/boxing/announce/${dd.id}`, { token: cc.token, body: { myFighter: goliath, theirFighter: david } })).body.error, 'booked_self', 'a booked fighter is on a card already');
+// a booked fighter's form is FROZEN — no training / fighting / exhibitions while the crowd bets
+assert.equal((await call('POST', '/v1/boxing/train', { token: cc.token, body: { fighter: goliath, stat: 'power' } })).body.error, 'booked', "can't change a booked fighter's form");
+assert.equal((await call('POST', '/v1/boxing/exhibition', { token: cc.token, body: { fighter: goliath, tier: BOXING.NPC_TIERS[0].id } })).body.error, 'booked', "a booked fighter can't take an exhibition");
+
+// the crowd bets (CASH escrow → the pot)
+const bet1 = await mk('Bettor One'); const bet2 = await mk('Bettor Two'); const bet3 = await mk('Bettor Three'); const late = await mk('Latecomer');
+for (const b of [bet1, bet2, bet3, late]) await grantCash(b.id, 500000);
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: cc.token, body: { fighter: goliath, amount: 10000 } })).body.error, 'own_event', "a principal can't bet their own card");
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet1.token, body: { fighter: 'nope', amount: 10000 } })).body.error, 'bad_fighter', 'bet on one of the two fighters');
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet1.token, body: { fighter: goliath, amount: 1 } })).body.error, 'amount', 'a bet has a floor');
+const winBet1 = 20000, winBet2 = 30000, loseBet = 40000;
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet1.token, body: { fighter: goliath, amount: winBet1 } })).code, 200, 'bettor 1 backs Goliath');
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet2.token, body: { fighter: goliath, amount: winBet2 } })).code, 200, 'bettor 2 backs Goliath');
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet3.token, body: { fighter: david, amount: loseBet } })).code, 200, 'bettor 3 backs David');
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: bet1.token, body: { fighter: goliath, amount: 5000 } })).body.error, 'already_bet', 'one bet per card per bettor');
+assert.equal((await meOf(bet1.token)).cash, 500500 - winBet1, "the bettor's stake is escrowed out of pocket");
+// the board shows the open card + the live parimutuel pools
+const meBoard = (await call('GET', '/v1/boxing', { token: bet1.token })).body;
+const card = meBoard.mainEvents.find((m) => m.id === boutId);
+assert(card && card.a.pool + card.b.pool === winBet1 + winBet2 + loseBet, 'the board shows the live pools');
+assert.equal(card.yourBet.amount, winBet1, 'the board shows your own bet');
+// §10.4 escrow reconciles mid-window (bets are transfers into the pot)
+let inv2 = await runLedgerInvariants(pool);
+const esc = (i) => i.checks.find((c) => c.name === 'boxing bet escrow');
+assert(esc(inv2).ok && esc(inv2).lhs === winBet1 + winBet2 + loseBet, 'escrow == the sum of live bets');
+assert.equal(inv2.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash still reconciles with escrowed bets');
+
+// close the window (SQL clock warp — the worker-sweep test pattern), then resolve via the worker
+await pool.query(`UPDATE boxing_bouts SET resolves_at = now() - interval '1 hour' WHERE id='${boutId}'`);
+assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: late.token, body: { fighter: goliath, amount: 10000 } })).body.error, 'closed', 'betting closes at the bell');
+const ccPre = (await meOf(cc.token)).cash, taxPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+const swept = await sweepMainEvents(pool);
+assert.equal(swept.resolved, 1, 'the worker resolved the card');
+// Goliath won (form 75 v 18): bettors 1+2 split the losing pot net of vig; bettor 3 lost their stake
+const betRake = Math.floor(loseBet * BOXING.BET_RAKE_BPS / 10000), purse = Math.floor(betRake / 2), houseCut = betRake - purse;
+const distributable = loseBet - betRake, totalWin = winBet1 + winBet2;
+const share1 = Math.floor(distributable * winBet1 / totalWin), share2 = distributable - share1; // bet2 (last) mops up the remainder
+assert.equal((await meOf(bet1.token)).cash, 500500 + share1, 'winner 1: stake back + pro-rata cut of the losers');
+assert.equal((await meOf(bet2.token)).cash, 500500 + share2, 'winner 2: stake back + pro-rata cut');
+assert.equal((await meOf(bet3.token)).cash, 500500 - loseBet, 'the loser lost their stake to the pot');
+assert.equal((await meOf(cc.token)).cash, ccPre + purse, 'the winning manager banked the promoter purse (from the vig)');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), taxPre + Math.floor(houseCut / 2), 'half the house vig fed the buyback (half burns)');
+assert.equal(Number((await pool.query(`SELECT wins FROM fighters WHERE id='${goliath}'`)).rows[0].wins), 1, 'Goliath banked the win');
+assert.equal(await boxingWins(cc.aid), 1, 'the manager legend banked the main-event win');
+assert.equal((await pool.query(`SELECT booked_until FROM fighters WHERE id='${goliath}'`)).rows[0].booked_until, null, 'the fighters are unbooked after the bell');
+let inv3 = await runLedgerInvariants(pool);
+assert(esc(inv3).ok && esc(inv3).lhs === 0, 'the escrow empties after resolution');
+assert.equal(inv3.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles after payout (bets/wins/purse are transfers)');
+
+// ── DEATH CANCELS a booked card + refunds the crowd (dead principal) ──
+const ee = await mk('Doomed Don'); await seed(ee.id, `respect=${lvlRespect(12)}`); await grantCash(ee.id, 2000000);
+const chump = (await call('POST', '/v1/boxing/recruit', { token: ee.token, body: { name: 'Chump' } })).body.id;
+await pool.query(`UPDATE fighters SET power=10,chin=10,speed=10 WHERE id='${chump}'`);
+await call('POST', '/v1/boxing/list', { token: ee.token, body: { fighter: chump, stake: 50000 } });
+const bout2 = (await call('POST', `/v1/boxing/announce/${ee.id}`, { token: cc.token, body: { myFighter: goliath, theirFighter: chump } })).body.bout;
+await call('POST', `/v1/boxing/bout/${bout2}/bet`, { token: bet1.token, body: { fighter: goliath, amount: 15000 } });
+const bet1Pre = (await meOf(bet1.token)).cash;
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: ee.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal((await pool.query(`SELECT status FROM boxing_bouts WHERE id='${bout2}'`)).rows[0].status, 'cancelled', "a dead principal's card is cancelled");
+assert.equal((await meOf(bet1.token)).cash, bet1Pre + 15000, 'the crowd is refunded when the card is cancelled');
+assert.equal((await pool.query(`SELECT booked_until FROM fighters WHERE id='${goliath}'`)).rows[0].booked_until, null, 'the surviving fighter is freed');
+let inv4 = await runLedgerInvariants(pool);
+assert(esc(inv4).ok && esc(inv4).lhs === 0, 'escrow reconciles through the death-cancel');
+assert.equal(inv4.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles through the cancel');
+
 // ── DEATH: a dead manager's whole STABLE is done + the belt VACATES; the career legend SURVIVES ──
 await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: aa.id }, headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM fighters WHERE character_id='${aa.id}'`)).rows[0].n), 0, "the dead manager's stable is gone");
@@ -117,5 +199,5 @@ assert.equal(await boxingWins(aa.aid), 2, 'the career legend (account-level) SUR
 inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 
-console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
+console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');
 await app.close();

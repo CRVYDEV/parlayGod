@@ -2109,9 +2109,44 @@ the stable + cap, train-by-id + ownership, the exhibition (bad-tier gate, fee-si
 the career-win bank, the cooldown), the PvP bout + rake split, the belt (claimed vacant, chip, vacated on
 death), the manager legend (survives death), and §10.4. Suite 30/30 + sim drift-0. The exhibition purse is
 the ONLY new faucet — flagged in BALANCE.md for sim + founder sign-off (the fee/purse/form spread keeps a
-losing fighter net-negative); STABLE_MAX/EXHIBITION_CD_MS/NPC_TIERS/LEGEND_RANKS are sign-off levers. Still
-deferred (step three): spectator betting on bouts (→ the den book), cornerman/trainer NPCs (Underworld
-tie-in), belt-defense mechanics.
+losing fighter net-negative); STABLE_MAX/EXHIBITION_CD_MS/NPC_TIERS/LEGEND_RANKS are sign-off levers.
+**Step three — THE MAIN EVENT (spectator betting) — BUILT** (`src/boxing.js`, `test/boxing.js`; the
+"my guy vs your guy — the oldest bet there is" fantasy the design doc called out). A SCHEDULED prestige
+card the CROWD bets on — a CASH **parimutuel** with an escrow (the bounty/market/loan/auction-escrow twin,
+on the cash side). A manager `announceMainEvent` (`POST /v1/boxing/announce/:opponentId`, two-party) books
+their fighter vs a LISTED opponent fighter (consent-by-listing, the fightBout precedent); **NO principal
+cash wager** — the fighters fight for the belt/legend/record, the money is the spectators'. Both fighters
+LOCK (`fighters.booked_until`) for the betting window (`BOXING.MAIN_EVENT_MS` 30 min; `MAIN_EVENT_MS` env
+is TEST-ONLY, the SEARCH_MS precedent) and their form FREEZES (train/fight/exhibition all throw `booked`, so
+bettors bet on stable form). Spectators `placeBoutBet` (`POST /v1/boxing/bout/:id/bet`) escrow CASH on one
+fighter (`boxing:bet` sink → the pot; one bet per (bout,bettor) via PK + bout-row lock; principals can't bet
+their own card — `own_event`; `[BET_MIN,BET_MAX]`; betting closes at `resolves_at`). **The worker resolves**
+(`sweepMainEvents` → `resolveMainEvent`, the auction-settle model — single-writer, no player lock races):
+the fight rolls (form + rand(VARIANCE), ties reroll, rng-audited), records/injury/belt/legend update (reusing
+the step-two logic), and the pot pays PARIMUTUEL — winning-side bettors get their stake back + a pro-rata cut
+of the losing pot net of vig (`boxing:bet:win`), the winning MANAGER banks a promoter purse from the vig
+(`boxing:purse:main`), the house vig splits half → the buyback pool / half burns (NULL `boxing:bet:take`), a
+DEAD bettor's escrow burns (NULL `boxing:bet:death`, the dead-funder precedent), and a one-sided book (no
+bets on the winner) refunds every live bettor (`boxing:bet:refund`). **Lock discipline:** `resolveMainEvent`
+reads the (frozen) bet set unlocked, then locks all involved character rows SORTED **before** the bout row —
+the canonical char→bout order players use via withCharacter → no AB-BA with a live bettor; the pathological
+principal-death-mid-resolve overlap maps 40P01 → the worker's per-bout retry (idempotent) + `deadlockToRetry`
+(the codebase-standard posture). **Death:** `cancelMainEventsAtDeath` (runEstate, BEFORE `wipeFighterAtDeath`)
+cancels a dead principal's booked cards — refunds living bettors, burns dead ones, unlocks the surviving
+fighter; a bettor who is the in-memory KILLER is credited in memory (the refundPot discipline). §10.4: every
+`boxing:bet*`/`boxing:purse:main` reason rides the existing `boxing:` cash vocabulary (**zero
+`invariants.js` reason change**); a NEW **boxing bet escrow** check reconciles the live-bout pot ==
+posted − wins − refunds − purse − take − death (the bounty-escrow twin). Board (`GET /v1/boxing`) gained
+`mainEvents` (the two fighters, live parimutuel pools per side, your bet, closesSeconds); `/v1/rules` gained
+betMin/betMax/betRakeBps; console: a "The Main Event" section (open cards + live pools + bet-on-either-fighter)
++ a "headline it" button on the circuit. `test/boxing.js` covers the announce gates + consent-by-listing, the
+booked-form freeze, the betting gates + escrow, the worker resolution (winners split the losers net of vig /
+the promoter purse / half-vig→buyback / the manager legend / the board pools), DEATH cancels a booked card +
+refunds the crowd, and the boxing-bet-escrow §10.4 check (mid-window == Σ bets, empties after resolve).
+Suite 30/30 + sim drift-0 (15 §10.4 checks incl. `boxing bet escrow`). `BOXING.MAIN_EVENT_MS`/`BET_MIN`/
+`BET_MAX`/`BET_RAKE_BPS` are founder sign-off levers (BALANCE.md; the parimutuel is a pure redistribution —
+no new faucet, unlike the step-two exhibition purse). Still deferred (step four): cornerman/trainer NPCs
+(the Underworld tie-in) + belt-defense mechanics (a mandatory-defense clock / #1-contender callout).
 
 **THE RESERVE BOND (Protocol-Owned Liquidity) — off-chain CORE BUILT, chain DORMANT** (`src/bonds.js`,
 `test/bonds.js` — the 30th suite; design `omerta-reserve-bond-design.md`; founder-directed "Option C").

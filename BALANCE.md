@@ -923,6 +923,16 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-two note:* the exhibition purse is the ONLY new faucet in the boxing pillar — it needs a sim pass to confirm the fee/purse/form spread keeps a losing fighter net-negative and a beatable-NPC net small (the intent: PvE is a slow record-builder, PvP the real money via the taxed transfer). Everything else (stable, belt, legend) is status/access — §10.4-neutral. `boxing:purse`/`boxing:fee` ride the existing `boxing:` cash vocabulary (zero `invariants.js` change), so the per-character cash check reconciles them exactly (proven in `test/boxing.js`).
 
+**The Fight Circuit — STEP THREE (`BOXING` step-three additions — THE MAIN EVENT, spectator parimutuel betting):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `BOXING.MAIN_EVENT_MS` | 30 min | The betting window between announcing a card and the worker resolving it. Long enough for a crowd to gather; `MAIN_EVENT_MS` env override is TEST-ONLY. | Sign-off |
+| `BOXING.BET_MIN` / `BET_MAX` | $500 / $250k | A single spectator bet's bounds (CASH only — never $OMR). | Sign-off |
+| `BOXING.BET_RAKE_BPS` | 800 (8%) | The house vig, taken from the LOSING pot: half → the winning manager's promoter purse (`boxing:purse:main`), half → the house (`boxing:bet:take`: half street-tax buyback, half burns). A pure taxed **redistribution** — **NO new faucet** (unlike the step-two exhibition purse); winners split the losers net of vig, so the bettors' EV is the parimutuel minus an 8% edge on the losing side. | Sign-off |
+
+*Step-three note:* THE MAIN EVENT is a CASH parimutuel with an escrow (the bounty/market/loan/auction-escrow twin, on the cash side) — a manager books a scheduled card (their fighter vs a listed opponent, **no principal cash wager** — they fight for the belt/legend/record), spectators bet CASH on a fighter, and the worker resolves at the bell paying winners a pro-rata cut of the losing pot net of vig. Every peso is a TRANSFER (bettors → winning bettors + the winning manager's promoter cut + the house vig); **nothing is minted**, so it adds **zero new faucet** and rides the existing `boxing:` cash vocabulary (zero `invariants.js` reason change) behind a NEW **boxing bet escrow** §10.4 check (`escrow == posted − wins − refunds − purse − take − death`; sim drift-0). The one thing to watch in the sim/alpha: a manager with a strong fighter + a crowd earns the promoter purse (a redistribution from losing bettors, bounded by `BET_RAKE_BPS/2` of the losing pot) — not a leak, but a wealth-scaled edge for popular managers; `BET_RAKE_BPS` is the dial.
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |

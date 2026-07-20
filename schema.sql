@@ -662,6 +662,7 @@ CREATE TABLE IF NOT EXISTS fighters (
   injured_until TIMESTAMPTZ,        -- a lost bout lays the fighter up (no spam)
   bout_limit NUMERIC,               -- the stake this fighter will take (null = not taking bouts)
   exhib_at TIMESTAMPTZ,             -- per-fighter cooldown on NPC exhibition bouts
+  booked_until TIMESTAMPTZ,         -- (step three) locked into a scheduled MAIN EVENT until it resolves
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_fighters_char ON fighters (character_id);
@@ -672,6 +673,30 @@ CREATE TABLE IF NOT EXISTS boxing_title (
   holder_fighter TEXT, holder_char TEXT, holder_name TEXT, since TIMESTAMPTZ
 );
 INSERT INTO boxing_title (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM boxing_title);
+-- THE MAIN EVENT (step three): a SCHEDULED prestige bout the crowd bets on. No principal cash wager —
+-- the fighters fight for the belt/legend/record; the money is the SPECTATOR pot (a CASH parimutuel).
+-- The worker resolves it at window close (the auction-settle model — single-writer, no player lock races).
+CREATE TABLE IF NOT EXISTS boxing_bouts (
+  id TEXT PRIMARY KEY,
+  a_char TEXT NOT NULL, a_fighter TEXT NOT NULL, a_name TEXT NOT NULL,
+  b_char TEXT NOT NULL, b_fighter TEXT NOT NULL, b_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'booked',   -- booked → resolved / cancelled
+  winner_fighter TEXT,                     -- set at resolution
+  opens_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolves_at TIMESTAMPTZ NOT NULL,        -- betting closes + the worker resolves after this
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_boxing_bouts_status ON boxing_bouts (status);
+-- one CASH bet per (bout, bettor) on one of the two fighters — escrowed into the pot (boxing:bet).
+CREATE TABLE IF NOT EXISTS boxing_bets (
+  bout_id TEXT NOT NULL,
+  bettor_char TEXT NOT NULL,
+  fighter TEXT NOT NULL,          -- which fighter they backed
+  amount NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (bout_id, bettor_char)
+);
+CREATE INDEX IF NOT EXISTS ix_boxing_bets_bout ON boxing_bets (bout_id);
 
 -- ── The Gambling Den: the Numbers (daily lottery tickets; dice are stateless) ──
 -- One ticket per street per day; resolves lazily against the day's seed-drawn number when

@@ -192,6 +192,23 @@ export async function runLedgerInvariants(pool) {
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
 
+  // (f6) BOXING BET ESCROW (the Fight Circuit step three — THE MAIN EVENT): CASH bets on a booked card sit
+  // in escrow (the bounty/market/loan-escrow twin). escrow == posted ('boxing:bet') − winner payouts
+  // ('boxing:bet:win': stake back + pro-rata cut) − refunds ('boxing:bet:refund': one-sided book / cancel)
+  // − the winning manager's promoter purse ('boxing:purse:main') − the house vig (NULL 'boxing:bet:take':
+  // half street tax + half burn) − dead-bettor burns (NULL 'boxing:bet:death'). recruit/train/fee/purse
+  // (exhibition) and the PvP 'boxing:bout' transfer are check-(a) rows, NOT escrow — the exact-reason
+  // matches below keep them out.
+  const boxEscrow = await one(pool,
+    "SELECT COALESCE(SUM(b.amount),0) s FROM boxing_bets b JOIN boxing_bouts o ON o.id=b.bout_id WHERE o.status='booked'");
+  const boxPosted = -(await sum(pool, "currency='cash' AND reason='boxing:bet'"));
+  const boxWins = await sum(pool, "currency='cash' AND reason='boxing:bet:win'");
+  const boxRefunds = await sum(pool, "currency='cash' AND reason='boxing:bet:refund'");
+  const boxPurse = await sum(pool, "currency='cash' AND reason='boxing:purse:main'");
+  const boxTake = -(await sum(pool, "currency='cash' AND reason='boxing:bet:take'"));
+  const boxDeath = -(await sum(pool, "currency='cash' AND reason='boxing:bet:death'"));
+  push('boxing bet escrow', boxEscrow, boxPosted - boxWins - boxRefunds - boxPurse - boxTake - boxDeath);
+
   // (f5) THE DEN'S BOOK (econ pass — the mint-on-top fix): the house's realized-profit accumulator
   // and its tip-outs each mirror the ledger EXACTLY. profit == PvE stakes − PvE payouts; distributed
   // == street cuts (NULL `casino:take` rows) + rakeback. The profit CAP itself (distributions never
