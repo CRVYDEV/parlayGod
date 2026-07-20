@@ -63,8 +63,15 @@ export async function buildServer() {
   // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.
   const routeRegistry = [];
   app.addHook('onRoute', (r) => {
+    // Capture the REAL enforcement from the route's preHandler (by function name) so the OpenAPI
+    // security is derived from what's actually mounted, never a URL heuristic that could drift or
+    // mask a missing-auth hole (audit F2). `auth`/`modAuth` are named consts below.
+    const pre = [].concat(r.preHandler || []);
+    const names = pre.map((f) => (f && f.name) || '');
+    const isMod = names.includes('modAuth');
+    const hasAuth = names.includes('auth') || isMod;
     const methods = Array.isArray(r.method) ? r.method : [r.method];
-    for (const m of methods) if (m !== 'HEAD' && m !== 'OPTIONS') routeRegistry.push({ method: m, url: r.url });
+    for (const m of methods) if (m !== 'HEAD' && m !== 'OPTIONS') routeRegistry.push({ method: m, url: r.url, hasAuth, isMod });
   });
   const baseUrl = process.env.PUBLIC_URL || SOCIAL_GAME_URL;
 
