@@ -269,9 +269,13 @@ export async function agentLeaderboard(pool, limit = 25) {
   for (const r of (await pool.query(
     "SELECT account_id, amount FROM transactions WHERE reason='withdraw:omr'")).rows)
     ext[r.account_id] = (ext[r.account_id] || 0) + Math.abs(Number(r.amount));
+  // audit: publish BANDS, not exact liquid — an exact net worth lets a hunter compute precise kill-EV
+  // on a named agent (the convoy value-band precedent). Rank still uses the exact figure server-side.
+  const cashBand = (n) => n < 1e4 ? '<$10k' : n < 1e5 ? '$10k–100k' : n < 1e6 ? '$100k–1M' : n < 1e7 ? '$1M–10M' : '$10M+';
+  const omrBand = (n) => n < 100 ? '<100' : n < 1000 ? '100–1k' : n < 10000 ? '1k–10k' : '10k+';
   return rows.map((r) => ({ name: r.name, level: levelOf(Number(r.respect)),
-    netWorth: Number(r.cash) + Number(r.bank), omr: Number(r.omr), kills: Number(r.kills || 0),
-    extracted: Math.round((ext[r.account_id] || 0) * 100) / 100 }));
+    wealthBand: cashBand(Number(r.cash) + Number(r.bank)), omrBand: omrBand(Number(r.omr)),
+    kills: Number(r.kills || 0), extracted: Math.round((ext[r.account_id] || 0) * 100) / 100 }));
 }
 
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative

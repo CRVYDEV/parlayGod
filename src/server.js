@@ -234,6 +234,8 @@ export async function buildServer() {
     const season = Math.floor(dayOf() / 28);
     const id = uid();
     await pool.query('INSERT INTO characters (id, account_id, name, season) VALUES ($1,$2,$3,$4)', [id, req.user.sub, name, season]);
+    // apply any Store Street-Wire window parked while the account had no living character (audit)
+    await Store.claimPendingWire(pool, req.user.sub, id);
     if (req.body?.referralCode) {
       // §7.13 — the referral code is the recruiter's character name
       const rec = await pool.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [String(req.body.referralCode), req.user.sub]);

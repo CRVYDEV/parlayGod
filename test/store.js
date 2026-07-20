@@ -88,6 +88,17 @@ r = await call('GET', '/v1/store', { token: alice.token });
 assert.equal(r.body.owned.wire.active, true, 'the Street Wire is live');
 assert(r.body.owned.wire.seconds > 29 * 86400, 'roughly a month left');
 
+// ── audit: a wire bought with NO living character is PARKED on the account + applied at the next birth ──
+const W_ORPHAN = getAddress('0x' + '33'.repeat(20));
+const { body: { token: orphanTok } } = await call('POST', '/v1/auth/guest');
+const orphanAid = (await pool.query("SELECT ap.account_id a FROM account_persistent ap LEFT JOIN characters c ON c.account_id=ap.account_id WHERE c.id IS NULL ORDER BY ap.account_id DESC LIMIT 1")).rows[0].a;
+await pool.query('UPDATE account_persistent SET wallet_address=$1 WHERE account_id=$2', [W_ORPHAN, orphanAid]);
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'wire_month', payer: W_ORPHAN, amountWei: ethWei(0.03) } });
+assert(Number((await pool.query('SELECT wire_pending_days d FROM account_persistent WHERE account_id=$1', [orphanAid])).rows[0].d) >= 30, 'the wire is PARKED (no living character to apply it to)');
+await call('POST', '/v1/character', { token: orphanTok, body: { name: 'Late Bloomer' } });
+assert.equal(Number((await pool.query('SELECT wire_pending_days d FROM account_persistent WHERE account_id=$1', [orphanAid])).rows[0].d), 0, 'the parked days are consumed at the character\'s birth');
+assert.equal((await call('GET', '/v1/store', { token: orphanTok })).body.owned.wire.active, true, 'the parked wire applied to the freshly-born character (not dropped)');
+
 // ── the Season Pass: a window + 2 revives + the patron badge ──
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'season_pass', payer: W1, amountWei: ethWei(0.05) } });
 r = await call('GET', '/v1/store', { token: alice.token });
