@@ -480,6 +480,13 @@ export const CONSTANTS = {
   // TERRITORY_UPKEEP_COLD_MS (3d) it goes COLD (no income / no upgrade) until squared; seizure hands
   // the victor a fresh clock. New/tunable — sim + founder sign-off (ground rule #1).
   TERRITORY_UPKEEP_BPS: 2000, TERRITORY_UPKEEP_CAP_MS: 7*24*3600*1000, TERRITORY_UPKEEP_COLD_MS: 3*24*3600*1000,
+  // STEP THREE — the BUREAU CRACKDOWN (the business-raid pattern at the gang level): a hot-type operation
+  // accrues scrutiny (net of decay); past the threshold, an owner-touch (collect/upgrade) rolls a raid over
+  // the minutes-above that SEIZES the pending income (never banked, never ledgered — the seize precedent) and
+  // FINES the treasury TERRITORY_RAID_FINE_RATE of the operation's build cost (a §10.4 sink `territory:raid`),
+  // then the heat's off (scrutiny→0). TERRITORY_RAID_P is a TEST-ONLY roll knob (the BUSINESS_RAID_P precedent).
+  TERRITORY_SCRUTINY_DECAY_HR: 4, TERRITORY_SCRUTINY_CAP: 100, TERRITORY_RAID_THRESHOLD: 60,
+  TERRITORY_RAID_P_PER_MIN: 0.0015, TERRITORY_RAID_FINE_RATE: 0.10,
   // Risk-to-Earn Phase 4 — BACKED EMISSION. STAKE_POOL_BPS of every 12h buyback's bought $OMR is
   // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin
@@ -1273,14 +1280,27 @@ export const BLACK_MARKET = {           // (MARKET is the generated §5 goods ca
 // stays the hook. Founder sign-off levers, like everything on this ladder.
 // The tier ladder (step two extended it 3→5, on the ROI taper — content, the car-catalog precedent:
 // upgradeRacket/territoryTierOf already handle any tier, so the extension is zero-code).
+// The tier ladder is the operation's SCALE (income magnitude — UNCHANGED from the sim-signed curve;
+// step three only renamed the tiers to scale labels so the old racket names could move to the TYPE
+// axis below). incomePerHr is the BASE — the type's incomeMult tilts it.
 export const TERRITORY_RACKETS = [
-  { tier: 1, name: 'Numbers Racket',    cost: 50000,    incomePerHr: 4000 },
-  { tier: 2, name: 'Protection Racket', cost: 250000,   incomePerHr: 16000 },
-  { tier: 3, name: 'Smuggling Front',   cost: 1000000,  incomePerHr: 60000 },
-  { tier: 4, name: 'Vice Empire',       cost: 4000000,  incomePerHr: 200000 },  // marginal ROI ~112%/day
-  { tier: 5, name: 'The Syndicate',     cost: 15000000, incomePerHr: 600000 },  // marginal ROI ~87%/day — the endgame operation
+  { tier: 1, name: 'Corner',        cost: 50000,    incomePerHr: 4000 },
+  { tier: 2, name: 'Neighborhood',  cost: 250000,   incomePerHr: 16000 },
+  { tier: 3, name: 'District',      cost: 1000000,  incomePerHr: 60000 },
+  { tier: 4, name: 'Citywide',      cost: 4000000,  incomePerHr: 200000 },  // marginal ROI ~112%/day
+  { tier: 5, name: 'The Syndicate', cost: 15000000, incomePerHr: 600000 },  // marginal ROI ~87%/day — the endgame operation
 ];
 export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tier === Number(tier)) || null;
+// ── STEP THREE — per-district racket TYPE: the operation's BUSINESS, chosen at establish. A real
+// risk/reward choice orthogonal to scale — a hotter type earns MORE but draws Bureau crackdowns
+// (scrutinyPerHr net of the decay below). numbers is the safe baseline (×1.0, never raided); the
+// income mults + risk are NEW founder sign-off levers (numbers keeps parity with the signed curve).
+export const TERRITORY_TYPES = [
+  { id: 'numbers',    name: 'Numbers Game',     incomeMult: 1.0,  scrutinyPerHr: 0,  desc: 'Bookmaking — steady and quiet. The Bureau never comes.' },
+  { id: 'protection', name: 'Protection Racket', incomeMult: 1.15, scrutinyPerHr: 6,  desc: 'Muscle on the block — more take, more heat.' },
+  { id: 'smuggling',  name: 'Smuggling Ring',    incomeMult: 1.35, scrutinyPerHr: 14, desc: 'Contraband moves big money — and brings the Feds.' },
+];
+export const territoryTypeOf = (id) => TERRITORY_TYPES.find((t) => t.id === id) || TERRITORY_TYPES[0];
 // THE EMPIRE (step two) — a gang-level status axis off lifetime territory income (dies with the family).
 // Pure status: no §10.4 surface (the income still rides territory:income; this is a separate counter).
 export const TERRITORY_RANKS = [

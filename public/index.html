@@ -708,13 +708,15 @@
       <h2 style="margin-top:12px">Territory Operations</h2>
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
-        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>
-          <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div></div>`).join('')}</div>`
+        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}
+          <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div>
+          ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no operations — a boss can establish one on held turf</span>'}
       ${boss ? `<div style="margin-top:6px">
         <button class="act" data-do="POST /v1/territory/collect">collect income → treasury</button>
         <button class="act" data-do="POST /v1/territory/upkeep">pay upkeep (treasury)</button>
-        <button class="act" data-do="POST /v1/territory/${me.loc}/establish">establish here (${me.loc})</button></div>` : ''}
+        <select id="terr-kind"><option value="numbers">Numbers Game (safe ×1.0)</option><option value="protection">Protection Racket (×1.15, some heat)</option><option value="smuggling">Smuggling Ring (×1.35, hot)</option></select>
+        <button class="act" id="terr-establish">establish here (${me.loc})</button></div>` : ''}
 
       <h2 style="margin-top:12px">Tribute</h2>
       <input id="trib-amt" placeholder="amount" size="10">
@@ -765,6 +767,8 @@
     { const tlb = $('#terr-lb'); if (tlb) tlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/territory')).body || {};
       alert('THE EMPIRE — biggest territorial families\\n\\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\\n') || 'no territory income logged yet')); }; }
+    { const te = $('#terr-establish'); if (te) te.onclick = () =>
+      act('POST', `/v1/territory/${me.loc}/establish`, { kind: $('#terr-kind').value }).then(() => renderFamily()); }
     t.querySelector('#trib-go').onclick = () =>
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>
@@ -1132,7 +1136,7 @@
       ['GET', '/v1/gangs'], ['GET', '/v1/gangs/:id'], ['POST', '/v1/gangs', { name: '', tag: '' }],
       ['POST', '/v1/gangs/:id/join', {}], ['POST', '/v1/gangs/leave', {}], ['POST', '/v1/gangs/tribute', { amount: 1000 }],
       ['POST', '/v1/gangs/tribute/omr', { amount: 1 }], ['POST', '/v1/gangs/war/:targetGangId', {}],
-      ['POST', '/v1/districts/:id/seize', {}], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { tier: 1 }],
+      ['POST', '/v1/districts/:id/seize', {}], ['GET', '/v1/territory'], ['POST', '/v1/territory/:districtId/establish', { kind: 'numbers' }],
       ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
       ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
       ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],

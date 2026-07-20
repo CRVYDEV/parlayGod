@@ -54,7 +54,7 @@ export async function runLedgerInvariants(pool) {
   // Phase 3 territory rackets: `territory:income` is a treasury FAUCET, `territory:establish` a SINK,
   // and (recurring sinks) `territory:upkeep` a treasury SINK too — all character_id NULL (gang-level).
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
-  const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep')"));
+  const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep','territory:raid')"));
   // Den step 2: the neon family's fight fix is a treasury sink (character_id NULL, like gang:war)
   const fixOut = -(await sum(pool, "currency='cash' AND reason='casino:fix'"));
   // Convoy step 2: the destination toll is a TRANSFER — the shipper's negative row mirrors the
