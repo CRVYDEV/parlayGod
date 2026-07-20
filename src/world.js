@@ -6,14 +6,17 @@
 // (a ledgered cash faucet, character_id'd, capped by real activity). Routing an outfit (draining it
 // to the floor) pays a one-time bonus + a streets event, then it rebuilds. The ONLY emission surface
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
+import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf } from './rules.js';
 
+const uid = () => crypto.randomUUID();
 const enragedNow = (enragedUntil, now = new Date()) => enragedUntil && new Date(enragedUntil) > now;
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
+const cooling = (ch) => ch.world_raid_at && new Date(ch.world_raid_at) > new Date();
 
 // Lazy §7.1 strength regen toward the fixture max. Seeds the row (at max) on first touch. Returns
 // the current strength; the caller writes it back inside its own transaction (or here, under lock).
@@ -41,20 +44,37 @@ async function currentStrength(client, fixture, now = new Date()) {
 export async function worldBoard(pool, ch = null, h = null) {
   const now = new Date();
   const patrol = cityHourOf(now.getTime()).patrol;
-  const rows = Object.fromEntries((await pool.query('SELECT npc_id, strength, strength_at, enraged_until FROM world_npcs')).rows
+  const rows = Object.fromEntries((await pool.query('SELECT npc_id, strength, strength_at, enraged_until, held_by_gang, held_since FROM world_npcs')).rows
     .map((r) => [r.npc_id, r]));
   const lvl = ch ? levelOf(Number(ch.respect)) : 0;
   const power = ch ? raiderPower(ch, h) : 0;
+  // frontier holders — a name per held outfit (LEFT JOIN so a dissolved family shows as open)
+  const heldIds = [...new Set(Object.values(rows).map((r) => r.held_by_gang).filter(Boolean))];
+  const gangNames = {};
+  if (heldIds.length) {
+    const ph = heldIds.map((_, i) => `$${i + 1}`).join(',');
+    for (const g of (await pool.query(`SELECT id, name, tag FROM gangs WHERE id IN (${ph})`, heldIds)).rows) gangNames[g.id] = g;
+  }
   // THE WAR EFFORT — your lifetime cartel damage + rank (account-level, survives death)
-  let effort = null;
+  let effort = null, myRaid = null;
   if (ch) {
     const dmg = Number((await pool.query('SELECT cartel_damage FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.cartel_damage || 0);
     effort = { damage: dmg, rank: worldRankOf(dmg).name };
+    // the crew raid this street is currently on, if any (the co-op board is a separate read)
+    const r = (await pool.query(
+      `SELECT r.id, r.npc_id, r.leader_character FROM world_raid_members m JOIN world_raids r ON r.id=m.raid_id
+        WHERE m.character_id=$1 AND r.status='planning'`, [ch.id])).rows[0];
+    if (r) {
+      const crew = Number((await pool.query('SELECT COUNT(*) n FROM world_raid_members WHERE raid_id=$1', [r.id])).rows[0].n);
+      myRaid = { id: r.id, npc: r.npc_id, leader: r.leader_character === ch.id, crew };
+    }
   }
   return {
     phase: patrol ? 'day' : 'night',
     nightRaidBonus: !patrol,                       // the small hours favour a raid (NPCs -10% defense)
     warEffort: effort,
+    myRaid,                                        // step three: your active co-op raid, if any
+    coop: { min: WORLD.COOP_MIN, max: WORLD.COOP_MAX_CREW },
     npcs: WORLD_NPCS.map((f) => {
       const row = rows[f.id];
       const strength = row
@@ -62,15 +82,61 @@ export async function worldBoard(pool, ch = null, h = null) {
         : f.max;
       const routed = strength <= f.max * WORLD.ROUT_FLOOR_BPS / 10000;
       const enraged = enragedNow(row?.enraged_until, now); // a routed cartel on high alert defends harder
+      const holder = row?.held_by_gang && gangNames[row.held_by_gang];
       return {
-        id: f.id, name: f.name, minLvl: f.minLvl,
+        id: f.id, name: f.name, minLvl: f.minLvl, coop: !!f.coop,
         // never the exact reservoir (like the convoy value band) — a status read
         strengthPct: Math.round(strength / f.max * 100),
         routed, enraged,
+        heldBy: holder ? { name: holder.name, tag: holder.tag, mine: !!(h?.owned?.gangId && h.owned.gangId === row.held_by_gang) } : null,
         canRaid: !!ch && lvl >= f.minLvl,
         odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged) * 100) : null,
       };
     }),
+  };
+}
+
+// GET /v1/world/raids — the open co-op raid board (planning raids looking for crew). Two flat queries
+// (pg-mem can't parse a correlated subquery — the heistBoard/GET-/v1/gangs precedent).
+export async function raidBoard(pool, characterId = null) {
+  const raids = (await pool.query(
+    `SELECT r.id, r.npc_id, r.leader_character, r.created_at, c.name AS leader_name
+       FROM world_raids r JOIN characters c ON c.id=r.leader_character
+      WHERE r.status='planning' AND r.created_at > $1 ORDER BY r.created_at DESC`,
+    [new Date(Date.now() - WORLD.COOP_TTL_MS)])).rows;
+  if (!raids.length) return { raids: [] };
+  const ph = raids.map((_, i) => `$${i + 1}`).join(',');
+  const counts = {};
+  for (const m of (await pool.query(`SELECT raid_id, COUNT(*) n FROM world_raid_members WHERE raid_id IN (${ph}) GROUP BY raid_id`,
+    raids.map((r) => r.id))).rows) counts[m.raid_id] = Number(m.n);
+  return {
+    raids: raids.map((r) => {
+      const f = worldNpcOf(r.npc_id);
+      return { id: r.id, npc: r.npc_id, name: f?.name, minLvl: f?.minLvl, leader: r.leader_name,
+        mine: characterId === r.leader_character, crew: counts[r.id] || 0, crewMax: WORLD.COOP_MAX_CREW };
+    }),
+  };
+}
+
+// GET /v1/leaderboard/frontier — THE FRONTIER board: families ranked by outfits held, weighted by the
+// outfit's scale (holding Volkov outranks holding the Dock Rats). Pure status — dies with the family.
+export async function frontierLeaderboard(pool) {
+  const held = (await pool.query('SELECT npc_id, held_by_gang FROM world_npcs WHERE held_by_gang IS NOT NULL')).rows;
+  const by = {};
+  for (const r of held) {
+    const f = worldNpcOf(r.npc_id);
+    (by[r.held_by_gang] = by[r.held_by_gang] || { outfits: [], weight: 0 });
+    by[r.held_by_gang].outfits.push(f?.name || r.npc_id);
+    by[r.held_by_gang].weight += f?.max || 0; // the reservoir max as a scale weight
+  }
+  const ids = Object.keys(by);
+  if (!ids.length) return { families: [] };
+  const ph = ids.map((_, i) => `$${i + 1}`).join(',');
+  const names = Object.fromEntries((await pool.query(`SELECT id, name, tag FROM gangs WHERE id IN (${ph})`, ids)).rows.map((g) => [g.id, g]));
+  return {
+    families: ids.filter((id) => names[id])   // a dissolved family drops off (its holds read open elsewhere)
+      .map((id) => ({ name: names[id].name, tag: names[id].tag, held: by[id].outfits.length, outfits: by[id].outfits, weight: by[id].weight }))
+      .sort((a, b) => b.held - a.held || b.weight - a.weight).slice(0, 15),
   };
 }
 
@@ -158,7 +224,225 @@ export async function raidNpc(ch, npcId, client, h) {
     newEnraged = new Date(now.getTime() + WORLD.ENRAGE_MS); // the cartel goes to high alert — harder to raid for a window
     bus.emit('streets', { type: 'world_routed', who: ch.name, npc: fixture.name });
   }
-  await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
+  // THE FRONTIER (step three): a ROUT topples the incumbent and plants the router's FAMILY flag
+  // (pure status; a gangless router leaves it UNHELD/open). Only changes on the crossing.
+  if (routed) {
+    const heldGang = h.owned.gangId || null;
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6 WHERE npc_id=$1',
+      [fixture.id, after, now, newEnraged, heldGang, now]);
+    if (heldGang) bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
+  } else {
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
+  }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, loot, routed });
-  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, enraged, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
+  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
+}
+
+// ── STEP THREE — CO-OP CREW RAIDS on the apex outfits (the crew-heist machinery) ──
+// A leader opens the op, made raiders join off the board, the leader calls the go and ONE roll pays
+// the whole crew. NO stake (each raider pays their own energy/ammo/heat at execute — the solo-raid
+// cost), so the loot is the SAME bounded reservoir slice, just split; §10.4-neutral vs solo.
+const staleRaid = (row) => Date.now() - new Date(row.created_at).getTime() > WORLD.COOP_TTL_MS;
+
+async function activeRaidMembership(client, characterId) {
+  return (await client.query(
+    `SELECT m.raid_id FROM world_raid_members m JOIN world_raids r ON r.id = m.raid_id
+      WHERE m.character_id=$1 AND r.status='planning'`, [characterId])).rows[0] || null;
+}
+// the raider must show up clean, armed, rested, and made for this outfit (the heist gateJoiner twin)
+function gateRaider(ch, fixture) {
+  if (jailed(ch)) throw new GameError('jailed', 'No raids from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', 'Not in any shape to run an op — see the Doc first.');
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run an op from a safehouse.");
+  if (cooling(ch)) throw new GameError('cooldown', 'Your crew needs to regroup before the next hit.');
+  if (levelOf(Number(ch.respect)) < fixture.minLvl) throw new GameError('level', `Hitting ${fixture.name} takes level ${fixture.minLvl}.`);
+  if (Number(ch.energy) < WORLD.RAID_ENERGY) throw new GameError('energy', `A raid takes ${WORLD.RAID_ENERGY} energy.`);
+  if (Number(ch.ammo) < WORLD.RAID_AMMO) throw new GameError('ammo', `Bring at least ${WORLD.RAID_AMMO} rounds.`);
+}
+
+// POST /v1/world/:npcId/plan — open a co-op raid (apex outfits only; they're too well-defended to solo).
+export async function planRaid(ch, npcId, client, h) {
+  const fixture = worldNpcOf(npcId);
+  if (!fixture) throw new GameError('bad_npc', 'No outfit by that name to hit.');
+  if (!fixture.coop) throw new GameError('solo', `${fixture.name} is a solo hit — no crew needed.`);
+  gateRaider(ch, fixture);
+  if (await activeRaidMembership(client, ch.id)) throw new GameError('busy', "You're already on a raid.");
+  const id = uid();
+  await client.query('INSERT INTO world_raids (id, npc_id, leader_character) VALUES ($1,$2,$3)', [id, fixture.id, ch.id]);
+  await client.query('INSERT INTO world_raid_members (raid_id, character_id) VALUES ($1,$2)', [id, ch.id]);
+  await h.track(client, ch.account_id, 'world_raid_plan', { npc: fixture.id });
+  return { ok: true, id, npc: fixture.id, name: fixture.name, crewMin: WORLD.COOP_MIN, crewMax: WORLD.COOP_MAX_CREW };
+}
+
+// POST /v1/world/raids/:id/join — off the open board; the outfit's gates apply to every raider.
+export async function joinRaid(ch, raidId, client, h) {
+  const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
+  if (!row) throw new GameError('no_raid', 'That raid is gone.');
+  if (staleRaid(row)) throw new GameError('stale', 'That plan went cold.');
+  const fixture = worldNpcOf(row.npc_id);
+  gateRaider(ch, fixture);
+  if (await activeRaidMembership(client, ch.id)) throw new GameError('busy', "You're already on a raid.");
+  const crew = (await client.query('SELECT 1 FROM world_raid_members WHERE raid_id=$1', [raidId])).rows.length;
+  if (crew >= WORLD.COOP_MAX_CREW) throw new GameError('full', 'The crew is set.');
+  await client.query('INSERT INTO world_raid_members (raid_id, character_id) VALUES ($1,$2)', [raidId, ch.id]);
+  await h.track(client, ch.account_id, 'world_raid_join', { npc: fixture.id });
+  return { ok: true, id: raidId, npc: fixture.id, crew: crew + 1, crewMax: WORLD.COOP_MAX_CREW };
+}
+
+// POST /v1/world/raids/:id/leave — a raider walks; the LEADER walking disbands the op (no stake to refund).
+export async function leaveRaid(ch, raidId, client, h) {
+  const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
+  if (!row) throw new GameError('no_raid', 'That raid is gone.');
+  const mine = (await client.query('SELECT 1 FROM world_raid_members WHERE raid_id=$1 AND character_id=$2', [raidId, ch.id])).rows[0];
+  if (!mine) throw new GameError('not_crew', "You're not on that raid.");
+  if (row.leader_character === ch.id) {
+    await client.query("UPDATE world_raids SET status='abandoned' WHERE id=$1", [raidId]);
+    await client.query('DELETE FROM world_raid_members WHERE raid_id=$1', [raidId]);
+    return { ok: true, disbanded: true };
+  }
+  await client.query('DELETE FROM world_raid_members WHERE raid_id=$1 AND character_id=$2', [raidId, ch.id]);
+  return { ok: true, left: true };
+}
+
+// POST /v1/world/raids/:id/go — leader-only, crew ready. ONE roll on COMBINED firepower for everyone.
+// Lock order (the executeHeist twin): leader (withCharacter) → member character rows SORTED → the raid
+// row → world_npcs (singleton). One-active-raid-per-character keeps concurrent executes disjoint (acyclic);
+// members are paid/costed by direct row UPDATE under lock (never in-memory — no persistCharacter clobber).
+export async function executeRaid(ch, raidId, client, h) {
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run an op from a safehouse.");
+  const pre = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning'", [raidId])).rows[0];
+  if (!pre) throw new GameError('no_raid', 'That raid is gone.');
+  if (pre.leader_character !== ch.id) throw new GameError('not_leader', 'The leader calls the go.');
+  if (staleRaid(pre)) throw new GameError('stale', 'That plan went cold — walk away and start fresh.');
+  const fixture = worldNpcOf(pre.npc_id);
+  const preIds = (await client.query('SELECT character_id FROM world_raid_members WHERE raid_id=$1', [raidId])).rows.map((r) => r.character_id);
+  const others = {};
+  for (const id of preIds.filter((id) => id !== ch.id).sort()) {
+    const r = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
+    if (!r) throw new GameError('crew_not_ready', 'One of the crew is in the ground. Recrew.');
+    others[id] = r;
+  }
+  // NOW the raid row — verify the crew we locked is still the crew
+  const row = (await client.query("SELECT * FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [raidId])).rows[0];
+  if (!row) throw new GameError('no_raid', 'That raid is gone.');
+  const members = (await client.query('SELECT character_id FROM world_raid_members WHERE raid_id=$1', [raidId])).rows.map((r) => r.character_id);
+  if (members.slice().sort().join() !== [...preIds].sort().join()) throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
+  if (members.length < WORLD.COOP_MIN) throw new GameError('crew_short', `A raid on ${fixture.name} needs at least ${WORLD.COOP_MIN} — you have ${members.length}.`);
+  const crewRows = [ch, ...Object.values(others)];
+  for (const m of crewRows) {
+    if (jailed(m) || hospitalized(m) || safeHoused(m) || (m.id !== ch.id && cooling(m)))
+      throw new GameError('crew_not_ready', 'The whole crew shows up clean, healthy, rested, and OUT of hiding — or nobody goes.');
+    if (levelOf(Number(m.respect)) < fixture.minLvl) throw new GameError('crew_not_ready', `Every raider needs level ${fixture.minLvl} for ${fixture.name}.`);
+    if (Number(m.energy) < WORLD.RAID_ENERGY || Number(m.ammo) < WORLD.RAID_AMMO)
+      throw new GameError('crew_not_ready', 'Every raider brings the energy and the rounds.');
+  }
+  if (cooling(ch)) throw new GameError('cooldown', 'Your next raid lines up later.');
+
+  const now = new Date();
+  const patrol = cityHourOf(now.getTime()).patrol;
+  const { strength, enragedUntil } = await currentStrength(client, fixture, now); // regened + row-locked (singleton, last)
+  const enraged = enragedNow(enragedUntil, now);
+  await client.query("UPDATE world_raids SET status='done' WHERE id=$1", [raidId]);
+
+  // each raider pays their OWN cost + cooldown up front, win or lose; the ammo is a §10.4 sink per head
+  const cd = new Date(now.getTime() + WORLD.RAID_CD_MS);
+  const setMember = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
+  for (const m of crewRows) {
+    if (m.id === ch.id) { ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY; ch.ammo = Number(ch.ammo) - WORLD.RAID_AMMO; ch.heat = Number(ch.heat || 0) + WORLD.RAID_HEAT; ch.world_raid_at = cd; }
+    else await setMember(m.id, 'energy=$2, ammo=$3, heat=$4, world_raid_at=$5',
+      [Number(m.energy) - WORLD.RAID_ENERGY, Number(m.ammo) - WORLD.RAID_AMMO, Number(m.heat || 0) + WORLD.RAID_HEAT, cd]);
+    await h.ledger(client, { characterId: m.id, currency: 'ammo', amount: -WORLD.RAID_AMMO, reason: 'world:raid' });
+  }
+
+  // COMBINED firepower (SUM, not avg — many guns) over the (enraged?) defense is how a crew cracks an apex.
+  // Members' gear/assets aren't loaded here (only the leader's h), so member power reads base stats — the
+  // COOP_SCALE is tuned for that; a geared member is a small bonus not counted, never a penalty.
+  const sumPower = crewRows.reduce((a, m) => a + raiderPower(m, m.id === ch.id ? h : null), 0);
+  const def = fixture.def * (patrol ? 1 : LIVING.NIGHT_RAID_MULT) + (enraged ? WORLD.ENRAGE_DEF : 0);
+  // WORLD_RAID_P is a TEST-ONLY knob (the solo-raid precedent) pinning the outcome for deterministic tests.
+  const p = process.env.WORLD_RAID_P != null ? Number(process.env.WORLD_RAID_P)
+    : Math.max(0.1, Math.min(WORLD.COOP_MAX_P, fixture.base + (sumPower - def) / WORLD.COOP_SCALE));
+  const roll = Math.random();
+  await h.rngLog(client, ch.id, `world:coop:${fixture.id}`, roll, `${roll < p ? 'raid' : 'repelled'} (crew ${crewRows.length})`);
+
+  if (roll >= p) {
+    // repelled — the WHOLE crew is hospitalized together; the reservoir is untouched (regen stamped)
+    const hospTo = new Date(now.getTime() + WORLD.FAIL_HOSP_MS);
+    for (const m of crewRows) {
+      if (m.id === ch.id) ch.hosp_until = hospTo;
+      else { await setMember(m.id, 'hosp_until=$2', [hospTo]); await h.notify(client, m.id, 'world_raid_fail', { npc: fixture.id }); }
+    }
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3 WHERE npc_id=$1', [fixture.id, strength, now]);
+    await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: false, crew: crewRows.length });
+    return { ok: true, success: false, npc: fixture.id, crew: crewRows.length, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000) };
+  }
+
+  // landed — the bounded reservoir slice is the pot (+ the rout windfall if this crossing routs it)
+  let pot = Math.min(Math.floor(strength * WORLD.GRAB_BPS / 10000), WORLD.GRAB_MAX, Math.floor(strength));
+  const after = strength - pot;
+  const floorVal = fixture.max * WORLD.ROUT_FLOOR_BPS / 10000;
+  let routed = false, newEnraged = enragedUntil;
+  if (strength > floorVal && after <= floorVal) { routed = true; pot += fixture.routBonus; newEnraged = new Date(now.getTime() + WORLD.ENRAGE_MS); }
+
+  // split like a heist pot (leader weight); each share a world:raid faucet + a cartel_damage bump (war effort)
+  const unit = pot / (WORLD.COOP_LEADER_WEIGHT + (crewRows.length - 1));
+  const shares = {};
+  for (const m of crewRows) shares[m.id] = Math.floor(unit * (m.id === ch.id ? WORLD.COOP_LEADER_WEIGHT : 1));
+  for (const m of crewRows) {
+    const share = shares[m.id];
+    if (m.id === ch.id) ch.cash = Number(ch.cash) + share;
+    else { await setMember(m.id, 'cash=$2', [Number(m.cash) + share]); await h.notify(client, m.id, 'world_raid_score', { npc: fixture.id, share, routed }); }
+    if (share > 0) {
+      await h.ledger(client, { characterId: m.id, currency: 'cash', amount: share, reason: 'world:raid', counterparty: fixture.id });
+      await client.query('UPDATE account_persistent SET cartel_damage = cartel_damage + $2 WHERE account_id=$1', [m.account_id, share]);
+    }
+  }
+  // THE FRONTIER — a rout plants the LEADER's family flag (pure status; gangless leader leaves it open)
+  const heldGang = routed ? (h.owned.gangId || null) : undefined;
+  if (routed) {
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6 WHERE npc_id=$1',
+      [fixture.id, after, now, newEnraged, heldGang, now]);
+    bus.emit('streets', { type: 'world_routed', who: ch.name, npc: fixture.name, crew: crewRows.length });
+    if (heldGang) bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
+  } else {
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
+  }
+  await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, pot, routed, crew: crewRows.length });
+  return { ok: true, success: true, npc: fixture.id, crew: crewRows.length, pot, share: shares[ch.id], routed,
+    frontier: routed && !!heldGang, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
+}
+
+// worker: sweep stale co-op raid plans (nothing staked → just clear the board). Leader-before-raid-row
+// lock order (no character locks, so no cycle). Per-raid txn (a poison row can't starve the sweep).
+export async function sweepStaleRaids(pool) {
+  const stale = (await pool.query(
+    "SELECT id FROM world_raids WHERE status='planning' AND created_at < $1",
+    [new Date(Date.now() - WORLD.COOP_TTL_MS)])).rows;
+  let swept = 0;
+  for (const { id } of stale) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const row = (await client.query("SELECT id FROM world_raids WHERE id=$1 AND status='planning' FOR UPDATE", [id])).rows[0];
+      if (row) {
+        await client.query("UPDATE world_raids SET status='abandoned' WHERE id=$1", [id]);
+        await client.query('DELETE FROM world_raid_members WHERE raid_id=$1', [id]);
+        swept++;
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
+  }
+  return { swept };
+}
+
+// A dissolving family drops every frontier flag it holds (the outfits read open — the house takes its
+// turf back). Called from gang dissolution, under the gang-row lock (no character/npc lock → no cycle).
+export async function releaseFrontierHolds(client, gangId) {
+  await client.query('UPDATE world_npcs SET held_by_gang=NULL, held_since=NULL WHERE held_by_gang=$1', [gangId]);
+}
+
+// runEstate: a dead co-op raid leader's plan is abandoned (the crew_heists precedent). Member rows are
+// wiped by the estate table sweep; this releases any raid this street was LEADING so its crew can recrew.
+export async function abandonRaidsAtDeath(client, characterId) {
+  await client.query("UPDATE world_raids SET status='abandoned' WHERE leader_character=$1 AND status='planning'", [characterId]);
 }

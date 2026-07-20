@@ -188,6 +188,64 @@ assert.equal((await call('GET', '/v1/world', { token: raider.token })).body.npcs
 delete process.env.WORLD_RAID_P;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STEP THREE — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest)
+// ─────────────────────────────────────────────────────────────────────────────
+const boss = await mk('Frontier Boss');
+const soldier = await mk('Frontier Soldier');
+await seedCh(boss.id, 'respect=2000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
+await seedCh(soldier.id, 'respect=2000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
+// the boss founds a family; the soldier joins it (the frontier flag is planted by the LEADER's family)
+assert.equal((await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'The Frontier Mob', tag: 'FRM' } })).code, 200, 'the family is founded');
+const gangId = (await meOf(boss.token)).gang.id;
+assert.equal((await call('POST', `/v1/gangs/${gangId}/join`, { token: soldier.token })).code, 200, 'the soldier joins the family');
+
+// an apex outfit needs a crew — a SOLO-only outfit refuses a co-op plan
+assert.equal((await call('POST', '/v1/world/dockrats/plan', { token: boss.token })).body.error, 'solo', 'the Dock Rats are a solo hit — no crew');
+// plan a co-op raid on the Kryl Syndicate (apex); the open raid shows on the board
+const plan = await call('POST', '/v1/world/kryl/plan', { token: boss.token });
+assert.equal(plan.code, 200, 'the raid is planned');
+const raidId = plan.body.id;
+const rboard = (await call('GET', '/v1/world/raids', { token: soldier.token })).body;
+assert(rboard.raids.find((x) => x.id === raidId && x.npc === 'kryl' && x.leader === 'Frontier Boss'), 'the open raid is on the board looking for crew');
+// the leader can't go it alone — an apex crew needs at least COOP_MIN
+assert.equal((await call('POST', `/v1/world/raids/${raidId}/go`, { token: boss.token })).body.error, 'crew_short', 'no apex raid short of a crew');
+assert.equal((await call('POST', `/v1/world/raids/${raidId}/join`, { token: soldier.token })).code, 200, 'the soldier crews up');
+// a non-leader can't call the go
+assert.equal((await call('POST', `/v1/world/raids/${raidId}/go`, { token: soldier.token })).body.error, 'not_leader', 'the leader calls the go');
+
+// force a ROUT: seed the reservoir just above the floor, pin the roll to a landed hit
+process.env.WORLD_RAID_P = '1';
+const kFloor = worldNpcOf('kryl').max * WORLD.ROUT_FLOOR_BPS / 10000;
+// seed the Kryl reservoir just above the floor (DELETE+INSERT — the row may not exist yet, so an
+// UPDATE would be a no-op and currentStrength would lazily seed it at MAX, defeating the rout setup)
+await pool.query(`DELETE FROM world_npcs WHERE npc_id='kryl'`);
+await pool.query(`INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ('kryl', ${Math.round(kFloor + 200)}, now())`);
+const bBefore = await rawCh(boss.id), sBefore = await rawCh(soldier.id);
+const go = await call('POST', `/v1/world/raids/${raidId}/go`, { token: boss.token });
+assert.equal(go.code, 200, 'the go runs');
+assert.equal(go.body.success, true, 'the crew lands the hit');
+assert.equal(go.body.routed, true, 'the crew ROUTS the Kryl Syndicate');
+assert.equal(go.body.frontier, true, 'the leader’s family plants the frontier flag on the rout');
+// both crewmen bank a leader-weighted world:raid share, each ledgered + banked exactly
+const bShare = await ledgerOf(boss.id, 'cash', 'world:raid');
+const sShare = await ledgerOf(soldier.id, 'cash', 'world:raid');
+assert(bShare > 0 && sShare > 0, 'both crewmen are paid a share');
+assert(bShare > sShare, 'the leader who fronted the op takes the bigger cut');
+assert.equal(Number((await rawCh(boss.id)).cash) - Number(bBefore.cash), bShare, 'the boss banks exactly his share');
+assert.equal(Number((await rawCh(soldier.id)).cash) - Number(sBefore.cash), sShare, 'the soldier banks exactly his share');
+assert.equal(await ledgerOf(boss.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the leader’s ammo is a ledgered sink');
+assert.equal(await ledgerOf(soldier.id, 'ammo', 'world:raid'), -WORLD.RAID_AMMO, 'the crew’s ammo is a ledgered sink');
+// the war effort is banked to BOTH accounts (== their co-op world:raid cash)
+board = (await call('GET', '/v1/world', { token: boss.token })).body;
+assert.equal(board.warEffort.damage, bShare, 'the boss’s war effort == his co-op loot');
+// THE FRONTIER — the Kryl turf now flies the Frontier Mob’s flag, and the board + leaderboard say so
+const kryl = board.npcs.find((n) => n.id === 'kryl');
+assert(kryl.heldBy && kryl.heldBy.tag === 'FRM' && kryl.heldBy.mine === true, 'the board shows the Frontier Mob holds Kryl (and it’s mine)');
+const flb = (await call('GET', '/v1/leaderboard/frontier', { token: boss.token })).body;
+assert(flb.families.find((f) => f.tag === 'FRM' && f.held === 1 && f.outfits.includes('The Kryl Syndicate')), 'the family tops the Frontier leaderboard holding Kryl');
+delete process.env.WORLD_RAID_P;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 4 — the day/night clock
 // ─────────────────────────────────────────────────────────────────────────────
 const noonUTC = Date.UTC(2026, 0, 1, 15, 0, 0);  // 15:00 UTC — inside the patrol window
@@ -205,5 +263,5 @@ assert.equal(Math.round(bustProbOf(indicted, noonUTC) / bustProbOf(indicted, nig
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `world:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT: lifetime cartel damage == world:raid loot, the leaderboard + rank, account-level status; ENRAGED CARTELS: a rout digs the outfit in — lower odds — until it lapses, emission-safe)');
+console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family)');
 process.exit(0);

@@ -826,8 +826,29 @@ CREATE TABLE IF NOT EXISTS world_npcs (
   npc_id TEXT PRIMARY KEY,
   strength NUMERIC NOT NULL,
   strength_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  enraged_until TIMESTAMPTZ   -- (step two) a routed cartel is on high alert — defends +ENRAGE_DEF for a window
+  enraged_until TIMESTAMPTZ,  -- (step two) a routed cartel is on high alert — defends +ENRAGE_DEF for a window
+  held_by_gang TEXT,          -- (step three) THE FRONTIER: the family that last ROUTED this outfit controls its turf (pure status; toppled on the next rout)
+  held_since TIMESTAMPTZ      -- when the current family took the frontier
 );
+
+-- THE FRONTIER — co-op crew raids on the apex outfits (step three). The crew-heist pattern applied
+-- to a WORLD raid: a leader opens the op, made raiders join off the board, the leader calls the go
+-- and ONE roll decides it for the whole crew — the reservoir slice splits like a heist pot
+-- (world:raid, the SAME bounded faucet as a solo raid, just shared). No stake (the cost is each
+-- raider's own energy/ammo/heat at execute); a stale plan is swept, nothing to refund.
+CREATE TABLE IF NOT EXISTS world_raids (
+  id TEXT PRIMARY KEY,
+  npc_id TEXT NOT NULL,
+  leader_character TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'planning',   -- planning | done | abandoned
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS world_raid_members (
+  raid_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  PRIMARY KEY (raid_id, character_id)
+);
+CREATE INDEX IF NOT EXISTS ix_world_raid_members_char ON world_raid_members (character_id);
 
 -- CREW HEISTS (THE BIG SCORE): the game's first co-op content. One row per job; members join
 -- off the open board; the leader executes when full. The stake is sunk at plan (refunded only

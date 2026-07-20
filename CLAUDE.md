@@ -1065,8 +1065,39 @@ is helped, never widened; the shared reservoir can't be farmed to the floor over
 reads it, the board flags `enraged`, and it lapses on its own (surfaced as an ON ALERT chip). §10.4
 untouched — the sim's `reason vocabulary` + `character cash` stay drift-0. `test/world.js` proves the
 five-outfit roster, the war-effort damage/rank/leaderboard identity, and the enrage odds-drop + lapse. All
-numbers are founder sim sign-off levers. Still deferred: the NPC-held-district "seizable frontier"
-(invasive) + co-op crew raids on the apex outfits (a bigger build — the crew-heist pattern).
+numbers are founder sim sign-off levers.
+**Step three — CO-OP CREW RAIDS + THE FRONTIER — BUILT** (`src/world.js`, `test/world.js`; the two deferred
+items — the crew-heist machinery applied to a WORLD raid + a family-conquest status axis). **(1) CO-OP
+CREW RAIDS** on the apex outfits (`coop: true` on kryl/moreau/volkov — too well-defended to solo reliably;
+`world_raids`+`world_raid_members` tables, the `crew_heists` twin): a leader `planRaid`s
+(`POST /v1/world/:npcId/plan`), made raiders `joinRaid` off `GET /v1/world/raids`, the leader `executeRaid`s
+(`POST /v1/world/raids/:id/go`) and ONE roll pays the whole crew. NO stake — each raider pays their OWN
+energy/ammo/heat at execute (the solo-raid cost), so the loot is the SAME bounded reservoir slice, just
+SPLIT (leader-weighted, the heist pot); §10.4-NEUTRAL vs solo (every share/ammo row rides the existing
+`world:raid` cash faucet + ammo sink, character_id'd → check (a) reconciles; the sim stays drift-0). The
+crew's COMBINED firepower (SUM of raider power over `COOP_SCALE` 600, clamped `COOP_MAX_P` 0.85) is how you
+crack an apex def a soloist can't — but never a sure thing. Lock discipline is the `executeHeist` twin
+(leader via withCharacter → member char rows SORTED → the raid row → `world_npcs` singleton; one-active-raid
+keeps concurrent executes disjoint/acyclic; the residual leader-vs-pairwise-PvP 40P01 → the existing
+`contention` retry; members paid/costed by absolute UPDATE under lock — no persist-clobber). **(2) THE
+FRONTIER** (family conquest, PURE STATUS — zero §10.4): whoever lands the ROUT (solo OR co-op) plants their
+FAMILY's flag on the outfit's turf (`world_npcs.held_by_gang`/`held_since`); the next rout topples it; a
+gangless router leaves it open. `GET /v1/leaderboard/frontier` (`frontierLeaderboard`) ranks families by
+outfits held (weighted by the outfit's reservoir scale — holding Volkov > the Dock Rats). The board's
+`heldBy {name,tag,mine}` per outfit + a streets `frontier_seized` event. A dissolved family drops its holds
+(`releaseFrontierHolds`, called from gang dissolution under the gang lock — `world_npcs` is a singleton, no
+cycle). Estate: a dead co-op leader's plan is abandoned (`abandonRaidsAtDeath`, the crew_heists precedent;
+`world_raid_members` joined the estate wipe). Worker `sweepStaleRaids` clears stale plans (no stake to
+refund). Console: the City tab gained frontier-control chips per outfit, a "plan a crew raid" button on apex
+outfits, a Crew Raids board (join/leave/go), and a frontier leaderboard link. `test/world.js` proves the
+solo-outfit + crew_short + not_leader gates, a crew ROUTING an apex outfit, leader-weighted `world:raid`
+shares ledgered per head + the ammo sink, war effort banked to both, and the frontier flag on the board +
+leaderboard. Suite 30/30 + sim drift-0. **Emission note (founder sim sign-off):** co-op raids make the apex
+reservoirs (moreau 5M / volkov 12M) a REALIZED faucet that solo raiders essentially couldn't tap — total
+emission is still bounded by REGEN (you can't extract past the reservoir), but previously-locked reservoirs
+now flow, so sim + sign-off the apex `regenPerHr`/`GRAB` before production (the only new emission surface;
+`COOP_*` numbers are all sign-off levers). Still deferred: NPC outfits holding actual player-map DISTRICTS
+(the fully-invasive turf-model rewire — the status frontier stands in) + per-district racket-type choice.
 
 A **five-lens red-team over the Law + Living World** (`AUDIT-law-world.md`: §10.4, concurrency/locks,
 death/estate/PvP, Law internals, World internals) closed two HIGH correctness defects + four MED/LOW

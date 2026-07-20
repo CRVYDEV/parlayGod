@@ -968,7 +968,19 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 | `WORLD.WAR_RANKS` | Civilian → The Scourge | The War Effort ladder off `account_persistent.cartel_damage` (lifetime NPC loot, survives death). PURE STATUS (the hitman-rep precedent) — outside §10.4 + the sim balance. | Sign-off |
 | `WORLD.ENRAGE_MS` / `ENRAGE_DEF` | 3h / +60 | A routed cartel goes to high alert: it defends +60 for 3h → LOWER raid odds. **EMISSION-SAFE by construction** (harder raids = less throughput), so it can only HELP §10.4, never widen it. Stops the shared reservoir being farmed to the floor over and over. | Sign-off |
 
-*Step-two note:* the War Effort is **pure status** (`cartel_damage` isn't a currency; the loot still rides the existing `world:raid` faucet — the test asserts `warEffort.damage == the account's world:raid cash`, so §10.4 is untouched). Enrage is a **defense modifier that reduces emission** — the one thing to confirm in the sim is that a 3h/+60 alert meaningfully slows repeat-routing of the low-tier outfits without making the apex (`volkov`, def 220 + 60 = 280) un-raidable for a solo raider (the odds floor at 0.1 catches that). Still deferred: co-op crew raids on the apex outfits + the NPC-held-district seizable frontier.
+*Step-two note:* the War Effort is **pure status** (`cartel_damage` isn't a currency; the loot still rides the existing `world:raid` faucet — the test asserts `warEffort.damage == the account's world:raid cash`, so §10.4 is untouched). Enrage is a **defense modifier that reduces emission** — the one thing to confirm in the sim is that a 3h/+60 alert meaningfully slows repeat-routing of the low-tier outfits without making the apex (`volkov`, def 220 + 60 = 280) un-raidable for a solo raider (the odds floor at 0.1 catches that).
+
+**The Living World — STEP THREE (co-op crew raids + THE FRONTIER):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `WORLD_NPCS[].coop` | kryl/moreau/volkov | The apex outfits accept a co-op crew (too well-defended to solo reliably). Solo raids still work on any outfit; co-op is the alternative that cracks a heavy def. | Sign-off |
+| `WORLD.COOP_MIN`/`COOP_MAX_CREW` | 2 / 4 | A raid crew is 2–4 made raiders — the crew-heist band. | Sign-off |
+| `WORLD.COOP_SCALE`/`COOP_MAX_P` | 600 / 0.85 | Combined firepower (SUM of raider power) over the outfit def; clamped so even a full crew is never certain. Higher scale than solo's 400 (many guns). | Sign-off |
+| `WORLD.COOP_LEADER_WEIGHT` | 1.2× | The leader who fronts the op takes a bigger cut (the heist precedent). | Sign-off |
+| THE FRONTIER | pure status | Whoever routs an outfit (solo OR co-op) plants their family's flag (`held_by_gang`); the next rout topples it. A conquest leaderboard, zero §10.4 — the Empire/Commission dominance precedent. | Sign-off |
+
+*Step-three EMISSION FLAG (the one real §10.4 consideration):* co-op is **§10.4-neutral vs a solo raid** by construction — the pot is the SAME bounded reservoir slice (`GRAB_BPS`/`GRAB_MAX`), just SPLIT among the crew, and every share/ammo row rides the existing `world:raid` vocabulary (the sim stays drift-0). BUT co-op makes the **apex reservoirs actually tappable** — a soloist essentially can't beat moreau (def 150) / volkov (def 220), so those 5M/12M reservoirs were near-locked; a crew unlocks them as a REALIZED faucet. Total emission is still bounded by REGEN (you can't extract past the reservoir + its `regenPerHr`), but previously-dormant reservoirs now flow, so **sim + founder sign-off the apex `regenPerHr`/`GRAB_MAX` at co-op cadence before production** — this is the only new emission surface in the pillar. The frontier itself adds zero emission (pure status). Still deferred: NPC outfits holding real player-map DISTRICTS (the invasive turf-model rewire) + per-district racket-type choice.
 
 **The Wire — STEP TWO (`WIRE` — content expansion for the intelligence terminal):**
 

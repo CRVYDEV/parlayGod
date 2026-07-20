@@ -1303,6 +1303,18 @@ export async function buildServer() {
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
   app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
+  // step three — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest leaderboard)
+  app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch) => World.raidBoard(pool, ch.id)));
+  app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.planRaid(ch, req.params.npcId, client, h)));
+  app.post('/v1/world/raids/:id/join', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.joinRaid(ch, req.params.id, client, h)));
+  app.post('/v1/world/raids/:id/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.leaveRaid(ch, req.params.id, client, h)));
+  app.post('/v1/world/raids/:id/go', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.executeRaid(ch, req.params.id, client, h)));
+  app.get('/v1/leaderboard/frontier', { preHandler: auth }, async () => World.frontierLeaderboard(pool)); // THE FRONTIER board
   return app;
 }
 
