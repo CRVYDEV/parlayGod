@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -828,7 +828,7 @@ await seedCh(don.id, 'cash=500000');
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: don.token, body: { amount: 100000 } })).code, 200, 'treasury funded for the operation');
 let treA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
 r = await call('POST', '/v1/territory/docks/establish', { token: don.token });
-assert.equal(r.code, 200, 'operation established on docks'); assert.equal(r.body.name, 'Numbers Racket');
+assert.equal(r.code, 200, 'operation established on docks'); assert.equal(r.body.name, 'Corner Numbers Game'); assert.equal(r.body.kind, 'numbers');
 assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, treA - 50000, 'establish cost ($50k) paid from the treasury');
 assert.equal((await call('POST', '/v1/territory/docks/establish', { token: don.token })).body.error, 'exists', 'one operation per district');
 // income accrues lazily; backdate the clock and collect to the treasury (any member can collect)
@@ -842,7 +842,7 @@ await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval
 assert.equal((await call('POST', '/v1/territory/collect', { token: don.token })).body.collected, 24 * 4000, 'income capped at TERRITORY_CAP_MS (24h)');
 // upgrade to tier 2
 r = await call('POST', '/v1/territory/docks/upgrade', { token: don.token });
-assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.name, 'Protection Racket'); assert.equal(r.body.tier, 2);
+assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.name, 'Neighborhood Numbers Game'); assert.equal(r.body.tier, 2);
 assert(((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.territory || []).some((t) => t.district === 'docks' && t.tier === 2), 'the gang view shows the tier-2 operation');
 // ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
 const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=400, cash=500000');
@@ -865,7 +865,7 @@ assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 3000
 // the ladder grew 3→5 (content); upgradeRacket/territoryTierOf already handle any tier generically, so
 // the extension is zero-code — a tier-3 operation can now climb to Vice Empire → The Syndicate.
 assert.equal(TERRITORY_RACKETS.length, 5, 'the ladder grew to five tiers (content)');
-assert(TERRITORY_RACKETS.find((t) => t.tier === 4 && t.name === 'Vice Empire') && TERRITORY_RACKETS.find((t) => t.tier === 5 && t.name === 'The Syndicate'), 'the two new operations (Vice Empire / The Syndicate) are on the ladder');
+assert(TERRITORY_RACKETS.find((t) => t.tier === 4 && t.name === 'Citywide') && TERRITORY_RACKETS.find((t) => t.tier === 5 && t.name === 'The Syndicate'), 'the two top scale tiers (Citywide / The Syndicate) are on the ladder');
 // THE EMPIRE — the raider's family banked 16000 of lifetime territory income (its single tier-2 collect)
 const empView = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.empire;
 assert(empView && empView.earned === 16000, 'the gang view shows lifetime territory income (THE EMPIRE)');
@@ -915,6 +915,43 @@ assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token 
 // §10.4: the treasury check still reconciles with the upkeep sink in the mix
 const terrTreas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
 assert(terrTreas.ok, `the treasury check reconciles territory:upkeep (drift ${terrTreas.drift})`);
+
+// ══ TERRITORY STEP THREE — per-district racket TYPE + the BUREAU CRACKDOWN ══
+const tboss = await mk('Territory Boss'); await seedCh(tboss.id, 'respect=2000, cash=5000000');
+const tgang = (await call('POST', '/v1/gangs', { token: tboss.token, body: { name: 'The Frontier Family', tag: 'TFF' } })).body.gangId;
+await call('POST', '/v1/gangs/tribute', { token: tboss.token, body: { amount: 2000000 } }); // a LEDGERED war chest (so the treasury check stays exact)
+await pool.query(`UPDATE districts SET holder_gang='${tgang}' WHERE id='canal'`);   // seed the turf
+// TYPE choice: a bad business is refused; a SMUGGLING ring earns ×1.35 the base tier rate
+assert.equal((await call('POST', '/v1/territory/canal/establish', { token: tboss.token, body: { kind: 'nope' } })).body.error, 'bad_kind', 'a real business or nothing');
+r = await call('POST', '/v1/territory/canal/establish', { token: tboss.token, body: { kind: 'smuggling' } });
+assert.equal(r.code, 200, 'a Smuggling Ring is established'); assert.equal(r.body.kind, 'smuggling'); assert.equal(r.body.name, 'Corner Smuggling Ring');
+// income rides the type multiplier — 2h of a tier-1 smuggling ring = 2 × $4000 × 1.35 = $10,800
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '2 hours' WHERE district_id='canal'`);
+r = await call('POST', '/v1/territory/collect', { token: tboss.token });
+assert.equal(r.body.collected, Math.floor(2 * 4000 * 1.35), 'a Smuggling Ring earns 1.35× the base tier rate');
+assert(!r.body.raided, 'a fresh operation has no heat yet — no raid');
+// THE BUREAU CRACKDOWN: leave the hot ring running and the Feds come — seize the pending, fine the treasury
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '5 hours', scrutiny=0, scrutiny_at = now() - interval '20 hours' WHERE district_id='canal'`); // 20h × net +10/hr → over the threshold
+let treT = (await call('GET', `/v1/gangs/${tgang}`, {})).body.gang.treasury;
+process.env.TERRITORY_RAID_P = '1';   // pin the roll (TEST-ONLY, the BUSINESS_RAID_P precedent)
+r = await call('POST', '/v1/territory/collect', { token: tboss.token });
+assert(r.body.raided && r.body.raided.length === 1, 'the Bureau raids the hot Smuggling Ring');
+assert.equal(r.body.collected, 0, 'the raid seized the pending income — nothing banked');
+const tFine = Math.floor(territoryBuildCost(1) * 0.10);   // 10% of the tier-1 build cost
+assert.equal(r.body.raided[0].fine, tFine, 'the treasury is fined 10% of the operation build cost');
+assert.equal((await call('GET', `/v1/gangs/${tgang}`, {})).body.gang.treasury, treT - tFine, 'the fine hit the treasury exactly');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:raid' AND counterparty='${tgang}'`)).rows[0].s), -tFine, 'the fine is a ledgered §10.4 territory:raid treasury sink');
+// a NUMBERS operation never heats up — safe and steady, no matter how long it runs (even with the roll pinned)
+await pool.query(`UPDATE territory_rackets SET kind='numbers', scrutiny=0, scrutiny_at = now() - interval '200 hours', last_income_at = now() - interval '2 hours' WHERE district_id='canal'`);
+r = await call('POST', '/v1/territory/collect', { token: tboss.token });
+assert(!r.body.raided, 'a Numbers Game never draws the Bureau (scrutinyPerHr 0 < decay — never crosses the line)');
+assert.equal(r.body.collected, 2 * 4000, 'the numbers op just pays out its base rate, safe');
+delete process.env.TERRITORY_RAID_P;
+// the type surfaces on the view; §10.4 treasury reconciles with territory:raid in the mix
+const tView = (await call('GET', '/v1/territory', { token: tboss.token })).body.territory.find((t) => t.district === 'canal');
+assert.equal(tView.kind, 'numbers', 'the view carries the operation type');
+const t3Treas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert(t3Treas.ok, `the treasury check reconciles territory:raid (drift ${t3Treas.drift})`);
 
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
 // ══ the safehouse is priced off the wealth it protects

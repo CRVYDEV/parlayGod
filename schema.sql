@@ -570,6 +570,9 @@ CREATE TABLE IF NOT EXISTS territory_rackets (
   tier INT NOT NULL DEFAULT 1,
   last_income_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   upkeep_at TIMESTAMPTZ NOT NULL DEFAULT now(),      -- recurring sinks: the operation's pad accrues off this clock (treasury pays); reset on pay/upgrade/seizure
+  kind TEXT NOT NULL DEFAULT 'numbers',              -- (step three) the operation's BUSINESS: numbers (safe) / protection (med) / smuggling (hot) — income tilt + Bureau-crackdown risk
+  scrutiny NUMERIC NOT NULL DEFAULT 0,               -- (step three) Bureau attention: grows from operating a hot type, decays; a crackdown seizes pending + fines the treasury
+  scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),    -- the scrutiny clock (reset on a raid + on seizure — a seized op isn't born hot)
   established_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   minted_onchain BOOLEAN NOT NULL DEFAULT false
 );

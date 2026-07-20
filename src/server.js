@@ -359,7 +359,7 @@ export async function buildServer() {
   // Risk-to-Earn Phase 3: territory rackets — establish/upgrade an operation on your turf, collect
   // its income, and lose it (with the district) to whoever seizes the turf.
   app.post('/v1/territory/:districtId/establish', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.establishRacket(ch, req.params.districtId, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.establishRacket(ch, req.params.districtId, req.body?.kind, client, h)));
   app.post('/v1/territory/:districtId/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.upgradeRacket(ch, req.params.districtId, client, h)));
   app.post('/v1/territory/collect', { preHandler: auth }, async (req) =>

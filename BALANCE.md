@@ -960,6 +960,16 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-four note:* both pieces are **status/pacing with ZERO new §10.4 surface**. The Cornerman is the boxing tie-in for the Underworld cast — standing earned actor-side at the boxing touchpoints, perks that are all actor-local discounts/pacing (no fight-outcome tampering — a trainer builds a better fighter, he doesn't fix the fight), the training discount riding the existing `boxing:train` sink. Belt defense adds a reign counter + a mandatory-defense clock (an inactive champ forfeits) — pure status on the `boxing_title` singleton. Nothing to watch on §10.4; the only balance question is the T3 build-pacing (a maxed fighter reached in half the sessions is a modest competitive edge in PvP + the main event, bounded by the unchanged `STAT_CAP` ceiling) and the 7-day defense window (too short strips casual champs; too long makes the belt static) — both sign-off dials.
 
+**Territory rackets — STEP THREE (`TERRITORY_TYPES` + the Bureau crackdown):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `TERRITORY_TYPES[].incomeMult` | numbers 1.0 / protection 1.15 / smuggling 1.35 | The operation's BUSINESS tilts income. **numbers ×1.0 preserves the sim-signed tier curve** (the safe default); protection/smuggling earn more BUT draw the Bureau. §10.4-safe (still a ledgered `territory:income` faucet) but a real balance change — **sim the NET EV per type** (income mult vs the raid seize + fine) before production; higher-income types must NOT be a strict upgrade. | **Sign-off (measure)** |
+| `TERRITORY_TYPES[].scrutinyPerHr` | 0 / 6 / 14 | Net of `TERRITORY_SCRUTINY_DECAY_HR` (4): numbers never heats up (0<4), protection climbs +2/hr (raid-eligible ~30h), smuggling +10/hr (~6h). The risk that pays for the income tilt. | Sign-off |
+| `TERRITORY_RAID_THRESHOLD` / `_P_PER_MIN` / `_FINE_RATE` | 60 / 0.0015 / 0.10 | The crackdown: past the threshold, roll `1−(1−p)^min-above`; a raid SEIZES pending (not minted) + fines the treasury 10% of build cost (`territory:raid`, a §10.4 treasury sink). The business-raid pattern at the gang level. `TERRITORY_RAID_P` is TEST-ONLY. | Sign-off |
+
+*Step-three note:* the tier ladder was RENAMED to scale labels (Corner→The Syndicate) with **incomes UNCHANGED** — the old racket names (Numbers/Protection/Smuggling) moved to the new TYPE axis where they belong. The only §10.4 surface is `territory:raid` (a treasury sink → helps extraction-vs-inflow, like every Law/Bureau drain); the income mult is the one balance item to measure — a smuggling ring should be higher-VARIANCE, not higher-EV, than numbers once the raids are priced in.
+
 **The Living World — STEP TWO (`WORLD` — content expansion for the NPC rival families):**
 
 | Lever | Default | Rationale | Rec |

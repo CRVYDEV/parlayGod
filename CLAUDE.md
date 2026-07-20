@@ -401,7 +401,31 @@ asserts `empire.earned == the family's lifetime collect`). Gang-level → dies w
 `GET /v1/gangs/:id` (`empire {earned, rank}`) + the console Family tab (an Empire banner + leaderboard).
 `test/social.js` proves the 5-tier ladder + the two new operations, the empire earned/rank, and the
 leaderboard (both territorial families, §10.4-clean). Suite 30/30 + sim drift-0. All numbers are founder
-sign-off levers. Deferred: per-district racket-TYPE choice + a Bureau-crackdown risk layer.
+sign-off levers.
+**Step three — per-district racket TYPE + the BUREAU CRACKDOWN — BUILT** (`src/territory.js`, `src/rules.js`,
+`test/social.js`; the two deferred items). The tier ladder is now the operation's SCALE (renamed Corner →
+Neighborhood → District → Citywide → The Syndicate; incomes UNCHANGED — the sim-signed curve), and a new
+orthogonal **TYPE** axis is the BUSINESS, chosen at establish (`TERRITORY_TYPES`, `establishRacket(kind)`,
+`POST /v1/territory/:id/establish {kind}`): **numbers** (Numbers Game — ×1.0 income, `scrutinyPerHr` 0, never
+raided — the safe baseline that keeps parity with the signed curve), **protection** (Protection Racket —
+×1.15, medium heat), **smuggling** (Smuggling Ring — ×1.35, hot). Income = `tier.incomePerHr × type.incomeMult`
+(via `ratePerHr`; upkeep scales with it too). **The Bureau crackdown** is the business-scrutiny pattern at the
+GANG level: scrutiny GROWS from operating a hot type (net of `TERRITORY_SCRUTINY_DECAY_HR`, so numbers never
+heats up), resolved LAZILY at the collect touch (`resolveTerritoryRaid` in `collectTerritory` — the §7.1
+kitchen/business precedent); above `TERRITORY_RAID_THRESHOLD` it rolls `1−(1−p)^(minutes-above)` and a raid
+SEIZES the pending income (never banked, never ledgered — the seize precedent) + FINES the treasury
+`TERRITORY_RAID_FINE_RATE` (10%) of the operation's build cost (a §10.4 treasury cash sink `territory:raid`,
+character_id NULL, counterparty=gang — added to the treasury check's `territoryOut`), then scrutiny→0.
+`TERRITORY_RAID_P` is a TEST-ONLY roll knob (the BUSINESS_RAID_P precedent). The type CARRIES on seizure
+(the victor inherits the smuggling ring) but scrutiny resets (a seized op isn't born hot). New columns
+`territory_rackets.kind/scrutiny/scrutiny_at`; `territoryOf` surfaces `kind`/`typeName`/`scrutiny`/`raidRisk`;
+console Family tab gained a type picker on establish + a FEDS-WATCHING chip + Bureau-heat line. `test/social.js`
+proves the bad-kind gate, smuggling's ×1.35 income, a forced crackdown (seize + ledgered treasury fine +
+§10.4 treasury reconcile), and a numbers op never drawing the Bureau. Suite 30/30 + sim drift-0. **Founder
+sign-off flag (BALANCE.md):** the income mults (protection ×1.15 / smuggling ×1.35) INCREASE the
+`territory:income` faucet for the hot types — §10.4-safe (still a ledgered faucet) but a balance change,
+offset by the raid risk; numbers (×1.0) preserves the signed baseline; sim the net EV per type before
+production. `TERRITORY_TYPES`/scrutiny/raid numbers are all sign-off levers.
 
 **Phase 4 (Backed emission) — BUILT** (`src/economy.js`, `src/worker.js`, `test/economy.js`;
 design `omerta-phase4-emission-design.md`). Closes the audit's #1 finding — the fixed 14% staking
@@ -1097,7 +1121,7 @@ reservoirs (moreau 5M / volkov 12M) a REALIZED faucet that solo raiders essentia
 emission is still bounded by REGEN (you can't extract past the reservoir), but previously-locked reservoirs
 now flow, so sim + sign-off the apex `regenPerHr`/`GRAB` before production (the only new emission surface;
 `COOP_*` numbers are all sign-off levers). Still deferred: NPC outfits holding actual player-map DISTRICTS
-(the fully-invasive turf-model rewire — the status frontier stands in) + per-district racket-type choice.
+(the fully-invasive turf-model rewire — the status frontier stands in). [Per-district racket-type choice: BUILT — see Territory step three.]
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World
