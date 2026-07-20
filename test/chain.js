@@ -74,6 +74,18 @@ assert(!r.body.signature, 'no signature while queued');
 assert.equal((await meOf(token)).omr, omrBefore - 10, '$OMR debited immediately (no double-spend while queued)');
 const nonceA = r.body.nonce;
 
+// ── audit LOW: cancel a still-QUEUED withdrawal → the burned $OMR is refunded (the escape hatch if
+//    the reserve never funds to your FIFO position). A separate voucher B, so A survives for the drain. ──
+const omrBeforeB = (await meOf(token)).omr;
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 5 } });
+assert.equal(r.body.status, 'queued', 'a second withdrawal also queues while the reserve is dry');
+const vB = r.body.id;
+assert.equal((await meOf(token)).omr, omrBeforeB - 5, 'the queued withdrawal debited $OMR');
+r = await call('POST', `/v1/withdraw/${vB}/cancel`, { token });
+assert.equal(r.code, 200, 'the queued withdrawal cancels'); assert.equal(r.body.refunded, 5, 'the burned $OMR is refunded');
+assert.equal((await meOf(token)).omr, omrBeforeB, '$OMR fully restored — no stuck funds (net-0 reversal)');
+assert.equal((await call('POST', `/v1/withdraw/${vB}/cancel`, { token })).body.error, 'not_queued', 'a cancelled voucher cannot be cancelled again');
+
 // Safe funds a tranche → the queue drains FIFO and signs A
 r = await call('POST', '/v1/mod/reserve/fund', { body: { amount: 100 }, headers: modH });
 assert.equal(r.code, 200); assert.equal(r.body.signed, 1, 'funding drained one queued voucher');

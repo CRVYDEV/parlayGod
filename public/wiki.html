@@ -369,10 +369,14 @@ const SECTIONS = [
       Ledger (racket/front/trade income), The Kitchen (cook quality, −deal heat). <b>Missions</b> — 29 pay-once jobs
       (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3/day + an all-three $OMR bonus. <b>The Daily
       Score</b> is the best low-level repeatable (8h cooldown).</p>
-      <p><b>Referrals</b> — a recruit qualifies after 4 gates; milestones pay cash + $OMR + titles. <b>The First Week</b>
-      — a 9-task checklist that pays cash to teach the ropes, with a capstone. <b>The Coach</b> (the ▸ line on your sheet)
-      always names your best next step.</p>
-      ${R(`POST /v1/path · /missions/:id · GET /v1/daily · /daily/:id/claim · POST /v1/heist · GET /v1/onboard · /onboard/:taskId/claim`)}` },
+      <p><b>Referrals</b> (your code is your character NAME) — a recruit qualifies after 4 gates; milestones pay cash +
+      $OMR + titles. <b>The spark</b> pays a small early bonus at L3 + 10 jobs; <b>tier-2 "the family tree"</b> pays a
+      one-time $5k finder's fee when your recruit brings in their own qualified recruit (cash only, depth 2); a
+      <b>recruitment drive</b> can temporarily multiply referral CASH. The <b>Recruiters</b> boards rank the top
+      recruiters + families. <b>Spread the Word</b> — three daily social tasks pay petty cash ($300; $500 all-three)
+      and share your referral code. <b>The First Week</b> — a 9-task checklist that pays cash to teach the ropes, with a
+      capstone. <b>The Coach</b> (the ▸ line on your sheet) always names your best next step.</p>
+      ${R(`POST /v1/path · /missions/:id · GET /v1/daily · /daily/:id/claim · POST /v1/heist · GET /v1/onboard · /onboard/:taskId/claim · GET /v1/social · /v1/social/:taskId/claim · GET /v1/leaderboard/recruiters`)}` },
 
   { id: 'reference', group: 'Reference', title: 'Quick Reference', tag: 'the things to remember',
     html: `<h3>What's safe from looting</h3><p>Cleared <b>bank</b> cash · <b>staked</b> $OMR · <b>minted (on-chain)</b>

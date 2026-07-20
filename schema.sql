@@ -1080,6 +1080,7 @@ CREATE TABLE IF NOT EXISTS bonds (
   discount_bps INT NOT NULL,           -- the bonder's incentive (≤ MAX_DISCOUNT_BPS)
   claimed_omr NUMERIC NOT NULL DEFAULT 0,
   vest_ms BIGINT NOT NULL,             -- linear vesting window
+  tx_hash TEXT,                        -- the on-chain Bonded tx (null = a mod comp/QA bond: no REAL-ETH accounting)
   opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_bonds_account ON bonds (account_id);

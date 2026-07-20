@@ -1121,7 +1121,10 @@ export async function buildServer() {
   app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
   app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
   app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
-    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, payer: req.body?.payer, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps }));
+    // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
+    // MED — else a comp fabricates Vig revenue the buyback spends, unbacking the withdrawal reserve).
+    // A test/QA caller may pass txHash to exercise the REAL on-chain-driven accounting path.
+    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, payer: req.body?.payer, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps, txHash: req.body?.txHash }));
 
   // ── M6-B: the chain service (§11, EVM) — withdrawals, gear mint, SIWE wallet link ──
   app.post('/v1/wallet/challenge', { preHandler: auth }, async (req) => Chain.walletChallenge(pool, req.user.sub));
@@ -1129,6 +1132,10 @@ export async function buildServer() {
     Chain.walletVerify(pool, req.user.sub, req.body?.address, req.body?.signature));
   app.post('/v1/withdraw', { preHandler: auth }, async (req) =>
     Chain.requestWithdraw(pool, req.user.sub, req.body?.amount, req.body?.address));
+  // cancel a still-QUEUED (unsigned) withdrawal and refund the burned $OMR (audit LOW — an escape hatch
+  // if the reserve never funds to your FIFO position; safe because a queued voucher was never signed).
+  app.post('/v1/withdraw/:id/cancel', { preHandler: auth }, async (req) =>
+    Chain.cancelQueuedWithdraw(pool, req.user.sub, req.params.id));
   app.post('/v1/gear/:id/withdraw', { preHandler: auth }, async (req) =>
     Chain.requestGearWithdraw(pool, req.user.sub, req.params.id, req.body?.address));
   app.get('/v1/withdraw/status', { preHandler: auth }, async (req) => {
