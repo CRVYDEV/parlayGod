@@ -1289,6 +1289,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
+  app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
   return app;
 }
 

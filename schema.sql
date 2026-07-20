@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   hitman_rep BIGINT NOT NULL DEFAULT 0,
   kills INT NOT NULL DEFAULT 0,
   boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
+  cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
   dynasty_name TEXT,
@@ -820,7 +821,8 @@ CREATE TABLE IF NOT EXISTS loans (
 CREATE TABLE IF NOT EXISTS world_npcs (
   npc_id TEXT PRIMARY KEY,
   strength NUMERIC NOT NULL,
-  strength_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  strength_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  enraged_until TIMESTAMPTZ   -- (step two) a routed cartel is on high alert — defends +ENRAGE_DEF for a window
 );
 
 -- CREW HEISTS (THE BIG SCORE): the game's first co-op content. One row per job; members join

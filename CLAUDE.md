@@ -1011,6 +1011,25 @@ is the surface). `test/world.js` proves the forecast/clock/weather board, the me
 into the price, floor holds, per-district variance), the raid (bounded faucet, ammo sink, drain, regen,
 rout, all gates), the patrol conviction premium, and the closed vocabulary. Suite 18/18 + sim drift-0.
 ALL numbers are founder sim sign-off levers — sign into BALANCE.md before production.
+**Step two — THE WAR EFFORT + roster + enraged cartels — BUILT** (`src/world.js`, `test/world.js`; a
+content expansion for the thin one-verb pillar). **(1) Roster 3→5** — two on-curve fixtures (a lvl-4
+`dockrats` starter + a lvl-55 `volkov` apex, each ~2-3× the prior tier; the car-catalog precedent —
+content, not a rebalance). **(2) THE WAR EFFORT** — `account_persistent.cartel_damage` (lifetime cash
+looted from NPC outfits, bumped by loot + rout bonus via direct SQL on the account row, NUMERIC so the
+arithmetic UPDATE is pg-mem-safe; account-level → SURVIVES DEATH, the kills/boxing-legend precedent) +
+`WORLD.WAR_RANKS` (Civilian → The Scourge, `worldRankOf`) + `GET /v1/leaderboard/world` (`worldLeaderboard`
+— the base's most feared cartel-hunters, the hitman-rep board twin). PURE STATUS — **zero §10.4 surface**
+(damage isn't a currency; the loot still rides the existing `world:raid` faucet, so the test proves
+`warEffort.damage == the account's world:raid cash`). Surfaced on `GET /v1/world` (`warEffort {damage,
+rank}`) + the console City tab (a war-effort banner + the leaderboard). **(3) ENRAGED CARTELS** — routing
+an outfit sets `world_npcs.enraged_until` (`WORLD.ENRAGE_MS` 3h); while enraged it defends `+ENRAGE_DEF`
+(60) — **EMISSION-SAFE by construction** (a higher defense LOWERS raid odds → REDUCES throughput, so §10.4
+is helped, never widened; the shared reservoir can't be farmed to the floor over and over). `raidChance`
+reads it, the board flags `enraged`, and it lapses on its own (surfaced as an ON ALERT chip). §10.4
+untouched — the sim's `reason vocabulary` + `character cash` stay drift-0. `test/world.js` proves the
+five-outfit roster, the war-effort damage/rank/leaderboard identity, and the enrage odds-drop + lapse. All
+numbers are founder sim sign-off levers. Still deferred: the NPC-held-district "seizable frontier"
+(invasive) + co-op crew raids on the apex outfits (a bigger build — the crew-heist pattern).
 
 A **five-lens red-team over the Law + Living World** (`AUDIT-law-world.md`: §10.4, concurrency/locks,
 death/estate/PvP, Law internals, World internals) closed two HIGH correctness defects + four MED/LOW

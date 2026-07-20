@@ -10,7 +10,7 @@
 // pg-mem, zero infra. §10.4 vocabulary stays closed (world:raid cash faucet + ammo sink).
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { LIVING, WORLD, worldNpcOf, cityHourOf, cityForecast, regionShockOf, cityLawEventOf,
+import { LIVING, WORLD, WORLD_NPCS, worldNpcOf, worldRankOf, cityHourOf, cityForecast, regionShockOf, cityLawEventOf,
          cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -154,6 +154,40 @@ assert.equal((await call('POST', '/v1/world/zappa/raid', { token: raider.token }
 assert.equal((await call('POST', '/v1/world/nope/raid', { token: raider.token })).body.error, 'bad_npc', 'no such outfit');
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STEP TWO — the roster, THE WAR EFFORT, and enraged cartels
+// ─────────────────────────────────────────────────────────────────────────────
+// roster expanded 3→5 (content), on-curve: a low-tier Dock Rats + a top-tier Volkov Bratva
+assert.equal(WORLD_NPCS.length, 5, 'the roster grew to five outfits');
+board = (await call('GET', '/v1/world', { token: raider.token })).body;
+assert(board.npcs.find((n) => n.id === 'dockrats') && board.npcs.find((n) => n.id === 'volkov'), 'the new low + apex outfits are on the board');
+
+// THE WAR EFFORT — lifetime cartel damage (account-level, survives death) == the raider's world:raid cash
+const wonCash = await ledgerOf(raider.id, 'cash', 'world:raid');
+assert(board.warEffort && board.warEffort.damage === wonCash, 'the war-effort damage == the lifetime world:raid loot banked');
+assert.equal(board.warEffort.rank, worldRankOf(wonCash).name, 'the rank is derived from the lifetime damage');
+const wlb = (await call('GET', '/v1/leaderboard/world', { token: raider.token })).body;
+assert(wlb.hunters.find((x) => x.name === 'Raider Rae' && x.damage === wonCash), 'the raider ranks on the War Effort leaderboard');
+
+// ENRAGED CARTELS — a rout puts the outfit on high alert; it defends harder (lower odds) until it lapses
+process.env.WORLD_RAID_P = '1';
+await seedCh(raider.id, 'muscle=50, speed=20, energy=200, ammo=100, world_raid_at=NULL, hosp_until=NULL'); // modest power so odds aren't clamped
+await pool.query(`UPDATE world_npcs SET strength=${worldNpcOf('zappa').max}, strength_at=now(), enraged_until=NULL WHERE npc_id='zappa'`);
+const calmOdds = (await call('GET', '/v1/world', { token: raider.token })).body.npcs.find((n) => n.id === 'zappa').odds;
+await pool.query(`UPDATE world_npcs SET strength=${Math.round(floor + 100)}, strength_at=now(), enraged_until=NULL WHERE npc_id='zappa'`);
+await seedCh(raider.id, 'energy=200, ammo=100, world_raid_at=NULL, hosp_until=NULL');
+r = await call('POST', '/v1/world/zappa/raid', { token: raider.token });
+assert.equal(r.body.routed, true, 'route the outfit to enrage it');
+await seedCh(raider.id, 'world_raid_at=NULL');
+await pool.query(`UPDATE world_npcs SET strength=${worldNpcOf('zappa').max}, strength_at=now() WHERE npc_id='zappa'`); // keep enraged_until, refill so odds compare cleanly
+board = (await call('GET', '/v1/world', { token: raider.token })).body;
+const zEn = board.npcs.find((n) => n.id === 'zappa');
+assert.equal(zEn.enraged, true, 'a routed cartel is ENRAGED (on high alert)');
+assert(zEn.odds < calmOdds, 'enraged: the cartel digs in — raid odds drop (emission-safe)');
+await pool.query(`UPDATE world_npcs SET enraged_until = now() - interval '1 minute' WHERE npc_id='zappa'`);
+assert.equal((await call('GET', '/v1/world', { token: raider.token })).body.npcs.find((n) => n.id === 'zappa').enraged, false, 'the alert lapses on its own');
+delete process.env.WORLD_RAID_P;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 4 — the day/night clock
 // ─────────────────────────────────────────────────────────────────────────────
 const noonUTC = Date.UTC(2026, 0, 1, 15, 0, 0);  // 15:00 UTC — inside the patrol window
@@ -171,5 +205,5 @@ assert.equal(Math.round(bustProbOf(indicted, noonUTC) / bustProbOf(indicted, nig
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `world:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/world.js — the Living World across all four phases');
+console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT: lifetime cartel damage == world:raid loot, the leaderboard + rank, account-level status; ENRAGED CARTELS: a rout digs the outfit in — lower odds — until it lapses, emission-safe)');
 process.exit(0);
