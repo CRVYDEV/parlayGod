@@ -1417,6 +1417,7 @@
       </div>`).join('');
     t.innerHTML = `
       ${!(W.taps || []).length && !W.subscribed ? coachCard('The Wire — information is a weapon', 'Pay $OMR to run a WIRETAP on a rival (their Law heat, wealth, rackets, and whether they\'re hunting YOU) — or subscribe to the STREET WIRE for forecasts, threat chatter, and the war room. Someone bugging your line? SWEEP it clean.') : ''}
+      ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>` : ''}
       <h2>The Street Wire</h2>
       <div class="card" style="${W.subscribed ? 'border-color:var(--neon)' : ''}">
         <span class="t">${W.subscribed ? 'SUBSCRIBED' : 'The Premium Feed'}</span>
@@ -1439,8 +1440,16 @@
       <h2 style="margin-top:12px">Sweep Your Lines</h2>
       <div class="card" style="${W.bugsOnYou ? 'border-color:var(--bad)' : ''}">
         <span class="t">${W.bugsOnYou ? `🐞 ${W.bugsOnYou} BUG(S) ON YOUR LINE` : 'lines clean'}</span>
-        <div class="d">${W.bugsOnYou ? `someone's listening. sweep clears every tap on you for ${W.costs.sweep} $OMR.` : 'no wires on you — a sweep is free when there\'s nothing to find.'}</div>
+        <div class="d">${W.bugsOnYou ? `someone's listening. sweep CLEARS every tap on you for ${W.costs.sweep} $OMR — or TRACE (${W.costs.trace} $OMR) to NAME who's on your line without clearing it (counter-intel — tap them back).` : 'no wires on you — a sweep or trace is free when there\'s nothing to find.'}</div>
         <button class="act" data-do="POST /v1/wire/sweep">sweep (${W.bugsOnYou ? W.costs.sweep + ' $OMR' : 'free'})</button>
+        <button class="act" id="wire-trace">trace / name them (${W.bugsOnYou ? W.costs.trace + ' $OMR' : 'free'})</button>
+      </div>
+
+      <h2 style="margin-top:12px">The Dossier</h2>
+      <div class="card">
+        <div class="d">a one-shot DEEP read on a mark for ${W.costs.dossier} $OMR — their kill record, their flags (wanted / welsher / rat), their family role, and who THEY have wires on. (No exact cash — the street only trades in bands.)</div>
+        <select id="wire-dossier-target"></select>
+        <button class="act" id="wire-dossier-go">pull the dossier</button>
       </div>
 
       ${W.premium ? `
@@ -1455,11 +1464,37 @@
       <div class="grid">${(() => { const today = (W.premium.forecast || [])[0]?.day || 0; return (W.premium.forecast || []).map((f) => `<div class="card"><span class="t">${f.day === today ? 'today' : '+' + (f.day - today) + 'd'}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join(''); })()}</div>
       ` : ''}`;
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
-    $('#wire-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
+    const opts = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
+    $('#wire-target').innerHTML = opts;
+    $('#wire-dossier-target').innerHTML = opts;
     $('#wire-tap-go').onclick = () => {
       const tgt = $('#wire-target').value;
       if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
     };
+    $('#wire-trace').onclick = async () => {
+      const r = await api('POST', '/v1/wire/trace', {});
+      if (r.code >= 400) { toast(describe(r.body) || 'trace failed'); return; }
+      const w = r.body.watchers || [];
+      alert(w.length ? 'BUGS TRACED — who\'s on your line:\\n\\n' + w.map((x) => `• ${x.name} (${mins(x.expiresSeconds)} left)`).join('\\n') : 'your lines are clean — nobody\'s listening.');
+      renderWire();
+    };
+    $('#wire-dossier-go').onclick = async () => {
+      const tgt = $('#wire-dossier-target').value; if (!tgt) return;
+      const r = await api('POST', `/v1/wire/dossier/${tgt}`, {});
+      if (r.code >= 400) { toast(describe(r.body) || 'no dossier'); return; }
+      const d = r.body.dossier;
+      alert(`DOSSIER — ${d.name} (lvl ${d.level})\\n\\n`
+        + `law: ${d.law.stage.toUpperCase()}${d.law.indicted ? ' · INDICTED' : ''} · heat ${d.law.heat}\\n`
+        + `money: ${d.wealth}\\n`
+        + `record: ${d.record.kills} kill(s) / ${d.record.deaths} death(s)\\n`
+        + `flags: ${[d.flags.wanted && 'WANTED', d.flags.welsher && 'WELSHER', d.flags.rat && 'RAT', d.flags.indicted && 'INDICTED'].filter(Boolean).join(', ') || 'clean'}\\n`
+        + `family: ${d.family ? d.family.name + ' (' + d.family.role + ')' : 'unaffiliated'}\\n`
+        + `has wires on: ${d.watching.length ? d.watching.join(', ') : 'nobody'}`);
+      renderWire();
+    };
+    const wlb = $('#wire-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/wire')).body || {};
+      alert('THE SPYMASTER — busiest intel operators\\n\\n' + ((d.spies || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${x.ops} ops)`).join('\\n') || 'nobody\'s been listening yet')); };
   }
 
   // ── THE STORE: ETH revenue packages (informational — purchases are made at the on-chain paywall) ──

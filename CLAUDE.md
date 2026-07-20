@@ -1814,6 +1814,26 @@ humanizes tap/sweep/subscribe; `/v1/rules` gained a `wire` block; the raw deck g
 `test/wire.js` covers the terminal, the tap sink + gates + INTEL (law/wealth/ops/huntingYou), bugs +
 sweep (free-clean vs charged-clears), the subscription + premium feed, the worker sweep, and the §10.4
 vocabulary + conservation. Suite 24/24 + sim drift-0. All numbers are founder sign-off levers.
+**Step two — THE BUG TRACE + THE DOSSIER + THE SPYMASTER — BUILT** (`src/wire.js`, `test/wire.js`; a
+content expansion for the flat terminal — progression + counter-intel + a premium read, all $OMR sinks
+through the EXISTING `intel:` vocabulary, so **ZERO invariant changes**). **(1) THE BUG TRACE** (`traceBugs`,
+`POST /v1/wire/trace`) — the sweep's offensive twin: NAMES every live watcher on your line (counter-intel —
+now you know who to tap back or hit) for `WIRE.TRACE_OMR` (15, `intel:trace`), and — unlike the sweep — does
+NOT clear them (the layered intel economy: sweep clears cheap+anonymous, trace names but leaves them). FREE
+when clean (the sweep/peek precedent). **(2) THE DOSSIER** (`pullDossier`, `POST /v1/wire/dossier/:targetId`)
+— a one-shot DEEP read (`WIRE.DOSSIER_OMR` 20, `intel:dossier`) beyond a standing tap: the mark's KILL
+RECORD (from `kill_log`), their flags (wanted/welsher/rat/indicted), their family ROLE, and — the
+counter-intel payload — WHO THEY'RE TAPPING. Deliberately keeps wealth BANDED (never exact cash — the
+audit's anti-precise-kill-EV rule holds). **(3) THE SPYMASTER** — `account_persistent.intel_ops` (lifetime
+intel actions, bumped by every tap/sweep/trace/dossier/sub via direct SQL, INT + 1 literal — the
+boxing-legend precedent; account-level → SURVIVES DEATH) + `WIRE.SPY_RANKS` (Eavesdropper → The Oracle,
+`spyRankOf`) + `GET /v1/leaderboard/wire` (`wireLeaderboard` — the hitman-rep board twin). Pure STATUS.
+Surfaced on `GET /v1/wire` (`spymaster {ops, rank}` + the trace/dossier costs) + the console Wire tab (the
+Spymaster banner + leaderboard, a trace button on the sweep card, a dossier target-picker → a deep-read
+popup). §10.4 untouched — the sim's `reason vocabulary` + `$OMR conservation` stay drift-0 (every wire
+spend reconciles as an `intel:*` burn). `test/wire.js` proves the trace (names watchers, doesn't clear,
+free-clean), the dossier (kill record + flags + who-they-tap, banded wealth, self-gate), and the spymaster
+ops + leaderboard. Suite 30/30 + sim drift-0. All numbers are founder sign-off levers.
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),

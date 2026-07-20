@@ -714,6 +714,12 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.sweepBugs(ch, client, h)));
   app.post('/v1/wire/subscribe', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.subscribeWire(ch, client, h)));
+  // Wire step two: THE BUG TRACE (name your watchers), THE DOSSIER (a deep read), THE SPYMASTER board
+  app.post('/v1/wire/trace', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.traceBugs(ch, client, h)));
+  app.post('/v1/wire/dossier/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.pullDossier(ch, req.params.targetId, client, h)));
+  app.get('/v1/leaderboard/wire', { preHandler: auth }, async () => Wire.wireLeaderboard(pool));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));

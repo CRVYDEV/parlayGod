@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   kills INT NOT NULL DEFAULT 0,
   boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
   cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
+  intel_ops INT NOT NULL DEFAULT 0,   -- (Wire step two) lifetime intel actions run — THE SPYMASTER (status, survives death)
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
   dynasty_name TEXT,

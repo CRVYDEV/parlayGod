@@ -1382,7 +1382,18 @@ export const WIRE = {
   TAP_OMR: 8, TAP_MS: 12 * 3600 * 1000, TAP_MAX: 5, // place a wire: cost, window, concurrent cap
   SWEEP_OMR: 5,                                     // sweep your lines clean of bugs
   SUB_OMR: 12, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window
+  // ── STEP TWO (all $OMR sinks through the intel: vocabulary — ZERO invariant changes; + a status axis) ──
+  TRACE_OMR: 15,                                    // THE BUG TRACE — sweep NAMES the watchers (counter-intel); free when clean
+  DOSSIER_OMR: 20,                                  // THE DOSSIER — a one-shot deep read (kills/flags/role/who-they-tap; NO exact cash — banding holds)
+  // THE SPYMASTER — a lifetime intel-ops status axis (account-level, survives death — the war-effort
+  // precedent). Pure status: a count of intel actions run, ranked. No §10.4 surface.
+  SPY_RANKS: [
+    { min: 0, name: 'Eavesdropper' }, { min: 25, name: 'Wireman' }, { min: 100, name: 'Spymaster' },
+    { min: 400, name: 'The Listener' }, { min: 1500, name: 'The Oracle' },
+  ],
 };
+export const spyRankOf = (ops) =>
+  [...WIRE.SPY_RANKS].reverse().find((r) => Number(ops) >= r.min) || WIRE.SPY_RANKS[0];
 export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
 
 // ── THE STORE (ETH revenue packages) — real-money purchases that grant ONLY non-§10.4 things
