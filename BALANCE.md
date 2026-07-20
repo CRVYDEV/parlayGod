@@ -955,6 +955,16 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-two note:* the War Effort is **pure status** (`cartel_damage` isn't a currency; the loot still rides the existing `world:raid` faucet — the test asserts `warEffort.damage == the account's world:raid cash`, so §10.4 is untouched). Enrage is a **defense modifier that reduces emission** — the one thing to confirm in the sim is that a 3h/+60 alert meaningfully slows repeat-routing of the low-tier outfits without making the apex (`volkov`, def 220 + 60 = 280) un-raidable for a solo raider (the odds floor at 0.1 catches that). Still deferred: co-op crew raids on the apex outfits + the NPC-held-district seizable frontier.
 
+**The Wire — STEP TWO (`WIRE` — content expansion for the intelligence terminal):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `WIRE.TRACE_OMR` | 15 $OMR | THE BUG TRACE — NAMES who's on your line (counter-intel; the sweep's offensive twin). Priced above the sweep (5) since it delivers actionable intel, not just a clear. A $OMR sink (`intel:trace`), free when clean. | Sign-off |
+| `WIRE.DOSSIER_OMR` | 20 $OMR | THE DOSSIER — a one-shot deep read (kill record / flags / family role / who they tap). The premium intel sink (`intel:dossier`). Keeps wealth BANDED (never exact — the audit anti-kill-EV rule). | Sign-off |
+| `WIRE.SPY_RANKS` | Eavesdropper → The Oracle | The Spymaster ladder off `account_persistent.intel_ops` (lifetime intel actions, survives death). PURE STATUS (the hitman-rep precedent) — outside §10.4 + the sim balance. | Sign-off |
+
+*Step-two note:* all three are **$OMR sinks through the EXISTING `intel:` vocabulary** (zero `invariants.js` change) or **pure status** (`intel_ops`), so §10.4 is untouched — every wire spend reconciles as an `intel:*` burn. These are deflationary $OMR sinks that add depth to the terminal (counter-intel, a deep read, a progression axis) without touching any signed economic surface. Nothing to watch on §10.4; the only balance question is the trace/dossier pricing relative to the tap (8) — priced to make the terminal a meaningful recurring $OMR drain for information-hungry players.
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |

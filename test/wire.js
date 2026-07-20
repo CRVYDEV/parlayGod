@@ -158,6 +158,48 @@ const swept = await sweepWire(pool);
 assert(swept.swept >= 1, 'the worker swept the expired tap');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM wiretaps WHERE target_character='stale'`)).rows[0].n), 0, 'the stale row is gone');
 
+// ══ STEP TWO — THE BUG TRACE + THE DOSSIER + THE SPYMASTER ══
+// (A) THE BUG TRACE — NAME who's on your line (counter-intel; does NOT clear). `other` bugs the watcher.
+await acctOmr(other.id, 100); grantDrift += 100;
+await call('POST', `/v1/wire/tap/${watcher.id}`, { token: other.token });
+await acctOmr(watcher.id, 100); grantDrift += 100;
+const traceOmrBefore = (await meOf(watcher.token)).omr;
+r = await call('POST', '/v1/wire/trace', { token: watcher.token });
+assert.equal(r.code, 200, 'the trace runs');
+assert.equal(r.body.bugsFound, 1, 'the trace finds the bug');
+assert(r.body.watchers.find((w) => w.name === 'Two-Face Sal'), 'the trace NAMES the watcher (counter-intel — the sweep only counts)');
+assert.equal(r.body.spent, WIRE.TRACE_OMR, 'the trace burned its price');
+assert.equal((await meOf(watcher.token)).omr, traceOmrBefore - WIRE.TRACE_OMR, 'exactly the trace price burned');
+assert.equal((await call('GET', '/v1/wire', { token: watcher.token })).body.bugsOnYou, 1, "trace does NOT clear the bug (that's the cheaper sweep's job)");
+const cleanGuy = await mk('Clean Clyde');
+assert.equal((await call('POST', '/v1/wire/trace', { token: cleanGuy.token })).body.spent, 0, 'a trace on clean lines is free (the sweep/peek precedent)');
+
+// (B) THE DOSSIER — a deep read (kill record / flags / family role / who they're tapping; NO exact cash)
+const markAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${mark.id}'`)).rows[0].a;
+const otherAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${other.id}'`)).rows[0].a;
+await pool.query(`INSERT INTO kill_log (id, killer_account, victim_account, victim_name) VALUES ('kl_dos','${markAcct}','${otherAcct}','Two-Face Sal')`);
+await pool.query(`UPDATE characters SET welsher=true WHERE id='${mark.id}'`);
+await acctOmr(mark.id, 100); grantDrift += 100;
+await call('POST', `/v1/wire/tap/${watcher.id}`, { token: mark.token }); // the mark keeps a wire on the watcher
+await acctOmr(watcher.id, 100); grantDrift += 100;
+const dossOmrBefore = (await meOf(watcher.token)).omr;
+r = await call('POST', `/v1/wire/dossier/${mark.id}`, { token: watcher.token });
+assert.equal(r.code, 200, 'the dossier compiles');
+assert.equal(r.body.spent, WIRE.DOSSIER_OMR, 'the dossier burned its price');
+assert.equal((await meOf(watcher.token)).omr, dossOmrBefore - WIRE.DOSSIER_OMR, 'exactly the dossier price burned');
+const d = r.body.dossier;
+assert.equal(d.record.kills, 1, "the dossier reads the mark's kill record");
+assert.equal(d.flags.welsher, true, 'and their welsher flag');
+assert(d.watching.find((n) => n === 'Nosy Nick'), 'and WHO they have wires on (counter-intel — the mark is watching the watcher)');
+assert.equal(typeof d.wealth, 'string', 'wealth stays a BAND — never exact cash (the audit anti-kill-EV rule holds)');
+assert.equal((await call('POST', `/v1/wire/dossier/${watcher.id}`, { token: watcher.token })).body.error, 'self', 'no dossier on yourself');
+
+// (C) THE SPYMASTER — lifetime intel ops (account-level, survives death) + the leaderboard
+const spyBoard = (await call('GET', '/v1/wire', { token: watcher.token })).body;
+assert(spyBoard.spymaster && spyBoard.spymaster.ops > 0, 'the terminal shows your lifetime intel ops + rank');
+const wlb = (await call('GET', '/v1/leaderboard/wire', { token: watcher.token })).body;
+assert(wlb.spies.find((x) => x.name === 'Nosy Nick' && x.ops > 0), 'the watcher ranks on the Spymaster board');
+
 // ── §10.4: intel:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -165,5 +207,5 @@ assert(vocab.ok, `intel: rides the omr vocabulary (${JSON.stringify(vocab.unknow
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, grantDrift, `the only $OMR drift is the test grant (${grantDrift}) — every wire spend reconciles as an intel:* burn`);
 
-console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
+console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
 await app.close();
