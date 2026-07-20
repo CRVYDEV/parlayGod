@@ -268,6 +268,22 @@ const funnel = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers
 assert(funnel.characters.total >= 1 && funnel.characters.alive >= 1, 'funnel counts characters');
 assert(funnel.progression.pulled_a_job >= 1, 'funnel sees at least one job pulled');
 assert(funnel.firstWeek.ob_crime >= 1, 'funnel tallies first-week claims from telemetry');
+assert(funnel.referral && typeof funnel.referral.kFactor === 'number' && funnel.referral.accounts >= 1, 'funnel carries the referral block (K-factor + counts)');
+
+// ── STEPPED PAYOUT — "the spark": a small EARLY cash payout the moment a recruit shows real
+// engagement (level 3 + 10 jobs), long before full qualification. Fast feedback for the referrer. ──
+const sponsor = await mk('Sponsor Sal');
+const rookie = await mk('Green Recruit', 'Sponsor Sal');
+const sponsorBefore = (await meOf(sponsor.token)).cash;
+await seedCh(rookie.id, 'respect=64, lc_crime=9, nerve=50, energy=200'); // L5, 9 jobs — one shy of the spark gate
+for (let i = 0; i < 20; i++) { await seedCh(rookie.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: rookie.token }); if (r.body.success) break; }
+const spSponsor = await meOf(sponsor.token);
+assert.equal(spSponsor.cash, sponsorBefore + 2500, 'the sponsor gets the early spark ($2500) — fast feedback before full qualification');
+assert.equal(spSponsor.omr, 0, 'the spark is cash only (no $OMR until the full gate)');
+assert.equal(spSponsor.recruits, 0, 'the spark does not advance the recruiter ladder (that is full qualification)');
+assert.equal((await pool.query(`SELECT ref_spark FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${rookie.id}')`)).rows[0].ref_spark, true, 'ref_spark latched');
+await call('POST', '/v1/crimes/pick', { token: rookie.token }); // once ever
+assert.equal((await meOf(sponsor.token)).cash, sponsorBefore + 2500, 'the spark fires once, not per-action');
 
 // ── referrals (§7.13): all four gates, atomic payout, milestone, exclusions ──
 const mentor = await mk('Mentor Max');
@@ -285,7 +301,7 @@ assert(r.body.success, 'the recruit landed the qualifying job');
 me = await meOf(recruit.token);
 assert.equal(me.omr, 1, 'recruit +1 $OMR from the fund');
 const mentorMe = await meOf(mentor.token);
-assert.equal(mentorMe.cash, mentorCashBefore + 10000 + 5000, 'recruiter +$10k + first-blood milestone');
+assert.equal(mentorMe.cash, mentorCashBefore + 2500 + 10000 + 5000, 'recruiter: the spark ($2500) + full recruiter ($10k) + first-blood milestone ($5k) — a fast-forward recruit crosses both gates at once');
 assert.equal(mentorMe.omr, 3, 'recruiter +3 $OMR from the fund');
 assert.equal(mentorMe.recruits, 1, 'ladder advanced');
 assert((await call('GET', '/v1/notifications', { token: mentor.token })).body.notifications.some((n) => n.type === 'ref'), 'recruiter notified');
@@ -333,7 +349,7 @@ assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: quiet.toke
 process.env.SOCIAL_VERIFY_MODE = 'trust'; // restore for the rest of the suite
 
 // ── telemetry (§12) ──
-for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified', 'social_task'])
+for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified', 'referral_spark', 'social_task'])
   assert(Number((await pool.query('SELECT COUNT(*) n FROM telemetry WHERE event=$1', [ev])).rows[0].n) >= 1, `telemetry: ${ev}`);
 
 // ── mod tools (§10.3): MOD_KEY gate, ban, mod-kill, confiscate, audit ──

@@ -172,7 +172,19 @@
       + barRow('in a family', pr.in_a_family || 0)
       + barRow('linked a wallet', pr.linked_wallet || 0)
       + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
-      + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`;
+      + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
+      + renderReferral(fn.referral);
+  }
+  function renderReferral(rf) {
+    if (!rf) return '';
+    const acc = Math.max(1, rf.accounts || 1);
+    const pct = (n) => Math.round(100 * n / acc);
+    return `<div class="note" style="margin-top:8px;color:var(--neon)">REFERRAL FUNNEL — K-factor ${rf.kFactor} <span style="color:var(--dim)">(qualified recruits / account; &gt;1 compounds)</span></div>`
+      + `<div class="row"><span class="k">came in on a code</span><span class="v">${fmt(rf.referred)} (${pct(rf.referred)}%)</span></div>`
+      + `<div class="row"><span class="k">sparked (early payout)</span><span class="v">${fmt(rf.sparked)}</span></div>`
+      + `<div class="row"><span class="k">qualified (full)</span><span class="v">${fmt(rf.qualified)} · spark→qual ${rf.sparkToQualified}</span></div>`
+      + `<div class="row"><span class="k">recruiters</span><span class="v">${fmt(rf.recruiters)} · ${fmt(rf.totalRecruits)} recruits</span></div>`
+      + `<div class="row"><span class="k">re-referred (viral depth)</span><span class="v">${fmt(rf.reReferred)}</span></div>`;
   }
 
   function renderTop(ov) {

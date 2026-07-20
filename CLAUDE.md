@@ -2226,6 +2226,32 @@ founder sign-off; the honest note: "post a tweet" is inherently unverifiable, so
 agent-excluded, cash-only, once/day, proof-logged TRUST faucet — petty by design so farming is barely worth
 it while genuine sharing brings in real referrals.
 
+**REFERRAL-FUNNEL EXPANSION (founder-directed — grow the organic/referral loop) — BUILT** (`src/game.js`,
+`src/rules.js` tail, `schema.sql`, `src/server.js`, `src/growth.js`, `public/index.html`, `public/admin.html`,
+`test/growth.js`; numbers are sign-off levers; §10.4 exact — suite 30/30 + sim drift-0). Three additions on
+top of §7.13. **(1) Stepped payout — "the spark"** (`game.js:maybeSparkReferral`, `M4.REF_SPARK`): a small
+EARLY cash payout ($2500 recruiter / $1500 recruit) the moment a recruit shows real early engagement (level
+3 + 10 jobs) — long before the full qualification (L8/40 jobs/3 check-ins/$25k) — so the referrer gets fast
+feedback and keeps referring. CASH ONLY (never $OMR — that stays on the full gate), ONCE ever (new
+`account_persistent.ref_spark`), agent-excluded, same sorted two-party lock as `maybeQualifyReferral` (no
+deadlock); wired post-commit non-fatal into BOTH withCharacter + withTwoCharacters hooks (spark before
+qualify; a fast-forward recruit crosses both gates at once and collects both). §10.4: `referral:spark` rides
+the existing `referral:` cash prefix (zero vocab change). Still Sybil-bounded — it requires real playtime,
+not a raw signup. **(2) Share-a-win prompts** (`public/index.html`): a dismissible "brag on X ↗" prompt
+fires after a genuinely brag-worthy result (a kill, a prison break, a big-score crew cut, a boxing purse, a
+standover, the First-Week capstone) — a one-tap prefilled X intent carrying the player's LIVING NAME as
+their referral code (turns highlights into reach → the §7.13 loop). `/v1/rules` gained a `share {gameUrl,
+xHandle}` block; `bragText(body)`/`showBrag(line)` in `act()`; only fires on rare wins so it never nags.
+**(3) Referral funnel + K-factor** (`growth.js:funnelStats` → `GET /v1/mod/funnel`, rendered on
+`public/admin.html`): `referral { accounts, referred, sparked, qualified, recruiters, totalRecruits,
+reReferred (viral depth), kFactor (qualified recruits/account — >1 compounds), sparkToQualified }` — so the
+organic loop is measurable. `test/growth.js` covers the spark (early payout, cash-only, ladder unaffected,
+once-ever, the fast-forward-collects-both assertion, `referral_spark` telemetry) + the funnel referral block.
+All numbers (`REF_SPARK.*`, the brag trigger set) are founder sign-off levers. Deferred from the funnel-plan
+(flagged, ranked): a Recruiters status leaderboard + family recruitment drives (status, §10.4-free), a
+time-boxed double-referral push, and the higher-risk 2-level "family tree" referral (cash-only + counsel-
+gated — held until the single-level loop is measured).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

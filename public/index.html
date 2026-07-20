@@ -91,6 +91,12 @@
     background: var(--panel2); border: 1px solid var(--neon); color: var(--ink);
     padding: 10px 18px; border-radius: 6px; font-size: 13px; display: none; z-index: 10; max-width: 70vw; }
   #toast.bad { border-color: var(--blood); }
+  /* share-a-win: a dismissible "brag on X" prompt after a notable win — turns highlights into reach */
+  #brag { position: fixed; bottom: 18px; left: 18px; background: var(--panel); border: 1px solid var(--neon);
+    border-radius: 8px; padding: 10px 12px; font-size: 13px; z-index: 11; max-width: 320px; display: flex;
+    align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  #brag .bt { color: var(--neon); } #brag button { white-space: nowrap; }
+  @media (max-width: 760px) { #brag { left: 8px; right: 8px; bottom: 60px; max-width: none; } }
 
   /* onboarding polish: modal overlay (welcome + glossary), the coach banner, empty-state cards */
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 20; display: flex;
@@ -224,6 +230,7 @@
 </div></div>
 
 <div id="toast"></div>
+<div id="brag" class="hidden"></div>
 
 <script>
 (() => {
@@ -326,6 +333,32 @@
     const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : '';
     t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3200);
   }
+  // SHARE-A-WIN: turn a notable highlight into a one-tap brag on X carrying your referral code (your
+  // name). Only fires on genuinely brag-worthy moments so it never nags.
+  function bragText(body) {
+    if (!body || typeof body !== 'object') return null;
+    if (body.kill) return 'just put a rival in the river';
+    if (body.escaped === true) return 'went over the wall — broke out of the pen';
+    if (body.rwaCut) return 'pulled a big score with my crew';
+    if (body.won === true && body.purse !== undefined) return 'my fighter took the purse';
+    if (body.won === true && body.feePaid !== undefined) return "stood over a rival's whole operation";
+    if (body.capstone) return 'made my bones — first week done';
+    return null;
+  }
+  function showBrag(line) {
+    const b = $('#brag'); if (!b) return;
+    const code = me?.name || '';
+    const url = rules?.share?.gameUrl || location.origin;
+    const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
+    const tweet = `I ${line} in OMERTÀ — a noir mob RPG.${code ? ` Use my code "${code}" to start.` : ''}${handle ? ` @${handle}` : ''}`;
+    const intent = `https://x.com/intent/tweet?text=${encodeURIComponent(tweet)}&url=${encodeURIComponent(url)}`;
+    b.innerHTML = `<span class="bt">🏆 ${line}</span>
+      <a href="${intent}" target="_blank" rel="noopener noreferrer"><button class="act">brag on X ↗</button></a>
+      <span id="brag-x" title="dismiss" style="cursor:pointer;color:var(--dim)">✕</span>`;
+    b.classList.remove('hidden');
+    $('#brag-x').onclick = () => b.classList.add('hidden');
+    clearTimeout(b._h); b._h = setTimeout(() => b.classList.add('hidden'), 15000);
+  }
   // one money move at a time — a global in-flight lock is the double-tap guard (buttons re-render
   // after each act, so a per-button disable is redundant; this covers every call site at once).
   let acting = false;
@@ -335,6 +368,7 @@
     try {
       const r = await api(method, path, body);
       toast(describe(r.body, r.code), r.code >= 400);
+      if (r.code < 400) { const bt = bragText(r.body); if (bt) showBrag(bt); }
       await refresh();
       return r;
     } finally { acting = false; document.body.style.cursor = ''; }

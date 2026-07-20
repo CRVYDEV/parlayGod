@@ -949,3 +949,26 @@ A recurring petty-cash faucet to grow organic word-of-mouth + referral volume. N
   real per-post check, or add a level floor. The share URLs carry the player's name as their referral code,
   so the intended payoff is the EXISTING referral system (real cash + $OMR on a qualified recruit).
 - `SOCIAL_GAME_URL` / `SOCIAL_X_HANDLE` are deploy-time (the share intents); default placeholders.
+
+## Referral-funnel expansion — the "spark" early payout + share-a-win (founder-directed 2026-07-20)
+Grows the organic/referral loop with a STEPPED payout, a share-a-win brag prompt, and K-factor measurement.
+NUMBERS ARE SIGN-OFF LEVERS.
+- **The spark** (`M4.REF_SPARK`): a recruiter earns an EARLY partial reward the moment their recruit reaches
+  `level` **3** + `jobs` **10** (real playtime, well before the full §7.13 qualify gate at L8/40 jobs/3
+  check-ins/$25k). Pays `recruiterCash` **$2,500** / `recruitCash` **$1,500** — CASH ONLY (v24 rule),
+  ledgered `referral:spark` (rides the existing `referral:` cash vocabulary, no invariant change).
+  Fires ONCE ever per recruit (`account_persistent.ref_spark` flag), agent-excluded, in the same sorted
+  two-party lock as `maybeQualifyReferral` (post-commit non-fatal in both game.js hooks). The full qualify
+  payout ($10k+3$OMR / $5k+1$OMR + milestones) is UNCHANGED and still fires at the full gate — the spark is
+  ADDITIVE, a faster taste that rewards the recruiter for a recruit who's genuinely playing, shortening the
+  feedback loop that drives re-sharing. A recruit who blows past both gates in one action collects both.
+- **Share-a-win** (client `bragText`/`showBrag`): a WIN (a kill, a survived break, a big-score RWA cut, a
+  won bout/purse, a completed First Week) surfaces a one-tap X share intent carrying the player's name as
+  their referral code — turning the game's own dopamine beats into recruit funnels. Pure client UI, no
+  mechanic, no §10.4 surface; the brag trigger set is a founder content lever.
+- **Funnel + K-factor** (`funnelStats.referral` → `GET /v1/mod/funnel`, admin dashboard): accounts, referred,
+  sparked, qualified, recruiters, totalRecruits, reReferred, **kFactor** (totalRecruits/accounts), and
+  sparkToQualified — so the alpha's viral coefficient + spark→qualify conversion are watchable without a dev.
+- Anti-abuse: the spark still requires REAL play (L3 + 10 jobs — not a create-time trigger), cash-only
+  (launder-bounded), agent-excluded, once-ever — the same Sybil posture as the full referral. If ring-farmed
+  in the alpha, the dial is the spark gate/amount; the full-qualify gate is the harder backstop.
