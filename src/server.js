@@ -409,7 +409,8 @@ export async function buildServer() {
       styleUnlocks: SPEAKEASY.RENOWN.STYLE_UNLOCKS, standoverFee: SPEAKEASY.STANDOVER.FEE },
     boxing: { minLevel: BOXING.MANAGER_MIN_LEVEL, recruitCost: BOXING.RECRUIT_COST, trainCost: BOXING.TRAIN_COST,
       trainEnergy: BOXING.TRAIN_ENERGY, statCap: BOXING.STAT_CAP, stats: BOXING.STATS,
-      minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, ranks: BOXING.RANKS, rakeBps: BOXING.RAKE_BPS },
+      minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, ranks: BOXING.RANKS, rakeBps: BOXING.RAKE_BPS,
+      stableMax: BOXING.STABLE_MAX, npcTiers: BOXING.NPC_TIERS, legendRanks: BOXING.LEGEND_RANKS },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -508,12 +509,15 @@ export async function buildServer() {
   app.post('/v1/boxing/recruit', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.recruitFighter(ch, req.body?.name, client, h)));
   app.post('/v1/boxing/train', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.trainFighter(ch, req.body?.stat, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.trainFighter(ch, req.body?.fighter, req.body?.stat, client, h)));
   app.post('/v1/boxing/list', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.listBout(ch, req.body?.stake, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.listBout(ch, req.body?.fighter, req.body?.stake, client, h)));
+  // NPC exhibition — a bounded PvE purse: your fighter vs a server card (step two)
+  app.post('/v1/boxing/exhibition', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.exhibitionBout(ch, req.body?.fighter, req.body?.tier, client, h)));
   app.post('/v1/boxing/fight/:opponentId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
-      Boxing.fightBout(ch, opponent, req.body?.stake, client, h)));
+      Boxing.fightBout(ch, opponent, req.body, client, h)));
   app.get('/v1/leaderboard/boxing', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return Boxing.boxingLeaderboard(pool, cid || '');

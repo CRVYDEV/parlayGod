@@ -911,6 +911,18 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 **Fight Circuit red-team (independent) — CLEAN (no CRITICAL/HIGH).** §10.4 rake accounting byte-identical to the audited `casino:pvp`; persist-clobber, lock order, the dynamic-column train UPDATE (allowlist-gated, injection-safe), input validation, reroll termination, and death/estate all verified sound. **MED-1 FIXED** (regression added): `fightBout` now gates a jailed/hospitalized OPPONENT (the `casino:pvp` counterparty-gate precedent) — no draining an incapacitated lister who can't call it off. Two LOW balance items flagged for founder sign-off (NOT patched, ground rule #1): **(L1)** info-asymmetric consent — fighter form/record is public and the challenger self-selects, so listing at a real stake is −EV against a stronger challenger (self-correcting: list only a strong fighter; the incentive is to BUILD a strong one, not list a weak one — but a bout-attractiveness lever is the dial if listing dies out); **(L2)** no energy/nerve cost on the bout initiator (unlike `casino:pvp`'s `DICE_NERVE`), so a strong-fighter manager's only throughput gate is the opponent's 4h injury clock — add an initiator resource cost if leaderboard-farming is seen. Both are status-axis/redistribution concerns (rank is powerless; alt-collusion is −EV via the 5% rake, the signed `casino:pvp` posture), not §10.4 leaks.
 
+**The Fight Circuit — STEP TWO (`BOXING` step-two additions — the stable, NPC exhibitions, the belt, the manager legend):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `BOXING.STABLE_MAX` | 3 | A manager can run up to 3 fighters at once (the stable). Bounds parallel exhibition throughput per account. | Sign-off |
+| `BOXING.EXHIBITION_CD_MS` | 6h | Per-fighter cooldown on NPC exhibition bouts — the throughput gate on the new PvE purse faucet (with the fee + needing the form to win). | Sign-off |
+| `BOXING.NPC_TIERS` (`fee` / `purse` / `form`) | clubfighter 26/$3k→$9k · journeyman 42/$10k→$26k · gatekeeper 62/$30k→$78k | **NEW cash FAUCET `boxing:purse`** — the fee (`boxing:fee`) is a cash SINK win or lose; the purse pays only on a WIN, so net-positive requires beating the NPC's form (your fighter's power+chin+speed+rand(VARIANCE) vs the tier `form`). Bounded by the fee, the 6h cooldown, and needing genuine form — a solo manager can build a record + earn, but a losing fighter bleeds fees. **Requires sim + founder sign-off before production** (the world-raid faucet precedent). | Sign-off |
+| `BOXING.LEGEND_RANKS` | Unknown → The Don of the Ring (by lifetime stable wins) | The MANAGER's career legend (`account_persistent.boxing_wins`), SURVIVES DEATH (the hitman-rep precedent). Pure STATUS — outside §10.4 + the sim balance. | Sign-off |
+| Title belt (`boxing_title` singleton) | one per server, claimed by beating the champ (or a vacant belt) | Pure STATUS — the winner takes the belt on a PvP win if it's vacant or held by the loser; vacated on the champion's death. No §10.4 surface. | Sign-off |
+
+*Step-two note:* the exhibition purse is the ONLY new faucet in the boxing pillar — it needs a sim pass to confirm the fee/purse/form spread keeps a losing fighter net-negative and a beatable-NPC net small (the intent: PvE is a slow record-builder, PvP the real money via the taxed transfer). Everything else (stable, belt, legend) is status/access — §10.4-neutral. `boxing:purse`/`boxing:fee` ride the existing `boxing:` cash vocabulary (zero `invariants.js` change), so the per-character cash check reconciles them exactly (proven in `test/boxing.js`).
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |

@@ -1685,42 +1685,51 @@
     const t = $('#tab-boxing');
     await refresh();
     const b = (await api('GET', '/v1/boxing')).body || {};
-    const y = b.yours;
+    const stable = b.stable || [], max = b.stableMax || 3;
+    const ready = stable.filter((f) => !f.injuredSeconds); // your fighters available to make a match
+    const npc = b.npcTiers || [];
     t.innerHTML = `
-      ${!y ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\' fighters. Win the purse (minus the house vig); a loss lays your man up. Your fighter dies with your street.') : ''}
+      ${!stable.length ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\' fighters or NPC cards. Run a stable of up to ' + max + '. Your fighters die with your street.') : ''}
       <h2>The Fight Circuit</h2>
-      ${y ? `
-      <div class="card" style="border-color:var(--neon)"><span class="t">${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
-        ${y.injuredSeconds ? `<span class="chip bad">LAID UP — ${mins(y.injuredSeconds)}</span>` : ''}
-        <div class="d">power ${y.power} · chin ${y.chin} · speed ${y.speed} · form ${y.form}</div>
-        <div style="margin-top:6px" class="d">Train (${'$' + fmt(b.trainCost)} + energy, cap ${b.statCap}):
-          ${(b.stats || []).map((s) => `<button class="act" data-train="${s}">${s}</button>`).join(' ')}</div>
-        <div style="margin-top:6px" class="d">${y.boutLimit ? `Taking bouts up to $${fmt(y.boutLimit)} — <button class="act" id="bx-unlist">stop</button>` : 'Take bouts:'}
-          <input id="bx-stake" placeholder="stake $" size="8"> <button class="act" id="bx-list">list</button></div></div>`
-      : `<div class="card"><span class="t">Sign a contender</span>
-          <div class="d">$${fmt(b.recruitCost)}, level ${b.minLevel}+. Name your fighter:</div>
-          <input id="bx-name" placeholder="fighter name" size="18" maxlength="24"> <button class="act" id="bx-sign" style="border-color:var(--neon)">sign ($${fmt(b.recruitCost)})</button></div>`}
+      ${b.champion ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏆 World Champion: ${b.champion.fighter}</span></div>` : ''}
+      <h2 style="margin-top:10px;font-size:14px">Your Stable <span class="d" style="font-size:10px">(${stable.length}/${max})</span></h2>
+      <div class="grid">${stable.map((y) => `
+        <div class="card" ${y.belt ? 'style="border-color:var(--neon)"' : ''}><span class="t">${y.belt ? '🏆 ' : ''}${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
+          ${y.injuredSeconds ? `<span class="chip bad">LAID UP — ${mins(y.injuredSeconds)}</span>` : ''}${y.exhibitionCdSeconds ? `<span class="chip">resting ${mins(y.exhibitionCdSeconds)}</span>` : ''}
+          <div class="d">power ${y.power} · chin ${y.chin} · speed ${y.speed} · form ${y.form}</div>
+          <div style="margin-top:6px" class="d">Train ($${fmt(b.trainCost)} + energy, cap ${b.statCap}): ${(b.stats || []).map((s) => `<button class="act" data-train="${s}" data-fid="${y.id}">${s}</button>`).join(' ')}</div>
+          <div style="margin-top:4px" class="d">${y.boutLimit ? `Taking bouts up to $${fmt(y.boutLimit)} — <button class="act" data-unlist="${y.id}">stop</button>` : 'Take bouts:'}
+            <input id="bx-stake-${y.id}" placeholder="stake $" size="7"> <button class="act" data-list="${y.id}">list</button></div>
+          ${!y.injuredSeconds && !y.exhibitionCdSeconds ? `<div style="margin-top:4px" class="d">Exhibition: ${npc.map((n) => `<button class="act" data-exhib="${y.id}" data-tier="${n.id}" title="fee $${fmt(n.fee)} → win $${fmt(n.purse)}">${n.name}</button>`).join(' ')}</div>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no fighters yet</span>'}</div>
+      ${stable.length < max ? `<div class="card" style="margin-top:6px"><span class="t">Sign a contender</span>
+        <div class="d">$${fmt(b.recruitCost)}, level ${b.minLevel}+.</div>
+        <input id="bx-name" placeholder="fighter name" size="18" maxlength="24"> <button class="act" id="bx-sign" style="border-color:var(--neon)">sign ($${fmt(b.recruitCost)})</button></div>` : ''}
 
-      <h2 style="margin-top:12px">The Circuit <span class="d" style="font-size:10px">(ranked by record)</span></h2>
-      <div class="grid">${(b.circuit || []).map((f) => `
-        <div class="card"><span class="t">${f.name}</span>${f.mine ? '<span class="chip good">yours</span>' : ''}<span class="chip">${f.rank}</span>
+      <h2 style="margin-top:12px">The Circuit <span class="d" style="font-size:10px">(other managers' fighters — belt holder first)</span></h2>
+      <div class="grid">${(b.circuit || []).filter((f) => !f.mine).map((f) => `
+        <div class="card"><span class="t">${f.belt ? '🏆 ' : ''}${f.name}</span><span class="chip">${f.rank}</span>
           <div class="d">${f.manager} · ${f.record} · form ${f.form}${f.injured ? ' · <span style="color:var(--bad)">laid up</span>' : ''}${f.boutLimit ? ' · takes $' + fmt(f.boutLimit) : ''}</div>
-          ${f.taking && y && !y.injuredSeconds ? `<div style="margin-top:4px"><input id="bx-fs-${f.name.replace(/\\W/g,'')}" placeholder="purse $" size="7"> <button class="act" data-fight="${f.characterId || ''}" data-fname="${f.name.replace(/\\W/g,'')}" style="border-color:var(--bad)">make the match</button></div>` : ''}</div>`).join('')
-        || '<span class="d" style="color:var(--dim)">no fighters on the circuit yet</span>'}</div>
-      <div style="margin-top:8px"><a href="#" id="bx-lb">the circuit leaderboard →</a></div>`;
+          ${f.taking && ready.length ? `<div style="margin-top:4px" class="d">
+            <select id="bx-my-${f.fighterId}">${ready.map((m) => `<option value="${m.id}">${m.name} (${m.form})</option>`).join('')}</select>
+            <input id="bx-purse-${f.fighterId}" placeholder="purse $" size="7"> <button class="act" data-fight="${f.managerId}" data-oppf="${f.fighterId}" style="border-color:var(--bad)">make the match${f.belt ? ' (TITLE)' : ''}</button></div>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no other fighters on the circuit yet</span>'}</div>
+      <div style="margin-top:8px"><a href="#" id="bx-lb">the circuit leaderboard + the manager legend →</a></div>`;
 
-    // the circuit board needs the opponent character_id — re-fetch it per fighter (the board is small)
     const bx = $('#bx-sign'); if (bx) bx.onclick = () => act('POST', '/v1/boxing/recruit', { name: $('#bx-name').value.trim() }).then(() => renderBoxing());
-    t.querySelectorAll('[data-train]').forEach((x) => x.onclick = () => act('POST', '/v1/boxing/train', { stat: x.dataset.train }).then(() => renderBoxing()));
-    const bl = $('#bx-list'); if (bl) bl.onclick = () => act('POST', '/v1/boxing/list', { stake: Number($('#bx-stake').value) }).then(() => renderBoxing());
-    const bu = $('#bx-unlist'); if (bu) bu.onclick = () => act('POST', '/v1/boxing/list', { stake: 0 }).then(() => renderBoxing());
+    t.querySelectorAll('[data-train]').forEach((x) => x.onclick = () => act('POST', '/v1/boxing/train', { fighter: x.dataset.fid, stat: x.dataset.train }).then(() => renderBoxing()));
+    t.querySelectorAll('[data-list]').forEach((x) => x.onclick = () => act('POST', '/v1/boxing/list', { fighter: x.dataset.list, stake: Number(($(`#bx-stake-${x.dataset.list}`) || {}).value || 0) }).then(() => renderBoxing()));
+    t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', '/v1/boxing/list', { fighter: x.dataset.unlist, stake: 0 }).then(() => renderBoxing()));
+    t.querySelectorAll('[data-exhib]').forEach((x) => x.onclick = () => act('POST', '/v1/boxing/exhibition', { fighter: x.dataset.exhib, tier: x.dataset.tier }).then(() => renderBoxing()));
     t.querySelectorAll('[data-fight]').forEach((x) => x.onclick = () => {
-      const stake = Number(($(`#bx-fs-${x.dataset.fname}`) || {}).value || 0);
-      act('POST', `/v1/boxing/fight/${x.dataset.fight}`, { stake }).then(() => renderBoxing());
+      const oppF = x.dataset.oppf, myF = ($(`#bx-my-${oppF}`) || {}).value, stake = Number(($(`#bx-purse-${oppF}`) || {}).value || 0);
+      act('POST', `/v1/boxing/fight/${x.dataset.fight}`, { myFighter: myF, theirFighter: oppF, stake }).then(() => renderBoxing());
     });
     const lb = $('#bx-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/boxing')).body || {};
-      alert('THE FIGHT CIRCUIT — top contenders\\n\\n' + (d.board || []).map((x, i) => `${i + 1}. ${x.fighter} (${x.manager}) — ${x.rank} ${x.record}${x.you ? '  ← you' : ''}`).join('\\n')); };
+      const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');
+      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\\n');
+      alert('TOP FIGHTERS\\n\\n' + (f || 'none') + '\\n\\nMANAGER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

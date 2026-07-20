@@ -2084,6 +2084,34 @@ board/leaderboard, DEATH, and §10.4. Suite 29/29 + sim drift-0. All numbers are
 Deferred (step two): a STABLE (multiple fighters), NPC exhibition bouts (a bounded PvE purse — sim-gated like
 the world-raid faucet), title belts, spectator betting on bouts (→ the den book), an account-level career-wins
 LEGEND surviving death (the hitman-rep precedent), and cornerman/trainer NPCs (the Underworld tie-in).
+**Step two — BUILT** (`src/boxing.js` rewrite, `test/boxing.js`): four of the deferred items. **THE STABLE** —
+a manager now runs up to `BOXING.STABLE_MAX` (3) fighters (`fighters.id` PK, `character_id` NON-unique + an
+`ix_fighters_char` index; `myFighter(client,ch,fighterId)` is the ownership gate on every action; `fightersOf`
+returns the array into `h.owned.fighters` + the view; `recruitFighter` caps the stable). **NPC EXHIBITION
+BOUTS** (`exhibitionBout`, `POST /v1/boxing/exhibition {fighter,tier}`) — the one NEW faucet: a bounded PvE
+purse over `BOXING.NPC_TIERS` (clubfighter/journeyman/gatekeeper). The `fee` BURNS win or lose (a cash SINK
+`boxing:fee`), the `purse` pays only on a WIN (a cash FAUCET `boxing:purse`) where win = your fighter's
+`power+chin+speed + rand(VARIANCE)` beats the tier `form` — so net-positive requires genuine form, bounded by
+the fee + a per-fighter `EXHIBITION_CD_MS` (6h) cooldown (`fighters.exhib_at`); a loss lays the fighter up
+`INJURY_MS`; a win bumps the manager legend. **THE TITLE BELT** (`boxing_title` singleton — `holder_fighter/
+holder_char/holder_name/since`, locked `FOR UPDATE` singletons-last) — pure STATUS: a PvP win takes the belt
+if it's vacant OR held by the loser's fighter; `wipeFighterAtDeath` vacates it if the dead street held it.
+**THE MANAGER LEGEND** (`account_persistent.boxing_wins`, bumped via direct SQL `bumpLegend` — the kills
+precedent, so persistAccount can't clobber it) — lifetime stable wins across exhibition + PvP, SURVIVES DEATH
+(the hitman-rep precedent), ranked `BOXING.LEGEND_RANKS` (Unknown → The Don of the Ring) on
+`GET /v1/leaderboard/boxing` (`{fighters, legend}`). §10.4: `boxing:fee`/`boxing:purse` ride the existing
+`boxing:` cash vocabulary (ZERO `invariants.js` change — the exhibition fee a sink, the purse a faucet, both
+character_id'd → check (a) reconciles); the PvP `boxing:bout` transfer + belt/legend status are unchanged.
+Fighter rows use ABSOLUTE INT writes (wins/losses, the pg-mem quirk). Console: `renderBoxing` rewritten for
+the stable (per-fighter cards with train/list/exhibition, the belt chip + champion banner, sign-if-under-max)
++ the circuit board (per-opponent fighter-select + purse) + the legend leaderboard. `test/boxing.js` covers
+the stable + cap, train-by-id + ownership, the exhibition (bad-tier gate, fee-sink + purse-faucet on a win,
+the career-win bank, the cooldown), the PvP bout + rake split, the belt (claimed vacant, chip, vacated on
+death), the manager legend (survives death), and §10.4. Suite 30/30 + sim drift-0. The exhibition purse is
+the ONLY new faucet — flagged in BALANCE.md for sim + founder sign-off (the fee/purse/form spread keeps a
+losing fighter net-negative); STABLE_MAX/EXHIBITION_CD_MS/NPC_TIERS/LEGEND_RANKS are sign-off levers. Still
+deferred (step three): spectator betting on bouts (→ the den book), cornerman/trainer NPCs (Underworld
+tie-in), belt-defense mechanics.
 
 **THE RESERVE BOND (Protocol-Owned Liquidity) — off-chain CORE BUILT, chain DORMANT** (`src/bonds.js`,
 `test/bonds.js` — the 30th suite; design `omerta-reserve-bond-design.md`; founder-directed "Option C").
