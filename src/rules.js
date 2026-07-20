@@ -909,10 +909,13 @@ export const cityForecast = (day = dayOf()) => Array.from({ length: LIVING.FOREC
 // a metered world quantity (§10.4-safe: `world:raid` is a ledgered faucet, capped by real activity).
 // The whole server grinds the same pool; routing it (strength → floor) pays a one-time bonus + a
 // streets event. Numbers are founder SIM sign-off levers (the only emission surface in this pillar).
+// Roster (step two expanded the set 3→5, on-curve — the car-catalog precedent: content, not a rebalance).
 export const WORLD_NPCS = [
-  { id: 'zappa',  name: 'The Zappa Crew',      minLvl: 8,  max: 400000,  regenPerHr: 12000, base: 0.55, def: 40,  routBonus: 15000 },
-  { id: 'kryl',   name: 'The Kryl Syndicate',  minLvl: 20, max: 1500000, regenPerHr: 40000, base: 0.45, def: 90,  routBonus: 60000 },
-  { id: 'moreau', name: 'The Moreau Cartel',   minLvl: 40, max: 5000000, regenPerHr: 90000, base: 0.35, def: 150, routBonus: 200000 },
+  { id: 'dockrats', name: 'The Dock Rats',      minLvl: 4,  max: 150000,   regenPerHr: 5000,   base: 0.60, def: 20,  routBonus: 5000 },
+  { id: 'zappa',    name: 'The Zappa Crew',     minLvl: 8,  max: 400000,   regenPerHr: 12000,  base: 0.55, def: 40,  routBonus: 15000 },
+  { id: 'kryl',     name: 'The Kryl Syndicate', minLvl: 20, max: 1500000,  regenPerHr: 40000,  base: 0.45, def: 90,  routBonus: 60000 },
+  { id: 'moreau',   name: 'The Moreau Cartel',  minLvl: 40, max: 5000000,  regenPerHr: 90000,  base: 0.35, def: 150, routBonus: 200000 },
+  { id: 'volkov',   name: 'The Volkov Bratva',  minLvl: 55, max: 12000000, regenPerHr: 180000, base: 0.30, def: 220, routBonus: 500000 },
 ];
 export const worldNpcOf = (id) => WORLD_NPCS.find((n) => n.id === id) || null;
 export const WORLD = {
@@ -922,7 +925,20 @@ export const WORLD = {
   GRAB_MAX: 250000,                                // …capped per raid (so a whale can't one-shot a full cartel)
   FAIL_HOSP_MS: 20 * 60 * 1000,                    // a repelled raid hospitalizes
   ROUT_FLOOR_BPS: 200,                             // "routed" once the reservoir is drained below 2% of max
+  // ── STEP TWO — THE CARTELS FIGHT BACK (pure pacing/def modifier, EMISSION-SAFE) ──
+  // Routing a cartel puts it on HIGH ALERT: it defends +ENRAGE_DEF for ENRAGE_MS, so it can't be
+  // farmed to the floor over and over. Raises DEFENSE (lowers odds) → REDUCES throughput, so §10.4 is
+  // helped, never widened. No new value — just a harder raid for a window.
+  ENRAGE_MS: 3 * 3600 * 1000, ENRAGE_DEF: 60,
+  // THE WAR EFFORT (status axis, survives death — the hitman-rep precedent): lifetime cash looted from
+  // NPC outfits ranks the base's most feared cartel-hunters. Pure status — no §10.4 surface.
+  WAR_RANKS: [
+    { min: 0, name: 'Civilian' }, { min: 100000, name: 'Cartel Raider' }, { min: 1000000, name: 'Kingpin Hunter' },
+    { min: 10000000, name: 'Warlord' }, { min: 50000000, name: 'The Scourge' },
+  ],
 };
+export const worldRankOf = (dmg) =>
+  [...WORLD.WAR_RANKS].reverse().find((r) => Number(dmg) >= r.min) || WORLD.WAR_RANKS[0];
 
 // THE PEN — the prison meta-game (design omerta-the-pen-design.md). Turns `jail_until` dead time into
 // a place: work the yard down, buy contraband, pay for protection, bribe out — and the marquee

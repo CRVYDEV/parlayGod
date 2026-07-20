@@ -1028,13 +1028,17 @@
       <div class="grid">${(c.forecast || []).map((f) =>
         `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">Rival Families <span class="d" style="font-size:10px">(NPC crews the whole city grinds down — raid for cash + ammo${w.phase === 'night' ? ' · night: their guard is down' : ''})</span></h2>
+      ${w.warEffort ? `<div class="card" style="border-color:var(--neon)"><span class="t">⚔️ War Effort: ${w.warEffort.rank}</span> <span class="d">$${fmt(w.warEffort.damage)} lifetime cartel damage — <a href="#" id="w-lb">the leaderboard →</a></span></div>` : ''}
       <div class="grid">${(w.npcs || []).map((n) => `
-        <div class="card"><span class="t">${n.name}</span>${n.routed ? '<span class="chip good">ROUTED</span>' : ''}
-          <div class="d">strength ${n.strengthPct}% · lvl ${n.minLvl}+${n.odds != null ? ` · your odds ${n.odds}%` : ''}</div>
+        <div class="card"><span class="t">${n.name}</span>${n.routed ? '<span class="chip good">ROUTED</span>' : ''}${n.enraged ? '<span class="chip bad">ON ALERT</span>' : ''}
+          <div class="d">strength ${n.strengthPct}% · lvl ${n.minLvl}+${n.odds != null ? ` · your odds ${n.odds}%` : ''}${n.enraged ? ' · <span style="color:var(--bad)">enraged — dug in</span>' : ''}</div>
           ${n.canRaid ? `<button class="act" data-raid="${n.id}">raid (energy + ammo)</button>` : `<span class="chip">need lvl ${n.minLvl}</span>`}</div>`).join('') || '<span class="d" style="color:var(--dim)">the streets are quiet</span>'}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:10px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
     t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
+    const wlb = $('#w-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/world')).body || {};
+      alert('THE WAR EFFORT — most feared cartel-hunters\\n\\n' + ((d.hunters || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} ($${fmt(x.damage)})`).join('\\n') || 'no cartel damage logged yet')); };
     // NAMED LANDMARKS — dedicate a district plaque to your dynasty (a $OMR status flex)
     const lm = (await api('GET', '/v1/landmarks')).body;
     $('#landmark-slot').innerHTML = `<div class="grid">${(lm?.landmarks || []).map((l) => `

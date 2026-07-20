@@ -945,6 +945,16 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-four note:* both pieces are **status/pacing with ZERO new §10.4 surface**. The Cornerman is the boxing tie-in for the Underworld cast — standing earned actor-side at the boxing touchpoints, perks that are all actor-local discounts/pacing (no fight-outcome tampering — a trainer builds a better fighter, he doesn't fix the fight), the training discount riding the existing `boxing:train` sink. Belt defense adds a reign counter + a mandatory-defense clock (an inactive champ forfeits) — pure status on the `boxing_title` singleton. Nothing to watch on §10.4; the only balance question is the T3 build-pacing (a maxed fighter reached in half the sessions is a modest competitive edge in PvP + the main event, bounded by the unchanged `STAT_CAP` ceiling) and the 7-day defense window (too short strips casual champs; too long makes the belt static) — both sign-off dials.
 
+**The Living World — STEP TWO (`WORLD` — content expansion for the NPC rival families):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `WORLD_NPCS` roster | 5 (was 3) | Two new on-curve outfits: a lvl-4 `dockrats` starter + a lvl-55 `volkov` apex (each ~2-3× the prior tier). The car-catalog precedent — content, not a rebalance. The new fixtures ride the SAME bounded-faucet math (`GRAB_BPS`/`GRAB_MAX`/regen), so total emission stays metered. | Sign-off |
+| `WORLD.WAR_RANKS` | Civilian → The Scourge | The War Effort ladder off `account_persistent.cartel_damage` (lifetime NPC loot, survives death). PURE STATUS (the hitman-rep precedent) — outside §10.4 + the sim balance. | Sign-off |
+| `WORLD.ENRAGE_MS` / `ENRAGE_DEF` | 3h / +60 | A routed cartel goes to high alert: it defends +60 for 3h → LOWER raid odds. **EMISSION-SAFE by construction** (harder raids = less throughput), so it can only HELP §10.4, never widen it. Stops the shared reservoir being farmed to the floor over and over. | Sign-off |
+
+*Step-two note:* the War Effort is **pure status** (`cartel_damage` isn't a currency; the loot still rides the existing `world:raid` faucet — the test asserts `warEffort.damage == the account's world:raid cash`, so §10.4 is untouched). Enrage is a **defense modifier that reduces emission** — the one thing to confirm in the sim is that a 3h/+60 alert meaningfully slows repeat-routing of the low-tier outfits without making the apex (`volkov`, def 220 + 60 = 280) un-raidable for a solo raider (the odds floor at 0.1 catches that). Still deferred: co-op crew raids on the apex outfits + the NPC-held-district seizable frontier.
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |
