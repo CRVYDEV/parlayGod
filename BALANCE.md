@@ -933,6 +933,17 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 
 *Step-three note:* THE MAIN EVENT is a CASH parimutuel with an escrow (the bounty/market/loan/auction-escrow twin, on the cash side) — a manager books a scheduled card (their fighter vs a listed opponent, **no principal cash wager** — they fight for the belt/legend/record), spectators bet CASH on a fighter, and the worker resolves at the bell paying winners a pro-rata cut of the losing pot net of vig. Every peso is a TRANSFER (bettors → winning bettors + the winning manager's promoter cut + the house vig); **nothing is minted**, so it adds **zero new faucet** and rides the existing `boxing:` cash vocabulary (zero `invariants.js` reason change) behind a NEW **boxing bet escrow** §10.4 check (`escrow == posted − wins − refunds − purse − take − death`; sim drift-0). The one thing to watch in the sim/alpha: a manager with a strong fighter + a crowd earns the promoter purse (a redistribution from losing bettors, bounded by `BET_RAKE_BPS/2` of the losing pot) — not a leak, but a wealth-scaled edge for popular managers; `BET_RAKE_BPS` is the dial.
 
+**The Fight Circuit — STEP FOUR (THE CORNERMAN + BELT DEFENSE — status/pacing only, ZERO §10.4 surface):**
+
+| Lever | Default | Rationale | Rec |
+|---|---|---|---|
+| `UNDERWORLD.FX.CORNER_TRAIN_MULT` | 0.9 | Mickey the Corner (a 6th Underworld fixture) T1: training sessions cost ×0.9 cash (the DOC_MULT/GUN_MULT precedent — a cash discount, the discounted number ledgered `boxing:train`). | Sign-off |
+| `UNDERWORLD.FX.CORNER_CD_MULT` | 0.8 | Cornerman T2: exhibition cooldown ×0.8 — his cutman rests your fighters faster (pure pacing). | Sign-off |
+| `UNDERWORLD.FX.CORNER_GAIN` | +1 | Cornerman T3: training builds +2 a session instead of +1. The `STAT_CAP` ceiling is unchanged, so it's PACING (reach a maxed fighter in fewer sessions), not power creep. | Sign-off |
+| `BOXING.DEFENSE_MS` | 7 days | The mandatory-defense clock: a champ who doesn't win a bout within this window is STRIPPED (the belt goes vacant). Pure status — makes holding the belt an active commitment. | Sign-off |
+
+*Step-four note:* both pieces are **status/pacing with ZERO new §10.4 surface**. The Cornerman is the boxing tie-in for the Underworld cast — standing earned actor-side at the boxing touchpoints, perks that are all actor-local discounts/pacing (no fight-outcome tampering — a trainer builds a better fighter, he doesn't fix the fight), the training discount riding the existing `boxing:train` sink. Belt defense adds a reign counter + a mandatory-defense clock (an inactive champ forfeits) — pure status on the `boxing_title` singleton. Nothing to watch on §10.4; the only balance question is the T3 build-pacing (a maxed fighter reached in half the sessions is a modest competitive edge in PvP + the main event, bounded by the unchanged `STAT_CAP` ceiling) and the 7-day defense window (too short strips casual champs; too long makes the belt static) — both sign-off dials.
+
 **The Reserve Bond (`BONDS`, Protocol-Owned Liquidity — off-chain core, chain DORMANT / mainnet-gated):**
 
 | Lever | Default | Rationale | Rec |

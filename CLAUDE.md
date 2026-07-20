@@ -2145,8 +2145,33 @@ the promoter purse / half-vig→buyback / the manager legend / the board pools),
 refunds the crowd, and the boxing-bet-escrow §10.4 check (mid-window == Σ bets, empties after resolve).
 Suite 30/30 + sim drift-0 (15 §10.4 checks incl. `boxing bet escrow`). `BOXING.MAIN_EVENT_MS`/`BET_MIN`/
 `BET_MAX`/`BET_RAKE_BPS` are founder sign-off levers (BALANCE.md; the parimutuel is a pure redistribution —
-no new faucet, unlike the step-two exhibition purse). Still deferred (step four): cornerman/trainer NPCs
-(the Underworld tie-in) + belt-defense mechanics (a mandatory-defense clock / #1-contender callout).
+no new faucet, unlike the step-two exhibition purse).
+**Step four — THE CORNERMAN + BELT DEFENSE — BUILT** (`src/boxing.js`, `src/underworld.js`, `test/boxing.js`,
+`test/underworld.js`). Two coherent pieces, both status/pacing — ZERO new §10.4 surface. **(A) THE CORNERMAN**
+— a SIXTH Underworld fixture (`Mickey the Corner`, `UNDERWORLD.NPCS`; the whole Underworld machinery —
+daily cap, lead, streak, decay, memory, board — auto-includes him). Standing is earned ACTOR-SIDE at the
+boxing touchpoints via game.js `bumpStanding` (sign +3, train +1, exhibition +1, fight +2, announce +2;
+`train` is his daily-lead task). Three perks, all **actor-local** (single-party paths with `h`, so no
+two-party tier reads, no fight-outcome tampering — the skills/decree precedent): T1 training ×0.9 cash
+(`CORNER_TRAIN_MULT`, the DOC_MULT precedent — the discounted number ledgered `boxing:train`), T2 exhibition
+cooldown ×0.8 (`CORNER_CD_MULT`), T3 training builds +2 a session (`CORNER_GAIN`, the STAT_CAP ceiling
+unchanged — pacing, not power creep). His weekly FAVOR (the step-four Underworld favor menu) patches up the
+whole stable (clears every fighter's injury; `nothing` if none laid up — never burns the week, the armorer
+precedent). §10.4-neutral (standing is a pure status axis; the training discount rides the existing
+`boxing:train` sink). **(B) BELT DEFENSE** (`boxing_title` gained `defenses` + `last_defense`): the belt now
+carries a REIGN + a mandatory-defense clock. A shared `applyBeltResult` (used by both `fightBout` and
+`resolveMainEvent`) makes a champ's win while HOLDING the belt a DEFENSE (`defenses++`, clock reset) vs a
+challenger's win a title CHANGE (fresh reign); the worker `enforceBeltDefense` STRIPS an inactive champion
+who hasn't won a bout within `BOXING.DEFENSE_MS` (7d — the belt goes vacant, hold it or fight). Pure status,
+no §10.4. The board's `champion` gained `defenses` + `defendSeconds` + the `#1 contender` (top non-champ
+fighter); `/v1/rules` gained `defenseMs`; console: the champion banner shows the reign + defense clock +
+contender. `test/boxing.js` covers the cornerman discount (T1) + build bonus (T3) + the stable-patch favor,
+and belt defense (a defence grows the reign, the clock + contender surface, an inactive champ is stripped);
+`test/underworld.js` asserts the six-fixture cast. Suite 30/30 + sim drift-0. All numbers
+(`CORNER_*`, `DEFENSE_MS`) are founder sign-off levers. **The boxing pillar is now four steps deep**
+(recruit/train/PvP → stable/exhibition/belt/legend → the main event → the cornerman + belt defense). Fully
+deferred beyond this: a belt-defense CALLOUT (a mandatory #1-contender challenge the champ must accept) is
+the only unbuilt idea — the mandatory-defense CLOCK stands in for it today.
 
 **THE RESERVE BOND (Protocol-Owned Liquidity) — off-chain CORE BUILT, chain DORMANT** (`src/bonds.js`,
 `test/bonds.js` — the 30th suite; design `omerta-reserve-bond-design.md`; founder-directed "Option C").

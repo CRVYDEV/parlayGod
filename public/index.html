@@ -1691,7 +1691,8 @@
     t.innerHTML = `
       ${!stable.length ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\' fighters or NPC cards. Run a stable of up to ' + max + '. Your fighters die with your street.') : ''}
       <h2>The Fight Circuit</h2>
-      ${b.champion ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏆 World Champion: ${b.champion.fighter}</span></div>` : ''}
+      ${b.champion ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏆 World Champion: ${b.champion.fighter}</span>
+        <div class="d">${b.champion.defenses} title defence${b.champion.defenses === 1 ? '' : 's'}${b.champion.defendSeconds > 0 ? ` · must defend within ${mins(b.champion.defendSeconds)} or forfeit` : ' · <span style="color:var(--bad)">defence overdue — forfeit imminent</span>'}${b.champion.contender ? ` · #1 contender: ${b.champion.contender.name} (${b.champion.contender.record})` : ''}</div></div>` : ''}
       <h2 style="margin-top:10px;font-size:14px">Your Stable <span class="d" style="font-size:10px">(${stable.length}/${max})</span></h2>
       <div class="grid">${stable.map((y) => `
         <div class="card" ${y.belt ? 'style="border-color:var(--neon)"' : ''}><span class="t">${y.belt ? '🏆 ' : ''}${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>

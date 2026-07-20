@@ -670,7 +670,9 @@ CREATE INDEX IF NOT EXISTS ix_fighters_wins ON fighters (wins DESC);
 -- the world TITLE BELT (step two): one champion, taken by beating the holder in a PvP bout. Pure status.
 CREATE TABLE IF NOT EXISTS boxing_title (
   id INT PRIMARY KEY,
-  holder_fighter TEXT, holder_char TEXT, holder_name TEXT, since TIMESTAMPTZ
+  holder_fighter TEXT, holder_char TEXT, holder_name TEXT, since TIMESTAMPTZ,
+  defenses INT NOT NULL DEFAULT 0,   -- (step four) the reign: successful title defenses since winning it
+  last_defense TIMESTAMPTZ           -- (step four) the mandatory-defense clock — an inactive champ is stripped
 );
 INSERT INTO boxing_title (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM boxing_title);
 -- THE MAIN EVENT (step three): a SCHEDULED prestige bout the crowd bets on. No principal cash wager —

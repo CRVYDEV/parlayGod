@@ -168,6 +168,11 @@ export async function claimFavor(ch, npcId, client, h) {
   } else if (npcId === 'harbor') {             // dock hands load for you today
     ch.energy = 50 + 2 * lvl + assetEnergyCap(h.owned.assets);
     favor = { energy: Math.floor(Number(ch.energy)) };
+  } else if (npcId === 'cornerman') {          // the corner patches up your whole stable overnight
+    const hurt = Number((await client.query("SELECT COUNT(*) n FROM fighters WHERE character_id=$1 AND injured_until > now()", [ch.id])).rows[0].n);
+    if (hurt === 0) throw new GameError('nothing', 'None of your fighters are laid up.'); // never burns the week (the armorer precedent)
+    await client.query('UPDATE fighters SET injured_until=NULL WHERE character_id=$1', [ch.id]);
+    favor = { healedFighters: hurt };
   } else {                                     // madame: a night off the clock
     ch.nerve = 10 + lvl;
     favor = { nerve: Math.floor(Number(ch.nerve)) };

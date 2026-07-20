@@ -1153,9 +1153,15 @@ export const UNDERWORLD = {
     { id: 'madame',  name: 'The Madame',       earn: 'den play + back-room fades + fight bets', tasks: ['dice', 'numbers'],
       perks: ['The house comps your seat — dice cost no nerve', 'The velvet rope — the high-stakes room opens at any level',
               "Pillow talk — she tells you how many hunters have been asking around about you"] },
+    { id: 'cornerman', name: 'Mickey the Corner', earn: 'signings + training + exhibitions', tasks: ['train'],
+      perks: ['Gym rates — training ×0.9 cash', 'A good cutman — your fighters rest less (exhibition cooldown ×0.8)',
+              'Sharper work — training builds +2 a session'] },
   ],
   FX: { DOC_MULT: 0.9, NPCHIT_MULT: 0.9, SEARCH_MULT: 0.9, GUN_MULT: 0.9, CRAFT_MULT: 0.9,
-        GUARD_MULT: 0.9, TTL_H: 72, EXTRA_LISTING: 1 },
+        GUARD_MULT: 0.9, TTL_H: 72, EXTRA_LISTING: 1,
+        // the Cornerman (boxing step four) — all actor-local pacing/discount perks (no fight-outcome
+        // tampering, no §10.4): T1 a training cash discount, T2 a shorter exhibition rest, T3 +1 build.
+        CORNER_TRAIN_MULT: 0.9, CORNER_CD_MULT: 0.8, CORNER_GAIN: 1 },
   // step two (all founder sign-off levers): relationships that live — daily leads, cooling,
   // inherited memory, and one rivalry. Zero money flows; every number is a status-axis dial.
   STEP2: {
@@ -1605,6 +1611,10 @@ export const BOXING = {
   // the house vig on the LOSING pot — half → the winning manager's promoter purse, half → the house
   // (of which half street-tax buyback, half burns). A pure taxed TRANSFER (redistribution), never a mint.
   BET_RAKE_BPS: 800,
+  // ── STEP FOUR — BELT DEFENSE (pure status, no §10.4) ──
+  // The belt tracks a REIGN (defenses since winning it) and carries a MANDATORY-DEFENSE clock: a champ
+  // who doesn't win a bout within DEFENSE_MS is STRIPPED (the belt goes vacant — hold it or fight).
+  DEFENSE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days to defend or forfeit
 };
 export const boxerRankOf = (wins) =>
   [...BOXING.RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.RANKS[0];
