@@ -980,6 +980,12 @@ defaults — sim + founder sign-off before production (ground rule #1). §10.4-c
 | `WORLD.COOP_LEADER_WEIGHT` | 1.2× | The leader who fronts the op takes a bigger cut (the heist precedent). | Sign-off |
 | THE FRONTIER | pure status | Whoever routs an outfit (solo OR co-op) plants their family's flag (`held_by_gang`); the next rout topples it. A conquest leaderboard, zero §10.4 — the Empire/Commission dominance precedent. | Sign-off |
 
+*Step-three AUDIT flag (B1, session red-team `AUDIT-session-drops.md`):* the `raidChance` **0.1 min-clamp**
+lets a min-level whale SOLO an apex outfit (Volkov def 220) at 10%/attempt for the full un-split `GRAB_MAX`
+every 2h — undercutting the "too well-defended to solo" framing that motivates co-op. §10.4-bounded by the
+shared reservoir/regen (not a leak), but the dial is the min-clamp or a **coop-only gate on `raidNpc` for
+`fixture.coop` outfits**. Bundle with the apex-reservoir sim below.
+
 *Step-three EMISSION FLAG (the one real §10.4 consideration):* co-op is **§10.4-neutral vs a solo raid** by construction — the pot is the SAME bounded reservoir slice (`GRAB_BPS`/`GRAB_MAX`), just SPLIT among the crew, and every share/ammo row rides the existing `world:raid` vocabulary (the sim stays drift-0). BUT co-op makes the **apex reservoirs actually tappable** — a soloist essentially can't beat moreau (def 150) / volkov (def 220), so those 5M/12M reservoirs were near-locked; a crew unlocks them as a REALIZED faucet. Total emission is still bounded by REGEN (you can't extract past the reservoir + its `regenPerHr`), but previously-dormant reservoirs now flow, so **sim + founder sign-off the apex `regenPerHr`/`GRAB_MAX` at co-op cadence before production** — this is the only new emission surface in the pillar. The frontier itself adds zero emission (pure status). Still deferred: NPC outfits holding real player-map DISTRICTS (the invasive turf-model rewire) + per-district racket-type choice.
 
 **The Wire — STEP TWO (`WIRE` — content expansion for the intelligence terminal):**

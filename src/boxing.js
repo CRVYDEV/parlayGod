@@ -121,12 +121,22 @@ export async function callOutChamp(ch, fighterId, client, h) {
 export async function acceptCallout(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', "You can't take the fight from a cell.");
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to make the walk.");
+  // audit F2: lock the FIGHTER rows BEFORE the boxing_title singleton (fighter→title, the fightBout/
+  // resolveMainEvent order). The challenger's fighter is another player's row we don't hold the char
+  // lock for, so locking it under the title lock inverted the order → an AB-BA vs a fightBout staking
+  // that same listed fighter. Read the title UNLOCKED to learn the two fighters, lock them sorted, THEN
+  // lock the singleton and re-verify the callout didn't shift under us (the executeHeist TOCTOU pattern).
+  const t0 = (await client.query('SELECT * FROM boxing_title WHERE id=1')).rows[0];
+  if (!t0 || !t0.callout_fighter) throw new GameError('no_callout', 'Nobody has called you out.');
+  if (t0.holder_char !== ch.id) throw new GameError('not_champ', 'Only the champion can accept the challenge.');
+  const [first, second] = [t0.holder_fighter, t0.callout_fighter].sort();
+  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [first]);
+  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [second]);
   const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
   if (!title || !title.callout_fighter) throw new GameError('no_callout', 'Nobody has called you out.');
   if (title.holder_char !== ch.id) throw new GameError('not_champ', 'Only the champion can accept the challenge.');
-  const [first, second] = [title.holder_fighter, title.callout_fighter].sort();
-  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [first]);
-  await client.query('SELECT 1 FROM fighters WHERE id=$1 FOR UPDATE', [second]);
+  if (title.holder_fighter !== t0.holder_fighter || title.callout_fighter !== t0.callout_fighter)
+    throw new GameError('contention', 'The card shifted under you — try again.'); // fighters changed; the locked pair is stale
   const champF = (await client.query('SELECT * FROM fighters WHERE id=$1', [title.holder_fighter])).rows[0];
   const chalF = (await client.query('SELECT * FROM fighters WHERE id=$1', [title.callout_fighter])).rows[0];
   if (!champF || champF.character_id !== ch.id) throw new GameError('no_fighter', 'You no longer hold the belt.');
@@ -287,13 +297,15 @@ export async function fightBout(ch, opponent, body, client, h) {
   winner.cash = Number(winner.cash) + amt - rake; // their own stake never left; net +stake − rake (casino:pvp accounting)
   await h.ledger(client, { characterId: loser.id, currency: 'cash', amount: -amt, reason: 'boxing:bout', counterparty: winner.id });
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'boxing:bout', counterparty: loser.id });
-  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]); // half → the buyback, half burns
   // records + injury — absolute INT writes (pg-mem arithmetic-UPDATE quirk)
   await client.query('UPDATE fighters SET wins=$2 WHERE id=$1', [winnerF.id, Number(winnerF.wins) + 1]);
   await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [loserF.id, Number(loserF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   await bumpLegend(client, winner.account_id);
   // the world TITLE BELT — win it, or DEFEND it if you're the champ (step four: the reign + clock)
+  // (audit F1: lock boxing_title BEFORE street_tax — resolveMainEvent locks them in that order, so
+  // crediting the pool before applyBeltResult inverted the two singletons → an AB-BA vs the resolver)
   const { belt: beltWon, defended } = await applyBeltResult(client, winnerF, winner.id, loserF);
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]); // half → the buyback, half burns
   await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'fight' }); // fight night is the corner's business
   await h.rngLog(client, ch.id, `boxing:bout:${of.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})${beltWon ? ' — TITLE' : defended ? ' — TITLE DEFENDED' : ''}`);
   await h.notify(client, opponent.id, 'boxing_bout', { from: ch.name, yours: of.name, mine: f.name, amount: amt, theyWon: !win, belt: beltWon && winner.id === opponent.id });

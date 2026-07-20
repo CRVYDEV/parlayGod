@@ -1099,6 +1099,28 @@ now flow, so sim + sign-off the apex `regenPerHr`/`GRAB` before production (the 
 `COOP_*` numbers are all sign-off levers). Still deferred: NPC outfits holding actual player-map DISTRICTS
 (the fully-invasive turf-model rewire — the status frontier stands in) + per-district racket-type choice.
 
+**Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
+death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World
+2–3), every finding re-verified vs source. **No CRITICAL/HIGH.** Fixed in-commit (regression each): **F1
+(MED)** `fightBout` credited `street_tax` BEFORE `applyBeltResult`'s `boxing_title` lock while
+`resolveMainEvent` locks them in the reverse order — an AB-BA between two singletons needing only temporal
+overlap (frequent fight vs the timer resolver); now `fightBout` credits the pool AFTER the belt result, so
+both paths lock `fighters → boxing_title → street_tax`. **F2 (MED)** `acceptCallout` locked the CHALLENGER's
+fighter (a row it doesn't hold the char lock for) UNDER the `boxing_title` lock — reversed vs `fightBout`'s
+fighter→title; now it reads the title unlocked, locks the two fighters sorted, THEN locks+re-verifies the
+title (the executeHeist TOCTOU pattern → clean `contention` on a shifted card). **LOW-1** a dead co-op raid
+leader left orphan `world_raid_members` rows the sweep never reaps → `abandonRaidsAtDeath` now deletes the
+stranded crew's rows (the pen-break precedent). Verified CLEAN: the boxing-bet escrow §10.4 identity (exact
+on every terminal state; the house cut is the audited `casino:pvp` NULL-row/half-pool/half-burn pattern),
+the co-op raid §10.4-neutrality + lock order, skills `active_at` no-clobber + cap-set actives + leaf-first
+respec, the death/estate belt/callout/main-event handling, and every gate (co-op level, one-active-raid,
+rout-crossing, own_event, callout one-at-a-time, duck→forfeit, booked-form freeze, banded dossier).
+`callOutChamp`/`wipeFighterAtDeath` (title-before-fighter but serialized behind the caller/dying char lock)
+are non-reachable cycles. Flagged for founder sign-off (NOT patched, ground rule #1): the apex-solo raid
+floor (0.1 min-clamp lets a min-level whale solo an apex for the full un-split `GRAB_MAX` — the dial is the
+clamp or a coop-only `raidNpc` gate for `fixture.coop`), the exhibition purse faucet, and symmetric-cost
+announce/co-op-ready grief (design-consistent). Suite 30/30 + sim drift-0.
+
 A **five-lens red-team over the Law + Living World** (`AUDIT-law-world.md`: §10.4, concurrency/locks,
 death/estate/PvP, Law internals, World internals) closed two HIGH correctness defects + four MED/LOW
 (regression per fix): the NPC-raid **rout bonus re-farmed** while the shared reservoir sat pinned below

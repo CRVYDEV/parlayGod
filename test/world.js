@@ -14,6 +14,7 @@ import { LIVING, WORLD, WORLD_NPCS, worldNpcOf, worldRankOf, cityHourOf, cityFor
          cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
+process.env.MOD_KEY = 'test-mod-key';   // for the co-op raid death regression (audit LOW-1)
 const app = await buildServer();
 const pool = app.pool;
 const call = async (method, url, { token, body } = {}) => {
@@ -244,6 +245,21 @@ assert(kryl.heldBy && kryl.heldBy.tag === 'FRM' && kryl.heldBy.mine === true, 't
 const flb = (await call('GET', '/v1/leaderboard/frontier', { token: boss.token })).body;
 assert(flb.families.find((f) => f.tag === 'FRM' && f.held === 1 && f.outfits.includes('The Kryl Syndicate')), 'the family tops the Frontier leaderboard holding Kryl');
 delete process.env.WORLD_RAID_P;
+
+// AUDIT LOW-1 regression — a dead co-op raid LEADER's plan is abandoned AND the stranded crew's member
+// rows are cleared (no orphan bloat the sweep never reaps; the pen-break death precedent)
+const doomed = await mk('Doomed Leader');
+const stranded = await mk('Stranded Soldier');
+await seedCh(doomed.id, 'respect=2000, energy=200, ammo=100');
+await seedCh(stranded.id, 'respect=2000, energy=200, ammo=100');
+const dplan = await call('POST', '/v1/world/kryl/plan', { token: doomed.token });
+assert.equal(dplan.code, 200, 'the raid is planned');
+assert.equal((await call('POST', `/v1/world/raids/${dplan.body.id}/join`, { token: stranded.token })).code, 200, 'the soldier crews up');
+const retired = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: doomed.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal(retired.statusCode, 200, 'the Commission retires the leader mid-plan');
+assert.equal((await pool.query(`SELECT status FROM world_raids WHERE id='${dplan.body.id}'`)).rows[0].status, 'abandoned', 'the dead leader’s raid is abandoned');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM world_raid_members WHERE raid_id='${dplan.body.id}'`)).rows[0].n), 0, 'the stranded crew rows are cleared — no orphan bloat');
+assert.equal((await call('POST', '/v1/world/kryl/plan', { token: stranded.token })).code, 200, 'and the freed soldier can plan a fresh raid');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 4 — the day/night clock
