@@ -445,6 +445,14 @@ export const RECRUIT_MILESTONES = [
   { n: 25, name: "PILLAR OF THE CITY", cash: 250000, omr: 25, title: "PILLAR OF THE CITY" },
 ]
 
+// The highest recruit milestone a recruiter has reached — a pure STATUS rank for the recruiters
+// leaderboard (display-only; the payout still fires per-milestone in maybeQualifyReferral).
+export function recruitRankOf(n) {
+  let rank = null;
+  for (const m of RECRUIT_MILESTONES) if (n >= m.n) rank = m.name;
+  return rank;
+}
+
 export const CONSTANTS = {
   GARAGE_CAP: 12, GTA_CD_MS: 300000, MELT_TITHE: 0.25, TITHE_ROUND_VALUE: 30,
   SEARCH_MS: 3*3600*1000, SHOOT_CD_MS: 2*3600*1000, MIN_FIRE: 50,   // PRODUCTION timers

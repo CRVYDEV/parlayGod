@@ -878,6 +878,9 @@
           ${s.claimed ? '' : `<button class="act" data-swclaim="${s.id}">claim</button>`}</div>`).join('')}</div>
       ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus.</div>` : ''}
 
+      <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:10px">— the hall of fame for bringing in made men. Every recruit who sticks pays real cash + $OMR + milestone bonuses</span></h2>
+      <div id="recruit-lb" class="d" style="color:var(--dim);font-size:11px">loading…</div>
+
       <h2 style="margin-top:14px">Missions <span class="d" style="font-size:10px">— one-time scripted jobs (cash + respect, sometimes $OMR &amp; a title)</span></h2>
       <div class="grid">${(rules?.missions || []).filter((m) => (m.req?.lvl || 0) <= (me?.level || 1)).map((m) => {
         const statReq = ['muscle', 'cunning', 'speed'].map((s) => m.req?.[s] ? `${s} ${m.req[s]}` : null).filter(Boolean).join(', ');
@@ -887,6 +890,19 @@
           <div class="d">needs lvl ${m.req?.lvl || 1}${statReq ? ` · ${statReq}` : ''} · pays $${fmt(m.reward?.cash || 0)}${m.reward?.omr ? ` + ${m.reward.omr} $OMR` : ''}${m.reward?.title ? ' + a title' : ''}</div>
           <button class="act" data-mission="${m.id}"${meets ? '' : ' disabled'}>attempt${meets ? '' : ' (train up first)'}</button></div>`;
       }).join('') || '<span class="d" style="color:var(--dim)">level up to unlock your first mission</span>'}</div>`;
+    api('GET', '/v1/leaderboard/recruiters').then((r) => {
+      const el = $('#recruit-lb'); if (!el) return;
+      const rc = r.body?.recruiters || [], fam = r.body?.families || [];
+      if (!rc.length && !fam.length) { el.innerHTML = 'Nobody\'s brought anyone in yet. Be the first — share your code (it\'s your name).'; return; }
+      const top = rc.slice(0, 10).map((x, i) =>
+        `<div class="card"><span class="t">${i + 1}. ${x.name}${x.rank ? ` <span class="chip">${x.rank}</span>` : ''}</span>
+          <div class="d">${x.recruits} made ${x.recruits === 1 ? 'man' : 'men'} brought in${x.gang ? ` · ${x.tag ? `[${x.tag}] ` : ''}${x.gang}` : ''}</div></div>`).join('');
+      const fams = fam.slice(0, 5).map((f, i) =>
+        `<div class="card"><span class="t">${i + 1}. ${f.tag ? `[${f.tag}] ` : ''}${f.name}</span>
+          <div class="d">${f.recruits} recruited by ${f.members} made ${f.members === 1 ? 'man' : 'men'}</div></div>`).join('');
+      el.innerHTML = `<div class="grid">${top}</div>${fam.length ? `<h2 style="margin-top:12px;font-size:13px">Family Recruitment</h2><div class="grid">${fams}</div>` : ''}`;
+      el.style.color = ''; el.style.fontSize = '';
+    });
     t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));

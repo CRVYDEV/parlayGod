@@ -828,6 +828,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
   // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
   app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
+  // The RECRUITERS (§7.13): the organic-growth hall of fame + the family recruitment board. Status only.
+  app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
+    recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool) }));
   // THE BLOOD-FEUD LEDGER: the public tally between MY bloodline and theirs — kills each way
   // (from kill_log), net bloodOwed (positive = they owe us bodies), and any active vendetta in
   // either direction. Pure reader; vendettas themselves are created by the estate.

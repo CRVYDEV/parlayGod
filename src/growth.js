@@ -3,7 +3,7 @@
 import { GameError } from './game.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
-  levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap,
+  levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
 } from './rules.js';
 import { verifySocial } from './verify.js';
 import { spendOmr } from './vanity.js';
@@ -211,6 +211,44 @@ export async function funnelStats(pool) {
   referral.kFactor = accounts ? Math.round((referral.totalRecruits / accounts) * 100) / 100 : 0;
   referral.sparkToQualified = referral.sparked ? Math.round((referral.qualified / referral.sparked) * 100) / 100 : 0;
   return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral };
+}
+
+// ── THE RECRUITERS (§7.13 status boards — organic-growth hall of fame) ──
+// Pure STATUS (recruit COUNT — display-only, outside §10.4 and the sim-audited balance, the
+// hitmen-board precedent). An agent recruiter never bumps `recruits` (maybeQualifyReferral rolls
+// back on recruiterAcct.agent_flag), so agents never appear — a made man's word brought these in.
+export async function recruiterLeaderboard(pool, limit = 20) {
+  const rows = (await pool.query(
+    `SELECT a.recruits, a.agent_flag, c.name, g.name AS gang, g.tag
+       FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+       LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN gangs g ON g.id = gm.gang_id
+      WHERE a.recruits > 0
+      ORDER BY a.recruits DESC LIMIT $1`, [limit])).rows;
+  return rows.map((r) => ({ name: r.name, gang: r.gang || null, tag: r.tag || null,
+    recruits: Number(r.recruits), rank: recruitRankOf(Number(r.recruits)), agent: !!r.agent_flag }));
+}
+
+// Family recruitment board — families ranked by the total qualified recruits their CURRENT roster
+// has brought in (a collective organic-growth standing; a member who leaves takes their count with
+// them — the roster's recruiting power, not a stored family tally). Pure STATUS, §10.4-free.
+// Aggregated in JS (the /v1/gangs two-flat-queries precedent — pg-mem is unreliable on GROUP BY).
+export async function recruitingFamilyLeaderboard(pool, limit = 20) {
+  const rows = (await pool.query(
+    `SELECT gm.gang_id, g.name, g.tag, a.recruits
+       FROM gang_members gm
+       JOIN gangs g ON g.id = gm.gang_id
+       JOIN characters c ON c.id = gm.character_id AND c.alive
+       JOIN account_persistent a ON a.account_id = c.account_id`)).rows;
+  const byGang = new Map();
+  for (const r of rows) {
+    const e = byGang.get(r.gang_id) || { name: r.name, tag: r.tag, members: 0, recruits: 0 };
+    e.members += 1; e.recruits += Number(r.recruits || 0);
+    byGang.set(r.gang_id, e);
+  }
+  return [...byGang.values()].filter((e) => e.recruits > 0)
+    .sort((x, y) => y.recruits - x.recruits).slice(0, limit);
 }
 
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
