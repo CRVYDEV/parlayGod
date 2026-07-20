@@ -63,9 +63,12 @@ let me = await meOf(boss.token);
 assert.equal(me.portfolio.holdings.length, 1, 'the view shows the holding');
 assert.equal(me.portfolio.bookValue, Math.round(r.body.bought * priceA * 100) / 100, 'view book value at today\'s price');
 
-// a second buy of the same ticker averages in
+// a second buy of the same ticker averages in. The server rounds EACH buy's shares to 6dp then
+// sums (round6(cur + round6(amt/price))), so the expectation must add the per-buy rounded shares —
+// NOT round6(total/price), which differs by 1 ULP on some days' prices (an otherwise date-flaky equality).
+const bought1 = r.body.bought;
 r = await call('POST', '/v1/portfolio/invest', { token: boss.token, body: { ticker: 'AAPL', omr: 1000 } });
-assert.equal(r.body.shares, Math.round(((3000 + 1000) / priceA) * 1e6) / 1e6, 'shares accumulate');
+assert.equal(r.body.shares, Math.round((bought1 + r.body.bought) * 1e6) / 1e6, 'shares accumulate');
 assert.equal(r.body.costBasis, 4000, 'cost basis is lifetime $OMR spent');
 
 // a different ticker is its own line

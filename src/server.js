@@ -42,7 +42,8 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING } from './rules.js';
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
+         RACKETS, ASSETS, MISSIONS, GANG_SEALS } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -353,6 +354,10 @@ export async function buildServer() {
     districts: DISTRICTS,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
+    rackets: RACKETS.map((r) => ({ id: r.id, name: r.name, lvl: r.lvl, cost: r.cost, income: r.income, desc: r.desc })),
+    assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),
+    missions: MISSIONS.map((m) => ({ id: m.id, name: m.name, req: m.req, reward: m.reward, brief: m.brief })),
+    seals: GANG_SEALS,
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
     vests: VESTS.map((v) => ({ id: v.id, name: v.name, mult: v.mult, omr: v.omr, desc: v.desc })),
     drugs: DRUGS.map((d) => ({ id: d.id, name: d.name, tag: d.tag, base: d.base, unlock: d.unlock })),
