@@ -316,6 +316,19 @@ await seedCh(bot.id, 'respect=400, lc_crime=40, cash=30000, nerve=50, energy=200
 await call('POST', '/v1/crimes/pick', { token: bot.token });
 assert.equal((await meOf(mentor.token)).recruits, 1, 'agent accounts excluded from referral payouts');
 
+// ── THE RECRUITERS boards (§7.13 status): individual hall of fame + family recruitment ──
+const lb = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.token })).body;
+const mm = lb.recruiters.find((r) => r.name === 'Mentor Max');
+assert(mm && mm.recruits === 1, 'the recruiter appears on the board with their recruit count');
+assert.equal(mm.rank, 'First Blood Brought In', 'the milestone rank surfaces on the board');
+assert(!lb.recruiters.some((r) => r.agent), 'agent recruiters never appear (they never bump recruits)');
+// family recruitment board: put the mentor in a gang and their count feeds the family total
+await seedCh(mentor.id, 'cash=200000, respect=400, energy=200, nerve=50, jail_until=NULL');
+await call('POST', '/v1/gangs', { token: mentor.token, body: { name: 'The Rainmakers', tag: 'RAIN' } });
+const lb2 = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.token })).body;
+const fam = lb2.families.find((f) => f.name === 'The Rainmakers');
+assert(fam && fam.recruits === 1 && fam.members >= 1, 'the family recruitment board sums the roster\'s recruits');
+
 // ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──
 const promoter = await mk('Promoter Pete');
 let sw = (await call('GET', '/v1/social', { token: promoter.token })).body;

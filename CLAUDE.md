@@ -2252,6 +2252,23 @@ All numbers (`REF_SPARK.*`, the brag trigger set) are founder sign-off levers. D
 time-boxed double-referral push, and the higher-risk 2-level "family tree" referral (cash-only + counsel-
 gated — held until the single-level loop is measured).
 
+**THE RECRUITERS BOARDS (§7.13 status hall of fame) — BUILT** (`src/growth.js`, `src/rules.js`,
+`src/server.js`, `public/index.html`, `test/growth.js`). The first deferred funnel item — makes recruiting a
+VISIBLE competition (drives the loop without touching the economy). Two read-only boards, PURE STATUS
+(recruit COUNT — display-only, outside §10.4 and the sim-audited balance, the hitmen-board precedent), so
+ZERO ledger surface. **`recruiterLeaderboard`** ranks accounts by lifetime QUALIFIED recruits with the
+living name, family, and a milestone `rank` (new `recruitRankOf` helper off `RECRUIT_MILESTONES` — the
+highest milestone name reached; display-only, the payout still fires per-milestone in
+`maybeQualifyReferral`); agent recruiters never bump `recruits` (the qualify txn rolls back on
+`recruiterAcct.agent_flag`) so they never appear. **`recruitingFamilyLeaderboard`** ranks families by the
+total recruits their CURRENT roster has brought in (a collective drive — a member who leaves takes their
+count with them; aggregated in JS over a flat 4-table JOIN, the `/v1/gangs` two-flat-queries pg-mem
+precedent). One route `GET /v1/leaderboard/recruiters` returns `{recruiters, families}`; the console
+surfaces both on the Start Here tab under "The Recruiters" (below Spread the Word). `test/growth.js` covers
+the recruiter appearing with count + milestone rank, agent exclusion, and the family board summing a
+roster's recruits. Suite 30/30 + sim drift-0. Still deferred (flagged): the time-boxed double-referral
+push, and the counsel-gated 2-level "family tree" referral.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
