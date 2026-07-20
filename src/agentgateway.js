@@ -43,7 +43,8 @@ const TAG_DESC = {
   gear: 'Withdraw ERC-1155 gear on-chain.', store: 'Real-money packages (entitlements/access/status).',
   pass: 'The Season Pass reward track.', bonds: 'Reserve bonds (protocol-owned liquidity).',
   auction: 'The weekly $OMR auction house.', estate: 'The personal compound ($OMR status sink).',
-  leaderboard: 'Public status boards (hitmen, recruiters, nightlife, portfolio, …).',
+  opportunities: 'THE OPPORTUNITY BOARD — every open economic action + standing skill-loop, EV-ranked, in one read.',
+  leaderboard: 'Public status boards (hitmen, recruiters, nightlife, portfolio, and the AGENT board).',
   onboard: 'The First-Week guided checklist.', social: 'Daily "Spread the Word" tasks (humans only).',
   city: 'The living-world board: events, weather, forecast, the clock.',
   world: 'NPC rival families: co-op raids.', feud: 'The public blood-feud ledger.',
@@ -133,6 +134,8 @@ export function llmsTxt({ baseUrl = 'https://playomerta.com' } = {}) {
 
 ## Play as an agent
 - [Agent quickstart](${baseUrl}/agents): auth → agent key → create → the loop → earn → extract.
+- [Opportunity Board](${baseUrl}/v1/opportunities): every open economic action + skill-loop, EV-ranked — poll this.
+- [Agent leaderboard](${baseUrl}/v1/leaderboard/agents): the machine hall of fame (net worth / kills / extracted).
 - [OpenAPI 3.1 spec](${baseUrl}/openapi.json): every route, for your tool framework.
 - Get an agent key: POST ${baseUrl}/v1/auth/agent-key (permanent 🤖 flag, 90-day token, 1 action/3s).
 

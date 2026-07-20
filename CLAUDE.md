@@ -2328,6 +2328,37 @@ status axes), and an **MCP server** (`omerta-mcp` — expose the game as MCP too
 natively; the biggest distribution lever, a new package). All three are §10.4-safe (read-only / new
 package) and were scoped in the agent-experience strategy discussion.
 
+**THE AGENT ECONOMY (Opportunity Board + Agent Leaderboard + MCP server) — BUILT** (`src/opportunities.js`,
+`src/growth.js`, `src/server.js`, `omerta-mcp/`, `AGENTS.md`, `src/agentgateway.js`, `public/wiki.html`,
+`test/hardening.js`; founder-directed "create all 3"). The three deferred agent-economy items, all §10.4-safe
+(read-only aggregation / a separate status board / a standalone package). **(1) The Opportunity Board**
+(`GET /v1/opportunities`, `src/opportunities.js:opportunityBoard(pool, ch)`) — the agent-liquidity feature:
+ONE keyless read that aggregates every open economic action (kill/hospitalize CONTRACTS with the pot as
+reward, CONVOYS to ambush by value band, open LOANS to take, WTB market ORDERS to fill) ranked by reward,
+PLUS the standing skill-loops (`niches`): today's widest cross-district trade-goods **arbitrage spreads**
+(computed from the deterministic §7.11 `goodPriceOf` hash — a solved optimization, the single highest-signal
+agent niche), the live **AMM spot**, loan-funding demand, convoy-running + passive-income notes. Pure
+aggregation over the existing boards + price math (reuses `listContracts`/`convoyBoard`/`loanBoard`/
+`marketBoard`) — moves no value. **(2) The Agent Leaderboard** (`GET /v1/leaderboard/agents`,
+`growth.js:agentLeaderboard`) — a SEPARATE machine hall of fame for `agent_flag` players (ranked by net
+worth = cash+bank, with kills + **$OMR extracted on-chain** summed from the `withdraw:omr` ledger — the
+"earned a living" metric). Agents are excluded from the HUMAN status axes (referral/assassin-rep) by design;
+this is their OWN board, so competition drives the agent economy without touching the human game. Pure
+STATUS, read-only. **(3) The MCP server** (`omerta-mcp/` — a standalone package, `@modelcontextprotocol/sdk`,
+its own `package.json`/`README.md`/`.gitignore`) — exposes the game as MCP tools so any MCP-capable agent
+(Claude Desktop/Code, an SDK agent) plays natively: `omerta_start` (guest→agent-key→create), `omerta_me`,
+`omerta_rules`, `omerta_opportunities`, and the universal `omerta_request {method,path,body}` escape hatch
+over all ~279 routes (mutations auto-carry an idempotency key; errors are the stable string codes). A thin
+stateful stdio proxy over the HTTP API (low-level `Server` API, zero-zod, version-tolerant); config via
+`OMERTA_BASE_URL`/`OMERTA_TOKEN`/`OMERTA_INVITE`. The biggest distribution lever — list it in MCP registries.
+`AGENTS.md` now points agents at `/v1/opportunities` (the "poll this" surface) + `/v1/leaderboard/agents`,
+with a **niches playbook** subsection; the OpenAPI `opportunities` tag + `llms.txt` + the wiki's "For agents"
+section reference both. `test/hardening.js` covers the board (arbitrage spreads computed, ranked opportunities
++ counts + AMM spot) + the agent leaderboard (agent-flag players listed with net worth + extracted). Suite
+30/30 + sim drift-0. **The full agent-experience roadmap is now built** (Gateway + Economy); deferred
+next-tier ideas (not requested): agent-specific rate-tier tuning, a sandbox/testnet flag, and listing
+`omerta-mcp` in public MCP directories (a deploy/marketing step, not code).
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

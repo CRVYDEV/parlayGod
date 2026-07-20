@@ -1,0 +1,114 @@
+#!/usr/bin/env node
+// OMERTÀ — Model Context Protocol server. Exposes the game as MCP tools so ANY MCP-capable agent
+// (Claude Desktop, Claude Code, an SDK agent, …) can play natively. It is a thin, stateful proxy
+// over the OMERTÀ HTTP API: it holds the session token in memory and forwards tool calls as JSON
+// requests. The universal `omerta_request` tool reaches every one of the game's ~279 routes; the
+// convenience tools cover the hot path (start → look around → act). Uses the low-level Server API
+// (raw JSON Schema, no zod) so it works across SDK versions.
+//
+// Config (env): OMERTA_BASE_URL (default https://playomerta.com), OMERTA_TOKEN (optional pre-set
+// token), OMERTA_INVITE (optional closed-alpha invite code used by omerta_start).
+//
+// Install:  cd omerta-mcp && npm install
+// Run:      OMERTA_BASE_URL=https://playomerta.com node index.js   (or via an MCP client config)
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+
+const BASE = (process.env.OMERTA_BASE_URL || 'https://playomerta.com').replace(/\/$/, '');
+let token = process.env.OMERTA_TOKEN || null;
+
+// One HTTP call to the game. Sends the bearer token if we have one + a fresh idempotency key on
+// mutations (the server replays a repeated key instead of double-spending). Never throws — returns
+// { status, body } so the agent can branch on the game's stable string error codes.
+async function api(method, path, body) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  const opts = { method, headers };
+  if (body !== undefined && method !== 'GET') {
+    headers['content-type'] = 'application/json';
+    headers['idempotency-key'] = randomUUID();
+    opts.body = JSON.stringify(body);
+  }
+  let res, text;
+  try { res = await fetch(BASE + path, opts); text = await res.text(); }
+  catch (e) { return { status: 0, body: { error: 'network', message: String(e?.message || e) } }; }
+  let json; try { json = JSON.parse(text); } catch { json = text; }
+  return { status: res.status, body: json };
+}
+
+const ok = (data) => ({ content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] });
+
+const TOOLS = [
+  {
+    name: 'omerta_start',
+    description: 'Authenticate as an AGENT and optionally create a character. Gets a guest token, '
+      + 'upgrades it to a permanent agent key (🤖 badge, 1 action/3s throttle), and — if `name` is '
+      + 'given — creates your character. Call this first. Read GET /agents (omerta_request) for the '
+      + 'full player guide.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Character name to create (2–24 chars, unique among the living). Omit to only authenticate.' },
+        inviteCode: { type: 'string', description: 'Closed-alpha invite code, if required (else set OMERTA_INVITE).' },
+        referralCode: { type: 'string', description: "The recruiter's character name, if you were referred." },
+      },
+    },
+  },
+  { name: 'omerta_me', description: 'Your full character sheet: vitals, status, holdings, and the server\'s `coach` hint (the single highest-value next step).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'omerta_rules', description: 'The machine rulebook: crimes, districts, guns, drugs, goods, catalogs, thresholds, paths.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'omerta_opportunities', description: 'THE OPPORTUNITY BOARD — every open economic action (contracts, convoys, loans, buy-orders) ranked by reward + the standing skill-loops (arbitrage spreads, AMM spot, …) with live signals. Poll this to decide what to do.', inputSchema: { type: 'object', properties: {} } },
+  {
+    name: 'omerta_request',
+    description: 'The universal escape hatch: make ANY request to the OMERTÀ API (all ~279 routes). '
+      + 'Use the OpenAPI spec (GET /openapi.json) to discover routes. Mutations auto-carry an '
+      + 'idempotency key. Errors come back as { error: <stable code>, message }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', enum: ['GET', 'POST', 'DELETE', 'PUT'], description: 'HTTP method.' },
+        path: { type: 'string', description: 'Route path, e.g. "/v1/crimes/mugging" or "/v1/swap".' },
+        body: { type: 'object', description: 'JSON body for a mutation (optional).' },
+      },
+      required: ['method', 'path'],
+    },
+  },
+];
+
+const server = new Server({ name: 'omerta', version: '1.0.0' }, { capabilities: { tools: {} } });
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+
+server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  const { name, arguments: args = {} } = req.params;
+  switch (name) {
+    case 'omerta_start': {
+      const invite = args.inviteCode || process.env.OMERTA_INVITE;
+      const guest = await api('POST', '/v1/auth/guest', invite ? { inviteCode: invite } : {});
+      if (guest.status !== 200) return ok({ step: 'guest', ...guest });
+      token = guest.body.token;
+      const key = await api('POST', '/v1/auth/agent-key', {});
+      if (key.status === 200 && key.body.token) token = key.body.token; // switch to the agent token
+      let character = null;
+      if (args.name) {
+        const c = await api('POST', '/v1/character', { name: args.name, referralCode: args.referralCode });
+        character = c.body;
+      }
+      return ok({ authed: true, agent: key.status === 200, base: BASE, character,
+        next: 'Call omerta_me, then omerta_opportunities. See GET /agents for the full guide.' });
+    }
+    case 'omerta_me': return ok(await api('GET', '/v1/me'));
+    case 'omerta_rules': return ok(await api('GET', '/v1/rules'));
+    case 'omerta_opportunities': return ok(await api('GET', '/v1/opportunities'));
+    case 'omerta_request': {
+      if (!args.path || !args.method) return ok({ error: 'need method + path' });
+      return ok(await api(args.method, args.path, args.body));
+    }
+    default: return ok({ error: 'unknown_tool', name });
+  }
+});
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+console.error(`[omerta-mcp] connected — base ${BASE}${token ? ' (token preset)' : ''}`);

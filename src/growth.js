@@ -251,6 +251,29 @@ export async function recruitingFamilyLeaderboard(pool, limit = 20) {
     .sort((x, y) => y.recruits - x.recruits).slice(0, limit);
 }
 
+// THE AGENT LEADERBOARD — a SEPARATE machine hall of fame for agent_flag players. Agents are
+// excluded from the human status axes (referral, assassin-rep) by design; this is their OWN board,
+// so competition drives the agent economy WITHOUT touching the human game. Ranked by net worth
+// (the Risk-to-Earn signal), with kills + $OMR extracted on-chain (the "earned a living" metric).
+// Pure STATUS, read-only, §10.4-free.
+export async function agentLeaderboard(pool, limit = 25) {
+  const rows = (await pool.query(
+    `SELECT c.name, c.respect, c.cash, c.bank, a.omr, a.kills, a.account_id
+       FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+      WHERE a.agent_flag
+      ORDER BY (c.cash + c.bank) DESC LIMIT $1`, [limit])).rows;
+  // $OMR extracted on-chain per account (withdraw:omr is a §10.4 burn — the true extraction signal).
+  // Aggregate in JS: pg-mem lacks ABS(), and the withdraw debit is a negative ledger amount.
+  const ext = {};
+  for (const r of (await pool.query(
+    "SELECT account_id, amount FROM transactions WHERE reason='withdraw:omr'")).rows)
+    ext[r.account_id] = (ext[r.account_id] || 0) + Math.abs(Number(r.amount));
+  return rows.map((r) => ({ name: r.name, level: levelOf(Number(r.respect)),
+    netWorth: Number(r.cash) + Number(r.bank), omr: Number(r.omr), kills: Number(r.kills || 0),
+    extracted: Math.round((ext[r.account_id] || 0) * 100) / 100 }));
+}
+
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
 // readiness (the same CHECKS claimOnboard enforces) so the client never re-derives game state:
 // each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.
