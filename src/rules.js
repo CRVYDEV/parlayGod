@@ -1235,12 +1235,24 @@ export const BLACK_MARKET = {           // (MARKET is the generated §5 goods ca
 // sim-audit F5 retune: marginal ROI now TAPERS up the ladder (t1 ~192%/day → t2 ~115% → t3 ~106%)
 // instead of staying flat — max-tier-everything is no longer strictly correct, and the entry tier
 // stays the hook. Founder sign-off levers, like everything on this ladder.
+// The tier ladder (step two extended it 3→5, on the ROI taper — content, the car-catalog precedent:
+// upgradeRacket/territoryTierOf already handle any tier, so the extension is zero-code).
 export const TERRITORY_RACKETS = [
-  { tier: 1, name: 'Numbers Racket',    cost: 50000,   incomePerHr: 4000 },
-  { tier: 2, name: 'Protection Racket', cost: 250000,  incomePerHr: 16000 },
-  { tier: 3, name: 'Smuggling Front',   cost: 1000000, incomePerHr: 60000 },
+  { tier: 1, name: 'Numbers Racket',    cost: 50000,    incomePerHr: 4000 },
+  { tier: 2, name: 'Protection Racket', cost: 250000,   incomePerHr: 16000 },
+  { tier: 3, name: 'Smuggling Front',   cost: 1000000,  incomePerHr: 60000 },
+  { tier: 4, name: 'Vice Empire',       cost: 4000000,  incomePerHr: 200000 },  // marginal ROI ~112%/day
+  { tier: 5, name: 'The Syndicate',     cost: 15000000, incomePerHr: 600000 },  // marginal ROI ~87%/day — the endgame operation
 ];
 export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tier === Number(tier)) || null;
+// THE EMPIRE (step two) — a gang-level status axis off lifetime territory income (dies with the family).
+// Pure status: no §10.4 surface (the income still rides territory:income; this is a separate counter).
+export const TERRITORY_RANKS = [
+  { min: 0, name: 'Corner Crew' }, { min: 1000000, name: 'Neighborhood Outfit' }, { min: 10000000, name: 'Borough Power' },
+  { min: 100000000, name: 'City Syndicate' }, { min: 500000000, name: 'The Cosa Nostra' },
+];
+export const territoryRankOf = (earned) =>
+  [...TERRITORY_RANKS].reverse().find((r) => Number(earned) >= r.min) || TERRITORY_RANKS[0];
 // cumulative build cost of an operation at `tier` — the basis for the seizure war premium
 export const territoryBuildCost = (tier = 0) =>
   TERRITORY_RACKETS.filter((t) => t.tier <= Number(tier)).reduce((a, t) => a + t.cost, 0);

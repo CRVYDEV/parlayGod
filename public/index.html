@@ -706,6 +706,7 @@
         <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>
 
       <h2 style="margin-top:12px">Territory Operations</h2>
+      ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
         <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div></div>`).join('')}</div>`
@@ -761,6 +762,9 @@
         ? `<div class="grid">${rows.slice(0, 10).map((f, i) => `<div class="card"><span class="t">${i + 1}. ${f.tag ? `[${f.tag}] ` : ''}${f.name}</span><div class="d">${f.foundation || ''}</div></div>`).join('')}</div>`
         : '<div class="d" style="color:var(--dim);font-size:11px">No family has endowed a foundation yet — be the first pillar of the city.</div>';
     }; }
+    { const tlb = $('#terr-lb'); if (tlb) tlb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/territory')).body || {};
+      alert('THE EMPIRE — biggest territorial families\\n\\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\\n') || 'no territory income logged yet')); }; }
     t.querySelector('#trib-go').onclick = () =>
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>
