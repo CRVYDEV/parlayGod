@@ -1691,8 +1691,11 @@
     t.innerHTML = `
       ${!stable.length ? coachCard('Sign a contender', 'Every boss fancies himself a fight manager. Sign a fighter ($' + fmt(b.recruitCost || 50000) + ', level ' + (b.minLevel || 8) + '+), train them up, and stake them against other managers\' fighters or NPC cards. Run a stable of up to ' + max + '. Your fighters die with your street.') : ''}
       <h2>The Fight Circuit</h2>
-      ${b.champion ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏆 World Champion: ${b.champion.fighter}</span>
-        <div class="d">${b.champion.defenses} title defence${b.champion.defenses === 1 ? '' : 's'}${b.champion.defendSeconds > 0 ? ` · must defend within ${mins(b.champion.defendSeconds)} or forfeit` : ' · <span style="color:var(--bad)">defence overdue — forfeit imminent</span>'}${b.champion.contender ? ` · #1 contender: ${b.champion.contender.name} (${b.champion.contender.record})` : ''}</div></div>` : ''}
+      ${b.champion ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏆 World Champion: ${b.champion.fighter}${b.champion.onMe ? ' <span class="chip good">you</span>' : ''}</span>
+        <div class="d">${b.champion.defenses} title defence${b.champion.defenses === 1 ? '' : 's'}${b.champion.defendSeconds > 0 ? ` · must defend within ${mins(b.champion.defendSeconds)} or forfeit` : ' · <span style="color:var(--bad)">defence overdue — forfeit imminent</span>'}${b.champion.contender ? ` · #1 contender: ${b.champion.contender.name} (${b.champion.contender.record})${b.champion.contender.mine ? ' — you' : ''}` : ''}</div>
+        ${b.champion.callout ? `<div class="d" style="color:var(--neon)">🥊 CALLOUT: ${b.champion.callout.challenger} has called out the champ${b.champion.callout.deadlineSeconds > 0 ? ` — the champ must accept within ${mins(b.champion.callout.deadlineSeconds)} or forfeit the belt` : ' — <span style="color:var(--bad)">accept overdue — forfeit imminent</span>'}
+          ${b.champion.onMe && b.champion.callout.deadlineSeconds > 0 ? '<button class="act" id="bx-accept" style="border-color:var(--neon)">accept the challenge (title main event)</button>' : ''}</div>`
+          : (b.champion.contender && b.champion.contender.mine && !b.champion.onMe ? `<div class="d"><button class="act" id="bx-callout" data-cf="${b.champion.contender.fighterId}" style="border-color:var(--bad)">📣 call out the champ (mandatory title shot)</button></div>` : '')}</div>` : ''}
       <h2 style="margin-top:10px;font-size:14px">Your Stable <span class="d" style="font-size:10px">(${stable.length}/${max})</span></h2>
       <div class="grid">${stable.map((y) => `
         <div class="card" ${y.belt ? 'style="border-color:var(--neon)"' : ''}><span class="t">${y.belt ? '🏆 ' : ''}${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
@@ -1745,6 +1748,8 @@
     });
     t.querySelectorAll('[data-bet]').forEach((x) => x.onclick = () =>
       act('POST', `/v1/boxing/bout/${x.dataset.bet}/bet`, { fighter: x.dataset.bf, amount: Number(($(`#bx-bet-${x.dataset.bet}`) || {}).value || 0) }).then(() => renderBoxing()));
+    const bxc = $('#bx-callout'); if (bxc) bxc.onclick = () => act('POST', `/v1/boxing/callout/${bxc.dataset.cf}`, null).then(() => renderBoxing());
+    const bxa = $('#bx-accept'); if (bxa) bxa.onclick = () => act('POST', '/v1/boxing/callout/accept', null).then(() => renderBoxing());
     const lb = $('#bx-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/boxing')).body || {};
       const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');

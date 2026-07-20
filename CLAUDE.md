@@ -2168,10 +2168,32 @@ fighter); `/v1/rules` gained `defenseMs`; console: the champion banner shows the
 contender. `test/boxing.js` covers the cornerman discount (T1) + build bonus (T3) + the stable-patch favor,
 and belt defense (a defence grows the reign, the clock + contender surface, an inactive champ is stripped);
 `test/underworld.js` asserts the six-fixture cast. Suite 30/30 + sim drift-0. All numbers
-(`CORNER_*`, `DEFENSE_MS`) are founder sign-off levers. **The boxing pillar is now four steps deep**
-(recruit/train/PvP → stable/exhibition/belt/legend → the main event → the cornerman + belt defense). Fully
-deferred beyond this: a belt-defense CALLOUT (a mandatory #1-contender challenge the champ must accept) is
-the only unbuilt idea — the mandatory-defense CLOCK stands in for it today.
+(`CORNER_*`, `DEFENSE_MS`) are founder sign-off levers.
+**Step five — THE CALLOUT — BUILT** (`src/boxing.js`, `test/boxing.js`; the mandatory #1-contender
+challenge, the last boxing idea). The **#1 contender** (the top living non-champ fighter with a record,
+`contenderOf`) forces a title fight: `callOutChamp` (`POST /v1/boxing/callout/:fighterId`) sets a pending
+callout on the `boxing_title` singleton (`callout_fighter`/`callout_char`/`callout_deadline`, `now +
+BOXING.CALLOUT_MS` 48h; `CALLOUT_MS` env is TEST-ONLY) — gated self / not-contender / one-at-a-time /
+injured / booked; the champ is notified + a streets shout. The champ then either **ACCEPTS**
+(`acceptCallout`, `POST /v1/boxing/callout/accept`) — books a TITLE main event champ-vs-challenger (the
+callout IS the challenger's consent, so no listing needed; reuses the entire step-three machinery — the
+belt rides on the result via the shared `applyBeltResult`: challenger wins → title change, champ wins → a
+defence) and consumes the callout — or **DUCKS** it: the worker `enforceBeltDefense` (now two-tier) forfeits
+the belt STRAIGHT to the challenger past the deadline (you can't duck the #1 contender), else falls through
+to the step-four mandatory-defense strip. Single-party throughout (no cash moves — the champ locks the two
+fighter rows + the singleton; the challenger's char is never locked). Death: `wipeFighterAtDeath` clears the
+callout if the dead man is the champ (belt vacates) OR the challenger (callout voids); an accepted title
+bout is a normal booked main event, so a champ's death cancels + refunds it via `cancelMainEventsAtDeath`.
+Board: `champion` gained `onMe` + `contender.mine`/`.fighterId` + a `callout` block (challenger + accept
+clock + `byMe`); `openMainEvents` flags a `title` bout; `/v1/rules` gained `calloutMs`; console: the
+champion banner shows a pending callout + an **accept** button (champ) / **call out** button (the #1
+contender). §10.4 untouched (pure status — the belt is a status singleton, the accepted fight is the
+already-§10.4-clean main event). `test/boxing.js` covers the gates (self / not-contender / one-at-a-time),
+the board callout surface, the DUCK forfeit (belt → challenger), and ACCEPT (title main event booked + the
+callout consumed + both fighters locked + the board title flag). Suite 30/30 + sim drift-0.
+`BOXING.CALLOUT_MS` is a founder sign-off lever. **The boxing pillar is COMPLETE** (recruit/train/PvP →
+stable/exhibition/belt/legend → the main event → the cornerman + belt defense → the callout) — every idea
+in the design + the four deferred lists is now built.
 
 **THE RESERVE BOND (Protocol-Owned Liquidity) — off-chain CORE BUILT, chain DORMANT** (`src/bonds.js`,
 `test/bonds.js` — the 30th suite; design `omerta-reserve-bond-design.md`; founder-directed "Option C").
