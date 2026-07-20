@@ -281,7 +281,7 @@ export async function jump(ch, victim, client, h) {
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer hits harder — a new modifier on the attack term, sign-off lever
   const atk = (eff('muscle') + eff('speed') * 0.5 + (gunObjOf(ch.gun)?.fp || 0) * 0.4 + (rIdx >= 3 ? 5 : 0))
-    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) + Math.random() * 25;
+    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) + Math.random() * 25;
   const def = (vEff('muscle') + vEff('speed') * 0.5 + (gunObjOf(victim.gun)?.fp || 0) * 0.4) + Math.random() * 25;
   await h.rngLog(client, ch.id, `jump:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 

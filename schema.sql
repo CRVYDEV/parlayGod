@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
   cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
   intel_ops INT NOT NULL DEFAULT 0,   -- (Wire step two) lifetime intel actions run — THE SPYMASTER (status, survives death)
+  -- NOTE: characters.active_at (Skills step two — shared skill-active cooldown) is added on the characters table below
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
   dynasty_name TEXT,
@@ -164,6 +165,7 @@ CREATE TABLE IF NOT EXISTS characters (
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)
   wire_until TIMESTAMPTZ,                           -- THE WIRE: the Street Wire premium-intelligence subscription window (a $OMR sink)
+  active_at TIMESTAMPTZ,                            -- SKILLS step two: shared cooldown across capstone-unlocked ACTIVE abilities
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

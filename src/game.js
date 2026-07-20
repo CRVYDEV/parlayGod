@@ -281,7 +281,9 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
 export const hasSkill = (h, id) => !!h?.owned?.skills?.has(id);
 export const skillMult = (h, id, mult) => (hasSkill(h, id) ? mult : 1);
 // trunk capacity incl. the Pack Mule bonus — use this, not cargoCapacity(), on player paths
-export const trunkCap = (h) => cargoCapacity(h.owned.assets) + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0);
+export const trunkCap = (h) => cargoCapacity(h.owned.assets)
+  + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
+  + (hasSkill(h, 'road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0); // step-two capstone: even bigger haul
 
 async function accrueAndLedger(client, ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,

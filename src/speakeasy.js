@@ -424,7 +424,7 @@ export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
   await client.query('UPDATE speakeasies SET standover_cd_until=$2 WHERE district_id=$1', [districtId, new Date(Date.now() + S.CD_MS)]);
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const oEff = (s) => effStat(owner[s], s, h.victimOwned.assets, h.victimOwned.gear);
-  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT);
+  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT);
   const def = oEff('muscle') + oEff('cunning') * 0.5;
   let p = Math.max(S.MIN_P, Math.min(S.MAX_P, S.BASE_P + (atk - def) / S.STAT_SCALE));
   if (process.env.SPEAKEASY_STANDOVER_P != null) p = Number(process.env.SPEAKEASY_STANDOVER_P); // TEST-ONLY (the raid precedent)
