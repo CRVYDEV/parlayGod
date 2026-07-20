@@ -300,15 +300,21 @@
     if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
     if (body.wireSeconds) bits.push('subscribed to the Street Wire — the intelligence is flowing');
     if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
+    if (body.verified && body.wallet) bits.push(`wallet linked — ${body.wallet.slice(0, 6)}…${body.wallet.slice(-4)}${body.feesCredited ? ` · ${body.feesCredited} fee credit(s) applied` : ''}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
 
   // ── plumbing ──
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
   async function api(method, path, body) {
-    // content-type only when a body rides along — Fastify 400s an empty JSON-typed body
+    // content-type only when a body rides along — Fastify 400s an empty JSON-typed body.
+    // a fresh Idempotency-Key on every mutation lets the server dedup a retried write (belt to the
+    // in-flight lock's braces — a network layer that re-sends the request won't double-spend).
+    const mutating = method !== 'GET';
     const r = await fetch(path, { method,
       headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(mutating ? { 'Idempotency-Key': uuid() } : {}),
         ...(token ? { authorization: 'Bearer ' + token } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body) });
     let j = null; try { j = await r.json(); } catch { j = { raw: await r.text?.() }; }
@@ -319,11 +325,34 @@
     const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : '';
     t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3200);
   }
+  // one money move at a time — a global in-flight lock is the double-tap guard (buttons re-render
+  // after each act, so a per-button disable is redundant; this covers every call site at once).
+  let acting = false;
   async function act(method, path, body) {
-    const r = await api(method, path, body);
-    toast(describe(r.body, r.code), r.code >= 400);
-    await refresh();
-    return r;
+    if (acting) { toast('easy — one move at a time', false); return { code: 429, body: {} }; }
+    acting = true; document.body.style.cursor = 'progress';
+    try {
+      const r = await api(method, path, body);
+      toast(describe(r.body, r.code), r.code >= 400);
+      await refresh();
+      return r;
+    } finally { acting = false; document.body.style.cursor = ''; }
+  }
+
+  // SIWE wallet link — the browser wallet signs a server challenge; the proven 0x address is what
+  // survives you and gates every $OMR / gear extraction. No wallet extension → a clean pointer.
+  async function linkWallet() {
+    if (!window.ethereum) { toast('no browser wallet found — install MetaMask or Rabby, then reload', true); return; }
+    try {
+      const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (!address) { toast('no wallet account selected', true); return; }
+      const ch = await api('POST', '/v1/wallet/challenge', {});
+      const message = ch.body?.message;
+      if (!message) { toast(describe(ch.body, ch.code), true); return; }
+      const signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+      await act('POST', '/v1/wallet/verify', { address, signature });
+      renderActive();
+    } catch (e) { toast(e?.message ? 'wallet: ' + e.message : 'wallet link cancelled', true); }
   }
 
   // ── screens ──
@@ -373,8 +402,8 @@
   $('#welcome-go').onclick = () => { localStorage.setItem('omerta_welcomed', '1'); $('#welcome').classList.add('hidden'); setTab('start'); };
 
   // the sheet stays honest on its own: countdowns and accrual don't wait for a click
-  setInterval(() => { if (me && !document.hidden) refresh(); }, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && me) refresh(); });
+  setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); } }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && me) { refresh(); renderActive(); } });
 
   // recent history into the wire so a fresh page isn't blind to what happened while away
   async function backfillFeed() {
@@ -477,30 +506,30 @@
     // new players land on the guided funnel; veterans (all-done) stay on the Streets
     api('GET', '/v1/onboard').then((r) => { if (r.body && !r.body.allDone) setTab('start'); });
   }
+  // one renderer per tab (deck/city/den built once at boot; the rest re-render on entry). Function
+  // declarations are hoisted, so this map can name them here.
+  const RENDERERS = { start: renderStart, streets: renderStreets, city: renderCity, den: renderDen,
+    kitchen: renderKitchen, family: renderFamily, market: renderMarket, pvp: renderPvp, law: renderLaw,
+    garage: renderGarage, empire: renderEmpire, speakeasy: renderSpeakeasy, boxing: renderBoxing,
+    scores: renderScores, loans: renderLoans, portfolio: renderPortfolio, estate: renderEstate,
+    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore };
+  let currentTab = 'streets';
   function setTab(id) {
+    currentTab = id;
     for (const b of $('#tabs').children) b.classList.toggle('on', b.dataset.tab === id);
     for (const t of $('#tabbodies').children) t.classList.toggle('on', t.id === 'tab-' + id);
-    if (id === 'start') renderStart();
-    if (id === 'streets') renderStreets();
-    if (id === 'city') renderCity();
-    if (id === 'den') renderDen();
-    if (id === 'kitchen') renderKitchen();
-    if (id === 'family') renderFamily();
-    if (id === 'market') renderMarket();
-    if (id === 'pvp') renderPvp();
-    if (id === 'law') renderLaw();
-    if (id === 'garage') renderGarage();
-    if (id === 'empire') renderEmpire();
-    if (id === 'speakeasy') renderSpeakeasy();
-    if (id === 'boxing') renderBoxing();
-    if (id === 'scores') renderScores();
-    if (id === 'loans') renderLoans();
-    if (id === 'portfolio') renderPortfolio();
-    if (id === 'estate') renderEstate();
-    if (id === 'life') renderLife();
-    if (id === 'pen') renderPen();
-    if (id === 'wire') renderWire();
-    if (id === 'store') renderStore();
+    RENDERERS[id]?.();
+  }
+  // re-render the OPEN tab (debounced) when live state changes — so a board a player is staring at
+  // (contracts, nightlife, the market) doesn't go stale under a WS event or the 30s poll.
+  let _reRenderT = null;
+  function renderActive() {
+    clearTimeout(_reRenderT);
+    _reRenderT = setTimeout(() => {
+      const ae = document.activeElement;
+      if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return; // don't nuke a field mid-type
+      try { RENDERERS[currentTab]?.(); } catch { /* transient */ }
+    }, 350);
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
@@ -779,7 +808,7 @@
       ob_bank: ['streets', 'Bank some cash — Streets → deposit'],
       ob_path: ['streets', 'Reach level 5, then declare your Path'],
       ob_family: ['family', 'Found or join a family'],
-      ob_wallet: ['deck', 'Link a wallet (the wallet is what survives you)'],
+      ob_wallet: ['portfolio', 'Link a wallet in Going Legit (the wallet is what survives you)'],
     };
     const reward = (r) => `$${fmt(r.cash || 0)}${r.cb ? ` + ${r.cb} crate${r.cb > 1 ? 's' : ''}` : ''}${r.en ? ` + ${r.en} energy` : ''}`;
     // the single most actionable step: a reward that's ready to claim, else the first thing to go do
@@ -1785,6 +1814,12 @@
           : '<span class="d">buy into the fund to earn a dividend</span>'}
       </div>` : ''}
 
+      <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:10px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
+      <div class="card">${me.wallet
+        ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
+        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge with your browser wallet to link it — nothing leaves your wallet, it just proves the address.</div>
+           <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
+
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat)</span></h2>
       <div class="card"><div class="d">pocket $${fmt(me.cash)} · $OMR on hand ${fmt(Math.floor(me.omr || 0))}</div>
         <input id="swap-amt" placeholder="amount" size="9">
@@ -1838,6 +1873,7 @@
       <div class="d" style="color:var(--dim);font-size:11px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
+    { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
     const swapAmt = () => Number($('#swap-amt').value);
     $('#swap-buy').onclick = () => act('POST', '/v1/swap', { direction: 'buy', amount: swapAmt() }).then(() => renderPortfolio());
     $('#swap-sell').onclick = () => act('POST', '/v1/swap', { direction: 'sell', amount: swapAmt() }).then(() => renderPortfolio());
@@ -1936,12 +1972,25 @@
           ${n.grudge ? `<button class="act" data-uwpenance="${n.id}">penance $${fmt(uw.penance || 25000)}</button>` : ''}
           ${n.tier >= 3 && !uw.favor?.taken ? `<button class="act" data-uwfavor="${n.id}">the weekly favor</button>` : ''}
           ${n.tier >= 1 && !uw.errand ? `<button class="act" data-uwerrand="${n.id}">take an errand</button>` : ''}</div>`).join('')}</div>
-      ${me.hospSeconds > 0 ? `<div style="margin-top:8px"><button class="act" data-do="POST /v1/underworld/discharge">Doc's early discharge ($150/min left)</button></div>` : ''}`;
+      ${me.hospSeconds > 0 ? `<div style="margin-top:8px"><button class="act" data-do="POST /v1/underworld/discharge">Doc's early discharge ($150/min left)</button></div>` : ''}
+
+      <h2 style="margin-top:12px">Vanity <span class="d" style="font-size:10px">(pure cosmetics — a $OMR flex · on hand: ${fmt(Math.floor(me.omr || 0))} $OMR)</span></h2>
+      <div class="card">
+        <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (5 $OMR)</button></div>
+        <div style="margin-top:4px"><input id="van-title" placeholder="custom title (blank clears it, free)" size="20" maxlength="24"> <button class="act" id="van-title-go">set title (10 $OMR)</button></div>
+        ${(me.cars || []).filter((c) => !c.listed && !c.pledged).length
+          ? `<div style="margin-top:4px"><select id="van-car">${(me.cars || []).filter((c) => !c.listed && !c.pledged).map((c) => `<option value="${c.id}">${c.model}${c.trim ? ' ' + c.trim : ''}${c.plate ? ` [${c.plate}]` : ''}</option>`).join('')}</select>
+             <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (2 $OMR)</button></div>`
+          : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
+      </div>`;
     t.querySelectorAll('[data-learn]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/skills/${btn.dataset.learn}`, {}).then(() => renderLife()));
     for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
       t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
         act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));
+    { const b = $('#van-name-go'); if (b) b.onclick = () => act('POST', '/v1/vanity/name', { name: $('#van-name').value.trim() }).then(() => renderLife()); }
+    { const b = $('#van-title-go'); if (b) b.onclick = () => act('POST', '/v1/vanity/title', { title: $('#van-title').value.trim() }).then(() => renderLife()); }
+    { const b = $('#van-plate-go'); if (b) b.onclick = () => act('POST', `/v1/vanity/plate/${$('#van-car').value}`, { plate: $('#van-plate').value.trim() }).then(() => renderLife()); }
   }
 
   // ── THE PEN: dead time made a place (jailed only) ──
@@ -2045,7 +2094,10 @@
         try {
           const ev = JSON.parse(m.data);
           feedLine(ev.channel || '?', ev);
-          if (ev.channel === 'me') refresh();
+          // your own events refresh the sheet + re-render the open board; streets/gang events
+          // (someone posted a contract, a club got raided) just re-render the open board.
+          if (ev.channel === 'me') { refresh(); renderActive(); }
+          else renderActive();
         } catch { /* noise */ }
       };
       ws.onclose = () => { $('#ws-dot').style.color = 'var(--bad)'; ws = null; setTimeout(connectWs, 4000); };
