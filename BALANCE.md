@@ -934,3 +934,18 @@ wall), and there is **no APY / price-appreciation marketing** until counsel sign
 - The raid makes the passive income EARNED: the more you monetize (table + patrons), the hotter the club,
   the bigger the raid risk. Self-inflicted notoriety from your own money-making — a real risk/reward dial.
 - Step three is the ETH cosmetic-decor revenue layer (mainnet-gated) + a P2P buyout + a renown axis.
+
+## Daily social tasks — "Spread the Word" (organic-growth faucet; founder-directed 2026-07-20)
+A recurring petty-cash faucet to grow organic word-of-mouth + referral volume. NUMBERS ARE SIGN-OFF LEVERS.
+- `SOCIAL_TASKS.CASH` **$300**/task, `ALL_BONUS` **$500** (all three in a day). 3 tasks → **max $1,400/day**.
+- Petty by design: a rounding error for a whale (self-targets newer/engaged players), yet a real nudge for
+  a low-level street. CASH ONLY (v24 rule) → farmed cash must clear heat + the $2.6M/day wash cap to become
+  extractable $OMR, so the faucet's real value is bounded. Once per (account, day); agent-flagged excluded;
+  gated behind `SOCIAL_VERIFY_MODE!=='off'` (alpha `trust`, so it's live with the First-Week socials).
+- Anti-abuse posture (flagged): "post a tweet" is inherently unverifiable, so this is a TRUST faucet with a
+  proof URL logged via `track('social_task')` for spot-checks. Sybil rings can farm $1,400/day/alt — but
+  each alt is a full account (invite-gated alpha), the cash is petty + laundering-bounded, and agents are
+  excluded. If abuse shows in the alpha, the dial is: lower `CASH`, require `SOCIAL_VERIFY_MODE=live` with a
+  real per-post check, or add a level floor. The share URLs carry the player's name as their referral code,
+  so the intended payoff is the EXISTING referral system (real cash + $OMR on a qualified recruit).
+- `SOCIAL_GAME_URL` / `SOCIAL_X_HANDLE` are deploy-time (the share intents); default placeholders.

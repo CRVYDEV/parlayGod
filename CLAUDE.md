@@ -2200,6 +2200,32 @@ custom title / car plate — the `vanity:*` $OMR sinks). Verified in Chromium: a
 page errors**, the grouped tab bar shows (Streets · Earners · Vice · Blood · Family · Legit), and every tab
 GET returns 2xx for a fresh guest. The UX-audit backlog is now empty.
 
+**DAILY SOCIAL TASKS — "Spread the Word" (organic-growth petty-cash faucet) — BUILT** (`src/growth.js`,
+`src/rules.js` tail, `schema.sql`, `src/server.js`, `src/invariants.js`, `public/index.html`,
+`test/growth.js`; founder-directed to grow organic word-of-mouth + referral volume; numbers are sign-off
+levers). Three recurring daily tasks (`SOCIAL_TASKS`: **sw_post** tweet about us, **sw_invite** share your
+code, **sw_boost** follow/RT the pinned post) each paying **petty cash** (`CASH` $300, `ALL_BONUS` $500 for
+all three in a day). **CASH ONLY** (the v24 social-reward rule — farmed cash must be laundered past heat +
+the $2.6M/day wash cap to extract, which bounds its value); **once per (account, day)** via the new
+`social_claims (account_id, day, task_id)` PK table (withCharacter's per-character lock serializes claims,
+the PK backstops); **agent-flagged accounts EXCLUDED** (the referral precedent); and the reward is **gated
+behind `SOCIAL_VERIFY_MODE!=='off'`** (the verify.js philosophy — a default/misconfigured server never
+leaks; alpha runs `trust`). The share URLs (`socialShareUrl`) are **prefilled X intents carrying the
+player's LIVING NAME as their referral code** (referrals resolve by name, §7.13) — so a recruit who uses it
+pays the sharer real referral cash + $OMR on qualification, closing the loop into the existing referral
+system. §10.4: `social:` joined the cash faucet vocabulary (`invariants.js`); every payout is a ledgered
+`social:<taskId>` cash faucet (the all-done bonus folds into the last row, the onboard-capstone precedent),
+so the per-character cash check reconciles exactly. `track('social_task', {task, allDone, proof})` gives
+the founder volume + a spot-check trail on the ops activity feed. Routes: `GET /v1/social`, `POST
+/v1/social/:taskId/claim`; the client surfaces a **"Spread the Word"** section on the Start Here tab (share
+↗ opens the intent, then claim) — browser-verified rendering with share links + claim buttons, no page
+errors. `test/growth.js` covers the board + share code, a paid claim (ledgered), the once/day gate, the
+all-done bonus, bad-task, the §10.4 per-character reconcile, agent exclusion, and the off-mode gate. Suite
+30/30 + sim drift-0. Levers (`CASH`, `ALL_BONUS`, the task set, `SOCIAL_GAME_URL`/`SOCIAL_X_HANDLE`) are
+founder sign-off; the honest note: "post a tweet" is inherently unverifiable, so this is a bounded,
+agent-excluded, cash-only, once/day, proof-logged TRUST faucet — petty by design so farming is barely worth
+it while genuine sharing brings in real referrals.
+
 ## Sensitive design notes
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT

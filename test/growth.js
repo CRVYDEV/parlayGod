@@ -7,6 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
+import { SOCIAL_TASKS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -299,8 +300,40 @@ await seedCh(bot.id, 'respect=400, lc_crime=40, cash=30000, nerve=50, energy=200
 await call('POST', '/v1/crimes/pick', { token: bot.token });
 assert.equal((await meOf(mentor.token)).recruits, 1, 'agent accounts excluded from referral payouts');
 
+// ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──
+const promoter = await mk('Promoter Pete');
+let sw = (await call('GET', '/v1/social', { token: promoter.token })).body;
+assert.equal(sw.enabled, true, 'trust mode → word-of-mouth rewards are live');
+assert.equal(sw.tasks.length, SOCIAL_TASKS.TASKS.length, 'the board lists every task');
+assert.equal(sw.code, 'Promoter Pete', "the share code is the player's living name");
+assert(sw.tasks[0].share.includes('x.com'), 'each task carries a prefilled share intent');
+assert.equal(sw.tasks[0].claimed, false, 'nothing claimed yet');
+const swCashBefore = (await meOf(promoter.token)).cash;
+r = await call('POST', '/v1/social/sw_post/claim', { token: promoter.token });
+assert.equal(r.code, 200); assert.equal(r.body.cash, SOCIAL_TASKS.CASH, 'a task pays the petty cash');
+assert.equal((await meOf(promoter.token)).cash, swCashBefore + SOCIAL_TASKS.CASH, 'the cash landed');
+assert.equal((await call('GET', '/v1/social', { token: promoter.token })).body.tasks.find((t) => t.id === 'sw_post').claimed, true, 'the board marks it done today');
+assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: promoter.token })).body.error, 'claimed', 'once per day per task');
+await call('POST', '/v1/social/sw_invite/claim', { token: promoter.token });
+r = await call('POST', '/v1/social/sw_boost/claim', { token: promoter.token });
+assert.equal(r.body.allDone, true, 'the last task completes the day');
+assert.equal(r.body.cash, SOCIAL_TASKS.CASH + SOCIAL_TASKS.ALL_BONUS, 'and pays the all-done bonus, folded into the row');
+assert.equal((await call('POST', '/v1/social/sw_nope/claim', { token: promoter.token })).body.error, 'bad_task', 'unknown task rejected');
+const swPaid = SOCIAL_TASKS.CASH * 3 + SOCIAL_TASKS.ALL_BONUS;
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id='${promoter.id}' AND reason LIKE 'social:%'`)).rows[0].s), swPaid, 'every payout is a ledgered social: cash faucet');
+assert.equal((await meOf(promoter.token)).cash, 500 + swPaid, 'the character cash reconciles with the ledger (§10.4)');
+// agent accounts are excluded (the referral precedent)
+const shill = await mk('Shill Bot');
+await pool.query(`UPDATE account_persistent SET agent_flag = true WHERE account_id = (SELECT account_id FROM characters WHERE id='${shill.id}')`);
+assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: shill.token })).body.error, 'agent', 'agent accounts earn no word-of-mouth cash');
+// the reward gate: with verification off, claiming is refused (sharing itself stays free)
+process.env.SOCIAL_VERIFY_MODE = 'off';
+const quiet = await mk('Quiet Guy');
+assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: quiet.token })).body.error, 'social_off', 'off mode pays nothing');
+process.env.SOCIAL_VERIFY_MODE = 'trust'; // restore for the rest of the suite
+
 // ── telemetry (§12) ──
-for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified'])
+for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified', 'social_task'])
   assert(Number((await pool.query('SELECT COUNT(*) n FROM telemetry WHERE event=$1', [ev])).rows[0].n) >= 1, `telemetry: ${ev}`);
 
 // ── mod tools (§10.3): MOD_KEY gate, ban, mod-kill, confiscate, audit ──

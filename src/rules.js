@@ -1634,3 +1634,35 @@ export const auctionLotsOf = (week = weekOf()) => {
   }
   return lots;
 };
+
+// ── DAILY SOCIAL TASKS ("Spread the Word") ────────────────────────────────────────────────────
+// Recurring petty-cash nudges that grow ORGANIC word-of-mouth + referral volume. CASH ONLY (the
+// v24 social-reward rule; farmed cash must be laundered — heat + the $2.6M/day wash cap — to
+// extract, which bounds its value), petty per task, once/day/account, agent-flagged accounts
+// EXCLUDED (the referral precedent), and the reward is gated behind SOCIAL_VERIFY_MODE!=='off' so
+// a default/misconfigured server never leaks. The share URLs carry the player's LIVING NAME as
+// their referral code (referrals resolve by name, §7.13) — a recruit who uses it pays the sharer
+// real referral cash + $OMR on qualification, so this feeds the existing referral loop. ALL
+// numbers are founder sign-off levers. Deploy sets SOCIAL_GAME_URL / SOCIAL_X_HANDLE.
+export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || 'https://playomerta.com'
+export const SOCIAL_X_HANDLE = (process.env.SOCIAL_X_HANDLE || 'PlayOmerta').replace(/^@/, '')
+export const SOCIAL_TASKS = {
+  CASH: 300,       // petty cash per task
+  ALL_BONUS: 500,  // a small bonus for doing every task in a day
+  TASKS: [
+    { id: 'sw_post',   name: 'Post about the family', kind: 'tweet',
+      desc: 'Tweet about OMERTÀ — tag us and drop your name as a referral code.' },
+    { id: 'sw_invite', name: 'Send out your code',    kind: 'referral',
+      desc: 'Share your street name as a referral code — a recruit who sticks pays you real cash + $OMR.' },
+    { id: 'sw_boost',  name: 'Boost the word',        kind: 'boost',
+      desc: 'Follow, retweet, or like the pinned post to push OMERTÀ up the timeline.' },
+  ],
+}
+// Prefilled share intents (client opens these in a new tab). code = the player's living name.
+export const socialShareUrl = (kind, code = '') => {
+  const url = SOCIAL_GAME_URL, h = SOCIAL_X_HANDLE
+  const tweet = (text) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
+  if (kind === 'tweet') return tweet(`I'm running the streets in OMERTÀ — a noir mob RPG. Use my code "${code}" when you sign up. @${h}`)
+  if (kind === 'referral') return tweet(`Come earn with me in OMERTÀ. Referral code: ${code}`)
+  return `https://x.com/${h}` // boost: the profile / pinned post
+}
