@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   -- lifetime feared-reputation (the "most feared" ladder) + lifetime confirmed kills.
   hitman_rep BIGINT NOT NULL DEFAULT 0,
   kills INT NOT NULL DEFAULT 0,
+  boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
   dynasty_name TEXT,
@@ -647,8 +648,11 @@ CREATE INDEX IF NOT EXISTS ix_speakeasy_patrons_char ON speakeasy_patrons (chara
 -- THE FIGHT CIRCUIT (omerta-fight-circuit-design.md): a manager signs ONE contender — a persistent owned
 -- asset with stats + a W/L record — and stakes them in PvP bouts (the casino:pvp transfer pattern). Dies
 -- with the street (joins the runEstate wipe). bout_limit = consent-by-listing (the fade/bodyguard pattern).
+-- THE FIGHT CIRCUIT (step two: THE STABLE) — a manager runs MANY fighters (BOXING.STABLE_MAX), so
+-- the PK is a per-fighter id and character_id is the (non-unique) manager.
 CREATE TABLE IF NOT EXISTS fighters (
-  character_id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,        -- the manager (a stable = many fighters per manager)
   name TEXT NOT NULL,
   power INT NOT NULL,
   chin INT NOT NULL,
@@ -657,9 +661,17 @@ CREATE TABLE IF NOT EXISTS fighters (
   losses INT NOT NULL DEFAULT 0,
   injured_until TIMESTAMPTZ,        -- a lost bout lays the fighter up (no spam)
   bout_limit NUMERIC,               -- the stake this fighter will take (null = not taking bouts)
+  exhib_at TIMESTAMPTZ,             -- per-fighter cooldown on NPC exhibition bouts
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS ix_fighters_char ON fighters (character_id);
 CREATE INDEX IF NOT EXISTS ix_fighters_wins ON fighters (wins DESC);
+-- the world TITLE BELT (step two): one champion, taken by beating the holder in a PvP bout. Pure status.
+CREATE TABLE IF NOT EXISTS boxing_title (
+  id INT PRIMARY KEY,
+  holder_fighter TEXT, holder_char TEXT, holder_name TEXT, since TIMESTAMPTZ
+);
+INSERT INTO boxing_title (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM boxing_title);
 
 -- ── The Gambling Den: the Numbers (daily lottery tickets; dice are stateless) ──
 -- One ticket per street per day; resolves lazily against the day's seed-drawn number when

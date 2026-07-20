@@ -1575,14 +1575,33 @@ export const BOXING = {
   VARIANCE: 22,              // rng added to each fighter's score — enough for upsets, form still tells
   INJURY_MS: 14400000,      // 4h — a lost bout lays the fighter up
   STATS: ['power', 'chin', 'speed'],
-  // the record ladder (by wins) — pure status
+  // ── STEP TWO ──
+  STABLE_MAX: 3,             // fighters a manager can run at once (the stable)
+  EXHIBITION_CD_MS: 6*3600*1000, // 6h per-fighter cooldown on NPC exhibition bouts
+  // NPC exhibition opponents — a bounded PvE purse so a solo manager can build a record + earn (the fee
+  // is a cash SINK win or lose; the purse a cash FAUCET only on a win → net-positive only vs a beatable
+  // NPC). Bounded by the cooldown + the fee + needing the FORM to win. New faucet — sim + sign-off.
+  NPC_TIERS: [
+    { id: 'clubfighter', name: 'Club Fighter',  form: 26, fee: 3000,  purse: 9000 },
+    { id: 'journeyman',  name: 'Journeyman',    form: 42, fee: 10000, purse: 26000 },
+    { id: 'gatekeeper',  name: 'The Gatekeeper', form: 62, fee: 30000, purse: 78000 },
+  ],
+  // the record ladder (by a single fighter's wins) — pure status
   RANKS: [
     { min: 0, name: 'Prospect' }, { min: 3, name: 'Contender' }, { min: 8, name: 'Ranked' },
     { min: 15, name: 'Champion' }, { min: 30, name: 'Hall of Famer' },
   ],
+  // the MANAGER's career legend (lifetime fighter wins across the whole stable, SURVIVES DEATH) — status
+  LEGEND_RANKS: [
+    { min: 0, name: 'Unknown' }, { min: 10, name: 'Cornerman' }, { min: 25, name: 'Fight Fixer' },
+    { min: 60, name: 'Boxing Kingpin' }, { min: 120, name: 'The Don of the Ring' },
+  ],
 };
 export const boxerRankOf = (wins) =>
   [...BOXING.RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.RANKS[0];
+export const boxerLegendOf = (wins) =>
+  [...BOXING.LEGEND_RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.LEGEND_RANKS[0];
+export const npcBoxerOf = (id) => BOXING.NPC_TIERS.find((t) => t.id === id) || null;
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
