@@ -372,6 +372,9 @@ export async function withCharacter(pool, accountId, fn) {
       catch (e) { console.error('referral spark (post-commit, non-fatal)', e?.code || e); }
       try { await maybeQualifyReferral(pool, accountId); }
       catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
+      // tier-2 "family tree": if this action just qualified a referred recruit, pay their grandrecruiter
+      try { await maybeGrandReferral(pool, accountId); }
+      catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
@@ -438,6 +441,7 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
     if (acct.referred_by && !acct.ref_paid && !acct.agent_flag) {
       try { await maybeSparkReferral(pool, accountId); } catch (e) { console.error('referral spark (post-commit, non-fatal)', e?.code || e); }
       await maybeQualifyReferral(pool, accountId);
+      try { await maybeGrandReferral(pool, accountId); } catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
     return { character: view(ch, acct, owned), events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
@@ -780,10 +784,12 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     const funded = Number(fund.fund) >= M4.REF_FUND_OMR;
     if (funded) await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [M4.REF_FUND_OMR]);
 
-    recruit.cash = Number(recruit.cash) + M4.REF_RECRUIT_CASH;
-    recruiter.cash = Number(recruiter.cash) + M4.REF_RECRUITER_CASH;
-    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: M4.REF_RECRUIT_CASH, reason: 'referral:recruit' });
-    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: M4.REF_RECRUITER_CASH, reason: 'referral:recruiter', counterparty: recruit.id });
+    const mult = await referralPushMult(client); // recruitment-drive CASH multiplier (1 when no push); $OMR untouched
+    const recruitCash = Math.round(M4.REF_RECRUIT_CASH * mult), recruiterCash = Math.round(M4.REF_RECRUITER_CASH * mult);
+    recruit.cash = Number(recruit.cash) + recruitCash;
+    recruiter.cash = Number(recruiter.cash) + recruiterCash;
+    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: recruitCash, reason: 'referral:recruit' });
+    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: recruiterCash, reason: 'referral:recruiter', counterparty: recruit.id });
     if (funded) {
       await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [recruitAccountId, M4.REF_RECRUIT_OMR]);
       await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [acct.referred_by, M4.REF_RECRUITER_OMR]);
@@ -797,7 +803,7 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     let milestoneCash = 0, milestoneOmr = 0, title = null;
     let fundLeft = Number(fund.fund) - (funded ? M4.REF_FUND_OMR : 0);
     for (const m of RECRUIT_MILESTONES.filter((m) => m.n > before && m.n <= after)) {
-      milestoneCash += m.cash || 0;
+      milestoneCash += Math.round((m.cash || 0) * mult); // the drive multiplies milestone cash too; $OMR stays fund-bounded
       if (m.omr && fundLeft >= m.omr) { milestoneOmr += m.omr; fundLeft -= m.omr; }
       if (m.title) title = m.title;
     }
@@ -827,9 +833,9 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     await client.query(
       `UPDATE characters SET cash=$2, title=COALESCE($3, title) WHERE id=$1`, [recruiter.id, recruiter.cash, title]);
     await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
-    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: M4.REF_RECRUITER_CASH + milestoneCash, omr: (funded ? M4.REF_RECRUITER_OMR : 0) + milestoneOmr, recruits: after });
-    await notify(client, recruit.id, 'ref', { made: true, amt: M4.REF_RECRUIT_CASH, omr: funded ? M4.REF_RECRUIT_OMR : 0 });
-    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, funded });
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash + milestoneCash, omr: (funded ? M4.REF_RECRUITER_OMR : 0) + milestoneOmr, recruits: after });
+    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash, omr: funded ? M4.REF_RECRUIT_OMR : 0 });
+    await track(client, recruitAccountId, 'referral_qualified', { recruiter: acct.referred_by, funded, mult });
     await client.query('COMMIT');
     return { qualified: true, funded };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
@@ -865,18 +871,83 @@ export async function maybeSparkReferral(pool, recruitAccountId) {
     if (acct.referred_by !== recruiterAccountId || acct.ref_spark || acct.ref_paid || acct.agent_flag || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
     // the early gate — real playtime, well short of full qualification (keeps it Sybil-bounded)
     if (!(levelOf(Number(recruit.respect)) >= M4.REF_SPARK.level && Number(recruit.lc_crime) >= M4.REF_SPARK.jobs)) { await client.query('ROLLBACK'); return null; }
-    recruit.cash = Number(recruit.cash) + M4.REF_SPARK.recruitCash;
-    recruiter.cash = Number(recruiter.cash) + M4.REF_SPARK.recruiterCash;
-    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: M4.REF_SPARK.recruitCash, reason: 'referral:spark' });
-    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: M4.REF_SPARK.recruiterCash, reason: 'referral:spark', counterparty: recruit.id });
+    const mult = await referralPushMult(client); // recruitment-drive CASH multiplier (1 when no push)
+    const recruitCash = Math.round(M4.REF_SPARK.recruitCash * mult), recruiterCash = Math.round(M4.REF_SPARK.recruiterCash * mult);
+    recruit.cash = Number(recruit.cash) + recruitCash;
+    recruiter.cash = Number(recruiter.cash) + recruiterCash;
+    await ledger(client, { characterId: recruit.id, currency: 'cash', amount: recruitCash, reason: 'referral:spark' });
+    await ledger(client, { characterId: recruiter.id, currency: 'cash', amount: recruiterCash, reason: 'referral:spark', counterparty: recruit.id });
     await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruit.id, recruit.cash]);
     await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [recruiter.id, recruiter.cash]);
     await client.query('UPDATE account_persistent SET ref_spark=true WHERE account_id=$1', [recruitAccountId]);
-    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: M4.REF_SPARK.recruiterCash, spark: true });
-    await notify(client, recruit.id, 'ref', { made: true, amt: M4.REF_SPARK.recruitCash, spark: true });
+    await notify(client, recruiter.id, 'ref', { from: recruit.name, amt: recruiterCash, spark: true });
+    await notify(client, recruit.id, 'ref', { made: true, amt: recruitCash, spark: true });
     await track(client, recruitAccountId, 'referral_spark', { recruiter: recruiterAccountId });
     await client.query('COMMIT');
     return { sparked: true };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// ── THE RECRUITMENT DRIVE ("the push") — a time-boxed CASH multiplier on every referral payout ──
+// The $OMR side is untouched (fund-bounded). Bounded by real qualified recruits → Sybil-bounded.
+export async function referralPushMult(client) {
+  const r = (await client.query('SELECT until, mult FROM referral_push WHERE id=1')).rows[0];
+  return (r && r.until && new Date(r.until) > new Date()) ? (Number(r.mult) || 1) : 1;
+}
+export async function referralPushStatus(pool) {
+  const r = (await pool.query('SELECT until, mult FROM referral_push WHERE id=1')).rows[0];
+  const active = !!(r && r.until && new Date(r.until) > new Date());
+  return { active, mult: active ? Number(r.mult) : 1, until: active ? r.until : null,
+    seconds: active ? Math.max(0, Math.floor((new Date(r.until) - new Date()) / 1000)) : 0 };
+}
+export async function startReferralPush(pool, hours, mult) {
+  const h = Math.min(M4.REF_PUSH_MAX_HOURS, Math.max(1, Math.floor(Number(hours) || 0)));
+  const m = Math.min(M4.REF_PUSH_MAX_MULT, Math.max(1, Number(mult) || 1));
+  const until = new Date(Date.now() + h * 3600 * 1000);
+  await pool.query('UPDATE referral_push SET until=$1, mult=$2 WHERE id=1', [until, m]);
+  return { active: true, mult: m, until, hours: h };
+}
+
+// TIER-2 "the family tree" (§7.13 addendum): when a recruit YOU brought in (R) then brings in their
+// OWN qualified recruit (R2), you — the grandrecruiter (A) — earn a BOUNDED, ONE-TIME finder's fee.
+// Deliberately a FLAT one-shot cash bonus, NOT an ongoing percentage of R2's earnings — that's the
+// anti-MLM line (a referral bonus, not a revenue-share pyramid). CASH ONLY, capped at DEPTH 2 (no
+// third level), agents excluded at EVERY level, once ever per R2 (ref_l2_paid). Keyed on R2's full
+// qualification (so it fires inside the same post-commit block that just set R2.ref_paid — the hook
+// stops firing for R2 once paid). Its OWN transaction; locks A's char then the two accounts sorted
+// (characters → accounts, the qualify path's order); the flag flip is an atomic claim (no double-pay).
+export async function maybeGrandReferral(pool, r2AccountId) {
+  const r2 = (await pool.query('SELECT referred_by, ref_paid, ref_l2_paid, agent_flag FROM account_persistent WHERE account_id=$1', [r2AccountId])).rows[0];
+  if (!r2 || !r2.ref_paid || r2.ref_l2_paid || r2.agent_flag || !r2.referred_by) return null; // only a QUALIFIED, non-agent recruit; once ever
+  const rAccountId = r2.referred_by; // the direct recruiter (the "parent")
+  const r = (await pool.query('SELECT referred_by, agent_flag FROM account_persistent WHERE account_id=$1', [rAccountId])).rows[0];
+  if (!r || r.agent_flag || !r.referred_by) return null; // the parent must exist, be human, and themselves have a referrer
+  const aAccountId = r.referred_by; // the grandrecruiter — the one we pay
+  if (aAccountId === r2AccountId || aAccountId === rAccountId) return null; // distinct chain (defense-in-depth vs a cycle)
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const aChar = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [aAccountId])).rows[0];
+    if (!aChar) { await client.query('ROLLBACK'); return null; } // grandrecruiter has no living street — nobody to pay
+    await client.query('SELECT id FROM characters WHERE id=$1 FOR UPDATE', [aChar.id]); // lock the payee char (characters first)
+    const lockedA = {}; // accounts sorted — the global lock order
+    for (const id of [aAccountId, r2AccountId].sort())
+      lockedA[id] = (await client.query('SELECT agent_flag, ref_paid, ref_l2_paid, referred_by FROM account_persistent WHERE account_id=$1 FOR UPDATE', [id])).rows[0];
+    const A = lockedA[aAccountId], R2 = lockedA[r2AccountId];
+    if (!A || !R2 || A.agent_flag) { await client.query('ROLLBACK'); return null; }
+    if (!R2.ref_paid || R2.ref_l2_paid || R2.agent_flag || R2.referred_by !== rAccountId) { await client.query('ROLLBACK'); return null; } // re-verify under lock
+    const claim = await client.query('UPDATE account_persistent SET ref_l2_paid=true WHERE account_id=$1 AND ref_paid AND NOT ref_l2_paid', [r2AccountId]);
+    if (claim.rowCount !== 1) { await client.query('ROLLBACK'); return null; } // a concurrent run already paid it
+    const mult = await referralPushMult(client);
+    const bonus = Math.round(M4.REF_TIER2_CASH * mult);
+    const aRow = (await client.query('SELECT cash FROM characters WHERE id=$1', [aChar.id])).rows[0];
+    await ledger(client, { characterId: aChar.id, currency: 'cash', amount: bonus, reason: 'referral:tier2' });
+    await client.query('UPDATE characters SET cash=$2 WHERE id=$1', [aChar.id, Number(aRow.cash) + bonus]);
+    await notify(client, aChar.id, 'ref', { tier2: true, amt: bonus });
+    await track(client, aAccountId, 'referral_tier2', { via: rAccountId, grandrecruit: r2AccountId });
+    await client.query('COMMIT');
+    return { tier2: true, amt: bonus };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }

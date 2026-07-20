@@ -238,6 +238,7 @@
       <div class="mod-row"><input id="m-kill-id" placeholder="character id"><button id="m-kill" class="danger">mod-kill</button></div>
       <div class="mod-row"><input id="m-ban-id" placeholder="account id"><button id="m-ban" class="danger">ban</button></div>
       <div class="mod-row"><input id="m-fund" placeholder="$OMR to reserve" size="10"><button id="m-fund-go">fund reserve</button></div>
+      <div class="mod-row"><input id="m-push-h" placeholder="hours" size="5" value="48"><input id="m-push-m" placeholder="mult" size="5" value="2"><button id="m-push-go">start recruit drive</button></div>
       <div id="m-out" class="note"></div>`;
     const out = (m, bad) => { const el = $('#m-out'); el.textContent = m; el.style.color = bad ? 'var(--bad)' : 'var(--dim)'; };
     $('#m-invite').onclick = async () => {
@@ -267,6 +268,13 @@
       const amt = Number($('#m-fund').value); if (!(amt > 0)) return out('amount?', true);
       const r = await j('POST', '/v1/mod/reserve/fund', { amount: amt });
       out(r.code === 200 ? 'reserve funded (queue drained).' : `error: ${r.body.message || r.code}`, r.code !== 200); refreshAll();
+    };
+    $('#m-push-go').onclick = async () => {
+      const hours = Number($('#m-push-h').value), mult = Number($('#m-push-m').value);
+      if (!(hours > 0) || !(mult >= 1)) return out('hours & mult (≥1)?', true);
+      if (!confirm(`Start a ${mult}× recruitment drive for ${hours}h? Referral CASH payouts multiply.`)) return;
+      const r = await j('POST', '/v1/mod/referral/push', { hours, mult });
+      out(r.code === 200 ? `drive live: ${r.body.mult}× for ${r.body.hours}h` : `error: ${r.body.message || r.code}`, r.code !== 200);
     };
   }
 
