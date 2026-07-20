@@ -69,15 +69,22 @@ const paramsOf = (url) => (url.match(/:([A-Za-z0-9_]+)/g) || []).map((p) => p.sl
 export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', version = '1.0.0' } = {}) {
   const paths = {};
   const tagsSeen = new Set();
-  for (const { method, url } of routes) {
+  for (const r of routes) {
+    const { method, url } = r;
     if (DOC_PATHS.has(url)) continue;           // HTML/markdown docs, not JSON API
     if (url.startsWith('/v1/ws')) continue;      // websocket, not HTTP request/response
+    // The moderator/admin surface is NOT advertised in the public contract (audit F1): agents have
+    // no use for it, and enumerating mod routes + the x-mod-key header only maps the admin surface.
+    const isMod = (r.isMod !== undefined) ? r.isMod : url.startsWith('/v1/mod/');
+    if (isMod) continue;
     const p = oapiPath(url);
     const tag = tagOf(url);
     tagsSeen.add(tag);
-    const isPublic = PUBLIC_PATHS.has(url);
-    const isMod = url.startsWith('/v1/mod/');
-    const security = isPublic ? [] : isMod ? [{ modKey: [] }] : [{ bearerAuth: [] }];
+    // Security is DERIVED from the route's real preHandler (r.hasAuth), not a URL heuristic — the
+    // spec can't drift from enforcement or mask a route that shipped without auth (audit F2). The
+    // PUBLIC_PATHS set is only a fallback for callers that don't supply the flag.
+    const isPublic = (r.hasAuth !== undefined) ? !r.hasAuth : PUBLIC_PATHS.has(url);
+    const security = isPublic ? [] : [{ bearerAuth: [] }];
     const op = {
       tags: [tag],
       summary: `${method} ${url}`,
@@ -112,10 +119,11 @@ export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', versi
     servers: [{ url: baseUrl }],
     tags,
     components: {
+      // Only the player/agent bearer scheme is advertised — the moderator surface is excluded from
+      // the public contract entirely (audit F1), so its header name is never disclosed here.
       securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT',
           description: 'Player/agent token from /v1/auth/*. Agent tokens (POST /v1/auth/agent-key) throttle at 1/3s.' },
-        modKey: { type: 'apiKey', in: 'header', name: 'x-mod-key', description: 'Moderator key (ops only).' },
       },
     },
     paths,

@@ -225,8 +225,14 @@ assert(Object.keys(oa.paths).length > 100, 'the spec enumerates every mounted ro
 assert(oa.paths['/v1/rules']?.get && oa.paths['/v1/character/mint']?.post, 'key routes are in the spec');
 assert.deepEqual(oa.paths['/v1/rules'].get.security, [], '/v1/rules is advertised keyless');
 assert.deepEqual(oa.paths['/v1/character/mint'].post.security, [{ bearerAuth: [] }], 'player routes require the bearer');
-assert.deepEqual(oa.paths['/v1/mod/invariants'].get.security, [{ modKey: [] }], 'mod routes require the mod key');
-assert(oa.components.securitySchemes.bearerAuth && oa.components.securitySchemes.modKey, 'both security schemes declared');
+// audit F1: the moderator surface is NOT advertised in the public contract
+assert(!Object.keys(oa.paths).some((p) => p.startsWith('/v1/mod')), 'no /v1/mod route appears in the public spec');
+assert(!oa.components.securitySchemes.modKey, 'the x-mod-key header is not disclosed in the spec');
+assert(oa.components.securitySchemes.bearerAuth, 'the bearer scheme is declared');
+// audit F2: security is DERIVED from the real preHandler, not a URL heuristic — a keyless public
+// route reads as keyless, an authed route as bearer, purely from what the route actually mounts
+assert.deepEqual(oa.paths['/v1/catalog'].get.security, [], 'a keyless route (real preHandler) reads keyless');
+assert.deepEqual(oa.paths['/v1/opportunities'].get.security, [{ bearerAuth: [] }], 'an authed route (real preHandler) reads bearer');
 const ag = await app.inject({ method: 'GET', url: '/agents' }); // markdown, not JSON — raw inject
 assert(ag.statusCode === 200 && /text\/markdown/.test(ag.headers['content-type']) && /agent-key/.test(ag.body), 'the agent guide serves at /agents');
 assert.equal((await app.inject({ method: 'GET', url: '/AGENTS.md' })).statusCode, 200, 'the conventional AGENTS.md filename serves too');
