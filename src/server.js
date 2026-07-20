@@ -548,6 +548,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.skillsBoard(ch, h)));
   app.post('/v1/skills/respec', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
+  // step two: fire a capstone-unlocked ACTIVE ability, and per-skill (leaf-first) respec.
+  app.post('/v1/skills/active/:ability', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.useActive(ch, req.params.ability, client, h)));
+  app.post('/v1/skills/respec/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecOne(ch, req.params.id, client, h)));
   app.post('/v1/skills/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.learnSkill(ch, req.params.id, client, h)));
 

@@ -32,7 +32,7 @@ await seedCh(vic.id, "cash=500000, loc='docks'");
 // ── the board + point derivation ──
 let r = await call('GET', '/v1/skills', { token: vic.token });
 assert.equal(r.code, 200, 'the tree is readable');
-assert.equal(r.body.tree.length, 9, 'nine skills, three branches');
+assert.equal(r.body.tree.length, 12, 'twelve skills — three branches × four tiers (incl. capstones)');
 assert.equal(r.body.points.total, 0, 'level 1 has no points');
 assert.equal((await call('POST', '/v1/skills/pack_mule', { token: rob.token })).body.error, 'points', 'no points, no school');
 assert.equal((await call('POST', '/v1/skills/juggling', { token: vic.token })).body.error, 'bad_skill', 'no such skill');
@@ -124,6 +124,41 @@ r = await call('POST', '/v1/heal', { token: ex.token });
 assert.equal(r.code, 200, 'healed');
 assert.equal(r.body.cost, Math.floor((100 - 40) * 15 * SKILLS.FX.DOC_MULT), 'the Doc charges the friend price');
 
+// ── STEP TWO: TIER-4 CAPSTONES + ACTIVE ABILITIES + per-skill respec ──
+// ex holds the maxed enforcer branch (bruiser/doctors_friend/executioner, 6 pts @ lvl 25).
+r = await call('GET', '/v1/skills', { token: ex.token });
+assert.equal(r.body.actives.length, 3, 'three capstone-unlocked active abilities on the board');
+assert(r.body.actives.every((a) => !a.unlocked), 'no capstone learned yet → nothing unlocked');
+// the capstone needs the tier-3 prereq AND a full ten points (level 40)
+assert.equal((await call('POST', '/v1/skills/made_man', { token: ex.token })).body.error, 'points', 'MADE MAN waits for level 40 (ten points)');
+await seedCh(ex.id, 'respect=6084');   // levelOf(6084)=40 → ten points; enforcer t1-3 already cost six
+assert.equal((await call('POST', '/v1/skills/made_man', { token: ex.token })).code, 200, 'MADE MAN — the enforcer capstone (cost 4)');
+r = await call('GET', '/v1/skills', { token: ex.token });
+assert.equal(r.body.points.available, 0, 'all ten points spent on the maxed branch');
+assert.equal(r.body.tree.find((s) => s.id === 'made_man').known, true, 'the capstone shows on the tree');
+assert(r.body.actives.find((a) => a.id === 'adrenaline').unlocked, 'Adrenaline Rush is now unlocked');
+
+// ACTIVE ABILITY: gates (bad id, locked, cooldown), then the energy burst to the level-scaled cap
+assert.equal((await call('POST', '/v1/skills/active/nope', { token: ex.token })).body.error, 'bad_active', 'no such ability');
+assert.equal((await call('POST', '/v1/skills/active/moxie', { token: ex.token })).body.error, 'locked', 'no kingpin → Moxie stays locked');
+await seedCh(ex.id, 'energy=1');
+r = await call('POST', '/v1/skills/active/adrenaline', { token: ex.token });
+assert.equal(r.code, 200, 'adrenaline pumped');
+assert.equal(r.body.energy, 50 + 2 * 40, 'energy refilled to the level-40 cap');
+assert.equal((await meOf(ex.token)).energy, r.body.energy, 'and the sheet agrees');
+assert.equal((await call('POST', '/v1/skills/active/adrenaline', { token: ex.token })).body.error, 'cooldown', 'one burst per shared cooldown');
+
+// PER-SKILL RESPEC: leaf-first (the capstone blocks the tier beneath it), ledgered, shared daily cooldown
+await pool.query(`UPDATE account_persistent SET omr = omr + 20 WHERE account_id = (SELECT account_id FROM characters WHERE id='${ex.id}')`);
+assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.token })).body.error, 'dependent', 'unlearn the capstone above it first');
+assert.equal((await call('POST', '/v1/skills/respec/getaway', { token: ex.token })).body.error, 'not_known', "you can't unlearn what you never learned");
+r = await call('POST', '/v1/skills/respec/made_man', { token: ex.token });
+assert.equal(r.code, 200, 'the capstone comes off for a single-skill $OMR burn');
+assert(![...(await meOf(ex.token)).skills].includes('made_man'), 'made_man unlearned');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='respec:skills'")).rows[0].s),
+  -(SKILLS.RESPEC_OMR + SKILLS.RESPEC_ONE_OMR), 'the single-skill burn is ledgered respec:skills too (vic full + ex one)');
+assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.token })).body.error, 'cooldown', 'per-skill respec shares the daily cooldown');
+
 // ── the estate wipes the build; the §10.4 vocabulary stays closed ──
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: wil.id },
   headers: { 'x-mod-key': 'test-mod-key' } });
@@ -134,5 +169,5 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM character_skills W
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `respec:skills rides the respec prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Skills test passed — nine-skill tree (three branches × three tiers), level-derived points (6 @ lvl 25), learn gates (bad/owned/prereq/points), FAST TALKER laylow ×0.8 ledger-exact, BROKER half listing fees, PACK MULE trunk 13, ROAD CAPTAIN 480s road, GETAWAY stints ≤80%, EXECUTIONER ~8s search clock, DOC\'S FRIEND heal ×0.75, respec (ledgered 10 $OMR burn, points restored, shared daily cooldown), estate wipes the build, vocabulary closed');
+console.log('✅ Skills test passed — twelve-skill tree (three branches × four tiers), level-derived points (6 @ lvl 25), learn gates (bad/owned/prereq/points), FAST TALKER laylow ×0.8 ledger-exact, BROKER half listing fees, PACK MULE trunk 13, ROAD CAPTAIN 480s road, GETAWAY stints ≤80%, EXECUTIONER ~8s search clock, DOC\'S FRIEND heal ×0.75, respec (ledgered 10 $OMR burn, points restored, shared daily cooldown), STEP TWO: MADE MAN capstone (needs lvl 40 / 10 points, unlocks Adrenaline Rush), active-ability gates + energy burst to the level-scaled cap + shared cooldown, per-skill respec (leaf-first, not_known, ledgered, daily cooldown), estate wipes the build, vocabulary closed');
 await app.close();

@@ -2128,8 +2128,15 @@
       <div class="grid">${Object.entries(branches).map(([br, list]) => `
         <div class="card"><span class="t" style="text-transform:capitalize">${br}</span>
           ${list.sort((a, b) => a.tier - b.tier).map((s) => `
-            <div class="d" style="margin-top:5px">${s.known ? '◆' : '◇'} <b>${s.name}</b> (t${s.tier}, ${s.cost}pt) — ${s.desc}
-              ${!s.known ? `<button class="act" data-learn="${s.id}" style="font-size:10px;padding:2px 6px">learn</button>` : ''}</div>`).join('')}</div>`).join('')}</div>
+            <div class="d" style="margin-top:5px">${s.known ? '◆' : '◇'} <b>${s.name}</b>${s.tier === 4 ? ' <span class="chip good">capstone</span>' : ''} (t${s.tier}, ${s.cost}pt) — ${s.desc}
+              ${!s.known ? `<button class="act" data-learn="${s.id}" style="font-size:10px;padding:2px 6px">learn</button>`
+                : `<button class="act" data-respec1="${s.id}" style="font-size:10px;padding:2px 6px">unlearn (${sk.respecOneOmr || 5} $OMR)</button>`}</div>`).join('')}</div>`).join('')}</div>
+      ${(sk.actives || []).some((a) => a.unlocked) ? `
+      <h2 style="margin-top:12px">Active Abilities <span class="d" style="font-size:10px">(capstone-unlocked bursts${sk.activeCooldownSeconds > 0 ? ` · ready in ${Math.ceil(sk.activeCooldownSeconds / 60)}m` : ' · ready'})</span></h2>
+      <div class="grid">${sk.actives.filter((a) => a.unlocked).map((a) => `
+        <div class="card"><span class="t">${a.name}</span>
+          <div class="d">${a.desc}</div>
+          <button class="act" data-active="${a.id}" ${sk.activeCooldownSeconds > 0 ? 'disabled' : ''}>use</button></div>`).join('')}</div>` : ''}
 
       <h2 style="margin-top:12px">The Underworld
         ${uw.lead ? `<span class="chip good">today's lead: ${uw.lead.npc} — ${uw.lead.task || 'any business'}</span>` : ''}
@@ -2156,6 +2163,10 @@
       </div>`;
     t.querySelectorAll('[data-learn]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/skills/${btn.dataset.learn}`, {}).then(() => renderLife()));
+    t.querySelectorAll('[data-respec1]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/skills/respec/${btn.dataset.respec1}`, {}).then(() => renderLife()));
+    t.querySelectorAll('[data-active]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/skills/active/${btn.dataset.active}`, {}).then(() => renderLife()));
     for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
       t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
         act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));

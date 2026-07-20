@@ -300,7 +300,7 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer leans harder — a new modifier, sign-off lever
-  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) + Math.random() * 25;
+  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) + Math.random() * 25;
   const def = vEff('muscle') + vEff('cunning') * 0.5 + Math.random() * 25;
   await h.rngLog(client, ch.id, `shakedown:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 

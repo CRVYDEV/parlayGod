@@ -843,9 +843,31 @@ fence_network fence+melt yields ×1.08; broker Black Market listing fees ×0.5; 
 reclaim, convoy load/hijack/collect); getaway crime stints ×0.8; road_captain own convoys ×0.8
 time. `GET /v1/skills` (board), `POST /v1/skills/:id`, `POST /v1/skills/respec`; view carries
 `skills` + `skillPoints` + skill-aware `cargoCap`. ALL numbers (FX + costs + LVL_PER_POINT) are
-founder sign-off levers — sim before production. Step two (deferred): ACTIVE abilities with
-cooldowns, tier-4 capstones, prestige-carried skill slots (a founder call — it would soften
-death), per-skill respec. Suite 15/15 + sim drift-0.
+founder sign-off levers — sim before production. Suite 15/15 + sim drift-0.
+**Step two — BUILT** (`src/skills.js`, `test/skills.js`; three of the four deferred items — everything
+but prestige-carried slots, which stays a founder call since it would soften death). **TIER-4 CAPSTONES**
+(`SKILLS.TREE` grew 9→12, `CAPSTONE_COST` 4 → the tier-3 skill is the prereq, so a full branch = lvl 40 /
+10 points): `made_man` (jumps+shakedowns another ×`MADE_MAN_MULT` 1.08 — stacked at the jump/shakedown/
+standover atk sites), `kingpin` (fence+melt another ×`KINGPIN_MULT` 1.08 — stacked in economy.js), `road_boss`
+(trunk +`ROAD_BOSS_TRUNK` 3 via `trunkCap`) — each a straight multiplicative stack on its branch's signature,
+the prereq chain guaranteeing the base skill is owned (the same `skillMult` mechanism as tier-1). **ACTIVE
+ABILITIES** (the new mechanic, `SKILLS.ACTIVES` + `activeOf`): a capstone unlocks a resource/cooldown BURST
+on a SHARED cooldown (`ACTIVE_CD_MS` 8h, `characters.active_at`, written by DIRECT SQL so it survives the
+60-param `persistCharacter` positional UPDATE) — `adrenaline` (made_man → energy to the level-scaled cap),
+`moxie` (kingpin → nerve to cap), `hot_wire` (road_boss → clears `heist_at`+`world_raid_at`, which DO ride
+persist). Deliberately OFF every §10.4 + audit-locked surface (energy/nerve are pure regen; heist/world
+cooldowns are op pacing, never `jail_until`) → zero ledger surface. **PER-SKILL RESPEC** (`respecOne`,
+`POST /v1/skills/respec/:id`): unlearn ONE skill LEAF-FIRST (a dependent tier+1 in the branch blocks it) for
+`RESPEC_ONE_OMR` 5 (< the full `RESPEC_OMR` 10 wipe), on the SHARED M8 `respec_at` cooldown, ledgered
+`respec:skills` (rides the existing respec omr vocabulary — zero invariant change). Routes
+`POST /v1/skills/active/:ability`, `POST /v1/skills/respec/:id`; the board gained `actives` (with `unlocked`)
++ `activeCooldownSeconds` + `respecOneOmr`; console: capstones auto-render (t4 chip), per-skill unlearn
+buttons on known skills, an Active Abilities card (unlocked-only, cooldown-gated). `test/skills.js` covers the
+12-skill board, the capstone's level-40/10-point gate, the active-ability gates (bad_active/locked/cooldown) +
+the energy burst to the level-scaled cap, and per-skill respec (leaf-first `dependent`, `not_known`, ledgered,
+shared cooldown). Suite 30/30 + sim drift-0. `MADE_MAN_MULT`/`KINGPIN_MULT`/`ROAD_BOSS_TRUNK`/`CAPSTONE_COST`/
+`ACTIVE_CD_MS`/`RESPEC_ONE_OMR` are founder sign-off levers. Still deferred: prestige-carried skill slots (the
+founder call — it would soften death).
 
 **The Underworld (step one) — BUILT** (`src/underworld.js`, `test/underworld.js` — the 16th suite
 file; design `omerta-underworld-design.md`). Named NPCs as RELATIONSHIPS — skills are what you are,

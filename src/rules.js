@@ -1135,10 +1135,28 @@ export const SKILLS = {
     { id: 'pack_mule',      branch: 'wheelman', tier: 1, cost: 1, name: 'Pack Mule',        desc: 'The trunk holds 3 more units.' },
     { id: 'getaway',        branch: 'wheelman', tier: 2, cost: 2, name: 'Getaway',          desc: 'Crime stints run 20% shorter.' },
     { id: 'road_captain',   branch: 'wheelman', tier: 3, cost: 3, name: 'Road Captain',     desc: 'Your convoys run 20% faster.' },
+    // ── STEP TWO — TIER-4 CAPSTONES (cost 4, the tier-3 skill is the prereq → a full branch = lvl 40).
+    // Each is a strong PASSIVE that stacks on its branch's signature effect AND unlocks an ACTIVE ability.
+    { id: 'made_man',  branch: 'enforcer', tier: 4, cost: 4, name: 'Made Man',    desc: 'Jumps + shakedowns hit another 8% harder — and unlocks Adrenaline Rush (energy to the max).' },
+    { id: 'kingpin',   branch: 'operator', tier: 4, cost: 4, name: 'Kingpin',     desc: 'Fencing + melting yield another 8% — and unlocks Moxie (nerve to the max).' },
+    { id: 'road_boss', branch: 'wheelman', tier: 4, cost: 4, name: 'Road Boss',   desc: 'The trunk holds 3 more still — and unlocks Hot Wire (clears your heist + world-raid cooldowns).' },
+  ],
+  CAPSTONE_COST: 4,
+  ACTIVE_CD_MS: 8 * 3600 * 1000,   // shared cooldown across your unlocked ACTIVE abilities
+  RESPEC_ONE_OMR: 5,               // step two: unlearn ONE skill (leaf-first) for less than a full respec
+  // capstone-unlocked ACTIVE abilities (the new mechanic): resource/cooldown bursts, off every §10.4 +
+  // audit-locked surface (energy/nerve are pure regen resources; heist/world cooldowns are op pacing).
+  ACTIVES: [
+    { id: 'adrenaline', req: 'made_man',  name: 'Adrenaline Rush', desc: 'Energy to the max — push through.' },
+    { id: 'moxie',      req: 'kingpin',   name: 'Moxie',           desc: 'Nerve to the max — the guts for one more play.' },
+    { id: 'hot_wire',   req: 'road_boss', name: 'Hot Wire',        desc: 'Clears your heist + world-raid cooldowns — back on the job.' },
   ],
   FX: { BRUISER_MULT: 1.08, DOC_MULT: 0.75, SEARCH_MULT: 0.8, LAYLOW_MULT: 0.8,
-        FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8 },
+        FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8,
+        // step-two capstone stacks (multiplicative on the branch signature; the prereq chain guarantees the base skill is owned)
+        MADE_MAN_MULT: 1.08, KINGPIN_MULT: 1.08, ROAD_BOSS_TRUNK: 3 },
 };
+export const activeOf = (id) => SKILLS.ACTIVES.find((a) => a.id === id) || null;
 export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
 // THE UNDERWORLD — the named NPC cast (design: omerta-underworld-design.md). Standing 0-100
 // per character per NPC, earned by doing business (actor-side bumps), gift-greasable only

@@ -170,6 +170,21 @@ item); executioner (−20% search) raises assassin throughput ~25% for a 6-point
 the deepest PvP lever here, flag for the whale-hunt economics; everything else is QoL/pacing.
 Respec cadence shares the daily M8 cooldown so build-swapping around fights stays impossible.
 
+### Skills step two — tier-4 capstones + active abilities + per-skill respec (sign-off pending)
+Extends the same discipline (NEW single-touchpoint modifiers, off every audit-locked surface).
+Levers: `CAPSTONE_COST` 4 (a full branch = lvl 40 / 10 points — the tier-3 skill is the prereq),
+`MADE_MAN_MULT` 1.08 (jumps+shakedowns+standover, STACKS on bruiser's 1.08 — the deepest PvP
+capstone, flag for whale-hunt economics alongside executioner), `KINGPIN_MULT` 1.08 (fence+melt,
+STACKS on fence_network — the only capstone touching a FAUCET, still bounded by the unchanged GTA
+faucet + garage cap), `ROAD_BOSS_TRUNK` +3 (QoL, stacks on pack_mule's +3 → +6 trunk). The ACTIVE
+abilities (`ACTIVE_CD_MS` 8h shared cooldown) refill energy/nerve (pure regen resources) or clear
+the heist/world-raid op cooldowns (op pacing, never `jail_until`) — deliberately ZERO §10.4 / no
+audit-locked surface, so pure QoL bursts. `RESPEC_ONE_OMR` 5 (< the full `RESPEC_OMR` 10 wipe) is a
+leaf-first single-skill unlearn on the SAME shared daily M8 cooldown, ledgered `respec:skills` — so
+per-skill build-swapping around fights is still impossible. Capstones are lvl-40 endgame commitments
+(one maxed branch); watch the made_man×bruiser and kingpin×fence_network multiplicative stacks in
+the sim pass.
+
 ## Post-signing addendum — the Underworld (named NPCs, sign-off pending)
 
 Relationship perks as NEW single-touchpoint modifiers, same discipline as skills — nothing

@@ -83,7 +83,7 @@ export async function meltCar(ch, carId, client, h) {
   const car = findCar(h, carId);
   // FENCE NETWORK (skills): the operator's contacts pay better — a new modifier, sign-off lever
   const yieldRounds = Math.floor(carMelt(car.model_id, car.trim_id, car.dmg)
-    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT));
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT));
   // §7.5: in a family, 25% of the rounds tithe to the armory and the treasury is
   // credited $30/round — atomically, in this same transaction.
   const tithe = h.owned.gangId ? Math.floor(yieldRounds * CONSTANTS.MELT_TITHE) : 0;
@@ -127,7 +127,7 @@ export async function fenceCar(ch, carId, client, h) {
   const car = findCar(h, carId);
   // FENCE NETWORK (skills): +8% on the gross — a new modifier, sign-off lever
   const gross = Math.floor(carVal(car.model_id, car.trim_id) * 0.5 * (1 - (car.dmg || 0) / 100) * (cityEventOf(dayOf()).fenceMult || 1)
-    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT));
+    * skillMult(h, 'fence_network', SKILLS.FX.FENCE_MULT) * skillMult(h, 'kingpin', SKILLS.FX.KINGPIN_MULT));
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;
