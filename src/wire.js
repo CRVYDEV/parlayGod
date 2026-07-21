@@ -306,22 +306,25 @@ export async function sweepWire(pool) {
 // notification, moves no value). Only LIVE taps whose watcher is alive AND subscribed qualify.
 export async function sweepWireAlerts(pool) {
   const taps = (await pool.query(
-    `SELECT w.watcher_character, w.target_character, w.alerted_hunt, w.alerted_wanted, w.alerted_indicted,
-            t.name, t.wanted_until, t.indicted_at
+    `SELECT w.watcher_character, w.target_character, t.name, t.wanted_until, t.indicted_at
        FROM wiretaps w
        JOIN characters t  ON t.id  = w.target_character  AND t.alive
        JOIN characters wc ON wc.id = w.watcher_character AND wc.alive
       WHERE w.expires_at > now() AND wc.wire_until > now()`)).rows;
   let fired = 0;
+  // CLAIM-then-notify (the fees/store idempotency discipline): the flag-set is the ATOMIC guard —
+  // `AND <col>=false` means only the first pass to flip false→true wins the row, so a concurrent
+  // worker / retry can't double-fire the alert. The notify fires ONLY for the claim winner.
+  const claim = async (w, col) =>
+    (await pool.query(`UPDATE wiretaps SET ${col}=true WHERE watcher_character=$1 AND target_character=$2 AND ${col}=false`,
+      [w.watcher_character, w.target_character])).rowCount > 0;
   for (const w of taps) {
     const wanted = !!(w.wanted_until && new Date(w.wanted_until) > new Date());
     const indicted = !!w.indicted_at;
     const hunting = !!(await pool.query('SELECT 1 FROM searches WHERE hunter=$1 AND target=$2', [w.target_character, w.watcher_character])).rows[0];
-    const sets = [];
-    if (hunting && !w.alerted_hunt) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'hunting_you' }); sets.push('alerted_hunt=true'); fired++; }
-    if (wanted && !w.alerted_wanted) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'wanted' }); sets.push('alerted_wanted=true'); fired++; }
-    if (indicted && !w.alerted_indicted) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'indicted' }); sets.push('alerted_indicted=true'); fired++; }
-    if (sets.length) await pool.query(`UPDATE wiretaps SET ${sets.join(',')} WHERE watcher_character=$1 AND target_character=$2`, [w.watcher_character, w.target_character]);
+    if (hunting && await claim(w, 'alerted_hunt')) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'hunting_you' }); fired++; }
+    if (wanted && await claim(w, 'alerted_wanted')) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'wanted' }); fired++; }
+    if (indicted && await claim(w, 'alerted_indicted')) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'indicted' }); fired++; }
   }
   return { fired };
 }

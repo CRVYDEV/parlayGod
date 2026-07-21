@@ -2275,7 +2275,15 @@ proves the rank perks (Spymaster → +2 slots / −10%, the discounted tap burn)
 the watchdog (fires on wanted, once-per-event, un-subscribers get nothing, a re-tap re-alerts). Suite 32/32
 + sim drift-0. All `SPY_RANKS` perk numbers are founder sign-off levers (status-axis modifiers, off the
 signed economy — the hitman-rep/Underworld precedent). Deferred (step five): an auto-tap/standing-watch
-automation + a tiered subscription ladder.
+automation + a tiered subscription ladder. A focused three-lens red-team (`AUDIT-wire-step-four.md`:
+§10.4/economy, watchdog worker concurrency, exploit/grief/info-leak) returned **no CRITICAL/HIGH** and
+applied one MED hardening: the watchdog's notify-then-flag wasn't idempotent under concurrent workers/
+retries → converted to **claim-then-notify** (the fees/store discipline — the per-flag `UPDATE … AND
+<col>=false` atomically guards the notify, so exactly one pass alerts per event). Verified CLEAN: the
+discount stays a burn (recomputed server-side, no client-set price, floors at 1, no free rank-grind
+since sweep/trace early-return before the ops bump), the subscribe-gated alive-JOIN'd watchdog (no
+stale/lapsed-sub alerts, flags off persistCharacter), and no new info-leak (the push only surfaces what
+a paid live tap already reveals).
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),
