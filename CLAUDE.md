@@ -439,6 +439,15 @@ collector faces real raid risk (like smuggling, which measured correctly: lazy-c
 worse than numbers, active-collected → the full ×1.35). World apex emission is regen-bounded (base-wide
 ceilings $960k–$4.32M/day; the B1 solo-floor is ~$90k–$300k/day for one min-level whale). The sim now prints
 all three every run so any retune is re-measured.
+**RETUNES APPLIED (founder-directed 2026-07-21, re-measured, §10.4 drift-0):** (1) **Protection
+`scrutinyPerHr` 6→10** — now hot-in-10h so a daily collector faces P(raid) 72% → net ~$376k/day (was a
+strict +15% free upgrade), a real higher-variance play (active collection ≤10h still banks the full ×1.15).
+(2) **Exhibition fees journeyman $10k→$15k / gatekeeper $30k→$45k** (clubfighter untouched — cheap entry) —
+maxed-fighter best EV +$41k→+$26k/bout (~$495k→~$315k/day for a maxed 3-stable), a genuine risk/reward
+(9% chance of −$45k) still worth a ~$1M stable; fresh-signee EV unchanged. Both now the recommended defaults
+(sim-signed, not yet production-signed). Also fixed a PRE-EXISTING date-flaky `test/growth.js` kitchen-raid
+test uncovered en route (a 30-min accrual window decayed heat below the raid threshold on `heatDecay=2`
+city-event days — now a 5-min window keeps heat ≥90). Suite 30/30 + sim drift-0.
 
 **Phase 4 (Backed emission) — BUILT** (`src/economy.js`, `src/worker.js`, `test/economy.js`;
 design `omerta-phase4-emission-design.md`). Closes the audit's #1 finding — the fixed 14% staking

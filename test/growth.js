@@ -151,7 +151,10 @@ for (let i = 0; i < 30 && !cooked; i++) {
 assert(cooked, 'restocked the stash');
 let raided = false;
 for (let i = 0; i < 300 && !raided; i++) {
-  await seedCh(chef.id, "heat=100, crew=0, last_accrued_at = now() - interval '30 minutes', jail_until=NULL");
+  // a SHORT window (5 min): accrual decays heat by dtMin×event.heatDecay FIRST, and the raid only
+  // rolls while heat is still >60 — a 30-min window on a heatDecay=2 city-event day (e.g. 'opencity')
+  // decayed 100→40 before the roll, so the raid never fired (a date-flaky test). 5 min keeps heat ≥90.
+  await seedCh(chef.id, "heat=100, crew=0, last_accrued_at = now() - interval '5 minutes', jail_until=NULL");
   me = await meOf(chef.token);
   if (me.jailSeconds > 0) raided = true;
 }

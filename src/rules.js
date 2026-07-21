@@ -1297,7 +1297,7 @@ export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tie
 // income mults + risk are NEW founder sign-off levers (numbers keeps parity with the signed curve).
 export const TERRITORY_TYPES = [
   { id: 'numbers',    name: 'Numbers Game',     incomeMult: 1.0,  scrutinyPerHr: 0,  desc: 'Bookmaking — steady and quiet. The Bureau never comes.' },
-  { id: 'protection', name: 'Protection Racket', incomeMult: 1.15, scrutinyPerHr: 6,  desc: 'Muscle on the block — more take, more heat.' },
+  { id: 'protection', name: 'Protection Racket', incomeMult: 1.15, scrutinyPerHr: 10, desc: 'Muscle on the block — more take, more heat.' },
   { id: 'smuggling',  name: 'Smuggling Ring',    incomeMult: 1.35, scrutinyPerHr: 14, desc: 'Contraband moves big money — and brings the Feds.' },
 ];
 export const territoryTypeOf = (id) => TERRITORY_TYPES.find((t) => t.id === id) || TERRITORY_TYPES[0];
@@ -1684,8 +1684,8 @@ export const BOXING = {
   // NPC). Bounded by the cooldown + the fee + needing the FORM to win. New faucet — sim + sign-off.
   NPC_TIERS: [
     { id: 'clubfighter', name: 'Club Fighter',  form: 26, fee: 3000,  purse: 9000 },
-    { id: 'journeyman',  name: 'Journeyman',    form: 42, fee: 10000, purse: 26000 },
-    { id: 'gatekeeper',  name: 'The Gatekeeper', form: 62, fee: 30000, purse: 78000 },
+    { id: 'journeyman',  name: 'Journeyman',    form: 42, fee: 15000, purse: 26000 },
+    { id: 'gatekeeper',  name: 'The Gatekeeper', form: 62, fee: 45000, purse: 78000 },
   ],
   // the record ladder (by a single fighter's wins) — pure status
   RANKS: [
