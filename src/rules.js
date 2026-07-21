@@ -1887,6 +1887,21 @@ export const boatUpgradeCost = (boat, spec, part) => {
   const tier = Math.max(1, Math.round((spec?.cost || 0) / 500000));   // ~1 (dinghy) … ~24 (cigarette)
   return PORT.STEP2.UPGRADE_BASE * (lvl + 1) * Math.max(1, Math.min(tier, 12));
 };
+// ── THE PORT step three: THE SMUGGLER'S LEGEND + THE HARBORMASTER (docks-holder toll) ──
+PORT.STEP3 = {
+  TOLL_BPS: 500,   // 5% of a clean landing to the family that HOLDS the docks (the convoy-toll twin); NPC-held / your own = free
+  // lifetime landed contraband value → a status rank (survives death — the boxing/wheel/war-effort precedent)
+  LEGEND_RANKS: [
+    { at: 0, title: 'Deckhand' }, { at: 250000, title: 'Runner' }, { at: 2000000, title: 'Smuggler' },
+    { at: 10000000, title: 'Blockade Runner' }, { at: 50000000, title: 'The Baron of the Bay' },
+    { at: 200000000, title: 'The Kingpin of the Coast' },
+  ],
+};
+export const portRankOf = (smuggled) => {
+  let cur = PORT.STEP3.LEGEND_RANKS[0];
+  for (const r of PORT.STEP3.LEGEND_RANKS) if (Number(smuggled || 0) >= r.at) cur = r;
+  return cur;
+};
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market

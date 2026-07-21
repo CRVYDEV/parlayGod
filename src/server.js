@@ -624,6 +624,7 @@ export async function buildServer() {
     G.withTwoCharacters(pool, req.user.sub, req.params.ownerId, (ch, opponent, client, h) =>
       Races.raceChallenge(ch, opponent, req.body, client, h)));
   app.get('/v1/leaderboard/races', { preHandler: auth }, async () => Races.raceLeaderboard(pool));
+  app.get('/v1/leaderboard/port', { preHandler: auth }, async () => Port.portLeaderboard(pool)); // THE SMUGGLER'S LEGEND board
 
   // ── THE PORT — maritime smuggling (boats + the run + the Coast Guard) ──
   app.get('/v1/port', { preHandler: auth }, async (req) =>

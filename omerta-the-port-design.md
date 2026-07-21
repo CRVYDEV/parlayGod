@@ -114,9 +114,31 @@ rendezvous (the closed-boat gate + the handoff moving the run + consuming the fl
 (`STEP2.*`) are founder sign-off levers — sim the piracy faucet before production (it can only reduce
 emission, but the ammo cost + PvP gate should keep it a skill play, not a farm).
 
-## Deferred (step three+)
+## Step three — BUILT (the Smuggler's Legend + the Harbormaster)
+
+- **THE SMUGGLER'S LEGEND** — `account_persistent.smuggled` (lifetime contraband value landed: every clean
+  collect + every piracy take, bumped by direct SQL, NUMERIC so the arithmetic UPDATE is pg-mem-safe;
+  account-level → **SURVIVES DEATH**, the boxing-wins / wheel / war-effort precedent) + `PORT.STEP3.LEGEND_RANKS`
+  (Deckhand → Runner → Smuggler → Blockade Runner → The Baron of the Bay → The Kingpin of the Coast,
+  `portRankOf`) + `GET /v1/leaderboard/port` (`portLeaderboard` — the biggest lifetime haulers; agents
+  excluded, the hitman-rep precedent). PURE STATUS — **zero §10.4 surface** (landed value isn't a currency;
+  the cash still rides `port:sale`/`port:piracy`, so the test proves `legend.smuggled == the account's
+  lifetime port:sale + port:piracy`). Surfaced on `GET /v1/port` (`legend {smuggled, rank}`) + the console.
+- **THE HARBORMASTER** — the family that **HOLDS the docks** (the Port's home district) tolls every clean
+  landing there: `port:toll` = `TOLL_BPS` (5%) of the sale, a §10.4 **TRANSFER** (shipper pocket→bank →
+  holder treasury — the convoy-toll twin: clamped to pocket+bank, never gates the freight, charged only if
+  the treasury credit lands, and NPC-held / your own family = free). The gang-treasuries §10.4 check gained
+  `portTollIn`. This ties the solo Port into the turf/family layer AND synergizes with the World-occupation
+  loop — the docks start NPC-occupied (dockrats), so a family **liberates** it (World step five) and then
+  earns Port tolls from every other shipper. Surfaced on `GET /v1/port` (`harbormaster {holder, tollBps,
+  tolled}`) + a console warning chip.
+
+`test/port.js` covers the legend (the `port:sale + port:piracy` identity, the rank, the leaderboard, DEATH
+survival) and the harbormaster (a held-docks toll credits the treasury 5%, the net reflects it, the
+gang-treasuries §10.4 reconcile). `PORT.STEP3.*` (TOLL_BPS, LEGEND_RANKS) are founder sign-off levers.
+
+## Deferred (step four+)
 - A **contraband MARKET** — land the goods as a tradeable premium commodity (its own price line + a fence)
   rather than auto-selling, so the Port feeds the market instead of paying cash directly.
-- Harbor **berths** (a slip you rent), a **smuggler's legend** (account-level lifetime landed value,
-  survives death — the boxing/wheel precedent), a **harbormaster protection racket**, and **Coast Guard
-  heat** feeding the Law meter.
+- Harbor **berths** (a rented slip that expands the fleet cap), and **Coast Guard heat** feeding the Law
+  meter (a dedicated federal-report exposure on a bust, distinct from the street-heat spike).

@@ -1995,7 +1995,9 @@
     t.innerHTML = `
       ${!fleet.length ? coachCard('Buy a boat, run the coast', 'The Port brings contraband in from offshore. Buy a boat at the docks (a hold for cargo, speed to slip the Coast Guard), load a run, and — if you make it home clean — fence the haul for the smuggling margin. Get caught and you lose the cargo, eat a fine, and might lose the boat. Distinct from convoys: this is the SEA, and the risk is the law, not other players.') : ''}
       <h2>The Port ${b.atDocks ? '' : '<span class="chip" style="color:var(--bad)">travel to the docks to trade</span>'}</h2>
-      <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.</div></div>
+      ${b.legend ? `<div class="card" style="border-color:var(--gold)"><span class="t">The Smuggler's Legend</span><div class="d"><b style="color:var(--gold)">${b.legend.rank}</b> — $${fmt(b.legend.smuggled)} landed for life <span class="chip">survives death</span> · <a href="#" id="pt-lb">the leaderboard →</a></div></div>` : ''}
+      <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.
+        ${(b.harbormaster && b.harbormaster.tolled) ? `<br><span class="chip" style="color:var(--bad)">the ${b.harbormaster.holder.name} [${b.harbormaster.holder.tag}] hold the docks — a ${(b.harbormaster.tollBps/100)}% toll on every clean landing</span>` : ''}</div></div>
       <div class="grid">
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
           ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${f.kind || ''}">${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
@@ -2018,6 +2020,9 @@
     t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.buy}`, null).then(() => renderPort()));
     t.querySelectorAll('[data-sell]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.sell}/sell`, null).then(() => renderPort()));
     t.querySelectorAll('[data-collect]').forEach((x) => x.onclick = () => act('POST', `/v1/port/collect/${x.dataset.collect}`, null).then(() => renderPort()));
+    { const plb = $('#pt-lb'); if (plb) plb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/port')).body?.smugglers || [];
+      alert("THE SMUGGLER'S LEGEND — biggest lifetime haul\\n\\n" + (d.map((x, i) => `${i + 1}. ${x.name} — $${(x.smuggled||0).toLocaleString()} (${x.rank})`).join('\\n') || 'none yet')); }; }
     t.querySelectorAll('[data-up]').forEach((x) => x.onclick = () => act('POST', `/v1/port/upgrade/${x.dataset.up}`, { part: x.dataset.part }).then(() => renderPort()));
     t.querySelectorAll('[data-pirate]').forEach((x) => x.onclick = () => act('POST', `/v1/port/intercept/${x.dataset.pirate}`, null).then(() => renderPort()));
     t.querySelectorAll('.pt-rdv').forEach((x) => x.onchange = () => act('POST', `/v1/port/boat/${x.dataset.for}/rendezvous`, { open: x.checked }).then(() => renderPort()));

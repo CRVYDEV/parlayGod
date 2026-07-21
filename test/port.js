@@ -167,7 +167,36 @@ assert.equal(r.code, 200, 'the handoff went through'); assert.equal(r.body.to, m
 assert.equal((await pool.query(`SELECT run_until FROM boats WHERE id='${cutter}'`)).rows[0].run_until, null, "the runner's boat is freed");
 assert((await pool.query(`SELECT run_until FROM boats WHERE id='${mateBoat}'`)).rows[0].run_until != null, "the partner's boat now carries the run");
 assert.equal((await pool.query(`SELECT rendezvous FROM boats WHERE id='${mateBoat}'`)).rows[0].rendezvous, false, 'the rendezvous flag was consumed');
-delete process.env.PORT_RUN_MS; delete process.env.PORT_PIRATE_WIN;
+delete process.env.PORT_PIRATE_WIN;
+
+// ════════════════════ STEP THREE ════════════════════
+// ── THE SMUGGLER'S LEGEND: lifetime landed value, account-level, survives death ──
+const capAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${cap.id}'`)).rows[0].a;
+const capLegend = (await call('GET', '/v1/port', { token: cap.token })).body.legend;
+assert(capLegend && capLegend.smuggled > 0 && typeof capLegend.rank === 'string', 'the legend tracks lifetime landed value + a rank');
+const capLanded = Number((await pool.query(`SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c ON c.id=t.character_id WHERE c.account_id='${capAcct}' AND t.reason IN ('port:sale','port:piracy')`)).rows[0].s);
+assert.equal(capLegend.smuggled, capLanded, "the legend == the account's lifetime port:sale + port:piracy (the war-effort identity)");
+// the pirate banked their take toward the legend too
+const bbSmug = Number((await pool.query(`SELECT smuggled FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${bb.id}')`)).rows[0].smuggled);
+assert.equal(bbSmug, expTake, "a piracy take counts toward the pirate's legend");
+const lb = (await call('GET', '/v1/leaderboard/port', { token: cap.token })).body;
+assert(Array.isArray(lb.smugglers) && lb.smugglers.some((s) => s.name === 'Captain Nemo'), 'the smuggler leaderboard ranks lifetime landed value');
+
+// ── THE HARBORMASTER: a family holding the docks tolls a clean landing (the convoy-toll twin) ──
+process.env.PORT_RUN_MS = '0'; process.env.PORT_INTERDICT_P = '0';
+const boss = await mk('Dock King'); await pool.query(`UPDATE characters SET respect=400, loc='docks' WHERE id='${boss.id}'`); await seedCash(boss.id, 100000);
+await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'Dock Kings', tag: 'DK' } });
+const gid = (await pool.query(`SELECT id FROM gangs WHERE name='Dock Kings'`)).rows[0].id;
+await pool.query(`UPDATE districts SET holder_gang='${gid}' WHERE id='docks'`);
+const treBefore = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gid}'`)).rows[0].treasury);
+const capBoat2 = (await call('POST', '/v1/port/boat/skiff', { token: cap.token })).body.boat.id;
+await call('POST', `/v1/port/run/${capBoat2}`, { token: cap.token, body: { route: 'coastal' } });
+const cr = (await call('POST', `/v1/port/collect/${capBoat2}`, { token: cap.token })).body;
+const expToll = Math.floor(cr.landed * PORT.STEP3.TOLL_BPS / 10000);
+assert(expToll > 0 && cr.toll === expToll, 'a clean landing pays the docks-holder a 5% toll');
+assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gid}'`)).rows[0].treasury), treBefore + expToll, 'the toll credited the harbormaster treasury');
+assert.equal(cr.net, cr.landed - cr.cost - expToll, 'the net reflects the toll');
+delete process.env.PORT_RUN_MS; delete process.env.PORT_INTERDICT_P;
 
 // ── boats die with the street ──
 process.env.MOD_KEY = 'test-mod-key';
@@ -181,6 +210,14 @@ const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `port: rides the cash vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cashCheck.drift, seeded, `the only cash drift is the seeded stake (${seeded}) — every port spend/sale/fine reconciles`);
+// the harbormaster toll is a TRANSFER — the gang-treasuries check reconciles it (portTollIn)
+const treCheck = inv.checks.find((c) => c.name === 'gang treasuries');
+assert(treCheck.ok, `the port:toll transfer reconciles the treasury (drift ${treCheck.drift})`);
+// THE SMUGGLER'S LEGEND survives the captain's death (account-level, never wiped) — == the account's
+// lifetime port:sale + port:piracy (re-queried: the harbormaster collect added another landing)
+const capLandedFinal = Number((await pool.query(`SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c ON c.id=t.character_id WHERE c.account_id='${capAcct}' AND t.reason IN ('port:sale','port:piracy')`)).rows[0].s);
+assert(capLandedFinal > capLanded, 'the harbormaster landing grew the legend');
+assert.equal(Number((await pool.query(`SELECT smuggled FROM account_persistent WHERE account_id='${capAcct}'`)).rows[0].smuggled), capLandedFinal, "the smuggler's legend outlives the man (account-level, survives death)");
 
-console.log('✅ The Port test passed — buy/sell boats + gates, the RUN + the lazy COLLECT (clean faucet / interdicted seize+fine+sink), the SUPPLY CAP, the board, boats DIE WITH THE STREET; STEP TWO: NAVAL UPGRADES (hull +cargo / engine +knots, capped cash sinks), PIRACY (the seas board as route+value band, a WIN redirects a CUT of the cargo to the pirate + voids the runner\'s run, a LOSS hospitalizes them; level + once gates), the offshore RENDEZVOUS (a consensual §10.4-neutral handoff to a partner\'s flagged boat); and section 10.4 (port: cash + ammo vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
+console.log('✅ The Port test passed — buy/sell boats + gates, the RUN + the lazy COLLECT (clean faucet / interdicted seize+fine+sink), the SUPPLY CAP, the board, boats DIE WITH THE STREET; STEP TWO: NAVAL UPGRADES + PIRACY (seas band / win-cut-void / loss / level+once gates) + the offshore RENDEZVOUS; STEP THREE: THE SMUGGLER\'S LEGEND (lifetime landed value == port:sale+port:piracy, ranked, SURVIVES DEATH, the leaderboard) + THE HARBORMASTER (a docks-holding family tolls a clean landing 5% to its treasury — the convoy-toll twin, §10.4 treasury reconcile); and section 10.4 (port: cash + ammo vocabulary + the per-character cash + gang-treasuries checks reconcile — drift equals the seeded stake only)');
 await app.close();

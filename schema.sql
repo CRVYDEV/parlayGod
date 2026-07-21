@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
   intel_ops INT NOT NULL DEFAULT 0,   -- (Wire step two) lifetime intel actions run — THE SPYMASTER (status, survives death)
   race_wins INT NOT NULL DEFAULT 0,   -- STREET RACES: lifetime race wins — THE WHEEL legend (status, survives death — the boxing-legend precedent)
+  smuggled NUMERIC NOT NULL DEFAULT 0,   -- THE PORT step three: lifetime contraband value landed (clean collect + piracy take) — THE SMUGGLER'S LEGEND (status, survives death)
   -- NOTE: characters.active_at (Skills step two — shared skill-active cooldown) is added on the characters table below
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
