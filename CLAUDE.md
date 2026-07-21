@@ -2755,6 +2755,38 @@ a bounded one-time cash finder's fee, not a revenue share, per the founder's bla
 approved architecture" directive + this explicit green-light; do NOT extend it to a 3rd level or an ongoing
 percentage without counsel.
 
+**THE BROADCAST (organic-growth layer on §7.13 referrals) — BUILT** (`src/cards.js`, `src/server.js`,
+`public/index.html`, `test/hardening.js`; design `omerta-broadcast-design.md`; founder-directed "make
+guerrilla organic marketing so effective users champion the game — no marketing budget"). Closes the two
+leaks that throttled word-of-mouth: **(1) attribution friction** — a recruit had to TYPE the referrer's
+name as a code (nobody does), so real word-of-mouth credited no one; now every share links to
+`/u/<name>?ref=<name>`, the console captures `?ref=` on load (`localStorage.omerta_ref`, 40-char clamped)
+and character creation auto-fills it as `referralCode` (then clears it) — the shared link IS the code, §7.13
+credits the sharer on qualification exactly as before, zero typing. **(2) no shareable content** — a
+referral was a bare text link; now `GET /card/:type/:name` renders a 1200×630 noir SVG poster (the OG-image
+ratio, unfurls in a feed): **legend** (the proud-player flex — fedora, name, assassin rank OR "gone legit"
+dynasty tier, LVL/KILLS/STANDING, teal when legit), **wanted** (red poster + the bounty POT on their head —
+public by design, not wealth), **whacked** (a kill notice), **join** (the unknown-name fallback).
+`GET /u/:name` is the champion destination — the public profile page (`Cards.profilePage`): OG/Twitter
+unfurl tags → the legend card, the card inline, a gold ENTER THE CITY → CTA to `/?ref=<name>`, and the
+"your referrer gets credit" line. A 📣 broadcast button on the console sheet builds the share (X intent +
+profile URL); the existing share-a-win prompts fire the same flow after a brag-worthy result. **Safety
+rails (why it ships everywhere):** `publicDossier` returns BANDED status only — level/kills/assassin
+rank/family/wanted-welsher flags/dynasty tier + the public bounty pot; **NEVER an exact cash/bank/$OMR
+figure** (preserves the audit's anti-precise-kill-EV rule — a card can't become a wealth scanner). Every
+route is PUBLIC + keyless + read-only, ZERO §10.4 surface (status/marketing only — no ledger row, no
+currency, no faucet); a card never 500s / never emits undefined/NaN; an unknown name falls back to a clean
+"join the city" card/page (a stale share link is harmless); HTML/SVG is escaped (a living name can't inject
+markup); fictional names only (no real brand anywhere — the standing legal posture). A shipped bug was
+regression-guarded here: `hitmanRankOf(...).title` (was `.name` → `undefined` on every legend card).
+`test/hardening.js` (THE BROADCAST block) seeds a wanted, blooded character and asserts the dossier bands
+rank/level/flags with no exact-wealth field, the assassin rank resolves to a real title, all four card types
+are well-formed `<svg>` with no undefined/NaN served as `image/svg+xml`, the profile carries the OG unfurl
+image + the `?ref=` CTA, and an unknown name falls back cleanly on all three routes. Suite green + sim
+drift-0. Deferred: an obituary card type + richer triggers; **rasterization** (X doesn't reliably render an
+SVG og:image — a PNG snapshot via headless-Chromium/resvg is a deploy-time production concern); funnel
+instrumentation (track profile views + card shares alongside `GET /v1/mod/funnel`).
+
 **THE AGENT GATEWAY (agent onboarding + machine discovery) — BUILT** (`AGENTS.md`, `src/agentgateway.js`,
 `src/server.js`, `public/index.html`, `test/hardening.js`; founder-directed "improve the agent experience /
 market to agents"). The first deliberate agent-facing surface — agents are already first-class players

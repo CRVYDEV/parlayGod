@@ -186,6 +186,7 @@
     <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
     <span id="whoami"></span>
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
+    <button class="act" id="btn-share" title="broadcast your legend — a shareable card that credits you for every recruit">📣 broadcast</button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
     <button class="act" id="btn-logout">burn the papers</button>
   </div>
@@ -272,6 +273,9 @@
   const ico = (kind, id) => id ? `<img class="ico" loading="lazy" alt="" src="/v1/art/${kind}/${encodeURIComponent(id)}">` : '';
   let token = localStorage.getItem('omerta_token') || null;
   let me = null, rules = null, ws = null, session = null;
+  // THE BROADCAST — frictionless referral attribution: a shared link (/u/<name>?ref=<name>) drops
+  // ?ref, we stash it, and character creation auto-fills it as the referralCode (no code to type).
+  try { const _r = new URLSearchParams(location.search).get('ref'); if (_r) localStorage.setItem('omerta_ref', _r.slice(0, 40)); } catch {}
 
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
@@ -409,19 +413,33 @@
     if (body.capstone) return 'made my bones — first week done';
     return null;
   }
+  // THE BROADCAST — a share links to the player's public profile (/u/<name>?ref=<name>): it unfurls
+  // the noir card in a feed, and the ?ref auto-credits the sharer when a recruit signs up (§7.13).
+  const shareUrl = (name) => `${(rules?.share?.gameUrl || location.origin).replace(/\/+$/, '')}/u/${encodeURIComponent(name)}?ref=${encodeURIComponent(name)}`;
+  const xIntent = (text, url) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
   function showBrag(line) {
     const b = $('#brag'); if (!b) return;
-    const code = me?.name || '';
-    const url = rules?.share?.gameUrl || location.origin;
+    const name = me?.name || '';
+    const url = name ? shareUrl(name) : (rules?.share?.gameUrl || location.origin);
     const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
-    const tweet = `I ${line} in OMERTÀ — a noir mob RPG.${code ? ` Use my code "${code}" to start.` : ''}${handle ? ` @${handle}` : ''}`;
-    const intent = `https://x.com/intent/tweet?text=${encodeURIComponent(tweet)}&url=${encodeURIComponent(url)}`;
+    const tweet = `I ${line} in OMERTÀ — a noir mob RPG. Come take the city.${handle ? ` @${handle}` : ''}`;
     b.innerHTML = `<span class="bt">🏆 ${line}</span>
-      <a href="${intent}" target="_blank" rel="noopener noreferrer"><button class="act">brag on X ↗</button></a>
+      <a href="${xIntent(tweet, url)}" target="_blank" rel="noopener noreferrer"><button class="act">brag on X ↗</button></a>
       <span id="brag-x" title="dismiss" style="cursor:pointer;color:var(--dim)">✕</span>`;
     b.classList.remove('hidden');
     $('#brag-x').onclick = () => b.classList.add('hidden');
     clearTimeout(b._h); b._h = setTimeout(() => b.classList.add('hidden'), 15000);
+  }
+  // the 📣 broadcast button — share your dossier (the shareable card + profile) any time, not just on a win.
+  function shareDossier() {
+    const name = me?.name; if (!name) return;
+    const url = shareUrl(name);
+    const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
+    const tweet = `My name rings out in OMERTÀ — a noir mob RPG. Think you can take the city?${handle ? ` @${handle}` : ''}`;
+    if (navigator.share) { navigator.share({ title: 'OMERTÀ', text: tweet, url }).catch(() => {}); return; }
+    try { navigator.clipboard?.writeText(url); } catch {}
+    window.open(xIntent(tweet, url), '_blank', 'noopener,noreferrer');
+    toast('link copied — your card unfurls when you paste it', false);
   }
   // one money move at a time — a global in-flight lock is the double-tap guard (buttons re-render
   // after each act, so a per-button disable is redundant; this covers every call site at once).
@@ -492,10 +510,12 @@
     landToken(await api(`POST`, `/v1/auth/${provider}`, { token: tok, ...(inviteCode ? { inviteCode } : {}) }));
   };
   $('#btn-create').onclick = async () => {
-    const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim() });
-    if (r.code < 400) boot(); else toast(r.body?.message || r.body?.error, true);
+    const ref = localStorage.getItem('omerta_ref') || '';   // frictionless referral — the shared link credited the sharer
+    const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim(), ...(ref ? { referralCode: ref } : {}) });
+    if (r.code < 400) { localStorage.removeItem('omerta_ref'); boot(); } else toast(r.body?.message || r.body?.error, true);
   };
   $('#btn-logout').onclick = () => { localStorage.removeItem('omerta_token'); location.reload(); };
+  $('#btn-share').onclick = shareDossier;
   $('#btn-refresh').onclick = () => refresh();
   // the glossary (the ? up top) + the first-session welcome (shown once per browser)
   $('#btn-help').onclick = () => $('#glossary').classList.remove('hidden');

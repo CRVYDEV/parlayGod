@@ -289,5 +289,43 @@ assert.equal((await app.inject({ method: 'GET', url: '/v1/art/car/nonesuch' })).
 assert.equal((await app.inject({ method: 'GET', url: '/v1/art/widget/x' })).statusCode, 200, 'unknown kind → 200 emblem');
 assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback)`);
+// ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution ──
+// PUBLIC + keyless + read-only; a card must never 500, never leak an exact dollar figure, never emit undefined/NaN.
+{
+  const bGuest = (await call('POST', '/v1/auth/guest')).body.token;
+  await call('POST', '/v1/character', { token: bGuest, body: { name: 'Broadcast Bruno' } });
+  const me = await meOf(bGuest);
+  await seedCh(me.id, "respect=680, season_kills=3, wanted_until=NOW()+interval '1 day'");
+  // (1) the safe public dossier — real fields, NEVER an exact wealth number
+  const dj = await call('GET', '/v1/u/Broadcast%20Bruno');
+  assert.equal(dj.code, 200, 'dossier → 200');
+  assert.equal(dj.body.found, true, 'dossier finds the living bearer by name');
+  assert.equal(dj.body.name, 'Broadcast Bruno', 'dossier carries the name');
+  assert(typeof dj.body.level === 'number' && dj.body.wanted === true, 'dossier bands rank/level + flags');
+  assert(typeof dj.body.hitmanRank === 'string' && dj.body.hitmanRank.length > 0, 'dossier resolves the assassin rank title (not undefined)');
+  assert(dj.body.cash === undefined && dj.body.bank === undefined && dj.body.omr === undefined, 'dossier NEVER leaks an exact wealth figure (anti precise-kill-EV)');
+  // (2) the cards — every type is well-formed SVG with no undefined/NaN
+  for (const t of ['legend', 'wanted', 'whacked', 'join']) {
+    const c = await app.inject({ method: 'GET', url: `/card/${t}/${encodeURIComponent('Broadcast Bruno')}` });
+    assert.equal(c.statusCode, 200, `card ${t} → 200`);
+    assert(/^<svg[\s\S]*<\/svg>\s*$/.test(c.body.trim()), `card ${t} is a well-formed <svg>`);
+    assert(!/undefined|NaN/.test(c.body), `card ${t} carries no undefined/NaN`);
+    assert.equal(c.headers['content-type'], 'image/svg+xml; charset=utf-8', `card ${t} served as SVG`);
+  }
+  // (3) the public profile page — OG unfurl tags + the referral CTA carrying the sharer's name
+  const p = await app.inject({ method: 'GET', url: '/u/Broadcast%20Bruno' });
+  assert.equal(p.statusCode, 200, 'profile page → 200');
+  assert(/text\/html/.test(p.headers['content-type']), 'profile served as HTML');
+  assert(p.body.includes('og:image') && p.body.includes('/card/legend/'), 'profile declares the OG unfurl image');
+  assert(p.body.includes('ENTER THE CITY') && p.body.includes('?ref=Broadcast%20Bruno'), 'profile CTA carries the sharer as referral');
+  // (4) an unknown name falls back cleanly — never a 500 (a bad share link is harmless)
+  const uk = await call('GET', '/v1/u/Nobody%20Here');
+  assert.equal(uk.code, 200, 'unknown dossier → 200');
+  assert.equal(uk.body.found, false, 'unknown dossier reports not-found');
+  assert.equal((await app.inject({ method: 'GET', url: '/card/legend/Nobody%20Here' })).statusCode, 200, 'unknown card → 200 (join fallback)');
+  assert.equal((await app.inject({ method: 'GET', url: '/u/Nobody%20Here' })).statusCode, 200, 'unknown profile → 200 (join the city)');
+  assert.equal((await app.inject({ method: 'GET', url: '/card/bogus/Broadcast%20Bruno' })).statusCode, 200, 'unknown card type → 200 (falls back to legend, never breaks a share)');
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks)`);
 await app.close();
