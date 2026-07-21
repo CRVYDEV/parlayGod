@@ -270,5 +270,24 @@ assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine
 // audit: liquid is published as a BAND, not an exact figure (so a hunter can't compute precise kill-EV)
 assert(agLb.agents.every((a) => typeof a.wealthBand === 'string' && typeof a.omrBand === 'string' && a.netWorth === undefined), 'agents carry banded wealth (no exact net worth leaked)');
 
-console.log('✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min)');
+// ── ITEM ART route: one procedural SVG per catalog entry (cosmetic; keyless; must never 500) ──
+const { CARS: ARC, PORT: ARP, DRUGS: ARD, GUNS: ARG, VESTS: ARV, GOODS: ARGD } = await import('../src/rules.js');
+const artCats = { car: ARC, boat: ARP.BOATS, drug: ARD, gun: ARG, vest: ARV, good: ARGD };
+let artCount = 0;
+for (const [kind, list] of Object.entries(artCats)) {
+  for (const it of list) {
+    const res = await app.inject({ method: 'GET', url: `/v1/art/${kind}/${encodeURIComponent(it.id)}` });
+    assert.equal(res.statusCode, 200, `art ${kind}/${it.id} → 200`);
+    assert(/^<svg[\s\S]*<\/svg>$/.test(res.body.trim()), `art ${kind}/${it.id} is a well-formed <svg>`);
+    assert(!/undefined|NaN/.test(res.body), `art ${kind}/${it.id} carries no undefined/NaN`);
+    assert.equal(res.headers['content-type'], 'image/svg+xml; charset=utf-8', `art ${kind}/${it.id} is served as SVG`);
+    artCount++;
+  }
+}
+// unknown id + unknown kind both fall back to a neutral emblem, never a 500 (a broken <img> is harmless)
+assert.equal((await app.inject({ method: 'GET', url: '/v1/art/car/nonesuch' })).statusCode, 200, 'unknown item id → 200 emblem');
+assert.equal((await app.inject({ method: 'GET', url: '/v1/art/widget/x' })).statusCode, 200, 'unknown kind → 200 emblem');
+assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback)`);
 await app.close();

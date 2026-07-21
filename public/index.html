@@ -100,6 +100,15 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
   .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-size: 12px; }
   .card .t { color: var(--ink); } .card .d { color: var(--dim); font-size: 11px; margin: 3px 0; }
+  /* procedural item art — a framed engraved plate at the top of an item card */
+  .ico { display: block; width: 100%; height: 74px; object-fit: contain; margin: -2px 0 6px;
+    border-radius: 3px; background:
+      repeating-linear-gradient(45deg, #101219 0 2px, transparent 2px 9px),
+      radial-gradient(80% 70% at 50% 42%, #1c1f28 0%, #0e1015 100%);
+    border: 1px solid var(--line); }
+  .ico.sm { height: 52px; }
+  .ico.row { display: inline-block; width: 46px; height: 30px; vertical-align: middle;
+    margin: -3px 8px -3px 0; border: 0; background: none; border-radius: 0; }
 
   /* feed */
   #feed { max-height: 75vh; overflow-y: auto; font-size: 12px; }
@@ -259,6 +268,8 @@
   const $ = (s) => document.querySelector(s);
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
+  // procedural item art — one engraved SVG per catalog id, served by GET /v1/art/:kind/:id.
+  const ico = (kind, id) => id ? `<img class="ico" loading="lazy" alt="" src="/v1/art/${kind}/${encodeURIComponent(id)}">` : '';
   let token = localStorage.getItem('omerta_token') || null;
   let me = null, rules = null, ws = null, session = null;
 
@@ -656,7 +667,7 @@
 
       <h2 style="margin-top:12px">The Supplier <span class="d" style="font-size:10px">(makings — today's prices)</span></h2>
       <div class="grid">${unlocked.map((d) => `
-        <div class="card"><span class="t">${d.name}</span> <span class="d">${d.tag}</span>
+        <div class="card">${ico('drug', d.id)}<span class="t">${d.name}</span> <span class="d">${d.tag}</span>
           <div class="d">makings $${fmt(prices.makings?.[d.id] ?? '?')}/unit · shelf: ${me.makings?.[d.id] || 0}</div>
           <input data-mk="${d.id}" placeholder="qty" size="5"> <button class="act" data-mkbuy="${d.id}">buy</button></div>`).join('')}</div>
       ${(rules?.drugs || []).filter((d) => d.unlock > rankIdx).map((d) =>
@@ -1020,7 +1031,7 @@
     const cargo = me?.cargo || {};
     const goodsCards = (rules?.goods || []).map((g) => {
       const price = spot[g.id], held = cargo[g.id] || 0;
-      return `<div class="card"><span class="t">${g.name}</span>
+      return `<div class="card">${ico('good', g.id)}<span class="t">${g.name}</span>
         <div class="d">spot here: $${price != null ? fmt(price) : '—'} · in trunk: ${held}</div>
         <input data-gd="${g.id}" placeholder="qty" size="5">
         <button class="act" data-gdbuy="${g.id}">buy</button>
@@ -1669,7 +1680,7 @@
       ${!(me.cars || []).length && !(me.guns || []).length ? coachCard('Your garage &amp; armory', 'Boost cars for cash (fence them) or to melt into ammo. Down below, buy a gun and a vest — you can\'t win a fight, or take a contract, unarmed.') : ''}
       <h2>The Fleet (${(me.cars || []).length}) <button class="act" data-do="POST /v1/garage/boost" style="margin-left:8px">boost a car (GTA)</button></h2>
       ${(me.cars || []).length ? `<div class="grid">${me.cars.map((c) => `
-        <div class="card"><span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
+        <div class="card">${ico('car', c.model)}<span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
           ${c.plate ? `<span class="chip">[${c.plate}]</span>` : ''}${c.listed ? '<span class="chip cold">ON THE BLOCK</span>' : ''}${c.pledged ? '<span class="chip cold">PLEDGED</span>' : ''}
           <div class="d">damage ${c.dmg}%</div>
           ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}">repair</button>
@@ -1679,7 +1690,7 @@
 
       <h2 style="margin-top:12px">The Armory <span class="d" style="font-size:10px">(carrying: ${me.gun || 'nothing'} · vest: ${me.vest || 'none'} · ammo ${fmt(me.ammo)})</span></h2>
       <div class="grid">${(rules?.guns || []).map((g) => `
-        <div class="card"><span class="t">${g.name}</span>${me.gun === g.id ? '<span class="chip good">CARRYING</span>' : ownedGuns.has(g.id) ? '<span class="chip">owned</span>' : ''}
+        <div class="card">${ico('gun', g.id)}<span class="t">${g.name}</span>${me.gun === g.id ? '<span class="chip good">CARRYING</span>' : ownedGuns.has(g.id) ? '<span class="chip">owned</span>' : ''}
           <div class="d">$${fmt(g.cash)} + ${g.crates} crate${g.crates > 1 ? 's' : ''} · firepower ${g.fp}</div>
           <div class="d">${g.desc || ''}</div>
           ${ownedGuns.has(g.id) ? (me.gun === g.id ? '<button class="act" data-do="POST /v1/armory/unequip">put it away</button>'
@@ -1963,12 +1974,12 @@
       <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.</div></div>
       <div class="grid">
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
-          ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span>${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
+          ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${f.kind || ''}">${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
             <span>${f.status === 'arrived' ? `<button class="act" data-collect="${f.id}"${b.atDocks ? '' : ' disabled'}>collect</button>` : f.status === 'docked' ? `<button class="act" data-sell="${f.id}"${b.atDocks ? '' : ' disabled'}>sell</button>` : ''}</span></div>
             ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks ? '' : ' disabled'}>run it</button></div>` : ''}`).join('') : '<div class="d">No boats. Buy one below.</div>'}
         </div>
         <div class="card"><span class="t">The Boatyard</span>
-          ${cat.map((c) => `<div class="row" style="margin-top:4px"><span>${c.name} — hold ${c.hold} · ${c.speed} kn</span><span>$${fmt(c.cost)} <button class="act" data-buy="${c.id}"${b.atDocks && fleet.length < (b.fleetMax || 5) ? '' : ' disabled'}>buy</button></span></div>`).join('')}
+          ${cat.map((c) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${c.id}">${c.name} — hold ${c.hold} · ${c.speed} kn</span><span>$${fmt(c.cost)} <button class="act" data-buy="${c.id}"${b.atDocks && fleet.length < (b.fleetMax || 5) ? '' : ' disabled'}>buy</button></span></div>`).join('')}
           <div class="d" style="margin-top:4px">Boats resell at ${Math.round(((cat[0]||{}).resale||0)/((cat[0]||{}).cost||1)*100)}% and die with your street.</div>
         </div>
       </div>`;

@@ -39,12 +39,13 @@ import * as Store from './store.js';
 import * as Pass from './pass.js';
 import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
+import { itemArt } from './assets.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
-         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
+         levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
@@ -95,6 +96,16 @@ export async function buildServer() {
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
   app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  // ── ITEM ART: one procedural SVG per catalog entry (cosmetic; no ledger surface). Public + keyless,
+  // heavily cacheable — the same id always renders the same icon. Shown in garage/port/kitchen/armory/
+  // market. Unknown kind/id falls back to a neutral emblem, so a broken <img src> never 500s. ──
+  const ART_CATALOGS = { car: CARS, boat: PORT.BOATS, drug: DRUGS, gun: GUNS, vest: VESTS, good: GOODS };
+  app.get('/v1/art/:kind/:id', async (req, reply) => {
+    const list = ART_CATALOGS[req.params.kind];
+    const item = list && list.find((x) => x.id === req.params.id);
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
+    return reply.send(itemArt(req.params.kind, item));
+  });
   // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
   let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';
   try { agentsMd = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'AGENTS.md'), 'utf8'); } catch { /* headless */ }
