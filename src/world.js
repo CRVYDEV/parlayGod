@@ -511,6 +511,9 @@ export async function invadeOutpost(ch, npcId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss marches on the frontier.');
   const fixture = worldNpcOf(npcId);
   if (!fixture) throw new GameError('bad_npc', 'No outfit by that name.');
+  // B1 (audit) — you can only HOLD turf you could RAID: the invader must clear the outfit's raid level,
+  // so money alone can't seat a rookie family on an apex outpost (consistency with the rout minLvl gate).
+  if (levelOf(Number(ch.respect)) < fixture.minLvl) throw new GameError('level', `Holding ${fixture.name}'s turf takes level ${fixture.minLvl}.`);
   const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const row = (await client.query('SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
   if (!row || !row.held_by_gang) throw new GameError('unheld', `Nobody holds ${fixture.name} — rout it to take the turf.`);

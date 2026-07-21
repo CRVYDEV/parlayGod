@@ -1218,11 +1218,12 @@ literal NPC occupation of the core districts (the fullest turf rewire).
 The three-lens red-team was §10.4/concurrency CLEAN and fixed one LOW (F1: `collectFrontier` now honors
 the SIGNED D2 safehouse gate — collecting frontier tribute is an exposed act, like territory/business/
 convoy collection). Two balance items flagged, NOT patched (ground rule #1):
-- **B1 — invasion has no level gate.** `invadeOutpost` is `canCommand`-gated but not `minLvl`-gated, so
-  once any family routs an outfit into play, a low-level boss with a $50k treasury can invade + hold it
-  (up to Volkov's $86.4k/day) despite Volkov normally needing lvl 55 + a co-op crew to rout. Bounded +
-  costed, but inconsistent with the raid gate. Dial: add `if (levelOf(ch.respect) < fixture.minLvl)` to
-  invade, or leave it (money, not muscle, takes a bought outpost — a deliberate "economic conquest" path).
+- **B1 — invasion level gate — FIXED (founder-directed).** `invadeOutpost` now gates
+  `levelOf(ch.respect) < fixture.minLvl` (you can only HOLD turf you could RAID) — closing the
+  consistency gap where a rookie family with a fat treasury could seat itself on an apex outpost. A pure
+  consistency fix mirroring the rout `minLvl` gate; `test/world.js` proves a lvl-10 boss can't invade
+  kryl (lvl 20). The "economic conquest" alternative (money takes a bought outpost) was considered and
+  declined for consistency.
 - **B2 — the garrison ratchet has no decay/cooldown.** Each invasion sets `garrison = max($50k,
   prev×1.5)`, ratcheting 25k→50k→75k→112k→168k…, exponentially pricing out further invasions. Pure
   treasury SINK (helps extraction≤inflow) and ROUT-resettable (a rout reinstalls the flat $25k garrison),

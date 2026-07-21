@@ -31,12 +31,12 @@ there to collect.
 
 ## Flagged for founder sign-off (NOT patched — ground rule #1)
 
-- **B1 — `invadeOutpost` has no level gate.** Routing an outfit is `minLvl`-gated (Volkov = lvl 55 + a
-  co-op crew), but once ANY family puts an outfit in play, a level-4 boss with a $50k treasury can invade
-  and hold it (up to $86.4k/day tribute) with no level requirement. Bounded + costed (a real treasury
-  burn), but it's inconsistent with the raid gate and lets low families punch above their weight
-  economically. Founder call: add a `fixture.minLvl` gate to invade, or leave it (money, not muscle, takes
-  a bought outpost).
+- **B1 — `invadeOutpost` had no level gate — FIXED (founder-directed follow-up).** Routing an outfit is
+  `minLvl`-gated (Volkov = lvl 55 + a co-op crew), but invasion originally let a low-level boss with a
+  $50k treasury hold an apex outpost. Now `invadeOutpost` gates `levelOf(ch.respect) < fixture.minLvl`
+  (you can only HOLD turf you could RAID) — a consistency fix mirroring the rout gate; regression added
+  (a lvl-10 boss can't invade kryl/lvl-20). The "economic conquest" alternative was declined for
+  consistency.
 - **B2 — the garrison ratchet has no decay and no invade cooldown.** Each invasion sets `garrison = cost =
   max($50k, prev×1.5)`, so successive invasions ratchet the garrison up 1.5× (25k → 50k → 75k → 112k →
   168k → …), exponentially pricing out further invasions. It's a pure treasury SINK (no extraction) and
