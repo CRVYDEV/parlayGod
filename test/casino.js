@@ -150,6 +150,12 @@ for (let i = 0; i < 30 && (pvpW === 0 || pvpL === 0); i++) {
 assert(pvpW > 0 && pvpL > 0, `both sides won at least once (${pvpW}/${pvpL})`);
 
 // ── the fight: one capped bet a week; the family holding neon can buy the result ──
+// SIGN-OFF (2.5): the book won't take action from a rookie — an anti-alt floor on the fix-Sybil ring
+const { body: { token: rookieTok } } = await call('POST', '/v1/auth/guest');
+await call('POST', '/v1/character', { token: rookieTok, body: { name: 'Rookie Ricky' } });
+await pool.query(`UPDATE characters SET cash=100000, loc='neon' WHERE id='${(await meOf(rookieTok)).id}'`);
+assert.equal((await call('POST', '/v1/casino/fight', { token: rookieTok, body: { side: 'a', amount: 500 } })).body.error, 'rookie', 'a fresh alt (level 1) is refused a fight bet');
+await seed('respect=200'); // Lou is level 7 — clears the fight-bet floor
 assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'x', amount: 500 } })).body.error, 'side', "back 'a' or 'b'");
 assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 50000 } })).body.error, 'max', 'fight bets cap small — the fix stays bounded');
 rr = await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 5000 } });

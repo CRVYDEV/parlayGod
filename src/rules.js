@@ -573,6 +573,7 @@ export const CASINO = {
   // FAV_P off the seed draw; decimal payouts carry a ~6-9% book edge. The family holding neon can
   // FIX the result once a week for FIX_COST from the treasury — a turf perk with teeth.
   FIGHT_MAX: 5000, FIGHT_FAV_P: 0.65, FIGHT_FAV_PAYS: 1.45, FIGHT_DOG_PAYS: 2.6, FIGHT_FIX_COST: 50000,
+  FIGHT_BET_MIN_LVL: 5,   // SIGN-OFF (2.5): an anti-alt floor on fight bets — raises a fix-Sybil ring's cost per disposable alt (the npcHit rookie-floor / WANTED_MIN_LVL precedent)
   // RAKEBACK: owners of a casino BUSINESS split RAKEBACK_BPS of den stake volume (claimed at
   // business collect, cursor-tracked) — the Den feeds the Business Empire layer.
   RAKEBACK_BPS: 100,
@@ -1033,6 +1034,7 @@ export const PEN = {
   COOP_TTL_MS: 60 * 60 * 1000,                              // a plan goes cold after an hour (the worker sweeps it, refunds a living leader's cutkit)
   // step two — YARD INCIDENTS: a deterministic daily draw (the §7.11 seed) the whole block shares,
   // a modifier layer on the Pen (the cityEventOf pattern). Each is ONE touchpoint. Sign-off levers.
+  QUIET_WEIGHT: 0.45,   // SIGN-OFF (Pen T3): 'quiet' is weighted up so the yard isn't hard-blocked ~40% of days
   YARD_EVENTS: [
     { id: 'quiet',    name: 'Quiet Day',          desc: 'The block is calm. Business as usual.' },
     { id: 'lockdown', name: 'Lockdown',           shankBlock: true,               desc: 'Cells locked, guards on every tier — nobody moves on anybody today.' },
@@ -1066,7 +1068,14 @@ export const penFactionOf = (id) => PEN.FACTIONS.find((f) => f.id === id) || nul
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
 export const yardEventById = (id) => PEN.YARD_EVENTS.find((e) => e.id === id) || PEN.YARD_EVENTS[0];
 // today's yard incident — seed-drawn, town-wide, deterministic (the cityEventOf shape)
-export const yardEventOf = (day = dayOf()) => PEN.YARD_EVENTS[Math.floor(hash01('yard:' + day + ':' + MARKET_SEED) * PEN.YARD_EVENTS.length) % PEN.YARD_EVENTS.length];
+export const yardEventOf = (day = dayOf()) => {
+  // SIGN-OFF (Pen T3): 'quiet' (index 0) is weighted up to PEN.QUIET_WEIGHT so the yard isn't
+  // hard-blocked (lockdown/toss) ~40% of days; the remaining incidents share the rest uniformly.
+  const r = hash01('yard:' + day + ':' + MARKET_SEED);
+  if (r < PEN.QUIET_WEIGHT) return PEN.YARD_EVENTS[0]; // 'quiet'
+  const rest = PEN.YARD_EVENTS.slice(1);
+  return rest[Math.min(rest.length - 1, Math.floor(((r - PEN.QUIET_WEIGHT) / (1 - PEN.QUIET_WEIGHT)) * rest.length))];
+};
 // seconds left on a sentence (0 if free) — the Pen's clock
 export const jailSecondsLeft = (ch, now = Date.now()) =>
   ch.jail_until ? Math.max(0, Math.ceil((new Date(ch.jail_until).getTime() - now) / 1000)) : 0;

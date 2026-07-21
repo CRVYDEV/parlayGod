@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the step-one tests (overridden per-case below)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PEN, NPC_HITMEN } from '../src/rules.js';
+import { PEN, NPC_HITMEN, yardEventOf } from '../src/rules.js';
 import { sweepStaleBreaks } from '../src/pen.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -462,6 +462,12 @@ assert(new Date(ratMnAfter.hole_until) > new Date(), 'and is holed WITH the crew
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
+
+// ── SIGN-OFF (Pen T3): 'quiet' is weighted up so the yard isn't hard-blocked ~40% of days ──
+let quietDays = 0, blockDays = 0;
+for (let d = 0; d < 300; d++) { const e = yardEventOf(d); if (e.id === 'quiet') quietDays++; if (e.shankBlock || e.commissaryClosed) blockDays++; }
+assert(quietDays / 300 > 0.35, `quiet days are weighted up (${quietDays}/300 ≈ ${Math.round(quietDays / 3)}%, was ~14% uniform)`);
+assert(blockDays / 300 < 0.25, `hard-block days (lockdown/toss) are diluted below a quarter (${blockDays}/300)`);
 
 console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked)');
 process.exit(0);

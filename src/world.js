@@ -119,7 +119,7 @@ export async function worldBoard(pool, ch = null, h = null) {
         tributePending: mine ? frontierTribute(f, row.tribute_at, now.getTime()) : null, // your accrued tribute on this outpost
         garrison: holder ? Math.floor(Number(row.garrison || 0)) : null,
         invadeCost: holder && !mine ? invadeCost(row.garrison) : null, // what it'd cost your family to take it
-        canRaid: !!ch && lvl >= f.minLvl,
+        canRaid: !!ch && lvl >= f.minLvl && !f.coop, // SIGN-OFF (1.3): apex (coop) outfits need a crew, not a solo hit
         odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged) * 100) : null,
       };
     }),
@@ -202,6 +202,9 @@ function raidChance(fixture, power, patrol, enraged = false) {
 export async function raidNpc(ch, npcId, client, h) {
   const fixture = worldNpcOf(npcId);
   if (!fixture) throw new GameError('bad_npc', 'No outfit by that name to hit.');
+  // SIGN-OFF (1.3): an apex outfit is too heavy to SOLO — it must be hit with a crew (planRaid → executeRaid).
+  // Closes the min-level-whale-solos-an-apex floor (the audit's B1); the crew path gates the inverse (`solo`).
+  if (fixture.coop) throw new GameError('crew', `${fixture.name} is too well-defended to hit alone — put a crew together (plan a raid).`);
   if (jailed(ch)) throw new GameError('jailed', 'No moves from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't run an op from a safehouse.");
   if (hospitalized(ch)) throw new GameError('hosp', 'Not in any shape to run an op — see the Doc first.'); // parity with convoy/heist ambush

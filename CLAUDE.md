@@ -2922,3 +2922,19 @@ on-ramp** ($45k docks → $3.6M neon at full outfit strength, flooring to $30k o
 the apex solo-raid floor (gate to crews), the fight-fix Sybil cap, and the Tier-6 chain gates (run
 `forge test`). Nothing was unilaterally retuned (ground rule #1) — the sheet is decision-ready, awaiting the
 founder's SHIP/CHANGE/WATCH per row.
+
+**SIGN-OFF SHIPPED (founder-directed 2026-07-21, "ship all recommendations").** The `SIGN-OFF.md` CHANGE
+rows applied + tested (suite 30/30, sim drift-0): **(1.3)** apex World outfits are now CREW-ONLY —
+`raidNpc` refuses `fixture.coop` (kryl/moreau/volkov), board `canRaid && !f.coop`; closes the apex
+solo-raid floor B1 (the crew path already gated the inverse `solo`, so the symmetry is closed).
+**(2.5)** `CASINO.FIGHT_BET_MIN_LVL` (5) — an anti-alt floor on fight bets (the WANTED_MIN_LVL/npcHit
+rookie-floor precedent) that raises a fight-fix Sybil ring's per-alt cost. **(Pen T3)** `PEN.QUIET_WEIGHT`
+(0.45) reweights `yardEventOf` so hard-block yard days (lockdown/toss) fall below ~25% (was ~40%);
+distributional regression in `test/pen.js`. **(Loans Tier 4)** THE DEBT SURVIVES THE LENDER —
+`voidLoansAtDeath` reassigns a dead lender's ACTIVE loan (+ pledged collateral) to the HEIR instead of
+voiding it (§10.4-neutral, the claim just changes hands; `runEstate` hoists `heirId` above the loan-void
+to pass it), closing the kill-your-lender-to-erase-the-debt moral hazard; the collateral-death test now
+asserts survival-to-heir. **(2.7, deploy-config)** production must run `SOCIAL_VERIFY_MODE=live` for the
+Spread-the-Word faucet (alpha keeps `trust`). Regressions added across world/casino/pen/loans. Everything
+else on the sheet is SIGNED at the recommended verdict or on the alpha WATCH-list; the Tier-6 chain/legal
+items stay a separate gate. `SIGN-OFF.md` + `BALANCE.md` record the resolution.

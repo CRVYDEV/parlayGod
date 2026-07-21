@@ -181,6 +181,10 @@ async function fightResultOf(client, week) {
 }
 
 export async function betFight(ch, side, amount, client, h) {
+  // SIGN-OFF (2.5): an anti-alt floor so a fix-Sybil ring can't field free throwaway bettors — each
+  // fixed-side alt must be a real, leveled character (the WANTED_MIN_LVL / npcHit rookie-floor precedent).
+  if (levelOf(Number(ch.respect)) < CASINO.FIGHT_BET_MIN_LVL)
+    throw new GameError('rookie', `The book doesn't take action from rookies — reach level ${CASINO.FIGHT_BET_MIN_LVL} first.`);
   const amt = gateBet(ch, amount, CASINO.MIN_BET, CASINO.FIGHT_MAX);
   if (side !== 'a' && side !== 'b') throw new GameError('side', "Back 'a' (the favorite) or 'b' (the dog).");
   const week = weekOf();

@@ -1,7 +1,7 @@
 // LOAN SHARKING — the Shylock. Offer (escrow) → take (escrow → borrower) → repay (transfer − vig) or
 // default → collect (seize pocket + in-transit up to the debt, leg-break + welsher). Gates (amount/
 // rate/term/own/welsher/max-active/not-due), the worker sweep (expired-offer refund + overdue welsher),
-// death (a dead lender's open escrow burns, active loans void), and §10.4 (the new loan-escrow check +
+// death (a dead lender's open escrow burns; an active loan's debt SURVIVES to the heir), and §10.4 (the loan-escrow check +
 // closed vocabulary + a scoped repay/collect transfer). pg-mem, zero infra.
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
@@ -278,7 +278,8 @@ const seizedInView = (collectRes.body.character?.cars || []).find((c) => c.id ==
 assert(seizedInView && seizedInView.model === 'pigeon', 'the seized car renders complete in the lender’s garage (full row, not a bare id stub)');
 assert.equal(Number((await pool.query('SELECT COUNT(*) c FROM cars')).rows[0].c), carsBefore, 'car conservation: the seizure MOVED a row, never minted or destroyed one');
 
-// dead lender → the surviving borrower's pledged car unlocks + the debt voids
+// SIGN-OFF (Tier 4): dead lender → the DEBT SURVIVES to the HEIR (killing your lender no longer wipes it).
+// The active loan carries over reassigned to the heir, and the pledged car stays locked (secured claim).
 const dLender = await mk('Doomed Lender');
 const survivor = await mk('Survivor Sid');
 await seedCh(dLender.id, 'cash=200000');
@@ -286,10 +287,14 @@ const survCar = await mkCar(survivor.id, 'pigeon', 'stock', 0);
 const secured3 = (await call('POST', '/v1/loans', { token: dLender.token, body: { amount: 20000, rate: 0.1, hours: 24, collateral: 1500 } })).body;
 await call('POST', `/v1/loans/${secured3.id}/take`, { token: survivor.token, body: { carId: survCar } });
 assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, true, 'pledged while the loan is live');
+const dLenderAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${dLender.id}'`)).rows[0].a;
 const killL = await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: dLender.id } });
 assert.equal(killL.statusCode, 200, 'the lender is dead');
-assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, false, 'the dead lender’s claim dies — the borrower’s car unlocks');
-assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM loans WHERE id='${secured3.id}'`)).rows[0].c), 0, 'the active loan voided');
+const dHeir = (await pool.query(`SELECT id FROM characters WHERE account_id='${dLenderAcct}' AND alive=true`)).rows[0].id;
+const survived = (await pool.query(`SELECT lender_character, status FROM loans WHERE id='${secured3.id}'`)).rows[0];
+assert(survived && survived.status === 'active', 'the debt SURVIVES the lender — killing your lender no longer erases it');
+assert.equal(survived.lender_character, dHeir, 'the receivable passed to the heir (the bloodline inherits the book)');
+assert.equal((await pool.query(`SELECT pledged FROM cars WHERE id='${survCar}'`)).rows[0].pledged, true, 'and the pledged car stays locked (the heir holds the secured claim)');
 
 // ── STEP TWO audit F1: an un-collected SECURED loan auto-forfeits its collateral past due + GRACE ──
 const afShark = await mk('Absent Shark');
