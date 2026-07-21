@@ -1388,6 +1388,17 @@ Suite 32/32 + sim drift-0.
 - All `STEP2.*` numbers (HULL/ENGINE_STEP, UPGRADE_BASE/MAX, PIRATE_TAKE_BPS/ENERGY/AMMO/MIN_LEVEL) are
   founder sign-off levers.
 
+### Step three (2026-07-21) — the Smuggler's Legend + the Harbormaster (sign-off levers)
+- **The Smuggler's Legend** (`account_persistent.smuggled`): PURE STATUS (lifetime landed value → a rank +
+  leaderboard, survives death) — zero §10.4, zero balance surface (the hitman-rep/wheel precedent).
+- **The Harbormaster toll** (`PORT.STEP3.TOLL_BPS` 5%): a §10.4-clean TRANSFER (shipper → docks-holder
+  treasury, the convoy-toll twin — no new emission, reconciled by `portTollIn`). Two balance effects, both
+  sign-off levers: (1) it makes HOLDING the docks more valuable (a small treasury faucet on top of the
+  district's perks — bounded by shippers' supply-capped landings, and the docks must first be liberated
+  from the NPC occupation + defended); (2) it's a 5% haircut on Port runners who land at a rival-held docks
+  (they can still run — the toll never gates the freight). Own-family + NPC-held + unheld = free. Reviewed
+  §10.4-clean (AUDIT-port-step-three.md); `TOLL_BPS` is the dial if 5% bites too hard or too soft.
+
 ## AUDIT-full-system-v2 economic flags (2026-07-21) — founder sign-off (NOT patched, ground rule #1)
 
 The overnight full-system red-team found NO new unbounded $OMR extraction (the reserve queue holds —
