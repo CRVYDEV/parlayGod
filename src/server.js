@@ -417,7 +417,10 @@ export async function buildServer() {
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
     wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
-      sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000) },
+      sweepOmr: WIRE.SWEEP_OMR, subOmr: WIRE.SUB_OMR, subDays: Math.round(WIRE.SUB_MS / 86400000),
+      traceOmr: WIRE.TRACE_OMR, dossierOmr: WIRE.DOSSIER_OMR,
+      disinfoOmr: WIRE.DISINFO_OMR, disinfoHours: Math.round(WIRE.DISINFO_MS / 3600000),
+      informantOmr: WIRE.INFORMANT_OMR, informantDays: Math.round(WIRE.INFORMANT_MS / 86400000), informantMax: WIRE.INFORMANT_MAX },
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
     pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })) },
   }));
@@ -733,6 +736,11 @@ export async function buildServer() {
   app.post('/v1/wire/dossier/:targetId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.pullDossier(ch, req.params.targetId, client, h)));
   app.get('/v1/leaderboard/wire', { preHandler: auth }, async () => Wire.wireLeaderboard(pool));
+  // Wire step three: DISINFORMATION (feed your tappers lies) + THE INFORMANT (a standing human source)
+  app.post('/v1/wire/disinfo', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.plantDisinfo(ch, client, h)));
+  app.post('/v1/wire/informant/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.recruitInformant(ch, req.params.targetId, client, h)));
 
   // THE BLACK MARKET — P2P trade: cars by auction (bid/buy-now), goods fixed-price at the dock.
   app.get('/v1/market', async () => Market.marketBoard(pool));

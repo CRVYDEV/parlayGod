@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS characters (
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)
   wire_until TIMESTAMPTZ,                           -- THE WIRE: the Street Wire premium-intelligence subscription window (a $OMR sink)
+  disinfo_until TIMESTAMPTZ,                        -- THE WIRE step three: DISINFORMATION — while current, any WIRETAP reading you gets cooked private signals (a $OMR sink; an informant sees through it)
   active_at TIMESTAMPTZ,                            -- SKILLS step two: shared cooldown across capstone-unlocked ACTIVE abilities
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -336,6 +337,17 @@ CREATE TABLE IF NOT EXISTS wiretaps (
   PRIMARY KEY (watcher_character, target_character)
 );
 CREATE INDEX IF NOT EXISTS ix_wiretaps_target ON wiretaps (target_character);
+-- THE WIRE step three: a standing HUMAN source on a rival — a recurring $OMR retainer that reads deeper
+-- than a wiretap AND sees through DISINFORMATION (a mole can't be fed lies like a bug). (Disinformation
+-- itself is a per-character window on characters.disinfo_until.)
+CREATE TABLE IF NOT EXISTS wire_informants (
+  watcher_character TEXT NOT NULL,
+  target_character TEXT NOT NULL,
+  paid_until TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (watcher_character, target_character)
+);
+CREATE INDEX IF NOT EXISTS ix_wire_informants_target ON wire_informants (target_character);
 -- NAMED LANDMARKS — one dedicable plaque per district, held by the highest $OMR flex. Pure STATUS
 -- (display-only, outside §10.4 and the sim-audited balance — the seal/estate precedent): dedicating
 -- BURNS the paid $OMR (a deflationary sink, vanity:landmark), a bigger flex takes the plaque over. The

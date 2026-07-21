@@ -8,7 +8,7 @@
 // goes silent, and the worker sweeps expired rows. The layered intel economy: the SUB warns you (a
 // hunter COUNT), a TAP identifies whether a SPECIFIC rival is hunting you, the peek names funders.
 import { GameError } from './game.js';
-import { WIRE, wireActive, spyRankOf, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf } from './rules.js';
+import { WIRE, wireActive, disinfoActive, spyRankOf, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // THE SPYMASTER (step two): bump the account's lifetime intel-ops count (status, survives death — the
@@ -25,6 +25,25 @@ const wealthBand = (v) => {
   if (n >= 25_000) return 'getting by';
   return 'broke';
 };
+
+// step three — DISINFORMATION: a mark running disinfo feeds any WIRETAP cooked PRIVATE signals
+// (wealth/law/heat/ops/hunting), deterministic-but-wrong so the tap can't tell it's fake — but PUBLIC
+// bulletins (wanted, family name, level, location) stay true (you can cook your books, not the street's
+// eyes). An INFORMANT (a human source) pierces this — it never scrambles. Silent by design: the counter
+// is to run an informant or pull a dossier (hard records), not a "this is fake" flag.
+const WEALTH_BANDS = ['broke', 'getting by', 'comfortable', 'flush', 'a whale — deep pockets'];
+const HEAT_BANDS = ['cold', 'warm', 'hot', 'red hot'];
+const LAW_STAGES = ['clean', 'watched', 'investigation'];
+function scrambleTap(intel, t) {
+  const s = hash01('disinfo:' + t.id + ':' + dayOf());   // stable within a day, wrong on purpose
+  return {
+    ...intel,
+    law: { stage: LAW_STAGES[Math.floor(s * 300) % 3], indicted: false, heat: HEAT_BANDS[Math.floor(s * 400) % 4] },
+    wealth: WEALTH_BANDS[Math.floor(s * 500) % 5],
+    ops: { ...intel.ops, businesses: Math.floor(s * 7) % 5, rackets: Math.floor(s * 70) % 4, territory: 0 }, // family (public record) stays true
+    huntingYou: false,   // the disinfo hides the hunt from a bug
+  };
+}
 
 // fresh intel on ONE tapped mark (a point-in-time read of their CURRENT state — never exact books)
 async function tapIntel(client, watcherId, t) {
@@ -80,6 +99,50 @@ export async function sweepBugs(ch, client, h) {
   await bumpIntelOps(client, ch.account_id);
   await h.track(client, ch.account_id, 'wire_sweep', { bugs });
   return { ok: true, spent: WIRE.SWEEP_OMR, bugsFound: bugs };
+}
+
+// POST /v1/wire/disinfo — STEP THREE, DISINFORMATION: plant false intel so any WIRETAP reading you gets
+// cooked private signals for a window (defensive counter-intel). A $OMR sink. `disinfo_until` is written
+// by DIRECT SQL (outside persistCharacter's positional UPDATE — the wire_until/active_at pattern) so the
+// write survives the persist; ch.disinfo_until (loaded via SELECT *) reads it back in-txn.
+export async function plantDisinfo(ch, client, h) {
+  await spendOmr(client, h, WIRE.DISINFO_OMR, 'intel:disinfo');
+  const until = new Date(Date.now() + WIRE.DISINFO_MS);
+  await client.query('UPDATE characters SET disinfo_until=$2 WHERE id=$1', [ch.id, until]);
+  ch.disinfo_until = until;
+  await bumpIntelOps(client, ch.account_id);
+  await h.track(client, ch.account_id, 'wire_disinfo', {});
+  return { ok: true, spent: WIRE.DISINFO_OMR, disinfoSeconds: Math.ceil(WIRE.DISINFO_MS / 1000) };
+}
+
+// POST /v1/wire/informant/:targetId — STEP THREE, THE INFORMANT: put a standing HUMAN source on a rival.
+// A recurring $OMR retainer (extends from the later of now / current end — the sub precedent), capped
+// concurrent. Reads DEEPER than a tap (who they're hunting, not just you) and PIERCES disinfo (a mole
+// isn't fooled by cooked books). One per (watcher, target).
+export async function recruitInformant(ch, targetId, client, h) {
+  if (targetId === ch.id) throw new GameError('self', "You don't need an informant on yourself.");
+  const t = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
+  if (!t) throw new GameError('gone', 'No such mark on the street.');
+  const active = (await client.query(
+    'SELECT target_character FROM wire_informants WHERE watcher_character=$1 AND paid_until > now()', [ch.id])).rows.map((r) => r.target_character);
+  if (!active.includes(targetId) && active.length >= WIRE.INFORMANT_MAX)
+    throw new GameError('capped', `You keep ${WIRE.INFORMANT_MAX} informants on retainer — let one lapse first.`);
+  await spendOmr(client, h, WIRE.INFORMANT_OMR, 'intel:informant');
+  const cur = (await client.query('SELECT paid_until FROM wire_informants WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId])).rows[0];
+  const base = cur && new Date(cur.paid_until) > new Date() ? new Date(cur.paid_until).getTime() : Date.now();
+  const until = new Date(base + WIRE.INFORMANT_MS);
+  const upd = await client.query('UPDATE wire_informants SET paid_until=$3 WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId, until]);
+  if (!upd.rowCount) await client.query('INSERT INTO wire_informants (watcher_character, target_character, paid_until) VALUES ($1,$2,$3)', [ch.id, targetId, until]);
+  await bumpIntelOps(client, ch.account_id);
+  await h.track(client, ch.account_id, 'wire_informant', { target: targetId });
+  return { ok: true, target: targetId, spent: WIRE.INFORMANT_OMR, paidSeconds: Math.ceil((until - Date.now()) / 1000) };
+}
+
+// the deeper HUMAN-source read — the TRUE intel (never scrambled) + who the mark is hunting (anyone)
+async function informantIntel(client, watcherId, t) {
+  const i = await tapIntel(client, watcherId, t);   // the unscrambled truth (the caller never applies scrambleTap to this)
+  const huntingAnyone = Number((await client.query('SELECT COUNT(*) n FROM searches WHERE hunter=$1', [t.id])).rows[0].n);
+  return { ...i, huntingAnyone, source: 'informant' };
 }
 
 // POST /v1/wire/trace — THE BUG TRACE (step two): NAME every live watcher bugging you (counter-intel —
@@ -148,9 +211,21 @@ export async function wireBoard(ch, client, h) {
       WHERE w.watcher_character=$1 AND w.expires_at > now() ORDER BY w.created_at DESC`, [ch.id])).rows;
   const intel = [];
   for (const t of taps) {
-    const i = await tapIntel(client, ch.id, t);
+    let i = await tapIntel(client, ch.id, t);
+    if (disinfoActive(t)) i = scrambleTap(i, t);   // step three: a mark running disinfo feeds the bug lies
     i.expiresSeconds = Math.max(0, Math.ceil((new Date(t.tap_expires) - Date.now()) / 1000));
     intel.push(i);
+  }
+  // step three — THE INFORMANTS: your standing human sources (the TRUE read, unscrambled — a mole pierces disinfo)
+  const infoRows = (await client.query(
+    `SELECT t.*, wi.paid_until FROM wire_informants wi
+       JOIN characters t ON t.id = wi.target_character AND t.alive
+      WHERE wi.watcher_character=$1 AND wi.paid_until > now() ORDER BY wi.created_at DESC`, [ch.id])).rows;
+  const informants = [];
+  for (const t of infoRows) {
+    const i = await informantIntel(client, ch.id, t);
+    i.paidSeconds = Math.max(0, Math.ceil((new Date(t.paid_until) - Date.now()) / 1000));
+    informants.push(i);
   }
   const day = dayOf();
   const tape = PORTFOLIO.TICKERS.map((tk) => {
@@ -163,11 +238,15 @@ export async function wireBoard(ch, client, h) {
        WHERE w.target_character=$1 AND w.expires_at > now()`, [ch.id])).rows[0].n);
   // THE SPYMASTER — your lifetime intel ops + rank (account-level, survives death)
   const ops = Number((await client.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.intel_ops || 0);
+  const disinfo = disinfoActive(ch);
   const board = {
     subscribed: sub, subSeconds: sub ? Math.max(0, Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000)) : 0,
-    costs: { tap: WIRE.TAP_OMR, sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR, trace: WIRE.TRACE_OMR, dossier: WIRE.DOSSIER_OMR }, tapMax: WIRE.TAP_MAX,
+    costs: { tap: WIRE.TAP_OMR, sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR, trace: WIRE.TRACE_OMR, dossier: WIRE.DOSSIER_OMR, disinfo: WIRE.DISINFO_OMR, informant: WIRE.INFORMANT_OMR },
+    tapMax: WIRE.TAP_MAX, informantMax: WIRE.INFORMANT_MAX,
     spymaster: { ops, rank: spyRankOf(ops).name },
-    taps: intel, bugsOnYou, tape, mover,
+    taps: intel, informants, bugsOnYou, tape, mover,
+    // step three: your own disinformation window (you feed anyone tapping you cooked private signals)
+    disinfo: { active: disinfo, seconds: disinfo ? Math.max(0, Math.ceil((new Date(ch.disinfo_until) - Date.now()) / 1000)) : 0 },
   };
   if (sub) {
     // threat chatter — a COUNT of who has a search out on you (never names; a tap IDs a specific rival,
@@ -198,8 +277,9 @@ export async function wireLeaderboard(pool) {
   return { spies: rows.map((r) => ({ name: r.name, ops: Number(r.intel_ops), rank: spyRankOf(r.intel_ops).name })) };
 }
 
-// Worker: sweep expired wiretaps (row hygiene — reads already filter expires_at, this just tidies).
+// Worker: sweep expired wiretaps + informant retainers (row hygiene — reads already filter, this tidies).
 export async function sweepWire(pool) {
   const r = await pool.query('DELETE FROM wiretaps WHERE expires_at <= now()');
-  return { swept: r.rowCount || 0 };
+  const i = await pool.query('DELETE FROM wire_informants WHERE paid_until <= now()');
+  return { swept: (r.rowCount || 0) + (i.rowCount || 0) };
 }

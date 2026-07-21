@@ -1200,7 +1200,8 @@
     ],
     'The Wire': [
       ['GET', '/v1/wire'], ['POST', '/v1/wire/tap/:targetId', {}], ['POST', '/v1/wire/sweep', {}],
-      ['POST', '/v1/wire/subscribe', {}],
+      ['POST', '/v1/wire/subscribe', {}], ['POST', '/v1/wire/trace', {}], ['POST', '/v1/wire/dossier/:targetId', {}],
+      ['POST', '/v1/wire/disinfo', {}], ['POST', '/v1/wire/informant/:targetId', {}],
     ],
     'World & Growth': [
       ['GET', '/v1/world'], ['POST', '/v1/world/:npcId/raid', {}],
@@ -1451,6 +1452,18 @@
         </div>
         <div class="d" style="font-size:10px;margin-top:4px">wire runs ${mins(i.expiresSeconds)}</div>
       </div>`).join('');
+    // your standing informants — the TRUE read (pierces a mark's disinformation) + who they're hunting
+    const informants = (W.informants || []).map((i) => `
+      <div class="card" style="border-color:var(--neon)">
+        <span class="t">${i.name} <span class="dim">lvl ${i.level}</span></span> <span class="chip good">INFORMANT</span>
+        ${i.huntingYou ? '<span class="chip bad">HUNTING YOU</span>' : ''}${i.wanted ? '<span class="chip bad">WANTED</span>' : ''}
+        <div class="d" style="margin-top:4px">
+          the law: <b style="color:${stageColor[i.law.stage] || 'var(--dim)'};text-transform:uppercase">${i.law.stage}</b> · heat <b style="color:${bandColor(i.law.heat)}">${i.law.heat}</b> · money: ${i.wealth}<br>
+          rackets: ${i.ops.businesses} front(s) · ${i.ops.rackets} racket(s) · ${i.ops.territory} turf op(s)${i.ops.family ? ' · <b>' + i.ops.family + '</b>' : ''}<br>
+          hunting ${i.huntingAnyone} mark(s) right now
+        </div>
+        <div class="d" style="font-size:10px;margin-top:4px">retainer runs ${mins(i.paidSeconds)} · a human source can't be fed lies</div>
+      </div>`).join('');
     t.innerHTML = `
       ${!(W.taps || []).length && !W.subscribed ? coachCard('The Wire — information is a weapon', 'Pay $OMR to run a WIRETAP on a rival (their Law heat, wealth, rackets, and whether they\'re hunting YOU) — or subscribe to the STREET WIRE for forecasts, threat chatter, and the war room. Someone bugging your line? SWEEP it clean.') : ''}
       ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>` : ''}
@@ -1472,6 +1485,22 @@
         <button class="act" id="wire-tap-go">place the wire</button>
       </div>
       ${wires ? `<div class="grid" style="margin-top:8px">${wires}</div>` : '<div class="d" style="margin-top:6px">no wires running.</div>'}
+
+      <h2 style="margin-top:12px">Informants (${(W.informants || []).length}/${W.informantMax || 3})</h2>
+      <div class="card" style="border-color:var(--neon)">
+        <div class="d">put a standing HUMAN source on a rival for ${W.costs.informant} $OMR (a weekly retainer). Deeper than a wiretap — it reads who they're hunting, and a mole can't be fed lies, so it SEES THROUGH their disinformation.</div>
+        <select id="wire-informant-target"></select>
+        <button class="act" id="wire-informant-go">put them on retainer</button>
+      </div>
+      ${informants ? `<div class="grid" style="margin-top:8px">${informants}</div>` : ''}
+
+      <h2 style="margin-top:12px">Disinformation</h2>
+      <div class="card" style="${W.disinfo && W.disinfo.active ? 'border-color:var(--neon)' : ''}">
+        <span class="t">${W.disinfo && W.disinfo.active ? 'FEEDING THEM LIES' : 'Cook Your Books'}</span>
+        ${W.disinfo && W.disinfo.active ? `<span class="chip good">${mins(W.disinfo.seconds)} left</span>` : ''}
+        <div class="d">plant false intel for ${W.costs.disinfo} $OMR — anyone running a WIRETAP on you reads garbage (your money, your heat, your hunt — all cooked) for a window. (A rival's INFORMANT still sees the truth.)</div>
+        <button class="act" data-do="POST /v1/wire/disinfo">${W.disinfo && W.disinfo.active ? 'refresh the smokescreen' : 'plant disinformation'} (${W.costs.disinfo} $OMR)</button>
+      </div>
 
       <h2 style="margin-top:12px">Sweep Your Lines</h2>
       <div class="card" style="${W.bugsOnYou ? 'border-color:var(--bad)' : ''}">
@@ -1503,9 +1532,14 @@
     const opts = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
     $('#wire-target').innerHTML = opts;
     $('#wire-dossier-target').innerHTML = opts;
+    $('#wire-informant-target').innerHTML = opts;
     $('#wire-tap-go').onclick = () => {
       const tgt = $('#wire-target').value;
       if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
+    };
+    $('#wire-informant-go').onclick = () => {
+      const tgt = $('#wire-informant-target').value;
+      if (tgt) act('POST', `/v1/wire/informant/${tgt}`, {}).then(() => renderWire());
     };
     $('#wire-trace').onclick = async () => {
       const r = await api('POST', '/v1/wire/trace', {});

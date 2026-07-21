@@ -200,6 +200,52 @@ assert(spyBoard.spymaster && spyBoard.spymaster.ops > 0, 'the terminal shows you
 const wlb = (await call('GET', '/v1/leaderboard/wire', { token: watcher.token })).body;
 assert(wlb.spies.find((x) => x.name === 'Nosy Nick' && x.ops > 0), 'the watcher ranks on the Spymaster board');
 
+// ════════ STEP THREE — the counter-intel triad (DISINFORMATION + THE INFORMANT) ════════
+const spy = await mk('Spooky Sue');       // a fresh operator + target for the triad
+const quarry = await mk('Slippery Sam');
+await acctOmr(spy.id, 200); grantDrift += 200;
+await acctOmr(quarry.id, 200); grantDrift += 200;
+// the quarry is a whale who is HUNTING the spy (the money signal a tap/informant is worth)
+await pool.query(`UPDATE characters SET cash=6000000, bank=0, heat=90, heat_exposure=1200 WHERE id='${quarry.id}'`);
+await pool.query(`INSERT INTO searches (hunter, target) VALUES ('${quarry.id}','${spy.id}')`);
+
+// (A) DISINFORMATION — the quarry plants false intel: any WIRETAP reading them gets cooked signals
+r = await call('POST', '/v1/wire/disinfo', { token: quarry.token });
+assert.equal(r.code, 200, 'the quarry plants disinformation');
+assert.equal(r.body.spent, WIRE.DISINFO_OMR, 'disinfo is an intel:disinfo $OMR sink');
+assert(r.body.disinfoSeconds > 0, 'and opens a disinfo window');
+assert((await call('GET', '/v1/wire', { token: quarry.token })).body.disinfo.active, 'the board shows the quarry’s own disinfo is live');
+
+// the spy taps the quarry — the wiretap gets GARBAGE: the hunt is hidden, indicted forced false
+await call('POST', `/v1/wire/tap/${quarry.id}`, { token: spy.token });
+let tapView = (await call('GET', '/v1/wire', { token: spy.token })).body.taps.find((t) => t.target === quarry.id);
+assert(tapView, 'the tap is live');
+assert.equal(tapView.huntingYou, false, 'DISINFO hides the hunt from a wiretap (the quarry IS hunting the spy, but the bug says no)');
+assert.equal(tapView.law.indicted, false, 'the cooked read never flags an indictment');
+
+// (B) THE INFORMANT — a human source PIERCES the disinfo: the truth, and who they’re hunting
+assert.equal((await call('POST', `/v1/wire/informant/${spy.id}`, { token: spy.token })).body.error, 'self', 'no informant on yourself');
+assert.equal((await call('POST', '/v1/wire/informant/nobody', { token: spy.token })).body.error, 'gone', 'no informant on a ghost');
+r = await call('POST', `/v1/wire/informant/${quarry.id}`, { token: spy.token });
+assert.equal(r.code, 200, 'the spy puts a standing informant on the quarry');
+assert.equal(r.body.spent, WIRE.INFORMANT_OMR, 'the informant is an intel:informant retainer sink');
+const info = (await call('GET', '/v1/wire', { token: spy.token })).body.informants.find((i) => i.target === quarry.id);
+assert(info, 'the informant reads on the terminal');
+assert.equal(info.source, 'informant', 'flagged as a human source');
+assert.equal(info.huntingYou, true, 'the INFORMANT pierces the disinfo — it sees the quarry IS hunting the spy');
+assert.equal(info.wealth, 'a whale — deep pockets', 'and reads the TRUE wealth band (the cooked tap couldn’t)');
+assert(info.huntingAnyone >= 1, 'the human source also reports whether they’re hunting ANYONE (not just you)');
+
+// (C) the informant cap — three on retainer, no more
+await acctOmr(spy.id, 200); grantDrift += 200;
+const e1 = await mk('Extra One'); const e2 = await mk('Extra Two'); const e3 = await mk('Extra Three');
+await call('POST', `/v1/wire/informant/${e1.id}`, { token: spy.token });  // 2nd
+await call('POST', `/v1/wire/informant/${e2.id}`, { token: spy.token });  // 3rd (cap = 3)
+assert.equal((await call('POST', `/v1/wire/informant/${e3.id}`, { token: spy.token })).body.error, 'capped', `no more than ${WIRE.INFORMANT_MAX} informants on retainer`);
+// the worker tidies expired retainers (row hygiene)
+await pool.query(`UPDATE wire_informants SET paid_until = now() - interval '1 hour' WHERE watcher_character='${spy.id}' AND target_character='${e1.id}'`);
+assert((await sweepWire(pool)).swept >= 1, 'the worker sweeps a lapsed informant retainer');
+
 // ── §10.4: intel:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -207,5 +253,5 @@ assert(vocab.ok, `intel: rides the omr vocabulary (${JSON.stringify(vocab.unknow
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, grantDrift, `the only $OMR drift is the test grant (${grantDrift}) — every wire spend reconciles as an intel:* burn`);
 
-console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
+console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), STEP THREE — the counter-intel triad: DISINFORMATION (an intel:disinfo sink that cooks a wiretap’s private signals — the hunt hidden, the indictment flag false) and THE INFORMANT (an intel:informant retainer that PIERCES the disinfo — the true read + who they’re hunting — self/gone/cap gates + worker sweep of lapsed retainers), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
 await app.close();
