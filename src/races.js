@@ -140,7 +140,12 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   // the loser's car takes damage (absolute write); the challenger's ride cools down
   const nd = Math.min(100, Number(loseCar.dmg) + RACES.LOSS_DMG);
   await client.query('UPDATE cars SET dmg=$2 WHERE id=$1', [loseCar.id, nd]);
-  await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, new Date(now.getTime() + raceCdMs())]);
+  // cool down the CHALLENGER (they initiated, win or lose) AND the WINNER — so an owner-account can't be
+  // fed WHEEL wins by disposable alt challengers with no throttle of its own (audit LOW-1). A losing owner
+  // is NOT cooled: no win to farm, and it can't be griefed into a lockout by spam challenges.
+  const cd = new Date(now.getTime() + raceCdMs());
+  await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, cd]);
+  if (winner.id !== ch.id) await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [winner.id, cd]);
   await bumpWheel(client, winner.account_id);
   await h.rngLog(client, ch.id, `race:pvp:${their.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, opponent.id, 'race_pvp', { from: ch.name, amount: amt, theyWon: !win });

@@ -1332,8 +1332,10 @@ ledgered sink; sim P9.12 prints net-of-upkeep by tier.
 Turns the deep 60-car catalog into a competitive loop (PvE circuit + PvP wagers + tuning). Built on the
 audited boxing/casino architecture; §10.4-clean (`race:` cash vocabulary; PvP is the casino:pvp taxed
 transfer; fees/tunes are sinks). **The PvE purse is the ONLY new faucet — sim-measured (P9.13), sign-off:**
-- PvE circuit tiers (fee BURNS win/lose; purse pays only on a win — a THIN edge over the fee):
-  Back-Alley $2k→$3.2k · Midnight $8k→$13k · Ghost Circuit $30k→$48k. Cooldown **`CD_MS` 2h** (12/day).
+- PvE circuit tiers (fee BURNS win/lose; purse pays only on a win — a matched car is ~break-even, an
+  over-powered car nets up to purse−fee, **+$18k/win = +60% of the fee at the top tier** — NOT a "thin
+  edge"; corrected per the red-team): Back-Alley $2k→$3.2k · Midnight $8k→$13k · Ghost Circuit $30k→$48k.
+  Cooldown **`CD_MS` 2h** (12/day).
 - **Measured EV** (P9.13): a tuned contender (power 200) +$5k/race best → **+$60k/day**; a premium monster
   (power 450) +$18k/race best → **+$216k/day** — bounded, in boxing-exhibition parity (~$315k/day maxed).
   **NOTE:** the initial 30-min/48-per-day + fat-purse defaults measured a **$3.12M/day printer** and were

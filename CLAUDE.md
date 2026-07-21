@@ -2981,4 +2981,16 @@ loser's car damaged, all gates), the legend + leaderboard, and §10.4 (per-chara
 premium monster +$216k/day at the 2h-cooldown/12-per-day cadence — bounded, in boxing-exhibition parity;
 the initial 30-min/48-per-day defaults measured a $3.12M/day printer and were retuned DOWN before ship).
 Suite 31/31 + sim drift-0. All `RACES` numbers (tiers/fees/purses/`CD_MS`/`TUNE_*`/`RAKE_BPS`/`VARIANCE`)
-are founder sign-off levers — flagged in BALANCE.md (the exhibition-purse precedent).
+are founder sign-off levers — flagged in BALANCE.md (the exhibition-purse precedent). A **three-lens
+red-team** (`AUDIT-street-races.md`: §10.4/persist, concurrency/locks, exploit/grief) returned **no
+CRITICAL/HIGH**: §10.4 exact (the PvP transfer is the audited casino:pvp pattern byte-for-byte, no mint;
+`race_at`/`tune`/`race_limit`/`race_wins` are direct-SQL, no persist-clobber), lock order sound (races.js
+is the ONLY `cars … FOR UPDATE` in the tree, so the uniform chars-before-cars order is acyclic), and the
+gates/estate/cross-system (Black-Market-listed + loan-pledged cars rejected both sides) are tight. Fixed
+one **LOW** (regression added): `raceChallenge` cooled the challenger but credited THE WHEEL to the winner —
+so an owner-account could be fed status wins by alt challengers with no throttle of its own; now the WINNER
+is cooled too (a losing owner isn't — no farm, no grief-lockout), bounding WHEEL accrual to the per-driver
+cap on either side. The "thin edge" comment was corrected to the real figure (an over-powered car nets up
+to +60% of the fee at the top tier). Accepted balance flags (founder sign-off): the PvE purse faucet
+magnitude (boxing-exhibition parity), the casino:pvp-posture collusion rail, consent-by-listing owner
+spam, no safehouse gate on a consensual cash game. Suite 31/31 + sim drift-0.
