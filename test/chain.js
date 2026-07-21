@@ -237,7 +237,11 @@ assert.ok(chainConfig().chainId === 46630, 'chainConfig works again with the env
 // silently re-point every cap AND change the tokenId of gear players already hold. Pin the known
 // head so any reorder breaks CI loudly (a re-extract must only APPEND).
 const { gearNumId } = await import('../src/chain.js');
-for (const [id, n] of [['brasspin', 1], ['newscap', 2], ['knuckles', 3], ['dice', 4]])
+// AUDIT-full-system-v2 D-MED3: pin the head AND the current tail — a mid-list insert anywhere before the
+// last class shifts the tail, so pinning `supledger`==51 catches an insertion the head pins would miss
+// (a head-only pin only guards inserts before position 4). An append (a new class AFTER supledger) keeps
+// every pin valid — the only safe way to grow the catalog.
+for (const [id, n] of [['brasspin', 1], ['newscap', 2], ['knuckles', 3], ['dice', 4], ['supledger', 51]])
   assert.equal(gearNumId(id), n, `gear tokenId is stable + append-only: ${id} == ${n}`);
 
 // MED — daily-cap guard: a single withdrawal over the on-chain cap is refused BEFORE any burn

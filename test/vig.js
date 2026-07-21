@@ -11,6 +11,7 @@ process.env.VOUCHER_SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5
 process.env.VOUCHER_CLAIM_ADDRESS = '0x1111111111111111111111111111111111111111';
 process.env.CHAIN_ID = '46630';
 process.env.MOD_KEY = 'test-mod-key';
+process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route drive the real-revenue flywheel (D-MED2 gate)
 
 const { buildServer } = await import('../src/server.js');
 const { runLedgerInvariants } = await import('../src/invariants.js');
@@ -37,8 +38,8 @@ const acctId = (await pool.query(`SELECT account_id FROM characters WHERE id='${
 let r;
 
 // ── (1) real ETH revenue in → the Vig takes its 60% share (dev keeps 40%) ──
-await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 9001, kind: 'mint', payer: player.address, amountWei: '10000000000000000' } });   // 0.01 ETH
-await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 9002, kind: 'respawn', payer: player.address, amountWei: '100000000000000000' } }); // 0.10 ETH
+await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 9001, kind: 'mint', payer: player.address, amountWei: '10000000000000000', txHash: '0xfee9001' } });   // 0.01 ETH (real on-chain → books Vig revenue)
+await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 9002, kind: 'respawn', payer: player.address, amountWei: '100000000000000000', txHash: '0xfee9002' } }); // 0.10 ETH
 let vig = await vigOf();
 assert(near(vig.status.grossRevenueEth, 0.11), `gross real revenue = 0.11 ETH (got ${vig.status.grossRevenueEth})`);
 assert(near(vig.status.vigRevenueEth, 0.066), 'the Vig takes its 60% share = 0.066 ETH');

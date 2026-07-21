@@ -128,6 +128,11 @@ export async function buildServer() {
   const modAuth = async (req, reply) => {
     if (!modKeyOk(req.headers['x-mod-key'])) return reply.code(401).send({ error: 'mod_auth' });
   };
+  // AUDIT-full-system-v2 D-MED2: real-ETH revenue (vig/pol/rwa) is booked ONLY from the on-chain
+  // watcher observing a genuine event — a mod comp/QA route must never fabricate it. So mod routes
+  // pass their caller-supplied txHash through this gate: it survives only when ALLOW_MOD_REAL_REVENUE=on
+  // (a QA-only escape hatch, default OFF), so a production comp can't book unbacked withdrawal reserve.
+  const modRealTxHash = (req) => (process.env.ALLOW_MOD_REAL_REVENUE === 'on' ? (req.body?.txHash || null) : null);
 
   // ── M5 hardening hooks: §10.2 rate limits + §5 idempotency keys ──
   // Applied to mutating player endpoints (auth/mod routes are excluded).
@@ -1215,8 +1220,11 @@ export async function buildServer() {
   app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
     // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
     // MED — else a comp fabricates Vig revenue the buyback spends, unbacking the withdrawal reserve).
-    // A test/QA caller may pass txHash to exercise the REAL on-chain-driven accounting path.
-    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, payer: req.body?.payer, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps, txHash: req.body?.txHash }));
+    // AUDIT-full-system-v2 D-MED2: real-ETH revenue must ONLY come from the on-chain watcher observing
+    // a genuine event — never a caller-supplied txHash on a mod route. So the route STRIPS txHash unless
+    // ALLOW_MOD_REAL_REVENUE=on (a QA-only escape hatch, default OFF — the X_TRUST_USER_TOKEN posture),
+    // making the production comp path incapable of booking real revenue no matter what the caller sends.
+    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, payer: req.body?.payer, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps, txHash: modRealTxHash(req) }));
 
   // ── M6-B: the chain service (§11, EVM) — withdrawals, gear mint, SIWE wallet link ──
   app.post('/v1/wallet/challenge', { preHandler: auth }, async (req) => Chain.walletChallenge(pool, req.user.sub));
@@ -1253,7 +1261,7 @@ export async function buildServer() {
   // MintFeePaid/RespawnFeePaid events; this endpoint is the manual + test path for the same call).
   app.post('/v1/mod/fees/record', { preHandler: modAuth }, async (req) =>
     Fees.recordFeePayment(pool, { nonce: req.body?.nonce, kind: req.body?.kind,
-      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: req.body?.txHash }));
+      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: modRealTxHash(req) })); // D-MED2: strip caller txHash unless the QA flag is set
 
   // ── Risk-to-Earn Phase 2: THE VIG (off-chain core) ──
   // PLEX bridge — pay a real-money fee from EARNED $OMR instead of ETH (burns $OMR → the same
@@ -1287,7 +1295,7 @@ export async function buildServer() {
   app.get('/v1/mod/revenue', { preHandler: modAuth }, async () => Store.revenueStatus(pool));
   app.post('/v1/mod/store/grant', { preHandler: modAuth }, async (req) =>
     Store.recordStorePurchase(pool, { nonce: req.body?.nonce, sku: req.body?.sku,
-      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: req.body?.txHash }));
+      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: modRealTxHash(req) })); // D-MED2: strip caller txHash unless the QA flag is set
 
   // THE LEDGER — the Season Pass reward track. The daily-claim track (status/consumables in the
   // claim txn; the $OMR stipend is paid post-commit through the BACKED prize-pool rail — pool-bounded,
@@ -1386,6 +1394,11 @@ export async function buildServer() {
 
 if (process.argv[1] && process.argv[1].endsWith('server.js')) {
   const app = await buildServer();
+  // AUDIT-full-system-v2 D-MED1: THIS process signs the withdrawal vouchers (Chain.requestWithdraw),
+  // so it — not just the worker — must verify CHAIN_ID matches the RPC's real chain before serving. A
+  // wrong-but-nonzero CHAIN_ID would sign every voucher under the wrong EIP-712 domain (all claims
+  // revert while $OMR is burned). Dormant (no CHAIN_RPC_URL) → no-op; a mismatch refuses to boot.
+  await Chain.assertChainId();
   const port = Number(process.env.PORT || 8787);
   await app.listen({ port, host: '0.0.0.0' });
   console.log(`OMERTÀ backend (M1–M5) listening on :${port}`);

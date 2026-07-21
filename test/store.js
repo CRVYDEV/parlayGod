@@ -8,6 +8,7 @@
 // pg-mem, zero infra. The chain layer is dormant — the test drives recordStorePurchase directly
 // (the test/chain.js fee precedent), simulating the watcher's StorePaid → ingestion call.
 process.env.MOD_KEY = 'test-mod-key';
+process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route drive the real-revenue flywheel (D-MED2 gate)
 import assert from 'node:assert';
 import { getAddress } from 'viem';
 import { buildServer } from '../src/server.js';
@@ -81,6 +82,15 @@ assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_3', payer: W1, amountWei: ethWei(0.25) } });
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.respawnTokens, 3, 'the comp granted three revives');
 assert.equal((await revenueStatus(pool)).grossEth, 0.01, 'a comp (no txHash) records NO revenue — only real on-chain payments (with a tx) feed the flywheel');
+
+// ── D-MED2 regression: in PRODUCTION (the QA flag OFF), a caller-supplied txHash on the mod route
+// CANNOT fabricate real-ETH revenue — the vector that would unback the withdrawal reserve. Only the
+// on-chain watcher (observing a genuine event) may book revenue.
+process.env.ALLOW_MOD_REAL_REVENUE = 'off';
+const W_NEVER = getAddress('0x' + '99'.repeat(20)); // never linked to an account → nothing parked reconciles later
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'made_man', payer: W_NEVER, amountWei: ethWei(0.01), txHash: '0xFABRICATED' } });
+assert.equal((await revenueStatus(pool)).grossEth, 0.01, 'production (flag off): a caller txHash CANNOT fabricate Vig revenue (D-MED2)');
+process.env.ALLOW_MOD_REAL_REVENUE = 'on';
 
 // ── the ETH Street Wire — a 30-day access window on the living character ──
 await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'wire_month', payer: W1, amountWei: ethWei(0.03) } });

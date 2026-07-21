@@ -246,24 +246,30 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // CHAIN_START_BLOCK to the contracts' deploy block so the first run doesn't scan from genesis.
   const source = await makeViemSource();
   if (source) {
-    // deploy hardening (audit): refuse to run the chain service if CHAIN_ID doesn't match the RPC —
-    // a wrong-but-nonzero CHAIN_ID would sign every voucher under the wrong EIP-712 domain.
-    await assertChainId();
-    const startBlock = process.env.CHAIN_START_BLOCK ? Number(process.env.CHAIN_START_BLOCK) : undefined;
-    const syncTick = async () => {
-      try {
-        if (process.env.OMERTA_FEES_ADDRESS) {
-          const f = await syncFeeEvents(pool, source, { startBlock });
-          if (f.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
-        }
-        if (process.env.VOUCHER_CLAIM_ADDRESS) {
-          const c = await syncClaimedEvents(pool, source, { startBlock });
-          if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
-        }
-      } catch (e) { console.error('chain sync error', e.message); }
-    };
-    await syncTick();
-    setInterval(syncTick, Number(process.env.CHAIN_POLL_MS || 30000));
-    console.log(`⛓  chain sync polling every ${Number(process.env.CHAIN_POLL_MS || 30000) / 1000}s, ${DEFAULT_CONFIRMATIONS} confirmations behind head`);
+    // deploy hardening (audit): a wrong-but-nonzero CHAIN_ID would sign every voucher under the wrong
+    // EIP-712 domain. AUDIT-full-system-v2 B-L8: a mismatch DISABLES the chain sync (fail-closed — never
+    // sync under the wrong domain) but must NOT crash the worker, or a poison chain config takes down the
+    // nightly §10.4 drift monitor + buyback + sweeps with it. Wrap it; on mismatch, skip chain sync only.
+    let chainOk = true;
+    try { await assertChainId(); }
+    catch (e) { chainOk = false; console.error('🚨 CHAIN SYNC DISABLED — ', e.message); }
+    if (chainOk) {
+      const startBlock = process.env.CHAIN_START_BLOCK ? Number(process.env.CHAIN_START_BLOCK) : undefined;
+      const syncTick = async () => {
+        try {
+          if (process.env.OMERTA_FEES_ADDRESS) {
+            const f = await syncFeeEvents(pool, source, { startBlock });
+            if (f.processed) console.log(`💰 fee sync: credited ${f.processed} payment(s) (blocks ${f.from}–${f.to})`);
+          }
+          if (process.env.VOUCHER_CLAIM_ADDRESS) {
+            const c = await syncClaimedEvents(pool, source, { startBlock });
+            if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
+          }
+        } catch (e) { console.error('chain sync error', e.message); }
+      };
+      await syncTick();
+      setInterval(syncTick, Number(process.env.CHAIN_POLL_MS || 30000));
+      console.log(`⛓  chain sync polling every ${Number(process.env.CHAIN_POLL_MS || 30000) / 1000}s, ${DEFAULT_CONFIRMATIONS} confirmations behind head`);
+    }
   }
 }

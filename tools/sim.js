@@ -8,6 +8,7 @@
 //
 // Run: node tools/sim.js   (exits non-zero if any §10.4 check drifts)
 process.env.MOD_KEY = 'sim-mod-key';
+process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA harness: let the mod fee-record drive the real Vig flywheel (D-MED2 gate)
 process.env.SEARCH_MS = '0';   // §9 test knobs — the sim compresses hit timers (never in prod)
 process.env.SHOOT_CD_MS = '0';
 import assert from 'node:assert';
