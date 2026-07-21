@@ -186,9 +186,10 @@ export async function interceptRun(ch, targetBoatId, client, h) {
   // family omertà: you don't pirate your own family's freight
   const rg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [boat.character_id])).rows[0];
   if (rg && h.owned.gangId && rg.gang_id === h.owned.gangId) throw new GameError('family', "That's a made man's boat. Omertà.");
-  // one interception per pirate per live run
+  // one interception per pirate per live run — catch ONLY the known unique violation as a terminal 'once'
+  // (the casino.js:256 pattern); a transient 40P01/40001 must rethrow so the wrapper's deadlockToRetry retries.
   try { await client.query('INSERT INTO port_intercepts (boat_id, character_id) VALUES ($1,$2)', [targetBoatId, ch.id]); }
-  catch { throw new GameError('once', 'You already made your run at her.'); }
+  catch (e) { if (e?.code === '23505') throw new GameError('once', 'You already made your run at her.'); throw e; }
 
   ch.energy = Number(ch.energy) - S.PIRATE_ENERGY;
   ch.ammo = Number(ch.ammo) - S.PIRATE_AMMO;
