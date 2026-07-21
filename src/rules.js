@@ -1027,7 +1027,8 @@ export const PEN = {
   FACTION_COVER: 0.08,        // shank-defense per active jailed faction-mate…
   FACTION_COVER_CAP: 0.24,    // …capped (a crew, not an army)
   SHOTCALLER_COVER: 0.1,      // the shot-caller (top season_kills, jailed) is individually harder to touch
-  BREAK_RAT_CUT_S: 3600,      // the snitch's deal — an hour off the rat's OWN sentence (a co-op break that got ratted)
+  // (the break rat's deal is relief-only — dodge the crew's added stretch + beating, no absolute sentence
+  // cut — so a Sybil main+alt can't farm a cheap trim; see executeBreak's ratted branch)
 };
 export const penFactionOf = (id) => PEN.FACTIONS.find((f) => f.id === id) || null;
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;

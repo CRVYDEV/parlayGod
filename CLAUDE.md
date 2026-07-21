@@ -1300,21 +1300,39 @@ pattern) so the write survives persist; the board surfaces `factions`/`faction {
 shotCaller}` + a per-roster-inmate crew chip. **(2) THE BREAK RAT** (the heist-rat twin) — `ratBreak`
 (`POST /v1/pen/break/:id/rat`, `pen_break_members.ratted`, `no_break`/`not_crew` gates): any crew member
 silently tips the guards. `executeBreak` reads the ratted flags under the crew lock and, if any, the break
-BLOWS regardless of the roll — the rat cuts a deal (`BREAK_RAT_CUT_S` 1h OFF their sentence, no beating),
-the honest crew eats `BREAK_CAUGHT_ADD_S` more time + a beating, and EVERYONE (incl. the rat) goes to the
-hole so the public roster never outs the only free man; the feed only ever says "somebody talked" (never
-named — the heist-rat anonymity precedent). **(3) RICHER YARD INCIDENTS** — `YARD_EVENTS` gained `gangwar`
-(shankAdd +0.15, bribeMult 1.5) + `newfish` (protMult 1.5), each ONE touchpoint (the decree precedent).
-§10.4: no new reasons (factions/rat move no currency; the ratted break's only ledgered event is the
-already-spent cutkit). Console: a "Yard Crews" section (your crew + cover% + SHOT-CALLER chip + join/leave,
+BLOWS regardless of the roll — the rat's deal is **relief-only** (they dodge the crew's added stretch +
+beating, but serve their OWN sentence unchanged — never a cut below it, so join-and-rat is never better than
+abstaining and a Sybil main+alt can't farm a cheap trim — the AUDIT-session-drops-2 F1 fix; `BREAK_RAT_CUT_S`
+retired), the honest crew eats `BREAK_CAUGHT_ADD_S` more time + a beating, and EVERYONE (incl. the rat) goes
+to the hole so the public roster never outs the only free man; the feed only ever says "somebody talked"
+(never named — the heist-rat anonymity precedent). **(3) RICHER YARD INCIDENTS** — `YARD_EVENTS` gained
+`gangwar` (shankAdd +0.15, bribeMult 1.5) + `newfish` (protMult 1.5), each ONE touchpoint (the decree
+precedent). §10.4: no new reasons (factions/rat move no currency; the ratted break's only ledgered event is
+the already-spent cutkit). Console: a "Yard Crews" section (your crew + cover% + SHOT-CALLER chip + join/leave,
 crew chips on the roster) + a dimmed "rat it out" button on your crew-break card. `test/pen.js` covers the
 faction join/leave/gates, the board cover + shot-caller derivation moving to the most-feared (Bo's kills
 flip it off Al), the yard-omertà shank block (`crew`) vs a rival staying fair game (`no_shiv`), and the
 break rat (the break BLOWS at a guaranteed-success roll, the honest leader holed + longer stretch, the rat
-holed but time OFF, the feed says "talked"). Suite 30/30 + sim drift-0. All numbers (`FACTION_COVER`/`_CAP`,
-`SHOTCALLER_COVER`, `BREAK_RAT_CUT_S`, the two yard incidents) are founder sign-off levers. **The Pen is
-now feature-complete** (yard/work/commissary/protection/bribe/shank → the hole/yard incidents/burner → the
-solo + co-op breakout → factions/shot-callers + the break rat).
+holed but serving their own sentence — no cut below it — the feed says "talked"). Suite 30/30 + sim drift-0.
+All numbers (`FACTION_COVER`/`_CAP`, `SHOTCALLER_COVER`, the two yard incidents) are founder sign-off levers.
+**The Pen is now feature-complete** (yard/work/commissary/protection/bribe/shank → the hole/yard incidents/
+burner → the solo + co-op breakout → factions/shot-callers + the break rat).
+
+A **four-lens red-team over the un-audited session drops** (`AUDIT-session-drops-2.md`: §10.4, concurrency/
+locks, death/estate/PvP, exploit/grief — over Territory step three, Pen steps four–five, and the faucet
+retunes) returned **no CRITICAL/HIGH**: §10.4 exact (territory establish/income/upkeep/raid reconcile,
+seized pending never ledgered, factions/break-rat move zero currency), lock order sound (co-op break
+leader→sorted-members→row with the leader-vs-PvP AB-BA mapped to `contention`; `ratBreak`'s flag read
+transitively char-locked; `factionCover` a lockless read; territory district→gang→racket consistent), and
+death/estate clean (no break orphan, dead-man gives no cover, the `SHANK_MIN` 0.15 floor keeps a
+max-0.34-faction-stacked mark always killable). Fixed in-commit (regression each): **F1 (LOW-MED)** the
+co-op-break self-rat farm — the ratted branch's absolute sentence cut let a Sybil pair trim ~1h for a $50k
+kit (~14× under the bribe sink), falsifying "self-rat is −EV by construction" → the rat's deal is now
+**relief-only** (dodge the added stretch + beating, no cut below their sentence; `BREAK_RAT_CUT_S` retired);
+**F2 (LOW)** `ratBreak` missing the `insideOnly` gate (benign — `executeBreak` already rejects walked/hole'd
+crew — fixed for consistency). Flagged for founder sign-off (NOT patched, ground rule #1): `upgradeRacket`
+dodges a pending Bureau raid (the speakeasy `upgradeSpeakeasy` fix is the parity dial), the frequent-collect
+raid-dodge (by-design tradeoff), and the flat pen `PROTECTION_COST` (wealth-scale it if it bites).
 
 A **three-lens red-team over Pen step two** (`AUDIT-the-pen-step-two.md`: the burner bypass, the hole,
 yard incidents + §10.4) closed one HIGH + three MED/LOW (regression per fix): a $25k burner **defeated

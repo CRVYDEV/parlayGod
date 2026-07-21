@@ -452,8 +452,12 @@ assert(/talked/i.test(rgo.body.message || ''), 'the feed only says somebody talk
 const ratLdAfter = await rawCh(ratLd.id), ratMnAfter = await rawCh(ratMn.id);
 assert(new Date(ratLdAfter.hole_until) > new Date(), 'the honest leader is thrown in the hole');
 assert(new Date(ratLdAfter.jail_until).getTime() > ratLdJail0, 'and eats a longer stretch');
-assert(new Date(ratMnAfter.jail_until).getTime() < ratMnJail0, 'the RAT cut a deal — time OFF their sentence');
-assert(new Date(ratMnAfter.hole_until) > new Date(), 'but the rat is holed WITH the crew so the roster never outs them');
+// the RAT's deal is RELIEF-ONLY (audit): they dodge the crew's added stretch + beating, but serve their
+// OWN sentence unchanged — never LESS. So join-and-rat is never better than abstaining (a Sybil main+alt
+// can't farm a cheap sentence trim); the rat still fares better than the honest crew who eat the longer stretch.
+assert(Math.abs(new Date(ratMnAfter.jail_until).getTime() - ratMnJail0) < 1000, 'the RAT serves their OWN sentence — no cut below it (Sybil-farm-proof, relief-only)');
+assert(new Date(ratMnAfter.jail_until).getTime() < new Date(ratLdAfter.jail_until).getTime(), 'but still fares better than the honest crew (who eat the longer stretch)');
+assert(new Date(ratMnAfter.hole_until) > new Date(), 'and is holed WITH the crew so the roster never outs them');
 
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');

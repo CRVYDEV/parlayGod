@@ -274,6 +274,7 @@ export async function leaveBreak(ch, breakId, client, h) {
 // POST /v1/pen/break/:id/go — leader-only. One roll for the whole crew.
 // POST /v1/pen/break/:id/rat — a crew member silently tips the guards (the heist-rat twin). Never named.
 export async function ratBreak(ch, breakId, client, h) {
+  insideOnly(ch); // you tip the guards from inside the yard (consistency with every other break action)
   const row = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning'", [breakId])).rows[0];
   if (!row) throw new GameError('no_break', 'That break is gone.');
   const upd = await client.query('UPDATE pen_break_members SET ratted=true WHERE break_id=$1 AND character_id=$2', [breakId, ch.id]);
@@ -321,13 +322,18 @@ export async function executeBreak(ch, breakId, client, h) {
   await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [breakId]);
   const setMemberRat = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
   if (rats.length) {
-    // THE GUARDS WERE WAITING: the break blows before the roll. The crew eats the hole + a longer stretch;
-    // the rat(s) cut a deal — a sentence CUT — but are thrown in the hole WITH the crew so the roster
-    // never outs the only free man (the heist-rat anonymity fix). The feed only says "somebody talked".
+    // THE GUARDS WERE WAITING: the break blows before the roll. The crew eats the hole + a longer stretch
+    // + a beating; the rat(s) DODGE the added stretch and the beating (their deal) — but never serve LESS
+    // than their OWN sentence. An absolute cut let a Sybil pair (a main leader + a throwaway alt joiner)
+    // farm a cheap sentence trim ($50k cutkit → an hour off, ~14× under the bribe sink), so "self-rat is
+    // −EV by construction" was false against alts (audit). Relief-only makes join-and-rat never better
+    // than abstaining — a legit saboteur still dodges the crew's penalty and denies them the escape, but
+    // nobody time-travels below their sentence. Everyone (incl. the rat) is holed WITH the crew so the
+    // roster never outs the only free man (the anonymity fix); the feed only says "somebody talked".
     for (const m of crewRows) {
       const isRat = rats.includes(m.id);
       const baseJail = new Date(m.jail_until).getTime();
-      const newJail = isRat ? new Date(Math.max(Date.now(), baseJail - PEN.BREAK_RAT_CUT_S * 1000))
+      const newJail = isRat ? new Date(baseJail) // relief-only: dodge the added stretch + beating, but no cut below your own sentence
         : new Date(baseJail + PEN.BREAK_CAUGHT_ADD_S * 1000);
       const hole = new Date(Math.min(Date.now() + PEN.HOLE_MS, newJail.getTime()));
       const health = isRat ? Number(m.health) : Math.max(1, Number(m.health) - rand(PEN.BREAK_FAIL_DMG[0], PEN.BREAK_FAIL_DMG[1]));

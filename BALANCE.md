@@ -739,8 +739,14 @@ ledgered event is the already-spent cutkit). All numbers are founder sign-off le
   SUBTRACTED from a shank's success `p` against a crew member, and same-crew shanks are blocked outright
   (yard omertà; a rat target voids it). Watch: whether stacked cover + protection makes a well-connected
   inmate effectively un-shankable — the dials are the two cover constants + the cap.
-- `PEN.BREAK_RAT_CUT_S` 3600 (1h off the rat's sentence). Self-ratting is −EV by construction (you still
-  eat a blown break + the hole), the heist-rat argument; the cut is small enough not to be a farm.
+- **The break rat is RELIEF-ONLY** (was `BREAK_RAT_CUT_S` 3600 — retired by AUDIT-session-drops-2.md).
+  A ratted break blows; the rat dodges the crew's added stretch (`BREAK_CAUGHT_ADD_S`) + the beating, but
+  serves their OWN sentence unchanged — never a cut below it. The original absolute 1h cut let a Sybil pair
+  (main leader + throwaway alt) farm a cheap sentence trim ($50k cutkit → 1h off, ~14× under the bribe
+  sink), falsifying the "self-rat is −EV by construction" claim. Relief-only restores it (self-rat is now
+  net-negative — you burn a $50k kit for nothing) while a legit saboteur still dodges the failure penalty +
+  denies the crew the escape. If the founder wants a "reward" flavor back, reintroduce a bounded cut with an
+  OFFSETTING cost the rat bears (energy/health/a longer hole) so it stays −EV to manufacture.
 - Yard incidents added: `gangwar` (shankAdd +0.15, bribeMult 1.5) + `newfish` (protMult 1.5) — each a
   one-touchpoint block-wide daily modifier (the decree precedent), the same weighting note as step two
   (a hard-block/perturb day is ~drawn share of the pool; if the loop feels too often gated, thin the deck).
@@ -749,6 +755,17 @@ Design intent: factions are a purely social/defensive status layer (cover, not p
 and grant no offense bonus), and the break rat imports the heist-rat's betrayal drama into the co-op break
 (the crew never learns the name — the feed only says "somebody talked"). Nothing here touches the signed
 economy.
+
+### Territory step three — the upgrade raid-dodge (sign-off flag, AUDIT-session-drops-2.md)
+
+`upgradeRacket` collects the pending income at the old rate and resets the operation's clock WITHOUT
+rolling `resolveTerritoryRaid` — so a hot smuggling/protection op can UPGRADE to sidestep a pending Bureau
+raid. §10.4-clean (the pending collected is a legitimately ledgered `territory:income` faucet — no drift),
+so it's a BALANCE call, not patched per ground rule #1. **The speakeasy audit fixed exactly this class**
+(`upgradeSpeakeasy` resolves the raid first + refuses while shut); the parity dial is to mirror it in
+`upgradeRacket` (resolve the pending raid before the upgrade; order the fine clamp vs the upgrade cost so
+the treasury can't overdraw). Not a new exploit class — frequent-collect already dodges the raid for a hot
+type (the "active collection banks the full mult" tradeoff above).
 
 ## THE WIRE — the intelligence terminal (proposed levers, sign-off pending)
 
