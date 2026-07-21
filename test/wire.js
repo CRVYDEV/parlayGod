@@ -8,8 +8,8 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { WIRE } from '../src/rules.js';
-import { sweepWire } from '../src/wire.js';
+import { WIRE, intelCost } from '../src/rules.js';
+import { sweepWire, sweepWireAlerts } from '../src/wire.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -251,6 +251,44 @@ assert.equal((await call('POST', `/v1/wire/informant/${e3.id}`, { token: spy.tok
 await pool.query(`UPDATE wire_informants SET paid_until = now() - interval '1 hour' WHERE watcher_character='${spy.id}' AND target_character='${e1.id}'`);
 assert((await sweepWire(pool)).swept >= 1, 'the worker sweeps a lapsed informant retainer');
 
+// ══════════ STEP FOUR — THE SPYMASTER'S TRADECRAFT + THE WATCHDOG ══════════
+// (A) TRADECRAFT: the earned SPY_RANKS now grant perks — more wire slots + an intel-read discount.
+const tspy = await mk('Tradecraft Terry'); await acctOmr(tspy.id, 200); grantDrift += 200;
+await pool.query(`UPDATE account_persistent SET intel_ops = 100 WHERE account_id = (SELECT account_id FROM characters WHERE id='${tspy.id}')`); // → Spymaster: +2 slots, −10%
+const tBoard = (await call('GET', '/v1/wire', { token: tspy.token })).body;
+assert.equal(tBoard.spymaster.rank, 'Spymaster', 'intel_ops 100 → the Spymaster rank');
+assert.equal(tBoard.spymaster.tapBonus, 2, 'the rank grants +2 wire slots');
+assert.equal(tBoard.spymaster.discountBps, 1000, 'and a 10% intel-read discount');
+assert.equal(tBoard.tapMax, WIRE.TAP_MAX + 2, 'the board surfaces the raised wire cap');
+assert.equal(tBoard.costs.tap, intelCost(WIRE.TAP_OMR, 100), 'the surfaced tap cost is the discounted price');
+const tmark = await mk('Tradecraft Mark');
+const tr = await call('POST', `/v1/wire/tap/${tmark.id}`, { token: tspy.token });
+assert.equal(tr.code, 200, 'the spymaster taps'); assert.equal(tr.body.spent, intelCost(WIRE.TAP_OMR, 100), 'and pays the discounted intel:wiretap burn (7, not 8)');
+
+// (B) THE WATCHDOG: a SUBSCRIBED watcher is pushed a wire_alert the moment a tapped mark turns hot.
+const wd = await mk('Watchdog Wanda'); await acctOmr(wd.id, 200); grantDrift += 200;
+assert.equal((await call('POST', '/v1/wire/subscribe', { token: wd.token })).code, 200, 'Wanda subscribes to the Street Wire');
+const wdMark = await mk('Hot Harry');
+assert.equal((await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: wd.token })).code, 200, 'Wanda taps Harry');
+const alertCount = async (id) => Number((await pool.query(`SELECT COUNT(*) n FROM notifications WHERE character_id='${id}' AND type='wire_alert'`)).rows[0].n);
+assert.equal(await alertCount(wd.id), 0, 'no alert yet — Harry is quiet');
+assert.equal((await sweepWireAlerts(pool)).fired, 0, 'the watchdog fires nothing while the mark is cold');
+// Harry goes WANTED → the watchdog pushes an alert
+await pool.query(`UPDATE characters SET wanted_until = now() + interval '1 day' WHERE id='${wdMark.id}'`);
+assert((await sweepWireAlerts(pool)).fired >= 1, 'the watchdog fires when the tapped mark goes wanted');
+assert.equal(await alertCount(wd.id), 1, 'Wanda got a wire_alert push');
+assert.equal((await sweepWireAlerts(pool)).fired, 0, 'and it fires ONCE per event per tap — no spam');
+assert.equal(await alertCount(wd.id), 1, 'still just the one alert');
+// a NON-subscribed tapper gets NO watchdog alert (the premium-service gate)
+const nosub = await mk('No-Sub Ned'); await acctOmr(nosub.id, 50); grantDrift += 50;
+assert.equal((await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: nosub.token })).code, 200, 'Ned taps the (already wanted) Harry without subscribing');
+await sweepWireAlerts(pool);
+assert.equal(await alertCount(nosub.id), 0, 'an un-subscribed watcher gets no watchdog alert — it rides the premium Street Wire');
+// re-tapping resets the alert flags → a fresh surveillance can re-alert
+await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: wd.token });
+assert((await sweepWireAlerts(pool)).fired >= 1, 'a re-tap resets the flags — the watchdog can alert again');
+assert.equal(await alertCount(wd.id), 2, 'Wanda got a second alert on the fresh tap');
+
 // ── §10.4: intel:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -258,5 +296,5 @@ assert(vocab.ok, `intel: rides the omr vocabulary (${JSON.stringify(vocab.unknow
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, grantDrift, `the only $OMR drift is the test grant (${grantDrift}) — every wire spend reconciles as an intel:* burn`);
 
-console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), STEP THREE — the counter-intel triad: DISINFORMATION (an intel:disinfo sink that cooks a wiretap’s private signals — the hunt hidden, the indictment flag false) and THE INFORMANT (an intel:informant retainer that PIERCES the disinfo — the true read + who they’re hunting — self/gone/cap gates + worker sweep of lapsed retainers), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
+console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), STEP THREE — the counter-intel triad: DISINFORMATION (an intel:disinfo sink that cooks a wiretap’s private signals — the hunt hidden, the indictment flag false) and THE INFORMANT (an intel:informant retainer that PIERCES the disinfo — the true read + who they’re hunting — self/gone/cap gates + worker sweep of lapsed retainers), STEP FOUR — THE SPYMASTER’S TRADECRAFT (the earned rank grants +wire-slots + an intel-read discount — the discounted amount is what’s ledgered) and THE WATCHDOG (a SUBSCRIBED watcher is pushed a wire_alert when a tapped mark turns hot — once per event per tap, reset on a re-tap, un-subscribers get nothing), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
 await app.close();

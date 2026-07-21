@@ -381,6 +381,11 @@ CREATE TABLE IF NOT EXISTS wiretaps (
   target_character TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- step four THE WATCHDOG: once-per-tap push-alert flags (a SUBSCRIBED watcher is pushed when the
+  -- tapped mark crosses into a noteworthy state) — reset on a tap place/refresh (a fresh surveillance)
+  alerted_hunt BOOLEAN NOT NULL DEFAULT false,
+  alerted_wanted BOOLEAN NOT NULL DEFAULT false,
+  alerted_indicted BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (watcher_character, target_character)
 );
 CREATE INDEX IF NOT EXISTS ix_wiretaps_target ON wiretaps (target_character);

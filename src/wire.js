@@ -7,9 +7,13 @@
 // action) — no lock complexity; reads filter expires_at and JOIN to `alive`, so a dead party's wire
 // goes silent, and the worker sweeps expired rows. The layered intel economy: the SUB warns you (a
 // hunter COUNT), a TAP identifies whether a SPECIFIC rival is hunting you, the peek names funders.
-import { GameError } from './game.js';
-import { WIRE, wireActive, disinfoActive, spyRankOf, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
+import { GameError, notify } from './game.js';
+import { WIRE, wireActive, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
 import { spendOmr } from './vanity.js';
+
+// STEP FOUR — the account's lifetime intel-ops (the SPYMASTER rank basis) → its TRADECRAFT perks
+const spyOps = async (client, accountId) =>
+  Number((await client.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [accountId])).rows[0]?.intel_ops || 0);
 
 // THE SPYMASTER (step two): bump the account's lifetime intel-ops count (status, survives death — the
 // war-effort/kills precedent; direct SQL on account_persistent so persistAccount can't clobber it).
@@ -73,17 +77,21 @@ export async function placeTap(ch, targetId, client, h) {
   if (targetId === ch.id) throw new GameError('self', "You don't need a wire to know your own business.");
   const t = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
   if (!t) throw new GameError('gone', 'No such mark on the street.');
+  const ops = await spyOps(client, ch.account_id);            // step four: your spymaster tradecraft
+  const cap = WIRE.TAP_MAX + spyPerksOf(ops).tapBonus;         // a higher rank runs more wires
   const active = (await client.query(
     'SELECT target_character FROM wiretaps WHERE watcher_character=$1 AND expires_at > now()', [ch.id])).rows.map((r) => r.target_character);
-  if (!active.includes(targetId) && active.length >= WIRE.TAP_MAX)
-    throw new GameError('capped', `You're already running ${WIRE.TAP_MAX} wires — pull one before you set another.`);
-  await spendOmr(client, h, WIRE.TAP_OMR, 'intel:wiretap');
+  if (!active.includes(targetId) && active.length >= cap)
+    throw new GameError('capped', `You're already running ${cap} wires — pull one before you set another.`);
+  const cost = intelCost(WIRE.TAP_OMR, ops);                   // rank discount (the discounted amount is ledgered)
+  await spendOmr(client, h, cost, 'intel:wiretap');
   const exp = new Date(Date.now() + WIRE.TAP_MS);
-  const upd = await client.query('UPDATE wiretaps SET expires_at=$3, created_at=now() WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId, exp]);
+  // reset the watchdog alert flags on a place/refresh — a fresh surveillance gives fresh alerts
+  const upd = await client.query('UPDATE wiretaps SET expires_at=$3, created_at=now(), alerted_hunt=false, alerted_wanted=false, alerted_indicted=false WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId, exp]);
   if (!upd.rowCount) await client.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [ch.id, targetId, exp]);
   await bumpIntelOps(client, ch.account_id);
   await h.track(client, ch.account_id, 'wiretap', { target: targetId });
-  return { ok: true, target: targetId, spent: WIRE.TAP_OMR, expiresSeconds: Math.ceil(WIRE.TAP_MS / 1000) };
+  return { ok: true, target: targetId, spent: cost, expiresSeconds: Math.ceil(WIRE.TAP_MS / 1000) };
 }
 
 // POST /v1/wire/sweep — sweep your lines clean of bugs. A $OMR sink; FREE (uncharged) when you're clean.
@@ -127,7 +135,8 @@ export async function recruitInformant(ch, targetId, client, h) {
     'SELECT target_character FROM wire_informants WHERE watcher_character=$1 AND paid_until > now()', [ch.id])).rows.map((r) => r.target_character);
   if (!active.includes(targetId) && active.length >= WIRE.INFORMANT_MAX)
     throw new GameError('capped', `You keep ${WIRE.INFORMANT_MAX} informants on retainer — let one lapse first.`);
-  await spendOmr(client, h, WIRE.INFORMANT_OMR, 'intel:informant');
+  const infCost = intelCost(WIRE.INFORMANT_OMR, await spyOps(client, ch.account_id)); // step four: rank discount
+  await spendOmr(client, h, infCost, 'intel:informant');
   const cur = (await client.query('SELECT paid_until FROM wire_informants WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId])).rows[0];
   const base = cur && new Date(cur.paid_until) > new Date() ? new Date(cur.paid_until).getTime() : Date.now();
   const until = new Date(base + WIRE.INFORMANT_MS);
@@ -135,7 +144,7 @@ export async function recruitInformant(ch, targetId, client, h) {
   if (!upd.rowCount) await client.query('INSERT INTO wire_informants (watcher_character, target_character, paid_until) VALUES ($1,$2,$3)', [ch.id, targetId, until]);
   await bumpIntelOps(client, ch.account_id);
   await h.track(client, ch.account_id, 'wire_informant', { target: targetId });
-  return { ok: true, target: targetId, spent: WIRE.INFORMANT_OMR, paidSeconds: Math.ceil((until - Date.now()) / 1000) };
+  return { ok: true, target: targetId, spent: infCost, paidSeconds: Math.ceil((until - Date.now()) / 1000) };
 }
 
 // the deeper HUMAN-source read — the TRUE intel (never scrambled) + who the mark is hunting (anyone)
@@ -167,7 +176,8 @@ export async function pullDossier(ch, targetId, client, h) {
   if (targetId === ch.id) throw new GameError('self', "You don't compile a dossier on yourself.");
   const t = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
   if (!t) throw new GameError('gone', 'No such mark on the street.');
-  await spendOmr(client, h, WIRE.DOSSIER_OMR, 'intel:dossier');
+  const dosCost = intelCost(WIRE.DOSSIER_OMR, await spyOps(client, ch.account_id)); // step four: rank discount
+  await spendOmr(client, h, dosCost, 'intel:dossier');
   await bumpIntelOps(client, ch.account_id);
   const kills = Number((await client.query('SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1', [t.account_id])).rows[0].n);
   const deaths = Number((await client.query('SELECT COUNT(*) n FROM kill_log WHERE victim_account=$1', [t.account_id])).rows[0].n);
@@ -178,7 +188,7 @@ export async function pullDossier(ch, targetId, client, h) {
     `SELECT c.name FROM wiretaps w JOIN characters c ON c.id = w.target_character AND c.alive
        WHERE w.watcher_character=$1 AND w.expires_at > now()`, [t.id])).rows.map((r) => r.name);
   await h.track(client, ch.account_id, 'wire_dossier', { target: targetId });
-  return { ok: true, spent: WIRE.DOSSIER_OMR,
+  return { ok: true, spent: dosCost,
     dossier: {
       name: t.name, level: levelOf(Number(t.respect)), loc: t.loc,
       law: { stage: rapStageOf(t.heat_exposure, t.indicted_at), indicted: !!t.indicted_at, heat: heatBand(t.heat) },
@@ -236,14 +246,18 @@ export async function wireBoard(ch, client, h) {
   const bugsOnYou = Number((await client.query(
     `SELECT COUNT(*) n FROM wiretaps w JOIN characters c ON c.id = w.watcher_character AND c.alive
        WHERE w.target_character=$1 AND w.expires_at > now()`, [ch.id])).rows[0].n);
-  // THE SPYMASTER — your lifetime intel ops + rank (account-level, survives death)
+  // THE SPYMASTER — your lifetime intel ops + rank (account-level, survives death) + step-four TRADECRAFT
   const ops = Number((await client.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.intel_ops || 0);
+  const perks = spyPerksOf(ops);
   const disinfo = disinfoActive(ch);
   const board = {
     subscribed: sub, subSeconds: sub ? Math.max(0, Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000)) : 0,
-    costs: { tap: WIRE.TAP_OMR, sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR, trace: WIRE.TRACE_OMR, dossier: WIRE.DOSSIER_OMR, disinfo: WIRE.DISINFO_OMR, informant: WIRE.INFORMANT_OMR },
-    tapMax: WIRE.TAP_MAX, informantMax: WIRE.INFORMANT_MAX,
-    spymaster: { ops, rank: spyRankOf(ops).name },
+    // step four: intel-read costs are the DISCOUNTED (rank-adjusted) prices; defensive/sub costs are flat
+    costs: { tap: intelCost(WIRE.TAP_OMR, ops), sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR, trace: WIRE.TRACE_OMR, dossier: intelCost(WIRE.DOSSIER_OMR, ops), disinfo: WIRE.DISINFO_OMR, informant: intelCost(WIRE.INFORMANT_OMR, ops) },
+    tapMax: WIRE.TAP_MAX + perks.tapBonus, informantMax: WIRE.INFORMANT_MAX,
+    spymaster: { ops, rank: spyRankOf(ops).name, tapBonus: perks.tapBonus, discountBps: perks.discountBps },
+    // step four THE WATCHDOG: a subscriber gets pushed 'wire_alert' notifications when a tapped mark turns hot
+    watchdog: sub && intel.length > 0,
     taps: intel, informants, bugsOnYou, tape, mover,
     // step three: your own disinformation window (you feed anyone tapping you cooked private signals)
     disinfo: { active: disinfo, seconds: disinfo ? Math.max(0, Math.ceil((new Date(ch.disinfo_until) - Date.now()) / 1000)) : 0 },
@@ -282,4 +296,32 @@ export async function sweepWire(pool) {
   const r = await pool.query('DELETE FROM wiretaps WHERE expires_at <= now()');
   const i = await pool.query('DELETE FROM wire_informants WHERE paid_until <= now()');
   return { swept: (r.rowCount || 0) + (i.rowCount || 0) };
+}
+
+// STEP FOUR — THE WATCHDOG: the push layer the pull-only intel service lacked. A SUBSCRIBED watcher
+// (the premium Street Wire) gets a live `wire_alert` the moment a mark they're tapping crosses into a
+// noteworthy state — starts HUNTING them (a search on the watcher), goes WANTED, or gets INDICTED. Fired
+// ONCE per event per tap (per-tap flags, reset on a place/refresh), so no spam. Self-contained (no
+// cross-module hooks) — the worker re-derives the mark's state each tick. §10.4-untouched (pushes a
+// notification, moves no value). Only LIVE taps whose watcher is alive AND subscribed qualify.
+export async function sweepWireAlerts(pool) {
+  const taps = (await pool.query(
+    `SELECT w.watcher_character, w.target_character, w.alerted_hunt, w.alerted_wanted, w.alerted_indicted,
+            t.name, t.wanted_until, t.indicted_at
+       FROM wiretaps w
+       JOIN characters t  ON t.id  = w.target_character  AND t.alive
+       JOIN characters wc ON wc.id = w.watcher_character AND wc.alive
+      WHERE w.expires_at > now() AND wc.wire_until > now()`)).rows;
+  let fired = 0;
+  for (const w of taps) {
+    const wanted = !!(w.wanted_until && new Date(w.wanted_until) > new Date());
+    const indicted = !!w.indicted_at;
+    const hunting = !!(await pool.query('SELECT 1 FROM searches WHERE hunter=$1 AND target=$2', [w.target_character, w.watcher_character])).rows[0];
+    const sets = [];
+    if (hunting && !w.alerted_hunt) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'hunting_you' }); sets.push('alerted_hunt=true'); fired++; }
+    if (wanted && !w.alerted_wanted) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'wanted' }); sets.push('alerted_wanted=true'); fired++; }
+    if (indicted && !w.alerted_indicted) { await notify(pool, w.watcher_character, 'wire_alert', { target: w.target_character, name: w.name, event: 'indicted' }); sets.push('alerted_indicted=true'); fired++; }
+    if (sets.length) await pool.query(`UPDATE wiretaps SET ${sets.join(',')} WHERE watcher_character=$1 AND target_character=$2`, [w.watcher_character, w.target_character]);
+  }
+  return { fired };
 }

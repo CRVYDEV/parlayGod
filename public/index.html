@@ -1582,7 +1582,7 @@
       </div>`).join('');
     t.innerHTML = `
       ${!(W.taps || []).length && !W.subscribed ? coachCard('The Wire — information is a weapon', 'Pay $OMR to run a WIRETAP on a rival (their Law heat, wealth, rackets, and whether they\'re hunting YOU) — or subscribe to the STREET WIRE for forecasts, threat chatter, and the war room. Someone bugging your line? SWEEP it clean.') : ''}
-      ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>` : ''}
+      ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run${W.spymaster.tapBonus ? ` · tradecraft: +${W.spymaster.tapBonus} wire slot${W.spymaster.tapBonus > 1 ? 's' : ''}` : ''}${W.spymaster.discountBps ? `, −${(W.spymaster.discountBps / 100)}% on intel reads` : ''} — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>${W.watchdog ? '<div class="d" style="color:var(--neon);font-size:11px">🐕 THE WATCHDOG is live — you\'ll be alerted the moment a tapped mark turns hot (hunts you / goes wanted / gets indicted).</div>' : ''}` : ''}
       <h2>The Street Wire</h2>
       <div class="card" style="${W.subscribed ? 'border-color:var(--neon)' : ''}">
         <span class="t">${W.subscribed ? 'SUBSCRIBED' : 'The Premium Feed'}</span>
