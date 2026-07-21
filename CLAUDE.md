@@ -3116,8 +3116,28 @@ Port into turf/family AND synergizes with the World-occupation loop (docks start
 LIBERATES it, then earns tolls). Surfaced on `GET /v1/port` (`harbormaster {holder, tollBps, tolled}`) + a
 console warning chip. `test/port.js` covers the legend (the identity + rank + leaderboard + DEATH survival) and
 the harbormaster (a held-docks 5% toll → treasury, the net reflects it, the gang-treasuries §10.4 reconcile).
-`PORT.STEP3.*` are founder sign-off levers. Suite 32/32 + sim drift-0. Deferred (step four): the contraband
-MARKET (land goods as a tradeable commodity), harbor berths, Coast-Guard heat into the Law meter.
+`PORT.STEP3.*` are founder sign-off levers. Suite 32/32 + sim drift-0.
+**Step four — THE CONTRABAND MARKET + HARBOR BERTHS — BUILT** (`src/port.js`, `src/rules.js` `PORT.STEP4`,
+`schema.sql`, `test/port.js`). **(1) THE CONTRABAND MARKET** — a clean landing can now WAREHOUSE the
+contraband as a commodity (`collectRun {warehouse:true}` → `characters.contraband` holds its BOOK VALUE =
+hold × route.sell) instead of auto-fencing; `fenceContraband` (`POST /v1/port/fence`) sells the whole
+warehouse at a DRIFTING daily rate (`fenceMultOf` — a §7.11 hash, 0.85–1.25, mean ~1.05): a market-timing
+play (warehouse a landing, fence high, or eat a bad day / lose it if whacked). `port:fence` cash faucet; the
+harbormaster toll + the legend bump fire at fence (cash realized at the docks then). The DEFAULT collect
+still fences immediately (`port:sale`) — warehousing is opt-in, the tested flow unchanged. **§10.4-safe:**
+contraband is a NON-currency resource (like cargo, not in the §10.4 set), sourced via the supply-capped run
+→ the fence faucet is bounded by what was sourced; dying while holding contraband just never fences it (the
+`port:buy` sink stands with no owed faucet — the risk of warehousing, §10.4-clean). Contraband + berths DIE
+WITH THE STREET automatically (the heir is a fresh character row, cols default 0). **(2) HARBOR BERTHS** —
+`rentBerth` (`POST /v1/port/berth`) leases a permanent slip (a `port:berth` cash SINK) that raises the fleet
+cap by 1 (`fleetCapOf = FLEET_MAX + berths`, capped `BERTH_MAX` 3). Direct-SQL columns (`characters.contraband`
+/`berths` — never in persistCharacter's positional UPDATE, so clobber-safe, the port_used pattern). Console:
+a warehouse toggle on collect + a Warehouse & Fence card + a rent-a-slip button. `test/port.js` covers the
+warehouse (holds book value, no cash), the fence (proceeds == book × the daily mult, empties, nothing-gate),
+and the berth (+1 cap). `PORT.STEP4.*` (FENCE_LO/SPAN 0.85/0.40, BERTH_COST/MAX) are founder sign-off levers
+— the fence is a higher-variance faucet than auto-sell (savvy market-timing beats the route rate, bounded by
+the supply cap); sim before production. Suite 32/32 + sim drift-0. Deferred (step five): Coast-Guard heat
+into the Law meter, warehoused contraband as a LOOTABLE resource on a fire-kill (P1.1).
 
 **OVERNIGHT FULL-SYSTEM RED-TEAM (`AUDIT-full-system-v2.md`, 2026-07-21)** — a max-effort audit, SIX
 parallel independent lenses over the ENTIRE codebase (47 src modules) + all 6 Solidity contracts

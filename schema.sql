@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS characters (
   race_at TIMESTAMPTZ,                              -- STREET RACES: per-driver race cooldown (written by direct SQL, outside persist — the active_at pattern)
   port_used NUMERIC NOT NULL DEFAULT 0,             -- THE PORT: contraband bought in the rolling 24h supply window (the D3 wash-cap token bucket; direct SQL, outside persist)
   port_at TIMESTAMPTZ,                              -- …the window's start marker
+  contraband NUMERIC NOT NULL DEFAULT 0,           -- THE PORT step four: warehoused landed contraband (BOOK VALUE at route.sell) — fenced later at a drifting price; direct SQL, dies with the street (heir starts at 0)
+  berths INT NOT NULL DEFAULT 0,                    -- THE PORT step four: rented harbor slips — +1 fleet cap each; direct SQL
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS boats (
   hull INT NOT NULL DEFAULT 0,                    -- step two: naval upgrade — +cargo hold per level
   engine INT NOT NULL DEFAULT 0,                  -- step two: naval upgrade — +knots per level
   rendezvous BOOLEAN NOT NULL DEFAULT false,      -- step two: docked + open to receive a mid-sea handoff (consent-by-listing)
+  -- NOTE: step four warehouse (characters.contraband) + berths (characters.berths) are on the characters table below
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_boats_char ON boats (character_id);

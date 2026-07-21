@@ -1902,6 +1902,13 @@ export const portRankOf = (smuggled) => {
   for (const r of PORT.STEP3.LEGEND_RANKS) if (Number(smuggled || 0) >= r.at) cur = r;
   return cur;
 };
+// ── THE PORT step four: THE CONTRABAND MARKET (warehouse + fence at a drifting daily price) + BERTHS ──
+PORT.STEP4 = {
+  FENCE_LO: 0.85, FENCE_SPAN: 0.40,   // the fence pays BOOK VALUE × a multiplier drifting 0.85–1.25 (mean ~1.05)
+  BERTH_COST: 500000, BERTH_MAX: 3,   // a rented harbor slip: +1 fleet cap, one-time cash sink, capped
+};
+// today's fence multiplier — a deterministic §7.11 daily drift (a smuggler times the market: warehouse, fence high)
+export const fenceMultOf = (day = dayOf()) => PORT.STEP4.FENCE_LO + hash01('fence:' + day + ':' + MARKET_SEED) * PORT.STEP4.FENCE_SPAN;
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
