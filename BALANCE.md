@@ -1096,3 +1096,43 @@ qualified recruits (each needs L8/40 jobs/3 check-ins/$25k of real playtime).
   (rides the `referral:` cash vocabulary). At $5k it's half the direct recruiter payout ($10k) — a modest
   incentive to grow the tree one level, not a living. LEVER: raise/lower `REF_TIER2_CASH`, or set 0 to
   disable the second level entirely if the alpha shows ring-farming (the full-qualify gate is the backstop).
+
+## Faucet measurement pass — sim P9.8–P9.10 (this-session drops, measured 2026-07-21)
+
+The three faucets shipped this session (co-op apex raids, the boxing exhibition purse, territory
+racket-type income mults) were all flagged "sim + sign-off." `tools/sim.js` now measures each
+(analytic, from the signed constants — the den/kill-EV precedent; §10.4 stays drift-0). The numbers:
+
+**P9.8 — World apex raid emission (co-op step three).** Emission is REGEN-bounded (a reservoir can't
+emit faster than it regenerates), so co-op is ACCESS not a ceiling raise:
+- Kryl ≤ $960k/day · Moreau ≤ $2.16M/day · Volkov ≤ $4.32M/day — **base-WIDE** ceilings (the whole
+  server competes for one reservoir), so per-capita is far lower.
+- **B1 (the flagged solo-floor):** one min-level whale at the 0.1 odds floor extracts ≈ $90k (Kryl) /
+  $300k (Moreau, Volkov) per day solo. The dial is the `raidChance` min-clamp or a coop-only gate on
+  `raidNpc` for `fixture.coop`. **REC: KEEP** for alpha (regen-bounded, competitive), revisit the
+  solo-floor if a few whales farm the apex reservoirs dry.
+
+**P9.9 — Boxing exhibition purse (the one new PvE faucet).** EV = −fee + P(win)×purse (exact form model):
+- Fresh signee (form 30): **+$2,982/bout** best (Club Fighter @66%) → +$11.9k/day/fighter, +$35.8k/day/3-stable.
+- Maxed fighter (form 75): **+$41,237/bout** best (Gatekeeper @91%) → +$164.9k/day/fighter,
+  **+$494.8k/day for a maxed 3-stable**.
+- **FINDING:** the purse is +EV at every form and scales to a **large sustained faucet** when maxed
+  (~half the top passive loop). It self-limits on the ~$1M training investment (payback ~6 days/fighter)
+  but the steady state is a real faucet. **REC (founder call):** scale the fee toward the purse (a
+  Gatekeeper fee ~$45k instead of $30k drops maxed EV to ~+$26k/bout) OR cap exhibitions/day, so a maxed
+  stable isn't near-risk-free income. Flagged, NOT retuned (ground rule #1).
+
+**P9.10 — Territory racket TYPE net income (mult vs the Bureau crackdown), at a tier-3 "District" op.**
+The type income mult is meant to be offset by crackdown risk that scales with the type — the intended
+shape is **higher-VARIANCE, not higher-EV**. Measured at the two collection cadences:
+- **Numbers** ×1.0 → $1,440,000/day, cadence-proof (scrutiny 0 < decay 4, never raided). The safe baseline.
+- **Smuggling** ×1.35 → $1,944,000/day gross; hot in 6h, so a LAZY (24h) collector is raided ~80% of days →
+  nets only **~$280k/day** (worse than numbers), while an ACTIVE collector (≤6h) banks the full $1.94M.
+  **Working as intended** — smuggling is a management/variance play, not free income. **REC: KEEP.**
+- **Protection** ×1.15 → $1,656,000/day; hot in **30h**, so a **daily** collector NEVER crosses the
+  threshold → **0% realized raid risk → a STRICT +15% upgrade over numbers** at the ordinary daily
+  cadence. **FINDING: this violates the "higher-variance not higher-EV" intent** — protection is
+  currently free income at daily cadence. **REC (founder call): raise `protection.scrutinyPerHr` 6 → ~10**
+  (net +6/hr → hot in ~10h → a daily collector sits ~14h above → P(raid) ~72% → net ~$377k/day, a real
+  variance play like smuggling). Flagged, NOT retuned (ground rule #1 — it's an unsigned this-session
+  default and the founder may accept a mild safe premium; the sim data is here to decide from).

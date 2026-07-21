@@ -14,7 +14,8 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf } from '../src/rules.js';
+import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
+         WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -403,6 +404,59 @@ for (let i = 0; i < 30; i++) {
 const hEv = hRuns ? (hReturned - hStaked) / hRuns : 0;
 note('heists', 'payroll co-op (2-crew, lvl 25)', `${hRuns} runs, ${hWins} scores, ${hJails} shared jails`,
   `pot−stake EV ${hEv >= 0 ? '+' : ''}$${fmt(hEv)}/run CREW-WIDE (split 1.2:1); stakes $${fmt(hStaked)} vs takes $${fmt(hReturned)}`);
+
+// ════════════════ P9.8 world raids — apex emission ceilings (co-op step three) ════════════════
+// The co-op raid faucet: co-op UNLOCKS the apex reservoirs (a soloist can't beat the def) but total
+// emission is REGEN-BOUNDED — a reservoir can't emit faster than it regenerates over time. Analytic
+// (exact from the signed constants), the den/extraction-risk precedent.
+phase('P9.8 world raids — apex emission ceilings (co-op unlocks; regen-bounded)');
+const worldRaidsPerDay = 24 / (WORLD.RAID_CD_MS / 3600000); // one raider's cadence (2h cd → 12/day)
+for (const f of WORLD_NPCS.filter((n) => n.coop)) {
+  const grab = Math.min(Math.floor(f.max * WORLD.GRAB_BPS / 10000), WORLD.GRAB_MAX);
+  const ceilDay = f.regenPerHr * 24;                        // steady state: base-wide emission ≤ regen
+  const soloFloorDay = Math.min(ceilDay, Math.round(0.10 * grab * worldRaidsPerDay)); // B1: a min-lvl whale at the 0.1 odds floor
+  note('world', `${f.name} (lvl ${f.minLvl})`, `≤ $${fmt(ceilDay)}/day base-wide ceiling`,
+    `regen-bounded; per-raid grab $${fmt(grab)}; one min-lvl solo @0.1-floor ≈ $${fmt(soloFloorDay)}/day`);
+}
+note('world', 'co-op = ACCESS not ceiling', `crew splits ONE grab (leader ${WORLD.COOP_LEADER_WEIGHT}×)`,
+  'total emission stays ≤ regen; co-op just makes a heavy apex def beatable — B1 solo-floor is the dial');
+
+// ════════════════ P9.9 boxing — exhibition purse EV (the new PvE faucet) ════════════════
+// EV = −fee + P(win)×purse, per the exact form model (form=Σstats, +rand(0,VARIANCE) each, ties reroll).
+// Enumerated P(win) over the rng grid — analytic, no maxed-fighter ($1M) build needed to seed value.
+phase('P9.9 boxing — exhibition purse EV by fighter form (the new faucet)');
+const pWinBox = (mf, tf, V) => { let w = 0, tot = 0; for (let a = 0; a <= V; a++) for (let b = 0; b <= V; b++) { if (mf + a === tf + b) continue; tot++; if (mf + a > tf + b) w++; } return w / tot; };
+const boxPerDay = 24 / (BOXING.EXHIBITION_CD_MS / 3600000);   // one fighter's cadence (6h cd → 4/day)
+for (const [label, myForm] of [['fresh signee', 3 * Math.round((BOXING.STAT_MIN + BOXING.STAT_MAX) / 2)], ['maxed fighter', 3 * BOXING.STAT_CAP]]) {
+  let best = null;
+  for (const t of BOXING.NPC_TIERS) { const p = pWinBox(myForm, t.form, BOXING.VARIANCE); const ev = -t.fee + p * t.purse; if (!best || ev > best.ev) best = { tier: t.name, p, ev }; }
+  note('boxing', `exhibition EV — ${label} (form ${myForm})`, `${best.ev >= 0 ? '+' : ''}$${fmt(best.ev)}/bout best`,
+    `best tier ${best.tier} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(best.ev * boxPerDay)}/day/fighter · ×${BOXING.STABLE_MAX} stable ${best.ev >= 0 ? '+' : ''}$${fmt(best.ev * boxPerDay * BOXING.STABLE_MAX)}/day`);
+}
+
+// ════════════════ P9.10 territory — net income by racket TYPE (mult vs the Bureau crackdown) ════
+// Territory step three's income mult is offset by crackdown risk that scales with the type's scrutiny.
+// The finding the founder needs: is a hot type higher-VARIANCE or higher-EV? Depends on COLLECTION
+// CADENCE (frequent collection stays ahead of the Bureau). Reported at a representative tier-3 op.
+phase('P9.10 territory — net income by racket TYPE (income mult vs crackdown)');
+const repTier = TERRITORY_RACKETS.find((t) => t.tier === 3); // 'District' — $60k/hr base
+const tDecay = CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR, tThr = CONSTANTS.TERRITORY_RAID_THRESHOLD, tPmin = CONSTANTS.TERRITORY_RAID_P_PER_MIN;
+const tFine = Math.floor(territoryBuildCost(3) * CONSTANTS.TERRITORY_RAID_FINE_RATE);
+for (const ty of TERRITORY_TYPES) {
+  const grossDay = repTier.incomePerHr * ty.incomeMult * 24;   // daily collect, 24h cap
+  const net = ty.scrutinyPerHr - tDecay;
+  if (net <= 0) {
+    note('territory', `${ty.name} (District t3)`, `$${fmt(grossDay)}/day`, `×${ty.incomeMult} · never heats up (${ty.scrutinyPerHr}/hr < decay ${tDecay}) — SAFE at any cadence`);
+  } else {
+    const hrsToHot = tThr / net;
+    const hrsAbove = Math.max(0, 24 - hrsToHot);              // hours above the line on a LAZY 24h cadence
+    const pRaid = 1 - Math.pow(1 - tPmin, Math.min(1440, hrsAbove * 60));
+    const lazyNet = grossDay * (1 - pRaid) - pRaid * tFine;   // raided → lose the pending + fine
+    note('territory', `${ty.name} (District t3)`, `$${fmt(grossDay)}/day gross (×${ty.incomeMult})`,
+      `hot in ${fmt(hrsToHot)}h — collect within it to stay cool; LAZY 24h cadence P(raid) ${(pRaid * 100).toFixed(0)}% → ~$${fmt(Math.round(lazyNet))}/day (fine $${fmt(tFine)})`);
+  }
+}
+note('territory', 'the TYPE tradeoff', 'active vs lazy', 'numbers is cadence-proof; a hot type should be higher-VARIANCE not higher-EV — watch protection (30h-to-hot dodges a daily collect) + smuggling lazy-net (BALANCE B-terr)');
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
