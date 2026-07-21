@@ -1399,6 +1399,18 @@ Suite 32/32 + sim drift-0.
   (they can still run — the toll never gates the freight). Own-family + NPC-held + unheld = free. Reviewed
   §10.4-clean (AUDIT-port-step-three.md); `TOLL_BPS` is the dial if 5% bites too hard or too soft.
 
+### Step four (2026-07-21) — the contraband market + berths (sign-off levers)
+- **The fence** (`port:fence`, `fenceMultOf` drifts 0.85–1.25, mean ~1.05): warehousing a landing and
+  fencing at a drifting daily rate is a HIGHER-VARIANCE faucet than the guaranteed auto-sell (route.sell).
+  §10.4-safe (contraband is a non-currency resource sourced via the supply cap → the fence is bounded by
+  sourcing; dying while holding it just forfeits the already-sunk `port:buy` cost — no owed faucet). But a
+  savvy player who fences ONLY on high days realizes ABOVE the route rate, so the REALIZED emission for
+  skilled play sits above auto-sell (a Risk-to-Earn skill reward, still supply-capped). **Sim the realized
+  $/day for a market-timer before production** — the dial is `FENCE_LO`/`FENCE_SPAN` (drop the mean to 1.0
+  for a pure gamble, or narrow the span). The death-loss risk + the exposure window offset it.
+- **Berths** (`port:berth`, one-time $500k/slip, cap 3): a pure cash SINK — raises the fleet cap, no
+  emission. Helps, not hurts.
+
 ## AUDIT-full-system-v2 economic flags (2026-07-21) — founder sign-off (NOT patched, ground rule #1)
 
 The overnight full-system red-team found NO new unbounded $OMR extraction (the reserve queue holds —

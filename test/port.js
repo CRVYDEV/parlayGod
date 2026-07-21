@@ -6,7 +6,7 @@
 process.env.PORT_RUN_MS = '0'; // TEST-ONLY: runs arrive instantly
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PORT, boatOf, boatResale } from '../src/rules.js';
+import { PORT, boatOf, boatResale, fenceMultOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -182,6 +182,30 @@ assert.equal(bbSmug, expTake, "a piracy take counts toward the pirate's legend")
 const lb = (await call('GET', '/v1/leaderboard/port', { token: cap.token })).body;
 assert(Array.isArray(lb.smugglers) && lb.smugglers.some((s) => s.name === 'Captain Nemo'), 'the smuggler leaderboard ranks lifetime landed value');
 
+// ── STEP FOUR: THE CONTRABAND MARKET (warehouse + fence) + BERTHS (docks NPC-held → no toll here) ──
+process.env.PORT_RUN_MS = '0'; process.env.PORT_INTERDICT_P = '0';
+const whBoat = (await call('POST', '/v1/port/boat/skiff', { token: cap.token })).body.boat.id;
+await call('POST', `/v1/port/run/${whBoat}`, { token: cap.token, body: { route: 'coastal' } });
+const cashPreWh = await cashOf(cap.token);
+const whRes = (await call('POST', `/v1/port/collect/${whBoat}`, { token: cap.token, body: { warehouse: true } })).body;
+assert(whRes.warehoused > 0 && whRes.landed === undefined, 'warehousing holds the contraband as a commodity (no cash yet)');
+assert.equal(await cashOf(cap.token), cashPreWh, 'no cash changed hands on a warehouse');
+const boardWh = (await call('GET', '/v1/port', { token: cap.token })).body;
+assert(boardWh.contraband.book >= whRes.warehoused && boardWh.contraband.fenceRate > 0, "the board shows the warehoused book value + today's fence rate");
+const book = Number((await pool.query(`SELECT contraband FROM characters WHERE id='${cap.id}'`)).rows[0].contraband);
+const cashPreFence = await cashOf(cap.token);
+const fenceRes = (await call('POST', '/v1/port/fence', { token: cap.token })).body;
+assert.equal(fenceRes.proceeds, Math.floor(book * fenceMultOf()), 'proceeds == book value × the daily fence multiplier');
+assert(fenceRes.rate >= PORT.STEP4.FENCE_LO && fenceRes.rate <= PORT.STEP4.FENCE_LO + PORT.STEP4.FENCE_SPAN, 'the fence rate is inside the drift band');
+assert.equal(await cashOf(cap.token), cashPreFence + fenceRes.proceeds, 'the fence proceeds hit the pocket (port:fence faucet)');
+assert.equal(Number((await pool.query(`SELECT contraband FROM characters WHERE id='${cap.id}'`)).rows[0].contraband), 0, 'the warehouse is emptied');
+assert.equal((await call('POST', '/v1/port/fence', { token: cap.token })).body.error, 'nothing', 'nothing left to fence');
+// rent a berth — +1 fleet cap
+const capBefore = (await call('GET', '/v1/port', { token: cap.token })).body.fleetMax;
+const berthRes = (await call('POST', '/v1/port/berth', { token: cap.token })).body;
+assert(berthRes.berths === 1 && berthRes.fleetMax === capBefore + 1, 'a rented slip raises the fleet cap');
+delete process.env.PORT_RUN_MS; delete process.env.PORT_INTERDICT_P;
+
 // ── THE HARBORMASTER: a family holding the docks tolls a clean landing (the convoy-toll twin) ──
 process.env.PORT_RUN_MS = '0'; process.env.PORT_INTERDICT_P = '0';
 const boss = await mk('Dock King'); await pool.query(`UPDATE characters SET respect=400, loc='docks' WHERE id='${boss.id}'`); await seedCash(boss.id, 100000);
@@ -215,9 +239,9 @@ const treCheck = inv.checks.find((c) => c.name === 'gang treasuries');
 assert(treCheck.ok, `the port:toll transfer reconciles the treasury (drift ${treCheck.drift})`);
 // THE SMUGGLER'S LEGEND survives the captain's death (account-level, never wiped) — == the account's
 // lifetime port:sale + port:piracy (re-queried: the harbormaster collect added another landing)
-const capLandedFinal = Number((await pool.query(`SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c ON c.id=t.character_id WHERE c.account_id='${capAcct}' AND t.reason IN ('port:sale','port:piracy')`)).rows[0].s);
+const capLandedFinal = Number((await pool.query(`SELECT COALESCE(SUM(t.amount),0) s FROM transactions t JOIN characters c ON c.id=t.character_id WHERE c.account_id='${capAcct}' AND t.reason IN ('port:sale','port:piracy','port:fence')`)).rows[0].s);
 assert(capLandedFinal > capLanded, 'the harbormaster landing grew the legend');
 assert.equal(Number((await pool.query(`SELECT smuggled FROM account_persistent WHERE account_id='${capAcct}'`)).rows[0].smuggled), capLandedFinal, "the smuggler's legend outlives the man (account-level, survives death)");
 
-console.log('✅ The Port test passed — buy/sell boats + gates, the RUN + the lazy COLLECT (clean faucet / interdicted seize+fine+sink), the SUPPLY CAP, the board, boats DIE WITH THE STREET; STEP TWO: NAVAL UPGRADES + PIRACY (seas band / win-cut-void / loss / level+once gates) + the offshore RENDEZVOUS; STEP THREE: THE SMUGGLER\'S LEGEND (lifetime landed value == port:sale+port:piracy, ranked, SURVIVES DEATH, the leaderboard) + THE HARBORMASTER (a docks-holding family tolls a clean landing 5% to its treasury — the convoy-toll twin, §10.4 treasury reconcile); and section 10.4 (port: cash + ammo vocabulary + the per-character cash + gang-treasuries checks reconcile — drift equals the seeded stake only)');
+console.log('✅ The Port test passed — buy/sell boats + gates, the RUN + the lazy COLLECT (clean faucet / interdicted seize+fine+sink), the SUPPLY CAP, the board, boats DIE WITH THE STREET; STEP TWO: NAVAL UPGRADES + PIRACY (seas band / win-cut-void / loss / level+once gates) + the offshore RENDEZVOUS; STEP THREE: THE SMUGGLER\'S LEGEND + THE HARBORMASTER (a docks-holding family tolls a clean landing 5% to its treasury — the convoy-toll twin); STEP FOUR: THE CONTRABAND MARKET (warehouse a clean landing as a commodity, fence later at a drifting daily rate == book × fenceMult, empties the warehouse; nothing-to-fence gate) + BERTHS (a rented slip raises the fleet cap); and section 10.4 (port: cash + ammo vocabulary + the per-character cash + gang-treasuries checks reconcile — drift equals the seeded stake only)');
 await app.close();

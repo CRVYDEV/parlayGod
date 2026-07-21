@@ -9,12 +9,30 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, levelOf, cityHourOf } from './rules.js';
+import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf } from './rules.js';
 
 // THE SMUGGLER'S LEGEND — lifetime contraband value landed, account-level (survives death — the boxing/
 // wheel/war-effort precedent). Direct SQL on the account (NUMERIC, arith-safe); status only, no §10.4.
 const bumpSmuggled = (client, accountId, amt) =>
   client.query('UPDATE account_persistent SET smuggled = smuggled + $2 WHERE account_id=$1', [accountId, Math.max(0, Math.floor(Number(amt) || 0))]);
+const fleetCapOf = (ch) => PORT.FLEET_MAX + (Number(ch.berths) || 0);   // step four: rented berths raise the cap
+
+// THE HARBORMASTER: the family holding the docks tolls a clean landing (a §10.4 TRANSFER to their treasury).
+// Returns the toll charged (0 when NPC-held / your own family / dissolution race); mutates ch.cash/ch.bank.
+// Shared by the immediate collect-fence AND the warehouse fence (cash realized at the docks either way).
+async function harborToll(client, h, ch, sale) {
+  const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [PORT.DISTRICT])).rows[0]?.holder_gang;
+  if (!holder || holder === h.owned.gangId || sale <= 0) return 0;
+  const toll = Math.min(Math.floor(sale * PORT.STEP3.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
+  if (toll <= 0) return 0;
+  const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
+  if (!upd.rowCount) return 0;   // holder dissolved between the read and the credit — no charge, no orphan
+  const fromPocket = Math.min(toll, Math.max(0, Math.floor(Number(ch.cash))));
+  ch.cash = Number(ch.cash) - fromPocket;
+  ch.bank = Number(ch.bank) - (toll - fromPocket);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'port:toll' });
+  return toll;
+}
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -41,7 +59,7 @@ export async function buyBoat(ch, kind, client, h) {
   const spec = boatOf(kind);
   if (!spec) throw new GameError('bad_boat', 'No such vessel at the yard.');
   const n = Number((await client.query('SELECT COUNT(*) c FROM boats WHERE character_id=$1', [ch.id])).rows[0].c);
-  if (n >= PORT.FLEET_MAX) throw new GameError('fleet', `Your berths are full (${PORT.FLEET_MAX}). Sell a boat first.`);
+  if (n >= fleetCapOf(ch)) throw new GameError('fleet', `Your berths are full (${fleetCapOf(ch)}). Sell a boat or rent a slip.`);
   if (Number(ch.cash) < spec.cost) throw new GameError('cash', `The ${spec.name} runs $${spec.cost}.`);
   ch.cash = Number(ch.cash) - spec.cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -spec.cost, reason: 'port:boat' });
@@ -121,8 +139,10 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   return { ok: true, boat: boat.id, route: route.id, hold, cost, escort: !!escort, arrivesSeconds: Math.ceil(runMsOf(route) / 1000) };
 }
 
-// POST /v1/port/collect/:boatId — the boat's home: roll the Coast Guard, then land the cargo or eat the bust
-export async function collectRun(ch, boatId, client, h) {
+// POST /v1/port/collect/:boatId {warehouse} — the boat's home: roll the Coast Guard, then land the cargo
+// or eat the bust. Step four: on a clean landing, WAREHOUSE the contraband (hold it as a commodity to fence
+// later at a drifting price) instead of fencing it to cash now — a market-timing play (the default fences now).
+export async function collectRun(ch, boatId, warehouse, client, h) {
   if (safeHoused(ch)) throw new GameError('safe', 'The take waits for a captain on the dock, not a ghost.'); // D2 collect
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Collect at the ${PORT.DISTRICT}.`);
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
@@ -140,28 +160,21 @@ export async function collectRun(ch, boatId, client, h) {
     await clearIntercepts(client, boat.id);
   };
   if (roll >= p) {
-    // CLEAN — the contraband lands and is fenced (the smuggling margin, a bounded faucet)
+    // CLEAN — the contraband slips the Coast Guard. Its BOOK VALUE = hold × the route's fence rate.
     const sale = Number(boat.run_hold) * route.sell;
+    if (warehouse) {
+      // WAREHOUSE (step four): hold the contraband as a commodity — no cash / toll / legend yet (those fire
+      // at fence). A market-timing play: fence later when the drifting price is high (or eat it if whacked).
+      await client.query('UPDATE characters SET contraband = contraband + $2 WHERE id=$1', [ch.id, sale]);
+      await clearRun();
+      await h.track(client, ch.account_id, 'port', { act: 'warehouse', route: route.id, value: sale });
+      return { ok: true, interdicted: false, warehoused: sale, cost: Number(boat.run_cost), route: route.id };
+    }
+    // FENCE NOW (the default) — land it straight to cash at the route rate (a bounded faucet)
     ch.cash = Number(ch.cash) + sale;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: sale, reason: 'port:sale' });
     await bumpSmuggled(client, ch.account_id, sale);   // THE SMUGGLER'S LEGEND (status, survives death)
-    // THE HARBORMASTER (step three): the family HOLDING the docks tolls a clean landing — a §10.4 TRANSFER
-    // (shipper pocket→bank → holder treasury, the convoy-toll twin). NPC-held / your own family = free;
-    // clamped to pocket+bank, never gates the freight, charged only if the treasury credit lands (dissolution race).
-    let toll = 0;
-    const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [PORT.DISTRICT])).rows[0]?.holder_gang;
-    if (holder && holder !== h.owned.gangId && sale > 0) {
-      toll = Math.min(Math.floor(sale * PORT.STEP3.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
-      if (toll > 0) {
-        const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
-        if (upd.rowCount) {
-          const fromPocket = Math.min(toll, Math.max(0, Math.floor(Number(ch.cash))));
-          ch.cash = Number(ch.cash) - fromPocket;
-          ch.bank = Number(ch.bank) - (toll - fromPocket);
-          await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'port:toll' });
-        } else toll = 0;
-      }
-    }
+    const toll = await harborToll(client, h, ch, sale); // THE HARBORMASTER (step three): docks-holder toll
     await clearRun();
     if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.name, value: sale });
     await h.track(client, ch.account_id, 'port', { act: 'land', route: route.id, sale, toll });
@@ -182,6 +195,41 @@ export async function collectRun(ch, boatId, client, h) {
   await h.notify(client, ch.id, 'port_bust', { route: route.id, fine, sunk: boatLost });
   await h.track(client, ch.account_id, 'port', { act: 'bust', route: route.id, fine, sunk: boatLost });
   return { ok: true, interdicted: true, seized: Number(boat.run_hold), fine, sunk: boatLost, route: route.id };
+}
+
+// POST /v1/port/fence — sell ALL warehoused contraband at today's drifting fence rate (a bounded cash faucet).
+// The market-timing payoff: fence when fenceMultOf is high to beat the route rate; a bad day (or a whacking)
+// is the risk. The harbormaster toll + the legend bump fire here (the cash is realized at the docks now).
+export async function fenceContraband(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No fencing from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', 'The fence deals face to face, not with a ghost.'); // D2 extraction-ish
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The fence works out of the ${PORT.DISTRICT}.`);
+  const book = Number((await client.query('SELECT contraband FROM characters WHERE id=$1', [ch.id])).rows[0]?.contraband || 0);
+  if (book <= 0) throw new GameError('nothing', "You've got no contraband warehoused.");
+  const mult = fenceMultOf();
+  const proceeds = Math.floor(book * mult);
+  ch.cash = Number(ch.cash) + proceeds;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: proceeds, reason: 'port:fence' });
+  await bumpSmuggled(client, ch.account_id, proceeds);
+  const toll = await harborToll(client, h, ch, proceeds);
+  await client.query('UPDATE characters SET contraband = 0 WHERE id=$1', [ch.id]);
+  if (proceeds >= 250000) bus.emit('streets', { type: 'port_fence', by: ch.name, value: proceeds });
+  await h.track(client, ch.account_id, 'port', { act: 'fence', book, proceeds, mult: Math.round(mult * 100) / 100 });
+  return { ok: true, book, proceeds, rate: Math.round(mult * 100) / 100, toll, net: proceeds - toll };
+}
+
+// POST /v1/port/berth — rent a permanent harbor slip (+1 fleet cap), a one-time cash sink, capped
+export async function rentBerth(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No paperwork from lockup.');
+  if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The harbormaster's office is at the ${PORT.DISTRICT}.`);
+  const berths = Number(ch.berths) || 0;
+  if (berths >= PORT.STEP4.BERTH_MAX) throw new GameError('maxed', `You already lease the max (${PORT.STEP4.BERTH_MAX}) slips.`);
+  if (Number(ch.cash) < PORT.STEP4.BERTH_COST) throw new GameError('cash', `A slip runs $${PORT.STEP4.BERTH_COST}.`);
+  ch.cash = Number(ch.cash) - PORT.STEP4.BERTH_COST;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -PORT.STEP4.BERTH_COST, reason: 'port:berth' });
+  await client.query('UPDATE characters SET berths = berths + 1 WHERE id=$1', [ch.id]);
+  await h.track(client, ch.account_id, 'port', { act: 'berth', berths: berths + 1 });
+  return { ok: true, berths: berths + 1, fleetMax: PORT.FLEET_MAX + berths + 1, spent: PORT.STEP4.BERTH_COST };
 }
 
 // POST /v1/port/intercept/:boatId — PIRACY: a pirate with their own fast boat + guns runs down a rival's run
@@ -332,10 +380,14 @@ export async function portBoard(ch, client, h) {
   const holderRow = (await client.query(
     `SELECT g.name, g.tag, d.holder_gang FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang WHERE d.id=$1`, [PORT.DISTRICT])).rows[0];
   const tolled = holderRow?.holder_gang && holderRow.holder_gang !== h.owned.gangId;
+  // step four: the warehouse (book value held) + today's drifting fence rate, and the berth office
+  const book = Number(ch.contraband || 0), rate = fenceMultOf();
   return {
     atDocks: ch.loc === PORT.DISTRICT, district: PORT.DISTRICT,
     catalog: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed, resale: boatResale(b.id) })),
-    fleet, fleetMax: PORT.FLEET_MAX, routes, escort: { cost: PORT.ESCORT_COST, def: PORT.ESCORT_DEF },
+    fleet, fleetMax: fleetCapOf(ch), routes, escort: { cost: PORT.ESCORT_COST, def: PORT.ESCORT_DEF },
+    contraband: { book, fenceRate: Math.round(rate * 100) / 100, estimate: Math.floor(book * rate) },
+    berth: { count: Number(ch.berths) || 0, max: PORT.STEP4.BERTH_MAX, cost: PORT.STEP4.BERTH_COST },
     supplyLeft: supplyState(ch).left, supplyCap: PORT.SUPPLY_CAP_DAY,
     seas, piracy: { minLevel: PORT.STEP2.PIRATE_MIN_LEVEL, energy: PORT.STEP2.PIRATE_ENERGY, ammo: PORT.STEP2.PIRATE_AMMO, takeBps: PORT.STEP2.PIRATE_TAKE_BPS },
     upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP },

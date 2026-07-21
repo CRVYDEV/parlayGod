@@ -636,7 +636,11 @@ export async function buildServer() {
   app.post('/v1/port/run/:boatId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.launchRun(ch, req.params.boatId, req.body?.route, !!req.body?.escort, client, h)));
   app.post('/v1/port/collect/:boatId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.collectRun(ch, req.params.boatId, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.collectRun(ch, req.params.boatId, !!req.body?.warehouse, client, h)));
+  app.post('/v1/port/fence', { preHandler: auth }, async (req) =>                    // step four: fence warehoused contraband
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.fenceContraband(ch, client, h)));
+  app.post('/v1/port/berth', { preHandler: auth }, async (req) =>                     // step four: rent a harbor slip (+fleet cap)
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.rentBerth(ch, client, h)));
   app.post('/v1/port/upgrade/:boatId', { preHandler: auth }, async (req) =>          // step two: naval upgrade (hull/engine)
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.upgradeBoat(ch, req.params.boatId, req.body?.part, client, h)));
   app.post('/v1/port/intercept/:boatId', { preHandler: auth }, async (req) =>        // step two: PIRACY — run down a rival at sea
