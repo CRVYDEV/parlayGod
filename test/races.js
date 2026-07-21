@@ -131,6 +131,50 @@ assert.equal(rr.body.win, false, 'the rookie loses to the strong owner');
 assert.equal(await wheelWins(), winsBefore, 'a win over a sub-level-floor loser earns NO WHEEL credit (F-MED1 anti-Sybil)');
 process.env.RACE_CD_MS = '0'; // restore for the rest of the suite
 
+// ── STEP TWO — NITROUS: buy a charge (a cash sink, capped), spend one on a race for a power bump ──
+const nosPre = (await meOf(racer.token)).cash;
+r = await call('POST', `/v1/races/nos/${myCar}`, { token: racer.token });
+assert.equal(r.code, 200, 'a nitrous charge bought'); assert.equal(r.body.nos, 1, 'one charge on the car'); assert.equal(r.body.spent, RACES.NOS_COST, 'the charge cost cash');
+assert.equal((await meOf(racer.token)).cash, nosPre - RACES.NOS_COST, 'the NOS burned cash (a §10.4 sink)');
+assert(board = (await call('GET', '/v1/races', { token: racer.token })).body, 'board reads');
+assert.equal(board.cars.find((c) => c.id === myCar).nos, 1, 'the board surfaces the NOS charge');
+// fill to the cap, then refuse
+for (let i = 1; i < RACES.NOS_MAX; i++) await call('POST', `/v1/races/nos/${myCar}`, { token: racer.token });
+assert.equal((await call('POST', `/v1/races/nos/${myCar}`, { token: racer.token })).body.error, 'maxed', `NOS caps at ${RACES.NOS_MAX}`);
+// spend one on a PvE race — a charge is consumed win/lose
+const nosCarPre = (await pool.query(`SELECT nos FROM cars WHERE id='${myCar}'`)).rows[0].nos;
+r = await call('POST', '/v1/races/npc', { token: racer.token, body: { car: myCar, tier: 'backalley', nos: true } });
+assert.equal(r.code, 200, 'the nitrous run runs'); assert.equal(r.body.nos, true, 'the response flags the NOS burn');
+assert.equal((await pool.query(`SELECT nos FROM cars WHERE id='${myCar}'`)).rows[0].nos, nosCarPre - 1, 'one charge consumed (win or lose)');
+
+// ── STEP TWO — PINK SLIPS: race for the car itself (a §10.4-neutral ownership transfer) ──
+// a fresh pair — the shark (monster) vs the mark (junker); the mark puts his junker up for pinks
+const shark = await mk('Pink Shark'); const mark = await mk('Pinkslip Mark');
+await pool.query(`UPDATE characters SET respect=3600, speed=200 WHERE id='${shark.id}'`);
+await pool.query(`UPDATE characters SET respect=3600, speed=5 WHERE id='${mark.id}'`);
+await seedCash(shark.id, 100000); await seedCash(mark.id, 100000);
+const sharkCar = await mkCar(shark.id, 'pigeon', 'stock', 0);
+const markCar = await mkCar(mark.id, 'junker', 'stock', 0);
+const carsBefore = Number((await pool.query('SELECT COUNT(*) s FROM cars')).rows[0].s); // car conservation baseline (both cars now exist)
+// gate: can't race for pinks a car that isn't offered
+assert.equal((await call('POST', `/v1/races/pinks/${mark.id}`, { token: shark.token, body: { myCar: sharkCar, theirCar: markCar } })).body.error, 'not_offered', "can't take a car that isn't up for pinks");
+// the mark offers his junker for pinks (consent-by-listing)
+r = await call('POST', `/v1/races/pinkslip/${markCar}`, { token: mark.token, body: { on: true } });
+assert.equal(r.code, 200, 'the junker is up for pinks'); assert.equal(r.body.pinkSlip, true, 'flagged for pinks');
+assert((await call('GET', '/v1/races', { token: shark.token })).body.strip.find((s) => s.carId === markCar && s.forPinks), 'the strip shows the pink-slip car');
+// the shark wins the pink-slip race → TAKES the mark's junker (ownership transfer)
+r = await call('POST', `/v1/races/pinks/${mark.id}`, { token: shark.token, body: { myCar: sharkCar, theirCar: markCar } });
+assert.equal(r.code, 200, 'the pink-slip race runs'); assert.equal(r.body.win, true, 'the monster takes the pinks');
+assert.equal(r.body.forPinks, true, 'flagged a pink-slip race'); assert.equal(r.body.wonCar.id, markCar, "won the mark's car");
+assert.equal((await pool.query(`SELECT character_id FROM cars WHERE id='${markCar}'`)).rows[0].character_id, shark.id, "the mark's junker changed hands to the shark");
+assert.equal((await pool.query(`SELECT pink_slip FROM cars WHERE id='${markCar}'`)).rows[0].pink_slip, false, 'the pink-slip flag cleared on transfer');
+assert.equal(Number((await pool.query('SELECT COUNT(*) s FROM cars')).rows[0].s), carsBefore, 'car conservation holds — a pink-slip win moves a car, never mints one');
+// no cash moved (a pink-slip race is pure ownership — no wager, no ledger)
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='race:pink'")).rows[0].s), 0, 'no race:pink ledger row — cars transfer by ownership, §10.4-neutral');
+// the shark now has two cars; the mark has none
+assert.equal(Number((await pool.query(`SELECT COUNT(*) s FROM cars WHERE character_id='${shark.id}'`)).rows[0].s), 2, 'the shark holds both cars');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) s FROM cars WHERE character_id='${mark.id}'`)).rows[0].s), 0, 'the mark walks home');
+
 // ── the leaderboard: THE WHEEL ranks the winningest drivers ──
 const lb = (await call('GET', '/v1/leaderboard/races', { token: racer.token })).body;
 assert(lb.drivers.find((d) => d.name === 'Speed Demon' && d.wins >= 2), 'the racer ranks on THE WHEEL');
@@ -142,5 +186,5 @@ assert(vocab.ok, `race: rides the cash vocabulary (${JSON.stringify(vocab.unknow
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cashCheck.drift, seeded, `the only cash drift is the seeded stake (${seeded}) — every race spend/purse/wager reconciles`);
 
-console.log('✅ Street Races test passed — car power (sqrt value + tune + wheelman speed), the PvE circuit (fee BURNS win/lose + bounded purse on a win, level/tier gates), tuning (cash sink + power gain + the cap), PvP wager races (the casino:pvp taxed transfer — winner nets wager minus rake, half to the street tax, the loser car damaged; self/min/max/not_listed/limit gates), THE WHEEL legend + the leaderboard, and section 10.4 (race: vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
+console.log('✅ Street Races test passed — car power (sqrt value + tune + wheelman speed), the PvE circuit (fee BURNS win/lose + bounded purse on a win, level/tier gates), tuning (cash sink + power gain + the cap), PvP wager races (the casino:pvp taxed transfer — winner nets wager minus rake, half to the street tax, the loser car damaged; self/min/max/not_listed/limit gates), THE WHEEL legend + the leaderboard; STEP TWO: NITROUS (a per-car cash-sink charge, capped, consumed win/lose for a power bump) and PINK SLIPS (race for the car itself — the winner TAKES the loser car, a §10.4-neutral ownership transfer: car conservation holds, no ledger row, no cash moves), and section 10.4 (race: vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
 await app.close();

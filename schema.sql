@@ -195,6 +195,8 @@ CREATE TABLE IF NOT EXISTS cars (
   pledged BOOLEAN NOT NULL DEFAULT false,        -- Loan step 2: pledged as loan collateral — locked like `listed` (findCar/list reject); seized to the lender on default
   tune INT NOT NULL DEFAULT 0,                    -- STREET RACES: engine tune level (a cash-sink progression that adds race power)
   race_limit INT,                                 -- STREET RACES: listed to race for a wager up to this (consent-by-listing, the fade/bout pattern); NULL = not on the strip
+  pink_slip BOOLEAN NOT NULL DEFAULT false,       -- STREET RACES step 2: offered for PINKS — the winner of a pink-slip race TAKES this car (ownership transfer, §10.4-neutral, cars conserve by row count). Cleared on a race/transfer.
+  nos INT NOT NULL DEFAULT 0,                      -- STREET RACES step 2: nitrous charges (a per-car consumable — buy at a cash sink, spend one for a one-race power bump; absolute writes, pg-mem-safe)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- THE PORT — maritime smuggling. A boat is an ownable vessel (bought like a car): a hold (cargo scale) +

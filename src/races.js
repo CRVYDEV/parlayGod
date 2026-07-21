@@ -24,9 +24,18 @@ const raceable = (h, carId) => {
   if (car.pledged) throw new GameError('unavailable', "It's pledged as collateral — square the loan first.");
   return car;
 };
+// step 2 — spend one NITROUS charge on the actor's OWN car for a one-race power bump (consumed win/lose).
+// Absolute write (pg-mem INT-arithmetic quirk). Returns the power bonus (0 if not used / no charge).
+async function spendNos(client, car, use) {
+  if (!use || Number(car.nos || 0) <= 0) return 0;
+  const nn = Number(car.nos) - 1;
+  await client.query('UPDATE cars SET nos=$2 WHERE id=$1', [car.id, nn]);
+  car.nos = nn;
+  return RACES.NOS_POWER;
+}
 
-// POST /v1/races/npc {car, tier} — the PvE circuit. Fee BURNS win/lose; a win pays the bounded purse.
-export async function raceNpc(ch, carId, tierId, client, h) {
+// POST /v1/races/npc {car, tier, nos} — the PvE circuit. Fee BURNS win/lose; a win pays the bounded purse.
+export async function raceNpc(ch, carId, tierId, useNos, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No racing from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to drive — see the Doc.");
   const lvl = levelOf(Number(ch.respect));
@@ -42,24 +51,40 @@ export async function raceNpc(ch, carId, tierId, client, h) {
   ch.cash = Number(ch.cash) - tier.fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tier.fee, reason: 'race:fee' });
   await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, new Date(now.getTime() + raceCdMs())]);
+  const nos = await spendNos(client, car, useNos); // step 2 — one-race nitrous bump (consumed win/lose)
   const power = carPower(car.model_id, car.trim_id, car.tune, ch.speed, car.dmg);
-  const mine = power + rand(0, RACES.VARIANCE), field = tier.fieldPower + rand(0, RACES.VARIANCE);
+  const mine = power + nos + rand(0, RACES.VARIANCE), field = tier.fieldPower + rand(0, RACES.VARIANCE);
   const win = mine > field;
-  await h.rngLog(client, ch.id, `race:npc:${tier.id}`, mine, `${win ? 'win' : 'loss'} (${mine} vs ${field})`);
+  await h.rngLog(client, ch.id, `race:npc:${tier.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} (${mine} vs ${field})`);
   if (win) {
     ch.cash = Number(ch.cash) + tier.purse; // the PURSE — a bounded faucet, only on a win
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: tier.purse, reason: 'race:purse' });
     await bumpWheel(client, ch.account_id);
     await h.track(client, ch.account_id, 'race', { mode: 'npc', tier: tier.id, win: true });
     bus.emit('streets', { type: 'race_win', by: ch.name, race: tier.name, purse: tier.purse });
-    return { ok: true, win: true, tier: tier.id, purse: tier.purse, fee: tier.fee, net: tier.purse - tier.fee, power: mine, field };
+    return { ok: true, win: true, tier: tier.id, purse: tier.purse, fee: tier.fee, net: tier.purse - tier.fee, power: mine, field, nos: nos > 0 };
   }
   // a loss dings the car (the existing damage mechanic — absolute write, pg-mem-safe)
   const nd = Math.min(100, Number(car.dmg) + RACES.LOSS_DMG);
   await client.query('UPDATE cars SET dmg=$2 WHERE id=$1', [car.id, nd]);
   car.dmg = nd;
   await h.track(client, ch.account_id, 'race', { mode: 'npc', tier: tier.id, win: false });
-  return { ok: true, win: false, tier: tier.id, fee: tier.fee, net: -tier.fee, dmg: nd, power: mine, field };
+  return { ok: true, win: false, tier: tier.id, fee: tier.fee, net: -tier.fee, dmg: nd, power: mine, field, nos: nos > 0 };
+}
+
+// POST /v1/races/nos/:carId — buy a NITROUS charge for a car (a §10.4 cash sink; capped NOS_MAX).
+export async function buyNos(ch, carId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No shop time from lockup.');
+  const car = raceable(h, carId);
+  if (Number(car.nos || 0) >= RACES.NOS_MAX) throw new GameError('maxed', `That car already holds ${RACES.NOS_MAX} charges.`);
+  if (Number(ch.cash) < RACES.NOS_COST) throw new GameError('cash', `A nitrous charge costs $${RACES.NOS_COST}.`);
+  ch.cash = Number(ch.cash) - RACES.NOS_COST;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -RACES.NOS_COST, reason: 'race:nos' });
+  const nn = Number(car.nos || 0) + 1;
+  await client.query('UPDATE cars SET nos=$2 WHERE id=$1', [car.id, nn]); // absolute write (pg-mem-safe)
+  car.nos = nn;
+  await h.track(client, ch.account_id, 'race', { mode: 'nos', charges: nn });
+  return { ok: true, carId: car.id, nos: nn, spent: RACES.NOS_COST };
 }
 
 // POST /v1/races/tune/:carId — spend cash to add a tune level (a §10.4 sink + car progression).
@@ -95,6 +120,16 @@ export async function unlistRace(ch, carId, client, h) {
   return { ok: true, carId: car.id };
 }
 
+// POST /v1/races/pinkslip/:carId {on} — offer (or pull) a car for PINKS. When on, any challenger can
+// race you for the title: the winner TAKES the loser's car. Consent-by-listing (the fade/bout pattern).
+export async function pinkSlipList(ch, carId, on, client, h) {
+  const car = raceable(h, carId);
+  const flag = on !== false; // default on; explicit false pulls it
+  await client.query('UPDATE cars SET pink_slip=$2 WHERE id=$1', [car.id, flag]);
+  car.pink_slip = flag;
+  return { ok: true, carId: car.id, pinkSlip: flag };
+}
+
 // POST /v1/races/challenge/:ownerId {myCar, theirCar, wager} — a PvP wager race (two-party, the
 // audited casino:pvp taxed transfer, NO escrow — one atomic txn). withTwoCharacters(challenger, owner).
 export async function raceChallenge(ch, opponent, body, client, h) {
@@ -124,7 +159,8 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket for the wager.');
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover the wager right now.");
   let mine, theirs;
-  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg);
+  const nos = await spendNos(client, my, body?.nos); // step 2 — the challenger may burn one nitrous charge (their own car only; the passive owner's isn't touched without consent)
+  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos;
   const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg);
   do { mine = mp + rand(0, RACES.VARIANCE); theirs = tp + rand(0, RACES.VARIANCE); } while (mine === theirs);
   const win = mine > theirs;
@@ -161,6 +197,58 @@ export async function raceChallenge(ch, opponent, body, client, h) {
     you: { car: winCar === my ? my.model_id : my.model_id, score: mine }, them: { score: theirs } };
 }
 
+// POST /v1/races/pinkslip/:ownerId {myCar, theirCar, nos} — a PINK-SLIP race: the winner TAKES the loser's
+// raced car. §10.4-NEUTRAL (an ownership transfer — cars conserve by ROW COUNT, no ledger — the chop/market-
+// seize precedent; can push the winner past GARAGE_CAP, the market-win precedent). withTwoCharacters. The
+// challenger stakes `myCar` by racing; the owner consents by pink-slip-listing `theirCar`. No cash moves.
+export async function pinkSlipRace(ch, opponent, body, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No racing from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to drive.");
+  if (opponent.id === ch.id) throw new GameError('self', "You don't race your own garage.");
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', 'No taking family iron.');
+  if (jailed(opponent) || hospitalized(opponent)) throw new GameError('unavailable', "They can't make the start line right now.");
+  const now = new Date();
+  if (ch.race_at && new Date(ch.race_at) > now) throw new GameError('cooldown', 'Your ride needs to cool down before the next run.');
+  const [first, second] = [String(body?.myCar || ''), String(body?.theirCar || '')].sort();
+  await client.query('SELECT 1 FROM cars WHERE id=$1 FOR UPDATE', [first]);
+  await client.query('SELECT 1 FROM cars WHERE id=$1 FOR UPDATE', [second]);
+  const my = (await client.query('SELECT * FROM cars WHERE id=$1', [body?.myCar])).rows[0];
+  const their = (await client.query('SELECT * FROM cars WHERE id=$1', [body?.theirCar])).rows[0];
+  if (!my || my.character_id !== ch.id) throw new GameError('no_car', 'Pink-slip one of your own cars.');
+  if (!their || their.character_id !== opponent.id) throw new GameError('no_opponent_car', "That car isn't in their garage.");
+  if (my.listed || my.pledged) throw new GameError('unavailable', "Your car is on the block or pledged — can't put it up for pinks.");
+  if (their.listed || their.pledged) throw new GameError('their_unavailable', 'Their car is on the block or pledged.');
+  if (!their.pink_slip) throw new GameError('not_offered', "That car isn't up for pinks.");
+  let mine, theirs;
+  const nos = await spendNos(client, my, body?.nos); // the challenger may burn one nitrous charge on their own car
+  const mp = carPower(my.model_id, my.trim_id, my.tune, ch.speed, my.dmg) + nos;
+  const tp = carPower(their.model_id, their.trim_id, their.tune, opponent.speed, their.dmg);
+  do { mine = mp + rand(0, RACES.VARIANCE); theirs = tp + rand(0, RACES.VARIANCE); } while (mine === theirs);
+  const win = mine > theirs;
+  const winner = win ? ch : opponent, loser = win ? opponent : ch;
+  const wonCar = win ? their : my, lostBy = loser; // the LOSER's raced car changes hands to the winner
+  // TRANSFER the loser's car to the winner — reset listings/pinks/nitrous on the new title (§10.4-neutral,
+  // no ledger row; car conservation counts rows). The winner may exceed GARAGE_CAP (the market-win precedent).
+  await client.query('UPDATE cars SET character_id=$2, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [wonCar.id, winner.id]);
+  // keep the actor's in-memory garage honest for this response (the next view reload is authoritative)
+  if (winner.id === ch.id) { const w = { ...wonCar, character_id: ch.id, race_limit: null, pink_slip: false, nos: 0 }; h.owned.cars.push(w); }
+  else h.owned.cars = (h.owned.cars || []).filter((c) => c.id !== wonCar.id);
+  // cool down the challenger (win or lose) AND the winner (so an owner-account can't be fed WHEEL wins by
+  // alt challengers throwing junk cars — the raceChallenge LOW-1 posture); a losing owner isn't cooled.
+  const cd = new Date(now.getTime() + raceCdMs());
+  await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, cd]);
+  if (winner.id !== ch.id) await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [winner.id, cd]);
+  // WHEEL credit gated on the loser's level (anti-Sybil — the raceChallenge floor; a pink win is already a
+  // real car-cost play, but keep the status floor consistent so a ring can't pad the board with junk iron).
+  if (levelOf(Number(loser.respect)) >= RACES.WHEEL_MIN_LVL) await bumpWheel(client, winner.account_id);
+  await h.rngLog(client, ch.id, `race:pink:${their.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} for pinks (${mine} vs ${theirs})`);
+  await h.notify(client, opponent.id, 'race_pink', { from: ch.name, theyWon: !win, car: wonCar.model_id });
+  bus.emit('streets', { type: 'race_pink', by: ch.name, vs: opponent.name, win });
+  await h.track(client, ch.account_id, 'race', { mode: 'pink', win });
+  return { ok: true, win, forPinks: true, wonCar: win ? { id: wonCar.id, model: wonCar.model_id } : null,
+    lostCar: win ? null : { id: wonCar.id, model: wonCar.model_id }, you: mine, them: theirs };
+}
+
 // GET /v1/races — the strip: your cars (power + tune + listing), the PvE card, the open PvP field, your legend.
 export async function raceBoard(ch, client, h) {
   const now = Date.now();
@@ -168,15 +256,18 @@ export async function raceBoard(ch, client, h) {
     id: c.id, model: c.model_id, trim: c.trim_id, dmg: Number(c.dmg), tune: Number(c.tune || 0),
     power: carPower(c.model_id, c.trim_id, c.tune, ch.speed, c.dmg),
     raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null,
+    pinkSlip: !!c.pink_slip, nos: Number(c.nos || 0),
   }));
-  // the open strip — other players' listed cars (a power BAND, never the exact figure; the convoy-band rule)
+  // the open strip — other players' cars taking a race (cash wager OR pinks). A power BAND, never the exact
+  // figure (the convoy-band rule); `forPinks` flags the ones you can race for the title.
   const strip = (await client.query(
-    `SELECT c.id, c.model_id, c.trim_id, c.tune, c.dmg, c.race_limit, c.character_id, o.name owner, o.speed
+    `SELECT c.id, c.model_id, c.trim_id, c.tune, c.dmg, c.race_limit, c.pink_slip, c.character_id, o.name owner, o.speed
        FROM cars c JOIN characters o ON o.id = c.character_id AND o.alive
-      WHERE c.race_limit IS NOT NULL AND c.character_id <> $1 AND NOT c.listed AND NOT c.pledged
-      ORDER BY c.race_limit DESC LIMIT 30`, [ch.id])).rows.map((r) => {
+      WHERE (c.race_limit IS NOT NULL OR c.pink_slip) AND c.character_id <> $1 AND NOT c.listed AND NOT c.pledged
+      ORDER BY c.race_limit DESC NULLS LAST LIMIT 30`, [ch.id])).rows.map((r) => {
     const p = carPower(r.model_id, r.trim_id, r.tune, r.speed, r.dmg);
-    return { ownerId: r.character_id, owner: r.owner, carId: r.id, model: r.model_id, limit: Math.floor(Number(r.race_limit)),
+    return { ownerId: r.character_id, owner: r.owner, carId: r.id, model: r.model_id,
+      limit: r.race_limit != null ? Math.floor(Number(r.race_limit)) : null, forPinks: !!r.pink_slip,
       band: p >= 500 ? 'a monster' : p >= 250 ? 'serious iron' : p >= 100 ? 'quick' : 'a runabout' };
   });
   const wins = Number((await client.query('SELECT race_wins FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.race_wins || 0);
@@ -185,6 +276,7 @@ export async function raceBoard(ch, client, h) {
     cars, strip,
     tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse, fieldPower: t.fieldPower })),
     tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX },
+    nos: { cost: RACES.NOS_COST, max: RACES.NOS_MAX, power: RACES.NOS_POWER },
     legend: { wins, rank: raceRankOf(wins).name }, cooldownSeconds: cdLeft,
   };
 }
