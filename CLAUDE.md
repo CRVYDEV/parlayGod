@@ -1284,6 +1284,37 @@ covers the gates (free/no-kit/crew_short/not_leader), the staked-kit lifecycle, 
 + WANTED + heat), a forced fail (whole crew in the hole + longer stretch), and the disband + stale-sweep kit
 refund. Suite 23/23 + sim drift-0. Step five deferred: prison factions/shot-callers, richer yard incidents,
 the break RAT (the heist-rat twin).
+**THE PEN — step five: PRISON FACTIONS + THE BREAK RAT + richer yard incidents — BUILT** (`src/pen.js`,
+`test/pen.js`; `PEN` rules-tail additions; new `characters.pen_faction` col + `pen_break_members.ratted`).
+Three drops, all leaning on existing machinery, §10.4-untouched (status/pacing only — no currency moves).
+**(1) PRISON FACTIONS + SHOT-CALLERS** (`PEN.FACTIONS` — Northside/Dixie/Muertos/Brand): a jailed inmate
+`joinFaction` (`POST /v1/pen/faction/:id`, insideOnly, `bad_faction`/`already` gates) / `leaveFaction`
+(`POST /v1/pen/faction`) runs with a yard crew. `factionCover(client, target)` (a point-in-time read,
+never stored) counts the target's LIVE jailed same-crew mates → `cover = min(FACTION_COVER_CAP 0.24,
+mates × FACTION_COVER 0.08)`, and the most-feared (highest `season_kills`, ties count) is the SHOT-CALLER
+(`+SHOTCALLER_COVER 0.10`). Two effects: **shank cover** — a shank's success `p` subtracts the VICTIM's
+`factionCover` (a crew watches its own back), and **yard omertà** — you can't shank your own crew (a `crew`
+gate before the shiv check; a rat target voids it, the family-omertà precedent). Pure derived status —
+`pen_faction` is written by DIRECT SQL (outside persistCharacter's positional UPDATE, the `active_at`
+pattern) so the write survives persist; the board surfaces `factions`/`faction {id,name,mates,cover%,
+shotCaller}` + a per-roster-inmate crew chip. **(2) THE BREAK RAT** (the heist-rat twin) — `ratBreak`
+(`POST /v1/pen/break/:id/rat`, `pen_break_members.ratted`, `no_break`/`not_crew` gates): any crew member
+silently tips the guards. `executeBreak` reads the ratted flags under the crew lock and, if any, the break
+BLOWS regardless of the roll — the rat cuts a deal (`BREAK_RAT_CUT_S` 1h OFF their sentence, no beating),
+the honest crew eats `BREAK_CAUGHT_ADD_S` more time + a beating, and EVERYONE (incl. the rat) goes to the
+hole so the public roster never outs the only free man; the feed only ever says "somebody talked" (never
+named — the heist-rat anonymity precedent). **(3) RICHER YARD INCIDENTS** — `YARD_EVENTS` gained `gangwar`
+(shankAdd +0.15, bribeMult 1.5) + `newfish` (protMult 1.5), each ONE touchpoint (the decree precedent).
+§10.4: no new reasons (factions/rat move no currency; the ratted break's only ledgered event is the
+already-spent cutkit). Console: a "Yard Crews" section (your crew + cover% + SHOT-CALLER chip + join/leave,
+crew chips on the roster) + a dimmed "rat it out" button on your crew-break card. `test/pen.js` covers the
+faction join/leave/gates, the board cover + shot-caller derivation moving to the most-feared (Bo's kills
+flip it off Al), the yard-omertà shank block (`crew`) vs a rival staying fair game (`no_shiv`), and the
+break rat (the break BLOWS at a guaranteed-success roll, the honest leader holed + longer stretch, the rat
+holed but time OFF, the feed says "talked"). Suite 30/30 + sim drift-0. All numbers (`FACTION_COVER`/`_CAP`,
+`SHOTCALLER_COVER`, `BREAK_RAT_CUT_S`, the two yard incidents) are founder sign-off levers. **The Pen is
+now feature-complete** (yard/work/commissary/protection/bribe/shank → the hole/yard incidents/burner → the
+solo + co-op breakout → factions/shot-callers + the break rat).
 
 A **three-lens red-team over Pen step two** (`AUDIT-the-pen-step-two.md`: the burner bypass, the hole,
 yard incidents + §10.4) closed one HIGH + three MED/LOW (regression per fix): a $25k burner **defeated

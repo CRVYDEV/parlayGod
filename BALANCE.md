@@ -730,6 +730,26 @@ persist-clobber — and found one HIGH (fixed):
   sentences cleared for one $50k kit. Consistent with "the leader stakes the kit"; price it deliberately.
   Dials: charge joiners a kit/energy, lower `COOP_BASE`/`COOP_PER_EXTRA`, or cap the crew payoff.
 
+## Post-signing addendum — The Pen step five: PRISON FACTIONS + THE BREAK RAT + yard incidents (sign-off levers)
+
+All §10.4-clean (status/pacing only — factions and the rat move no currency; the ratted break's sole
+ledgered event is the already-spent cutkit). All numbers are founder sign-off levers:
+- `PEN.FACTION_COVER` 0.08 per live jailed same-crew mate, `FACTION_COVER_CAP` 0.24 (so cover tops out at
+  3 mates), `SHOTCALLER_COVER` +0.10 for the crew's most-feared (highest `season_kills`). The cover is
+  SUBTRACTED from a shank's success `p` against a crew member, and same-crew shanks are blocked outright
+  (yard omertà; a rat target voids it). Watch: whether stacked cover + protection makes a well-connected
+  inmate effectively un-shankable — the dials are the two cover constants + the cap.
+- `PEN.BREAK_RAT_CUT_S` 3600 (1h off the rat's sentence). Self-ratting is −EV by construction (you still
+  eat a blown break + the hole), the heist-rat argument; the cut is small enough not to be a farm.
+- Yard incidents added: `gangwar` (shankAdd +0.15, bribeMult 1.5) + `newfish` (protMult 1.5) — each a
+  one-touchpoint block-wide daily modifier (the decree precedent), the same weighting note as step two
+  (a hard-block/perturb day is ~drawn share of the pool; if the loop feels too often gated, thin the deck).
+
+Design intent: factions are a purely social/defensive status layer (cover, not power — they move no money
+and grant no offense bonus), and the break rat imports the heist-rat's betrayal drama into the co-op break
+(the crew never learns the name — the feed only says "somebody talked"). Nothing here touches the signed
+economy.
+
 ## THE WIRE — the intelligence terminal (proposed levers, sign-off pending)
 
 Off-chain, §10.4-clean recurring $OMR sinks (every burn rides the existing `intel:*` omr vocabulary +

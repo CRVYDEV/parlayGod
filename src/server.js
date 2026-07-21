@@ -610,6 +610,13 @@ export async function buildServer() {
   // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)
   app.post('/v1/pen/burner/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.burnerHit(ch, victim, client, h, req.body?.tier)));
+  // step five: prison factions (join/leave for cover) + the break RAT
+  app.post('/v1/pen/faction/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.joinFaction(ch, req.params.id, client, h)));
+  app.post('/v1/pen/faction', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveFaction(ch, client, h)));
+  app.post('/v1/pen/break/:id/rat', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.ratBreak(ch, req.params.id, client, h)));
 
   // LOAN SHARKING — the Shylock: escrowed offers, a taken loan is a live debt, default is enforced.
   app.get('/v1/loans', { preHandler: auth }, async (req) => {

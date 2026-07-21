@@ -1007,8 +1007,29 @@ export const PEN = {
     { id: 'riot',     name: 'Riot in the Block',  shankAdd: 0.2, protMult: 0.5,   desc: 'The yard is up. Blood is cheap and the boss cuts a deal on cover.' },
     { id: 'visit',    name: 'Family Visit Day',   bribeMult: 0.5,                 desc: 'Brass wants the place looking civilised — the guard takes less to look away.' },
     { id: 'toss',     name: 'Cell Toss',          commissaryClosed: true,         desc: 'Guards are tearing the block apart — the guard won’t move contraband today.' },
+    // step five — two more incidents (reuse the existing touchpoint fields; no new plumbing)
+    { id: 'gangwar',  name: 'War in the Yard',    shankAdd: 0.15, bribeMult: 1.5, desc: 'The crews are at each other — blood in the dust, and the guards want more to look away.' },
+    { id: 'newfish',  name: 'A Bus of New Fish',  protMult: 1.5,                  desc: 'Fresh transfers off the bus — the yard boss charges a premium while he sizes them up.' },
   ],
+  // step five — PRISON FACTIONS: yard crews an inmate runs with for cover. Joining is free; while jailed
+  // in a faction with fellow inmates, incoming shanks are HARDER (the crew watches your back) and you
+  // can't be shanked BY your own crew (omertà inside). The SHOT-CALLER — the most-feared jailed member
+  // (by this street's season_kills) — leads: they're individually harder to touch. Pure status + a shank
+  // modifier; zero §10.4. The BREAK RAT (the heist-rat twin): a co-op-break crew member silently tips the
+  // guards — the break blows, the crew eats the hole + a longer stretch, the rat cuts a deal (a sentence
+  // cut) and is NEVER named. All numbers are sign-off levers.
+  FACTIONS: [
+    { id: 'northside', name: 'The Northside Crew' },
+    { id: 'dixie',     name: 'The Dixie Mob' },
+    { id: 'muertos',   name: 'Los Muertos' },
+    { id: 'brand',     name: 'The Brand' },
+  ],
+  FACTION_COVER: 0.08,        // shank-defense per active jailed faction-mate…
+  FACTION_COVER_CAP: 0.24,    // …capped (a crew, not an army)
+  SHOTCALLER_COVER: 0.1,      // the shot-caller (top season_kills, jailed) is individually harder to touch
+  BREAK_RAT_CUT_S: 3600,      // the snitch's deal — an hour off the rat's OWN sentence (a co-op break that got ratted)
 };
+export const penFactionOf = (id) => PEN.FACTIONS.find((f) => f.id === id) || null;
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
 export const yardEventById = (id) => PEN.YARD_EVENTS.find((e) => e.id === id) || PEN.YARD_EVENTS[0];
 // today's yard incident — seed-drawn, town-wide, deterministic (the cityEventOf shape)

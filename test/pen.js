@@ -406,9 +406,58 @@ await seedCh(dm.id, `${jailFuture}, cash=1000000`); // the survivor is still jai
 await call('POST', '/v1/pen/buy/cutkit', { token: dm.token });
 assert.equal((await call('POST', '/v1/pen/break/plan', { token: dm.token })).code, 200, 'the freed member can plan a fresh break, not bricked by the dead leader\'s plan');
 
+// ══ STEP FIVE — PRISON FACTIONS + SHOT-CALLERS ══
+const fal = await mk('Faction Al'); const fbo = await mk('Faction Bo'); const fcy = await mk('Faction Cy');
+await seedCh(fal.id, `${jailFuture}, energy=200`); await seedCh(fbo.id, `${jailFuture}`); await seedCh(fcy.id, `${jailFuture}`);
+const freeFred = await mk('Yardless Yuri');
+assert.equal((await call('POST', '/v1/pen/faction/northside', { token: freeFred.token })).body.error, 'free', 'no yard crew on the outside');
+assert.equal((await call('POST', '/v1/pen/faction/nope', { token: fal.token })).body.error, 'bad_faction', 'no such crew runs this yard');
+assert.equal((await call('POST', '/v1/pen/faction/northside', { token: fal.token })).code, 200, 'Al runs with the Northside Crew');
+assert.equal((await call('POST', '/v1/pen/faction/northside', { token: fbo.token })).code, 200, 'Bo runs with him');
+assert.equal((await call('POST', '/v1/pen/faction/muertos', { token: fcy.token })).code, 200, 'Cy runs with Los Muertos');
+assert.equal((await call('POST', '/v1/pen/faction/northside', { token: fal.token })).body.error, 'already', 'no double-join');
+// the board surfaces your crew + the cover it buys: 1 mate (8%) + the shot-caller bonus (Al ties on kills)
+board = (await call('GET', '/v1/pen', { token: fal.token })).body;
+assert.equal(board.faction.id, 'northside', 'the board shows your crew');
+assert.equal(board.faction.mates, 1, 'one fellow inmate in the crew (Bo)');
+assert.equal(board.faction.shotCaller, true, 'Al is the shot-caller (nobody out-kills him yet)');
+assert.equal(board.faction.cover, Math.round((PEN.FACTION_COVER + PEN.SHOTCALLER_COVER) * 100), 'cover = one mate + the shot-caller leadership');
+// SHOT-CALLER moves to the most-feared: give Bo kills → Bo calls the shots, Al loses the leadership cover
+await seedCh(fbo.id, 'season_kills=5');
+board = (await call('GET', '/v1/pen', { token: fal.token })).body;
+assert.equal(board.faction.shotCaller, false, 'Al is no longer the shot-caller');
+assert.equal(board.faction.cover, Math.round(PEN.FACTION_COVER * 100), 'so Al keeps just the one-mate cover');
+assert.equal((await call('GET', '/v1/pen', { token: fbo.token })).body.faction.shotCaller, true, 'Bo now calls the shots');
+// YARD OMERTÀ: you don't move on your own crew (fires before the shiv check); a rival crew is fair game
+assert.equal((await call('POST', `/v1/pen/shank/${fbo.id}`, { token: fal.token })).body.error, 'crew', "you don't shank your own crew");
+assert.equal((await call('POST', `/v1/pen/shank/${fcy.id}`, { token: fal.token })).body.error, 'no_shiv', 'a rival crew is fair game — blocked only for want of a shiv, not omertà');
+assert.equal((await call('POST', '/v1/pen/faction', { token: fcy.token })).body.left, 'muertos', 'Cy walks away from his crew');
+
+// ══ STEP FIVE — THE BREAK RAT (the heist-rat twin) ══
+const ratLd = await mk('Rat Leader'); const ratMn = await mk('The Rat');
+await seedCh(ratLd.id, "jail_until = now() + interval '4 hours', cash=1000000, energy=200, health=100");
+await seedCh(ratMn.id, "jail_until = now() + interval '4 hours', cash=1000000, energy=200, health=100");
+await call('POST', '/v1/pen/buy/cutkit', { token: ratLd.token });
+const rplan = (await call('POST', '/v1/pen/break/plan', { token: ratLd.token })).body.id;
+assert.equal((await call('POST', `/v1/pen/break/${rplan}/join`, { token: ratMn.token })).code, 200, 'the rat joins the crew');
+assert.equal((await call('POST', `/v1/pen/break/${rplan}/rat`, { token: ratMn.token })).code, 200, 'the rat quietly tips the guards');
+const ratLdJail0 = new Date((await rawCh(ratLd.id)).jail_until).getTime();
+const ratMnJail0 = new Date((await rawCh(ratMn.id)).jail_until).getTime();
+process.env.PEN_BREAK_P = '1'; // even a guaranteed-success roll can't save a ratted break — it blows first
+const rgo = await call('POST', `/v1/pen/break/${rplan}/go`, { token: ratLd.token });
+delete process.env.PEN_BREAK_P;
+assert.equal(rgo.body.blown, true, 'a ratted break BLOWS — the guards were waiting');
+assert.equal(rgo.body.escaped, false, 'nobody goes over the wall');
+assert(/talked/i.test(rgo.body.message || ''), 'the feed only says somebody talked (the rat is never named)');
+const ratLdAfter = await rawCh(ratLd.id), ratMnAfter = await rawCh(ratMn.id);
+assert(new Date(ratLdAfter.hole_until) > new Date(), 'the honest leader is thrown in the hole');
+assert(new Date(ratLdAfter.jail_until).getTime() > ratLdJail0, 'and eats a longer stretch');
+assert(new Date(ratMnAfter.jail_until).getTime() < ratMnJail0, 'the RAT cut a deal — time OFF their sentence');
+assert(new Date(ratMnAfter.hole_until) > new Date(), 'but the rat is holed WITH the crew so the roster never outs them');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit)');
+console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked)');
 process.exit(0);
