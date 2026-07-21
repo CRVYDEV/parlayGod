@@ -1351,6 +1351,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // deleted — so sweep them by the runner's boats FIRST (before the loop removes the boats). Pure
   // row-hygiene (boat_id never re-collides), the npc_hits both-sides precedent.
   await client.query('DELETE FROM port_intercepts WHERE boat_id IN (SELECT id FROM boats WHERE character_id=$1)', [victim.id]);
+  // territory step five: a dead made-man can't keep running an operation — clear their specialist post,
+  // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
+  // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
+  await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
   for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit

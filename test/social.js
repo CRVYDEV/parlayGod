@@ -929,9 +929,15 @@ await pool.query(`UPDATE territory_rackets SET kind='smuggling', op_at=NULL, scr
 r = await call('POST', '/v1/territory/docks/op', { token: don.token });
 assert.equal(r.body.op, 'ghost_route'); assert.equal(r.body.scrutiny, 0, 'ghosting clears the heat'); assert(r.body.ghostSeconds > 0, 'and opens a no-accrual window');
 // require a specialist for a special op; and unassign frees the slot
-await call('DELETE', '/v1/territory/docks/specialist', { token: don.token });
+assert.equal((await call('DELETE', '/v1/territory/docks/specialist', { token: don.token })).code, 200, 'the boss pulls the specialist');
 await pool.query(`UPDATE territory_rackets SET op_at=NULL WHERE district_id='docks'`);
 assert.equal((await call('POST', '/v1/territory/docks/op', { token: don.token })).body.error, 'no_specialist', 'no special op without a specialist');
+// RED-TEAM regression: the ghost window must SKIP its hours, not retroactively catch up once it ends.
+// Simulate the op ran 8h ago (scrutiny_at) with the 6h window ended 2h ago (op_ghost_until) — smuggling
+// net is 14−4=10/hr, so only the 2 post-window hours count → scrutiny ≈ 20, NOT 8h×10 = 80 (the old bug).
+await pool.query(`UPDATE territory_rackets SET scrutiny=0, scrutiny_at=now() - interval '8 hours', op_ghost_until=now() - interval '2 hours' WHERE district_id='docks'`);
+const ghScr = (await dkOp()).scrutiny;
+assert(ghScr >= 15 && ghScr <= 25, `only the post-ghost hours accrue (saw ${ghScr}, expected ~20 — not the caught-up ~80)`);
 // reset the operation to a clean tier-2 numbers op for the seizure test below
 await pool.query(`UPDATE territory_rackets SET kind='numbers', fortitude=0, scrutiny=0, op_ghost_until=NULL WHERE district_id='docks'`);
 // ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
