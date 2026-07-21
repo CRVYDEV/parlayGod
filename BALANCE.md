@@ -1136,3 +1136,19 @@ shape is **higher-VARIANCE, not higher-EV**. Measured at the two collection cade
   (net +6/hr → hot in ~10h → a daily collector sits ~14h above → P(raid) ~72% → net ~$377k/day, a real
   variance play like smuggling). Flagged, NOT retuned (ground rule #1 — it's an unsigned this-session
   default and the founder may accept a mild safe premium; the sim data is here to decide from).
+
+### RETUNES APPLIED (founder-directed 2026-07-21) — re-measured
+
+Founder signed off on both flagged findings above; applied + re-measured (`tools/sim.js`, §10.4 drift-0):
+- **Protection `scrutinyPerHr` 6 → 10.** Now hot in **10h** (was 30h), so a LAZY 24h collector faces
+  **P(raid) 72% → net ~$376k/day** (was a strict +15% free upgrade at $1.656M/day). Now a real
+  higher-VARIANCE play like smuggling — active collection (≤10h) still banks the full ×1.15. Intent met.
+- **Exhibition fees: journeyman $10k→$15k, gatekeeper $30k→$45k** (clubfighter untouched — new-player
+  entry stays cheap). Maxed-fighter best EV **+$41,237 → +$26,237/bout** (~$495k → **~$315k/day for a
+  maxed 3-stable**); fresh-signee EV unchanged (+$2,982/bout at clubfighter). A meaningful loss now stings
+  (9% chance of −$45k) so it's a genuine risk/reward, still a worthwhile endgame reward for a ~$1M stable.
+
+Both are now the recommended defaults (still sim-signed, not yet production-signed). Also fixed a
+PRE-EXISTING date-flaky test uncovered en route: `test/growth.js`'s kitchen Bureau-raid loop used a 30-min
+accrual window that, on a `heatDecay=2` city-event day, decayed heat 100→40 (below the raid threshold)
+before the roll — a 5-min window keeps heat ≥90 so the raid stays reachable on any day.
