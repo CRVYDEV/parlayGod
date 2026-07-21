@@ -281,3 +281,22 @@ Mirror the `OmertaFees` test shape (exact-fee / forward-to-wallet / monotonic-no
 Write **Tier A** first (it runs today against the built rail — the fastest proof), then **Tier C** with
 the contract, then **Tier B** with the watcher, then **Tier D** in the sim. Ship no hook to mainnet until
 Tier C's `forge test` passes and the whole thing clears the third-party contract audit.
+
+### BUILD STATUS (2026-07-21)
+- **Tier A — BUILT** (`test/vig.js`): a `source='trade'` producer drives `recordVigRevenue` →
+  `runVigBuyback` → reserve+prize → `runVigInvariants`, proving the split / idempotency / §10.4-neutrality
+  and that it WIDENS `extraction ≤ inflow`. Runs today; no chain needed.
+- **Tier B — BUILT (dormant)**: `src/vig.js` `recordTradeFee` (the `recordFeePayment` twin, self-txn'd,
+  `source='trade'`); `src/watcher.js` `syncTradeFees` (stream `'trades'`, its own cursor, confirmation-depth
+  + backfill + idempotent replay, gated by `TRADE_FEE_HOOK_ADDRESS`) + the viem `tradeFeeLogs` adapter;
+  wired into the worker's chain-sync tick. **Security: NO mod route books `source='trade'`** — the watcher
+  observing a real `TradeFeePaid` log is the sole producer, so the D-MED2 `ALLOW_MOD_REAL_REVENUE` gate
+  does not even apply (zero fabrication surface). Regression: `test/watcher.js` (the trade-fee stream).
+- **Tier C — REFERENCE DRAFT** (`omerta-contracts/reference/OmertaTradeFeeHook.sol` + `reference/README.md`):
+  the audit-ready hook draft, deliberately OUTSIDE the compile glob (`src/*.sol` only) so it never
+  masquerades as verified. It cannot be built/tested here (needs `@uniswap/v4-core` + `@uniswap/v4-periphery`
+  and a MINED hook address via Foundry `HookMiner` — the load-bearing v4 constraint — plus Foundry itself,
+  egress-blocked). Pre-mainnet gate: resolve the v4 deps, mine the address, `forge test` the five §7-C
+  properties, include in the third-party audit.
+- **Tier D — BUILT** (`tools/sim.js` P9.15): an analytic flywheel-contribution probe (out-of-band, zero
+  ledger rows — the fees.js precedent, so §10.4 is untouched). A sign-off number, not an assertion.

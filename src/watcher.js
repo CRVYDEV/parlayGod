@@ -11,6 +11,7 @@
 // The chain specifics (viem getLogs + ABI decode) live in a `source` adapter the caller passes,
 // so the cursor / confirmation / idempotency logic here is unit-testable with a mock source.
 import { recordFeePayment } from './fees.js';
+import { recordTradeFee } from './vig.js';
 import { markClaimed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
@@ -69,6 +70,20 @@ export async function syncClaimedEvents(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync the afterSwap→Vig hook's TradeFeePaid(nonce, amountWei) → recordTradeFee (source='trade',
+// idempotent on the nonce, real-only — the watcher is the sole producer). Same cursor + confirmation-
+// depth discipline as the fee stream. Dormant unless TRADE_FEE_HOOK_ADDRESS is set. Design §2.
+export async function syncTradeFees(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'trades', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.tradeFeeLogs(w.from, w.to);
+  let processed = 0;
+  for (const l of logs) { await recordTradeFee(pool, { nonce: l.nonce, amountWei: l.amount }); processed++; }
+  await setCursor(pool, 'trades', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // Build the viem-backed source adapter used in production (kept thin: the tested logic is above).
 // Returns null unless a real RPC + the relevant contract addresses are configured.
 export async function makeViemSource() {
@@ -77,9 +92,11 @@ export async function makeViemSource() {
   const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
   const feesAddr = process.env.OMERTA_FEES_ADDRESS;
   const claimAddr = process.env.VOUCHER_CLAIM_ADDRESS;
+  const hookAddr = process.env.TRADE_FEE_HOOK_ADDRESS; // the OMR/ETH pool's afterSwap→Vig hook
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
+  const tradeEv = parseAbiItem('event TradeFeePaid(uint256 indexed nonce, uint256 amountWei)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   return {
     head: () => client.getBlockNumber(),
@@ -97,6 +114,11 @@ export async function makeViemSource() {
       if (!claimAddr) return [];
       const logs = await client.getLogs({ address: claimAddr, event: claimedEv, ...range(from, to) });
       return logs.map((l) => ({ nonce: Number(l.args.nonce) }));
+    },
+    tradeFeeLogs: async (from, to) => {
+      if (!hookAddr) return [];
+      const logs = await client.getLogs({ address: hookAddr, event: tradeEv, ...range(from, to) });
+      return logs.map((l) => ({ nonce: Number(l.args.nonce), amount: l.args.amountWei?.toString(), txHash: l.transactionHash }));
     },
   };
 }

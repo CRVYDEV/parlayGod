@@ -67,6 +67,23 @@ export async function recordVigRevenue(client, { source, ref, kind, amountWei })
   return { recorded: true, vigEth };
 }
 
+// ── the afterSwap→Vig hook's revenue ingestion (the recordFeePayment twin; chain-dormant, watcher-driven) ──
+// A `TradeFeePaid(nonce, amountWei)` log from the OMR/ETH pool's afterSwap hook → the Vig's share, through
+// the SAME rail as gameplay fees (recordVigRevenue splits VIG_BPS, idempotent on source+ref). Design:
+// omerta-uniswap-hooks-design.md §2. Security posture: there is NO mod route for trade fees BY DESIGN —
+// the on-chain watcher is the ONLY producer, so unlike fees/store/bonds (which carry a QA mod route behind
+// ALLOW_MOD_REAL_REVENUE) there is ZERO fabrication surface. A re-delivered / reorged log is a no-op.
+export async function recordTradeFee(pool, { nonce, amountWei }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await recordVigRevenue(client, { source: 'trade', ref: nonce, kind: 'trade', amountWei });
+    await client.query('COMMIT');
+    return r;
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 const sumEth = async (pool, table, col, where = '') =>
   Number((await pool.query(`SELECT COALESCE(SUM(${col}),0) s FROM ${table} ${where}`)).rows[0].s);
 
