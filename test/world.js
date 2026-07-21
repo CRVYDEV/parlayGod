@@ -294,6 +294,12 @@ assert.equal(tributeLedgered, kTributePerHr * 5, 'the tribute is ledgered world:
 await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '48 hours' WHERE npc_id='kryl'`);
 const cap = await call('POST', '/v1/world/collect', { token: soldier.token });
 assert.equal(cap.body.collected, kTributePerHr * 24, 'tribute accrual caps at 24h');
+// BALANCE D2 (SIGNED) — collecting tribute is an EXPOSED act: a safehoused member can't bank it (audit F1)
+await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '3 hours' WHERE npc_id='kryl'`);
+await seedCh(soldier.id, "safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/world/collect', { token: soldier.token })).body.error, 'safe', 'no collecting the frontier from a safehouse (shield, not bunker)');
+await seedCh(soldier.id, 'safe_until = NULL');
+assert.equal((await call('POST', '/v1/world/collect', { token: soldier.token })).body.collected, kTributePerHr * 3, 'once he surfaces, the tribute is still there to collect');
 
 // (3) invasion gates
 assert.equal((await call('POST', '/v1/world/kryl/invade', { token: soldier.token })).body.error, 'rank', 'only the boss/underboss marches on the frontier');

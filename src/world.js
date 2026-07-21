@@ -479,6 +479,9 @@ export async function releaseFrontierHolds(client, gangId) {
 // + the 24h cap. Uncollected tribute forfeits on a flag transfer (rout/invasion), so this is pull-or-lose.
 export async function collectFrontier(ch, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
+  // BALANCE D2 (SIGNED) — shield, not bunker: banking a productive income stream is an EXPOSED act,
+  // blocked while safehoused, exactly like collectTerritory/business/convoy collection (audit F1).
+  if (safeHoused(ch)) throw new GameError('safe', 'The runners report to a man on the street, not a ghost — collection waits until you surface.');
   const now = new Date();
   const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const held = (await client.query('SELECT npc_id, tribute_at FROM world_npcs WHERE held_by_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;
