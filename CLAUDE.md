@@ -2251,6 +2251,31 @@ behavior (disinfo is a bluff, countered by the informant/dossier), and the unlab
 matches the world/territory boards (a $OMR-bought, payout-free status axis — agent inclusion is consistent).
 A persist-clobber regression was added (disinfo survives a later persisting action). Suite 30/30 + sim
 drift-0.
+**Step four — THE SPYMASTER'S TRADECRAFT + THE WATCHDOG — BUILT** (`src/wire.js`, `src/rules.js`,
+`src/worker.js`, `schema.sql`, `test/wire.js`; the progression + push layer the flat intel loop lacked —
+every action was a one-shot flat cost, and all intel was PULL). **(1) TRADECRAFT** — the earned
+`SPY_RANKS` ladder (lifetime `intel_ops`, account-level, survives death) now GRANTS PERKS (the
+Underworld-tier / skills precedent; single-touchpoint modifiers OFF §10.4 — the DISCOUNTED amount is what's
+`spendOmr`'d/ledgered): `tapBonus` (Eavesdropper 0 → The Oracle +5 concurrent WIRE slots) + `discountBps`
+(0 → 30% off every offensive intel READ — tap/informant/dossier). `spyPerksOf`/`intelCost` helpers;
+placeTap uses `TAP_MAX + tapBonus` for the cap + `intelCost(TAP_OMR, ops)` for the charge; recruitInformant/
+pullDossier discount too (defensive sweep/trace/disinfo + the sub stay flat). So working the wires makes
+you a better spymaster — deeper reach + cheaper tradecraft. **(2) THE WATCHDOG** — a SUBSCRIBED watcher (the
+premium Street Wire) is PUSHED a live `wire_alert` the moment a mark they're tapping crosses into a
+noteworthy state — starts HUNTING them (a search on the watcher), goes WANTED, or gets INDICTED — via a new
+worker sweep `sweepWireAlerts` (self-contained, re-derives state each tick, NO cross-module hooks). Fired
+ONCE per event per tap (new `wiretaps.alerted_hunt/_wanted/_indicted` flags, RESET on a tap place/refresh),
+gated on the watcher being alive AND `wire_until > now` — so it's a real reason to keep the recurring sub
+(the pull-only terminal becomes an active intelligence service). §10.4-UNTOUCHED (the discount rides the
+existing `intel:` burns — the discounted number is the burn; the watchdog pushes a notification, moves no
+value). `intel_ops` is read inline (`spyOps`) so the perk applies under withCharacter. The board surfaces
+`spymaster {tapBonus, discountBps}` + `tapMax` (raised) + `watchdog` + the discounted `costs`; `/v1/rules`
+gained `wire.spyRanks`; the console Wire tab shows the tradecraft line + a WATCHDOG-live banner. `test/wire.js`
+proves the rank perks (Spymaster → +2 slots / −10%, the discounted tap burn), the raised cap surfaced, and
+the watchdog (fires on wanted, once-per-event, un-subscribers get nothing, a re-tap re-alerts). Suite 32/32
++ sim drift-0. All `SPY_RANKS` perk numbers are founder sign-off levers (status-axis modifiers, off the
+signed economy — the hitman-rep/Underworld precedent). Deferred (step five): an auto-tap/standing-watch
+automation + a tiered subscription ladder.
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),

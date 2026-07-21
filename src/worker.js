@@ -18,7 +18,7 @@ import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
 import { sweepStaleRaids } from './world.js';
-import { sweepWire } from './wire.js';
+import { sweepWire, sweepWireAlerts } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepLaw } from './law.js';
@@ -218,6 +218,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE WIRE: expire stale wiretaps (row hygiene — reads already filter expires_at)
     const wr = await safe('wire sweep', () => sweepWire(pool));
     if (wr?.swept > 0) console.log(`📡 wire: swept ${wr.swept} expired wiretap(s)`);
+    // THE WIRE step four THE WATCHDOG: push alerts to subscribers when a tapped mark turns hot
+    const wa = await safe('wire alerts', () => sweepWireAlerts(pool));
+    if (wa?.fired > 0) console.log(`📡 wire: fired ${wa.fired} watchdog alert(s)`);
     // THE LAW: force the RICO bust on an indicted player past the grace window (reaches the offline whale)
     const law = await safe('law sweep', () => sweepLaw(pool));
     if (law && law.cases > 0) console.log(`⚖️  law: tried ${law.cases} case(s) — ${law.convicted} convicted ($${Math.round(law.seized)} seized), ${law.acquitted} walked`);

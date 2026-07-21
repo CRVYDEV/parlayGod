@@ -1558,9 +1558,16 @@ export const WIRE = {
   DOSSIER_OMR: 20,                                  // THE DOSSIER — a one-shot deep read (kills/flags/role/who-they-tap; NO exact cash — banding holds)
   // THE SPYMASTER — a lifetime intel-ops status axis (account-level, survives death — the war-effort
   // precedent). Pure status: a count of intel actions run, ranked. No §10.4 surface.
+  // STEP FOUR — THE TRADECRAFT: the SPY_RANKS ladder now grants PERKS (the earned status axis finally
+  // gives power — the Underworld-tier / skills precedent; a single-touchpoint modifier off §10.4, the
+  // discounted amount is what's ledgered). `tapBonus` = extra concurrent WIRE slots; `discountBps` =
+  // cost off every offensive intel READ (tap/informant/dossier). Cumulative at your rank. Sign-off levers.
   SPY_RANKS: [
-    { min: 0, name: 'Eavesdropper' }, { min: 25, name: 'Wireman' }, { min: 100, name: 'Spymaster' },
-    { min: 400, name: 'The Listener' }, { min: 1500, name: 'The Oracle' },
+    { min: 0, name: 'Eavesdropper', tapBonus: 0, discountBps: 0 },
+    { min: 25, name: 'Wireman', tapBonus: 1, discountBps: 500 },
+    { min: 100, name: 'Spymaster', tapBonus: 2, discountBps: 1000 },
+    { min: 400, name: 'The Listener', tapBonus: 3, discountBps: 2000 },
+    { min: 1500, name: 'The Oracle', tapBonus: 5, discountBps: 3000 },
   ],
   // ── STEP THREE — the counter-intel triad (all $OMR sinks via the intel: vocabulary — ZERO invariant
   // changes). A rock-paper-scissors: a cheap WIRETAP is machine surveillance → foiled by DISINFORMATION;
@@ -1571,6 +1578,10 @@ export const WIRE = {
 export const disinfoActive = (ch, now = Date.now()) => !!ch.disinfo_until && new Date(ch.disinfo_until).getTime() > now;
 export const spyRankOf = (ops) =>
   [...WIRE.SPY_RANKS].reverse().find((r) => Number(ops) >= r.min) || WIRE.SPY_RANKS[0];
+// STEP FOUR — the tradecraft perks at your spymaster rank (extra wire slots + an intel-read discount)
+export const spyPerksOf = (ops) => { const r = spyRankOf(ops); return { tapBonus: r.tapBonus || 0, discountBps: r.discountBps || 0 }; };
+// the discounted cost of an intel read at your rank (the discounted amount is what's ledgered)
+export const intelCost = (base, ops) => Math.max(1, Math.floor(Number(base) * (1 - (spyPerksOf(ops).discountBps / 10000))));
 export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
 
 // ── THE STORE (ETH revenue packages) — real-money purchases that grant ONLY non-§10.4 things
