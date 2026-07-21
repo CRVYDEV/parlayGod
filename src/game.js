@@ -528,6 +528,8 @@ export function view(ch, acct = {}, owned = {}) {
     safehouseCost: Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000)),
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
+    rerollCredits: Number(acct.reroll_credits || 0), // paid 0.01-ETH stat re-rolls in hand
+    statTotal: Number(ch.muscle) + Number(ch.cunning) + Number(ch.speed), // fixed budget — a re-roll only reshapes it
     ammo: Number(ch.ammo || 0), cb: Number(ch.cb || 0), heat: Math.round(Number(ch.heat || 0)),
     welsher: !!ch.welsher, // LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
     // LOAN step 4 — WANTED: a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty)

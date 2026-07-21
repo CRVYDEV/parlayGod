@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   minted BOOLEAN NOT NULL DEFAULT false,
   mint_credits INT NOT NULL DEFAULT 0,
   respawn_tokens INT NOT NULL DEFAULT 0,
+  -- unspent paid stat RE-ROLLS (0.01 ETH each on-chain → RerollFeePaid → the watcher credits one);
+  -- spent via POST /v1/character/reroll to re-roll the living character's (total-conserved) build.
+  reroll_credits INT NOT NULL DEFAULT 0,
   -- M7 Phase 2 — the assassin's LEGEND (account-level, survives death like prestige/$OMR):
   -- lifetime feared-reputation (the "most feared" ladder) + lifetime confirmed kills.
   hitman_rep BIGINT NOT NULL DEFAULT 0,

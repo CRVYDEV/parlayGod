@@ -313,6 +313,7 @@
       body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       (body.win === false && body.dmg !== undefined);
+    if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
     if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
@@ -590,10 +591,13 @@
       <div class="row"><span class="k">health</span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
       <div class="row"><span class="k">heat</span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
       <div class="row"><span class="k">muscle / cunning / speed</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
+      <div class="row"><span class="k">base build <span class="d" style="font-size:9px">(rolled at birth · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
+        ${me.rerollCredits > 0 ? `<button class="act" id="reroll-go" style="font-size:9px;padding:1px 5px">re-roll (${me.rerollCredits})</button>` : ''}</span></div>
       <div class="row"><span class="k">gun</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">ammo / crates</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
       <div class="row"><span class="k">cars</span><span>${(me.cars || []).length}</span></div>`;
     if (me.coach) { const cg = $('#coach-go'); if (cg) cg.onclick = () => setTab(me.coach.tab); }
+    { const rr = $('#reroll-go'); if (rr) rr.onclick = () => act('POST', '/v1/character/reroll', {}).then(() => refresh()); }
     // a GHOST account lives in this browser only — the claim card upgrades it in place (same
     // account row, same street, §4 guest→provider) so a lost device doesn't mean a lost life
     const claim = $('#claim-card');
@@ -1331,7 +1335,7 @@
     'Chain': [
       ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', { address: '' }],
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
-      ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['GET', '/v1/fees/status'],
+      ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['POST', '/v1/character/reroll', {}], ['GET', '/v1/fees/status'],
       ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
       ['GET', '/v1/pass'], ['POST', '/v1/pass/claim', {}],
     ],

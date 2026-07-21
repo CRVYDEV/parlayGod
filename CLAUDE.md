@@ -1044,6 +1044,34 @@ street (this is a head start, not survival); `MEMORY_MAX 0` / `PRESTIGE_POINT_MA
 (the `wil` estate case). Suite 32/32 + sim drift-0. `MEMORY_MAX`/`PRESTIGE_PER_SLOT`/`PRESTIGE_PER_POINT`/
 `PRESTIGE_POINT_MAX` are founder sign-off levers (they soften death — flagged in BALANCE.md).
 
+**RANDOMIZED BUILDS + THE PAID RE-ROLL (0.01 ETH) — BUILT** (`src/rules.js`, `src/server.js`, `src/fees.js`,
+`schema.sql`, `omerta-contracts/`, `public/index.html`, `test/chain.js`; founder-directed 2026-07-21).
+**(1) Randomized starting stats** — every fresh character now `rollStats()`s a UNIQUE muscle/cunning/speed
+distribution instead of the flat 5/5/5 (server-authoritative, rng_audit'd `roll_stats`). **Total-conserved**
+(`CONSTANTS.CREATE_STAT_MIN` 3 / `CREATE_STAT_TOTAL` 15 — each stat floors at 3, always sums to 15) → ZERO
+power creep (same budget, only the SHAPE varies → the sim-audited stat economy is untouched; sim drift-0,
+suite 32/32). No two characters the same. The M8 `/v1/respec` still conserves the character's OWN total
+(a 9/3/3 build respecs toward the ≥5-floored middle — the documented rebalance). **(2) The paid re-roll** —
+`POST /v1/character/reroll` spends a `reroll_credit` to re-roll the living build (total-conserved, rng_audit'd
+`reroll_stats`, **infinitely repeatable** — each needs a fresh paid credit). Credits come from a 0.01-ETH
+on-chain fee following the EXACT mint/respawn machinery: `fees.js:recordFeePayment` accepts the new `reroll`
+kind → `reroll_credits += 1` (idempotent on `fee_payments.nonce`, pay-before-link reconciled); the on-chain
+`OmertaFees.payRerollFee()` mirrors `payMintFee` (exact-value, CEI + nonReentrant, ETH straight to the dev
+wallet, monotonic nonce; `rerollFee` defaults to `mintFee` 0.01 ETH, owner-tunable via `setRerollFee`); the
+watcher (`watcher.js`) reads `RerollFeePaid`. **§10.4-NEUTRAL by construction** — a re-roll writes ZERO
+`transactions` rows (it only redistributes a fixed stat budget; the ETH is out-of-band, the fees.js
+precedent — no new reason/bucket/vocabulary). `rerollCharacter` locks the CHARACTER row first then the
+account (canonical `characters→accounts` order — a red-team MED fix: the original account-first lock risked
+a lost-update clobber + an AB-BA vs `withCharacter`). `feeStatus`/the view surface `rerollCredits` +
+`statTotal`; the console sheet shows the base build + a re-roll button (when a credit is in hand) +
+`describe()` humanization; the raw deck gained `/v1/character/reroll`. `OmertaFees` compiles clean (solc
+0.8.26) with new Foundry tests (`forge test` the pre-mainnet gate, egress-blocked here). `test/chain.js`
+covers the randomized 15-point creation, the paid re-roll (credit → spend → total conserved → consumed →
+next needs another payment) + fee idempotency. A red-team (`AUDIT-skills-prestige-and-reroll.md`) returned
+no CRITICAL/HIGH — the one MED (the re-roll lock order) fixed in-commit. `CREATE_STAT_MIN`/`CREATE_STAT_TOTAL`
++ the 0.01-ETH fee are founder sign-off levers (total-conserved → no §10.4/sim change; the spread is a
+build-identity dial, not a power dial).
+
 **The Underworld (step one) — BUILT** (`src/underworld.js`, `test/underworld.js` — the 16th suite
 file; design `omerta-underworld-design.md`). Named NPCs as RELATIONSHIPS — skills are what you are,
 the Underworld is who you know. Four fixtures, one per loop (`UNDERWORLD` rules tail: Doc Moretti /

@@ -6,13 +6,18 @@
 // (idempotently) records the payment and credits the paying account an in-game entitlement:
 //   • mint    → account.mint_credits +1   (spend via POST /v1/character/mint → account.minted)
 //   • respawn → account.respawn_tokens +1 (auto-consumed on a killing blow, see social.js)
+//   • reroll  → account.reroll_credits +1 (spend via POST /v1/character/reroll → re-roll the build)
 //
-// Isolation: this module writes only `fee_payments` and the three entitlement columns on
-// `account_persistent` (minted / mint_credits / respawn_tokens). It writes ZERO rows to
-// `transactions` — real ETH is out-of-band value, outside the §10.4 in-game conservation set.
+// Isolation: this module writes only `fee_payments`, the four entitlement columns on
+// `account_persistent` (minted / mint_credits / respawn_tokens / reroll_credits), and — on a
+// reroll spend — the paying character's OWN stat columns (a total-conserved re-roll, no value
+// moves). It writes ZERO rows to `transactions` — real ETH is out-of-band value, outside the
+// §10.4 in-game conservation set (a re-roll only redistributes a fixed stat budget, no currency).
 import { getAddress } from 'viem';
+import crypto from 'node:crypto';
 import { GameError, notify } from './game.js';
 import { recordVigRevenue } from './vig.js';
+import { rollStats } from './rules.js';
 
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
 // A payment only grants an entitlement if it actually carried value — belt-and-suspenders
@@ -22,6 +27,7 @@ const positiveWei = (s) => { try { return BigInt(s ?? '0') > 0n; } catch { retur
 async function creditEntitlement(client, accountId, kind) {
   if (kind === 'mint') await client.query('UPDATE account_persistent SET mint_credits = mint_credits + 1 WHERE account_id=$1', [accountId]);
   else if (kind === 'respawn') await client.query('UPDATE account_persistent SET respawn_tokens = respawn_tokens + 1 WHERE account_id=$1', [accountId]);
+  else if (kind === 'reroll') await client.query('UPDATE account_persistent SET reroll_credits = reroll_credits + 1 WHERE account_id=$1', [accountId]);
   else throw new GameError('bad_fee_kind', `Unknown fee kind: ${kind}`);
   // tell the player their real-ETH payment landed (offline-durable + live push); the paywall's
   // silent moment otherwise gives zero in-game acknowledgement. Skip if no living character yet.
@@ -33,7 +39,7 @@ async function creditEntitlement(client, accountId, kind) {
 // watcher restart) is a no-op. If the payer's wallet is already linked, the entitlement is
 // credited now; otherwise the row waits (account_id NULL) until `reconcileFees` runs at link.
 export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, txHash }) {
-  if (kind !== 'mint' && kind !== 'respawn') throw new GameError('bad_fee_kind', `Unknown fee kind: ${kind}`);
+  if (kind !== 'mint' && kind !== 'respawn' && kind !== 'reroll') throw new GameError('bad_fee_kind', `Unknown fee kind: ${kind}`);
   const addr = norm(payer);
   if (!addr) throw new GameError('bad_payer', 'Payer is not a valid EVM address.');
   const n = Number(nonce);
@@ -153,7 +159,37 @@ export async function mintCharacter(pool, accountId) {
   finally { client.release(); }
 }
 
+// Spend one reroll credit (a paid 0.01 ETH re-roll) to RE-ROLL the living character's build. The
+// roll is total-conserved (same fixed budget, new shape — no power creep, no §10.4 surface: no
+// currency moves) and server-authoritative + rng_audit'd. Infinitely repeatable — each re-roll
+// consumes one paid credit. The account row is locked FIRST (the mintCharacter discipline) so a
+// double-submit can't spend two credits on one intent.
+export async function rerollCharacter(pool, accountId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // lock the CHARACTER row first, then the account — the canonical characters→accounts order (a
+    // concurrent withCharacter action locks the character too, so the re-roll serializes with it and
+    // no persist can clobber the new build, and there's no AB-BA vs the standard lock order).
+    const ch = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive FOR UPDATE', [accountId])).rows[0];
+    if (!ch) throw new GameError('no_character', 'Create a character first.');
+    const acct = (await client.query('SELECT reroll_credits FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct) throw new GameError('no_account', 'No such account.');
+    if (Number(acct.reroll_credits) < 1)
+      throw new GameError('no_reroll_credit', 'Pay the 0.01 ETH re-roll fee on-chain first, then re-roll your build.');
+    const st = rollStats();
+    await client.query('UPDATE account_persistent SET reroll_credits = reroll_credits - 1 WHERE account_id=$1', [accountId]);
+    await client.query('UPDATE characters SET muscle=$2, cunning=$3, speed=$4 WHERE id=$1', [ch.id, st.muscle, st.cunning, st.speed]);
+    await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
+      [crypto.randomUUID(), ch.id, 'reroll_stats', Math.random(), `${st.muscle}/${st.cunning}/${st.speed}`]);
+    await notify(client, ch.id, 'rerolled', st);
+    await client.query('COMMIT');
+    return { rerolled: true, stats: st };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
 export async function feeStatus(pool, accountId) {
-  const a = (await pool.query('SELECT minted, mint_credits, respawn_tokens FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
-  return { minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0) };
+  const a = (await pool.query('SELECT minted, mint_credits, respawn_tokens, reroll_credits FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+  return { minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0), rerollCredits: Number(a.reroll_credits || 0) };
 }

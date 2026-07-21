@@ -95,6 +95,7 @@ export async function makeViemSource() {
   const hookAddr = process.env.TRADE_FEE_HOOK_ADDRESS; // the OMR/ETH pool's afterSwap→Vig hook
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
+  const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
   const tradeEv = parseAbiItem('event TradeFeePaid(uint256 indexed nonce, uint256 amountWei)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
@@ -102,13 +103,14 @@ export async function makeViemSource() {
     head: () => client.getBlockNumber(),
     feeLogs: async (from, to) => {
       if (!feesAddr) return [];
-      const [mints, respawns] = await Promise.all([
+      const [mints, respawns, rerolls] = await Promise.all([
         client.getLogs({ address: feesAddr, event: mintEv, ...range(from, to) }),
         client.getLogs({ address: feesAddr, event: respawnEv, ...range(from, to) }),
+        client.getLogs({ address: feesAddr, event: rerollEv, ...range(from, to) }),
       ]);
       const norm = (kind) => (l) => ({ kind, nonce: Number(l.args.nonce), payer: l.args.payer,
         amount: l.args.amount?.toString(), txHash: l.transactionHash });
-      return [...mints.map(norm('mint')), ...respawns.map(norm('respawn'))];
+      return [...mints.map(norm('mint')), ...respawns.map(norm('respawn')), ...rerolls.map(norm('reroll'))];
     },
     claimedLogs: async (from, to) => {
       if (!claimAddr) return [];

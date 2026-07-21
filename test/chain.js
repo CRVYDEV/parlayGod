@@ -65,6 +65,29 @@ assert.equal(r.code, 200, 'mint spends the credit'); assert.equal(r.body.minted,
 assert.equal((await meOf(token)).minted, true, 'view shows minted');
 assert.equal((await call('GET', '/v1/fees/status', { token })).body.mintCredits, 0, 'credit consumed');
 
+// ── randomized build + the paid RE-ROLL (0.01 ETH each, infinitely repeatable) ──
+{
+  const before = (await meOf(token)).stats;
+  assert.equal(before.muscle + before.cunning + before.speed, 15, 'a fresh build rolls the fixed 15-point budget');
+  assert(before.muscle >= 3 && before.cunning >= 3 && before.speed >= 3, 'each stat floors at 3');
+  // no re-roll without a paid credit
+  assert.equal((await call('POST', '/v1/character/reroll', { token })).body.error, 'no_reroll_credit', 'no re-roll without a paid credit');
+  // pay the fee (the watcher's manual twin) → one credit; idempotent on nonce
+  r = await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 5010, kind: 'reroll', payer: player.address, amountWei: '10000000000000000' } });
+  assert.equal(r.code, 200); assert(r.body.credited, 're-roll fee credited');
+  assert.equal((await call('GET', '/v1/fees/status', { token })).body.rerollCredits, 1, 'one re-roll credit in hand');
+  // spend it — the build re-rolls, total conserved (no power creep), the credit is consumed
+  r = await call('POST', '/v1/character/reroll', { token });
+  assert.equal(r.code, 200, 're-roll spent the credit'); assert(r.body.rerolled, 'rerolled');
+  assert.equal(r.body.stats.muscle + r.body.stats.cunning + r.body.stats.speed, 15, 'the re-roll conserves the 15-point budget');
+  assert.equal((await meOf(token)).statTotal, 15, 'the view agrees the budget is unchanged');
+  assert.equal((await call('GET', '/v1/fees/status', { token })).body.rerollCredits, 0, 're-roll credit consumed');
+  // infinitely repeatable — but each needs a fresh paid credit
+  assert.equal((await call('POST', '/v1/character/reroll', { token })).body.error, 'no_reroll_credit', 'the next re-roll needs another 0.01 ETH');
+  // and it rides the same fee-payment idempotency as mint/respawn
+  assert.equal((await call('POST', '/v1/mod/fees/record', { headers: modH, body: { nonce: 5010, kind: 'reroll', payer: player.address, amountWei: '10000000000000000' } })).body.duplicate, true, 'a re-delivered re-roll payment is a no-op');
+}
+
 // ── full-reserve queue ──
 // funded reserve starts at 0 → the first withdrawal QUEUES (debited in-game, unsigned)
 const omrBefore = (await meOf(token)).omr;

@@ -28,11 +28,17 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
     /// @notice Flat fees, in wei. Owner-settable (launch tuning); enforced exactly.
     uint256 public mintFee;
     uint256 public respawnFee;
+    /// @notice The stat RE-ROLL fee, in wei. Owner-settable; enforced exactly. Initialized to
+    ///         `mintFee` at deploy (0.01 ETH) — a player pays it (again) each time they re-roll
+    ///         their build off-chain, so it's an unbounded repeat fee, not a one-time entitlement.
+    uint256 public rerollFee;
     /// @notice Monotonic id stamped on every payment — the off-chain idempotency key.
     uint256 public nonce;
 
     event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
     event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
+    event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount);
+    event RerollFeeChanged(uint256 rerollFee);
     /// @dev On-chain transparency of each split; the backend does NOT rely on it (it computes the
     ///      Vig share from the gross `amount` in MintFeePaid/RespawnFeePaid × VIG_BPS == vigBps).
     event FeeSplit(uint256 indexed nonce, uint256 toDev, uint256 toVig);
@@ -63,9 +69,11 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         vigBps = vigBps_;
         mintFee = mintFee_;
         respawnFee = respawnFee_;
+        rerollFee = mintFee_;   // the re-roll costs the same as a mint by default (0.01 ETH); owner-tunable
         emit FeeRecipientChanged(feeRecipient_);
         emit VigRecipientChanged(vigRecipient_);
         emit FeesChanged(mintFee_, respawnFee_);
+        emit RerollFeeChanged(mintFee_);
     }
 
     /// @notice Pay the mint fee to make your character permanent. Exact-value only.
@@ -82,6 +90,14 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         uint256 n = ++nonce;
         _forward(n, msg.value);
         emit RespawnFeePaid(msg.sender, n, msg.value);
+    }
+
+    /// @notice Pay to re-roll your build. Exact-value only; repeatable (each pays the fee again).
+    function payRerollFee() external payable nonReentrant {
+        if (msg.value != rerollFee) revert WrongFee(msg.value, rerollFee);
+        uint256 n = ++nonce;
+        _forward(n, msg.value);
+        emit RerollFeePaid(msg.sender, n, msg.value);
     }
 
     /// @dev Splits `amount` into a Vig share (vigBps) forwarded to `vigRecipient` and the remainder
@@ -122,6 +138,13 @@ contract OmertaFees is Ownable2Step, ReentrancyGuard {
         mintFee = mintFee_;
         respawnFee = respawnFee_;
         emit FeesChanged(mintFee_, respawnFee_);
+    }
+
+    /// @notice Tune the re-roll fee (launch/live). A 0 fee would make off-chain re-rolls free.
+    function setRerollFee(uint256 rerollFee_) external onlyOwner {
+        if (rerollFee_ == 0) revert ZeroFee();
+        rerollFee = rerollFee_;
+        emit RerollFeeChanged(rerollFee_);
     }
 
     /// @notice Rescue any ETH that somehow lands here outside the pay* paths (e.g. a

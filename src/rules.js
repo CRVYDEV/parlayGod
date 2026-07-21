@@ -454,6 +454,12 @@ export function recruitRankOf(n) {
 }
 
 export const CONSTANTS = {
+  // Randomized starting build — every fresh character rolls a UNIQUE distribution of the SAME
+  // fixed budget (no two the same, but the total is constant → zero power creep, so the
+  // sim-audited stat economy is untouched). Each stat floors at CREATE_STAT_MIN and they always
+  // sum to CREATE_STAT_TOTAL. The $OMR respec keeps its own ≥5 floor (RESPEC_STAT_MIN) — a
+  // deliberate rebalance toward the middle — while a fresh roll or a paid re-roll can spike to 9.
+  CREATE_STAT_MIN: 3, CREATE_STAT_TOTAL: 15,
   GARAGE_CAP: 12, GTA_CD_MS: 300000, MELT_TITHE: 0.25, TITHE_ROUND_VALUE: 30,
   SEARCH_MS: 3*3600*1000, SHOOT_CD_MS: 2*3600*1000, MIN_FIRE: 50,   // PRODUCTION timers
   COOK_MULT: 12, APY: 0.14, SWAP_MIN: 500, PATH_FIRST_COST: 10000, PATH_SWITCH_OMR: 25,
@@ -659,6 +665,20 @@ export const gearStat=(ids=[],st)=>ids.reduce((a,id)=>{const g=gearOf(id);return
 export const cargoCapacity=(ids=[])=>10+ids.reduce((a,id)=>a+(assetOf(id)?.cargo||0),0);
 // effective stat = base + owned gear boosts + owned asset boosts (spec §6)
 export const effStat=(base,st,assetIds=[],gearIds=[])=>base+gearStat(gearIds,st)+assetStat(assetIds,st);
+
+// Roll a UNIQUE starting/re-rolled build: each stat floors at CREATE_STAT_MIN, and the surplus
+// (CREATE_STAT_TOTAL − 3×min) is scattered one point at a time across the three stats. The TOTAL
+// is fixed, so every character carries the same power budget — only the SHAPE varies (a muscle
+// spike costs speed) → no power creep, the sim-audited stat economy is untouched. Server-side +
+// rng_audit'd at the call site. Accepts an injectable rng (defaults Math.random) for testability.
+export function rollStats(rng = Math.random) {
+  const min = CONSTANTS.CREATE_STAT_MIN;
+  const stats = { muscle: min, cunning: min, speed: min };
+  const keys = ['muscle', 'cunning', 'speed'];
+  let surplus = CONSTANTS.CREATE_STAT_TOTAL - min * keys.length;
+  while (surplus-- > 0) stats[keys[Math.floor(rng() * keys.length)]] += 1;
+  return stats;
+}
 
 // ── M3 helpers (§7.6–7.9, §5.5) ──
 export const gunObjOf=(id)=>GUNS.find(g=>g.id===id)||null;
