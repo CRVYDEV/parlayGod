@@ -202,9 +202,18 @@ CREATE TABLE IF NOT EXISTS boats (
   run_hold INT NOT NULL DEFAULT 0,                -- cargo units this run
   run_cost NUMERIC NOT NULL DEFAULT 0,            -- what the cargo cost (the fine + loss-at-risk basis)
   run_escort BOOLEAN NOT NULL DEFAULT false,      -- an escort was hired (cuts interdiction)
+  hull INT NOT NULL DEFAULT 0,                    -- step two: naval upgrade — +cargo hold per level
+  engine INT NOT NULL DEFAULT 0,                  -- step two: naval upgrade — +knots per level
+  rendezvous BOOLEAN NOT NULL DEFAULT false,      -- step two: docked + open to receive a mid-sea handoff (consent-by-listing)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_boats_char ON boats (character_id);
+-- step two: PIRACY — one interception attempt per pirate per live run (cleared when a boat's run starts/ends/moves)
+CREATE TABLE IF NOT EXISTS port_intercepts (
+  boat_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  PRIMARY KEY (boat_id, character_id)
+);
 CREATE TABLE IF NOT EXISTS character_items (
   character_id TEXT NOT NULL,
   item_id TEXT NOT NULL,

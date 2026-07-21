@@ -109,6 +109,66 @@ assert(board.catalog.length === PORT.BOATS.length && board.routes.length === POR
 assert(board.fleet.find((b) => b.id === cutter), 'the fleet shows the cutter');
 assert(typeof board.supplyLeft === 'number', 'the supplier headroom is shown');
 
+// ════════════════════ STEP TWO ════════════════════
+const S = PORT.STEP2;
+// ── NAVAL UPGRADES: hull (+cargo) and engine (+knots), cash sinks, capped ── (cutter is docked here)
+assert.equal((await call('POST', `/v1/port/upgrade/${cutter}`, { token: cap.token, body: { part: 'sails' } })).body.error, 'bad_part', 'only hull/engine');
+const preUp = await cashOf(cap.token);
+r = await call('POST', `/v1/port/upgrade/${cutter}`, { token: cap.token, body: { part: 'hull' } });
+assert.equal(r.code, 200, 'hull upgraded'); assert.equal(r.body.level, 1, 'hull now level 1');
+assert.equal(r.body.hold, boatOf('cutter').hold + S.HULL_STEP, 'the hull adds cargo capacity');
+assert.equal(await cashOf(cap.token), preUp - r.body.spent, 'the refit was a cash sink (port:upgrade)');
+r = await call('POST', `/v1/port/upgrade/${cutter}`, { token: cap.token, body: { part: 'engine' } });
+assert.equal(r.body.speed, boatOf('cutter').speed + S.ENGINE_STEP, 'the engine adds knots');
+const upBoard = (await call('GET', '/v1/port', { token: cap.token })).body.fleet.find((b) => b.id === cutter);
+assert(upBoard.hull === 1 && upBoard.engine === 1 && upBoard.hold === boatOf('cutter').hold + S.HULL_STEP, 'the board shows the upgraded boat');
+
+// ── PIRACY: a pirate runs down a rival's run at sea (the convoy-ambush twin) ──
+process.env.PORT_RUN_MS = String(60 * 60 * 1000); // a long run so it stays AT SEA (piratable)
+r = await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
+const pirateHold = r.body.hold; // the upgraded hold
+// set up the pirate: a made man at the docks with a fast boat + guns
+const bb = await mk('Blackbeard'); await pool.query(`UPDATE characters SET respect=400, loc='docks', energy=200, ammo=50 WHERE id='${bb.id}'`); await seedCash(bb.id, 2000000);
+const bbBoat = (await call('POST', '/v1/port/boat/cutter', { token: bb.token })).body.boat.id;
+// gates: a rookie can't pirate
+const rk = await mk('Deckhand Dan'); await pool.query(`UPDATE characters SET respect=50, loc='docks' WHERE id='${rk.id}'`);
+assert.equal((await call('POST', `/v1/port/intercept/${cutter}`, { token: rk.token })).body.error, 'level', 'piracy is level-gated');
+// the seas board shows the run (route + value BAND, never the manifest)
+const seas = (await call('GET', '/v1/port', { token: bb.token })).body.seas;
+const target = seas.find((s) => s.boatId === cutter);
+assert(target && target.route === 'coastal' && typeof target.band === 'string' && target.runner === 'Captain Nemo', 'the seas board shows the rival run as a route + value band');
+assert(target.band && !('hold' in target), 'the band hides the exact manifest');
+// a WIN: seize a CUT of the cargo value; the runner's run is voided
+process.env.PORT_PIRATE_WIN = '1';
+const bbCashBefore = await cashOf(bb.token);
+r = await call('POST', `/v1/port/intercept/${cutter}`, { token: bb.token });
+assert.equal(r.code, 200, 'the boarding lands'); assert.equal(r.body.win, true, 'the pirate took her');
+const expTake = Math.floor(pirateHold * PORT.ROUTES.find((x) => x.id === 'coastal').sell * S.PIRATE_TAKE_BPS / 10000);
+assert.equal(r.body.take, expTake, 'the take is PIRATE_TAKE_BPS of the cargo value (< 100% → port emission falls)');
+assert.equal(await cashOf(bb.token), bbCashBefore + expTake, 'the take hit the pirate\'s pocket (port:piracy faucet)');
+assert.equal((await pool.query(`SELECT run_until FROM boats WHERE id='${cutter}'`)).rows[0].run_until, null, 'the runner\'s run was voided — the cargo is gone');
+// a LOSS: the escort/guns put the pirate in the water; the run survives
+r = await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } }); // relaunch (fresh run clears the intercept slate)
+process.env.PORT_PIRATE_WIN = '0';
+r = await call('POST', `/v1/port/intercept/${cutter}`, { token: bb.token });
+assert.equal(r.body.win, false, 'the runner outran her'); assert(r.body.hospSeconds > 0, 'the repelled pirate is hospitalized');
+assert((await pool.query(`SELECT run_until FROM boats WHERE id='${cutter}'`)).rows[0].run_until != null, 'a repelled run stays at sea');
+// once per pirate per run
+await pool.query(`UPDATE characters SET hosp_until=NULL, energy=200, ammo=50 WHERE id='${bb.id}'`);
+assert.equal((await call('POST', `/v1/port/intercept/${cutter}`, { token: bb.token })).body.error, 'once', 'one run at a given cargo per pirate');
+
+// ── RENDEZVOUS: hand the at-sea run to a partner's flagged boat (§10.4-neutral) ──
+const mate = await mk('First Mate'); await pool.query(`UPDATE characters SET respect=400, loc='docks' WHERE id='${mate.id}'`); await seedCash(mate.id, 2000000);
+const mateBoat = (await call('POST', '/v1/port/boat/cutter', { token: mate.token })).body.boat.id;
+assert.equal((await call('POST', `/v1/port/rendezvous/${cutter}`, { token: cap.token, body: { to: mateBoat } })).body.error, 'closed', "can't hand off to a boat that isn't waiting");
+await call('POST', `/v1/port/boat/${mateBoat}/rendezvous`, { token: mate.token, body: { open: true } });
+r = await call('POST', `/v1/port/rendezvous/${cutter}`, { token: cap.token, body: { to: mateBoat } });
+assert.equal(r.code, 200, 'the handoff went through'); assert.equal(r.body.to, mateBoat, 'the run moved to the partner');
+assert.equal((await pool.query(`SELECT run_until FROM boats WHERE id='${cutter}'`)).rows[0].run_until, null, "the runner's boat is freed");
+assert((await pool.query(`SELECT run_until FROM boats WHERE id='${mateBoat}'`)).rows[0].run_until != null, "the partner's boat now carries the run");
+assert.equal((await pool.query(`SELECT rendezvous FROM boats WHERE id='${mateBoat}'`)).rows[0].rendezvous, false, 'the rendezvous flag was consumed');
+delete process.env.PORT_RUN_MS; delete process.env.PORT_PIRATE_WIN;
+
 // ── boats die with the street ──
 process.env.MOD_KEY = 'test-mod-key';
 const app2ok = await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: cap.id } });
@@ -122,5 +182,5 @@ assert(vocab.ok, `port: rides the cash vocabulary (${JSON.stringify(vocab.unknow
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cashCheck.drift, seeded, `the only cash drift is the seeded stake (${seeded}) — every port spend/sale/fine reconciles`);
 
-console.log('✅ The Port test passed — buy/sell boats (cash sink/faucet + bad-boat/level/district/at-sea gates), the RUN (contraband sourcing sink + bad-route/busy/too-slow/safehouse/supply-cap gates), the lazy COLLECT (clean → port:sale faucet + net margin; interdicted → seize + port:fine sink + heat + boat survives/sinks), the daily SUPPLY CAP, the harbor board, boats DIE WITH THE STREET, and section 10.4 (port: vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
+console.log('✅ The Port test passed — buy/sell boats + gates, the RUN + the lazy COLLECT (clean faucet / interdicted seize+fine+sink), the SUPPLY CAP, the board, boats DIE WITH THE STREET; STEP TWO: NAVAL UPGRADES (hull +cargo / engine +knots, capped cash sinks), PIRACY (the seas board as route+value band, a WIN redirects a CUT of the cargo to the pirate + voids the runner\'s run, a LOSS hospitalizes them; level + once gates), the offshore RENDEZVOUS (a consensual §10.4-neutral handoff to a partner\'s flagged boat); and section 10.4 (port: cash + ammo vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
 await app.close();
