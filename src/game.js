@@ -708,7 +708,7 @@ export async function checkin(ch, client, h) {
 // ── BANK & TRAVEL ──
 export async function bank(ch, dir, amount, client, h) {
   amount = Math.floor(Number(amount));
-  if (!(amount > 0)) throw new GameError('amount', 'Positive amounts only.');
+  if (!(Number.isFinite(amount) && amount > 0)) throw new GameError('amount', 'Positive amounts only.'); // Number.isFinite rejects Infinity/NaN (E-L3 defense-in-depth)
   if (dir === 'deposit') {
     // BALANCE D2 — shield, not bunker: banking is an EXPOSED act (the courier walks). You can't
     // move money into the vault from inside a safehouse; withdrawing (bringing cash to hand) is fine.

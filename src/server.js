@@ -41,7 +41,7 @@ import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
-import { rateLimitsEnabled, initRateLimiter, checkRateLimit } from './ratelimit.js';
+import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
@@ -140,6 +140,13 @@ export async function buildServer() {
   const guarded = (req) => (req.method === 'POST' || req.method === 'DELETE')
     && req.url.startsWith('/v1') && !req.url.startsWith('/v1/auth') && !req.url.startsWith('/v1/mod');
   app.addHook('preHandler', async (req, reply) => {
+    // E-M1: auth endpoints are excluded from the account-keyed limiter above (they're unauthenticated),
+    // so throttle them per-IP — bounds guest-mint Sybil floods + X/Privy auth-fetch amplification.
+    if (rateLimitsEnabled() && req.method === 'POST' && req.url.startsWith('/v1/auth')) {
+      const limited = await checkAuthRateLimit({ ip: req.ip });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
     if (!guarded(req)) return;
     try { await req.jwtVerify(); } catch { return; } // unauthenticated → the route 401s
     // Ban + agent status come from the DB, never the token: an agent-flagged account
