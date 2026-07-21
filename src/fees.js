@@ -15,7 +15,7 @@
 // §10.4 in-game conservation set (a re-roll only redistributes a fixed stat budget, no currency).
 import { getAddress } from 'viem';
 import crypto from 'node:crypto';
-import { GameError, notify } from './game.js';
+import { GameError, notify, deadlockToRetry } from './game.js';
 import { recordVigRevenue } from './vig.js';
 import { rollStats } from './rules.js';
 
@@ -162,8 +162,10 @@ export async function mintCharacter(pool, accountId) {
 // Spend one reroll credit (a paid 0.01 ETH re-roll) to RE-ROLL the living character's build. The
 // roll is total-conserved (same fixed budget, new shape — no power creep, no §10.4 surface: no
 // currency moves) and server-authoritative + rng_audit'd. Infinitely repeatable — each re-roll
-// consumes one paid credit. The account row is locked FIRST (the mintCharacter discipline) so a
-// double-submit can't spend two credits on one intent.
+// consumes one paid credit. The CHARACTER row is locked first (the canonical characters→accounts
+// order, matching withCharacter) so a double-submit can't spend two credits on one intent and a
+// concurrent action can't clobber the new build. The rare AB-BA vs mintCharacter (account→character,
+// once-ever) surfaces as a clean retryable `contention` via deadlockToRetry rather than a raw 500.
 export async function rerollCharacter(pool, accountId) {
   const client = await pool.connect();
   try {
@@ -185,7 +187,7 @@ export async function rerollCharacter(pool, accountId) {
     await notify(client, ch.id, 'rerolled', st);
     await client.query('COMMIT');
     return { rerolled: true, stats: st };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
 
