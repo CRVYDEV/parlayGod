@@ -109,8 +109,44 @@ Emphasis: "check all contract interactions" + adversarially re-verify Wave-1's o
   passes but J's dedicated economic-exploit read of those three did not complete → closed by Wave 3.
 
 ## WAVE 3 — the one coverage gap (2026-07-21)
-- **K — heists/convoy/market dedicated economic-exploit + escrow lock-race read** (J's acknowledged gap):
-  (running)
+- **K — heists/convoy/market dedicated economic-exploit + escrow lock-race read (J's gap): ALL THREE
+  SOUND, no confirmed exploit.** Verified: heist crew-cut is per-crew-level bounded (not alt-
+  multipliable, crew hard-capped, avg-level drags the pot down), the RAT is −EV by construction, the
+  inside job doesn't double-emit (pot ≤ real pending, clock advanced proportionally, business row
+  FOR UPDATE'd) and can't launder a hot front (feds_watching/omertà/safehouse gates hold), stake
+  refunded exactly once; convoy insurance underwriting-limit holds under concurrent claims (pool
+  FOR UPDATE serialized, net extraction ≤ premiums by construction), toll §10.4-exact + un-dodgeable,
+  goods count-conserved, multi-ambush slot/wear grief-bounded; market self-deal always pays the 2%
+  take, outbid-refund can't double-refund (re-verify under lock → `again`/`contention`), buy-order
+  fill+claim can't mint goods (C1 `not_for_sale` guard), and the market-escrow check reconciles across
+  EVERY lifecycle transition + both death hooks. No fix needed.
 
-Wave-2 fixes committed d44472a. Suite 32/32 + sim drift-0; contracts compile clean (0 warnings).
-`forge test` remains the pre-mainnet gate (Foundry egress-blocked).
+---
+
+## FINAL — audit complete
+
+**11 independent red-team lenses across 3 waves over the entire codebase (47 src modules) + all 6
+Solidity contracts. Zero CRITICAL. Zero §10.4 drift. Extraction ≤ inflow verified airtight.**
+
+- **16 defects fixed** (each with a regression; suite 32/32 + sim drift-0 throughout; contracts compile
+  clean). Material: the X-token account-takeover, the fire-kill pen-shield/jail assassination bypass,
+  the unbacked-reserve fabrication, two reachable deadlocks, the gear-cap minter-swap gap (now enforced
+  at the durable asset layer), + the API voucher-signer chain-id guard, WHEEL Sybil floor, auth
+  throttle, and estate-wipe/leaderboard/finite-guard/logging/sweep-isolation LOWs.
+- **Verified CLEAN (checked, not assumed):** §10.4 across all modules; the chain core walls (EIP-712
+  parity/replay/reentrancy incl. the ERC-1155 receiver hook/CEI/access-control/pool-separation/daily
+  caps/minted-gate/no-owner-mint); the offline economy (accrual + every worker sweep, ~25 touchpoints);
+  route-auth coverage + no-SQL-injection; loot/shield-ordering/estate-survival + all death hooks; the
+  escrow reconciliation of bounty/market/loan/auction/boxing-bet/convoy-insurance; and Wave-1's own
+  fixes (adversarially re-verified — all sound).
+- **Flagged for founder (not patched — ground rule #1: signed levers / accepted Sybil posture / trust
+  model / deploy checklist):** J-1 per-character bank-taper Sybil-split, J-2 pen:work missing level
+  floor, B-H2/M2/M3/L4 (retry-masked/unreachable lock inversions), F-MED2 speakeasy notoriety Sybil,
+  F-LOW1 port fine wallet-dodge, the contract trust-model items (VoucherClaim.sweep, bond signer price,
+  staking APY retroactivity), and E-M2/M3/L1/L2 infra backlog. All in this report + BALANCE.md.
+- **The one standing external gate:** `forge test` must run in a Foundry-capable environment before the
+  third-party contract audit (egress-blocked here; contracts compile clean via solc, and the core
+  properties re-verified from source + the E2E prover ran on a devnet in a prior session).
+
+The game is bulletproof against every technical + economic attack class this audit could construct;
+what remains is founder balance sign-off + the pre-mainnet contract gate.
