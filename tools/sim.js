@@ -16,7 +16,8 @@ import { runBuyback } from '../src/worker.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
-         frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES } from '../src/rules.js';
+         frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
+         PORT, boatOf, portRouteOf, interdictChance } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -520,6 +521,25 @@ for (const [label, cp] of [['a tuned contender (power 200)', 200], ['a premium m
   note('races', `PvE EV — ${label}`, `${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev))}/race best`,
     `best tier ${best.tier} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * racesPerDay))}/day at ${racesPerDay}/day cadence — bounded faucet, a lost race also dings the car (repair cost); sign-off vs boxing exhibition`);
 }
+
+// ════════ P9.14 the Port — smuggling margin EV, cap-bounded (the new content faucet) ════════
+// port:sale is the drop's one faucet. Per $1 of contraband bought, net = P(clean)×(sell/buy) − 1 −
+// P(caught)×FINE_RATE. The DAILY faucet is bounded by SUPPLY_CAP_DAY (the max buy-value/day). Analytic —
+// the fastest boat that clears each route, patrol-neutral. The bound must land at boxing/territory parity.
+phase('P9.14 the Port — smuggling margin EV per route (cap-bounded faucet)');
+let bestNetRatio = 0;
+for (const route of PORT.ROUTES) {
+  const boat = [...PORT.BOATS].sort((a, b) => b.speed - a.speed).find((b) => b.speed >= route.minSpeed) || PORT.BOATS[0];
+  const p = interdictChance(route, boat, false, 0);                  // patrol-neutral
+  const clean = 1 - p;
+  const netRatio = clean * (route.sell / route.buy) - 1 - p * PORT.FINE_RATE; // margin per $1 of buy
+  const dailyMax = Math.round(PORT.SUPPLY_CAP_DAY * netRatio);       // at full cap utilization
+  bestNetRatio = Math.max(bestNetRatio, netRatio);
+  note('port', `${route.name} — ${boat.name}`, `~$${fmt(dailyMax)}/day at the cap`,
+    `P(caught) ${(p * 100).toFixed(0)}% · margin ×${(route.sell / route.buy).toFixed(2)} · net ${(netRatio * 100).toFixed(0)}% per $ sourced (fine ${(PORT.FINE_RATE * 100)}% of cargo on a bust; a bust can also sink the boat)`);
+}
+note('port', 'daily faucet (best route, maxed)', `~$${fmt(Math.round(PORT.SUPPLY_CAP_DAY * bestNetRatio))}/day`,
+  `bounded by SUPPLY_CAP_DAY $${fmt(PORT.SUPPLY_CAP_DAY)} × the best net margin — sign-off vs boxing exhibition / territory (~$300-400k)`);
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

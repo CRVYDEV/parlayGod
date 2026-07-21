@@ -1346,3 +1346,29 @@ transfer; fees/tunes are sinks). **The PvE purse is the ONLY new faucet — sim-
 
 All `RACES` numbers are founder sign-off levers (the exhibition-purse precedent). Sim the PvE purse net-EV
 (vs the boxing exhibition) + the PvP wager economy before production. Suite 31/31 + sim drift-0.
+
+## THE PORT — maritime smuggling (2026-07-21; offshore contraband import by boat)
+
+The SEA counterpart to convoys. Boats are a buyable asset (like cars, `boats` table); runs source
+contraband offshore and fence it home if the Coast Guard (PvE interdiction) doesn't catch you. ONE new
+faucet — `port:sale` — bounded three ways (per-boat run clock, interdiction eating runs, a daily supply
+cap). Measured in `tools/sim.js` P9.14 (analytic, zero value seeded, §10.4 untouched):
+
+| Route | Margin | P(caught) | Net per $ sourced | Daily faucet (best boat, cap-maxed) |
+|---|---|---|---|---|
+| Coastal Hop (lvl6) | ×1.67 | 3% | 60% | ~$240,667/day |
+| Open Water (lvl16) | ×1.83 | 3% | 76% | **~$303,486/day** (the best) |
+| The Deep Run (lvl32) | ×2.11 | 30% | 33% | ~$131,111/day (high-variance) |
+
+- **KEEP** — the best realized route (~$303k/day) sits at boxing-exhibition / territory parity
+  (~$300-400k/day maxed). The gradient is deliberate: deeper routes pay a richer margin but heavier patrol,
+  so the safe route earns steadily and the deep run is a gamble. Bounded by `SUPPLY_CAP_DAY` $400k/day.
+- Boat catalog (Dinghy $40k → Cigarette Boat $12M), route curves (buy/sell/patrol/minSpeed),
+  `INTERDICT_MIN/MAX` (.03/.85), `FINE_RATE` (50% of cargo on a bust), `SINK_P` (15% boat loss on a bust),
+  `ESCORT_COST/DEF` ($15k/+25), `RESALE_BPS` (60%), `FLEET_MAX` (5) — all founder sign-off levers.
+- The fine (`port:fine`) + boat loss are the downside that keeps the faucet honest; interdiction odds read
+  `patrol ± cityHour patrolMod − boat speed − escort def`, so speed (a pricier boat) + an escort buy safety,
+  and the day/night patrol window shifts the odds (the Living-World tie-in).
+
+`port:sale` is the emission surface — sim the net EV per route before production (measured at parity).
+Suite 32/32 + sim drift-0.

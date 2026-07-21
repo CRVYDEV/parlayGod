@@ -1830,6 +1830,44 @@ export const carPower = (modelId, trimId, tune = 0, speed = 0, dmg = 0) =>
     + Number(tune) * RACES.TUNE_POWER + Math.floor(Number(speed) / RACES.SPEED_DIV)
     - Math.floor(Number(dmg) / RACES.DMG_PEN_DIV));
 
+// ── THE PORT — maritime smuggling (omerta-the-port-design.md) ──
+// Boats are an ownable vessel class (bought like cars): a HOLD (cargo scale) + SPEED (Coast Guard evasion).
+// A run sources contraband offshore (a cash SINK), sails a real clock, and — if it slips the COAST GUARD —
+// lands the goods for the smuggling margin (a cash FAUCET). Interdiction SEIZES the cargo + FINES + may SINK
+// the boat. All CASH. The one faucet (port:sale) is bounded by the run clock, interdiction, and a daily
+// SUPPLY CAP (the wash-cap token bucket). All numbers are founder sign-off levers — sim before production.
+export const PORT = {
+  MIN_LEVEL: 6, DISTRICT: 'docks', FLEET_MAX: 5, RESALE_BPS: 6000, // boats resell at 60% of cost
+  ESCORT_COST: 15000, ESCORT_DEF: 25,          // hire an escort: a cash sink that subtracts from interdiction
+  INTERDICT_MIN: 0.03, INTERDICT_MAX: 0.85, FINE_RATE: 0.5, SINK_P: 0.15, // Coast Guard: caught-odds clamp, fine, boat-loss sub-roll
+  RUN_HEAT: 6, BUST_HEAT: 25,                   // heat drawn on launch / on a bust
+  SUPPLY_CAP_DAY: 400000,                       // rolling-24h cap on contraband COST sourced — the D3 wash-cap bound on the faucet (sim-tuned to boxing/territory parity)
+  BOATS: [
+    { id: 'dinghy',    name: 'Harbor Dinghy',      cost: 40000,    hold: 20,  speed: 25 },
+    { id: 'skiff',     name: "Runner's Skiff",     cost: 150000,   hold: 50,  speed: 45 },
+    { id: 'trawler',   name: 'Converted Trawler',  cost: 500000,   hold: 120, speed: 40 },
+    { id: 'cutter',    name: 'Fast Cutter',        cost: 1500000,  hold: 200, speed: 75 },
+    { id: 'freighter', name: 'Coastal Freighter',  cost: 5000000,  hold: 500, speed: 35 }, // huge hold, slow — high-variance
+    { id: 'cigarette', name: 'Cigarette Boat',     cost: 12000000, hold: 160, speed: 120 }, // the evasion king
+  ],
+  // routes = risk tiers: buy/sell per unit, Coast Guard patrol, run time, a minimum boat speed to attempt.
+  // The gradient is DEEPER = richer margin ratio BUT heavier patrol (higher-variance, the territory-type
+  // philosophy): coastal is a safe thin baseline; the deep run pays best but is a real gamble even for the
+  // fastest boat (patrol 150 > the top speed 120 → the cigarette boat still eats ~30% out there).
+  ROUTES: [
+    { id: 'coastal',   name: 'Coastal Hop',  minLvl: 6,  buy: 120, sell: 200,  patrol: 30,  ms: 60 * 60 * 1000,  minSpeed: 0 },  // ×1.67, safe
+    { id: 'openwater', name: 'Open Water',   minLvl: 16, buy: 350, sell: 640,  patrol: 90,  ms: 90 * 60 * 1000,  minSpeed: 40 }, // ×1.83, medium
+    { id: 'deeprun',   name: 'The Deep Run', minLvl: 32, buy: 900, sell: 1900, patrol: 150, ms: 150 * 60 * 1000, minSpeed: 70 }, // ×2.11, high-variance
+  ],
+};
+export const boatOf = (id) => PORT.BOATS.find((b) => b.id === id) || null;
+export const portRouteOf = (id) => PORT.ROUTES.find((r) => r.id === id) || null;
+export const boatResale = (kind) => Math.floor((boatOf(kind)?.cost || 0) * PORT.RESALE_BPS / 10000);
+// the Coast Guard's interdiction chance: route patrol (+ a day/night patrol modifier) minus boat speed
+// and any escort, clamped. A fast boat / escort on a low route ≈ safe; a slow freighter on the deep run ≈ dice.
+export const interdictChance = (route, boat, escort, patrolMod = 0) => Math.max(PORT.INTERDICT_MIN,
+  Math.min(PORT.INTERDICT_MAX, (route.patrol + patrolMod - (boat?.speed || 0) - (escort ? PORT.ESCORT_DEF : 0)) / 100));
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it

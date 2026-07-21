@@ -1318,7 +1318,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // World step three: a dead co-op raid leader's plan is abandoned so the crew can recrew (the
   // crew_heists precedent — the member rows above are already wiped; this frees the leadership).

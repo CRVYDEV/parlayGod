@@ -325,6 +325,11 @@
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
     if (body.escaped === true) bits.push("OVER THE WALL — you're out, but WANTED now (no family cover, hunters coming)");
     if (body.escaped === false) bits.push('caught at the fence — the hole, a longer stretch, and a beating');
+    if (body.interdicted === false && body.landed !== undefined) bits.push(`⚓ slipped the Coast Guard — landed the haul, +$${fmt(body.landed)} (net $${fmt(body.net)})`);
+    if (body.interdicted === true) bits.push(`⚓ BUSTED AT SEA — the Coast Guard seized the cargo, fined $${fmt(body.fine)}${body.sunk ? ' and SANK her' : ''}`);
+    if (body.arrivesSeconds !== undefined && body.route) bits.push(`⚓ cast off on the ${body.route} run — back in ${Math.ceil(body.arrivesSeconds / 60)}m`);
+    if (body.boat && body.boat.name && body.spent !== undefined) bits.push(`bought the ${body.boat.name} — $${fmt(body.spent)}`);
+    if (body.refund !== undefined && body.boat === undefined && body.landed === undefined && !bits.length) bits.push(`sold her back to the yard — +$${fmt(body.refund)}`);
     if (body.foundation && body.foundation.name) bits.push(`the family endowed the ${body.foundation.name} — softer trials for everyone`);
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
     if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
@@ -535,12 +540,12 @@
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
     market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', races: 'Street Races', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
-    wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', deck: 'Everything Else' };
+    wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', port: 'The Port', deck: 'Everything Else' };
   // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
   const TAB_GROUPS = [
     ['', ['start']],
     ['Streets', ['streets', 'garage', 'life', 'city']],
-    ['Earners', ['kitchen', 'empire', 'scores', 'market']],
+    ['Earners', ['kitchen', 'empire', 'scores', 'market', 'port']],
     ['Vice', ['den', 'speakeasy', 'boxing', 'races']],
     ['Blood', ['pvp', 'loans', 'law', 'pen', 'wire']],
     ['Family', ['family']],
@@ -570,7 +575,7 @@
     kitchen: renderKitchen, family: renderFamily, market: renderMarket, pvp: renderPvp, law: renderLaw,
     garage: renderGarage, empire: renderEmpire, speakeasy: renderSpeakeasy, boxing: renderBoxing,
     scores: renderScores, loans: renderLoans, portfolio: renderPortfolio, estate: renderEstate,
-    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces };
+    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces, port: renderPort };
   let currentTab = 'streets';
   function setTab(id) {
     currentTab = id;
@@ -1915,6 +1920,38 @@
       const d = (await api('GET', '/v1/leaderboard/races')).body?.drivers || [];
       alert('THE WHEEL — winningest drivers\\n\\n' + (d.map((x, i) => `${i + 1}. ${x.name} — ${x.wins} wins (${x.rank})`).join('\\n') || 'none yet'));
     };
+  }
+
+  // ── THE PORT: maritime smuggling — boats + the run + the Coast Guard ──
+  async function renderPort() {
+    const t = $('#tab-port');
+    await refresh();
+    const b = (await api('GET', '/v1/port')).body || {};
+    const fleet = b.fleet || [], routes = b.routes || [], cat = b.catalog || [];
+    const routeOpts = routes.map((r) => `<option value="${r.id}">${r.name} — buy $${fmt(r.buy)}/u · sell $${fmt(r.sell)}/u · ~${r.interdictPct}% caught</option>`).join('');
+    t.innerHTML = `
+      ${!fleet.length ? coachCard('Buy a boat, run the coast', 'The Port brings contraband in from offshore. Buy a boat at the docks (a hold for cargo, speed to slip the Coast Guard), load a run, and — if you make it home clean — fence the haul for the smuggling margin. Get caught and you lose the cargo, eat a fine, and might lose the boat. Distinct from convoys: this is the SEA, and the risk is the law, not other players.') : ''}
+      <h2>The Port ${b.atDocks ? '' : '<span class="chip" style="color:var(--bad)">travel to the docks to trade</span>'}</h2>
+      <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.</div></div>
+      <div class="grid">
+        <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
+          ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span>${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
+            <span>${f.status === 'arrived' ? `<button class="act" data-collect="${f.id}"${b.atDocks ? '' : ' disabled'}>collect</button>` : f.status === 'docked' ? `<button class="act" data-sell="${f.id}"${b.atDocks ? '' : ' disabled'}>sell</button>` : ''}</span></div>
+            ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks ? '' : ' disabled'}>run it</button></div>` : ''}`).join('') : '<div class="d">No boats. Buy one below.</div>'}
+        </div>
+        <div class="card"><span class="t">The Boatyard</span>
+          ${cat.map((c) => `<div class="row" style="margin-top:4px"><span>${c.name} — hold ${c.hold} · ${c.speed} kn</span><span>$${fmt(c.cost)} <button class="act" data-buy="${c.id}"${b.atDocks && fleet.length < (b.fleetMax || 5) ? '' : ' disabled'}>buy</button></span></div>`).join('')}
+          <div class="d" style="margin-top:4px">Boats resell at ${Math.round(((cat[0]||{}).resale||0)/((cat[0]||{}).cost||1)*100)}% and die with your street.</div>
+        </div>
+      </div>`;
+    t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.buy}`, null).then(() => renderPort()));
+    t.querySelectorAll('[data-sell]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.sell}/sell`, null).then(() => renderPort()));
+    t.querySelectorAll('[data-collect]').forEach((x) => x.onclick = () => act('POST', `/v1/port/collect/${x.dataset.collect}`, null).then(() => renderPort()));
+    t.querySelectorAll('[data-run]').forEach((x) => x.onclick = () => {
+      const route = (t.querySelector(`.pt-route[data-for="${x.dataset.run}"]`) || {}).value;
+      const escort = (t.querySelector(`.pt-esc[data-for="${x.dataset.run}"]`) || {}).checked;
+      act('POST', `/v1/port/run/${x.dataset.run}`, { route, escort }).then(() => renderPort());
+    });
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

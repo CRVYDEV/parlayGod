@@ -2994,3 +2994,40 @@ cap on either side. The "thin edge" comment was corrected to the real figure (an
 to +60% of the fee at the top tier). Accepted balance flags (founder sign-off): the PvE purse faucet
 magnitude (boxing-exhibition parity), the casino:pvp-posture collusion rail, consent-by-listing owner
 spam, no safehouse gate on a consensual cash game. Suite 31/31 + sim drift-0.
+
+**THE PORT — maritime smuggling (step one) — BUILT** (`src/port.js`, `test/port.js` — the 32nd suite;
+design `omerta-the-port-design.md`). The SEA counterpart to convoys — deliberately distinct: convoys move
+YOUR trade goods over LAND in trucks that other PLAYERS hijack (internal arbitrage); the Port brings
+CONTRABAND in from OFFSHORE by BOAT, and the antagonist is the LAW (the Coast Guard, a PvE interdiction),
+not a rival. **Boats are a new buyable asset, bought like cars** (`boats` table, `boatOf`/`PORT.BOATS` —
+Dinghy $40k → Cigarette Boat $12M, each with a cargo `hold` + a `speed` that slips patrols; `FLEET_MAX` 5,
+resale `RESALE_BPS` 60%, `port:boat` cash SINK to buy / `port:sell` faucet back — and they **DIE WITH THE
+STREET**, joined to the runEstate wipe like cars). **The run** (`launchRun`, `POST /v1/port/run/:boatId`):
+at the docks (`PORT.DISTRICT`), pick a route (`PORT.ROUTES` — Coastal Hop lvl6 → The Deep Run lvl32, each a
+per-unit buy/sell + a `patrol` rating + a `minSpeed` gate), the boat's full hold is sourced as contraband
+(`port:buy` cash SINK), optionally hire an ESCORT (`port:escort` sink, +`ESCORT_DEF` vs patrols), and she's
+at sea for the route's clock (`PORT_RUN_MS` env is TEST-ONLY, the SEARCH_MS precedent). Gates:
+jailed/hospitalized/safehoused (D2)/wrong-district/busy/bad_route/route-level/too_slow (boat speed <
+route minSpeed)/supply-cap. **The lazy collect** (`collectRun`, `POST /v1/port/collect/:boatId`): rolls
+INTERDICTION (`interdictChance` = clamp[`INTERDICT_MIN` .03, `INTERDICT_MAX` .85] of `(patrol ± cityHour
+patrolMod − boat speed − escort def)/100`, rng-audited; `PORT_INTERDICT_P` TEST-ONLY) — **CLEAN** → the
+haul fences for the route's sell rate (`port:sale` cash FAUCET; net = landed − cost = the smuggling margin);
+**INTERDICTED** → the Coast Guard SEIZES the cargo (never banked), FINES `FINE_RATE` (50%) of the cargo
+cost clamped to pocket+bank (`port:fine` cash SINK, the raid-fine precedent, pocket-then-bank), spikes heat,
+and rolls `SINK_P` (15%; `PORT_SINK` TEST-ONLY) to IMPOUND/SINK the boat (deleted). **The one new faucet is
+bounded three ways**: the per-boat run clock, interdiction eating runs, and a daily **SUPPLY CAP**
+(`SUPPLY_CAP_DAY` $400k, the wash-cap continuous token bucket on `characters.port_used`/`port_at`) — sim-
+measured to ~$303k/day best-route-maxed (**Open Water ×1.83 margin / 3% caught**), at boxing-exhibition /
+territory parity; the safe Coastal Hop pays less (×1.67) and the Deep Run is high-variance (×2.11 margin /
+30% caught / 33% net). §10.4: `port:` joined the cash `KNOWN_REASONS` (buy/escort/fine/boat SINKS +
+sale/sell FAUCETS, all character_id'd → the per-character cash check reconciles); the seized cargo + a sunk
+boat move no currency (ownership). Routes `GET /v1/port`, `POST /v1/port/boat/:kind|/:boatId/sell|
+/run/:boatId|/collect/:boatId`; surfaced on the view + `/v1/rules` + a "The Port" console tab (the supplier
+headroom, your fleet with collect/sell/run-it + escort, the boatyard). `test/port.js` covers buy/sell gates,
+a clean run (the sale faucet + margin), an interdicted run (fine + heat + boat survives), the boat SINKING,
+the supply cap, too_slow, the safehouse block, resale, the board, DEATH, and §10.4. Suite 32/32 + sim
+drift-0. ALL numbers (boat catalog, route curves, `INTERDICT_*`/`FINE_RATE`/`SINK_P`, `SUPPLY_CAP_DAY`) are
+founder sign-off levers — the `port:sale` faucet is the one new emission surface (BALANCE.md; measured at
+parity). Deferred (step two): the offshore RENDEZVOUS (a player-to-player mid-sea handoff), pirate PvP
+(intercept a rival's run — the convoy-ambush twin at sea), naval upgrades (hull/engine tuning like car
+`tune`), and a harbormaster protection racket.
