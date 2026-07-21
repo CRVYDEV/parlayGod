@@ -38,7 +38,13 @@ async function bumpProfit(client, delta) {
 async function openLiability(client) {
   const n = Number((await client.query('SELECT COALESCE(SUM(stake),0) s FROM numbers_tickets')).rows[0].s);
   const f = Number((await client.query('SELECT COALESCE(SUM(stake),0) s FROM fight_bets')).rows[0].s);
-  return n * CASINO.NUMBERS_PAYOUT + Math.ceil(f * CASINO.FIGHT_DOG_PAYS);
+  // a LIVE blackjack hand's pending payout is reserved too (parity with numbers/fight — else the
+  // street could be tipped against an unresolved hand): each hand pays at most 2× its effective bet
+  // if it wins (bet × 2 on a stand, × 2 again on a double). Computed in JS to dodge the pg-mem
+  // SUM-over-expression quirk.
+  const bj = (await client.query('SELECT bet, dbl FROM blackjack_hands')).rows
+    .reduce((s, r) => s + Number(r.bet) * (r.dbl ? 2 : 1) * 2, 0);
+  return n * CASINO.NUMBERS_PAYOUT + Math.ceil(f * CASINO.FIGHT_DOG_PAYS) + bj;
 }
 // distributable house profit right now (locks den_volume — serializes concurrent tip-outs)
 export async function denAvailable(client) {
