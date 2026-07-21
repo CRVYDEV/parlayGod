@@ -60,7 +60,11 @@ export async function buildServer() {
   // token for any account. Dev/test may use the fallback (in-memory db, no real value).
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET)
     throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
-  const app = Fastify({ logger: false });
+  // trustProxy (AUDIT-full-system-v2 H): OFF by default (raw socket IP — X-Forwarded-For is spoofable
+  // when NOT behind a trusted proxy). An operator deploying behind a load balancer sets TRUST_PROXY=on
+  // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global
+  // bucket at the proxy's IP. No behaviour change in the alpha (rate limits are off there anyway).
+  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'on' });
 
   // THE AGENT GATEWAY — collect every mounted route (this hook fires per registration) so the
   // OpenAPI 3.1 contract at /openapi.json is auto-derived and never drifts from what's live.

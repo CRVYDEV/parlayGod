@@ -31,7 +31,8 @@ contract OmertaTest is Test {
         staking = new OMRStaking(safe, IERC20(address(omr)), 1400);
         vm.startPrank(safe);
         gear.setMinter(address(vc));
-        vc.setGearSupplyCap(7, 1000);                // gear class 7 mintable up to 1000
+        gear.setGearCap(7, 1000);                    // G-MED-1: the authoritative asset-layer lifetime cap
+        vc.setGearSupplyCap(7, 1000);                // gear class 7 mintable up to 1000 (bridge pre-flight)
         omr.transfer(address(vc), TRANCHE);          // tranche 1
         omr.approve(address(staking), type(uint256).max);
         staking.fundRewards(100_000e18);             // reward pool
@@ -85,6 +86,7 @@ contract OmertaTest is Test {
 
     // The per-gearId lifetime cap bounds total supply — a leaked signer can't exceed it.
     function test_gear_cap_enforced() public {
+        vm.prank(safe); gear.setGearCap(9, 2);
         vm.prank(safe); vc.setGearSupplyCap(9, 2);
         VoucherClaim.Voucher memory v1 = _voucher(player, 2, 1, 9, 21);
         vm.prank(player); vc.claim(v1, _sign(v1, signerPk)); // mints 2 of 2
@@ -100,6 +102,42 @@ contract OmertaTest is Test {
         vc.setGearSupplyCap(1, 100);
         vm.prank(safe); vc.setGearSupplyCap(1, 100);
         assertEq(vc.gearSupplyCap(1), 100);
+    }
+
+    // ── AUDIT full-system-v2 G-MED-1: the per-gearId lifetime cap is enforced at the ASSET layer
+    // (GearVault) and SURVIVES a minter swap — a fresh bridge cannot re-mint a class's supply that a
+    // prior bridge already minted to the cap (the bug: the count lived only in the swappable minter). ──
+    function test_gear_cap_survives_minter_swap() public {
+        address minterA = address(0xA11CE);
+        address minterB = address(0xB0B0);
+        vm.startPrank(safe);
+        gear.setGearCap(11, 2);
+        gear.setMinter(minterA);
+        vm.stopPrank();
+        vm.prank(minterA); gear.mint(player, 11, 2);       // mints the 2 allowed
+        assertEq(gear.minted(11), 2);
+        vm.prank(minterA); vm.expectRevert("GearVault: cap"); gear.mint(player, 11, 1); // over the cap
+        // the Safe upgrades the bridge — the lifetime count must NOT reset with the new minter
+        vm.prank(safe); gear.setMinter(minterB);
+        vm.prank(minterB); vm.expectRevert("GearVault: cap"); gear.mint(player, 11, 1); // STILL blocked
+        assertEq(gear.minted(11), 2);
+    }
+
+    function test_gearvault_setcap_gates() public {
+        vm.expectRevert();                                  // onlyOwner
+        gear.setGearCap(5, 100);
+        vm.prank(safe); gear.setGearCap(5, 100);
+        assertEq(gear.cap(5), 100);
+        vm.prank(safe); gear.setMinter(address(0xCA5E));
+        vm.prank(address(0xCA5E)); gear.mint(player, 5, 10);
+        vm.prank(safe); vm.expectRevert("GearVault: below minted"); // can't lower below minted
+        gear.setGearCap(5, 5);
+    }
+
+    // an uncapped class (cap 0) is fail-closed even from a valid minter (asset-layer default)
+    function test_gearvault_uncapped_class_blocked() public {
+        vm.prank(safe); gear.setMinter(address(0xFEED));
+        vm.prank(address(0xFEED)); vm.expectRevert("GearVault: cap"); gear.mint(player, 99, 1);
     }
 
     // ── AUDIT F-5: a deadline beyond the TTL backstop is rejected ──

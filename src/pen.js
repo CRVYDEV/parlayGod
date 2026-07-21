@@ -423,7 +423,7 @@ export async function sweepStaleBreaks(pool) {
         await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [s.id]);
         await client.query('COMMIT');
         swept++;
-      } catch (e) { await client.query('ROLLBACK'); throw e; }
+      } catch (e) { await client.query('ROLLBACK'); console.error('[sweepStaleBreaks] break', s.id, e?.message || e); } // per-row isolation (AUDIT-full-system-v2 I-LOW): a poison break no longer aborts the rest of the tick
     }
     return { swept };
   } finally { client.release(); }
