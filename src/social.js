@@ -1454,6 +1454,13 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     await h.ledger(client, { currency: 'cash', amount: -openBounty, reason: 'death:bounty', counterparty: victim.id });
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victim.id]);
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victim.id]);
+  // …and any DIRECTED pot that named the DECEASED as its exclusive hitman (on a LIVING mark) OPENS to
+  // all claimers — otherwise `claimBounty` skips a hospitalize pot in its window for anyone but the named
+  // hitman, so a dead man's contract would lock the pot (and `postBounty` blocks re-naming) for up to
+  // DIRECTED_MAX_H, handing the mark a free hospitalize-immunity window (RED-TEAM: the specialist
+  // dangling-pointer sibling — a dead character can't hold an exclusive claim). §10.4-neutral (the escrow
+  // stays; only the exclusivity pointer clears — kill pots already pay any killer, this fixes hospitalize).
+  await client.query('UPDATE bounties SET hitman=NULL, opens_at=NULL WHERE hitman=$1', [victim.id]);
   // Exchange escrow forfeits with the man (v24 rule) — bucket rows keep cb/ammo conservation exact
   const escrowed = (await client.query("SELECT item_kind, SUM(qty) q FROM listings WHERE seller_character=$1 AND item_kind IN ('cb','ammo') GROUP BY item_kind", [victim.id])).rows;
   for (const e of escrowed)
