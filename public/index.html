@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%8E%A9%3C/text%3E%3C/svg%3E">
 <title>OMERTÀ — the city</title>
 <meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real Risk-to-Earn economy. Autonomous agents are first-class players: play the whole game over a JSON API and extract $OMR on-chain. See /agents to start.">
 <!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
@@ -354,7 +355,9 @@
         ...(token ? { authorization: 'Bearer ' + token } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body) });
     let j = null; try { j = await r.json(); } catch { j = { raw: await r.text?.() }; }
-    $('#resp').textContent = `${method} ${path}\n` + JSON.stringify(j, null, 2);
+    // NOTE: api() no longer writes the "Last Word" viewer — background reads (refresh, tab renders,
+    // the 30s poll) all call api() and would clobber it with a GET /v1/me dump after every action.
+    // act() writes #resp with the ACTION's result instead, so the viewer shows what you actually did.
     return { code: r.status, body: j };
   }
   function toast(msg, bad = false) {
@@ -395,6 +398,9 @@
     acting = true; document.body.style.cursor = 'progress';
     try {
       const r = await api(method, path, body);
+      // the "Last Word" viewer shows the ACTION result (written here, before refresh's GET /v1/me
+      // would otherwise overwrite it — the raw JSON for the deck / power users; the toast is the human read).
+      $('#resp').textContent = `${method} ${path}\n` + JSON.stringify(r.body, null, 2);
       toast(describe(r.body, r.code), r.code >= 400);
       if (r.code < 400) { const bt = bragText(r.body); if (bt) showBrag(bt); }
       await refresh();
@@ -1415,8 +1421,8 @@
           <div class="d">${L.retainer.active ? `on retainer — ${mins(L.retainer.seconds)} left (softer busts, smaller forfeits)` : `$${fmt(L.retainer.cost)} keeps counsel on call`}</div>
           ${L.retainer.active ? '' : '<button class="act" data-do="POST /v1/law/retainer">retain</button>'}</div>
         <div class="card"><span class="t">The Envelope</span>
-          <div class="d">${L.envelope.active ? `current — ${mins(L.envelope.seconds)} left. The cops bury your file: the case builds at ${Math.round(L.envelope.gainMult * 100)}% rate AND cools ${L.envelope.bleedMult}× faster.` : `slip the precinct ${L.envelope.omr} $OMR — while it's current the case builds slower (${Math.round(L.envelope.gainMult * 100)}%) and cools ${L.envelope.bleedMult}× faster. Standing protection, not a one-shot.`}</div>
-          <button class="act" data-do="POST /v1/law/envelope">${L.envelope.active ? 'top up the envelope' : `pay ${L.envelope.omr} $OMR`}</button></div>
+          <div class="d">${L.envelope.active ? `current — ${mins(L.envelope.seconds)} left. The cops bury your file: the case builds at ${Math.round(L.envelope.gainMult * 100)}% rate AND cools ${L.envelope.bleedMult}× faster.` : `slip the precinct ${L.envelope.cost} $OMR — while it's current the case builds slower (${Math.round(L.envelope.gainMult * 100)}%) and cools ${L.envelope.bleedMult}× faster. Standing protection, not a one-shot.`}</div>
+          <button class="act" data-do="POST /v1/law/envelope">${L.envelope.active ? 'top up the envelope' : `pay ${L.envelope.cost} $OMR`}</button></div>
         <div class="card"><span class="t">Lay Low / Clean Papers</span>
           <div class="d">heat feeds the case — cool it in the Kitchen tab</div></div>
       </div>
