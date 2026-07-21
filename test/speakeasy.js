@@ -69,8 +69,14 @@ const preCollect = (await meOf(owner.token)).cash;
 const coll = await call('POST', '/v1/speakeasy/collect', { token: owner.token });
 assert.equal(coll.code, 200, 'the take is collected');
 const capIncome = Math.floor(speakeasyTierOf(0).incomePerHr * SPEAKEASY.INCOME_CAP_MS / 3600000);
-assert.equal(coll.body.collected, capIncome, 'the bar take is capped at 24h');
-assert.equal((await meOf(owner.token)).cash, preCollect + capIncome, 'it landed in the pocket');
+// SIGN-OFF (net-EV): protection + wages come off the top — UPKEEP_BPS of the gross is a speakeasy:upkeep sink
+const capUpkeep = Math.floor(capIncome * SPEAKEASY.UPKEEP_BPS / 10000);
+const capNet = capIncome - capUpkeep;
+assert.equal(coll.body.gross, capIncome, 'the gross bar take is capped at 24h');
+assert.equal(coll.body.upkeep, capUpkeep, 'the upkeep cut (protection + wages) comes off the top');
+assert.equal(coll.body.collected, capNet, 'the owner nets the take minus upkeep');
+assert.equal((await meOf(owner.token)).cash, preCollect + capNet, 'the NET landed in the pocket');
+assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='speakeasy:upkeep'")).rows[0].s), -capUpkeep, 'the upkeep is a ledgered §10.4 sink');
 // safehouse blocks collection (an exposed act, D2)
 await seed(owner.id, `safe_until = now() + interval '1 hour'`);
 assert.equal((await call('POST', '/v1/speakeasy/collect', { token: owner.token })).body.error, 'safe', 'no collecting from the bunker');

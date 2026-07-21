@@ -2938,3 +2938,16 @@ asserts survival-to-heir. **(2.7, deploy-config)** production must run `SOCIAL_V
 Spread-the-Word faucet (alpha keeps `trust`). Regressions added across world/casino/pen/loans. Everything
 else on the sheet is SIGNED at the recommended verdict or on the alpha WATCH-list; the Tier-6 chain/legal
 items stay a separate gate. `SIGN-OFF.md` + `BALANCE.md` record the resolution.
+
+**SPEAKEASY UPKEEP — the sign-off's one open number, DIALED (founder-directed 2026-07-21).** The net-EV
+measurement pass (sim P9.12) surfaced the passive bar take as the richest low-risk earner (top tier
+$3.12M/day, ~6d payback) and corrected two of the doc's own assumptions — there was NO "pad" upkeep on a
+speakeasy, and raid notoriety is patron-driven (table/rounds), NOT the owner's passive collect, so a
+bar-take-only owner drew ~0 raid tax. Founder's call: apply the upkeep drip (over trimming the income
+curve). Shipped: **`SPEAKEASY.UPKEEP_BPS` (2000 = 20%)** comes off the top of every `collectSpeakeasy` as a
+`speakeasy:upkeep` §10.4 cash SINK (the business-'pad' rate) — the bar take is no longer risk-free. Both the
+income faucet + the upkeep sink are character_id'd under the existing `speakeasy:` cash prefix → ZERO
+invariant/vocab change (the per-character check reconciles). Top-tier net $3.12M → $2.496M/day, payback
+~6.0d → ~7.5d; every tier keeps 80% gross. `test/speakeasy.js` asserts gross/upkeep/net + the ledgered
+sink; sim P9.12 prints net-of-upkeep by tier + the verdict. Suite 30/30 + sim drift-0. The `incomePerHr`
+curve remains a further founder dial; SIGN-OFF.md row 1.2 marked RESOLVED.

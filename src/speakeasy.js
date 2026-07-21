@@ -109,10 +109,16 @@ export async function collectSpeakeasy(ch, client, h) {
   if (raid.raided) return { ok: true, collected: 0, raid, district: row.district_id };
   const inc = accruedIncome(row); // 0 while shut (income_at was pushed to shut_until by the raid)
   if (inc <= 0) return { ok: true, collected: 0, ...(isShut(row) ? { shutSeconds: Math.ceil((new Date(row.shut_until).getTime() - Date.now()) / 1000) } : {}) };
-  ch.cash = Number(ch.cash) + inc;
+  // SIGN-OFF (net-EV): protection + wages come off the top — a recurring UPKEEP cut (the business-'pad'
+  // 20% rate) so the passive bar take isn't a risk-free faucet. §10.4-clean: both rows character_id'd and
+  // ride the existing speakeasy: cash prefix, so the per-character check reconciles with zero vocab change.
+  const upkeep = Math.floor(inc * SPEAKEASY.UPKEEP_BPS / 10000);
+  const net = inc - upkeep;
+  ch.cash = Number(ch.cash) + net;
   await client.query('UPDATE speakeasies SET income_at=now() WHERE district_id=$1', [row.district_id]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: inc, reason: 'speakeasy:income' });
-  return { ok: true, collected: inc, district: row.district_id };
+  if (upkeep > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -upkeep, reason: 'speakeasy:upkeep' });
+  return { ok: true, collected: net, gross: inc, upkeep, district: row.district_id };
 }
 
 // Redo the decor to the next tier — banks the pending base take at the OLD rate first (never wiped),

@@ -496,15 +496,17 @@ for (const [districtId, npcId] of Object.entries(WORLD.OCCUPATION)) {
 // front). So for a passive club, NET ≈ GROSS — the raid layer only bites an owner who runs a busy table.
 phase('P9.12 speakeasy — bar-take NET EV + build payback by tier (the flagged faucet)');
 let seBuild = SPEAKEASY.OPEN_COST;
+const seKeep = 1 - SPEAKEASY.UPKEEP_BPS / 10000; // after the SIGN-OFF upkeep cut off the top of every collect
 for (const t of SPEAKEASY.TIERS) {
   seBuild += t.cost; // cumulative capital to reach this tier (open + every upgrade)
   const grossDay = t.incomePerHr * (SPEAKEASY.INCOME_CAP_MS / 3600000);
-  const paybackDays = grossDay > 0 ? seBuild / grossDay : Infinity;
-  note('speakeasy', `${t.name} (t${t.tier}) bar take`, `$${fmt(grossDay)}/day gross ≈ NET (passive)`,
-    `build-to-here $${fmt(seBuild)} → payback ~${paybackDays.toFixed(1)}d; passive collect draws ~0 notoriety → ~0 raid tax (table/rounds are patron-driven); no upkeep; safehouse-gated collect (D2)`);
+  const netDay = Math.floor(grossDay * seKeep);
+  const paybackDays = netDay > 0 ? seBuild / netDay : Infinity;
+  note('speakeasy', `${t.name} (t${t.tier}) bar take`, `$${fmt(grossDay)}/day gross → $${fmt(netDay)} NET`,
+    `−${SPEAKEASY.UPKEEP_BPS / 100}% upkeep off the top (speakeasy:upkeep sink); build-to-here $${fmt(seBuild)} → payback ~${paybackDays.toFixed(1)}d; passive collect draws ~0 notoriety → the table/rounds carry the raid risk; safehouse-gated collect (D2)`);
 }
-note('speakeasy', 'net-EV verdict', 'a large, low-risk, fast-payback faucet',
-  `top tier ~$3.12M/day (≈ a maxed territory op ×1.6-2), un-raided when run passively, ~5.7d payback — FLAG: richness of the incomePerHr curve or a passive-owner notoriety/upkeep is the founder dial (BALANCE speakeasy)`);
+note('speakeasy', 'net-EV verdict', 'still a strong front, now taxed',
+  `top tier ~$${fmt(Math.floor(3120000 * seKeep))}/day NET after the ${SPEAKEASY.UPKEEP_BPS / 100}% upkeep — no longer a risk-free faucet; incomePerHr curve is the remaining founder dial (BALANCE speakeasy)`);
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
