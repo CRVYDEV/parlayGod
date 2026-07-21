@@ -1295,6 +1295,23 @@ export const SKILLS = {
     { id: 'moxie',      req: 'kingpin',   name: 'Moxie',           desc: 'Nerve to the max — the guts for one more play.' },
     { id: 'hot_wire',   req: 'road_boss', name: 'Hot Wire',        desc: 'Clears your heist + world-raid cooldowns — back on the job.' },
   ],
+  // ── STEP FOUR — GRANDMASTERY: the capstone-of-capstones. Owning BOTH tier-4 capstones of a pair
+  // (the deepest build — two maxed branches, ~lvl 48) DERIVES a Grandmastery (no cost — the natural
+  // reward) that unlocks a combined ULTIMATE active (both bursts in ONE cast, where the two single
+  // actives share a cooldown so you'd otherwise pick just one) AND cuts the shared active cooldown
+  // (GRANDMASTER_CD_MS < ACTIVE_CD_MS). Pure QoL/pacing on the step-two active mechanic — energy/nerve
+  // are regen resources, heist/world cooldowns are op pacing → ZERO §10.4, off every audit-locked
+  // surface. Derived from OWNED capstones, so the heir only gets it by re-earning both (muscle memory
+  // carries tier-1 only) — no death-softening. GRANDMASTER_CD_MS = ACTIVE_CD_MS reverts the pacing edge.
+  GRANDMASTER_CD_MS: 4 * 3600 * 1000,
+  GRANDMASTERIES: [
+    { id: 'the_boss',    reqs: ['made_man', 'kingpin'],   name: 'The Boss',
+      active: { id: 'kingpins_rush', name: "Kingpin's Rush", desc: 'Energy AND nerve to the max — total command of the table.' } },
+    { id: 'the_warlord', reqs: ['made_man', 'road_boss'],  name: 'The Warlord',
+      active: { id: 'full_throttle', name: 'Full Throttle',  desc: 'Energy to the max AND clears your heist + world-raid cooldowns.' } },
+    { id: 'the_shadow',  reqs: ['kingpin',  'road_boss'],  name: 'The Shadow',
+      active: { id: 'ghost_protocol', name: 'Ghost Protocol', desc: 'Nerve to the max AND clears your heist + world-raid cooldowns.' } },
+  ],
   FX: { BRUISER_MULT: 1.08, DOC_MULT: 0.75, SEARCH_MULT: 0.8, LAYLOW_MULT: 0.8,
         FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8,
         // step-two capstone stacks (multiplicative on the branch signature; the prereq chain guarantees the base skill is owned)
@@ -1310,6 +1327,11 @@ export const SKILLS = {
 };
 export const activeOf = (id) => SKILLS.ACTIVES.find((a) => a.id === id) || null;
 export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
+// step four — GRANDMASTERY helpers. `owned` is a Set or array of owned skill ids.
+const hasSkillId = (owned, id) => (owned?.has ? owned.has(id) : (owned || []).includes(id));
+export const grandmasteriesFor = (owned) => SKILLS.GRANDMASTERIES.filter((g) => g.reqs.every((r) => hasSkillId(owned, r)));
+export const ultimateOf = (id) => SKILLS.GRANDMASTERIES.find((g) => g.active.id === id) || null;
+export const activeCdFor = (owned) => grandmasteriesFor(owned).length ? SKILLS.GRANDMASTER_CD_MS : SKILLS.ACTIVE_CD_MS;
 // THE UNDERWORLD — the named NPC cast (design: omerta-underworld-design.md). Standing 0-100
 // per character per NPC, earned by doing business (actor-side bumps), gift-greasable only
 // below GIFT_CAP — top tiers are EARNED. Perks are NEW single-touchpoint modifiers (the
