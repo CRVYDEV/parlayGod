@@ -212,7 +212,14 @@ assert.equal((await meOf(token)).omr, omrPreReclaim - 7, 'the $OMR is burned at 
 assert.equal((await reclaimExpiredVouchers(pool)).omrReclaimed, 0, 'a still-live voucher is NOT reclaimed');
 await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE nonce=${expNonce}`); // past deadline+grace
 const availPre = (await call('GET', '/v1/mod/reserve', { headers: modH })).body.available;
-assert.equal((await reclaimExpiredVouchers(pool)).omrReclaimed, 7, 'the expired voucher is reclaimed');
+// full-system v3 chain F1: WITHOUT an on-chain reader we NEVER blind-refund (the voucher could be
+// claimed on a signing-enabled-but-RPC-down box) — the sweep skips and retries; only a reader that
+// confirms the nonce is UNUSED lets the refund proceed.
+const noReader = await reclaimExpiredVouchers(pool);
+assert.equal(noReader.omrReclaimed, 0, 'no on-chain reader → the expired voucher is NOT blind-refunded');
+assert.equal(noReader.skipped, 1, 'it is skipped for retry, not refunded');
+assert.equal((await meOf(token)).omr, omrPreReclaim - 7, 'the $OMR stays burned until the chain confirms it unclaimed');
+assert.equal((await reclaimExpiredVouchers(pool, { usedNonce: async () => false })).omrReclaimed, 7, 'a reader confirming the nonce is unclaimed reclaims the expired voucher');
 assert.equal((await meOf(token)).omr, omrPreReclaim, 'the burned $OMR is refunded whole');
 assert.equal((await pool.query(`SELECT status FROM vouchers WHERE nonce=${expNonce}`)).rows[0].status, 'expired', 'the voucher is marked expired');
 assert.equal((await call('GET', '/v1/mod/reserve', { headers: modH })).body.available, availPre + 7, 'the stuck reserve capacity is freed');
@@ -220,7 +227,7 @@ assert.equal(await driftOf('$OMR conservation'), driftPreReclaim, 'the refund re
 await call('POST', '/v1/mod/reserve/claimed', { body: { nonce: expNonce }, headers: modH }); // a late Claimed event
 assert.equal((await pool.query(`SELECT status FROM vouchers WHERE nonce=${expNonce}`)).rows[0].status, 'expired', 'a stale Claimed event cannot un-expire a reclaimed voucher');
 await pool.query(`UPDATE vouchers SET deadline = ${Math.floor(Date.now() / 1000) - 99999} WHERE kind='gear' AND status='signed'`);
-assert.equal((await reclaimExpiredVouchers(pool)).gearRestored, 1, 'the expired gear voucher restores');
+assert.equal((await reclaimExpiredVouchers(pool, { usedNonce: async () => false })).gearRestored, 1, 'the expired gear voucher restores (reader confirms unclaimed)');
 assert.equal((await pool.query(`SELECT minted_onchain FROM account_gear WHERE gear_id='knuckles'`)).rows[0].minted_onchain, false, 'the gear is back in play — not lost to a failed claim');
 
 // ══ AUDIT (chain on-chain audit) regressions ══

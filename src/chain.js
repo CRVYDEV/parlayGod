@@ -319,20 +319,29 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
   // voucher (fail safe: a delayed refund is recoverable, a double-spend is not).
   const chain = reader !== undefined ? reader : await makeChainReader();
   const client = await pool.connect();
-  let omrReclaimed = 0, gearRestored = 0, reconciled = 0;
+  let omrReclaimed = 0, gearRestored = 0, reconciled = 0, skipped = 0;
   try {
     const cutoff = Math.floor(Date.now() / 1000) - RECLAIM_GRACE_SEC;
     const expired = (await client.query(
       "SELECT id, account_id, kind, amount, gear_id, nonce FROM vouchers WHERE status='signed' AND NOT claimed_onchain AND deadline < $1", [cutoff])).rows;
+    // AUDIT (full-system v3, chain lens F1): a `signed` voucher exists ONLY because the chain was
+    // configured enough to sign it (chainConfig + signer) — signing does NOT require CHAIN_RPC_URL,
+    // but the on-chain reader DOES. So "no reader" is NOT proof the chain is dormant: it can mean a
+    // signing-enabled box whose RPC is unset/down, where the voucher may ALREADY be claimed on-chain.
+    // Refunding on the wall clock there double-spends (tokens on-chain AND $OMR back), invisibly to
+    // §10.4. So WITHOUT a reader we NEVER refund — we skip and retry (a delayed refund is recoverable,
+    // a double-spend is not; the same fail-safe the RPC-error branch already uses). A genuinely
+    // torn-down chain's stuck vouchers are a manual/mod reconciliation, not a blind auto-refund.
+    if (!chain && expired.length)
+      console.error(`reclaim: ${expired.length} expired voucher(s) but no on-chain reader (CHAIN_RPC_URL unset/down) — skipping to avoid a blind refund; set the RPC so usedNonce can confirm before refunding`);
     for (const v of expired) {
       // ask the chain first — a used nonce means this voucher WAS claimed (tokens left the tranche);
-      // record the claim the watcher missed and NEVER refund it.
-      if (chain) {
-        let used;
-        try { used = await chain.usedNonce(v.nonce); }
-        catch { continue; } // RPC hiccup — retry next tick, never refund blind
-        if (used) { await markClaimed(pool, Number(v.nonce)); reconciled++; continue; }
-      }
+      // record the claim the watcher missed and NEVER refund it. NO reader → skip (never refund blind).
+      if (!chain) { skipped++; continue; }
+      let used;
+      try { used = await chain.usedNonce(v.nonce); }
+      catch { continue; } // RPC hiccup — retry next tick, never refund blind
+      if (used) { await markClaimed(pool, Number(v.nonce)); reconciled++; continue; }
       await client.query('BEGIN');
       try {
         const cur = (await client.query("SELECT status, claimed_onchain FROM vouchers WHERE id=$1 FOR UPDATE", [v.id])).rows[0];
@@ -352,7 +361,7 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
       // batch (matches the worker's safe() philosophy). Log + skip; each refund is already its own txn.
       } catch (e) { await client.query('ROLLBACK'); console.error('reclaim voucher failed', v.id, e?.code || e?.message || e); continue; }
     }
-    return { omrReclaimed, gearRestored, reconciled };
+    return { omrReclaimed, gearRestored, reconciled, skipped };
   } finally { client.release(); }
 }
 

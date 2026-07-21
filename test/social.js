@@ -144,6 +144,11 @@ let roccoMe = await meOf(rocco.token);
 assert.equal(roccoMe.cash, roccoCashBefore - r.body.stolen, 'victim pocket emptied by exactly the steal');
 assert(roccoMe.hospSeconds > 0, 'victim hospitalized');
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).code, 400, 'hospitalized target protected');
+// full-system v3 (death lens): a JAILED target is out of reach — jump must gate it like fire/npcHit/shank
+// (jail can't be strictly more dangerous than the street). Restore Rocco's health, jail him, confirm the gate.
+await seedCh(rocco.id, `health=100, hosp_until=NULL, jail_until='${new Date(Date.now() + 3600000).toISOString()}'`);
+assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).body.error, 'jailed', 'a jailed target cannot be jumped');
+await seedCh(rocco.id, 'jail_until=NULL');
 const roccoNotes = (await call('GET', '/v1/notifications', { token: rocco.token })).body.notifications;
 assert(roccoNotes.some((n) => n.type === 'attack'), 'victim notified');
 
