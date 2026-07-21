@@ -2064,6 +2064,32 @@ popup). §10.4 untouched — the sim's `reason vocabulary` + `$OMR conservation`
 spend reconciles as an `intel:*` burn). `test/wire.js` proves the trace (names watchers, doesn't clear,
 free-clean), the dossier (kill record + flags + who-they-tap, banded wealth, self-gate), and the spymaster
 ops + leaderboard. Suite 30/30 + sim drift-0. All numbers are founder sign-off levers.
+**Step three — THE COUNTER-INTEL TRIAD (DISINFORMATION + THE INFORMANT) — BUILT** (`src/wire.js`,
+`test/wire.js`; the surveillance rock-paper-scissors — all $OMR sinks through the EXISTING `intel:`
+vocabulary, so **ZERO invariant changes**). A cheap WIRETAP is machine surveillance → foiled by
+DISINFORMATION; an expensive INFORMANT is a HUMAN source → SEES THROUGH the disinfo (a mole can't be fed
+lies). **(1) DISINFORMATION** (`plantDisinfo`, `POST /v1/wire/disinfo`): a defensive `WIRE.DISINFO_OMR`
+(10, `intel:disinfo`) sink sets `characters.disinfo_until` (12h; written by DIRECT SQL — the
+wire_until/active_at pattern, off persistCharacter's positional UPDATE so it survives persist). While
+current, any WIRETAP reading you (`scrambleTap`) gets deterministic-but-wrong PRIVATE signals (cooked
+wealth/law-stage/heat/ops + `huntingYou` forced false, `indicted` false) — SILENT (no "this is fake"
+flag; the counter is a human source or a records-based dossier). PUBLIC bulletins stay TRUE (wanted, the
+family name, level, location — you can cook your books, not the street's eyes). **(2) THE INFORMANT**
+(`recruitInformant`, `POST /v1/wire/informant/:targetId`): a standing HUMAN source — a recurring
+`WIRE.INFORMANT_OMR` (25, `intel:informant`) retainer (extends from later-of-now/current-end, the sub
+precedent), capped `INFORMANT_MAX` (3), one per (watcher, target), in the new `wire_informants` table. It
+reads DEEPER than a tap (`huntingAnyone` — who they're hunting, not just you) and **PIERCES disinfo** (the
+board applies `scrambleTap` only to taps, never to informant reads — a mole isn't fooled by cooked books).
+So the layered economy completes: the SUB warns (a COUNT), a TAP IDs a rival (foilable), the DOSSIER reads
+records, an INFORMANT is the reliable standing source, and DISINFO is the counter to the cheap tap. Death:
+`wire_informants` rows die with either party (the wiretap precedent in runEstate); `disinfo_until` rides
+the character row. The worker `sweepWire` now also reaps lapsed retainers. Board (`GET /v1/wire`) gained
+`informants` (the true reads), `disinfo {active,seconds}` (your own smokescreen), and the step-three costs;
+`/v1/rules` + the console Wire tab (an Informants section + a Disinformation card) surface them.
+`test/wire.js` proves disinfo cooks a tap (the hunt hidden, indicted false), the informant PIERCES it (true
+`huntingYou`/wealth + `huntingAnyone`), the self/gone/cap gates, the worker sweep, and §10.4 ($OMR
+conservation drift == the test grant only — every wire spend an `intel:*` burn). Suite 30/30 + sim drift-0.
+All numbers are founder sign-off levers.
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),

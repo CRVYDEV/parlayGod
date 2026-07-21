@@ -1498,7 +1498,13 @@ export const WIRE = {
     { min: 0, name: 'Eavesdropper' }, { min: 25, name: 'Wireman' }, { min: 100, name: 'Spymaster' },
     { min: 400, name: 'The Listener' }, { min: 1500, name: 'The Oracle' },
   ],
+  // ── STEP THREE — the counter-intel triad (all $OMR sinks via the intel: vocabulary — ZERO invariant
+  // changes). A rock-paper-scissors: a cheap WIRETAP is machine surveillance → foiled by DISINFORMATION;
+  // an expensive INFORMANT is a HUMAN source → sees THROUGH the disinfo (a mole can't be fed lies). ──
+  DISINFO_OMR: 10, DISINFO_MS: 12 * 3600 * 1000,   // plant false intel: any WIRETAP reading you gets cooked private signals for a window
+  INFORMANT_OMR: 25, INFORMANT_MS: 7 * 24 * 3600 * 1000, INFORMANT_MAX: 3, // a standing HUMAN source: recurring retainer, deeper read, pierces disinfo
 };
+export const disinfoActive = (ch, now = Date.now()) => !!ch.disinfo_until && new Date(ch.disinfo_until).getTime() > now;
 export const spyRankOf = (ops) =>
   [...WIRE.SPY_RANKS].reverse().find((r) => Number(ops) >= r.min) || WIRE.SPY_RANKS[0];
 export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
