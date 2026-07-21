@@ -427,6 +427,19 @@ sign-off flag (BALANCE.md):** the income mults (protection ×1.15 / smuggling ×
 offset by the raid risk; numbers (×1.0) preserves the signed baseline; sim the net EV per type before
 production. `TERRITORY_TYPES`/scrutiny/raid numbers are all sign-off levers.
 
+**FAUCET MEASUREMENT PASS — `tools/sim.js` P9.8–P9.10 (measured this session's three drops).** The three
+"sim + sign-off" faucets (co-op apex raids, boxing exhibition purse, territory type mults) are now measured
+analytically in the sim (the den/kill-EV precedent; §10.4 stays drift-0). Recorded in BALANCE.md with
+recommendations; two real FINDINGS surfaced (flagged for founder sign-off, NOT retuned per ground rule #1):
+**(1)** the **exhibition purse** is a large sustained faucet (+$41k/bout / **~$495k/day for a maxed 3-stable**,
++EV at every form) — rec: scale the fee toward the purse or cap bouts/day; **(2)** the **Protection Racket
+type is a STRICT +15% upgrade at daily cadence** (hot-in-30h dodges a daily collect → 0% realized raid risk),
+violating the "higher-variance not higher-EV" intent — rec: raise `protection.scrutinyPerHr` 6→~10 so a daily
+collector faces real raid risk (like smuggling, which measured correctly: lazy-collected → ~80% raided → net
+worse than numbers, active-collected → the full ×1.35). World apex emission is regen-bounded (base-wide
+ceilings $960k–$4.32M/day; the B1 solo-floor is ~$90k–$300k/day for one min-level whale). The sim now prints
+all three every run so any retune is re-measured.
+
 **Phase 4 (Backed emission) — BUILT** (`src/economy.js`, `src/worker.js`, `test/economy.js`;
 design `omerta-phase4-emission-design.md`). Closes the audit's #1 finding — the fixed 14% staking
 APY was the only unbounded $OMR mint. Now staking rewards are **paid from a funded pool, not
