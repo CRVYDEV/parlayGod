@@ -10,7 +10,7 @@
 // Every effect is a NEW single-touchpoint modifier read via game.js `hasSkill`/`skillMult`/
 // `trunkCap` — deliberately OFF the audit-locked surfaces. All numbers are sign-off levers.
 import { GameError } from './game.js';
-import { SKILLS, skillOf, activeOf, levelOf, assetEnergyCap, M8 } from './rules.js';
+import { SKILLS, skillOf, activeOf, ultimateOf, grandmasteriesFor, activeCdFor, levelOf, assetEnergyCap, M8 } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // STEP THREE — PRESTIGE POINTS: a long-lived bloodline gets a small bonus point budget on top of the
@@ -48,27 +48,33 @@ export async function learnSkill(ch, skillId, client, h) {
 // heist/world-raid cooldowns are op pacing (never jail_until). active_at is written by DIRECT SQL (it's
 // outside persistCharacter's positional UPDATE, so the write survives the persist at txn end).
 export async function useActive(ch, abilityId, client, h) {
+  // a capstone active (single req) OR a step-four grandmastery ULTIMATE (needs BOTH capstones of a pair)
   const a = activeOf(abilityId);
-  if (!a) throw new GameError('bad_active', 'No such ability.');
-  if (!h.owned.skills.has(a.req)) throw new GameError('locked', `${a.name} is unlocked by ${skillOf(a.req)?.name}.`);
+  const ult = a ? null : ultimateOf(abilityId);
+  if (!a && !ult) throw new GameError('bad_active', 'No such ability.');
+  if (a && !h.owned.skills.has(a.req)) throw new GameError('locked', `${a.name} is unlocked by ${skillOf(a.req)?.name}.`);
+  if (ult && !ult.reqs.every((r) => h.owned.skills.has(r)))
+    throw new GameError('locked', `${ult.active.name} needs ${ult.reqs.map((r) => skillOf(r)?.name).join(' + ')}.`);
   if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', "You can't pull that off from a cell.");
-  if (ch.active_at && Date.now() - new Date(ch.active_at).getTime() < SKILLS.ACTIVE_CD_MS)
+  // a GRANDMASTER (owns any grandmastery pair) cycles the shared active cooldown faster
+  const cd = activeCdFor(h.owned.skills);
+  if (ch.active_at && Date.now() - new Date(ch.active_at).getTime() < cd)
     throw new GameError('cooldown', 'You need to catch your breath before the next one.');
-  const lvl = levelOf(Number(ch.respect));
-  let result;
-  if (abilityId === 'adrenaline') {
-    const max = 50 + 2 * lvl + assetEnergyCap(h.owned.assets || []);
-    ch.energy = max; result = { energy: max };
-  } else if (abilityId === 'moxie') {
-    const max = 10 + lvl;
-    ch.nerve = max; result = { nerve: max };
-  } else { // hot_wire — clears op cooldowns (heist_at + world_raid_at ride persistCharacter, so no direct SQL)
-    ch.heist_at = null; ch.world_raid_at = null; result = { cooldownsCleared: ['heist', 'world_raid'] };
-  }
+  const energyMax = 50 + 2 * levelOf(Number(ch.respect)) + assetEnergyCap(h.owned.assets || []);
+  const nerveMax = 10 + levelOf(Number(ch.respect));
+  const name = a ? a.name : ult.active.name;
+  const result = {};
+  // effect flags per ability (a single capstone burst, or a grandmastery ultimate = a combined burst)
+  const givesEnergy = ['adrenaline', 'kingpins_rush', 'full_throttle'].includes(abilityId);
+  const givesNerve  = ['moxie', 'kingpins_rush', 'ghost_protocol'].includes(abilityId);
+  const clearsOps   = ['hot_wire', 'full_throttle', 'ghost_protocol'].includes(abilityId);
+  if (givesEnergy) { ch.energy = energyMax; result.energy = energyMax; }
+  if (givesNerve)  { ch.nerve = nerveMax;   result.nerve = nerveMax; }
+  if (clearsOps)   { ch.heist_at = null; ch.world_raid_at = null; result.cooldownsCleared = ['heist', 'world_raid']; }
   await client.query('UPDATE characters SET active_at=now() WHERE id=$1', [ch.id]);
   ch.active_at = new Date();
-  await h.track(client, ch.account_id, 'skill_active', { ability: abilityId });
-  return { ok: true, ability: abilityId, name: a.name, ...result, cooldownSeconds: Math.ceil(SKILLS.ACTIVE_CD_MS / 1000) };
+  await h.track(client, ch.account_id, 'skill_active', { ability: abilityId, ultimate: !!ult });
+  return { ok: true, ability: abilityId, name, ...result, cooldownSeconds: Math.ceil(cd / 1000) };
 }
 
 // STEP TWO — PER-SKILL RESPEC: unlearn ONE skill (leaf-first) for a smaller $OMR burn than the full wipe,
@@ -106,15 +112,24 @@ export async function respecSkills(ch, client, h) {
 
 // The board — the full tree, what this street knows, and the point budget.
 export function skillsBoard(ch, h) {
-  const cdLeft = ch.active_at ? Math.max(0, SKILLS.ACTIVE_CD_MS - (Date.now() - new Date(ch.active_at).getTime())) : 0;
+  const owned = h.owned.skills;
+  const cd = activeCdFor(owned); // step four: a grandmaster's shared active cooldown is shorter
+  const cdLeft = ch.active_at ? Math.max(0, cd - (Date.now() - new Date(ch.active_at).getTime())) : 0;
   const prestige = Number(h.acct?.prestige || 0);
+  const grands = grandmasteriesFor(owned);
   return {
     lvlPerPoint: SKILLS.LVL_PER_POINT, respecOmr: SKILLS.RESPEC_OMR, respecOneOmr: SKILLS.RESPEC_ONE_OMR,
     points: pointsOf(ch, h.owned, prestige),
-    tree: SKILLS.TREE.map((s) => ({ ...s, known: h.owned.skills.has(s.id) })),
+    tree: SKILLS.TREE.map((s) => ({ ...s, known: owned.has(s.id) })),
     // step two: capstone-unlocked ACTIVE abilities + their shared cooldown
-    actives: SKILLS.ACTIVES.map((a) => ({ id: a.id, name: a.name, desc: a.desc, req: a.req, unlocked: h.owned.skills.has(a.req) })),
+    actives: SKILLS.ACTIVES.map((a) => ({ id: a.id, name: a.name, desc: a.desc, req: a.req, unlocked: owned.has(a.req) })),
     activeCooldownSeconds: Math.ceil(cdLeft / 1000),
+    // step four: GRANDMASTERY — owning both capstones of a pair unlocks a combined ULTIMATE + faster cooldown
+    grandmasteries: SKILLS.GRANDMASTERIES.map((g) => ({ id: g.id, name: g.name, reqs: g.reqs,
+      unlocked: g.reqs.every((r) => owned.has(r)),
+      active: { id: g.active.id, name: g.active.name, desc: g.active.desc } })),
+    grandmaster: grands.length > 0, grandmasterTitles: grands.map((g) => g.name),
+    activeCdSeconds: Math.ceil(cd / 1000),
     // step three: how prestige carries into a new street — the bonus points now, the memory slots at death
     prestige, memorySlots: memorySlotsOf(prestige), memoryMax: SKILLS.MEMORY_MAX,
     prestigePerSlot: SKILLS.PRESTIGE_PER_SLOT, prestigePerPoint: SKILLS.PRESTIGE_PER_POINT,

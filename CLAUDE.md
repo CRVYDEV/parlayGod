@@ -1072,6 +1072,25 @@ no CRITICAL/HIGH — the one MED (the re-roll lock order) fixed in-commit. `CREA
 + the 0.01-ETH fee are founder sign-off levers (total-conserved → no §10.4/sim change; the spread is a
 build-identity dial, not a power dial).
 
+**Skills step four — GRANDMASTERY — BUILT** (`src/rules.js`, `src/skills.js`, `test/skills.js`,
+`public/index.html`; the capstone-of-capstones endgame). Owning BOTH tier-4 capstones of a pair (the
+deepest build — two fully-maxed branches, ~lvl 48 for 20 points) DERIVES a **Grandmastery** (no cost —
+the natural reward, `SKILLS.GRANDMASTERIES`: The Boss = made_man+kingpin, The Warlord = made_man+road_boss,
+The Shadow = kingpin+road_boss) that unlocks a combined ULTIMATE active (`useActive` extended:
+`kingpins_rush` energy+nerve, `full_throttle` energy+op-cds, `ghost_protocol` nerve+op-cds — both bursts in
+ONE cast, where the two single actives share a cooldown so you'd otherwise pick just one) AND cuts the
+shared active cooldown (`GRANDMASTER_CD_MS` 4h < `ACTIVE_CD_MS` 8h, via `activeCdFor`). Pure QoL/pacing on
+the step-two active mechanic — energy/nerve are regen resources, heist/world cooldowns are op pacing → ZERO
+section-10.4, off every audit-locked surface (sim drift-0, suite 32/32). DERIVED from OWNED capstones, so the
+heir only gets it by re-earning both (muscle memory carries tier-1 only) — no death-softening. Helpers
+`grandmasteriesFor`/`ultimateOf`/`activeCdFor`; the board surfaces `grandmasteries` (with `unlocked` + the
+ultimate), `grandmaster`/`grandmasterTitles`, `activeCdSeconds`; the console Life tab renders unlocked
+ultimates (gold cards) + a locked-grandmastery hint. `test/skills.js` proves the two-maxed-branch unlock
+(The Boss), the locked-ultimate gate (The Warlord without road_boss), the combined burst (energy AND nerve
+to the level-80 cap), and the shorter grandmaster cooldown. `GRANDMASTER_CD_MS` + the pairings are founder
+sign-off levers (pure pacing — `GRANDMASTER_CD_MS = ACTIVE_CD_MS` reverts the edge). The Skills pillar is now
+feature-complete (3×3 tree → capstones + actives + per-skill respec → prestige carry → grandmastery).
+
 **The Underworld (step one) — BUILT** (`src/underworld.js`, `test/underworld.js` — the 16th suite
 file; design `omerta-underworld-design.md`). Named NPCs as RELATIONSHIPS — skills are what you are,
 the Underworld is who you know. Four fixtures, one per loop (`UNDERWORLD` rules tail: Doc Moretti /

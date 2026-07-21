@@ -159,6 +159,29 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
   -(SKILLS.RESPEC_OMR + SKILLS.RESPEC_ONE_OMR), 'the single-skill burn is ledgered respec:skills too (vic full + ex one)');
 assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.token })).body.error, 'cooldown', 'per-skill respec shares the daily cooldown');
 
+// ── STEP FOUR: GRANDMASTERY — own BOTH capstones of a pair → a combined ULTIMATE + faster cooldown ──
+const gm = await mk('Grand Master');
+await seedCh(gm.id, 'respect=25000');  // level 80 → 20 points = two fully-maxed branches
+for (const s of ['bruiser', 'doctors_friend', 'executioner', 'made_man',       // enforcer 1+2+3+4 = 10
+                 'fast_talker', 'fence_network', 'broker', 'kingpin'])          // operator 1+2+3+4 = 10
+  assert.equal((await call('POST', `/v1/skills/${s}`, { token: gm.token })).code, 200, `${s} learned`);
+r = await call('GET', '/v1/skills', { token: gm.token });
+assert.equal(r.body.points.available, 0, 'all twenty points spent on two maxed branches');
+assert.equal(r.body.grandmaster, true, 'two maxed branches makes a Grandmaster');
+const boss = r.body.grandmasteries.find((g) => g.id === 'the_boss');
+assert.equal(boss.unlocked, true, 'The Boss (made_man + kingpin) is unlocked');
+assert.equal(r.body.grandmasteries.find((g) => g.id === 'the_warlord').unlocked, false, 'The Warlord needs road_boss — not owned');
+assert.equal(r.body.activeCdSeconds, Math.ceil(SKILLS.GRANDMASTER_CD_MS / 1000), 'a Grandmaster cycles the shorter cooldown');
+// the locked ultimate is refused; the unlocked one fires a COMBINED burst (energy AND nerve to the cap)
+assert.equal((await call('POST', '/v1/skills/active/full_throttle', { token: gm.token })).body.error, 'locked', 'The Warlord ultimate stays locked without road_boss');
+await seedCh(gm.id, 'energy=1, nerve=1');
+r = await call('POST', '/v1/skills/active/kingpins_rush', { token: gm.token });
+assert.equal(r.code, 200, "Kingpin's Rush fired");
+assert.equal(r.body.energy, 50 + 2 * 80, 'energy to the level-80 cap');
+assert.equal(r.body.nerve, 10 + 80, 'AND nerve to the cap — the combined ultimate');
+assert.equal(r.body.cooldownSeconds, Math.ceil(SKILLS.GRANDMASTER_CD_MS / 1000), 'on the grandmaster cooldown');
+assert.equal((await call('POST', '/v1/skills/active/adrenaline', { token: gm.token })).body.error, 'cooldown', 'one burst per shared cooldown (ultimate + capstone actives share it)');
+
 // ── STEP THREE: PRESTIGE POINTS + MUSCLE MEMORY (prestige carries into a new street) ──
 const dyn = await mk('Dynasty Don');
 const dynAcct = `(SELECT account_id FROM characters WHERE id='${dyn.id}')`;
@@ -192,5 +215,5 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM character_skills W
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `respec:skills rides the respec prefix (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Skills test passed — twelve-skill tree (three branches × four tiers), level-derived points (6 @ lvl 25), learn gates (bad/owned/prereq/points), FAST TALKER laylow ×0.8 ledger-exact, BROKER half listing fees, PACK MULE trunk 13, ROAD CAPTAIN 480s road, GETAWAY stints ≤80%, EXECUTIONER ~8s search clock, DOC\'S FRIEND heal ×0.75, respec (ledgered 10 $OMR burn, points restored, shared daily cooldown), STEP TWO: MADE MAN capstone (needs lvl 40 / 10 points, unlocks Adrenaline Rush), active-ability gates + energy burst to the level-scaled cap + shared cooldown, per-skill respec (leaf-first, not_known, ledgered, daily cooldown), estate wipes the build, vocabulary closed');
+console.log('✅ Skills test passed — twelve-skill tree (three branches × four tiers), level-derived points (6 @ lvl 25), learn gates (bad/owned/prereq/points), FAST TALKER laylow ×0.8 ledger-exact, BROKER half listing fees, PACK MULE trunk 13, ROAD CAPTAIN 480s road, GETAWAY stints ≤80%, EXECUTIONER ~8s search clock, DOC\'S FRIEND heal ×0.75, respec (ledgered 10 $OMR burn, points restored, shared daily cooldown), STEP TWO: MADE MAN capstone (needs lvl 40 / 10 points, unlocks Adrenaline Rush), active-ability gates + energy burst to the level-scaled cap + shared cooldown, per-skill respec (leaf-first, not_known, ledgered, daily cooldown), STEP FOUR: GRANDMASTERY (two maxed branches → a Grandmaster: the combined ULTIMATE fires energy AND nerve to the cap, the locked ultimate is refused, the shared active cooldown is shorter), STEP THREE: prestige points (+2 @ prestige 24) + MUSCLE MEMORY (the heir keeps the three tier-1 basics; a prestige-0 line stays unschooled), estate wipes the build, vocabulary closed');
 await app.close();

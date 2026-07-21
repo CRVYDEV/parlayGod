@@ -2425,11 +2425,18 @@
               ${!s.known ? `<button class="act" data-learn="${s.id}" style="font-size:10px;padding:2px 6px">learn</button>`
                 : `<button class="act" data-respec1="${s.id}" style="font-size:10px;padding:2px 6px">unlearn (${sk.respecOneOmr || 5} $OMR)</button>`}</div>`).join('')}</div>`).join('')}</div>
       ${(sk.actives || []).some((a) => a.unlocked) ? `
-      <h2 style="margin-top:12px">Active Abilities <span class="d" style="font-size:10px">(capstone-unlocked bursts${sk.activeCooldownSeconds > 0 ? ` · ready in ${Math.ceil(sk.activeCooldownSeconds / 60)}m` : ' · ready'})</span></h2>
+      <h2 style="margin-top:12px">Active Abilities <span class="d" style="font-size:10px">(capstone-unlocked bursts${sk.grandmaster ? ` · GRANDMASTER — cooldown ${Math.round((sk.activeCdSeconds || 0) / 3600)}h` : ''}${sk.activeCooldownSeconds > 0 ? ` · ready in ${Math.ceil(sk.activeCooldownSeconds / 60)}m` : ' · ready'})</span></h2>
       <div class="grid">${sk.actives.filter((a) => a.unlocked).map((a) => `
         <div class="card"><span class="t">${a.name}</span>
           <div class="d">${a.desc}</div>
-          <button class="act" data-active="${a.id}" ${sk.activeCooldownSeconds > 0 ? 'disabled' : ''}>use</button></div>`).join('')}</div>` : ''}
+          <button class="act" data-active="${a.id}" ${sk.activeCooldownSeconds > 0 ? 'disabled' : ''}>use</button></div>`).join('')}
+        ${(sk.grandmasteries || []).filter((g) => g.unlocked).map((g) => `
+        <div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">${g.active.name} <span class="chip good">${g.name} — ultimate</span></span>
+          <div class="d">${g.active.desc}</div>
+          <button class="act" data-active="${g.active.id}" ${sk.activeCooldownSeconds > 0 ? 'disabled' : ''}>use</button></div>`).join('')}</div>` : ''}
+      ${(sk.grandmasteries || []).some((g) => !g.unlocked) ? `
+      <div class="d" style="font-size:10px;margin-top:6px;color:var(--dim)">Grandmastery (own BOTH capstones of a pair → a combined ultimate + a faster cooldown):
+        ${(sk.grandmasteries || []).map((g) => `${g.unlocked ? '◆' : '◇'} <b>${g.name}</b> (${g.reqs.join(' + ')})`).join(' · ')}</div>` : ''}
 
       <h2 style="margin-top:12px">The Underworld
         ${uw.lead ? `<span class="chip good">today's lead: ${uw.lead.npc} — ${uw.lead.task || 'any business'}</span>` : ''}
