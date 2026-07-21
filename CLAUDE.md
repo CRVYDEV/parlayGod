@@ -1181,12 +1181,14 @@ dissolution and two-rival-invade with an EvalPlanQual outbid re-read; mirrors ex
 free extraction or free grief. Fixed in-commit (regression added): **F1 (LOW)** `collectFrontier` was
 missing the SIGNED **D2 "shield, not bunker"** safehouse gate its sibling `collectTerritory` enforces —
 a safehoused member could bank frontier tribute while untargetable; now `safeHoused(ch)` throws `safe`
-(closing a hole in a signed anti-abuse bound, matching territory/business/convoy collection). Flagged for
-founder sign-off (NOT patched, ground rule #1): **B1** `invadeOutpost` has no level gate (a low boss with
-$50k can hold an apex outpost once it's in play — money not muscle takes a bought outpost; add a `minLvl`
-gate if undesired), and **B2** the garrison ratchet (×1.5/invasion, no decay/cooldown) can price a
-sub-apex family out of an apex outpost — a pure sink, rout-resettable, so never permanent, but a
-garrison-decay or invade-cooldown is the dial. Suite 30/30 + sim drift-0.
+(closing a hole in a signed anti-abuse bound, matching territory/business/convoy collection).
+**B1 (founder-directed follow-up) — invasion now level-gated:** `invadeOutpost` gates
+`levelOf(ch.respect) < fixture.minLvl` (you can only HOLD turf you could RAID), closing the consistency
+gap where a rookie family could buy an apex outpost with treasury alone; regression added (a lvl-10 boss
+can't invade kryl/lvl-20). Still flagged for founder sign-off (NOT patched, ground rule #1): **B2** the
+garrison ratchet (×1.5/invasion, no decay/cooldown) can price a sub-apex family out of an apex outpost —
+a pure sink, rout-resettable, so never permanent, but a garrison-decay or invade-cooldown is the dial.
+Suite 30/30 + sim drift-0.
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

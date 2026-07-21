@@ -328,6 +328,13 @@ board = (await call('GET', '/v1/world', { token: boss.token })).body;
 kb = board.npcs.find((n) => n.id === 'kryl');
 assert.equal(kb.heldBy.mine, false, 'the Frontier Mob no longer holds Kryl');
 assert.equal(kb.invadeCost, Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(expectCost * WORLD.FRONTIER.INVADE_OUTBID)), 'the board quotes what it’d cost to take it back');
+// B1 (audit) — you can only HOLD turf you could RAID: a rookie boss with a fat treasury can't seat
+// himself on an apex outpost (kryl is lvl 20). Money alone doesn't take the frontier.
+const rookieBoss = await mk('Rookie Don');
+await seedCh(rookieBoss.id, 'respect=324, cash=100000');  // level 10 — enough to found (lvl 5), under kryl's minLvl 20
+assert.equal((await call('POST', '/v1/gangs', { token: rookieBoss.token, body: { name: 'The Nobodies', tag: 'NOB' } })).code, 200, 'the rookie family is founded');
+// the level gate fires BEFORE the treasury read, so no seed needed — money can't buy an apex outpost
+assert.equal((await call('POST', '/v1/world/kryl/invade', { token: rookieBoss.token })).body.error, 'level', 'a rookie boss can’t invade an apex outpost, treasury or no');
 
 // (5) §10.4 — the gang-treasuries check reconciles world:tribute (+) and world:invade (−); the only
 // unexplained drift is the SQL-seeded rival treasury (fully-earned tribute needs no seed)
