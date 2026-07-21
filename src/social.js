@@ -1330,7 +1330,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id

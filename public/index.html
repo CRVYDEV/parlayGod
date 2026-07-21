@@ -350,6 +350,16 @@
     if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
     if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
     if (body.game && typeof body.win === 'boolean' && body.bet !== undefined) bits.push(body.win ? `the table paid — +$${fmt(Math.abs(body.net ?? 0))}` : `the house keeps it — −$${fmt(Math.abs(body.net ?? body.bet))}`);
+    if (body.game === 'blackjack' && !body.done) bits.push(`dealt ${body.playerTotal} — dealer shows ${body.dealerUp === 1 ? 'an ace' : body.dealerUp}`);
+    if (body.game === 'blackjack' && body.done) bits.push(
+      body.outcome === 'blackjack' ? `BLACKJACK — +$${fmt(body.net)}` :
+      body.outcome === 'bust' ? `bust at ${body.playerTotal} — −$${fmt(Math.abs(body.net))}` :
+      body.outcome === 'push' ? "a push — your bet's returned" :
+      `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
+    if (body.game === 'poker' && body.result) bits.push(
+      body.result === 'push' ? `split pot — ${body.yourHand} both ways` :
+      body.result === 'win' ? `${body.yourHand} takes it — +$${fmt(body.net)}` :
+      `their ${body.theirHand} beat your ${body.yourHand} — −$${fmt(Math.abs(body.net))}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
     if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
     if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
@@ -1175,6 +1185,18 @@
       <button class="act" id="fight-b">back the dog</button>
       <input id="fight-amt" placeholder="stake" size="8" value="1000">
       <button class="act" data-do="POST /v1/casino/fight/claim">claim bets</button>
+      <h2 style="margin-top:14px">Blackjack <span class="d" style="font-size:10px">(a natural pays 3:2 — dealer stands on 17)</span></h2>
+      ${(() => { const hd = den.blackjack?.hand; const rk = (c) => c === 1 ? 'A' : c === 11 ? 'J' : c === 12 ? 'Q' : c === 13 ? 'K' : String(c);
+        if (hd) return `<div class="d" style="font-size:12px">your hand: <b>${hd.player.map(rk).join(' ')}</b> (${hd.playerTotal}) &nbsp;·&nbsp; dealer shows: <b>${rk(hd.dealerUp)}</b> &nbsp;·&nbsp; bet $${fmt(hd.bet)}${hd.doubled ? ' (doubled)' : ''}</div>
+          <button class="act" data-do="POST /v1/casino/blackjack/hit">hit</button>
+          <button class="act" data-do="POST /v1/casino/blackjack/stand">stand</button>
+          ${hd.canDouble ? '<button class="act" data-do="POST /v1/casino/blackjack/double">double down</button>' : ''}`;
+        return `<input id="bj-amt" placeholder="bet" size="8" value="1000"> <button class="act" id="bj-go">deal</button>`; })()}
+      <h2 style="margin-top:14px">Hold'em Table <span class="d" style="font-size:10px">(heads-up showdown — winner takes the raked pot)</span></h2>
+      <div class="d" style="color:var(--dim);font-size:11px">open tables: ${(den.poker?.tables || []).map((p) => `<a href="#" class="pk-play" data-id="${p.id}" data-name="${p.name}">${p.name} (up to $${fmt(p.limit)})</a>`).join(' · ') || 'nobody dealing'}</div>
+      <div style="margin-top:4px"><input id="pk-amt" placeholder="stake" size="8" value="1000"> <span class="d" style="font-size:10px">click a table above to play for this stake</span></div>
+      <input id="pk-limit" placeholder="open your own table (limit)" size="20">
+      <button class="act" id="pk-set">deal from your table</button>
       <h2 style="margin-top:14px">Back Room</h2>
       <div class="d" style="color:var(--dim);font-size:11px">faders: ${(den.backroom?.faders || []).map((f) => `${f.name} ($${fmt(f.fadeLimit)})`).join(', ') || 'nobody'}</div>
       <input id="fade-limit" placeholder="your fade limit" size="12">
@@ -1184,6 +1206,9 @@
     t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#fade-set').onclick = () => act('POST', '/v1/casino/fade', { limit: Number(t.querySelector('#fade-limit').value) });
+    if (t.querySelector('#bj-go')) t.querySelector('#bj-go').onclick = () => act('POST', '/v1/casino/blackjack', { amount: Number(t.querySelector('#bj-amt').value) });
+    t.querySelector('#pk-set').onclick = () => act('POST', '/v1/casino/poker/deal', { limit: Number(t.querySelector('#pk-limit').value) });
+    t.querySelectorAll('.pk-play').forEach((a) => a.onclick = (e) => { e.preventDefault(); act('POST', `/v1/casino/poker/${a.dataset.id}`, { amount: Number(t.querySelector('#pk-amt').value) }); });
   }
 
   // Everything Else — the grouped action deck over the full /v1 surface

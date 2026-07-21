@@ -577,6 +577,21 @@ export const CASINO = {
   // RAKEBACK: owners of a casino BUSINESS split RAKEBACK_BPS of den stake volume (claimed at
   // business collect, cursor-tracked) — the Den feeds the Business Empire layer.
   RAKEBACK_BPS: 100,
+  // ── step three: the TABLE GAMES (all founder sign-off levers) ──
+  // BLACKJACK (stateful PvE): a real hand you play out — deal/hit/stand/double. Infinite deck
+  // (independent draws), dealer stands per DEALER_MIN and hits SOFT 17 (the authentic Vegas rule
+  // → the standard ~0.6% edge; a natural pays 3:2 = BJ_PAYS_BPS). Same book accounting as dice
+  // (casino:bet:blackjack sink at deal, casino:win:blackjack faucet at resolve, profit-capped
+  // street tip). Bets ride the shared MIN_BET/MAX_BET (+ the HIGH_LVL room).
+  BJ_PAYS_BPS: 15000,          // a natural (2-card 21) pays 3:2
+  BJ_DEALER_MIN: 17, BJ_HIT_SOFT_17: true,
+  BJ_NERVE: 1,                 // a hand costs a nerve at deal (Madame T1 comps it, like dice)
+  // HEADS-UP HOLD'EM (PvP showdown): consent-by-listing (a dealer posts a poker_limit — the fade
+  // pattern); a challenger antes an equal stake, both are dealt 2 hole + 5 community, best 5-of-7
+  // wins the pot minus PVP_RAKE_BPS (half → street tax, half burns — the back-room-dice mechanism,
+  // §10.4-exact per character). A tie splits (each stake returned, no rake). One atomic showdown
+  // (true multi-street betting needs turn-based sessions this architecture defers).
+  POKER_MIN: 100,
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)

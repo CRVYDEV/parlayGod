@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS characters (
   safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
   guard_price NUMERIC,                             -- M7 Phase 4: bodyguard-for-hire listing (NULL = not offering)
   fade_limit NUMERIC,                              -- Den step 2: open back-room dice challenge limit (NULL = not fading)
+  poker_limit NUMERIC,                             -- Den step 3: open heads-up poker challenge limit (NULL = not dealing)
   -- D3: per-account daily cap on the PUBLIC wash route (a token bucket, like a business front's
   -- launderCapDay — heat was the only brake and it decays in minutes)
   wash_used NUMERIC NOT NULL DEFAULT 0,
@@ -808,6 +809,19 @@ CREATE TABLE IF NOT EXISTS den_volume (
   distributed NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO den_volume (id, total) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM den_volume);
+
+-- Den step three: BLACKJACK — a stateful PvE hand (one live hand per street at a time). The bet is
+-- taken (and profit-booked) at deal; the hand persists across hit/stand/double calls (each its own
+-- atomic txn) until it resolves, when the payout (if any) is credited. Cards are drawn from an
+-- infinite deck (independent, unpredictable — the same server-authoritative RNG as dice) and stored
+-- as comma-separated rank ints (1=Ace, 11/12/13=J/Q/K). Dies with the street (runEstate wipe).
+CREATE TABLE IF NOT EXISTS blackjack_hands (
+  character_id TEXT PRIMARY KEY,
+  bet INT NOT NULL,
+  dbl BOOLEAN NOT NULL DEFAULT FALSE,   -- doubled down (bet is staked twice, one card, auto-stand)
+  player TEXT NOT NULL,                 -- the player's cards, comma-separated rank ints
+  dealer TEXT NOT NULL                  -- the dealer's cards (only the up-card is revealed until stand)
+);
 
 -- VENDETTAS: a player fire-kill swears the victim's bloodline (ACCOUNT) against the killer's —
 -- surviving both sides' deaths until settled (a revenge fire-kill, 2x rep) or lapsed. One active
