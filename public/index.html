@@ -295,6 +295,8 @@
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`moved product — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
+    if (typeof body.win === 'boolean' && (body.purse != null || body.wager != null)) bits.push(body.win ? `🏁 took the checkered — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}` : `🏁 ate the loss — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`);
+    if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
     if (body.seized) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}`);
     if (body.pay) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
     if (body.won !== undefined && body.settled) bits.push(body.won > 0 ? `settled — +$${fmt(body.won)}` : 'settled — nothing hit');
@@ -531,7 +533,7 @@
 
   // ── tabs ──
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
-    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', scores: 'Big Scores',
+    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', races: 'Street Races', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
     wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', deck: 'Everything Else' };
   // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
@@ -539,7 +541,7 @@
     ['', ['start']],
     ['Streets', ['streets', 'garage', 'life', 'city']],
     ['Earners', ['kitchen', 'empire', 'scores', 'market']],
-    ['Vice', ['den', 'speakeasy', 'boxing']],
+    ['Vice', ['den', 'speakeasy', 'boxing', 'races']],
     ['Blood', ['pvp', 'loans', 'law', 'pen', 'wire']],
     ['Family', ['family']],
     ['Legit', ['portfolio', 'estate', 'store']],
@@ -568,7 +570,7 @@
     kitchen: renderKitchen, family: renderFamily, market: renderMarket, pvp: renderPvp, law: renderLaw,
     garage: renderGarage, empire: renderEmpire, speakeasy: renderSpeakeasy, boxing: renderBoxing,
     scores: renderScores, loans: renderLoans, portfolio: renderPortfolio, estate: renderEstate,
-    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore };
+    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces };
   let currentTab = 'streets';
   function setTab(id) {
     currentTab = id;
@@ -1869,6 +1871,50 @@
       const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');
       const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\\n');
       alert('TOP FIGHTERS\\n\\n' + (f || 'none') + '\\n\\nMANAGER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
+  }
+
+  // ── STREET RACES: the car catalog as a competitive loop (PvE circuit + tuning + PvP wagers) ──
+  async function renderRaces() {
+    const t = $('#tab-races');
+    await refresh();
+    const b = (await api('GET', '/v1/races')).body || {};
+    const cars = b.cars || [], strip = b.strip || [], tiers = b.tiers || [];
+    const cd = b.cooldownSeconds || 0;
+    const carOpts = cars.map((c) => `<option value="${c.id}">${c.model} — power ${c.power}${c.tune ? ` (tune ${c.tune})` : ''}${c.dmg ? ` · ${c.dmg}% dmg` : ''}</option>`).join('');
+    t.innerHTML = `
+      ${!cars.length ? coachCard('Get some iron on the strip', 'Street racing turns your garage into a competitive loop. Boost or buy a car, tune it, and race the NPC circuit for a purse — or list it and take wagers off other drivers. Fast, valuable, well-tuned iron wins; the wheelman\'s speed decides close ones.') : ''}
+      <h2>Street Races <span class="chip">🏁 ${b.legend?.rank || 'Sunday Driver'} · ${b.legend?.wins || 0} wins</span></h2>
+      ${cd > 0 ? `<div class="card"><div class="d">Your ride is cooling down — next run in ${mins(cd)}.</div></div>` : ''}
+      <div class="grid">
+        <div class="card"><span class="t">The Circuit (PvE)</span>
+          <div class="d">Pay the buy-in (burns win or lose), beat the NPC pack for the purse. A loss dings your car.</div>
+          <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select></div>
+          ${tiers.map((ti) => `<div class="row" style="margin-top:4px"><span>${ti.name} <span class="chip">lvl ${ti.minLvl}</span></span><span>fee $${fmt(ti.fee)} · purse $${fmt(ti.purse)} <button class="act" data-npc="${ti.id}"${cd > 0 || !cars.length ? ' disabled' : ''}>race</button></span></div>`).join('')}
+        </div>
+        <div class="card"><span class="t">Your Garage</span>
+          ${cars.length ? cars.map((c) => `<div class="row" style="margin-top:4px"><span>${c.model} — <b>power ${c.power}</b>${c.dmg ? ` · <span style="color:var(--bad)">${c.dmg}% dmg</span>` : ''}${c.raceLimit ? ` · <span class="chip good">racing ≤ $${fmt(c.raceLimit)}</span>` : ''}</span>
+            <span><button class="act" data-tune="${c.id}"${c.tune >= (b.tune?.max || 5) ? ' disabled' : ''}>tune $${fmt(b.tune?.cost || 25000)} (${c.tune}/${b.tune?.max || 5})</button>
+            ${c.raceLimit ? `<button class="act" data-unlist="${c.id}">pull</button>` : `<input id="rc-lim-${c.id}" type="number" placeholder="list for $" style="width:96px"><button class="act" data-list="${c.id}">list</button>`}</span></div>`).join('') : '<div class="d">No cars — boost or buy some iron first.</div>'}
+        </div>
+      </div>
+      <div class="card"><span class="t">The Strip (PvP wagers)</span>
+        <div class="d">Other drivers' listed cars. Pick your own ride, name a wager up to their limit, and race. Winner takes the pot minus a 5% rake; the loser's car takes damage.</div>
+        ${strip.length ? strip.map((s) => `<div class="row" style="margin-top:4px"><span>${s.owner}'s ${s.model} <span class="chip">${s.band}</span> · up to $${fmt(s.limit)}</span>
+          <span><select class="rc-mycar" data-for="${s.carId}">${carOpts}</select><input id="rc-w-${s.carId}" type="number" placeholder="wager $" style="width:96px"><button class="act" data-race="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''}>race</button></span></div>`).join('') : '<div class="d">Nobody\'s on the strip right now. List one of your own to draw a challenger.</div>'}
+      </div>
+      <button class="act" id="rc-lb">🏁 THE WHEEL — the leaderboard</button>`;
+    t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc }).then(() => renderRaces()));
+    t.querySelectorAll('[data-tune]').forEach((x) => x.onclick = () => act('POST', `/v1/races/tune/${x.dataset.tune}`, null).then(() => renderRaces()));
+    t.querySelectorAll('[data-list]').forEach((x) => x.onclick = () => act('POST', `/v1/races/list/${x.dataset.list}`, { limit: Number(($(`#rc-lim-${x.dataset.list}`) || {}).value || 0) }).then(() => renderRaces()));
+    t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', `/v1/races/unlist/${x.dataset.unlist}`, null).then(() => renderRaces()));
+    t.querySelectorAll('[data-race]').forEach((x) => x.onclick = () => {
+      const myCar = (t.querySelector(`.rc-mycar[data-for="${x.dataset.car}"]`) || {}).value;
+      act('POST', `/v1/races/challenge/${x.dataset.race}`, { myCar, theirCar: x.dataset.car, wager: Number(($(`#rc-w-${x.dataset.car}`) || {}).value || 0) }).then(() => renderRaces());
+    });
+    const lb = $('#rc-lb'); if (lb) lb.onclick = async () => {
+      const d = (await api('GET', '/v1/leaderboard/races')).body?.drivers || [];
+      alert('THE WHEEL — winningest drivers\\n\\n' + (d.map((x, i) => `${i + 1}. ${x.name} — ${x.wins} wins (${x.rank})`).join('\\n') || 'none yet'));
+    };
   }
 
   // ── BIG SCORES: the solo score, crew heists, smuggling convoys ──

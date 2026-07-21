@@ -2951,3 +2951,34 @@ invariant/vocab change (the per-character check reconciles). Top-tier net $3.12M
 ~6.0d → ~7.5d; every tier keeps 80% gross. `test/speakeasy.js` asserts gross/upkeep/net + the ledgered
 sink; sim P9.12 prints net-of-upkeep by tier + the verdict. Suite 30/30 + sim drift-0. The `incomePerHr`
 curve remains a further founder dial; SIGN-OFF.md row 1.2 marked RESOLVED.
+
+**STREET RACES — a new content drop (`src/races.js`, `test/races.js` — the 31st suite).** The deep 60-car
+catalog (`CARS`) had barely mattered beyond melt/fence value; racing turns it into a competitive loop. A
+car's RACE POWER = `sqrt(carVal) + tune×TUNE_POWER + wheelman speed/2 − damage` (`rules.js:carPower`), so
+fast/valuable iron wins but tuning + the driver's speed stat decide close races. Three loops, all CASH (the
+Den's rule), built on the audited boxing/casino architecture: **(1) the PvE CIRCUIT** (`raceNpc`,
+`POST /v1/races/npc`) — pay a tier fee (BURNS win/lose, a §10.4 `race:fee` cash sink), beat the NPC field
+(`carPower + rand(VARIANCE)` vs `tier.fieldPower + rand`) for a bounded PURSE (a `race:purse` faucet, only
+on a win — the boxing-exhibition precedent); a loss dings the car (the existing damage mechanic). **(2) PvP
+WAGER races** (`raceChallenge`, `POST /v1/races/challenge/:ownerId`, two-party) — consent-by-listing
+(`cars.race_limit`, the fade/bout pattern), the audited **casino:pvp** taxed transfer (`race:wager`: winner
+nets wager − 5% rake, loser −wager, half rake → street tax/buyback, half burns — NO escrow, one atomic txn),
+the loser's car takes damage; challenger cooled down. **(3) TUNING** (`tuneCar`, `POST /v1/races/tune/:carId`)
+— a `race:tune` cash sink (+power, capped `TUNE_MAX` 5) that gives the car catalog progression. **THE WHEEL**
+— `account_persistent.race_wins` (lifetime wins, SURVIVES DEATH — the boxing-legend precedent) +
+`RACES.RANKS` + `GET /v1/leaderboard/races`. New columns `cars.tune`/`cars.race_limit`,
+`characters.race_at` (per-driver cooldown, DIRECT SQL — the active_at pattern, outside persist),
+`account_persistent.race_wins`. §10.4: `race:` joined the cash `KNOWN_REASONS` — every fee/purse/wager/tune
+row is character_id'd, so the per-character cash check reconciles (the PvP rake→pool/burn is the audited
+casino:pvp mechanism, outside the character-cash set); cars die with the street (already in the runEstate
+garage wipe — no new estate code). `RACE_CD_MS` is a TEST-ONLY cooldown knob (the SEARCH_MS precedent).
+Routes + `GET /v1/races` board + `/v1/rules` catalog + a **"Street Races"** console tab (Vice group: your
+garage with power/tune/list, the PvE circuit, the PvP strip with value BANDS, THE WHEEL leaderboard) +
+`describe()` humanization. `test/races.js` proves car power, the PvE circuit (fee-burn + bounded purse +
+level/tier gates), tuning (sink + cap), the PvP taxed transfer (winner nets wager − rake, half → street tax,
+loser's car damaged, all gates), the legend + leaderboard, and §10.4 (per-character cash reconciles).
+**The PvE purse is the drop's ONLY new faucet** — sim P9.13 measures it (a tuned contender +$60k/day, a
+premium monster +$216k/day at the 2h-cooldown/12-per-day cadence — bounded, in boxing-exhibition parity;
+the initial 30-min/48-per-day defaults measured a $3.12M/day printer and were retuned DOWN before ship).
+Suite 31/31 + sim drift-0. All `RACES` numbers (tiers/fees/purses/`CD_MS`/`TUNE_*`/`RAKE_BPS`/`VARIANCE`)
+are founder sign-off levers — flagged in BALANCE.md (the exhibition-purse precedent).

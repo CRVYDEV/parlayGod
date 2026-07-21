@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
   cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
   intel_ops INT NOT NULL DEFAULT 0,   -- (Wire step two) lifetime intel actions run — THE SPYMASTER (status, survives death)
+  race_wins INT NOT NULL DEFAULT 0,   -- STREET RACES: lifetime race wins — THE WHEEL legend (status, survives death — the boxing-legend precedent)
   -- NOTE: characters.active_at (Skills step two — shared skill-active cooldown) is added on the characters table below
   -- THE DYNASTY: the account-level RWA book survives death, so it's a generational fund — name it
   -- (a $OMR vanity sink). The name outlives every character and heads the legit-legend leaderboard.
@@ -168,6 +169,7 @@ CREATE TABLE IF NOT EXISTS characters (
   wire_until TIMESTAMPTZ,                           -- THE WIRE: the Street Wire premium-intelligence subscription window (a $OMR sink)
   disinfo_until TIMESTAMPTZ,                        -- THE WIRE step three: DISINFORMATION — while current, any WIRETAP reading you gets cooked private signals (a $OMR sink; an informant sees through it)
   active_at TIMESTAMPTZ,                            -- SKILLS step two: shared cooldown across capstone-unlocked ACTIVE abilities
+  race_at TIMESTAMPTZ,                              -- STREET RACES: per-driver race cooldown (written by direct SQL, outside persist — the active_at pattern)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -182,6 +184,8 @@ CREATE TABLE IF NOT EXISTS cars (
   plate TEXT,                                    -- M8 vanity plate (display only, $OMR sink)
   listed BOOLEAN NOT NULL DEFAULT false,         -- Black Market escrow: the row STAYS (car conservation counts rows); melt/fence/repair reject it
   pledged BOOLEAN NOT NULL DEFAULT false,        -- Loan step 2: pledged as loan collateral — locked like `listed` (findCar/list reject); seized to the lender on default
+  tune INT NOT NULL DEFAULT 0,                    -- STREET RACES: engine tune level (a cash-sink progression that adds race power)
+  race_limit INT,                                 -- STREET RACES: listed to race for a wager up to this (consent-by-listing, the fade/bout pattern); NULL = not on the strip
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS character_items (

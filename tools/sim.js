@@ -16,7 +16,7 @@ import { runBuyback } from '../src/worker.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
-         frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN } from '../src/rules.js';
+         frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -507,6 +507,19 @@ for (const t of SPEAKEASY.TIERS) {
 }
 note('speakeasy', 'net-EV verdict', 'still a strong front, now taxed',
   `top tier ~$${fmt(Math.floor(3120000 * seKeep))}/day NET after the ${SPEAKEASY.UPKEEP_BPS / 100}% upkeep — no longer a risk-free faucet; incomePerHr curve is the remaining founder dial (BALANCE speakeasy)`);
+
+// ════════ P9.13 street races — PvE purse EV (the new content faucet, boxing-exhibition twin) ════════
+// EV = −fee + P(win)×purse; P(win) enumerated over the rand grid (carPower+rand vs field+rand). The PvE
+// purse is the ONLY new faucet in the drop (PvP wagers are a taxed transfer, tuning a sink). Analytic.
+phase('P9.13 street races — PvE circuit purse EV by car power (the new faucet)');
+const pWinRace = (cp, field, V) => { let w = 0, tot = 0; for (let a = 0; a <= V; a++) for (let b = 0; b <= V; b++) { const m = cp + a, f = field + b; if (m === f) continue; tot++; if (m > f) w++; } return w / tot; };
+const racesPerDay = 24 / (RACES.CD_MS / 3600000); // one driver's cadence (30-min cd → 48/day)
+for (const [label, cp] of [['a tuned contender (power 200)', 200], ['a premium monster (power 450)', 450]]) {
+  let best = null;
+  for (const t of RACES.TIERS) { const p = pWinRace(cp, t.fieldPower, RACES.VARIANCE); const ev = -t.fee + p * t.purse; if (!best || ev > best.ev) best = { tier: t.name, p, ev }; }
+  note('races', `PvE EV — ${label}`, `${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev))}/race best`,
+    `best tier ${best.tier} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * racesPerDay))}/day at ${racesPerDay}/day cadence — bounded faucet, a lost race also dings the car (repair cost); sign-off vs boxing exhibition`);
+}
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
