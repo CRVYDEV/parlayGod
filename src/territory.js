@@ -289,6 +289,11 @@ export async function raidRivalRacket(ch, districtId, client, h) {
 export async function assignSpecialist(ch, districtId, memberId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss assigns the crew.');
   if (!memberId) throw new GameError('member', 'Name a made man to run it.');
+  // LOCK the GANG row first (char → gang → racket, the territory convention) — this SERIALIZES two
+  // concurrent commanders (boss + underboss) assigning the SAME member to two different rackets, which
+  // the unlocked one-per-specialist `busy` check below can't catch under READ COMMITTED (both would
+  // read the last-committed snapshot and both write). Defensive-only (no §10.4), but a clean fix.
+  await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId]);
   const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!r || r.owner_gang !== h.owned.gangId) throw new GameError('no_racket', "Your family doesn't run that operation.");
   // the assignee must be a LIVING made-man of YOUR family (snapshot their stats; re-assign to refresh)
