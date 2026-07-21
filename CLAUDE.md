@@ -2789,9 +2789,14 @@ pass — no headless browser in the game backend), an **`optionalDependency`**: 
 native build, `renderPng` returns null and the route falls back to serving SVG (never 500s). PNGs are
 cached by the SVG's content hash (5-min TTL, 256-cap); the profile `og:image`/`twitter:image` now point at
 the `.png`. `test/hardening.js` asserts the .png route returns a valid PNG (magic bytes) when resvg is
-present, else the SVG fallback. Deferred: an obituary card type + richer triggers; funnel instrumentation
-(track profile views + card shares alongside `GET /v1/mod/funnel`); a bundled brand font (resvg falls back
-to a system serif — cosmetic).
+present, else the SVG fallback. **FUNNEL INSTRUMENTATION — BUILT**: `POST /v1/broadcast/shared {kind}`
+(authed beacon — bounded by real accounts + rate limits, NOT an unauthenticated write; the client hits it
+on 📣/brag) records `track('broadcast_share')` (zero §10.4); `funnelStats` gained a `broadcast` block
+(shares, byKind, distinct sharers, `referredPerShare`) so `GET /v1/mod/funnel` + the admin dashboard read
+the whole organic loop — shares → referred signups → qualified recruits → K-factor. Deliberately NOT
+tracking the keyless `GET /u`/`GET /card` hits (OG-crawler-dominated + an unauthenticated write amplifier —
+raw views are an edge/CDN concern). Deferred: an obituary card type + richer triggers; a bundled brand
+font (resvg falls back to a system serif — cosmetic).
 
 **THE AGENT GATEWAY (agent onboarding + machine discovery) — BUILT** (`AGENTS.md`, `src/agentgateway.js`,
 `src/server.js`, `public/index.html`, `test/hardening.js`; founder-directed "improve the agent experience /

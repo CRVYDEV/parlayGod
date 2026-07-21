@@ -272,6 +272,13 @@ assert(funnel.characters.total >= 1 && funnel.characters.alive >= 1, 'funnel cou
 assert(funnel.progression.pulled_a_job >= 1, 'funnel sees at least one job pulled');
 assert(funnel.firstWeek.ob_crime >= 1, 'funnel tallies first-week claims from telemetry');
 assert(funnel.referral && typeof funnel.referral.kFactor === 'number' && funnel.referral.accounts >= 1, 'funnel carries the referral block (K-factor + counts)');
+// THE BROADCAST funnel: a share beacon (authed) feeds broadcast.shares → referredPerShare
+assert.equal((await call('POST', '/v1/broadcast/shared', { token: rook.token, body: { kind: 'dossier' } })).code, 200, 'the share beacon accepts an authed post');
+await call('POST', '/v1/broadcast/shared', { token: rook.token, body: { kind: 'win' } });
+const funnel2 = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+assert(funnel2.broadcast && funnel2.broadcast.shares >= 2, 'funnel counts broadcast share intents');
+assert(funnel2.broadcast.byKind.dossier >= 1 && funnel2.broadcast.byKind.win >= 1, 'funnel breaks shares down by kind');
+assert(funnel2.broadcast.sharers >= 1 && typeof funnel2.broadcast.referredPerShare === 'number', 'funnel carries distinct sharers + reach→conversion');
 
 // ── STEPPED PAYOUT — "the spark": a small EARLY cash payout the moment a recruit shows real
 // engagement (level 3 + 10 jobs), long before full qualification. Fast feedback for the referrer. ──

@@ -210,7 +210,19 @@ export async function funnelStats(pool) {
   // K-factor ≈ qualified recruits per account (>1 means the loop compounds); spark→qualify conversion
   referral.kFactor = accounts ? Math.round((referral.totalRecruits / accounts) * 100) / 100 : 0;
   referral.sparkToQualified = referral.sparked ? Math.round((referral.qualified / referral.sparked) * 100) / 100 : 0;
-  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral };
+  // THE BROADCAST — the TOP of the organic funnel: share intents (from the beacon) feeding referred
+  // signups. shareToReferred ties reach → conversion (how many shares it takes to land a recruit).
+  const broadcast = { shares: 0, byKind: {} };
+  const sh = (await pool.query("SELECT props FROM telemetry WHERE event='broadcast_share'")).rows;
+  for (const r of sh) {
+    const p = typeof r.props === 'string' ? JSON.parse(r.props) : (r.props || {});
+    broadcast.shares++;
+    const k = p.kind || 'dossier';
+    broadcast.byKind[k] = (broadcast.byKind[k] || 0) + 1;
+  }
+  broadcast.sharers = await one("SELECT COUNT(DISTINCT account_id) n FROM telemetry WHERE event='broadcast_share'");
+  broadcast.referredPerShare = broadcast.shares ? Math.round((referral.referred / broadcast.shares) * 100) / 100 : 0;
+  return { characters, levels, progression, firstWeek: { ...firstWeek, capstone }, referral, broadcast };
 }
 
 // ── THE RECRUITERS (§7.13 status boards — organic-growth hall of fame) ──

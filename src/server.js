@@ -330,6 +330,13 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.heal(ch, client, h)));
   app.post('/v1/checkin', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.checkin(ch, client, h)));
+  // THE BROADCAST share beacon — a player tapped broadcast / brag. AUTHED (bounded by real accounts +
+  // rate limits, never an unauthenticated write), zero §10.4 — telemetry feeding the organic-growth funnel.
+  app.post('/v1/broadcast/shared', { preHandler: auth }, async (req) => {
+    const kind = ['dossier', 'win', 'wanted', 'whacked'].includes(req.body?.kind) ? req.body.kind : 'dossier';
+    await G.track(pool, req.user.sub, 'broadcast_share', { kind });
+    return { ok: true };
+  });
   app.post('/v1/bank/:dir', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.bank(ch, req.params.dir, req.body?.amount, client, h)));
   app.post('/v1/travel/:district', { preHandler: auth }, async (req) =>

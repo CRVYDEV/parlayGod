@@ -417,6 +417,8 @@
   // the noir card in a feed, and the ?ref auto-credits the sharer when a recruit signs up (§7.13).
   const shareUrl = (name) => `${(rules?.share?.gameUrl || location.origin).replace(/\/+$/, '')}/u/${encodeURIComponent(name)}?ref=${encodeURIComponent(name)}`;
   const xIntent = (text, url) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+  // fire-and-forget beacon so the founder's funnel can measure share intent → recruit (organic loop)
+  const beaconShare = (kind) => { try { api('POST', '/v1/broadcast/shared', { kind }); } catch {} };
   function showBrag(line) {
     const b = $('#brag'); if (!b) return;
     const name = me?.name || '';
@@ -424,9 +426,10 @@
     const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
     const tweet = `I ${line} in OMERTÀ — a noir mob RPG. Come take the city.${handle ? ` @${handle}` : ''}`;
     b.innerHTML = `<span class="bt">🏆 ${line}</span>
-      <a href="${xIntent(tweet, url)}" target="_blank" rel="noopener noreferrer"><button class="act">brag on X ↗</button></a>
+      <a id="brag-go" href="${xIntent(tweet, url)}" target="_blank" rel="noopener noreferrer"><button class="act">brag on X ↗</button></a>
       <span id="brag-x" title="dismiss" style="cursor:pointer;color:var(--dim)">✕</span>`;
     b.classList.remove('hidden');
+    $('#brag-go').onclick = () => beaconShare('win');
     $('#brag-x').onclick = () => b.classList.add('hidden');
     clearTimeout(b._h); b._h = setTimeout(() => b.classList.add('hidden'), 15000);
   }
@@ -436,6 +439,7 @@
     const url = shareUrl(name);
     const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
     const tweet = `My name rings out in OMERTÀ — a noir mob RPG. Think you can take the city?${handle ? ` @${handle}` : ''}`;
+    beaconShare('dossier');
     if (navigator.share) { navigator.share({ title: 'OMERTÀ', text: tweet, url }).catch(() => {}); return; }
     try { navigator.clipboard?.writeText(url); } catch {}
     window.open(xIntent(tweet, url), '_blank', 'noopener,noreferrer');
