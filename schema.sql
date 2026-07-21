@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS characters (
   world_raid_at TIMESTAMPTZ,                       -- THE LIVING WORLD P2: per-character NPC-raid cooldown
   pen_safe_until TIMESTAMPTZ,                      -- THE PEN: in-jail protection window (paid the yard boss — can't be shanked)
   hole_until TIMESTAMPTZ,                          -- THE PEN step two: solitary (a caught shank) — no yard actions, untouchable
+  pen_faction TEXT,                                -- THE PEN step five: the yard crew this inmate runs with (cover from shanks; only functional while jailed)
   welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)
@@ -798,6 +799,7 @@ CREATE TABLE IF NOT EXISTS pen_breaks (
 CREATE TABLE IF NOT EXISTS pen_break_members (
   break_id TEXT NOT NULL,
   character_id TEXT NOT NULL UNIQUE,         -- one active break per inmate (the heist precedent)
+  ratted BOOLEAN NOT NULL DEFAULT false,     -- (step five) the silent flag — a snitch tips the guards; never surfaced by name
   PRIMARY KEY (break_id, character_id)
 );
 

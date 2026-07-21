@@ -6,7 +6,7 @@
 // and witness-protection segregation. Every action REQUIRES being jailed. Numbers are sign-off levers.
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { PEN, penContrabandOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
+import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
          yardEventOf, yardEventById, dayOf } from './rules.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
 
@@ -34,16 +34,55 @@ async function setContraband(client, chId, item, qty) {
   if (!upd.rowCount) await client.query('INSERT INTO pen_contraband (character_id, item, qty) VALUES ($1,$2,$3)', [chId, item, qty]);
 }
 
+// ── STEP FIVE — PRISON FACTIONS: the crew an inmate runs with for cover (only functional while jailed).
+// `pen_faction` is written by DIRECT SQL (outside persistCharacter's positional UPDATE, like active_at),
+// so the write survives the persist; ch.pen_faction (loaded via SELECT *) reads it back in-txn.
+export async function joinFaction(ch, factionId, client, h) {
+  insideOnly(ch);
+  const f = penFactionOf(factionId);
+  if (!f) throw new GameError('bad_faction', 'No such crew runs this yard.');
+  if (ch.pen_faction === f.id) throw new GameError('already', `You already run with ${f.name}.`);
+  await client.query('UPDATE characters SET pen_faction=$2 WHERE id=$1', [ch.id, f.id]);
+  ch.pen_faction = f.id;
+  await h.track(client, ch.account_id, 'pen_faction_join', { faction: f.id });
+  return { ok: true, faction: f.id, name: f.name };
+}
+export async function leaveFaction(ch, client, h) {
+  insideOnly(ch);
+  if (!ch.pen_faction) throw new GameError('none', "You don't run with anybody.");
+  const was = ch.pen_faction;
+  await client.query('UPDATE characters SET pen_faction=NULL WHERE id=$1', [ch.id]);
+  ch.pen_faction = null;
+  return { ok: true, left: was };
+}
+// the shank DEFENSE an inmate gets from their crew: FACTION_COVER per active jailed faction-mate (capped),
+// plus SHOTCALLER_COVER if THEY are the shot-caller (top season_kills among the jailed crew). A read.
+async function factionCover(client, target) {
+  if (!target.pen_faction) return { cover: 0, mates: 0, shotCaller: false };
+  const mates = (await client.query(
+    'SELECT season_kills FROM characters WHERE alive AND jail_until > now() AND pen_faction=$1 AND id <> $2',
+    [target.pen_faction, target.id])).rows;
+  let cover = Math.min(PEN.FACTION_COVER_CAP, mates.length * PEN.FACTION_COVER);
+  // the shot-caller = the most-feared jailed member of the crew; a lone inmate isn't a shot-caller
+  const vsk = Number(target.season_kills || 0);
+  const shotCaller = mates.length > 0 && mates.every((m) => vsk >= Number(m.season_kills || 0));
+  if (shotCaller) cover += PEN.SHOTCALLER_COVER;
+  return { cover, mates: mates.length, shotCaller };
+}
+
 // GET /v1/pen — the yard (runs under withCharacter so it reads inside the caller's txn)
 export async function penBoard(ch, client, h) {
   const held = await contrabandOf(client, ch.id);
   const roster = (await client.query(
-    `SELECT c.id, c.name, c.respect, gm.gang_id FROM characters c
+    `SELECT c.id, c.name, c.respect, c.pen_faction, gm.gang_id FROM characters c
        LEFT JOIN gang_members gm ON gm.character_id = c.id
       WHERE c.alive AND c.jail_until > now() AND c.id <> $1
       ORDER BY c.jail_until ASC LIMIT 30`, [ch.id])).rows
-    .map((r) => ({ id: r.id, name: r.name, level: levelOf(Number(r.respect)), gang: r.gang_id || null }));
+    .map((r) => ({ id: r.id, name: r.name, level: levelOf(Number(r.respect)), gang: r.gang_id || null,
+      faction: r.pen_faction ? (penFactionOf(r.pen_faction)?.name || r.pen_faction) : null }));
   const ev = activeYardEvent();
+  // step five — YOUR crew: your faction, the cover it gives you, and whether you're the shot-caller
+  const myCover = jailed(ch) ? await factionCover(client, ch) : { cover: 0, mates: 0, shotCaller: false };
   return {
     inside: !!jailed(ch),
     sentenceSeconds: jailSecondsLeft(ch),
@@ -55,6 +94,10 @@ export async function penBoard(ch, client, h) {
     protectionCost: Math.round(PEN.PROTECTION_COST * (ev.protMult || 1)), bribePerSecond: Math.round(PEN.BRIBE_PER_S * (ev.bribeMult || 1)),
     // step two: today's yard incident (the block-wide modifier everyone shares)
     incident: { id: ev.id, name: ev.name, desc: ev.desc },
+    // step five: your yard crew + the cover it buys, the shot-caller status, and the roster of crews
+    factions: PEN.FACTIONS.map((f) => ({ id: f.id, name: f.name })),
+    faction: ch.pen_faction ? { id: ch.pen_faction, name: penFactionOf(ch.pen_faction)?.name || ch.pen_faction,
+      mates: myCover.mates, cover: Math.round(myCover.cover * 100), shotCaller: myCover.shotCaller } : null,
     // step three: THE BREAKOUT — buy a cutkit, go over the wall (become a WANTED fugitive on a win)
     breakout: { cost: penContrabandOf('cutkit')?.cost || 0, ready: (held.cutkit || 0) > 0,
       blocked: !!ev.shankBlock, fugitiveHours: Math.round(PEN.FUGITIVE_MS / 3600000) },
@@ -229,6 +272,16 @@ export async function leaveBreak(ch, breakId, client, h) {
 }
 
 // POST /v1/pen/break/:id/go — leader-only. One roll for the whole crew.
+// POST /v1/pen/break/:id/rat — a crew member silently tips the guards (the heist-rat twin). Never named.
+export async function ratBreak(ch, breakId, client, h) {
+  const row = (await client.query("SELECT * FROM pen_breaks WHERE id=$1 AND status='planning'", [breakId])).rows[0];
+  if (!row) throw new GameError('no_break', 'That break is gone.');
+  const upd = await client.query('UPDATE pen_break_members SET ratted=true WHERE break_id=$1 AND character_id=$2', [breakId, ch.id]);
+  if (!upd.rowCount) throw new GameError('not_crew', "You're not on that break.");
+  await h.track(client, ch.account_id, 'pen_break_rat', {});
+  return { ok: true }; // as quiet as the act
+}
+
 export async function executeBreak(ch, breakId, client, h) {
   insideOnly(ch); // the leader must be inside + out of the hole
   const ev = activeYardEvent();
@@ -258,12 +311,34 @@ export async function executeBreak(ch, breakId, client, h) {
     if (inHole(m)) throw new GameError('crew_hole', "One of the crew is in the hole — nobody moves without them.");
     if (hospitalized(m)) throw new GameError('crew_hurt', 'One of the crew is in the infirmary. Wait for them.');
   }
+  // step five — THE RAT: read the silent flags BEFORE the membership rows are cleared.
+  const rats = (await client.query('SELECT character_id FROM pen_break_members WHERE break_id=$1 AND ratted', [breakId])).rows.map((r) => r.character_id);
   // resolve: the kit was already spent at PLAN (removed from inventory; never refunded once we're 'done').
   // DELETE the member rows so the crew can break again — `pen_break_members.character_id` is UNIQUE, so
   // leaving stale 'done' rows would trip 23505 on a survivor's NEXT plan/join (audit HIGH). The character
   // outcomes below are written to the CHARACTER rows, not these membership rows.
   await client.query("UPDATE pen_breaks SET status='done' WHERE id=$1", [breakId]);
   await client.query('DELETE FROM pen_break_members WHERE break_id=$1', [breakId]);
+  const setMemberRat = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
+  if (rats.length) {
+    // THE GUARDS WERE WAITING: the break blows before the roll. The crew eats the hole + a longer stretch;
+    // the rat(s) cut a deal — a sentence CUT — but are thrown in the hole WITH the crew so the roster
+    // never outs the only free man (the heist-rat anonymity fix). The feed only says "somebody talked".
+    for (const m of crewRows) {
+      const isRat = rats.includes(m.id);
+      const baseJail = new Date(m.jail_until).getTime();
+      const newJail = isRat ? new Date(Math.max(Date.now(), baseJail - PEN.BREAK_RAT_CUT_S * 1000))
+        : new Date(baseJail + PEN.BREAK_CAUGHT_ADD_S * 1000);
+      const hole = new Date(Math.min(Date.now() + PEN.HOLE_MS, newJail.getTime()));
+      const health = isRat ? Number(m.health) : Math.max(1, Number(m.health) - rand(PEN.BREAK_FAIL_DMG[0], PEN.BREAK_FAIL_DMG[1]));
+      if (m.id === ch.id) { ch.health = health; ch.jail_until = newJail; ch.hole_until = hole; }
+      else { await setMemberRat(m.id, 'health=$2, jail_until=$3, hole_until=$4', [health, newJail, hole]); await h.notify(client, m.id, 'break_failed', { reason: 'talked' }); }
+    }
+    await h.rngLog(client, ch.id, 'pen:coopbreak', 0, `blown — somebody talked (crew ${crewRows.length})`);
+    bus.emit('streets', { type: 'breakout_foiled', crew: crewRows.length });
+    await h.track(client, ch.account_id, 'pen_coop_break', { made: false, ratted: true, crew: crewRows.length });
+    return { ok: true, escaped: false, blown: true, message: 'The guards were waiting at the fence. Somebody talked.' };
+  }
   // PEN_BREAK_P is a TEST-ONLY knob (the SHANK_P precedent). Odds scale with crew + a riot's chaos.
   const p = process.env.PEN_BREAK_P != null ? Number(process.env.PEN_BREAK_P)
     : Math.max(0.05, Math.min(PEN.COOP_MAX_P, PEN.COOP_BASE + (crewRows.length - 1) * PEN.COOP_PER_EXTRA + (ev.shankAdd || 0)));
@@ -358,6 +433,9 @@ export async function shank(ch, victim, client, h) {
   // family omertà holds inside too — VOID for a rat (the audit precedent)
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat)
     throw new GameError('family', "They're family. Even in here.");
+  // step five — yard omertà: you don't move on your own crew (a rat forfeits it, like family)
+  if (ch.pen_faction && ch.pen_faction === victim.pen_faction && !h.victimAcct.rat)
+    throw new GameError('crew', "They run with your crew. You don't move on your own.");
   if (hospitalized(victim)) throw new GameError('hosp', "They're in the infirmary — out of reach.");
   if (penSafe(victim)) throw new GameError('protected', 'The yard boss has them covered right now.');
   if (inHole(victim)) throw new GameError('segregated', "They're in the hole — nobody reaches them there.");
@@ -373,9 +451,12 @@ export async function shank(ch, victim, client, h) {
   await setContraband(client, ch.id, 'shiv', held.shiv - 1); // the shiv is spent whether it lands or not
   const km = effStat(Number(ch.muscle), 'muscle', h.owned.assets || [], h.owned.gear || []);
   const vm = effStat(Number(victim.muscle), 'muscle', h.victimOwned.assets || [], h.victimOwned.gear || []);
+  // step five: the victim's CREW watches their back — faction cover (+ shot-caller leadership) is a
+  // defense modifier that lowers the shank's odds (a NEW sign-off lever on the contest, off SHANK_P).
+  const cov = await factionCover(client, victim);
   // SHANK_P is a TEST-ONLY knob (the LAW_BUST_P / WORLD_RAID_P precedent) — never set in production.
   const p = process.env.SHANK_P != null ? Number(process.env.SHANK_P)
-    : Math.max(PEN.SHANK_MIN, Math.min(PEN.SHANK_MAX, PEN.SHANK_BASE + (km - vm) / PEN.SHANK_SCALE + (ev.shankAdd || 0))); // a riot makes blood cheap
+    : Math.max(PEN.SHANK_MIN, Math.min(PEN.SHANK_MAX, PEN.SHANK_BASE + (km - vm) / PEN.SHANK_SCALE + (ev.shankAdd || 0) - cov.cover)); // a riot makes blood cheap; a crew makes it dear
   const roll = Math.random();
   await h.rngLog(client, ch.id, `shank:${victim.id}`, roll, roll < p ? 'landed' : 'missed');
 
