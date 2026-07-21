@@ -1298,3 +1298,20 @@ Jorge shipped the `SIGN-OFF.md` sheet. Applied + tested (suite 30/30, sim drift-
 Everything else on the sheet is SIGNED at the recommended verdict (SHIP) or on the alpha WATCH-list. The
 Tier-6 chain/legal items remain a SEPARATE gate (legal counsel + `forge test` + third-party audit), not
 signed by this pass.
+
+### Speakeasy bar take — NET-EV measurement (sim P9.12, 2026-07-21)
+
+The sign-off's one flagged big faucet, now measured net of its costs (analytic probe). Findings:
+- **Bar take by tier (gross ≈ net, passive):** Backroom $192k/day (payback 3.9d) → Lounge $384k (3.5d) →
+  Blue Room $816k (3.9d) → Copa $1.632M (4.7d) → **Cathedral $3.12M/day (payback ~6.0d, build-to-here $18.65M)**.
+- **No raid tax on a passive owner:** notoriety (→ Bureau raids) accrues from the back-room TABLE (8/play) +
+  busy ROUNDS (2 each) — PATRON-driven, not the owner's collect. A bar-take-only club draws ~0 notoriety →
+  ~0 realized raid risk. (An owner who runs a busy table takes on the raid risk in exchange for the rake.)
+- **No recurring upkeep:** unlike a business front (the 20% "pad"), the speakeasy has no upkeep drip.
+- **Safehouse-gated collect (D2)** is the only friction on an otherwise passive, low-risk earner.
+
+**Verdict:** §10.4-clean (a ledgered `speakeasy:income` faucet), but the **richest low-risk passive earner
+in the game** — ~$3.12M/day at the top, ≈ a maxed territory op ×1.6–2, un-raided when run passively,
+sub-week payback at every tier. **FOUNDER DIAL (not retuned — ground rule #1):** if it should be taxed like
+other endgame fronts, add (a) a passive-owner notoriety/upkeep drip (the business-`pad` precedent) or (b)
+trim the `SPEAKEASY.TIERS[].incomePerHr` curve. Flagged for sign-off with the numbers in hand.
