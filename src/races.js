@@ -146,7 +146,13 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   const cd = new Date(now.getTime() + raceCdMs());
   await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, cd]);
   if (winner.id !== ch.id) await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [winner.id, cd]);
-  await bumpWheel(client, winner.account_id);
+  // THE WHEEL credit only lands when the LOSER is a real racer (level floor) — AUDIT-full-system-v2
+  // F-MED1: the winner-cooldown alone was inert (the cooldown gate checks the CHALLENGER, and the bump
+  // fired regardless), so a ring of disposable low-level alts could pad an owner's status board by
+  // deliberately losing. A level floor on the loser is the WANTED_MIN_LVL / npcHit-rookie-floor anti-Sybil
+  // pattern — farming now costs the ring a real respect grind per alt. The wager/rake still move (a taxed
+  // transfer); only the cosmetic WHEEL credit is gated.
+  if (levelOf(Number(loser.respect)) >= RACES.WHEEL_MIN_LVL) await bumpWheel(client, winner.account_id);
   await h.rngLog(client, ch.id, `race:pvp:${their.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, opponent.id, 'race_pvp', { from: ch.name, amount: amt, theyWon: !win });
   bus.emit('streets', { type: 'race_pvp', by: ch.name, vs: opponent.name, amount: pot, win });
@@ -187,6 +193,6 @@ export async function raceBoard(ch, client, h) {
 export async function raceLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.race_wins, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.race_wins > 0 ORDER BY a.race_wins DESC LIMIT 15`)).rows;
+      WHERE a.race_wins > 0 AND NOT a.agent_flag ORDER BY a.race_wins DESC LIMIT 15`)).rows; // agents excluded from the human status board (F-LOW2, the hitman-rep precedent)
   return { drivers: rows.map((r) => ({ name: r.name, wins: Number(r.race_wins), rank: raceRankOf(r.race_wins).name })) };
 }

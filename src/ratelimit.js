@@ -45,6 +45,18 @@ export async function initRateLimiter() {
 const AGENT_RATE = 1 / 3, AGENT_BURST = 1;   // §10.2: hard, no burst
 const SWAP_RATE = 6 / 60, SWAP_BURST = 6;    // 6 per minute
 
+// Auth endpoints are UNAUTHENTICATED (no accountId), so they throttle per source IP — bounding
+// guest-account Sybil floods + auth-fetch (X/Privy) amplification from one origin (AUDIT-full-system-v2
+// E-M1). Deliberately GENEROUS (burst 20) so it only bites a flood, never a normal sign-in burst.
+// Returns null when allowed, else {retryAfter}.
+export async function checkAuthRateLimit({ ip }) {
+  const take = redis ? takeRedis : takeMemory;
+  const rate = Number(process.env.RATE_AUTH_PER_SEC || 1);
+  const burst = Number(process.env.RATE_AUTH_BURST || 20);
+  const r = await take(`auth:${ip || 'unknown'}`, rate, burst);
+  return r.ok ? null : { retryAfter: r.retryAfter };
+}
+
 // Returns null when allowed, else {retryAfter} seconds.
 export async function checkRateLimit({ accountId, agent, path }) {
   const take = redis ? takeRedis : takeMemory;

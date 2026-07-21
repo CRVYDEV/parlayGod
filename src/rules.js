@@ -1806,6 +1806,7 @@ export const RACES = {
   LOSS_DMG: 8,                         // a lost race dings the car (the existing damage mechanic — repair is a real cost on a loss)
   RAKE_BPS: 500,                       // PvP: 5% off the pot (half → street tax/buyback, half burns — casino:pvp)
   WAGER_MIN: 500, WAGER_MAX: 250000,
+  WHEEL_MIN_LVL: 10,                   // a PvP WHEEL win only counts vs a loser at/above this level (anti-Sybil — the WANTED_MIN_LVL/npcHit-rookie-floor precedent; a status board can't be farmed against fresh alts). Sign-off lever.
   // PvE circuit — fieldPower is the NPC pack; fee burns win/lose; purse pays only on a win (a bounded
   // faucet). A matched car (power ≈ field) is roughly break-even; an OVER-POWERED car wins its tier
   // deterministically for up to purse−fee (top tier +$18k/win = +60% of the fee), so it's a gear/skill

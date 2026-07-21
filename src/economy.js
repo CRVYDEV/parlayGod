@@ -280,7 +280,7 @@ export async function sellAsset(ch, assetId, client, h) {
 export async function swap(ch, direction, amount, client, h) {
   if (direction !== 'buy' && direction !== 'sell') throw new GameError('bad_dir', "Direction must be 'buy' or 'sell'.");
   const amt = Math.floor(Number(amount));
-  if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
+  if (!(Number.isFinite(amt) && amt > 0)) throw new GameError('amount', 'Positive amounts only.'); // Number.isFinite rejects Infinity/NaN (E-L3 defense-in-depth)
   const pool = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
   const c = Number(pool.cash_reserve), o = Number(pool.omr_reserve), k = c * o;
 

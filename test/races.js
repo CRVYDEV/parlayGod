@@ -117,6 +117,18 @@ r = await call('POST', `/v1/races/challenge/${champ.id}`, { token: chump.token, 
 assert.equal(r.body.win, false, 'the weak challenger loses to the strong owner');
 assert((await pool.query(`SELECT race_at FROM characters WHERE id='${champ.id}' AND race_at > now()`)).rows.length === 1, 'the WINNING OWNER is cooled down (LOW-1: no throttle-free WHEEL farming)');
 assert((await pool.query(`SELECT race_at FROM characters WHERE id='${chump.id}' AND race_at > now()`)).rows.length === 1, 'the challenger is cooled down too');
+
+// ── F-MED1: a WHEEL win against a SUB-FLOOR (rookie) loser earns NO credit — the anti-Sybil level floor ──
+const wheelWins = async () => Number((await pool.query(`SELECT race_wins FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${champ.id}')`)).rows[0].race_wins);
+const winsBefore = await wheelWins();
+const rkRacer = await mk('Rookie Racer');
+await pool.query(`UPDATE characters SET respect=100, speed=5 WHERE id='${rkRacer.id}'`); // level ~6, below WHEEL_MIN_LVL (10)
+await seedCash(rkRacer.id, 200000);
+await mkCar(rkRacer.id, 'junker', 'stock', 0);
+const rkCar = (await pool.query(`SELECT id FROM cars WHERE character_id='${rkRacer.id}'`)).rows[0].id;
+const rr = await call('POST', `/v1/races/challenge/${champ.id}`, { token: rkRacer.token, body: { myCar: rkCar, theirCar: champCar, wager: 20000 } });
+assert.equal(rr.body.win, false, 'the rookie loses to the strong owner');
+assert.equal(await wheelWins(), winsBefore, 'a win over a sub-level-floor loser earns NO WHEEL credit (F-MED1 anti-Sybil)');
 process.env.RACE_CD_MS = '0'; // restore for the rest of the suite
 
 // ── the leaderboard: THE WHEEL ranks the winningest drivers ──
