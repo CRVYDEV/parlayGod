@@ -215,6 +215,11 @@ assert.equal(r.code, 200, 'the quarry plants disinformation');
 assert.equal(r.body.spent, WIRE.DISINFO_OMR, 'disinfo is an intel:disinfo $OMR sink');
 assert(r.body.disinfoSeconds > 0, 'and opens a disinfo window');
 assert((await call('GET', '/v1/wire', { token: quarry.token })).body.disinfo.active, 'the board shows the quarry’s own disinfo is live');
+// persist-clobber guard: disinfo_until is written by DIRECT SQL (outside persistCharacter's positional
+// column list), so a LATER persisting action by the same character must NOT wipe it. The quarry subscribes
+// (which persists ch.wire_until) — the disinfo window must survive the persist.
+await call('POST', '/v1/wire/subscribe', { token: quarry.token });
+assert((await call('GET', '/v1/wire', { token: quarry.token })).body.disinfo.active, 'disinfo survives a later persisting action (direct-SQL column — no persist-clobber)');
 
 // the spy taps the quarry — the wiretap gets GARBAGE: the hunt is hidden, indicted forced false
 await call('POST', `/v1/wire/tap/${quarry.id}`, { token: spy.token });
