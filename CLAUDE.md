@@ -426,6 +426,35 @@ sign-off flag (BALANCE.md):** the income mults (protection ×1.15 / smuggling ×
 `territory:income` faucet for the hot types — §10.4-safe (still a ledgered faucet) but a balance change,
 offset by the raid risk; numbers (×1.0) preserves the signed baseline; sim the net EV per type before
 production. `TERRITORY_TYPES`/scrutiny/raid numbers are all sign-off levers.
+**Step four — the RACKET-WARS layer (FORTIFICATION + RIVAL RAIDS) — BUILT** (`src/territory.js`,
+`src/rules.js`, `schema.sql`, `test/social.js`; the between-war contestability + a treasury defense sink
+territory lacked — rackets only changed hands via a full district seizure). New columns
+`territory_rackets.fortitude/raid_cd_until`. **(1) FORTIFY** (`fortifyRacket`, `POST /v1/territory/:id/
+fortify`, boss/underboss): buy a defense level from the treasury (`territory:fortify` cash SINK,
+`territoryFortCost` = base × (level+1) × tier, capped `TERRITORY_FORT_MAX` 5) — a recurring late-game
+treasury drain. Each level lowers a RIVAL raid's success; it does NOT touch the signed Bureau-crackdown
+math. **(2) RIVAL RAID** (`raidRivalRacket`, `POST /v1/territory/:id/raid`, any made man of ANOTHER
+family): muscle a held operation for `TERRITORY_RIVAL_CUT_BPS` (30%) of its PENDING income — a
+muscle+cunning/2 contest vs the fortitude (`TERRITORY_RIVAL_RAID_P` TEST-ONLY roll knob). A landed raid
+REDIRECTS the cut to the raider's treasury (`territory:muscle`, a treasury FAUCET — the owner's clock
+advances so they keep the rest pending, exactly the **business-shakedown pattern**, so total
+`territory:income + territory:muscle` emission stays bounded by the SAME signed income curve →
+**§10.4-neutral**), draws law heat, and sets a per-racket `TERRITORY_RIVAL_CD_MS` (8h) cooldown win OR
+lose (the owner isn't ground down); a failed raid costs the raider `TERRITORY_RIVAL_FAIL_DMG` health.
+Gated level ≥ `TERRITORY_RIVAL_MIN_LVL` (8) / energy / not jailed·hospitalized·safehoused (P1.3) / not
+your own family / not on cooldown / has pending income. §10.4: `territory:fortify` joined `territoryOut`
+(SINK) and `territory:muscle` a new treasury IN term (`territoryMuscleIn`) in the gang-treasuries check —
+both ride the `territory:` vocabulary (no vocab change). Seizure/dissolution reset fortitude + cooldown
+(a seized op isn't born fortified). Lock order: attacker char → attacker gang → target racket (the
+territory gang-before-racket convention; the DEFENDER gang is never locked — only the contested racket
+row, so it can't AB-BA a concurrent collect/seize). `territoryOf` surfaces `fortitude`/`fortMax`/
+`fortCost`/`raidCdSeconds`; the console Family tab gained a per-op fortify button + a shield chip + a
+raid-a-rival input; `describe()` humanizes both. `test/social.js` covers the fortify rank/not-yours
+gates + ledgered sink + view, the raid own/no_gang gates + a pinned WIN (cut → treasury, owner keeps the
+rest pending) + the cooldown + a pinned LOSS (health hit, no cut), and the gang-treasuries §10.4
+reconcile with both new reasons. All `TERRITORY_FORT_*`/`TERRITORY_RIVAL_*` numbers are founder sign-off
+levers (the fortify sink + the muscle faucet is a redirect, not new emission). Deferred (step five):
+racket specialists (assigning members) + racket-specific special operations.
 
 **FAUCET MEASUREMENT PASS — `tools/sim.js` P9.8–P9.10 (measured this session's three drops).** The three
 "sim + sign-off" faucets (co-op apex raids, boxing exhibition purse, territory type mults) are now measured

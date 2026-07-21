@@ -633,6 +633,8 @@ CREATE TABLE IF NOT EXISTS territory_rackets (
   kind TEXT NOT NULL DEFAULT 'numbers',              -- (step three) the operation's BUSINESS: numbers (safe) / protection (med) / smuggling (hot) — income tilt + Bureau-crackdown risk
   scrutiny NUMERIC NOT NULL DEFAULT 0,               -- (step three) Bureau attention: grows from operating a hot type, decays; a crackdown seizes pending + fines the treasury
   scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),    -- the scrutiny clock (reset on a raid + on seizure — a seized op isn't born hot)
+  fortitude INT NOT NULL DEFAULT 0,                  -- (step four) defense level — bought from the treasury; each level lowers a RIVAL raid's success (not the signed Bureau math)
+  raid_cd_until TIMESTAMPTZ,                         -- (step four) per-racket cooldown after a rival raid attempt (win or lose) — protects the owner from being ground down
   established_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   minted_onchain BOOLEAN NOT NULL DEFAULT false
 );

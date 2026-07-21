@@ -435,6 +435,11 @@ export async function buildServer() {
   // recurring sinks: a boss/underboss pays the pad on the family's operations from the treasury
   app.post('/v1/territory/upkeep', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.payTerritoryUpkeep(ch, client, h)));
+  // step four — the racket-wars layer: fortify your own op (treasury sink) / raid a rival's for a cut
+  app.post('/v1/territory/:districtId/fortify', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.fortifyRacket(ch, req.params.districtId, client, h)));
+  app.post('/v1/territory/:districtId/raid', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.raidRivalRacket(ch, req.params.districtId, client, h)));
   app.get('/v1/territory', { preHandler: auth }, async (req) => {
     const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
     return { territory: gid ? await Territory.territoryOf(pool, gid) : [] };

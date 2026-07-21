@@ -1006,6 +1006,54 @@ assert.equal(tView.kind, 'numbers', 'the view carries the operation type');
 const t3Treas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
 assert(t3Treas.ok, `the treasury check reconciles territory:raid (drift ${t3Treas.drift})`);
 
+// ══ TERRITORY STEP FOUR — FORTIFICATION + RIVAL RAIDS (the racket-wars layer) ══
+// tgang (Territory Boss) holds canal (a tier-1 Numbers op); rg (raider) holds docks. Fund tgang so it
+// can fortify, then rg muscles canal for a cut of its pending income (the shakedown pattern).
+await call('POST', '/v1/gangs/tribute', { token: tboss.token, body: { amount: 500000 } }); // ledgered war chest
+// FORTIFY — rank gate (a soldier can't), a rival can't fortify your op, then the boss buys a defense level
+const tsold = await mk('Territory Soldier'); await call('POST', `/v1/gangs/${tgang}/join`, { token: tsold.token });
+assert.equal((await call('POST', '/v1/territory/canal/fortify', { token: tsold.token })).body.error, 'rank', 'a soldier does not fortify the rackets');
+assert.equal((await call('POST', '/v1/territory/canal/fortify', { token: raider.token })).body.error, 'not_yours', "you can't fortify a rival's operation");
+const treTgPreFort = (await call('GET', `/v1/gangs/${tgang}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/canal/fortify', { token: tboss.token });
+assert.equal(r.code, 200, 'the boss fortified canal'); assert.equal(r.body.fortitude, 1, 'defense at level 1');
+assert.equal(r.body.cost, 100000, 'fortifying a tier-1 op to level 1 costs $100k (base × 1 × tier)');
+assert.equal((await call('GET', `/v1/gangs/${tgang}`, {})).body.gang.treasury, treTgPreFort - 100000, 'the fortify cost left the treasury exactly');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:fortify' AND counterparty='${tgang}'`)).rows[0].s), -100000, 'territory:fortify is a ledgered §10.4 treasury sink');
+assert.equal((await call('GET', '/v1/territory', { token: tboss.token })).body.territory.find((t) => t.district === 'canal').fortitude, 1, 'the view shows the fortitude');
+
+// RIVAL RAID — rg muscles canal (tgang's op) for a cut of its pending income
+await seedCh(raider.id, 'energy=200, muscle=80, cunning=40'); // a real earner, past the level floor already (respect 400 → lvl 11)
+await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '2 hours', upkeep_at = now(), raid_cd_until=NULL WHERE district_id='canal'`);
+assert.equal((await call('POST', '/v1/territory/docks/raid', { token: raider.token })).body.error, 'own', "you can't muscle your own family's operation");
+const gruntRaid = await mk('Gangless Gus'); await seedCh(gruntRaid.id, 'energy=200, respect=400');
+assert.equal((await call('POST', '/v1/territory/canal/raid', { token: gruntRaid.token })).body.error, 'no_gang', 'you need a family to bank the take');
+process.env.TERRITORY_RIVAL_RAID_P = '1'; // pin the contest to a WIN (TEST-ONLY, the raid precedent)
+const rgPreRaid = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/canal/raid', { token: raider.token });
+assert.equal(r.code, 200, `the raid lands (${JSON.stringify(r.body)})`); assert.equal(r.body.win, true, 'the muscle got in');
+assert.equal(r.body.cut, Math.floor(8000 * 0.30), 'stole 30% of the $8000 pending (a Numbers op, ×1.0)');
+assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, rgPreRaid + Math.floor(8000 * 0.30), "the cut landed in the raider's treasury");
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='territory:muscle' AND counterparty='${rg}'`)).rows[0].s), Math.floor(8000 * 0.30), 'territory:muscle is a ledgered §10.4 treasury faucet');
+// the OWNER keeps the rest pending (the clock advanced only by the stolen share)
+const canalPending = (await call('GET', '/v1/territory', { token: tboss.token })).body.territory.find((t) => t.district === 'canal').pending;
+assert(Math.abs(canalPending - (8000 - Math.floor(8000 * 0.30))) <= 5, `the owner keeps ~the un-stolen $5600 pending (got ${canalPending})`);
+// COOLDOWN — the op is on alert; a second raid is refused (the owner isn't ground down)
+assert.equal((await call('POST', '/v1/territory/canal/raid', { token: raider.token })).body.error, 'cooldown', 'a raided op is on alert — no back-to-back raids');
+// a LOSS costs the raider health, no cut (pin to a loss on a DIFFERENT op — reuse docks? it's rg's own → use a fresh setup)
+await pool.query(`UPDATE territory_rackets SET raid_cd_until=NULL, last_income_at = now() - interval '2 hours' WHERE district_id='canal'`);
+process.env.TERRITORY_RIVAL_RAID_P = '0'; // pin to a LOSS
+await seedCh(raider.id, 'energy=200, health=100');
+const rgPreLoss = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/territory/canal/raid', { token: raider.token });
+assert.equal(r.body.win, false, 'the raid was repelled'); assert(r.body.dmg > 0, 'and the raider took a beating');
+assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, rgPreLoss, 'a failed raid steals nothing');
+assert(((await meOf(raider.token)).health || 100) < 100, "the raider's health dropped on the failed raid");
+delete process.env.TERRITORY_RIVAL_RAID_P;
+// §10.4: the treasury check reconciles with territory:fortify (sink) + territory:muscle (faucet) in the mix
+const t4Treas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert(t4Treas.ok, `the treasury check reconciles territory:fortify + territory:muscle (drift ${t4Treas.drift})`);
+
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
 // ══ the safehouse is priced off the wealth it protects
 const vault = await mk('Vinnie Vault');
