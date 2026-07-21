@@ -2129,7 +2129,20 @@ the character row. The worker `sweepWire` now also reaps lapsed retainers. Board
 `test/wire.js` proves disinfo cooks a tap (the hunt hidden, indicted false), the informant PIERCES it (true
 `huntingYou`/wealth + `huntingAnyone`), the self/gone/cap gates, the worker sweep, and §10.4 ($OMR
 conservation drift == the test grant only — every wire spend an `intel:*` burn). Suite 30/30 + sim drift-0.
-All numbers are founder sign-off levers.
+All numbers are founder sign-off levers. A **three-lens red-team over step three**
+(`AUDIT-wire-step-three.md`: §10.4/persist/$OMR, concurrency/locks, exploit/info-leak/grief) returned
+**no CRITICAL/HIGH/MED — CLEAN**: every `intel:*` spend rides both the omr vocabulary and the burn term
+(zero faucet); `disinfo_until`/`intel_ops` are direct-SQL columns absent from the persist positional
+UPDATE (no clobber); all routes single-party under withCharacter (the upsert serializes on the actor lock,
+reads never lock a second character → no AB-BA); wealth stays BANDED everywhere (the anti-precise-kill-EV
+rule); `scrambleTap` is non-invertible (hashes on target+day, fully replaces the private fields) and keeps
+`wanted`/family/level/loc TRUE (a wanted man can't hide); self/dead/heir gates + `alive`-JOINs sound; a tap
+is a read so grief is cost-bounded. Two LOW notes left as-is (ground rule #1): the scramble's hardcoded
+`indicted:false`/`huntingYou:false` are the DOCUMENTED, TESTED "cook the private signals / hide the hunt"
+behavior (disinfo is a bluff, countered by the informant/dossier), and the unlabeled Spymaster leaderboard
+matches the world/territory boards (a $OMR-bought, payout-free status axis — agent inclusion is consistent).
+A persist-clobber regression was added (disinfo survives a later persisting action). Suite 30/30 + sim
+drift-0.
 
 **THE STORE — ETH revenue packages — BUILT** (`src/store.js`, `test/store.js` — the 25th suite; design
 `omerta-eth-store-design.md`). Real-money packages, off-chain-first / chain-dormant (the M6 pattern),
