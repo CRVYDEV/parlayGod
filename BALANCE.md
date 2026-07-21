@@ -1326,3 +1326,21 @@ cash prefix (zero invariant/vocabulary change; the per-character check reconcile
 $3.12M → **$2.496M/day**, payback ~6.0d → ~7.5d; every tier keeps 80% of gross. The `incomePerHr` curve
 remains the further dial if a leaner front is wanted. `test/speakeasy.js` asserts gross/upkeep/net + the
 ledgered sink; sim P9.12 prints net-of-upkeep by tier.
+
+## STREET RACES — a new content drop (2026-07-21; the car catalog as a competitive loop)
+
+Turns the deep 60-car catalog into a competitive loop (PvE circuit + PvP wagers + tuning). Built on the
+audited boxing/casino architecture; §10.4-clean (`race:` cash vocabulary; PvP is the casino:pvp taxed
+transfer; fees/tunes are sinks). **The PvE purse is the ONLY new faucet — sim-measured (P9.13), sign-off:**
+- PvE circuit tiers (fee BURNS win/lose; purse pays only on a win — a THIN edge over the fee):
+  Back-Alley $2k→$3.2k · Midnight $8k→$13k · Ghost Circuit $30k→$48k. Cooldown **`CD_MS` 2h** (12/day).
+- **Measured EV** (P9.13): a tuned contender (power 200) +$5k/race best → **+$60k/day**; a premium monster
+  (power 450) +$18k/race best → **+$216k/day** — bounded, in boxing-exhibition parity (~$315k/day maxed).
+  **NOTE:** the initial 30-min/48-per-day + fat-purse defaults measured a **$3.12M/day printer** and were
+  retuned DOWN to the above before ship (a new number set, not a signed-lever change). A losing race also
+  dings the car (a real repair cost), so a mismatched tier is −EV.
+- PvP: `RAKE_BPS` 500 (5%), `WAGER_MIN/MAX` $500/$250k, `VARIANCE` 40 — a taxed transfer, no new faucet.
+- Tuning: `TUNE_COST` $25k, `TUNE_MAX` 5 — a cash sink + car progression. `LOSS_DMG` 8.
+
+All `RACES` numbers are founder sign-off levers (the exhibition-purse precedent). Sim the PvE purse net-EV
+(vs the boxing exhibition) + the PvP wager economy before production. Suite 31/31 + sim drift-0.

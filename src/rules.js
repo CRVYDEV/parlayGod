@@ -1791,6 +1791,43 @@ export const boxerLegendOf = (wins) =>
   [...BOXING.LEGEND_RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.LEGEND_RANKS[0];
 export const npcBoxerOf = (id) => BOXING.NPC_TIERS.find((t) => t.id === id) || null;
 
+// ── STREET RACES (omerta-street-races-design) — the deep 60-car catalog becomes a competitive loop ──
+// A car's RACE POWER = sqrt(book value) + tune×TUNE_POWER + driver speed/SPEED_DIV − damage. Fast/valuable
+// iron wins, but tuning + the wheelman's speed decide close races. PvE circuit (fee BURNS win/lose, purse
+// on a win — a bounded faucet, the boxing-exhibition precedent); PvP wager races (the audited casino:pvp
+// taxed transfer). Tuning is a cash sink. Lifetime wins are an account-level legend (survives death). CASH
+// only (the Den's rule). All numbers are founder sign-off levers — sim before production.
+export const RACES = {
+  MIN_LEVEL: 3,                        // a wheelman's game, open early
+  VARIANCE: 40,                        // the road is fickle — rand(0,VARIANCE) added to each side
+  TUNE_POWER: 15, TUNE_MAX: 5, TUNE_COST: 25000,   // engine tune: +power per level, capped, a cash sink
+  SPEED_DIV: 2, DMG_PEN_DIV: 4,        // driver speed/2 into power; damage/4 off it
+  CD_MS: 2 * 60 * 60 * 1000,           // 2h per-driver cooldown (RACE_CD_MS env overrides for tests) — bounds the PvE faucet to boxing-exhibition parity
+  LOSS_DMG: 8,                         // a lost race dings the car (the existing damage mechanic — repair is a real cost on a loss)
+  RAKE_BPS: 500,                       // PvP: 5% off the pot (half → street tax/buyback, half burns — casino:pvp)
+  WAGER_MIN: 500, WAGER_MAX: 250000,
+  // PvE circuit — fieldPower is the NPC pack; fee burns win/lose; purse pays only on a win (a bounded
+  // faucet: a THIN edge over the fee even on a guaranteed win, so it's a modest gear/skill earner, never a
+  // money printer — sized against the boxing-exhibition sibling. All sign-off levers.
+  TIERS: [
+    { id: 'backalley', name: 'Back-Alley Sprint', minLvl: 3,  fieldPower: 45,  fee: 2000,  purse: 3200 },
+    { id: 'midnight',  name: 'Midnight Run',       minLvl: 12, fieldPower: 140, fee: 8000,  purse: 13000 },
+    { id: 'grandprix', name: 'The Ghost Circuit',  minLvl: 30, fieldPower: 320, fee: 30000, purse: 48000 },
+  ],
+  RANKS: [
+    { min: 0, name: 'Sunday Driver' }, { min: 10, name: 'Street Racer' }, { min: 40, name: 'The Wheelman' },
+    { min: 120, name: 'King of the Strip' }, { min: 400, name: 'The Phantom' },
+  ],
+};
+export const raceTierOf = (id) => RACES.TIERS.find((t) => t.id === id) || null;
+export const raceRankOf = (wins) =>
+  [...RACES.RANKS].reverse().find((r) => Number(wins) >= r.min) || RACES.RANKS[0];
+// a car's race power (deterministic; the car dominates, tune + wheelman speed decide close ones)
+export const carPower = (modelId, trimId, tune = 0, speed = 0, dmg = 0) =>
+  Math.max(1, Math.floor(Math.sqrt(carVal(modelId, trimId)))
+    + Number(tune) * RACES.TUNE_POWER + Math.floor(Number(speed) / RACES.SPEED_DIV)
+    - Math.floor(Number(dmg) / RACES.DMG_PEN_DIV));
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it
