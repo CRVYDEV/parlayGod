@@ -3071,9 +3071,38 @@ a clean run (the sale faucet + margin), an interdicted run (fine + heat + boat s
 the supply cap, too_slow, the safehouse block, resale, the board, DEATH, and §10.4. Suite 32/32 + sim
 drift-0. ALL numbers (boat catalog, route curves, `INTERDICT_*`/`FINE_RATE`/`SINK_P`, `SUPPLY_CAP_DAY`) are
 founder sign-off levers — the `port:sale` faucet is the one new emission surface (BALANCE.md; measured at
-parity). Deferred (step two): the offshore RENDEZVOUS (a player-to-player mid-sea handoff), pirate PvP
-(intercept a rival's run — the convoy-ambush twin at sea), naval upgrades (hull/engine tuning like car
-`tune`), and a harbormaster protection racket.
+parity).
+**Step two — NAVAL UPGRADES + PIRACY + the offshore RENDEZVOUS — BUILT** (`src/port.js`, `src/rules.js`
+`PORT.STEP2`, `schema.sql`, `test/port.js`; the deferred step-two items). **(1) NAVAL UPGRADES** (the car-`tune`
+twin): new `boats.hull`/`boats.engine` levels (each capped `UPGRADE_MAX` 5, a `port:upgrade` cash SINK whose
+cost climbs with the level + the boat's tier); `effHold`/`effSpeed` (+`HULL_STEP` 15 cargo / +`ENGINE_STEP` 8
+knots per level) fold into every run (cost/hold, the `minSpeed` gate, interdiction) + the board. Upgrades buy
+efficiency toward the daily `SUPPLY_CAP_DAY`, NOT a higher ceiling (the cap still bounds daily sourcing → no
+new emission). **(2) PIRACY** (`interceptRun`, `POST /v1/port/intercept/:boatId` — the convoy-ambush twin at
+sea): a pirate with their OWN fast docked boat + guns runs down a rival's genuinely-at-sea run; the board's new
+**THE SEAS** section lists targets as a route + value BAND (never the manifest — the convoy-board rule). Energy
++ ammo (`port:piracy` ammo SINK, `port:` joined the ammo vocab) + heat; a muscle/speed + pursuit-boat contest
+vs the runner's `effSpeed` + escort (`PORT_PIRATE_WIN` TEST-ONLY roll knob). A WIN seizes the cargo: the pirate
+lands a CUT (`PIRATE_TAKE_BPS` 60%) of its would-be fence value (`port:piracy` cash FAUCET) and the run is
+VOIDED — since the take is < 100% and the run dies, **piracy is a §10.4-SAFE REDIRECT of the existing
+`port:sale` faucet: total port emission can only FALL**. A LOSS hospitalizes the pirate. One attempt per pirate
+per live run (`port_intercepts`, cleared when a boat's run starts/ends/moves); family omertà holds; needs your
+own boat → a Port-native PvP loop (+ a use for fast boats). Lock order: pirate char → target boat `FOR UPDATE`
+(all run-mutating paths now lock the boat, so piracy + the owner's collect serialize — no double-realize).
+**(3) The offshore RENDEZVOUS** (`rendezvous`, `POST /v1/port/rendezvous/:boatId {to}`): a consensual mid-sea
+handoff — a runner hands an active run to a partner's docked, rendezvous-flagged boat
+(`POST /v1/port/boat/:boatId/rendezvous`, consent-by-listing); the run moves vessel-to-vessel, the runner's
+boat frees, the flag is consumed. Use it to hand a hot cargo to a fast/clean captain, or to shake a pirate
+tracking your boat. **§10.4-neutral** (no currency; `port:sale` fires for whoever collects); both boat rows
+lock `FOR UPDATE` sorted (deadlock-safe vs a concurrent rendezvous/piracy). `port_intercepts` joined the
+runEstate wipe; boats already die with the street. Console: the Port tab gained per-boat hull/engine upgrade
+buttons + a rendezvous toggle + **THE SEAS** piracy board. `test/port.js` covers the upgrade ladder + effective
+hold/speed on the board, piracy (the seas band, level + once gates, a WIN's redirected cut + voided run, a LOSS
+hospitalization), and the rendezvous (closed-boat gate + the handoff moving the run + consuming the flag).
+Suite 32/32 + sim drift-0. All `STEP2.*` numbers are founder sign-off levers — sim the piracy faucet before
+production (it can only reduce emission, but the ammo cost + PvP gate keep it a skill play, not a farm).
+Deferred (step three): the contraband MARKET (land goods as a tradeable commodity), harbor berths, a smuggler's
+legend, a harbormaster racket, Coast-Guard heat into the Law meter.
 
 **OVERNIGHT FULL-SYSTEM RED-TEAM (`AUDIT-full-system-v2.md`, 2026-07-21)** — a max-effort audit, SIX
 parallel independent lenses over the ENTIRE codebase (47 src modules) + all 6 Solidity contracts

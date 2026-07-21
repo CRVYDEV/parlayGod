@@ -1373,6 +1373,21 @@ cap). Measured in `tools/sim.js` P9.14 (analytic, zero value seeded, §10.4 unto
 `port:sale` is the emission surface — sim the net EV per route before production (measured at parity).
 Suite 32/32 + sim drift-0.
 
+### Step two (2026-07-21) — naval upgrades + PIRACY + rendezvous (founder sign-off levers)
+- **Naval upgrades** (`PORT.STEP2` hull/engine, capped 5): buy efficiency toward the DAILY `SUPPLY_CAP_DAY`,
+  NOT a higher ceiling — a bigger hull hits the same $ cap in fewer/bigger runs, and a faster boat lowers
+  interdiction so more runs land. Net: upgrades raise REALIZED emission toward the (unchanged) cap, not the
+  cap itself. `port:upgrade` is a cash SINK (a $OMR-free money drain — helps, not hurts).
+- **Piracy** (`interceptRun`, `port:piracy` cash faucet at `PIRATE_TAKE_BPS` 60%): a WIN redirects a rival
+  run's would-be `port:sale` to the pirate at < 100% and VOIDS the run → **total port emission can only FALL
+  vs a clean landing** (emission-safe by construction, like a convoy hijack but realized as cash since the
+  Port has no goods intermediary). Bounded by the runner's supply cap + a PvP contest + the pirate's ammo
+  cost. Sim the realized $/day for a dedicated pirate before production, but it cannot exceed what the
+  runners it preys on would have landed.
+- **Rendezvous**: §10.4-neutral (a run changes vessels; no currency moves). No emission impact.
+- All `STEP2.*` numbers (HULL/ENGINE_STEP, UPGRADE_BASE/MAX, PIRATE_TAKE_BPS/ENERGY/AMMO/MIN_LEVEL) are
+  founder sign-off levers.
+
 ## AUDIT-full-system-v2 economic flags (2026-07-21) — founder sign-off (NOT patched, ground rule #1)
 
 The overnight full-system red-team found NO new unbounded $OMR extraction (the reserve queue holds —

@@ -461,7 +461,7 @@ export async function buildServer() {
     seals: GANG_SEALS,
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
     races: { minLevel: RACES.MIN_LEVEL, tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse })), tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX } },
-    port: { minLevel: PORT.MIN_LEVEL, district: PORT.DISTRICT, boats: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed })), routes: PORT.ROUTES.map((r) => ({ id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell })) },
+    port: { minLevel: PORT.MIN_LEVEL, district: PORT.DISTRICT, boats: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed })), routes: PORT.ROUTES.map((r) => ({ id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell })), upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP }, piracy: { minLevel: PORT.STEP2.PIRATE_MIN_LEVEL, energy: PORT.STEP2.PIRATE_ENERGY, ammo: PORT.STEP2.PIRATE_AMMO } },
     vests: VESTS.map((v) => ({ id: v.id, name: v.name, mult: v.mult, omr: v.omr, desc: v.desc })),
     drugs: DRUGS.map((d) => ({ id: d.id, name: d.name, tag: d.tag, base: d.base, unlock: d.unlock })),
     goods: GOODS.map((g) => ({ id: g.id, name: g.name, base: g.base })),
@@ -636,6 +636,14 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.launchRun(ch, req.params.boatId, req.body?.route, !!req.body?.escort, client, h)));
   app.post('/v1/port/collect/:boatId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.collectRun(ch, req.params.boatId, client, h)));
+  app.post('/v1/port/upgrade/:boatId', { preHandler: auth }, async (req) =>          // step two: naval upgrade (hull/engine)
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.upgradeBoat(ch, req.params.boatId, req.body?.part, client, h)));
+  app.post('/v1/port/intercept/:boatId', { preHandler: auth }, async (req) =>        // step two: PIRACY — run down a rival at sea
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.interceptRun(ch, req.params.boatId, client, h)));
+  app.post('/v1/port/boat/:boatId/rendezvous', { preHandler: auth }, async (req) =>  // step two: flag a docked boat open to a handoff
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.setRendezvous(ch, req.params.boatId, req.body?.open !== false, client, h)));
+  app.post('/v1/port/rendezvous/:boatId', { preHandler: auth }, async (req) =>       // step two: hand your run to a partner's boat
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.rendezvous(ch, req.params.boatId, req.body?.to, client, h)));
 
   // THE COMMISSION — the top families' weekly city decree (votes public, effect next week).
   app.get('/v1/commission', async () => Commission.commissionBoard(pool));

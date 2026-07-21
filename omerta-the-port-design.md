@@ -80,11 +80,43 @@ sized (sim-measured) to boxing-exhibition / territory parity (~a few hundred k/d
 smuggler). Every number is a founder sign-off lever; the faucet is sim-measured before production (the
 races/exhibition precedent).
 
-## Deferred (step two+)
+## Step two — BUILT (naval upgrades + PIRACY + the offshore rendezvous)
+
+- **NAVAL UPGRADES** (the car-`tune` twin): a boat carries a **hull** and **engine** level (each capped at
+  `UPGRADE_MAX` 5, a `port:upgrade` cash SINK, cost climbs with the level and the boat's tier).
+  `effHold = hold + hull×HULL_STEP` (+15 cargo/level) and `effSpeed = speed + engine×ENGINE_STEP` (+8
+  knots/level) fold into every run (cost/hold, the `minSpeed` gate, interdiction) and the board. Upgrades
+  buy efficiency toward the daily `SUPPLY_CAP_DAY`, **not a higher ceiling** — the cap still bounds total
+  daily sourcing, so this is progression, not inflation.
+- **PIRACY** (`interceptRun`, `POST /v1/port/intercept/:boatId` — the convoy-ambush twin at sea): a pirate
+  with their **own fast docked boat** + guns runs down a rival's run that's genuinely at sea. The board's
+  new **THE SEAS** section lists at-sea runs as a route + **value BAND** (never the manifest — the
+  convoy-board rule). Energy + ammo (`port:piracy` ammo SINK) + heat; a muscle/speed + pursuit-boat-speed
+  contest vs the runner's `effSpeed` + escort. A **WIN** seizes the cargo: the pirate lands a **CUT**
+  (`PIRATE_TAKE_BPS` 60%) of what it would have fenced for (`port:piracy` cash FAUCET) and the runner's run
+  is **voided**. Because the take is < 100% and the run is voided, piracy is a **§10.4-safe REDIRECT of the
+  existing `port:sale` faucet — total port emission can only FALL**. A **LOSS** hospitalizes the pirate.
+  One attempt per pirate per live run (`port_intercepts`, cleared when a boat's run starts/ends/moves);
+  family omertà holds; the pirate needs their own boat, so piracy is a Port-native PvP loop (and a use for
+  fast boats). Lock order: pirate char → the target boat row `FOR UPDATE` (all run-mutating paths now lock
+  the boat, so piracy and the owner's collect serialize — no double-realize).
+- **The offshore RENDEZVOUS** (`rendezvous`, `POST /v1/port/rendezvous/:boatId {to}`): a consensual mid-sea
+  handoff — a runner hands an active run to a **partner's docked, rendezvous-flagged boat**
+  (`POST /v1/port/boat/:boatId/rendezvous` is consent-by-listing). The run (route/hold/cost/escort/timer)
+  moves vessel-to-vessel; the runner's boat is freed; the flag is consumed. Use it to hand a hot cargo to a
+  fast/clean captain for the final approach, or to shake a pirate tracking your specific boat.
+  **§10.4-neutral** — no currency moves; `port:sale` fires for whoever finally collects. Both boat rows lock
+  `FOR UPDATE` in sorted order (deadlock-safe vs a concurrent rendezvous/piracy).
+
+`test/port.js` covers the upgrade ladder + the effective hold/speed on the board, piracy (the seas value
+band, the level + once gates, a WIN's redirected cut + voided run, a LOSS's hospitalization), and the
+rendezvous (the closed-boat gate + the handoff moving the run + consuming the flag). All step-two numbers
+(`STEP2.*`) are founder sign-off levers — sim the piracy faucet before production (it can only reduce
+emission, but the ammo cost + PvP gate should keep it a skill play, not a farm).
+
+## Deferred (step three+)
 - A **contraband MARKET** — land the goods as a tradeable premium commodity (its own price line + a fence)
   rather than auto-selling, so the Port feeds the market instead of paying cash directly.
-- **PvP piracy** — other players intercept your boat at sea (the convoy-ambush analog on water), so the
-  Port has a player-risk layer too.
-- **Boat upgrades** (engines/holds), harbor **berths** (a slip you rent), a **smuggler's legend**
-  (account-level lifetime landed value, survives death — the boxing/wheel precedent), and **Coast Guard
+- Harbor **berths** (a slip you rent), a **smuggler's legend** (account-level lifetime landed value,
+  survives death — the boxing/wheel precedent), a **harbormaster protection racket**, and **Coast Guard
   heat** feeding the Law meter.

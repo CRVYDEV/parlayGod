@@ -2000,16 +2000,31 @@
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
           ${fleet.length ? fleet.map((f) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${f.kind || ''}">${f.name} — hold ${f.hold} · ${f.speed} kn ${f.status === 'at_sea' ? `<span class="chip">at sea · ${mins(f.etaSeconds)}</span>` : f.status === 'arrived' ? '<span class="chip good">home — collect</span>' : '<span class="chip">docked</span>'}</span>
             <span>${f.status === 'arrived' ? `<button class="act" data-collect="${f.id}"${b.atDocks ? '' : ' disabled'}>collect</button>` : f.status === 'docked' ? `<button class="act" data-sell="${f.id}"${b.atDocks ? '' : ' disabled'}>sell</button>` : ''}</span></div>
-            ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks ? '' : ' disabled'}>run it</button></div>` : ''}`).join('') : '<div class="d">No boats. Buy one below.</div>'}
+            ${f.status === 'docked' ? `<div class="row" style="margin-top:2px"><select class="pt-route" data-for="${f.id}">${routeOpts}</select><label style="font-size:.8em"><input type="checkbox" class="pt-esc" data-for="${f.id}"> escort +$${fmt((b.escort || {}).cost || 0)}</label><button class="act" data-run="${f.id}"${b.atDocks ? '' : ' disabled'}>run it</button></div>
+            <div class="row" style="margin-top:2px;font-size:.85em"><span class="chip">hull ${f.hull}/${(b.upgrade||{}).max||5}</span>${f.hullCost ? `<button class="act" data-up="${f.id}" data-part="hull">+cargo $${fmt(f.hullCost)}</button>` : ''}
+              <span class="chip">engine ${f.engine}/${(b.upgrade||{}).max||5}</span>${f.engineCost ? `<button class="act" data-up="${f.id}" data-part="engine">+knots $${fmt(f.engineCost)}</button>` : ''}
+              <label style="font-size:.9em"><input type="checkbox" class="pt-rdv" data-for="${f.id}" ${f.rendezvous ? 'checked' : ''}> ready for a handoff</label></div>` : ''}
+            ${f.status === 'at_sea' ? `<div class="row" style="margin-top:2px;font-size:.85em"><span class="d">hand off to a partner's boat:</span><input class="pt-to" data-for="${f.id}" placeholder="partner boat id" style="flex:1"><button class="act" data-rdv="${f.id}">rendezvous</button></div>` : ''}`).join('') : '<div class="d">No boats. Buy one below.</div>'}
         </div>
         <div class="card"><span class="t">The Boatyard</span>
           ${cat.map((c) => `<div class="row" style="margin-top:4px"><span><img class="ico row" alt="" src="/v1/art/boat/${c.id}">${c.name} — hold ${c.hold} · ${c.speed} kn</span><span>$${fmt(c.cost)} <button class="act" data-buy="${c.id}"${b.atDocks && fleet.length < (b.fleetMax || 5) ? '' : ' disabled'}>buy</button></span></div>`).join('')}
           <div class="d" style="margin-top:4px">Boats resell at ${Math.round(((cat[0]||{}).resale||0)/((cat[0]||{}).cost||1)*100)}% and die with your street.</div>
         </div>
-      </div>`;
+      </div>
+      ${(b.seas && b.seas.length) ? `<div class="card" style="margin-top:12px"><span class="t">The Seas — runs out there now <span class="chip">piracy</span></span>
+        <div class="d">Run down a rival's cargo with your own fast boat + guns (${(b.piracy||{}).ammo} rounds, ${(b.piracy||{}).energy} energy). A win takes a cut of the haul; a loss puts you in the water. ${b.atDocks ? '' : '<b>Travel to the docks to give chase.</b>'}</div>
+        ${b.seas.map((s) => `<div class="row" style="margin-top:4px"><span><b>${s.runner}</b> — ${s.routeName} · <span class="chip">${s.band}</span> · in ${mins(s.etaSeconds)}</span><button class="act" data-pirate="${s.boatId}"${b.atDocks ? '' : ' disabled'}>run her down</button></div>`).join('')}
+      </div>` : (me.level >= ((b.piracy||{}).minLevel||10) ? '<div class="card" style="margin-top:12px"><span class="t">The Seas</span><div class="d">No rival runs out there right now. Keep a fast boat docked and check back — a loaded run is worth chasing.</div></div>' : '')}`;
     t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.buy}`, null).then(() => renderPort()));
     t.querySelectorAll('[data-sell]').forEach((x) => x.onclick = () => act('POST', `/v1/port/boat/${x.dataset.sell}/sell`, null).then(() => renderPort()));
     t.querySelectorAll('[data-collect]').forEach((x) => x.onclick = () => act('POST', `/v1/port/collect/${x.dataset.collect}`, null).then(() => renderPort()));
+    t.querySelectorAll('[data-up]').forEach((x) => x.onclick = () => act('POST', `/v1/port/upgrade/${x.dataset.up}`, { part: x.dataset.part }).then(() => renderPort()));
+    t.querySelectorAll('[data-pirate]').forEach((x) => x.onclick = () => act('POST', `/v1/port/intercept/${x.dataset.pirate}`, null).then(() => renderPort()));
+    t.querySelectorAll('.pt-rdv').forEach((x) => x.onchange = () => act('POST', `/v1/port/boat/${x.dataset.for}/rendezvous`, { open: x.checked }).then(() => renderPort()));
+    t.querySelectorAll('[data-rdv]').forEach((x) => x.onclick = () => {
+      const to = (t.querySelector(`.pt-to[data-for="${x.dataset.rdv}"]`) || {}).value;
+      act('POST', `/v1/port/rendezvous/${x.dataset.rdv}`, { to }).then(() => renderPort());
+    });
     t.querySelectorAll('[data-run]').forEach((x) => x.onclick = () => {
       const route = (t.querySelector(`.pt-route[data-for="${x.dataset.run}"]`) || {}).value;
       const escort = (t.querySelector(`.pt-esc[data-for="${x.dataset.run}"]`) || {}).checked;

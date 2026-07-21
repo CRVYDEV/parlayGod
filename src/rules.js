@@ -1868,6 +1868,25 @@ export const boatResale = (kind) => Math.floor((boatOf(kind)?.cost || 0) * PORT.
 // and any escort, clamped. A fast boat / escort on a low route ≈ safe; a slow freighter on the deep run ≈ dice.
 export const interdictChance = (route, boat, escort, patrolMod = 0) => Math.max(PORT.INTERDICT_MIN,
   Math.min(PORT.INTERDICT_MAX, (route.patrol + patrolMod - (boat?.speed || 0) - (escort ? PORT.ESCORT_DEF : 0)) / 100));
+// ── THE PORT step two: NAVAL UPGRADES + PIRACY + RENDEZVOUS ── (all numbers founder sign-off levers)
+PORT.STEP2 = {
+  HULL_STEP: 15, ENGINE_STEP: 8, UPGRADE_MAX: 5,        // +cargo / +knots per level, capped like car tune
+  UPGRADE_BASE: 30000,                                  // cost = BASE × (level+1) × boat-tier multiple (bigger hulls cost more)
+  // PIRACY (the convoy-ambush twin at sea): a pirate needs their own fast boat + guns; a WIN redirects
+  // the run's would-be landing to the pirate at a CUT (< 100%), so total port emission can only FALL.
+  PIRATE_MIN_LEVEL: 10, PIRATE_ENERGY: 12, PIRATE_AMMO: 4, PIRATE_HEAT: 15,
+  PIRATE_TAKE_BPS: 6000,                                // 60% of the seized cargo's landing value; the rest scatters
+  ESCORT_VS_PIRATE: 30, FAIL_HOSP_MS: 30 * 60 * 1000,   // an escort fights pirates too; a repelled pirate is laid up
+};
+// effective hold/speed with naval upgrades folded in
+export const effHold = (boat, spec) => (spec?.hold || 0) + (Number(boat?.hull) || 0) * PORT.STEP2.HULL_STEP;
+export const effSpeed = (boat, spec) => (spec?.speed || 0) + (Number(boat?.engine) || 0) * PORT.STEP2.ENGINE_STEP;
+// upgrade cost climbs with the level AND the boat's tier (a freighter's hull costs more than a dinghy's)
+export const boatUpgradeCost = (boat, spec, part) => {
+  const lvl = Number(part === 'hull' ? boat?.hull : boat?.engine) || 0;
+  const tier = Math.max(1, Math.round((spec?.cost || 0) / 500000));   // ~1 (dinghy) … ~24 (cigarette)
+  return PORT.STEP2.UPGRADE_BASE * (lvl + 1) * Math.max(1, Math.min(tier, 12));
+};
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
