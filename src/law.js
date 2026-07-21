@@ -65,7 +65,7 @@ export function lawBoard(ch, h) {
       active: retainerActive(ch),
       seconds: retainerActive(ch) ? Math.max(0, Math.ceil((new Date(ch.retainer_until) - Date.now()) / 1000)) : 0 },
     // THE ENVELOPE — the standing graft that buries your file (the meter builds slower while current)
-    envelope: { cost: LAW.ENVELOPE_OMR, gainMult: LAW.ENVELOPE_GAIN_MULT,
+    envelope: { cost: LAW.ENVELOPE_OMR, gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT,
       active: envelopeActive(ch),
       seconds: envelopeActive(ch) ? Math.max(0, Math.ceil((new Date(ch.envelope_until) - Date.now()) / 1000)) : 0 },
     // Phase 2/3 — the case, once filed
