@@ -25,6 +25,7 @@ import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
+import { sweepTournaments } from './casino.js';
 import { syncFeeEvents, syncClaimedEvents, syncTradeFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -208,6 +209,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE FIGHT CIRCUIT (step three): resolve any past-window MAIN EVENT card — roll the fight + pay the crowd
     const me = await safe('main event sweep', () => sweepMainEvents(pool));
     if (me && me.resolved > 0) console.log(`🥊 boxing: resolved ${me.resolved} main event(s)`);
+    // THE GAMBLING DEN (step four): settle any poker TOURNAMENT past its registration window — deal + pay
+    const trn = await safe('tournament sweep', () => sweepTournaments(pool));
+    if (trn && trn.resolved > 0) console.log(`🃏 den: settled ${trn.resolved} poker tournament(s)`);
     // THE FIGHT CIRCUIT (step four): strip an inactive champion who hasn't defended the belt in time
     const bd = await safe('belt defense', () => enforceBeltDefense(pool));
     if (bd && bd.stripped) console.log(`🥊 boxing: stripped an inactive champion (${bd.fighter})`);

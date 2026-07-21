@@ -673,7 +673,29 @@ Verified CLEAN: the den-profit identity + per-character cash exactness, the `bla
 SQL/char-lock discipline (no persist-clobber, deals serialize → `hand` gate, the PK-23505 path
 unreachable), `poker_limit` persist parity + `playPoker`'s den_volume→street_tax lock order (the
 B-H1 posture), infinite-deck un-countability, −EV poker collusion, no hole-card leak (only the
-dealer up-card is exposed until resolve), and abandonment being pure self-forfeit.
+dealer up-card is exposed until resolve), and abandonment being pure self-forfeit. **Step four — THE
+POKER TOURNAMENT — BUILT** (`src/casino.js`, `test/casino.js`; the scheduled, escrow-funded,
+worker-resolved SHOWDOWN — the boxing main-event pattern, since the atomic model can't hold
+turn-based hands). A fixed `TOURNEY.BUYIN` ($5k) cash ESCROWS into a pool during an open window
+(`POST /v1/casino/tournament`; `poker_tournaments`/`poker_entries`/`poker_state` tables; one open
+tournament at a time, a new one materializes on the next entry after the last settles; `TOURNEY_MS`
+env TEST-ONLY). The worker (`sweepTournaments`→`resolveTournament`, wired in worker.js) deals every
+LIVE entrant an INDEPENDENT 7-card hand (a fresh shuffle each — scales to any field), ranks best-5-
+of-7, and pays the top `min(field, PAYOUTS.length)` places a RENORMALIZED share of the pool net of
+`RAKE_BPS` (5%, half → street tax / half burns) — so the house edge stays the rake at any turnout
+(no unpaid-place leak); ties split the covered shares. A dead entrant's stake burns
+(`casino:tourney:death`); a field < `MIN_ENTRANTS` (2) is refunded. §10.4: all ride the `casino:`
+prefix (no vocab change) + a NEW **`poker tourney escrow`** check (the boxing-bet-escrow twin: open
+pool == Σ buyin − win − refund − take − death) — and the exact-reason matches sit UNDER the den-book
+`casino:bet:%`/`casino:win:%` LIKE patterns, so a tournament never touches the PvE house book. A pure
+competitive REDISTRIBUTION (no new emission). Lock order: char → `poker_state` → tournament (enter);
+entrant chars sorted → tournament (settle) — acyclic. `denInfo`/`/v1/rules` surface it; the console
+Den tab gained a tournament card; `describe()` humanizes the buy-in. `test/casino.js` proves the
+district gate, the short-field refund + closed-window + double-entry gates, a 3-handed settle with a
+dead entrant's stake burned + the top places splitting net of rake, and the escrow §10.4 check.
+Suite 32/32 + sim drift-0. All `TOURNEY.*` numbers are founder sign-off levers. Deferred (step five):
+true multi-way ring poker with live betting streets + a bracketed multi-table tournament (both need
+turn-based session state).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

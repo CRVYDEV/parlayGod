@@ -6,7 +6,8 @@
 // house's REALIZED profit net of open liabilities (the econ-pass mint-on-top fix — see the book
 // helpers below); whatever profit isn't tipped out burns. Dice are stateless (a full pass-line
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
-import { GameError, bus, npcTier, bumpStanding } from './game.js';
+import crypto from 'node:crypto';
+import { GameError, bus, npcTier, bumpStanding, ledger, notify, rngLog } from './game.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -550,6 +551,139 @@ export async function playPoker(ch, dealer, amount, client, h) {
     net: result === 'win' ? amt - rake : result === 'loss' ? -amt : 0 };
 }
 
+// ── THE POKER TOURNAMENT (scheduled showdown, escrow → worker settle — the boxing main-event pattern) ──
+// A CASH buy-in ESCROWS into the pool during an open registration window; the worker deals every
+// LIVE entrant an independent 7-card hand and pays the top places a share of the pool net of the
+// house rake (half → street tax / half burns). A pure competitive redistribution — no new emission
+// (the field is net-negative by the rake), a NEW §10.4 escrow check reconciles it. One open
+// tournament at a time (poker_state.current); a fresh one materializes on the next entry after the
+// last settles.
+const tourneyMs = () => Number(process.env.TOURNEY_MS) || CASINO.TOURNEY.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
+function deal7() { // an independent 7-card hand from a fresh shuffle (scales to any field — no shared board)
+  const deck = [];
+  for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) deck.push({ rank: r, suit: s });
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+  return deck.slice(0, 7);
+}
+
+export async function enterTournament(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The big table is on the ${CASINO.DISTRICT}.`);
+  const buyin = CASINO.TOURNEY.BUYIN;
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is $${buyin}.`);
+  // materialize/find the open tournament under the state singleton lock (LOCK ORDER: char → poker_state → tournament)
+  const st = (await client.query('SELECT current FROM poker_state WHERE id=1 FOR UPDATE')).rows[0];
+  let t = st.current ? (await client.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
+  if (!t) {
+    const id = crypto.randomUUID();
+    const resolvesAt = new Date(Date.now() + tourneyMs());
+    await client.query('INSERT INTO poker_tournaments (id, status, resolves_at, pool) VALUES ($1,$2,$3,0)', [id, 'open', resolvesAt]);
+    await client.query('UPDATE poker_state SET current=$1 WHERE id=1', [id]);
+    t = { id, status: 'open', resolves_at: resolvesAt, pool: 0 };
+  } else if (new Date(t.resolves_at) <= new Date()) {
+    throw new GameError('closed', 'Registration has closed — the tournament is about to run. Try again after it settles.');
+  }
+  if ((await client.query('SELECT 1 FROM poker_entries WHERE tournament_id=$1 AND character_id=$2', [t.id, ch.id])).rows[0])
+    throw new GameError('entered', "You're already seated at this tournament.");
+  ch.cash = Number(ch.cash) - buyin;
+  await client.query('INSERT INTO poker_entries (tournament_id, character_id, buyin) VALUES ($1,$2,$3)', [t.id, ch.id, buyin]);
+  await client.query('UPDATE poker_tournaments SET pool = pool + $2 WHERE id=$1', [t.id, buyin]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -buyin, reason: 'casino:tourney:buyin', counterparty: t.id });
+  await bumpStanding(client, h, ch, 'madame', 2); // seating a tournament is serious business
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [t.id])).rows[0].n);
+  await h.track(client, ch.account_id, 'casino', { game: 'tourney', buyin });
+  bus.emit('streets', { type: 'tourney_entry', who: ch.name, entrants });
+  return { ok: true, game: 'tourney', tournament: t.id, buyin, pool: Number(t.pool) + buyin, entrants,
+    closesSeconds: Math.max(0, Math.ceil((new Date(t.resolves_at) - Date.now()) / 1000)) };
+}
+
+// Worker settle: deal every LIVE entrant an independent 7-card hand, rank them, pay the top places a
+// share of the pool net of the rake. Single-writer (no player-lock races), idempotent (status gate).
+export async function resolveTournament(client, tid) {
+  const t0 = (await client.query('SELECT * FROM poker_tournaments WHERE id=$1', [tid])).rows[0];
+  if (!t0 || t0.status !== 'open') return null;
+  // LOCK ORDER: entrant chars sorted → tournament row (the resolveMainEvent discipline)
+  const entChars = (await client.query('SELECT character_id FROM poker_entries WHERE tournament_id=$1', [tid])).rows.map((r) => r.character_id).sort();
+  for (const cid of entChars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  const t = (await client.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open' FOR UPDATE", [tid])).rows[0];
+  if (!t) return null;
+  const pool = Number(t.pool);
+  const entries = (await client.query(
+    'SELECT e.character_id, e.buyin, c.alive, c.name FROM poker_entries e LEFT JOIN characters c ON c.id=e.character_id WHERE e.tournament_id=$1', [tid])).rows;
+  let deadBurn = 0;
+  const live = [];
+  for (const e of entries) {
+    if (e.alive) live.push(e);
+    else { deadBurn += Number(e.buyin); await ledger(client, { currency: 'cash', amount: -Number(e.buyin), reason: 'casino:tourney:death', counterparty: tid }); }
+  }
+  const clearCurrent = async () => { await client.query('UPDATE poker_state SET current=NULL WHERE id=1 AND current=$1', [tid]); };
+  if (live.length < CASINO.TOURNEY.MIN_ENTRANTS) { // not enough runners — refund the field, burn the dead
+    for (const e of live) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, Number(e.buyin)]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: Number(e.buyin), reason: 'casino:tourney:refund', counterparty: tid });
+      await notify(client, e.character_id, 'tourney_refund', { buyin: Number(e.buyin) });
+    }
+    await client.query("UPDATE poker_tournaments SET status='refunded' WHERE id=$1", [tid]);
+    await clearCurrent();
+    return { tournament: tid, refunded: live.length };
+  }
+  // deal + rank (independent 7-card hands — best 5-of-7, ties share the covered places' shares)
+  const ranked = live.map((e) => { const cards = deal7(); const score = best7(cards); return { ...e, score, hand: handName(score) }; })
+    .sort((a, b) => cmpHand(b.score, a.score));
+  const livePool = pool - deadBurn;
+  const rake = Math.floor(livePool * CASINO.TOURNEY.RAKE_BPS / 10000);
+  const net = livePool - rake;
+  // pay the top min(field, PAYOUTS.length) places, RENORMALIZED to the field so the house edge stays
+  // the 5% rake regardless of turnout (an unpaid place otherwise leaks its share to the take).
+  const frac = CASINO.TOURNEY.PAYOUTS.slice(0, ranked.length);
+  const denom = frac.reduce((a, b) => a + b, 0) || 1;
+  const placeShare = frac.map((f) => Math.floor(net * f / denom)); // share for places 0,1,2…
+  const payouts = new Array(ranked.length).fill(0);
+  for (let i = 0; i < ranked.length;) { // group ties: a run of equal hands splits the covered places' shares
+    let j = i; while (j + 1 < ranked.length && cmpHand(ranked[j + 1].score, ranked[i].score) === 0) j++;
+    let sum = 0; for (let p = i; p <= j; p++) sum += placeShare[p] || 0;
+    const each = Math.floor(sum / (j - i + 1));
+    for (let p = i; p <= j; p++) payouts[p] = each;
+    i = j + 1;
+  }
+  let handedOut = 0;
+  for (let i = 0; i < ranked.length; i++) {
+    const e = ranked[i], payout = payouts[i];
+    if (payout > 0) {
+      handedOut += payout;
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, payout]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: payout, reason: 'casino:tourney:win', counterparty: tid });
+    }
+    await client.query('UPDATE poker_entries SET place=$3, hand=$4 WHERE tournament_id=$1 AND character_id=$2', [tid, e.character_id, i + 1, e.hand]);
+    await notify(client, e.character_id, 'tourney_result', { place: i + 1, of: ranked.length, hand: e.hand, payout });
+  }
+  const totalTake = rake + (net - handedOut); // the rake + any rounding/unpaid remainder = the house cut
+  if (totalTake > 0) {
+    await ledger(client, { currency: 'cash', amount: -totalTake, reason: 'casino:tourney:take', counterparty: tid });
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(totalTake / 2)]); // half → the buyback, half burns
+  }
+  await client.query("UPDATE poker_tournaments SET status='resolved' WHERE id=$1", [tid]);
+  await clearCurrent();
+  await rngLog(client, ranked[0].character_id, `casino:tourney:${tid}`, ranked[0].score[0],
+    `winner ${ranked[0].name} ${ranked[0].hand} · ${ranked.length} runners · pool $${pool}`);
+  bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool, runners: ranked.length });
+  return { tournament: tid, runners: ranked.length, pool, winner: ranked[0].name, take: totalTake };
+}
+
+// worker sweep — settle every open tournament past its registration window (per-tournament txn,
+// idempotent; a poison tournament can't starve the rest).
+export async function sweepTournaments(pool) {
+  const due = (await pool.query("SELECT id FROM poker_tournaments WHERE status='open' AND resolves_at <= now() ORDER BY resolves_at")).rows;
+  let resolved = 0;
+  for (const { id } of due) {
+    const client = await pool.connect();
+    try { await client.query('BEGIN'); await resolveTournament(client, id); await client.query('COMMIT'); resolved++; }
+    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved };
+}
+
 // The den's front window: yesterday's number, your open tickets, the table limits.
 export async function denInfo(pool, characterId) {
   const today = dayOf();
@@ -568,6 +702,16 @@ export async function denInfo(pool, characterId) {
   const pokerTables = (await pool.query(
     `SELECT id, name, poker_limit FROM characters WHERE alive AND poker_limit IS NOT NULL AND loc=$1 AND id<>$2 ORDER BY poker_limit DESC LIMIT 20`,
     [CASINO.DISTRICT, characterId])).rows.map((f) => ({ id: f.id, name: f.name, limit: Math.floor(Number(f.poker_limit)) }));
+  // step four: the open poker TOURNAMENT (if one's registering) + whether you're seated
+  const st = (await pool.query('SELECT current FROM poker_state WHERE id=1')).rows[0];
+  const tr = st?.current ? (await pool.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open'", [st.current])).rows[0] : null;
+  const tourney = tr ? {
+    id: tr.id, pool: Number(tr.pool),
+    entrants: Number((await pool.query('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [tr.id])).rows[0].n),
+    seated: !!(await pool.query('SELECT 1 FROM poker_entries WHERE tournament_id=$1 AND character_id=$2', [tr.id, characterId])).rows[0],
+    closesSeconds: Math.max(0, Math.ceil((new Date(tr.resolves_at) - Date.now()) / 1000)),
+    buyin: CASINO.TOURNEY.BUYIN, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS,
+  } : { buyin: CASINO.TOURNEY.BUYIN, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS, open: false };
   return {
     district: CASINO.DISTRICT,
     dice: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: '1:1 pass line',
@@ -579,5 +723,6 @@ export async function denInfo(pool, characterId) {
     backroom: { rakeBps: CASINO.PVP_RAKE_BPS, faders },
     blackjack: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: `${CASINO.BJ_PAYS_BPS / 10000 * 2}:2 on a natural`, hand },
     poker: { min: CASINO.POKER_MIN, maxBet: CASINO.MAX_BET, rakeBps: CASINO.PVP_RAKE_BPS, tables: pokerTables },
+    tournament: tourney,
   };
 }

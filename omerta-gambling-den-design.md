@@ -113,3 +113,32 @@ levers (`CASINO.BJ_*`, `CASINO.POKER_MIN`).
 **Deferred (step four candidates):** true multi-way ring poker + a live scheduled TOURNAMENT with a
 prize pool (both need turn-based session state this atomic one-call architecture doesn't hold),
 blackjack splits/insurance, a poker sit-n-go.
+
+## Step four — THE POKER TOURNAMENT (BUILT)
+
+A scheduled, escrow-funded, worker-resolved SHOWDOWN — the boxing main-event pattern (the atomic
+one-txn-per-action model can't hold turn-based play, so the tournament is a pooled competition, not
+live hands). CASH only. A pure competitive REDISTRIBUTION (no new emission — the field is net-negative
+by the house rake). All numbers are founder sign-off levers (`CASINO.TOURNEY.*`).
+
+- **Buy in** (`POST /v1/casino/tournament`) — a fixed `BUYIN` ($5k) ESCROWS into the pool during an
+  open registration window (`REGISTER_MS`, `TOURNEY_MS` env TEST-ONLY). At most ONE open tournament at
+  a time (`poker_state.current`); a fresh one materializes on the next entry after the last settles.
+  Gates: at neon, not jailed, not already seated, registration still open (`closed` past the window).
+- **The worker settles** (`sweepTournaments` → `resolveTournament`) — deals every LIVE entrant an
+  INDEPENDENT 7-card hand (a fresh shuffle each — scales to any field, no shared-board 52-card limit),
+  ranks them best-5-of-7, and pays the top `min(field, PAYOUTS.length)` places a share of the pool net
+  of `RAKE_BPS` (5%). Shares are RENORMALIZED to the field, so the house edge stays the rake regardless
+  of turnout (an unpaid place doesn't leak its share to the take). Ties split the covered places' shares.
+  A dead entrant's stake BURNS (`casino:tourney:death`); a field below `MIN_ENTRANTS` (2) is refunded
+  (`casino:tourney:refund`). Single-writer (no player-lock races), idempotent (status gate).
+- **§10.4** — a NEW escrow check (the boxing-bet-escrow twin): open-tournament pool ==
+  Σ `casino:tourney:buyin` − `:win` − `:refund` − `:take` (NULL, half street tax / half burns) −
+  `:death` (NULL). All ride the `casino:` prefix (no vocab change); the exact-reason matches sit under
+  the `casino:bet:%`/`casino:win:%` den-profit LIKE patterns, so a tournament never touches the PvE
+  house book. Lock order: char → `poker_state` → tournament (enter); entrant chars sorted → tournament
+  (settle) — both acquire char(s) before the tournament row, acyclic.
+
+The step-four deferred items (true multi-way ring poker with live betting streets; a bracketed
+multi-table tournament) still need turn-based session state; the pooled showdown is the tournament
+this architecture supports.

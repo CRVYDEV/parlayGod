@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { sweepTournaments } from '../src/casino.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -347,6 +348,58 @@ for (let i = 0; i < 40 && (pkW === 0 || pkL === 0); i++) {
 assert(pkW > 0 && pkL > 0, `heads-up poker saw both sides win (${pkW}W/${pkL}L, ${pkPush} split)`);
 assert.equal((await meOf(token)).omr, omrAfterBJ, 'poker never touches $OMR either');
 
+// ══════════ STEP FOUR: the POKER TOURNAMENT (scheduled showdown, escrow → worker settle) ══════════
+// three fresh players (kept off Lou's tracked ledger); the worker deals + settles; the escrow §10.4
+// check reconciles the pool. BUYIN escrows on entry; the worker pays the top places net of the rake.
+const BUYIN = CASINO.TOURNEY.BUYIN;
+const newPlayer = async (name) => { const { body: { token: tk } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: tk, body: { name } });
+  const id = (await meOf(tk)).id; await pool.query(`UPDATE characters SET cash=200000, loc='neon' WHERE id='${id}'`);
+  return { tk, id }; };
+const tsum = async (reason) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='${reason}'`)).rows[0].s);
+
+// gate: not at the den
+const D = await newPlayer('Tourney Tess');
+await pool.query(`UPDATE characters SET loc='docks' WHERE id='${D.id}'`);
+assert.equal((await call('POST', '/v1/casino/tournament', { token: D.tk })).body.error, 'district', 'the big table is at neon');
+await pool.query(`UPDATE characters SET loc='neon' WHERE id='${D.id}'`);
+// ── the SHORT-FIELD REFUND: one entrant, the field never fills → the buy-in comes back ──
+let e = await call('POST', '/v1/casino/tournament', { token: D.tk });
+assert.equal(e.code, 200, `Tess buys in (${JSON.stringify(e.body)})`); assert.equal(e.body.pool, BUYIN, 'the pool holds her buy-in');
+assert.equal((await call('POST', '/v1/casino/tournament', { token: D.tk })).body.error, 'entered', "you can't buy in twice");
+const cashPreRefund = (await meOf(D.tk)).cash;
+const tid1 = e.body.tournament;
+await pool.query(`UPDATE poker_tournaments SET resolves_at = now() - interval '1 minute' WHERE id='${tid1}'`);
+// registration is closed now — a fresh entrant is turned away
+assert.equal((await call('POST', '/v1/casino/tournament', { token: (await newPlayer('Late Larry')).tk })).body.error, 'closed', 'no seating after the window closes');
+await sweepTournaments(pool);
+assert.equal((await pool.query(`SELECT status FROM poker_tournaments WHERE id='${tid1}'`)).rows[0].status, 'refunded', 'a short field is refunded');
+assert.equal((await meOf(D.tk)).cash, cashPreRefund + BUYIN, "Tess got her buy-in back");
+assert.equal((await pool.query('SELECT current FROM poker_state WHERE id=1')).rows[0].current, null, 'the state cleared for the next tournament');
+
+// ── a full field settles: buy-ins escrow, one dies (their stake burns), the top places split net of rake ──
+const A = await newPlayer('Ante Al'), B = await newPlayer('Bluff Bo'), C = await newPlayer('Cold Cy');
+for (const p of [A, B, C]) assert.equal((await call('POST', '/v1/casino/tournament', { token: p.tk })).code, 200, 'entered the tournament');
+const tid2 = (await pool.query("SELECT id FROM poker_tournaments WHERE status='open'")).rows[0].id;
+assert.equal(Number((await pool.query(`SELECT pool FROM poker_tournaments WHERE id='${tid2}'`)).rows[0].pool), 3 * BUYIN, 'the pool holds all three buy-ins');
+await pool.query(`UPDATE characters SET alive=false WHERE id='${C.id}'`); // Cy's street dies before the deal — his stake burns
+const buyinPre = -(await tsum('casino:tourney:buyin')), winPre = await tsum('casino:tourney:win'), takePre = -(await tsum('casino:tourney:take')), deathPre = -(await tsum('casino:tourney:death'));
+await pool.query(`UPDATE poker_tournaments SET resolves_at = now() - interval '1 minute' WHERE id='${tid2}'`);
+await sweepTournaments(pool);
+assert.equal((await pool.query(`SELECT status FROM poker_tournaments WHERE id='${tid2}'`)).rows[0].status, 'resolved', 'the tournament settled');
+// escrow math for THIS tournament: pool 15000, Cy's 5000 burns, net 9500 (5% rake) split between the 2 live
+const win2 = await tsum('casino:tourney:win') - winPre, take2 = -(await tsum('casino:tourney:take')) + takePre, death2 = -(await tsum('casino:tourney:death')) + deathPre;
+assert.equal(death2, BUYIN, "the dead entrant's stake burned (casino:tourney:death)");
+assert.equal(win2 + take2 + death2, 3 * BUYIN, 'buy-ins == prizes + house take + the dead burn (escrow closes)');
+// both live entrants placed; the winner took the biggest share
+const places = (await pool.query(`SELECT character_id, place, hand FROM poker_entries WHERE tournament_id='${tid2}' AND character_id IN ('${A.id}','${B.id}') ORDER BY place`)).rows;
+assert.equal(places.length, 2, 'both live players were ranked'); assert(places.every((r) => r.hand), 'each got a dealt hand');
+assert.equal(Number(places[0].place), 1, 'a first place'); assert.equal(Number(places[1].place), 2, 'and a second');
+// the §10.4 escrow check reconciles across every tournament (open + settled)
+const invT = await runLedgerInvariants(pool);
+const trEsc = invT.checks.find((c) => c.name === 'poker tourney escrow');
+assert(trEsc?.ok, `poker tourney escrow reconciles (drift ${trEsc?.drift})`);
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
@@ -363,6 +416,8 @@ const denP = inv.checks.find((c) => c.name === 'den profit');
 assert(denP?.ok, `den profit == PvE bets − wins (drift ${denP?.drift})`);
 const denD = inv.checks.find((c) => c.name === 'den distributions');
 assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
+const trFinal = inv.checks.find((c) => c.name === 'poker tourney escrow');
+assert(trFinal?.ok, `poker tourney escrow holds at the end (drift ${trFinal?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), §10.4 identity + vocabulary + treasury + den checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), §10.4 identity + vocabulary + treasury + den + tourney-escrow checks hold`);
 await app.close();

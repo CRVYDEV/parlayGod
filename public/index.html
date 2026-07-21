@@ -356,6 +356,7 @@
       body.outcome === 'bust' ? `bust at ${body.playerTotal} — −$${fmt(Math.abs(body.net))}` :
       body.outcome === 'push' ? "a push — your bet's returned" :
       `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
+    if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
     if (body.game === 'poker' && body.result) bits.push(
       body.result === 'push' ? `split pot — ${body.yourHand} both ways` :
       body.result === 'win' ? `${body.yourHand} takes it — +$${fmt(body.net)}` :
@@ -1197,6 +1198,12 @@
       <div style="margin-top:4px"><input id="pk-amt" placeholder="stake" size="8" value="1000"> <span class="d" style="font-size:10px">click a table above to play for this stake</span></div>
       <input id="pk-limit" placeholder="open your own table (limit)" size="20">
       <button class="act" id="pk-set">deal from your table</button>
+      <h2 style="margin-top:14px">The Tournament <span class="d" style="font-size:10px">(buy in, best hand takes the pool)</span></h2>
+      ${(() => { const tr = den.tournament || {};
+        if (tr.open === false) return `<div class="d" style="color:var(--dim);font-size:11px">No tournament running. Buy in ($${fmt(tr.buyin)}) to open one — the top ${(tr.payouts || []).length} split the pool.</div>
+          <button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`;
+        return `<div class="d" style="color:var(--dim);font-size:11px">pool <b>$${fmt(tr.pool)}</b> · ${tr.entrants} seated · closes in ${Math.ceil((tr.closesSeconds || 0) / 60)}m${tr.seated ? ' · <b style="color:var(--gold)">you\'re in</b>' : ''}</div>
+          ${tr.seated ? '' : `<button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`}`; })()}
       <h2 style="margin-top:14px">Back Room</h2>
       <div class="d" style="color:var(--dim);font-size:11px">faders: ${(den.backroom?.faders || []).map((f) => `${f.name} ($${fmt(f.fadeLimit)})`).join(', ') || 'nobody'}</div>
       <input id="fade-limit" placeholder="your fade limit" size="12">
