@@ -464,10 +464,16 @@ export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
 // GET /v1/leaderboard/nightlife — the scene ranked by RENOWN (the hitmen-board full-scan precedent). Two
 // flat queries + aggregate in JS (pg-mem GROUP BY-SUM is dicey — the /v1/gangs precedent). Living only.
 export async function nightlifeLeaderboard(pool, characterId) {
+  // agents are excluded from the human status board (the boxing/port/races precedent — this board also
+  // GATES renown-earned cosmetic decor, so consistency matters); join the account to filter agent_flag.
   const patrons = (await pool.query(
-    `SELECT p.character_id, p.spent_cash, p.spent_omr, c.name FROM speakeasy_patrons p JOIN characters c ON c.id = p.character_id AND c.alive`)).rows;
+    `SELECT p.character_id, p.spent_cash, p.spent_omr, c.name FROM speakeasy_patrons p
+       JOIN characters c ON c.id = p.character_id AND c.alive
+       JOIN account_persistent a ON a.account_id = c.account_id AND NOT a.agent_flag`)).rows;
   const clubs = (await pool.query(
-    `SELECT s.owner_character, s.prestige, c.name FROM speakeasies s JOIN characters c ON c.id = s.owner_character AND c.alive`)).rows;
+    `SELECT s.owner_character, s.prestige, c.name FROM speakeasies s
+       JOIN characters c ON c.id = s.owner_character AND c.alive
+       JOIN account_persistent a ON a.account_id = c.account_id AND NOT a.agent_flag`)).rows;
   const agg = new Map();
   const bump = (id, name, f) => { const e = agg.get(id) || { name, cash: 0, omr: 0, ownPrestige: 0 }; f(e); if (name && !e.name) e.name = name; agg.set(id, e); };
   for (const p of patrons) bump(p.character_id, p.name, (e) => { e.cash += Number(p.spent_cash); e.omr += Number(p.spent_omr); });

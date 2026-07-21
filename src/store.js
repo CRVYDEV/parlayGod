@@ -75,8 +75,14 @@ async function grantPackage(client, accountId, sku, ref = null) {
     else await client.query('UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL WHERE account_id=$1', [accountId, until]);
   }
   if (g.wireDays) {
-    // the ETH Street Wire — extend the LIVING character's wire_until (character-level access window)
-    const ch = (await client.query('SELECT id, wire_until FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+    // the ETH Street Wire — extend the LIVING character's wire_until (character-level access window).
+    // LOCK the character row (full-system v3 concurrency #2): wire_until is a persist-list column, and
+    // this headless grant reads-then-writes it ABSOLUTE. Without the lock, a concurrent subscribeWire
+    // (which mutates wire_until under the withCharacter char lock) could commit in the read→write gap
+    // and be clobbered by the stale-read value — silently shortening a paid window. FOR UPDATE
+    // serializes the two; grantPackage locks no account row here (its account updates are relative),
+    // so char-first introduces no lock-order inversion.
+    const ch = (await client.query('SELECT id, wire_until FROM characters WHERE account_id=$1 AND alive FOR UPDATE', [accountId])).rows[0];
     if (ch) {
       const until = new Date(laterMs(now, ch.wire_until) + g.wireDays * 86400000);
       await client.query('UPDATE characters SET wire_until=$2 WHERE id=$1', [ch.id, until]);

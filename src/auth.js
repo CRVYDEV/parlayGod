@@ -58,7 +58,10 @@ export async function verifyPrivy(token) {
     { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url'));
   if (!okSig) throw new GameError('auth_failed', 'Privy signature check failed.');
   const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
-  if (claims.aud !== appId) throw new GameError('auth_failed', 'Privy token is for another app.');
+  // `aud` may be a scalar or an array (OIDC allows both; some Privy app configs emit `[appId]`) — accept
+  // either as long as our appId is present. Still fail-closed: an absent/mismatched audience is rejected.
+  const audOk = Array.isArray(claims.aud) ? claims.aud.includes(appId) : claims.aud === appId;
+  if (!audOk) throw new GameError('auth_failed', 'Privy token is for another app.');
   if (claims.iss && claims.iss !== 'privy.io') throw new GameError('auth_failed', 'Unexpected Privy issuer.');
   if (!claims.exp || claims.exp * 1000 < Date.now()) throw new GameError('auth_failed', 'Privy token expired or non-expiring.');
   if (!claims.sub) throw new GameError('auth_failed', 'Privy token has no subject.');

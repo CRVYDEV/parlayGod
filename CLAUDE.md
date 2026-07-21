@@ -3387,3 +3387,34 @@ E-M2/M3/L1/L2 (infra-hardening backlog). Verified CLEAN: §10.4 across every mod
 pg-mem-quirk classes, route-auth coverage & no-SQL-injection, loot/shield-ordering/estate-survival, and
 the casino:pvp taxed-transfer family. `forge test` STILL not run (Foundry egress-blocked) — the pre-audit
 gate stands. Suite 32/32 + sim drift-0.
+
+**FULL-SYSTEM RED-TEAM v3 (`AUDIT-full-system-v3.md`)** — a max-effort whole-codebase audit, FIVE
+independent lenses in parallel (§10.4/economy, concurrency/locks/persist-clobber, death/estate/PvP,
+chain+contracts+auth+infra, cross-system exploits), every reported finding re-verified against source
+before any fix, a regression per behavioural change. **No CRITICAL. No §10.4 drift.** Fixed in-commit:
+**HIGH (config-gated) — chain reclaim double-spend**: voucher signing is gated on {signer,CHAIN_ID,
+claim-addr} but the on-chain double-spend guard needs CHAIN_RPC_URL, so `reclaimExpiredVouchers` on a
+signing-enabled-but-RPC-less box took the wall-clock branch and REFUNDED burned $OMR for a voucher that
+may already be claimed on-chain (double-spend, §10.4-blind); now WITHOUT a reader it never refunds —
+skips + retries (the code's own "a delayed refund is recoverable, a double-spend is not" principle), a
+refund proceeds only when `usedNonce===false` is confirmed (`test/chain.js` asserts the skip + the
+reader-confirmed refund). **MED — `jump` missing victim gates**: `fire`/`npcHit`/`shank` gate an
+unreachable target but `jump` gated only hospitalized+omertà, so a JAILED/witpro/penSafe/inHole rival
+could be robbed + hospitalized while unable to flee (jail strictly more dangerous than the street, the
+class the v2 audit closed on the lethal paths); added `jailed`/`witproActive`/`penSafe`/`inHole` gates
+(safehouse stays jumpable by design). **MED — `store.js:grantPackage` wire_until lost-update**: the
+headless ETH-Street-Wire grant read-then-wrote the persist-list `wire_until` column absolute WITHOUT the
+char lock, so a concurrent `subscribeWire` could be clobbered (a shortened paid window); now
+`SELECT … FOR UPDATE`s the char row (char-first, no lock-order inversion). **LOW — `nightlifeLeaderboard`
+agent exclusion** (renown gates cosmetic unlocks; both subqueries now `NOT a.agent_flag`, the boxing/port/
+races precedent); **Privy `aud` array** (fail-closed compat — accept a scalar OR an array containing the
+appId); **`port_intercepts` dead-runner orphan** (swept by the runner's boats before the wipe loop
+removes them — the npc_hits both-sides precedent). Verified CLEAN: §10.4 across ~260 ledger sites + every
+escrow, the 27-table estate wipe + survivors + shield ordering, boxing/territory/casino/vig/loan/
+speakeasy lock order + mint/reroll char→account, EIP-712 parity + the full-reserve queue + fee/store/bond
+txHash-gated revenue + the Solidity invariants + OpenAPI /v1/mod exclusion. Flagged for founder sign-off
+(NOT patched): the market bidListing AB-BA (retry-masked, the auction accepted class), VoucherClaim.sweep
+lacking OmertaBond's over-sweep guard (Safe = root of trust), port warehouse→fence variance, purchasable
+Commission seasonal standing, and the shared-dividend-pool allocation — all previously-known/accepted.
+`forge test` STILL not run (Foundry egress-blocked) — the pre-mainnet gate stands. Suite 32/32 + sim
+drift-0.

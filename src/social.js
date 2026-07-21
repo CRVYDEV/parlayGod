@@ -286,6 +286,13 @@ export async function jump(ch, victim, client, h) {
   if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  // an unreachable target can't be jumped either — jail/witness-protection/the Pen's yard-boss shield or
+  // the hole put them beyond a street beating, exactly as fire/npcHit/shank gate (AUDIT-full-system v3:
+  // jump was the one value-moving PvP path left un-gated, so jail was strictly more dangerous than the
+  // street). safehouse stays intentionally omitted — a safe-housed man is still jumpable, non-lethally.
+  if (jailed(victim)) throw new GameError('jailed', "They're in lockup — out of your reach.");
+  if (witproActive(victim)) throw new GameError('witpro', 'They vanished into witness protection.');
+  if (penSafe(victim) || inHole(victim)) throw new GameError('protected', "They're locked down where you can't reach.");
   // omertà holds inside the family — VOID for a rat OR a WANTED man (a defaulter/escapee under pursuit),
   // matching fire/npcHit/postBounty/startSearch so a fugitive forfeits protection on EVERY PvP path (the
   // non-lethal jump was the one gap; a hunted man's own family can lay hands on him too).
@@ -1339,6 +1346,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // Skills still DIE with the street (this is a small head start, not survival); MEMORY_MAX 0 or
   // a short bloodline (prestige < PRESTIGE_PER_SLOT) restores the hard rule. Pure build, no §10.4.
   const rememberedSkillIds = rememberedSkills([...(h.victimOwned.skills || [])], priorPrestige);
+  // port_intercepts keys on (boat_id, pirate character_id): the loop below wipes the dead PIRATE's
+  // attempts (character_id), but rows keyed on a dead RUNNER's boats would orphan once `boats` is
+  // deleted — so sweep them by the runner's boats FIRST (before the loop removes the boats). Pure
+  // row-hygiene (boat_id never re-collides), the npc_hits both-sides precedent.
+  await client.query('DELETE FROM port_intercepts WHERE boat_id IN (SELECT id FROM boats WHERE character_id=$1)', [victim.id]);
   for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
