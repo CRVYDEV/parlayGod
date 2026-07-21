@@ -83,6 +83,10 @@ await pool.query(`DELETE FROM world_npcs WHERE npc_id='kryl'`);
 await pool.query(`INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ('kryl', 30000, now())`); // ~2% of max
 assert.equal((await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal').liberationCost, 30000,
   'a beaten-down outfit’s turf floors at OCCUPY_MIN — the World raid loop is the path to core turf');
+// E2 (audit): a rookie boss can't free-ride the rout to liberate an APEX core district. Rocco is level 11;
+// canal is the Kryl Syndicate's turf (minLvl 20) — even beaten-down it's off-limits until he can raid kryl himself.
+assert.equal((await call('POST', '/v1/districts/canal/seize', { token: rocco.token })).code, 400,
+  'occupied apex district needs the outfit’s raid level — no cheap free-ride');
 // now the family liberates canal cheaply from the treasury (a §10.4 turf:seize sink; the perk was dormant, now theirs)
 const treasBefore = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
 r = await call('POST', '/v1/districts/canal/seize', { token: don.token });
@@ -91,6 +95,15 @@ assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, t
 const canalNow = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal');
 assert.equal(canalNow.occupiedBy, undefined, 'canal is no longer NPC-occupied');
 assert.equal(canalNow.holder.tag, 'DON', 'the Fabrizi hold it now (the +10% crime-payout perk is live)');
+
+// E1 (audit): the schema occupation seed is idempotent against a liberated-then-dissolved district.
+// canal is now DON-held with seized_at set. Simulate the family dissolving (holder_gang→NULL, garrison→0,
+// seized_at stays set), then re-run the EXACT schema seed UPDATE — the seized_at guard blocks re-occupation.
+await pool.query(`UPDATE districts SET holder_gang=NULL, garrison=0 WHERE id='canal'`);
+await pool.query(`UPDATE districts SET npc_holder='kryl' WHERE id='canal' AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL`);
+assert.equal((await pool.query(`SELECT npc_holder FROM districts WHERE id='canal'`)).rows[0].npc_holder, null,
+  'a once-liberated district (seized_at set) never re-occupies on a schema re-run');
+await pool.query(`UPDATE districts SET holder_gang='${gangA}', garrison=30000 WHERE id='canal'`); // restore for downstream
 
 // ── melt tithe (§7.5): 25% of rounds to the family armory, $30/round to treasury ──
 let car = null;

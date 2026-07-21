@@ -1252,3 +1252,21 @@ sign-off before production (ground rule #1):**
 - Levers: `WORLD.OCCUPATION` (the mapping — occupy fewer districts to soften the on-ramp), `OCCUPY_BPS`
   3000 (the full-strength cost fraction), `OCCUPY_MIN` 30000 (the floor). Sim the net on-ramp EV + the
   time-to-first-turf for a new family before production.
+
+### World step five — red-team flags (AUDIT-world-occupation.md; founder sign-off)
+
+The three-lens red-team was §10.4/emission + concurrency CLEAN and fixed two MED consistency bugs
+(E1 — the schema seed re-occupied a liberated-then-dissolved district; now guarded on `seized_at IS
+NULL`; E2 — the liberation branch was missing the frontier-B1 outfit level gate; now
+`levelOf(ch.respect) < fixture.minLvl` throws `level`). Balance items flagged, NOT patched (ground
+rule #1):
+- **The on-ramp shift (the headline):** 5/6 core districts now start NPC-held, so a fresh family's old
+  cheap free-seize is a small liberation (weak outfits' districts docks ~$45k / brick ~$120k — a soft
+  on-ramp teaching the World loop; cathedral stays free). Perk VALUES unchanged. Sim the net first-turf
+  time before production.
+- **Garrison ratchet (carried from frontier B2):** a liberated core district's garrison becomes the new
+  player defense budget with no decay/cooldown on the player-vs-player reseize path. A pure sink,
+  rout-resettable via the World loop, never permanent — garrison-decay or a reseize-cooldown is the dial.
+- **Apex solo-raid floor (carried, World-wide):** the 0.1 min-clamp lets a min-level whale solo an apex
+  outfit for the full grab, bounding how fast an apex outfit (hence its core district) is driven to the
+  liberation floor — the clamp or a coop-only `raidNpc` gate for `fixture.coop` is the dial.
