@@ -1,0 +1,847 @@
+{
+  "style": "engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo",
+  "negative": "photo, photorealistic, 3D render, modern car, modern gun, brand logo, badge, text, watermark, license plate, people, background scenery, bright colors, cartoon",
+  "count": 105,
+  "items": [
+    {
+      "kind": "car",
+      "id": "junker",
+      "name": "County Auction Junker",
+      "archetype": "junker",
+      "rare": false,
+      "prompt": "a battered late-1920s Model-T-style jalopy, tall narrow upright body, spindly big-spoked wheels, humble and worn. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Sold as-is. 'Is' was generous."
+    },
+    {
+      "kind": "car",
+      "id": "errand",
+      "name": "Errand Boy Coupe",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Ten thousand deliveries, zero questions."
+    },
+    {
+      "kind": "car",
+      "id": "garden",
+      "name": "Gardener's Pickup",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Smells like mulch and opportunity."
+    },
+    {
+      "kind": "car",
+      "id": "volara",
+      "name": "Volara Hatch",
+      "archetype": "junker",
+      "rare": false,
+      "prompt": "a battered late-1920s Model-T-style jalopy, tall narrow upright body, spindly big-spoked wheels, humble and worn. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Four wheels, three of them honest."
+    },
+    {
+      "kind": "car",
+      "id": "postal",
+      "name": "Decommissioned Postal Van",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Neither snow nor rain nor roadblocks."
+    },
+    {
+      "kind": "car",
+      "id": "milk",
+      "name": "Milk Route Truck",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: On every street by 5am, suspected by no one."
+    },
+    {
+      "kind": "car",
+      "id": "cabbie",
+      "name": "Retired Cabbie Sedan",
+      "archetype": "junker",
+      "rare": false,
+      "prompt": "a battered late-1920s Model-T-style jalopy, tall narrow upright body, spindly big-spoked wheels, humble and worn. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Knows every shortcut and one very long one."
+    },
+    {
+      "kind": "car",
+      "id": "iceman",
+      "name": "Ice Delivery Truck",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Keeps the cargo cold and the driver colder."
+    },
+    {
+      "kind": "car",
+      "id": "pigeon",
+      "name": "Pigeon Runabout",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Nobody looks twice. That's the feature."
+    },
+    {
+      "kind": "car",
+      "id": "offduty",
+      "name": "Off-Duty Checker",
+      "archetype": "junker",
+      "rare": false,
+      "prompt": "a battered late-1920s Model-T-style jalopy, tall narrow upright body, spindly big-spoked wheels, humble and worn. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: The meter's broken. So is the registration."
+    },
+    {
+      "kind": "car",
+      "id": "cannery",
+      "name": "Cannery Row Hauler",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Smells of fish and pays like it doesn't."
+    },
+    {
+      "kind": "car",
+      "id": "conductor",
+      "name": "Conductor's Coupe",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Punches tickets and the occasional passenger."
+    },
+    {
+      "kind": "car",
+      "id": "dray",
+      "name": "Dray Panel Van",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Delivers bread by day. Delivers by night."
+    },
+    {
+      "kind": "car",
+      "id": "foreman",
+      "name": "Foreman's Runabout",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Runs the site by day, the shipment by night."
+    },
+    {
+      "kind": "car",
+      "id": "rubicon",
+      "name": "Rubicon Flatbed",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Hauls anything that fits and several things that don't."
+    },
+    {
+      "kind": "car",
+      "id": "ladder",
+      "name": "Hook & Ladder Rig",
+      "archetype": "truck",
+      "rare": false,
+      "prompt": "a 1930s panel delivery truck / stakebed work truck, tall boxy cargo body, short hood, spoked wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Clears traffic and questions alike."
+    },
+    {
+      "kind": "car",
+      "id": "prefect",
+      "name": "Prefect Saloon",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: A schoolteacher's car. The schoolteacher disagrees."
+    },
+    {
+      "kind": "car",
+      "id": "deuce",
+      "name": "Deuce Roadster",
+      "archetype": "speedster",
+      "rare": false,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Cheap, quick, and gone before the whistle."
+    },
+    {
+      "kind": "car",
+      "id": "notary",
+      "name": "Notary's Saloon",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Every document it carries is a forgery."
+    },
+    {
+      "kind": "car",
+      "id": "stag",
+      "name": "Stag Sedan",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: A working man's car for working men's work."
+    },
+    {
+      "kind": "car",
+      "id": "trolley",
+      "name": "Trolley Jumper",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Off the rails on purpose."
+    },
+    {
+      "kind": "car",
+      "id": "sedanette",
+      "name": "Sedanette Eight",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Eight cylinders, six payments behind."
+    },
+    {
+      "kind": "car",
+      "id": "clubman",
+      "name": "Clubman Coupe",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Members only. The lock disagreed."
+    },
+    {
+      "kind": "car",
+      "id": "coupe38",
+      "name": "'38 Business Coupe",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: The business is nobody's business."
+    },
+    {
+      "kind": "car",
+      "id": "boulevard",
+      "name": "Boulevard Eight",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Eight cylinders of plausible respectability."
+    },
+    {
+      "kind": "car",
+      "id": "mercantile",
+      "name": "Mercantile Wagon",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Dry goods by receipt, wet work by moonlight."
+    },
+    {
+      "kind": "car",
+      "id": "wagoneer",
+      "name": "Estate Wagon",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Room for the family. Either meaning."
+    },
+    {
+      "kind": "car",
+      "id": "consul",
+      "name": "Consul Limousine",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Diplomatic plates, undiplomatic cargo."
+    },
+    {
+      "kind": "car",
+      "id": "harbor",
+      "name": "Harbor King Coupe",
+      "archetype": "coupe",
+      "rare": false,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Smells like cigars and hush money."
+    },
+    {
+      "kind": "car",
+      "id": "dockmaster",
+      "name": "Dockmaster Cruiser",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Owns the pier and rents the silence."
+    },
+    {
+      "kind": "car",
+      "id": "brougham",
+      "name": "Brougham Town Car",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: The chauffeur ran. Smart chauffeur."
+    },
+    {
+      "kind": "car",
+      "id": "courier",
+      "name": "Courier Special",
+      "archetype": "sedan",
+      "rare": false,
+      "prompt": "an upright 1930s four-door saloon, tall greenhouse with four windows, running boards, rounded fenders. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Factory-tuned for schedules that don't exist."
+    },
+    {
+      "kind": "car",
+      "id": "regent",
+      "name": "Regent Landaulet",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Half a roof for twice the price."
+    },
+    {
+      "kind": "car",
+      "id": "touring",
+      "name": "Grand Touring Six",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Built for the coast road and the fast exit."
+    },
+    {
+      "kind": "car",
+      "id": "sable",
+      "name": "Sable Landau",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Funeral black. Ready either way."
+    },
+    {
+      "kind": "car",
+      "id": "cabaret",
+      "name": "Cabaret Cabriolet",
+      "archetype": "speedster",
+      "rare": false,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Arrives at midnight, leaves before the raid."
+    },
+    {
+      "kind": "car",
+      "id": "diplomat",
+      "name": "Diplomat Town Sedan",
+      "archetype": "limo",
+      "rare": false,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Immune to everything but envy."
+    },
+    {
+      "kind": "car",
+      "id": "cascade",
+      "name": "Cascade Cabriolet",
+      "archetype": "speedster",
+      "rare": false,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Top down, heat up, gone."
+    },
+    {
+      "kind": "car",
+      "id": "sportsman",
+      "name": "Sportsman Convertible",
+      "archetype": "speedster",
+      "rare": false,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Won at cards. Twice. By different people."
+    },
+    {
+      "kind": "car",
+      "id": "vesper",
+      "name": "Vesper GT",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Fast enough to outrun most consequences."
+    },
+    {
+      "kind": "car",
+      "id": "corsair",
+      "name": "Corsair Speedster",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Named for pirates. It earns the name."
+    },
+    {
+      "kind": "car",
+      "id": "monarch",
+      "name": "Monarch V12",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Twelve cylinders of divine right."
+    },
+    {
+      "kind": "car",
+      "id": "regatta",
+      "name": "Regatta Convertible",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Won at the marina, lost at the docks."
+    },
+    {
+      "kind": "car",
+      "id": "tempest",
+      "name": "Tempest Roadster",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Two seats: you, and whatever you took."
+    },
+    {
+      "kind": "car",
+      "id": "phaeton",
+      "name": "Skyline Phaeton",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Open to the sky and closed to inquiry."
+    },
+    {
+      "kind": "car",
+      "id": "ambassador",
+      "name": "Ambassador Armored Sedan",
+      "archetype": "armored",
+      "rare": true,
+      "prompt": "a heavy 1930s armored sedan, thick slab-sided body, narrow slit windows, reinforced fenders, sombre and menacing. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Bulletproof glass, glass-jaw owner."
+    },
+    {
+      "kind": "car",
+      "id": "bullion",
+      "name": "Bullion Armored Truck",
+      "archetype": "armored",
+      "rare": true,
+      "prompt": "a heavy 1930s armored sedan, thick slab-sided body, narrow slit windows, reinforced fenders, sombre and menacing. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Someone left the depot in it. Someone was you."
+    },
+    {
+      "kind": "car",
+      "id": "blackout",
+      "name": "Blackout Phantom",
+      "archetype": "armored",
+      "rare": true,
+      "prompt": "a heavy 1930s armored sedan, thick slab-sided body, narrow slit windows, reinforced fenders, sombre and menacing. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: The last thing several people never saw."
+    },
+    {
+      "kind": "car",
+      "id": "nocturne",
+      "name": "Nocturne Coupe",
+      "archetype": "coupe",
+      "rare": true,
+      "prompt": "a 1930s business coupe, short two-window cabin set forward over a long rounded rear deck, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Only ever seen leaving."
+    },
+    {
+      "kind": "car",
+      "id": "duchess",
+      "name": "Duchess Drophead",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Titled, entitled, and extremely stolen."
+    },
+    {
+      "kind": "car",
+      "id": "spectre",
+      "name": "Spectre Berlinetta",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Registered to a man who died in 1931."
+    },
+    {
+      "kind": "car",
+      "id": "leviathan",
+      "name": "Leviathan Town Car",
+      "archetype": "limo",
+      "rare": true,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Displaces its own weight in trouble."
+    },
+    {
+      "kind": "car",
+      "id": "comet",
+      "name": "Corsa Comet",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Melts into a small war."
+    },
+    {
+      "kind": "car",
+      "id": "warhawk",
+      "name": "Warhawk Prototype",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: The factory built one. The factory misplaced one."
+    },
+    {
+      "kind": "car",
+      "id": "vulcan",
+      "name": "Vulcan Fire Chief",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Every road clears for it. Every single one."
+    },
+    {
+      "kind": "car",
+      "id": "sovereign",
+      "name": "Silver Sovereign",
+      "archetype": "limo",
+      "rare": true,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: A head of state died in one. It buffed right out."
+    },
+    {
+      "kind": "car",
+      "id": "olympia",
+      "name": "Olympia Parade Car",
+      "archetype": "limo",
+      "rare": true,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Waved at by a million people who'd testify they never saw it."
+    },
+    {
+      "kind": "car",
+      "id": "meridian",
+      "name": "Meridian Mk.II",
+      "archetype": "limo",
+      "rare": true,
+      "prompt": "a long formal 1930s chauffeur town car, tall dignified cabin, division window, landau irons, whitewall tyres, running boards. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: There are nine in the world. The city believes this is the tenth."
+    },
+    {
+      "kind": "car",
+      "id": "aurora",
+      "name": "Aurora Land-Speed Car",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Holds the record for the mile and for the getaway."
+    },
+    {
+      "kind": "car",
+      "id": "tsarina",
+      "name": "The Tsarina's Ghost",
+      "archetype": "speedster",
+      "rare": true,
+      "prompt": "a long-hooded 1930s American classic boattail speedster, low and swooping, with sweeping cycle fenders, dual side-mount spare wheels, a raked windshield and polished wire wheels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Smuggled out of a revolution in a hay wagon. Still smells faintly of empire."
+    },
+    {
+      "kind": "boat",
+      "id": "dinghy",
+      "name": "Harbor Dinghy",
+      "archetype": "dinghy",
+      "rare": false,
+      "prompt": "a small wooden harbour rowboat, single oar. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "boat",
+      "id": "skiff",
+      "name": "Runner's Skiff",
+      "archetype": "skiff",
+      "rare": false,
+      "prompt": "a small open wooden outboard runner boat. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "boat",
+      "id": "trawler",
+      "name": "Converted Trawler",
+      "archetype": "trawler",
+      "rare": false,
+      "prompt": "a converted wooden fishing trawler, tall wheelhouse, mast and boom. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "boat",
+      "id": "cutter",
+      "name": "Fast Cutter",
+      "archetype": "cutter",
+      "rare": false,
+      "prompt": "a sleek fast patrol cutter, low hull, raked bridge, radio mast. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "boat",
+      "id": "freighter",
+      "name": "Coastal Freighter",
+      "archetype": "freighter",
+      "rare": false,
+      "prompt": "a small coastal cargo freighter, high steel sides, single funnel, cargo hatches and a derrick. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "boat",
+      "id": "cigarette",
+      "name": "Cigarette Boat",
+      "archetype": "runner",
+      "rare": false,
+      "prompt": "a long low mahogany speedboat (a \"cigarette\" runner), open cockpit, throwing spray. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "drug",
+      "id": "vim",
+      "name": "VIM",
+      "archetype": "jar",
+      "rare": false,
+      "prompt": "a corked apothecary jar of tonic. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: the salesman's tonic"
+    },
+    {
+      "kind": "drug",
+      "id": "moonmilk",
+      "name": "MOONMILK",
+      "archetype": "baggie",
+      "rare": false,
+      "prompt": "a small tied cloth pouch of product, a wax seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: sleep in a bottle"
+    },
+    {
+      "kind": "drug",
+      "id": "lotus",
+      "name": "LOTUS",
+      "archetype": "blotter",
+      "rare": false,
+      "prompt": "a printed sheet of perforated blotter tabs. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: the dreaming resin"
+    },
+    {
+      "kind": "drug",
+      "id": "glass",
+      "name": "GLASS",
+      "archetype": "vial",
+      "rare": true,
+      "prompt": "a small stoppered glass vial of glowing liquid, a wax seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: bottled lightning"
+    },
+    {
+      "kind": "drug",
+      "id": "ambrosia",
+      "name": "AMBROSIA",
+      "archetype": "ampoule",
+      "rare": true,
+      "prompt": "a slender sealed glass ampoule of luminous fluid. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: what the orchestra plays for"
+    },
+    {
+      "kind": "drug",
+      "id": "static",
+      "name": "STATIC",
+      "archetype": "powder",
+      "rare": true,
+      "prompt": "a folded paper packet spilling fine powder. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: the radio between stations"
+    },
+    {
+      "kind": "drug",
+      "id": "halo",
+      "name": "HALO",
+      "archetype": "pills",
+      "rare": true,
+      "prompt": "a small pile of stamped pills. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: borrowed grace"
+    },
+    {
+      "kind": "drug",
+      "id": "nocturne",
+      "name": "NOCTURNE",
+      "archetype": "brick",
+      "rare": true,
+      "prompt": "a taped brick of powder wrapped in wax paper, a stamped mark. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: the last song of the evening"
+    },
+    {
+      "kind": "gun",
+      "id": "lastresort",
+      "name": "Rusty .25 'Last Resort'",
+      "archetype": "pocket",
+      "rare": false,
+      "prompt": "a small 1930s pocket semi-automatic pistol, blued steel, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Found in a drawer. Stays in a pocket."
+    },
+    {
+      "kind": "gun",
+      "id": "pocket22",
+      "name": "Pocket .22",
+      "archetype": "pocket",
+      "rare": false,
+      "prompt": "a small 1930s pocket semi-automatic pistol, blued steel, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Fits in a sock. Insults nobody's tailor."
+    },
+    {
+      "kind": "gun",
+      "id": "penny",
+      "name": "Target .22 'Penny'",
+      "archetype": "revolver",
+      "rare": false,
+      "prompt": "a snub-nose 1930s double-action revolver, exposed cylinder, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Wins prizes at the fair. Wins arguments elsewhere."
+    },
+    {
+      "kind": "gun",
+      "id": "alleycat",
+      "name": "Snub .38 'Alley Cat'",
+      "archetype": "revolver",
+      "rare": false,
+      "prompt": "a snub-nose 1930s double-action revolver, exposed cylinder, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Quick out of the coat, quicker back in."
+    },
+    {
+      "kind": "gun",
+      "id": "badge",
+      "name": "Service .38 'Badge'",
+      "archetype": "revolver",
+      "rare": false,
+      "prompt": "a snub-nose 1930s double-action revolver, exposed cylinder, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Retired from the force. Not from the work."
+    },
+    {
+      "kind": "gun",
+      "id": "argument",
+      "name": "Heavy .45 'The Argument'",
+      "archetype": "auto",
+      "rare": false,
+      "prompt": "a full-size 1930s .45 semi-automatic pistol, exposed hammer, checkered grip. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Ends most discussions before they start."
+    },
+    {
+      "kind": "gun",
+      "id": "rancher",
+      "name": "Lever-Gun 'Rancher'",
+      "archetype": "rifle",
+      "rare": false,
+      "prompt": "a 1930s lever-action carbine / long rifle, wooden stock and forend, iron sights. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Never jams. Never hurries. Never misses twice."
+    },
+    {
+      "kind": "gun",
+      "id": "whisper",
+      "name": "Silenced .32 'Whisper'",
+      "archetype": "suppressed",
+      "rare": false,
+      "prompt": "a 1930s semi-automatic pistol fitted with a fat cylindrical suppressor can. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: The room finds out one person at a time."
+    },
+    {
+      "kind": "gun",
+      "id": "doorbell",
+      "name": "Street-Sweeper 12g 'Doorbell'",
+      "archetype": "shotgun",
+      "rare": false,
+      "prompt": "a 1930s side-by-side / trench shotgun, twin barrels, wooden stock and forend. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Everyone hears you coming. That's the point."
+    },
+    {
+      "kind": "gun",
+      "id": "brothers",
+      "name": "Twin .45s 'The Brothers'",
+      "archetype": "tommy",
+      "rare": false,
+      "prompt": "a Prohibition-era drum-magazine submachine gun, wooden foregrip, round drum magazine, straight wooden stock, muzzle compensator. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: They finish each other's sentences."
+    },
+    {
+      "kind": "gun",
+      "id": "broom",
+      "name": "Trench Gun 'Broom'",
+      "archetype": "shotgun",
+      "rare": false,
+      "prompt": "a 1930s side-by-side / trench shotgun, twin barrels, wooden stock and forend. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Sweeps a hallway clean in one pass."
+    },
+    {
+      "kind": "gun",
+      "id": "orchestra",
+      "name": "Drum-Fed 'Orchestra'",
+      "archetype": "tommy",
+      "rare": true,
+      "prompt": "a Prohibition-era drum-magazine submachine gun, wooden foregrip, round drum magazine, straight wooden stock, muzzle compensator. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Plays one song. Whole block listens."
+    },
+    {
+      "kind": "gun",
+      "id": "anniversary",
+      "name": "Presentation Pair 'Anniversary'",
+      "archetype": "tommy",
+      "rare": true,
+      "prompt": "a Prohibition-era drum-magazine submachine gun, wooden foregrip, round drum magazine, straight wooden stock, muzzle compensator. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Engraved, oiled, and utterly sincere."
+    },
+    {
+      "kind": "gun",
+      "id": "chorusline",
+      "name": "Belt-Fed 'Chorus Line'",
+      "archetype": "tommy",
+      "rare": true,
+      "prompt": "a Prohibition-era drum-magazine submachine gun, wooden foregrip, round drum magazine, straight wooden stock, muzzle compensator. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: High kicks all the way down the street."
+    },
+    {
+      "kind": "gun",
+      "id": "undertaker",
+      "name": "Long-Case 'Undertaker'",
+      "archetype": "rifle",
+      "rare": true,
+      "prompt": "a 1930s lever-action carbine / long rifle, wooden stock and forend, iron sights. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Arrives in a violin case. Plays no music."
+    },
+    {
+      "kind": "vest",
+      "id": "woolv",
+      "name": "Padded Overcoat",
+      "archetype": "vest",
+      "rare": false,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Better than a suit. Barely."
+    },
+    {
+      "kind": "vest",
+      "id": "lightv",
+      "name": "Light Vest",
+      "archetype": "vest",
+      "rare": false,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo. mood: Turns a sure thing into a maybe."
+    },
+    {
+      "kind": "vest",
+      "id": "medv",
+      "name": "Reinforced Vest",
+      "archetype": "vest",
+      "rare": true,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: The tailor asks no questions."
+    },
+    {
+      "kind": "vest",
+      "id": "tailorv",
+      "name": "Tailored Plate",
+      "archetype": "vest",
+      "rare": true,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Fitted twice: once for the suit, once for survival."
+    },
+    {
+      "kind": "vest",
+      "id": "heavyv",
+      "name": "Heavy Plate Rig",
+      "archetype": "vest",
+      "rare": true,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: You'll hear the shots. That's the point — you'll HEAR them."
+    },
+    {
+      "kind": "vest",
+      "id": "vaultv",
+      "name": "The Walking Vault",
+      "archetype": "vest",
+      "rare": true,
+      "prompt": "a 1930s body-armour vest / bulletproof waistcoat, steel plating panels. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo; the finest example of its kind, a cold teal accent glow on the wheels/edges marking it as rare and coveted. mood: Bank-door steel, cut for shoulders. Walk slow. Outlive everyone."
+    },
+    {
+      "kind": "good",
+      "id": "gin",
+      "name": "Bathtub Gin",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "coffee",
+      "name": "Green Coffee Sacks",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "cigars",
+      "name": "Smuggled Cigars",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "nylons",
+      "name": "Black-Market Nylons",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "shine",
+      "name": "Mountain Shine",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "penicillin",
+      "name": "Clinic Penicillin",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "silk",
+      "name": "Counterfeit Silk",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "watches",
+      "name": "Swiss Movement Watches",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "ice",
+      "name": "Hot Ice",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    },
+    {
+      "kind": "good",
+      "id": "bearer",
+      "name": "Bearer Bonds",
+      "archetype": "crate",
+      "rare": false,
+      "prompt": "a stamped wooden shipping crate of contraband goods, a wax shipping seal. engraved single-line gold illustration on a near-black background; 1930s Prohibition-era noir, art-deco poster style; single centered subject in clean side profile, filling the frame; warm brass-gold linework (#c9a24b), subtle depth, faint shadow beneath; no text, no numbers, no logos, no badges, no brand markings, no license plate, no watermark; muted, restrained, elegant — a catalogue engraving, not a photo"
+    }
+  ]
+}

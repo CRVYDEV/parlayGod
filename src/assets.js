@@ -24,74 +24,128 @@ const shadow = (cx, rx, rare) => rare
   ? `<ellipse cx="${cx}" cy="128" rx="${rx}" ry="7" fill="${TEAL}" opacity="0.14" stroke="none"/>`
   : `<ellipse cx="${cx}" cy="128" rx="${rx}" ry="6" fill="#000" opacity="0.34" stroke="none"/>`;
 
-// ── CARS ── side profile; proportions + roofline + detailing scale with value tier, rarity glows teal.
+// ── CARS ── distinct 1930s ARCHETYPE silhouettes (a boattail speedster reads nothing like a milk
+// truck), chosen from the item's NAME (the catalog already implies the body — "Coupe"/"Hauler"/
+// "Town Car"/"Roadster") then value tier. Period forms only (out of design-patent), never a brand.
+function carArchetype(c) {
+  const n = (c.name || '').toLowerCase(), val = Number(c.val) || 0;
+  if (/armor|armour|bullion|blackout|phantom|walking vault/.test(n)) return 'armored';
+  if (/truck|van|hauler|flatbed|pickup|rig|ladder|route|delivery|dray|postal|milk|freight|cannery|gardener/.test(n)) return 'truck';
+  if (/roadster|speedster|boattail|convertible|cabriolet|drophead|phaeton| gt|comet|corsair|vesper|monarch|aurora|land-speed|tempest|skyline|regatta|prototype|berlinetta|drophead/.test(n)) return 'speedster';
+  if (/limous|town car|landau|parade|brougham|sovereign|diplomat|ambassador|meridian|sedan de ville|sable|regent|grand touring|leviathan|spectre/.test(n)) return 'limo';
+  if (/coupe|coup|runabout|business/.test(n)) return 'coupe';
+  if (/junker|jalopy|hatch|pigeon|errand|county|volara|off-duty|cabbie|conductor/.test(n) && val < 6000) return 'junker';
+  if (val >= 120000) return 'speedster';
+  if (val >= 45000) return 'limo';
+  if (val >= 12000) return 'coupe';
+  if (val >= 2500) return 'sedan';
+  return 'junker';
+}
 function carArt(c) {
   const h = hashId(c.id), val = Number(c.val) || 0, rare = !!c.rare;
   const tier = val < 2500 ? 0 : val < 12000 ? 1 : val < 40000 ? 2 : val < 120000 ? 3 : 4;
-  const acc = rare ? TEAL : GOLD;
-  const ground = 116, wR = 13 + tier + (h % 3) * 0.7;         // premium rides on bigger wheels
-  const len = 150 + tier * 12 + (h % 5) * 4;                  // luxury is longer
-  const x0 = 120 - len / 2, x1 = 120 + len / 2;
-  const wf = x0 + len * 0.24, wr = x1 - len * 0.22;           // wheel centres
-  const roof = pick(h >> 3, tier >= 3 ? ['notch', 'fast', 'limo'] : tier === 0 ? ['box', 'notch', 'truck'] : ['notch', 'fast', 'box', 'truck']);
-  const cowl = x0 + len * (roof === 'truck' ? 0.30 : 0.34);
-  const rearRoof = roof === 'fast' ? x1 - len * 0.16 : roof === 'limo' ? x1 - len * 0.10 : x1 - len * 0.24;
-  const roofY = ground - 46 - (tier >= 3 ? 6 : 0) + (roof === 'box' || roof === 'truck' ? 4 : 0);
-  const beltY = ground - 22;
-  // body outline
-  let body = `M${x0} ${ground - 12} Q${x0 - 2} ${beltY} ${x0 + 10} ${beltY - 2} `
-    + `L${cowl} ${beltY - 4} `;
-  if (roof === 'fast') body += `Q${cowl + 14} ${roofY} ${(cowl + rearRoof) / 2} ${roofY} Q${rearRoof + 20} ${roofY + 2} ${x1 - 6} ${beltY - 2} `;
-  else if (roof === 'truck') body += `L${cowl + 2} ${roofY} L${x0 + len * 0.52} ${roofY} L${x0 + len * 0.52} ${beltY - 4} L${x1 - 8} ${beltY - 6} `;
-  else body += `Q${cowl + 8} ${roofY} ${cowl + 20} ${roofY} L${rearRoof} ${roofY} Q${rearRoof + 16} ${roofY + 1} ${x1 - 8} ${beltY - 4} `;
-  body += `Q${x1 + 2} ${beltY} ${x1} ${ground - 12} `;
-  body += `L${x0} ${ground - 12} Z`;
-  const parts = [];
-  parts.push(shadow(120, len / 2 - 6, rare));
+  const arch = carArchetype(c), acc = rare ? TEAL : GOLD, G = 116;
+  const P = [shadow(120, 92, rare)];
   const gid = 'cg' + (h % 97);
-  if (rare) parts.push(glowDefs(gid));
-  parts.push(`<g${rare ? ` filter="url(#${gid})"` : ''}>`);
-  parts.push(`<path d="${body}" fill="${FILL}"/>`);
-  // windows
-  const winY = roofY + 6;
-  if (roof !== 'truck') parts.push(`<path d="M${cowl + 6} ${beltY - 6} L${cowl + 14} ${winY} L${rearRoof - 6} ${winY} L${rearRoof + 4} ${beltY - 6} Z" stroke="${DIM}" stroke-width="1.4"/>`);
-  else parts.push(`<rect x="${cowl + 6}" y="${roofY + 4}" width="${len * 0.16}" height="${beltY - roofY - 8}" stroke="${DIM}" stroke-width="1.4"/>`);
-  if (tier >= 1 && roof !== 'fast' && roof !== 'truck') parts.push(`<line x1="${(cowl + rearRoof) / 2}" y1="${winY}" x2="${(cowl + rearRoof) / 2}" y2="${beltY - 6}" stroke="${DIM}" stroke-width="1.2"/>`);
-  // running board / sill
-  parts.push(`<line x1="${wf + wR}" y1="${ground - 10}" x2="${wr - wR}" y2="${ground - 10}" stroke="${DIM}" stroke-width="1.6"/>`);
-  // headlamp
-  parts.push(`<circle cx="${x0 + 6}" cy="${beltY - 4}" r="${3.4 + tier * 0.3}" fill="${acc}" stroke="none"/>`);
-  // tier flourishes
-  if (tier >= 2) { parts.push(`<line x1="${x0 + len * 0.72}" y1="${beltY - 8}" x2="${x0 + len * 0.80}" y2="${beltY - 3}" stroke="${DIM}" stroke-width="1.3"/>`); parts.push(`<line x1="${x0 + len * 0.75}" y1="${beltY - 10}" x2="${x0 + len * 0.83}" y2="${beltY - 5}" stroke="${DIM}" stroke-width="1.3"/>`); }
-  if (tier >= 3 && (h & 1)) parts.push(`<circle cx="${wr + wR + 8}" cy="${beltY - 2}" r="${wR - 5}" stroke="${DIM}" stroke-width="1.5"/>`); // side spare
-  // wheels
-  for (const wx of [wf, wr]) {
-    parts.push(`<circle cx="${wx}" cy="${ground}" r="${wR}"/>`);
-    parts.push(`<circle cx="${wx}" cy="${ground}" r="${wR - (tier >= 2 ? 6 : 7)}" stroke="${rare ? TEAL : DIM}" stroke-width="${tier >= 2 ? 2 : 1.4}"/>`);
+  if (rare) P.push(glowDefs(gid));
+  P.push(`<g${rare ? ` filter="url(#${gid})"` : ''}>`);
+  const lamp = (x, y) => P.push(`<circle cx="${x}" cy="${y}" r="4" fill="${acc}" stroke="none"/>`);
+  const wheel = (x, r, spoke) => { P.push(`<circle cx="${x}" cy="${G}" r="${r}"/>`); P.push(`<circle cx="${x}" cy="${G}" r="${r - (spoke ? 3 : 6)}" stroke="${rare ? TEAL : DIM}" stroke-width="${spoke ? 1 : 2}"/>`); if (spoke) for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; P.push(`<line x1="${x}" y1="${G}" x2="${(x + Math.cos(a) * (r - 3)).toFixed(1)}" y2="${(G + Math.sin(a) * (r - 3)).toFixed(1)}" stroke="${DIM}" stroke-width="1"/>`); } };
+  const board = (a, b) => P.push(`<line x1="${a}" y1="${G - 8}" x2="${b}" y2="${G - 8}" stroke="${DIM}" stroke-width="2"/>`);
+  const fender = (x, r) => P.push(`<path d="M${x - r - 4} ${G - 4} Q${x - r} ${G - r - 8} ${x} ${G - r - 9} Q${x + r} ${G - r - 8} ${x + r + 4} ${G - 4}" stroke="${GOLD}" stroke-width="2"/>`);
+
+  if (arch === 'speedster') {                     // Auburn/Duesenberg boattail — long hood, pointed tail, low
+    P.push(`<path d="M22 100 L36 92 L118 84 Q140 66 168 68 L190 82 Q216 90 214 100 Q212 108 202 106 L120 106 Q118 96 96 96 L60 96 Q40 96 34 106 Q24 106 22 100Z" fill="${FILL}"/>`);
+    P.push(`<path d="M126 84 Q140 70 162 71 L182 82 Z" stroke="${DIM}" stroke-width="1.4"/>`);      // low windshield/tonneau
+    P.push(`<path d="M190 82 Q214 88 214 100" stroke="${GOLD}" stroke-width="2"/>`);                // boattail
+    P.push(`<line x1="40" y1="90" x2="118" y2="84" stroke="${DIM}" stroke-width="1.3"/>`);          // hood louvre line
+    fender(64, 17); fender(184, 17);
+    if (tier >= 3) P.push(`<circle cx="44" cy="${G - 8}" r="9" stroke="${DIM}" stroke-width="1.5"/>`); // side-mount spare in fender
+    lamp(30, 90); wheel(64, 17, true); wheel(184, 17, true);
+  } else if (arch === 'limo') {                    // long formal town car — tall upright cabin, landau
+    P.push(`<path d="M24 104 L24 96 L44 92 Q52 66 96 64 L176 64 Q196 66 200 90 L216 94 L216 104 Z" fill="${FILL}"/>`);
+    P.push(`<path d="M60 64 L64 46 L118 45 L120 64 M126 64 L128 46 L182 47 Q190 54 190 64" stroke="${DIM}" stroke-width="1.4"/>`); // 2 tall windows + division
+    board(58, 186);
+    P.push(`<path d="M150 48 q10 -6 12 6" stroke="${DIM}" stroke-width="1.4"/>`);                    // landau iron
+    lamp(30, 92); if (tier >= 3) P.push(`<circle cx="46" cy="${G - 6}" r="8" stroke="${DIM}" stroke-width="1.5"/>`);
+    wheel(66, 16); wheel(178, 16);
+  } else if (arch === 'coupe') {                   // business coupe — short cabin forward, long deck
+    P.push(`<path d="M28 104 L30 94 L54 90 Q62 66 104 66 L128 68 Q142 74 150 92 L206 96 L208 104 Z" fill="${FILL}"/>`);
+    P.push(`<path d="M70 66 L76 50 L118 51 L128 68 Z" stroke="${DIM}" stroke-width="1.4"/>`);
+    board(62, 176);
+    lamp(34, 92); wheel(70, 16); wheel(178, 16);
+  } else if (arch === 'truck') {                   // panel delivery / stakebed — short hood, tall box
+    const van = (h & 1);
+    if (van) { P.push(`<path d="M26 104 L26 60 L120 58 L120 78 L150 82 Q160 82 162 74 L186 74 Q200 74 200 90 L214 94 L214 104 Z" fill="${FILL}"/>`);
+      P.push(`<rect x="34" y="66" width="76" height="30" stroke="${DIM}" stroke-width="1.3"/>`);      // cargo box side
+      P.push(`<path d="M166 78 L170 66 L184 66 L186 76 Z" stroke="${DIM}" stroke-width="1.3"/>`); }    // cab window
+    else { P.push(`<path d="M26 104 L28 82 Q34 66 68 66 L92 68 L96 82 L206 84 L206 104 Z" fill="${FILL}"/>`);
+      P.push(`<path d="M40 66 L46 54 L86 55 L90 68 Z" stroke="${DIM}" stroke-width="1.3"/>`);          // cab
+      P.push(`<rect x="100" y="72" width="100" height="14" stroke="${DIM}" stroke-width="1.2"/>`);    // flat bed / stakes
+      for (let i = 0; i < 5; i++) P.push(`<line x1="${108 + i * 22}" y1="72" x2="${108 + i * 22}" y2="86" stroke="${DIM}" stroke-width="1"/>`); }
+    lamp(32, 92); wheel(64, 16); wheel(180, 16);
+  } else if (arch === 'armored') {                 // heavy armored sedan — thick, slit windows
+    P.push(`<path d="M26 104 L28 92 L46 90 Q54 68 96 66 L172 66 Q192 68 196 90 L214 94 L214 104 Z" fill="${STEEL}"/>`);
+    P.push(`<rect x="64" y="72" width="30" height="9" stroke="${DIM}" stroke-width="1.4"/>`);         // slit windows
+    P.push(`<rect x="104" y="72" width="30" height="9" stroke="${DIM}" stroke-width="1.4"/>`);
+    P.push(`<rect x="144" y="72" width="30" height="9" stroke="${DIM}" stroke-width="1.4"/>`);
+    board(60, 182); P.push(`<path d="M28 92 L46 90" stroke="${GOLD}" stroke-width="3"/>`);             // heavy fender
+    lamp(34, 92); wheel(66, 16); wheel(178, 16);
+  } else if (arch === 'junker') {                  // Model-T jalopy — tall, narrow, spindly big wheels
+    P.push(`<path d="M58 104 L58 92 L70 88 Q74 62 104 62 L140 63 Q150 66 152 90 L182 92 L182 104 Z" fill="${FILL}"/>`);
+    P.push(`<path d="M80 62 L84 48 L138 49 L140 63 Z" stroke="${DIM}" stroke-width="1.4"/>`);
+    P.push(`<line x1="120" y1="49" x2="120" y2="62" stroke="${DIM}" stroke-width="1.2"/>`);
+    lamp(64, 84); wheel(78, 17, true); wheel(168, 17, true);
+  } else {                                         // sedan — upright 4-window saloon, running boards
+    P.push(`<path d="M28 104 L30 94 L50 90 Q58 66 100 64 L162 66 Q184 70 190 90 L210 94 L210 104 Z" fill="${FILL}"/>`);
+    P.push(`<path d="M66 66 L72 50 L110 51 L112 66 M118 66 L120 51 L160 53 Q172 58 174 68" stroke="${DIM}" stroke-width="1.3"/>`);
+    board(64, 180); lamp(34, 92); wheel(70, 16); wheel(176, 16);
   }
-  parts.push('</g>');
-  return svg(parts.join(''));
+  P.push('</g>');
+  return svg(P.join(''));
 }
 
-// ── BOATS ── low hull on a waterline; length by hold, cockpit + engine cowls by speed.
+// ── BOATS ── distinct vessel types by id (rowboat / outboard skiff / fishing trawler / patrol cutter
+// / cargo freighter / low speedboat) — period marine forms, differentiated silhouettes.
+const BOAT_FORM = { dinghy: 'dinghy', skiff: 'skiff', trawler: 'trawler', cutter: 'cutter', freighter: 'freighter', cigarette: 'runner' };
 function boatArt(b) {
-  const h = hashId(b.id), hold = Number(b.hold) || 40, speed = Number(b.speed) || 30;
-  const len = 120 + Math.min(90, hold) * 0.7, x0 = 120 - len / 2, x1 = 120 + len / 2;
-  const deck = 100, fast = speed >= 90;
-  const parts = [];
-  // water
-  parts.push(`<path d="M8 116 Q40 110 72 116 T136 116 T200 116 T236 114" stroke="#3a6f68" stroke-width="1.6"/>`);
-  parts.push(`<path d="M20 126 Q52 121 84 126 T148 126 T212 126" stroke="#26433f" stroke-width="1.4"/>`);
-  // hull — pointed bow (right), transom (left)
-  const bow = x1 + (fast ? 14 : 6);
-  parts.push(`<path d="M${x0} ${deck} L${x1 - 20} ${deck - 6} Q${bow} ${deck - 4} ${bow - 8} ${deck + 6} L${x0 + 16} ${deck + 10} Q${x0 - 4} ${deck + 8} ${x0} ${deck}Z" fill="#12303c" stroke="${GOLD}"/>`);
-  parts.push(`<line x1="${x0 + 14}" y1="${deck + 1}" x2="${x1 - 24}" y2="${deck - 4}" stroke="${DIM}" stroke-width="1.4"/>`);
-  // cabin / cockpit
-  if (hold >= 90) parts.push(`<path d="M${x0 + 24} ${deck - 4} L${x0 + 30} ${deck - 22} L${x0 + 64} ${deck - 22} L${x0 + 70} ${deck - 3} Z" fill="${FILL}" stroke="${GOLD}"/>`);
-  else parts.push(`<path d="M${120} ${deck - 3} Q${126} ${deck - 15} ${140} ${deck - 13} L${156} ${deck - 11} Q${160} ${deck - 3} ${158} ${deck - 2}" />`);
-  // engine cowl + spray for fast boats
-  if (fast) { parts.push(`<path d="M${x0 + 6} ${deck} q-12 2 -16 8" stroke="${TEAL}" stroke-width="1.5" opacity="0.7"/>`); parts.push(`<path d="M${x1 - 34} ${deck - 4} l12 -6 4 8" stroke-width="1.6"/>`); }
-  return svg(parts.join(''));
+  const hold = Number(b.hold) || 40, speed = Number(b.speed) || 30;
+  const form = BOAT_FORM[b.id] || (speed >= 90 ? 'runner' : hold >= 100 ? 'freighter' : hold >= 60 ? 'trawler' : 'skiff');
+  const D = 102, P = [];
+  P.push(`<path d="M6 116 Q40 110 74 116 T138 116 T202 116 T236 114" stroke="#3a6f68" stroke-width="1.6"/>`);
+  P.push(`<path d="M18 126 Q52 121 86 126 T150 126 T214 126" stroke="#26433f" stroke-width="1.4"/>`);
+  if (form === 'dinghy') {                         // little rowboat
+    P.push(`<path d="M74 ${D} Q120 ${D + 16} 166 ${D} L158 ${D + 8} Q120 ${D + 20} 82 ${D + 8} Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<line x1="110" y1="${D + 4}" x2="132" y2="${D + 4}" stroke="${DIM}" stroke-width="1.4"/>`);   // thwart
+    P.push(`<line x1="140" y1="${D + 2}" x2="176" y2="${D - 14}" stroke="${GOLD}" stroke-width="2"/>`);   // oar
+  } else if (form === 'skiff') {                   // small open outboard runner
+    P.push(`<path d="M60 ${D} L176 ${D - 4} Q186 ${D - 3} 182 ${D + 6} L70 ${D + 10} Q58 ${D + 8} 60 ${D}Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<path d="M120 ${D - 4} L126 ${D - 16} L146 ${D - 15} L150 ${D - 3}" stroke="${GOLD}" stroke-width="1.6"/>`); // small windscreen
+    P.push(`<path d="M60 ${D - 2} l-10 4 2 8 8 -2Z" fill="${FILL}" stroke="${GOLD}"/>`);                   // outboard motor
+  } else if (form === 'trawler') {                 // fishing trawler — tall wheelhouse + mast/boom
+    P.push(`<path d="M44 ${D} L196 ${D - 4} Q208 ${D - 2} 202 ${D + 10} L58 ${D + 12} Q42 ${D + 10} 44 ${D}Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<rect x="70" y="${D - 26}" width="40" height="24" fill="${FILL}" stroke="${GOLD}"/>`);        // wheelhouse
+    P.push(`<rect x="78" y="${D - 22}" width="10" height="9" stroke="${DIM}" stroke-width="1.2"/><rect x="94" y="${D - 22}" width="10" height="9" stroke="${DIM}" stroke-width="1.2"/>`);
+    P.push(`<line x1="130" y1="${D - 2}" x2="130" y2="${D - 42}" stroke="${GOLD}" stroke-width="2"/>`);   // mast
+    P.push(`<line x1="130" y1="${D - 34}" x2="168" y2="${D - 12}" stroke="${DIM}" stroke-width="1.6"/>`);// boom
+  } else if (form === 'cutter') {                  // sleek patrol cutter — long low hull, raked bridge
+    P.push(`<path d="M40 ${D} L192 ${D - 6} Q210 ${D - 4} 200 ${D + 8} L54 ${D + 10} Q38 ${D + 8} 40 ${D}Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<path d="M96 ${D - 6} L104 ${D - 22} L138 ${D - 22} L146 ${D - 5} Z" fill="${FILL}" stroke="${GOLD}"/>`); // bridge
+    P.push(`<line x1="120" y1="${D - 22}" x2="120" y2="${D - 40}" stroke="${GOLD}" stroke-width="1.6"/>`);// radio mast
+    P.push(`<line x1="52" y1="${D - 3}" x2="188" y2="${D - 8}" stroke="${DIM}" stroke-width="1.3"/>`);
+  } else if (form === 'freighter') {               // cargo freighter — high sides, funnel, hatches
+    P.push(`<path d="M30 ${D - 4} L206 ${D - 8} L200 ${D + 12} L44 ${D + 12} Q30 ${D + 10} 30 ${D - 4}Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<rect x="150" y="${D - 26}" width="34" height="22" fill="${FILL}" stroke="${GOLD}"/>`);       // aft superstructure
+    P.push(`<rect x="162" y="${D - 40}" width="10" height="16" fill="${FILL}" stroke="${GOLD}"/>`);       // funnel
+    for (let i = 0; i < 3; i++) P.push(`<rect x="${52 + i * 30}" y="${D - 12}" width="22" height="8" stroke="${DIM}" stroke-width="1.2"/>`); // cargo hatches
+    P.push(`<line x1="100" y1="${D - 4}" x2="100" y2="${D - 30}" stroke="${GOLD}" stroke-width="1.6"/>`);// derrick
+  } else {                                         // runner — low cigarette speedboat, spray
+    P.push(`<path d="M40 ${D} L192 ${D - 4} Q214 ${D - 2} 206 ${D + 8} L96 ${D + 10} Q70 ${D + 8} 52 ${D + 6} L40 ${D}Z" fill="#12303c" stroke="${GOLD}"/>`);
+    P.push(`<path d="M120 ${D - 4} Q126 ${D - 14} 140 ${D - 12} L154 ${D - 4} Z" fill="${FILL}" stroke="${GOLD}"/>`); // low cockpit
+    P.push(`<path d="M188 ${D - 4} l14 -6 4 8" stroke-width="1.6"/>`);                                     // engine cowl
+    P.push(`<path d="M40 ${D} q-14 2 -18 9" stroke="${TEAL}" stroke-width="1.6" opacity="0.75"/>`);       // spray
+  }
+  return svg(P.join(''));
 }
 
 // ── DRUGS ── the product: form chosen per id (vial/brick/pills/baggie/powder/ampoule/blotter/jar),
@@ -152,42 +206,65 @@ function drugArt(d) {
   return svg(parts.join(''));
 }
 
-// ── GUNS ── silhouette by firepower: pocket pistol → auto → revolver → SMG → long case.
+// ── GUNS ── period iron by NAME (the catalog already says the type — "Drum-Fed"→a Tommy gun,
+// "Street-Sweeper"→a shotgun, "Lever-Gun"→a carbine, "Silenced"→a suppressor) then by firepower.
+function gunArchetype(g) {
+  const n = (g.name || '').toLowerCase(), fp = Number(g.fp) || 5;
+  if (/drum|belt|orchestra|chorus|thompson|chopper|tommy/.test(n)) return 'tommy';
+  if (/trench|sweeper|doorbell|broom|shotgun|sawed|12g|scatter/.test(n)) return 'shotgun';
+  if (/lever|rancher|carbine|long-case|undertaker|rifle/.test(n)) return 'rifle';
+  if (/silenc|whisper|suppress/.test(n)) return 'suppressed';
+  if (/revolver|snub|\.38|alley|badge|target|penny/.test(n) && fp < 30) return 'revolver';
+  if (fp < 8) return 'pocket';
+  if (fp < 34) return 'auto';
+  if (fp < 50) return 'tommy';
+  return 'rifle';
+}
 function gunArt(g) {
-  const fp = Number(g.fp) || 5, cash = Number(g.cash) || 500, h = hashId(g.id);
-  const cls = fp < 8 ? 'pocket' : fp < 20 ? 'auto' : fp < 34 ? 'revolver' : fp < 50 ? 'smg' : 'long';
-  const acc = cash >= 100000 ? TEAL : GOLD;
-  const parts = [shadow(120, 74, cash >= 100000)];
-  if (cls === 'pocket' || cls === 'auto') {
-    const L = cls === 'pocket' ? 96 : 150, x0 = 120 - L / 2, x1 = 120 + L / 2, sy = 70;
-    parts.push(`<path d="M${x0} ${sy} L${x1} ${sy} L${x1} ${sy + 15} L${x0 + L * 0.62} ${sy + 15} L${x0 + L * 0.62} ${sy + 21} L${x0 + 18} ${sy + 21} Q${x0 + 10} ${sy + 21} ${x0 + 8} ${sy + 15} L${x0} ${sy + 15} Z" fill="${STEEL}" stroke="${GOLD}"/>`);
-    parts.push(`<line x1="${x0 + 8}" y1="${sy + 6}" x2="${x1 - 6}" y2="${sy + 6}" stroke="${DIM}" stroke-width="1.4"/>`);
-    parts.push(`<rect x="${x0 + 12}" y="${sy - 6}" width="6" height="6" fill="${acc}" stroke="none"/>`);
-    // grip
-    const gx = x0 + L * 0.62;
-    parts.push(`<path d="M${gx} ${sy + 21} L${gx + 16} ${sy + 21} L${gx + 8} ${sy + 58} Q${gx + 6} ${sy + 64} ${gx} ${sy + 64} L${gx - 12} ${sy + 64} Q${gx - 18} ${sy + 64} ${gx - 16} ${sy + 58} Z" fill="${FILL}" stroke="${GOLD}"/>`);
-    parts.push(`<path d="M${gx - 18} ${sy + 21} Q${gx - 26} ${sy + 34} ${gx - 14} ${sy + 40} L${gx - 8} ${sy + 33}" stroke-width="1.8"/>`); // trigger guard
-    if (cls === 'auto') parts.push(`<path d="M${x1} ${sy} q9 -2 9 8" stroke-width="1.8"/>`); // hammer
-  } else if (cls === 'revolver') {
-    parts.push(`<path d="M60 70 L150 70 L150 84 L120 84 L120 90 L92 90 Q84 90 82 84 L60 84 Z" fill="${STEEL}" stroke="${GOLD}"/>`);
-    parts.push(`<circle cx="112" cy="80" r="12" fill="${FILL}" stroke="${GOLD}"/>`); // cylinder
-    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; parts.push(`<circle cx="${(112 + Math.cos(a) * 6).toFixed(1)}" cy="${(80 + Math.sin(a) * 6).toFixed(1)}" r="1.7" stroke="${DIM}" stroke-width="1"/>`); }
-    parts.push(`<path d="M118 90 L134 90 L126 126 Q124 132 118 132 L108 132 Q102 132 104 126 Z" fill="${FILL}" stroke="${GOLD}"/>`);
-    parts.push(`<rect x="66" y="64" width="6" height="6" fill="${acc}" stroke="none"/>`);
-  } else if (cls === 'smg') {
-    parts.push(`<path d="M46 62 L188 62 L188 76 L70 76 L70 84 L52 84 Q46 84 46 78 Z" fill="${STEEL}" stroke="${GOLD}"/>`);
-    parts.push(`<circle cx="96" cy="98" r="16" fill="${FILL}" stroke="${GOLD}"/><circle cx="96" cy="98" r="7" stroke="${DIM}" stroke-width="1.4"/>`); // drum mag
-    parts.push(`<path d="M150 76 L162 76 L158 112 L146 112 Z" fill="${FILL}" stroke="${GOLD}"/>`); // rear grip
-    parts.push(`<line x1="60" y1="68" x2="182" y2="68" stroke="${DIM}" stroke-width="1.4"/>`);
-    parts.push(`<rect x="176" y="56" width="6" height="6" fill="${acc}" stroke="none"/>`);
-  } else { // long case (rifle / "Undertaker")
-    parts.push(`<line x1="30" y1="76" x2="210" y2="70" stroke="${GOLD}" stroke-width="3"/>`);
-    parts.push(`<path d="M120 70 L206 66 L206 82 L128 86 Z" fill="${STEEL}" stroke="${GOLD}"/>`); // receiver/stock
-    parts.push(`<path d="M150 86 L164 86 L158 116 Q156 120 150 120 L142 120 Z" fill="${FILL}" stroke="${GOLD}"/>`);
-    parts.push(`<rect x="196" y="60" width="7" height="7" fill="${acc}" stroke="none"/>`);
-    parts.push(`<line x1="44" y1="74" x2="70" y2="72" stroke="${DIM}" stroke-width="5"/>`); // muzzle
+  const cash = Number(g.cash) || 500, arch = gunArchetype(g), acc = cash >= 100000 ? TEAL : GOLD;
+  const P = [shadow(120, 74, cash >= 100000)];
+  const sight = (x, y) => P.push(`<rect x="${x}" y="${y}" width="6" height="6" fill="${acc}" stroke="none"/>`);
+  if (arch === 'pocket' || arch === 'auto' || arch === 'suppressed') {
+    const L = arch === 'pocket' ? 92 : 148, x0 = 120 - L / 2, x1 = 120 + L / 2, sy = 72;
+    P.push(`<path d="M${x0} ${sy} L${x1} ${sy} L${x1} ${sy + 14} L${x0 + L * 0.6} ${sy + 14} L${x0 + L * 0.6} ${sy + 20} L${x0 + 16} ${sy + 20} Q${x0 + 8} ${sy + 20} ${x0 + 7} ${sy + 14} L${x0} ${sy + 14} Z" fill="${STEEL}" stroke="${GOLD}"/>`);
+    P.push(`<line x1="${x0 + 8}" y1="${sy + 5}" x2="${x1 - 6}" y2="${sy + 5}" stroke="${DIM}" stroke-width="1.4"/>`);
+    sight(x0 + 10, sy - 6);
+    const gx = x0 + L * 0.6;
+    P.push(`<path d="M${gx} ${sy + 20} L${gx + 15} ${sy + 20} L${gx + 8} ${sy + 56} Q${gx + 6} ${sy + 62} ${gx} ${sy + 62} L${gx - 11} ${sy + 62} Q${gx - 17} ${sy + 62} ${gx - 15} ${sy + 56} Z" fill="${FILL}" stroke="${GOLD}"/>`);
+    P.push(`<path d="M${gx - 17} ${sy + 20} Q${gx - 25} ${sy + 33} ${gx - 13} ${sy + 39} L${gx - 8} ${sy + 32}" stroke-width="1.8"/>`);
+    if (arch === 'auto') P.push(`<path d="M${x1} ${sy} q9 -2 9 8" stroke-width="1.8"/>`);
+    if (arch === 'suppressed') P.push(`<rect x="${x0 - 34}" y="${sy}" width="34" height="14" rx="6" fill="${FILL}" stroke="${GOLD}"/>`); // fat suppressor can
+  } else if (arch === 'revolver') {
+    P.push(`<path d="M60 72 L150 72 L150 84 L120 84 L120 90 L92 90 Q84 90 82 84 L60 84 Z" fill="${STEEL}" stroke="${GOLD}"/>`);
+    P.push(`<circle cx="112" cy="82" r="12" fill="${FILL}" stroke="${GOLD}"/>`);
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; P.push(`<circle cx="${(112 + Math.cos(a) * 6).toFixed(1)}" cy="${(82 + Math.sin(a) * 6).toFixed(1)}" r="1.6" stroke="${DIM}" stroke-width="1"/>`); }
+    P.push(`<path d="M118 90 L134 90 L126 124 Q124 130 118 130 L108 130 Q102 130 104 124 Z" fill="${FILL}" stroke="${GOLD}"/>`);
+    sight(66, 66);
+  } else if (arch === 'tommy') {                  // the Thompson — foregrip + drum + straight stock
+    P.push(`<path d="M40 66 L176 66 L176 80 L64 80 L64 88 L48 88 Q40 88 40 80 Z" fill="${STEEL}" stroke="${GOLD}"/>`); // receiver
+    P.push(`<line x1="24" y1="70" x2="40" y2="70" stroke="${GOLD}" stroke-width="4"/>`);        // barrel + Cutts comp
+    P.push(`<line x1="24" y1="66" x2="24" y2="74" stroke="${GOLD}" stroke-width="2"/>`);
+    P.push(`<circle cx="92" cy="100" r="17" fill="${FILL}" stroke="${GOLD}"/><circle cx="92" cy="100" r="7" stroke="${DIM}" stroke-width="1.4"/>`); // drum
+    P.push(`<path d="M60 80 L54 100 L64 100 L70 80 Z" fill="${FILL}" stroke="${GOLD}"/>`);       // front vertical foregrip
+    P.push(`<path d="M138 80 L150 80 L144 108 Q142 112 138 112 L132 112 Z" fill="${FILL}" stroke="${GOLD}"/>`); // rear grip
+    P.push(`<path d="M176 68 L214 74 L214 82 L176 78 Z" fill="${FILL}" stroke="${GOLD}"/>`);     // straight stock
+    sight(50, 60);
+  } else if (arch === 'shotgun') {                // side-by-side / trench gun — twin barrels + wood
+    P.push(`<line x1="26" y1="74" x2="150" y2="74" stroke="${GOLD}" stroke-width="3"/>`);        // barrels
+    P.push(`<line x1="26" y1="79" x2="150" y2="79" stroke="${GOLD}" stroke-width="3"/>`);
+    P.push(`<path d="M150 70 L166 70 L166 86 L150 86 Z" fill="${STEEL}" stroke="${GOLD}"/>`);     // action
+    P.push(`<path d="M166 72 L212 80 L212 92 Q212 96 206 96 L172 90 Z" fill="${FILL}" stroke="${GOLD}"/>`); // wood stock
+    P.push(`<path d="M158 86 L168 86 L164 104 L154 104 Z" fill="${FILL}" stroke="${GOLD}"/>`);   // grip/trigger
+    sight(30, 68);
+  } else {                                        // rifle / carbine / violin-case long gun
+    P.push(`<line x1="26" y1="76" x2="150" y2="76" stroke="${GOLD}" stroke-width="3"/>`);        // long barrel
+    P.push(`<path d="M120 70 L166 70 L166 84 L128 88 Z" fill="${STEEL}" stroke="${GOLD}"/>`);     // receiver
+    P.push(`<path d="M166 72 L214 80 L214 94 Q214 98 208 98 L172 90 Z" fill="${FILL}" stroke="${GOLD}"/>`); // wood stock
+    P.push(`<path d="M138 88 Q132 100 144 106 L150 100" stroke="${GOLD}" stroke-width="1.8"/>`); // lever loop
+    P.push(`<line x1="40" y1="72" x2="66" y2="72" stroke="${DIM}" stroke-width="5"/>`);          // fore-end
+    sight(196, 64);
   }
-  return svg(parts.join(''));
+  return svg(P.join(''));
 }
 
 // ── VESTS ── a coat / body-armour torso; plating by protection mult.
@@ -233,3 +310,6 @@ export function itemArt(kind, item) {
 }
 
 export const ART_KINDS = Object.keys(GEN);
+// exported so the AI-art prompt generator (tools/art-prompts.js) assigns the SAME archetype an item's
+// SVG gets — a painted set stays in lockstep with the vector set (same id → same body form).
+export { carArchetype, gunArchetype, BOAT_FORM, DRUG_FORM };
