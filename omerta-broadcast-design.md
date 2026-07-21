@@ -100,6 +100,23 @@ You can't optimize what you can't see, so the share loop is now measured end-to-
   dominated by OG crawlers and would be an unauthenticated DB-write amplifier; raw view counts
   are an edge/CDN-analytics concern, not an app write.
 
+## Security pass — the first public keyless surface
+
+THE BROADCAST is the app's first **public, keyless** HTML/SVG/PNG-rendering surface (served to
+anyone, unfurled by crawlers), so it got a focused red-team. Verified clean: all output routes
+through `esc()` (SVG/HTML metacharacters escaped — no injection via `:name` or `?ref`), URLs go
+through `encodeURIComponent`, the `type` param is whitelisted, and every SQL lookup is
+parameterized (no injection). `publicDossier` bands status only — **no exact wealth figure**
+(the anti-precise-kill-EV rule). Fixed one finding:
+
+- **Unbounded input on keyless routes → resource-exhaustion (MED).** `:name` and `?ref` were
+  rendered untruncated. Fastify already 414s a giant `:name` path, but `?ref` is a query string
+  and isn't bounded that way — a 5,000-char `?ref` rendered a ~5KB SVG, made resvg rasterize a
+  giant string, and poisoned the PNG cache with an oversized entry. **Fixed** by clamping both
+  `:name` and `?ref` to 48 chars at the route boundary (a living name is ≤24, so 48 never
+  truncates a real lookup). `test/hardening.js` regresses the clamp (oversized `?ref` → bounded
+  body) and the escaping (a `<script>` name never appears raw in the card or the profile page).
+
 ## Deferred
 
 - An **obituary** card type and richer share triggers.
