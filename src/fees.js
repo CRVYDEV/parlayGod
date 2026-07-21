@@ -139,23 +139,27 @@ export async function mintCharacter(pool, accountId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // lock the CHARACTER row first, then the account — the canonical characters→accounts order
+    // (matching withCharacter + rerollCharacter), so mint can't AB-BA against any of them; the rare
+    // residual still maps to a clean retryable `contention` via deadlockToRetry below. A character
+    // exists before minting; if there's no living street, minting is a no-op-with-error either branch.
+    const ch = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive FOR UPDATE', [accountId])).rows[0];
     const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
     if (!acct) throw new GameError('no_account', 'No such account.');
     if (acct.minted) {
-      await client.query('UPDATE characters SET minted=true WHERE account_id=$1 AND alive', [accountId]);
+      if (ch) await client.query('UPDATE characters SET minted=true WHERE id=$1', [ch.id]);
       await client.query('COMMIT');
       return { minted: true, alreadyMinted: true };
     }
     if (Number(acct.mint_credits) < 1)
       throw new GameError('no_mint_credit', 'Pay the 0.01 ETH mint fee on-chain first (then your character is made).');
-    const ch = (await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
     if (!ch) throw new GameError('no_character', 'Create a character first, then mint it.');
     await client.query('UPDATE account_persistent SET minted=true, mint_credits = mint_credits - 1 WHERE account_id=$1', [accountId]);
-    await client.query('UPDATE characters SET minted=true WHERE account_id=$1 AND alive', [accountId]);
+    await client.query('UPDATE characters SET minted=true WHERE id=$1', [ch.id]);
     await notify(client, ch.id, 'made', {}); // a made man — the street is permanent now
     await client.query('COMMIT');
     return { minted: true };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
 
