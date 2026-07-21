@@ -58,8 +58,13 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
       throw e;
     }
     // Phase 2: route this payment's Vig share into the redistribution pool (same txn). The ETH
-    // itself still went to the dev wallet on-chain; this only records the accounting split.
-    await recordVigRevenue(client, { source: 'fee', ref: n, kind, amountWei });
+    // itself still went to the dev wallet on-chain; this only records the accounting split. Booked
+    // ONLY for a REAL on-chain payment (one carrying a txHash from the observed FeePaid event) — the
+    // store.js/bonds.js precedent (AUDIT-full-system-v2 D-MED2). A comp / manual QA record with no
+    // txHash grants the entitlement but injects ZERO Vig revenue — else it would fabricate real-ETH
+    // "revenue" that runVigBuyback (which sums vig_revenue with no source filter) would spend,
+    // unbacking the withdrawal reserve, invisible to runVigInvariants.
+    if (txHash) await recordVigRevenue(client, { source: 'fee', ref: n, kind, amountWei });
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let credited = false;
     if (acct) {

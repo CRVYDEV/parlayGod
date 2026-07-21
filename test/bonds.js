@@ -5,6 +5,7 @@
 // nonce), claim (linear vesting), the bond invariant, the Vig integration (bond ETH feeds the buyback), and
 // §10.4-IN-GAME-UNTOUCHED (the sweep is drift-free through a bond run). pg-mem, zero infra.
 process.env.MOD_KEY = 'test-mod-key';
+process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route drive the real-revenue flywheel (D-MED2 gate)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BONDS, bondPayout } from '../src/rules.js';

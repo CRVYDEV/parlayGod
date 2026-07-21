@@ -5,6 +5,7 @@
 // §10.4 (prize:omr reconciles — every earned $OMR is a backed faucet, no SQL mint), DEATH SURVIVAL
 // (the account-level track carries to the heir), and the fresh-season reset. pg-mem, zero infra.
 process.env.MOD_KEY = 'test-mod-key';
+process.env.ALLOW_MOD_REAL_REVENUE = 'on'; // QA: let the mod route drive the real-revenue flywheel (D-MED2 gate)
 import assert from 'node:assert';
 import { getAddress } from 'viem';
 import { buildServer } from '../src/server.js';
