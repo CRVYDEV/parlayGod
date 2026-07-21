@@ -351,7 +351,7 @@ export async function squareWanted(ch, client, h) {
 // the rest BURNS (loan:death, the dead-funder pattern). NPC/mod kills pass 0 → the whole escrow burns.
 // ACTIVE loans (as lender or borrower) void with no ledger (the principal already moved — §10.4-neutral);
 // both sides are notified. Called inside the estate txn (victim + killer rows already locked).
-export async function voidLoansAtDeath(client, victimId, h, killerCh = null, lootRate = 0) {
+export async function voidLoansAtDeath(client, victimId, h, killerCh = null, lootRate = 0, heirId = null) {
   // LOCK the open offers, then sum over the LOCKED set (the bounty-sweep precedent, social.js) — takeLoan
   // locks the loan row FOR UPDATE but NOT the lender's character, so it doesn't serialize with the estate
   // on the char lock; without this lock a concurrent open→active take could be counted in openEscrow here
@@ -378,19 +378,30 @@ export async function voidLoansAtDeath(client, victimId, h, killerCh = null, loo
   // a borrower's debt is erased). The killer, if a counterparty, still gets the notification row.
   const active = (await client.query(
     "SELECT id, lender_character, borrower_character, collateral_car FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId])).rows;
+  let inherited = 0;
   for (const l of active) {
     if (l.lender_character === victimId && l.borrower_character) {
-      // the debt dies with the lender: the surviving borrower keeps the principal AND their pledged
-      // car comes home (unlock it — a third-party row, SQL not in-memory).
-      if (l.collateral_car) await client.query('UPDATE cars SET pledged=false WHERE id=$1', [l.collateral_car]);
-      await h.notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_dead' });
+      // SIGN-OFF (Tier 4): THE DEBT SURVIVES. Killing your lender no longer wipes what you owe — the
+      // receivable (and any pledged collateral) passes to the lender's HEIR, who can still collect.
+      // §10.4-neutral (no money moves; the claim + the pledge just change hands — the principal already
+      // moved at take-time). No heir (a lender who somehow dies without one) falls back to voiding.
+      if (heirId) {
+        await client.query('UPDATE loans SET lender_character=$2 WHERE id=$1', [l.id, heirId]);
+        await h.notify(client, l.borrower_character, 'loan_inherited', { reason: 'lender_dead' });
+        inherited++;
+      } else {
+        if (l.collateral_car) await client.query('UPDATE cars SET pledged=false WHERE id=$1', [l.collateral_car]);
+        await h.notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_dead' });
+      }
     } else if (l.borrower_character === victimId) {
-      // the borrower is dead: any pledged car dies with the fleet (the estate wipe) — nothing to unlock.
+      // the borrower is dead: the claim is uncollectable, any pledged car dies with the fleet (the estate wipe).
       await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead' });
     }
   }
+  // delete only the loans that did NOT survive: borrower-dead actives (+ any no-heir lender-dead actives).
+  // The heir-reassigned loans now carry the heir as lender_character, so this predicate no longer matches them.
   await client.query("DELETE FROM loans WHERE (lender_character=$1 OR borrower_character=$1) AND status='active'", [victimId]);
-  return { looted };
+  return { looted, inherited };
 }
 
 // worker sweep — refund EXPIRED open offers to the lender, and mark OVERDUE borrowers welsher (so

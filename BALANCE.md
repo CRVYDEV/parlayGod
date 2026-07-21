@@ -1276,3 +1276,25 @@ rule #1):
 - **Apex solo-raid floor (carried, World-wide):** the 0.1 min-clamp lets a min-level whale solo an apex
   outfit for the full grab, bounding how fast an apex outfit (hence its core district) is driven to the
   liberation floor — the clamp or a coop-only `raidNpc` gate for `fixture.coop` is the dial.
+
+## SIGN-OFF SHIPPED — founder approved all recommendations (2026-07-21)
+
+Jorge shipped the `SIGN-OFF.md` sheet. Applied + tested (suite 30/30, sim drift-0), all founder-signed:
+
+- **World 1.3 — apex outfits are crew-only** (`raidNpc` refuses `fixture.coop`; board `canRaid && !f.coop`).
+  Closes the apex solo-raid floor (B1) — a min-level whale can no longer solo kryl/moreau/volkov for the
+  full grab. The crew path (`planRaid`) already gated the inverse (`solo`), so the symmetry is now closed.
+- **Casino 2.5 — `CASINO.FIGHT_BET_MIN_LVL` (5)** on fight bets (the `WANTED_MIN_LVL`/npcHit rookie-floor
+  precedent) — an anti-alt floor raising a fight-fix Sybil ring's cost per disposable bettor.
+- **Pen T3 — `PEN.QUIET_WEIGHT` (0.45)** weights the `quiet` yard day up in `yardEventOf`, so hard-block
+  days (lockdown/toss) fall below ~25% (was ~40%). Distributional regression added (`test/pen.js`).
+- **Loans Tier 4 — the debt survives the lender.** `voidLoansAtDeath` now reassigns a dead lender's active
+  loan (+ pledged collateral) to the **heir** instead of voiding it (§10.4-neutral — no money moves, the
+  claim changes hands). `runEstate` hoists `heirId` above the loan-void to pass it. Closes the
+  kill-your-lender-to-erase-the-debt moral hazard. Test updated: the collateral loan survives to the heir.
+- **Referrals 2.7 (deploy-config, not code):** production **must** run `SOCIAL_VERIFY_MODE=live` so the
+  Spread-the-Word cash faucet requires real social verification (alpha keeps `trust`).
+
+Everything else on the sheet is SIGNED at the recommended verdict (SHIP) or on the alpha WATCH-list. The
+Tier-6 chain/legal items remain a SEPARATE gate (legal counsel + `forge test` + third-party audit), not
+signed by this pass.

@@ -20,6 +20,31 @@ the ones you want to change or discuss. Technical detail for any row lives in `B
 
 ---
 
+## ✅ RESOLUTION — founder shipped all recommendations (2026-07-21)
+
+Jorge: *"Ship all your recommendations."* Applied + tested (suite 30/30, sim drift-0):
+
+**Code changes (the CHANGE-recommended rows):**
+- **1.3 apex solo-raid gate** — `raidNpc` now refuses `coop` outfits (kryl/moreau/volkov); they must be hit
+  with a crew (`planRaid`→`executeRaid`). Board `canRaid` reflects it. Closes the min-level-whale solo floor.
+- **2.5 fight-fix Sybil bound** — a `FIGHT_BET_MIN_LVL` (5) floor on fight bets (the `WANTED_MIN_LVL`/npcHit
+  rookie-floor precedent) — raises a fix-ring's cost per disposable alt.
+- **Pen T3 yard-incident reweight** — `PEN.QUIET_WEIGHT` (0.45) weights `quiet` up so the yard is
+  hard-blocked (lockdown/toss) &lt;25% of days instead of ~40%.
+- **Tier-4 lender-death** — killing your lender no longer erases the debt: an active loan's receivable (and
+  any pledged collateral) passes to the lender's **heir** (`voidLoansAtDeath` reassigns instead of voiding;
+  §10.4-neutral).
+
+**Deploy-config (2.7):** production **must** set `SOCIAL_VERIFY_MODE=live` so the "Spread the Word" cash
+faucet requires real social verification (keeps the alpha `trust` mode for now). An ops requirement, not code.
+
+**Everything else = SIGNED** at my recommended verdict (SHIP or WATCH). WATCH items are the alpha watch-list.
+**Tier 6 remains a separate legal/audit track** — not signed here.
+
+Below is the full sheet as-decided (verdicts stand as the record).
+
+---
+
 ## TIER 0 — two retunes are applied but not production-signed (decide first)
 
 Both were founder-directed on 2026-07-21, re-measured in the sim, and are live in the code as the

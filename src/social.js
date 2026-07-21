@@ -1426,19 +1426,20 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0);
   if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
   await burnBidsAtDeath(client, victim.id);
+  // the heir id (generated early so the lender-death loan claim can pass to it below — the debt survives)
+  const heirId = uid();
   // LOAN SHARKING: a PLAYER fire-kill (opts.loot) loots CASH_LOOT_RATE of the dead lender's OPEN-offer
   // escrow to the killer (parked capital is no longer a loot-proof vault, the market-order precedent);
-  // the rest burns (loan:death). ACTIVE loans (as lender or borrower) void — the principal already
-  // moved, so no ledger (§10.4-neutral); both counterparties are notified.
-  const ln = await voidLoansAtDeath(client, victim.id, h, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0);
+  // the rest burns (loan:death). An active loan the DEAD LENDER made passes to the HEIR (the debt
+  // survives — SIGN-OFF Tier 4, §10.4-neutral); a debt owed BY the dead borrower is uncollectable.
+  const ln = await voidLoansAtDeath(client, victim.id, h, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0, heirId);
   if (opts.killerCh && ln.looted) report.loanLoot = ln.looted;
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
   victim.alive = false;
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0, cb=0, ammo=0, gun=NULL, vest=NULL WHERE id=$1', [victim.id]);
 
-  // the heir — same name (the bloodline), next generation, legacy stake
-  const heirId = uid();
+  // the heir — same name (the bloodline), next generation, legacy stake (heirId generated above)
   const stake = 500 + 100 * Number(acct.prestige);
   // the bloodline stays "made" — a paid mint (§11) carries down the estate to the heir
   await client.query(

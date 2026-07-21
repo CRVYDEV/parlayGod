@@ -202,6 +202,8 @@ assert.equal((await call('POST', `/v1/gangs/${gangId}/join`, { token: soldier.to
 
 // an apex outfit needs a crew — a SOLO-only outfit refuses a co-op plan
 assert.equal((await call('POST', '/v1/world/dockrats/plan', { token: boss.token })).body.error, 'solo', 'the Dock Rats are a solo hit — no crew');
+// SIGN-OFF (1.3): …and the inverse — an apex (coop) outfit refuses a SOLO raid (closes the solo-floor B1)
+assert.equal((await call('POST', '/v1/world/kryl/raid', { token: boss.token })).body.error, 'crew', 'the Kryl Syndicate is too heavy to solo — crew up');
 // plan a co-op raid on the Kryl Syndicate (apex); the open raid shows on the board
 const plan = await call('POST', '/v1/world/kryl/plan', { token: boss.token });
 assert.equal(plan.code, 200, 'the raid is planned');
