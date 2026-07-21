@@ -1913,6 +1913,13 @@ export const RACES = {
   MIN_LEVEL: 3,                        // a wheelman's game, open early
   VARIANCE: 40,                        // the road is fickle — rand(0,VARIANCE) added to each side
   TUNE_POWER: 15, TUNE_MAX: 5, TUNE_COST: 25000,   // engine tune: +power per level, capped, a cash sink
+  // step 2 — NITROUS (NOS): a per-car consumable. Buy a charge (a cash SINK), spend ONE on a race for a
+  // one-race power bump (rng-audited). Tactical depth + a recurring cash sink; the charge is gone win/lose.
+  NOS_COST: 15000, NOS_MAX: 3, NOS_POWER: 60,
+  // step 2 — PINK SLIPS: race for the car itself (consent-by-listing via cars.pink_slip). The winner TAKES
+  // the loser's raced car — a §10.4-NEUTRAL ownership transfer (cars conserve by ROW COUNT, no ledger — the
+  // chop/market-seize precedent), can push the winner past GARAGE_CAP (the market-win precedent). No numeric
+  // lever — it rides the same power/variance/cooldown/WHEEL machinery as a cash wager race.
   SPEED_DIV: 2, DMG_PEN_DIV: 4,        // driver speed/2 into power; damage/4 off it
   CD_MS: 2 * 60 * 60 * 1000,           // 2h per-driver cooldown (RACE_CD_MS env overrides for tests) — bounds the PvE faucet to boxing-exhibition parity
   LOSS_DMG: 8,                         // a lost race dings the car (the existing damage mechanic — repair is a real cost on a loss)

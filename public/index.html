@@ -309,7 +309,7 @@
     // (game), races (field/wager), boxing (opponent/yourFighter/record), a street jump (stolen/dmg),
     // an extortion (cut), a convoy hijack (taken/hospSeconds). The generic WIN/LOSS lines below only
     // fire when NONE of those are present (else e.g. a jump — which carries no cash `net` — read "WIN — +$0").
-    const spec = body.game || body.field !== undefined || body.wager !== undefined ||
+    const spec = body.game || body.field !== undefined || body.wager !== undefined || body.forPinks !== undefined ||
       body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       (body.win === false && body.dmg !== undefined);
@@ -334,6 +334,7 @@
     if (body.earned) bits.push(`moved product — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) bits.push(body.win ? `🏁 took the checkered — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}` : `🏁 ate the loss — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`);
+    if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
     if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
     if (body.seized) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}`);
     if (body.pay) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
@@ -2002,7 +2003,8 @@
     const b = (await api('GET', '/v1/races')).body || {};
     const cars = b.cars || [], strip = b.strip || [], tiers = b.tiers || [];
     const cd = b.cooldownSeconds || 0;
-    const carOpts = cars.map((c) => `<option value="${c.id}">${c.model} — power ${c.power}${c.tune ? ` (tune ${c.tune})` : ''}${c.dmg ? ` · ${c.dmg}% dmg` : ''}</option>`).join('');
+    const carOpts = cars.map((c) => `<option value="${c.id}">${c.model} — power ${c.power}${c.tune ? ` (tune ${c.tune})` : ''}${c.nos ? ` · ${c.nos} NOS` : ''}${c.dmg ? ` · ${c.dmg}% dmg` : ''}</option>`).join('');
+    const nosMax = b.nos?.max || 3;
     t.innerHTML = `
       ${!cars.length ? coachCard('Get some iron on the strip', 'Street racing turns your garage into a competitive loop. Boost or buy a car, tune it, and race the NPC circuit for a purse — or list it and take wagers off other drivers. Fast, valuable, well-tuned iron wins; the wheelman\'s speed decides close ones.') : ''}
       <h2>Street Races <span class="chip">🏁 ${b.legend?.rank || 'Sunday Driver'} · ${b.legend?.wins || 0} wins</span></h2>
@@ -2010,28 +2012,41 @@
       <div class="grid">
         <div class="card"><span class="t">The Circuit (PvE)</span>
           <div class="d">Pay the buy-in (burns win or lose), beat the NPC pack for the purse. A loss dings your car.</div>
-          <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select></div>
+          <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select><label style="font-size:12px"><input type="checkbox" id="rc-nos-npc"> burn a NOS (+${b.nos?.power || 60})</label></div>
           ${tiers.map((ti) => `<div class="row" style="margin-top:4px"><span>${ti.name} <span class="chip">lvl ${ti.minLvl}</span></span><span>fee $${fmt(ti.fee)} · purse $${fmt(ti.purse)} <button class="act" data-npc="${ti.id}"${cd > 0 || !cars.length ? ' disabled' : ''}>race</button></span></div>`).join('')}
         </div>
         <div class="card"><span class="t">Your Garage</span>
-          ${cars.length ? cars.map((c) => `<div class="row" style="margin-top:4px"><span>${c.model} — <b>power ${c.power}</b>${c.dmg ? ` · <span style="color:var(--bad)">${c.dmg}% dmg</span>` : ''}${c.raceLimit ? ` · <span class="chip good">racing ≤ $${fmt(c.raceLimit)}</span>` : ''}</span>
+          ${cars.length ? cars.map((c) => `<div class="row" style="margin-top:4px"><span>${c.model} — <b>power ${c.power}</b>${c.nos ? ` · <span class="chip good">💨 ${c.nos} NOS</span>` : ''}${c.dmg ? ` · <span style="color:var(--bad)">${c.dmg}% dmg</span>` : ''}${c.raceLimit ? ` · <span class="chip good">racing ≤ $${fmt(c.raceLimit)}</span>` : ''}${c.pinkSlip ? ' · <span class="chip" style="color:var(--bad)">🎀 up for pinks</span>' : ''}</span>
             <span><button class="act" data-tune="${c.id}"${c.tune >= (b.tune?.max || 5) ? ' disabled' : ''}>tune $${fmt(b.tune?.cost || 25000)} (${c.tune}/${b.tune?.max || 5})</button>
+            <button class="act" data-nos="${c.id}"${(c.nos || 0) >= nosMax ? ' disabled' : ''}>NOS $${fmt(b.nos?.cost || 15000)} (${c.nos || 0}/${nosMax})</button>
+            <button class="act" data-pink="${c.id}" data-on="${c.pinkSlip ? '0' : '1'}">${c.pinkSlip ? 'pull pinks' : 'put up pinks'}</button>
             ${c.raceLimit ? `<button class="act" data-unlist="${c.id}">pull</button>` : `<input id="rc-lim-${c.id}" type="number" placeholder="list for $" style="width:96px"><button class="act" data-list="${c.id}">list</button>`}</span></div>`).join('') : '<div class="d">No cars — boost or buy some iron first.</div>'}
         </div>
       </div>
-      <div class="card"><span class="t">The Strip (PvP wagers)</span>
-        <div class="d">Other drivers' listed cars. Pick your own ride, name a wager up to their limit, and race. Winner takes the pot minus a 5% rake; the loser's car takes damage.</div>
-        ${strip.length ? strip.map((s) => `<div class="row" style="margin-top:4px"><span>${s.owner}'s ${s.model} <span class="chip">${s.band}</span> · up to $${fmt(s.limit)}</span>
-          <span><select class="rc-mycar" data-for="${s.carId}">${carOpts}</select><input id="rc-w-${s.carId}" type="number" placeholder="wager $" style="width:96px"><button class="act" data-race="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''}>race</button></span></div>`).join('') : '<div class="d">Nobody\'s on the strip right now. List one of your own to draw a challenger.</div>'}
+      <div class="card"><span class="t">The Strip (PvP)</span>
+        <div class="d">Other drivers' cars taking a race. Wager races: pick your own ride, name a wager up to their limit — winner takes the pot minus a 5% rake, the loser's car takes damage. <b style="color:var(--bad)">🎀 pinks</b> races have no cash — the winner <b>takes the loser's car</b>.</div>
+        ${strip.length ? strip.map((s) => `<div class="row" style="margin-top:4px"><span>${s.owner}'s ${s.model} <span class="chip">${s.band}</span>${s.limit ? ` · up to $${fmt(s.limit)}` : ''}${s.forPinks ? ' · <span class="chip" style="color:var(--bad)">🎀 for pinks</span>' : ''}</span>
+          <span><select class="rc-mycar" data-for="${s.carId}">${carOpts}</select><label style="font-size:12px"><input type="checkbox" class="rc-nos" data-for="${s.carId}"> NOS</label>
+          ${s.limit ? `<input id="rc-w-${s.carId}" type="number" placeholder="wager $" style="width:90px"><button class="act" data-race="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''}>race</button>` : ''}
+          ${s.forPinks ? `<button class="act" data-pinkrace="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''} style="color:var(--bad)">🎀 for pinks</button>` : ''}</span></div>`).join('') : '<div class="d">Nobody\'s on the strip right now. List one of your own — for a wager or for pinks — to draw a challenger.</div>'}
       </div>
       <button class="act" id="rc-lb">🏁 THE WHEEL — the leaderboard</button>`;
-    t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc }).then(() => renderRaces()));
+    t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc, nos: $('#rc-nos-npc')?.checked || false }).then(() => renderRaces()));
     t.querySelectorAll('[data-tune]').forEach((x) => x.onclick = () => act('POST', `/v1/races/tune/${x.dataset.tune}`, null).then(() => renderRaces()));
+    t.querySelectorAll('[data-nos]').forEach((x) => x.onclick = () => act('POST', `/v1/races/nos/${x.dataset.nos}`, null).then(() => renderRaces()));
+    t.querySelectorAll('[data-pink]').forEach((x) => x.onclick = () => act('POST', `/v1/races/pinkslip/${x.dataset.pink}`, { on: x.dataset.on === '1' }).then(() => renderRaces()));
     t.querySelectorAll('[data-list]').forEach((x) => x.onclick = () => act('POST', `/v1/races/list/${x.dataset.list}`, { limit: Number(($(`#rc-lim-${x.dataset.list}`) || {}).value || 0) }).then(() => renderRaces()));
     t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', `/v1/races/unlist/${x.dataset.unlist}`, null).then(() => renderRaces()));
     t.querySelectorAll('[data-race]').forEach((x) => x.onclick = () => {
       const myCar = (t.querySelector(`.rc-mycar[data-for="${x.dataset.car}"]`) || {}).value;
-      act('POST', `/v1/races/challenge/${x.dataset.race}`, { myCar, theirCar: x.dataset.car, wager: Number(($(`#rc-w-${x.dataset.car}`) || {}).value || 0) }).then(() => renderRaces());
+      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).checked || false;
+      act('POST', `/v1/races/challenge/${x.dataset.race}`, { myCar, theirCar: x.dataset.car, wager: Number(($(`#rc-w-${x.dataset.car}`) || {}).value || 0), nos }).then(() => renderRaces());
+    });
+    t.querySelectorAll('[data-pinkrace]').forEach((x) => x.onclick = () => {
+      const myCar = (t.querySelector(`.rc-mycar[data-for="${x.dataset.car}"]`) || {}).value;
+      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).checked || false;
+      if (!confirm('Pink-slip race — if you lose, your selected car is GONE. Race for it?')) return;
+      act('POST', `/v1/races/pinks/${x.dataset.pinkrace}`, { myCar, theirCar: x.dataset.car, nos }).then(() => renderRaces());
     });
     const lb = $('#rc-lb'); if (lb) lb.onclick = async () => {
       const d = (await api('GET', '/v1/leaderboard/races')).body?.drivers || [];

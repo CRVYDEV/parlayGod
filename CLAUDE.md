@@ -3246,6 +3246,32 @@ cap on either side. The "thin edge" comment was corrected to the real figure (an
 to +60% of the fee at the top tier). Accepted balance flags (founder sign-off): the PvE purse faucet
 magnitude (boxing-exhibition parity), the casino:pvp-posture collusion rail, consent-by-listing owner
 spam, no safehouse gate on a consensual cash game. Suite 31/31 + sim drift-0.
+**Step two — PINK SLIPS + NITROUS — BUILT** (`src/races.js`, `src/rules.js` `RACES` tail, `schema.sql`,
+`test/races.js`; the deepen-a-thin-system drop — step one was the thinnest recently-built loop). **(1) PINK
+SLIPS** (the iconic street-racing fantasy — race for the car itself): a car offered for pinks (consent-by-
+listing via `cars.pink_slip`, `pinkSlipList`/`POST /v1/races/pinkslip/:carId {on}`) can be raced for the
+TITLE (`pinkSlipRace`, `POST /v1/races/pinks/:ownerId {myCar,theirCar,nos}`, two-party) — the winner TAKES
+the loser's raced car, a **§10.4-NEUTRAL ownership transfer** (`UPDATE cars SET character_id=winner` — cars
+conserve by ROW COUNT, no ledger row, no cash moves — the chop/market-seize/loan-collateral precedent) that
+can push the winner past `GARAGE_CAP` (the market-win precedent). It rides the SAME power/variance/cooldown/
+WHEEL machinery as a cash wager race (gates self/family/jailed/hosp/not_offered + the two-car sorted `FOR
+UPDATE` lock, the raceChallenge pattern); the loser's car resets `race_limit`/`pink_slip`/`nos` on transfer;
+the WHEEL credit keeps the `WHEEL_MIN_LVL` anti-Sybil floor on the loser. **(2) NITROUS (NOS)** — a per-car
+consumable (`cars.nos`, `RACES.NOS_COST` $15k / `NOS_MAX` 3 / `NOS_POWER` +60): `buyNos`
+(`POST /v1/races/nos/:carId`, a §10.4 cash SINK `race:nos`, capped) arms a charge; the actor may burn ONE on
+a race (`{nos:true}` on npc/challenge/pinks — their OWN car only, never the passive owner's without consent)
+for a one-race power bump (rng-audited, consumed win/lose — absolute INT writes, the pg-mem quirk). §10.4:
+`race:nos` rides the existing `race:` cash prefix (**zero invariants.js change** — a character_id'd sink →
+the per-character cash check reconciles); pink-slip transfers are car-conservation-neutral (row count
+unchanged). The board (`GET /v1/races`) surfaces `nos`/`pinkSlip` per car + `forPinks` on the strip +
+the NOS config; `/v1/rules` gained `nos`/`pinkSlips`; the console Street Races tab gained NOS buy/burn +
+put-up/pull-pinks + a 🎀 for-pinks race button (with a "your car is GONE if you lose" confirm) +
+`describe()` humanization. `test/races.js` covers the NOS buy (sink + cap + board) + consume, and the
+pink-slip race (the not_offered gate, the strip surface, the ownership transfer to the winner, car
+conservation holding, NO `race:pink` ledger row / no cash moved, the shark holding both cars + the mark
+walking home). Suite 31/31 + sim drift-0. All numbers (`NOS_*`) are founder sign-off levers; pink slips
+add no lever (they ride the audited race machinery). Deferred (step three): THE GRAND PRIX (a scheduled,
+worker-resolved cash parimutuel — the boxing-main-event/poker-tournament escrow twin).
 
 **THE PORT — maritime smuggling (step one) — BUILT** (`src/port.js`, `test/port.js` — the 32nd suite;
 design `omerta-the-port-design.md`). The SEA counterpart to convoys — deliberately distinct: convoys move
