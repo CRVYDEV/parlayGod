@@ -5,6 +5,7 @@
 // Runs on pg-mem — zero infra. Production timers shrunk via env (§9 note in social.js).
 process.env.SEARCH_MS = '0';
 process.env.SHOOT_CD_MS = '1000';
+process.env.MOD_KEY = 'test-mod-key'; // for the mod-kill used in the directed-pot death regression
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
@@ -415,6 +416,24 @@ donMe = await meOf(don.token);
 assert.equal(donMe.hitmanRep, 98, 'rep 82 + 16');
 assert.equal(donMe.kills, 3, 'three QUALIFYING lifetime kills (Rocco, Marked, heir — rookie excluded)');
 assert.equal(donMe.hitmanTitle, 'Button Man', '98 rep → Button Man');
+
+// RED-TEAM (full-system deep pass, death lens): a directed HOSPITALIZE pot naming a hitman who then
+// DIES (not the mark) must OPEN to all claimers — else the dead man's exclusive window locks the pot
+// (claimBounty skips a hospitalize pot in-window for anyone but the named hitman) and hands the mark a
+// free immunity window. runEstate now clears `hitman` on the deceased's directed pots.
+const hmark = await mk('Hospital Mark');
+const gun = await mk('Doomed Gun');
+await seedCh(hmark.id, "respect=400, cash=5000, muscle=1, speed=1, loc='docks'");
+await seedCh(gun.id, "respect=400, loc='docks'");
+await seedCh(vito.id, 'cash=30000');
+r = await call('POST', `/v1/streets/${hmark.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'hospitalize', hitman: gun.id, exclusiveHours: 999 } });
+assert.equal(r.code, 200, 'directed hospitalize pot posted naming the gun'); assert.equal(r.body.hitman, gun.id, 'the gun is the named hitman');
+// the named gun DIES (mod-kill) — the pot must open to everyone, not stay locked to the corpse
+assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: gun.id }, headers: { 'x-mod-key': 'test-mod-key' } })).statusCode, 200, 'the gun is retired');
+// Don (a third party, never the named hitman) jumps the mark → collects the now-OPEN hospitalize pot
+await seedCh(don.id, "energy=200, ammo=3000, jail_until=NULL, hosp_until=NULL, loc='docks'");
+r = await call('POST', `/v1/streets/${hmark.id}/jump`, { token: don.token });
+assert(r.body.win && r.body.bounty === 12000, "the dead hitman's directed pot opened — any player collects it (not locked to the corpse)");
 
 // the feared-assassin leaderboard: the lifetime legend + this season's streak
 const lb = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
