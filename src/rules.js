@@ -1807,8 +1807,10 @@ export const RACES = {
   RAKE_BPS: 500,                       // PvP: 5% off the pot (half → street tax/buyback, half burns — casino:pvp)
   WAGER_MIN: 500, WAGER_MAX: 250000,
   // PvE circuit — fieldPower is the NPC pack; fee burns win/lose; purse pays only on a win (a bounded
-  // faucet: a THIN edge over the fee even on a guaranteed win, so it's a modest gear/skill earner, never a
-  // money printer — sized against the boxing-exhibition sibling. All sign-off levers.
+  // faucet). A matched car (power ≈ field) is roughly break-even; an OVER-POWERED car wins its tier
+  // deterministically for up to purse−fee (top tier +$18k/win = +60% of the fee), so it's a gear/skill
+  // earner bounded by the per-driver cooldown (~12/day ≈ +$216k/day at the top — boxing-exhibition
+  // parity, NOT risk-free: a lost race dings the car). All sign-off levers.
   TIERS: [
     { id: 'backalley', name: 'Back-Alley Sprint', minLvl: 3,  fieldPower: 45,  fee: 2000,  purse: 3200 },
     { id: 'midnight',  name: 'Midnight Run',       minLvl: 12, fieldPower: 140, fee: 8000,  purse: 13000 },

@@ -103,6 +103,22 @@ assert.equal((await meOf(rival.token)).cash, vBefore - wager, 'the loser paid th
 assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), taxBefore + Math.floor(rakeExp / 2), 'half the rake fed the street tax');
 assert.equal((await pool.query(`SELECT dmg FROM cars WHERE id='${rivalCar}'`)).rows[0].dmg, RACES.LOSS_DMG, "the loser's car took damage");
 
+// ── AUDIT LOW-1: the WINNER is cooled down too (an owner can't be fed WHEEL wins by alt challengers) ──
+process.env.RACE_CD_MS = '3600000'; // a real 1h cooldown for this one race
+const champ = await mk('Champ Owner'); const chump = await mk('Chump Challenger');
+await pool.query(`UPDATE characters SET respect=3600, speed=200 WHERE id='${champ.id}'`); // strong wheelman
+await pool.query(`UPDATE characters SET respect=3600, speed=5 WHERE id='${chump.id}'`);   // weak
+await seedCash(champ.id, 200000); await seedCash(chump.id, 200000);
+const champCar = await mkCar(champ.id, 'pigeon', 'stock', 0); // power ~144
+await mkCar(chump.id, 'junker', 'stock', 0);
+await call('POST', `/v1/races/list/${champCar}`, { token: champ.token, body: { limit: 50000 } });
+const chumpCar = (await pool.query(`SELECT id FROM cars WHERE character_id='${chump.id}'`)).rows[0].id;
+r = await call('POST', `/v1/races/challenge/${champ.id}`, { token: chump.token, body: { myCar: chumpCar, theirCar: champCar, wager: 20000 } });
+assert.equal(r.body.win, false, 'the weak challenger loses to the strong owner');
+assert((await pool.query(`SELECT race_at FROM characters WHERE id='${champ.id}' AND race_at > now()`)).rows.length === 1, 'the WINNING OWNER is cooled down (LOW-1: no throttle-free WHEEL farming)');
+assert((await pool.query(`SELECT race_at FROM characters WHERE id='${chump.id}' AND race_at > now()`)).rows.length === 1, 'the challenger is cooled down too');
+process.env.RACE_CD_MS = '0'; // restore for the rest of the suite
+
 // ── the leaderboard: THE WHEEL ranks the winningest drivers ──
 const lb = (await call('GET', '/v1/leaderboard/races', { token: racer.token })).body;
 assert(lb.drivers.find((d) => d.name === 'Speed Demon' && d.wins >= 2), 'the racer ranks on THE WHEEL');
