@@ -1214,7 +1214,21 @@ ON-RAMP — 5/6 core districts start NPC-held, so a fresh family's cheap free-se
 (the weak outfits' districts are ~$45k–$120k, effectively a soft on-ramp that teaches the World loop;
 `cathedral` stays free). Perk VALUES unchanged; `OCCUPATION`/`OCCUPY_BPS`/`OCCUPY_MIN` + the mapping are
 all sign-off levers. The World pillar is now feature-complete (visible city → rival outfits + co-op raids →
-war-effort/frontier → productive+contestable outposts → **NPC-occupied core turf**).
+war-effort/frontier → productive+contestable outposts → **NPC-occupied core turf**). A **three-lens
+red-team over step five** (`AUDIT-world-occupation.md`: §10.4/emission, concurrency/locks, exploit/grief)
+returned **no CRITICAL/HIGH** — §10.4 exact (liberation reuses the existing `turf:seize:` sink, zero
+invariant change; an NPC district carries no racket so the transfer is skipped; perks dormant while
+occupied), lock order sound (`outfitStrengthFrac` is a lockless quote, no cycle vs a raid's
+`world_npcs`-last lock) — and closed two MED consistency fixes (regression each): **E1** the schema
+occupation seed re-occupied a liberated-then-DISSOLVED district (dissolution leaves `seized_at` set but
+resets `holder_gang`/`garrison`, so the pristine-guard matched on a re-boot and the outfit re-took turf
+players had fought the World loop to free) — all five seed UPDATEs now also require `AND seized_at IS
+NULL`, so a district ever fought over stays player-controllable forever; **E2** the liberation branch
+was missing the frontier-B1 outfit level gate (a rookie could free-ride others' rout of an apex outfit
+to liberate its APEX core district — neon/canal/foundry — for the $30k floor) — now `levelOf(ch.respect)
+< fixture.minLvl` throws `level`, mirroring `invadeOutpost`. Flagged for founder sign-off (NOT patched):
+the on-ramp shift (5/6 core districts start NPC-held), the carried garrison-ratchet (frontier B2), and
+the carried apex-solo-raid floor (the 0.1 clamp). Suite 30/30 + sim drift-0.
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

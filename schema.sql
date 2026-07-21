@@ -277,15 +277,17 @@ INSERT INTO districts (id) SELECT 'foundry'   WHERE NOT EXISTS (SELECT 1 FROM di
 INSERT INTO districts (id) SELECT 'brick'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='brick');
 INSERT INTO districts (id) SELECT 'canal'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='canal');
 INSERT INTO districts (id) SELECT 'cathedral' WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='cathedral');
--- THE OCCUPATION (World step five): the apex outfits garrison 5 of 6 core districts on a FRESH map. Only a
--- PRISTINE (never-touched) district is occupied, so a re-run never re-occupies a district a family has
--- since liberated/held (cathedral stays free — the fallback on-ramp). Keep this mapping in lockstep with
--- rules.js WORLD.OCCUPATION.
-UPDATE districts SET npc_holder='dockrats' WHERE id='docks'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
-UPDATE districts SET npc_holder='zappa'    WHERE id='brick'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
-UPDATE districts SET npc_holder='kryl'     WHERE id='canal'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
-UPDATE districts SET npc_holder='moreau'   WHERE id='foundry' AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
-UPDATE districts SET npc_holder='volkov'   WHERE id='neon'    AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
+-- THE OCCUPATION (World step five): the apex outfits garrison 5 of 6 core districts on a FRESH map. schema.sql
+-- re-runs on EVERY boot, so the guard must occupy ONLY a PRISTINE district — `seized_at IS NULL` (never taken).
+-- A district that was liberated then freed by gang dissolution has holder_gang/garrison reset to NULL/0 but
+-- KEEPS seized_at (set at liberation), so it stays unowned + freely-seizable and is NOT re-occupied on a later
+-- reboot (audit E1). cathedral stays free — the fallback on-ramp. Keep this mapping in lockstep with rules.js
+-- WORLD.OCCUPATION.
+UPDATE districts SET npc_holder='dockrats' WHERE id='docks'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL;
+UPDATE districts SET npc_holder='zappa'    WHERE id='brick'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL;
+UPDATE districts SET npc_holder='kryl'     WHERE id='canal'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL;
+UPDATE districts SET npc_holder='moreau'   WHERE id='foundry' AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL;
+UPDATE districts SET npc_holder='volkov'   WHERE id='neon'    AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0 AND seized_at IS NULL;
 -- Contract board (M7 Phase 1). One escrow pot per (target, kind):
 --   'hospitalize' — collectible by a winning jump OR a completed kill
 --   'kill'        — collectible ONLY by a completed hit (fire); a premium contract

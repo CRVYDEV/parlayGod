@@ -243,6 +243,10 @@ export async function seizeDistrict(ch, districtId, client, h) {
   let base, premium = 0;
   if (occupied) {
     const fixture = worldNpcOf(d.npc_holder);
+    // Frontier B1 precedent: you can only hold turf you could raid. A rookie can't free-ride
+    // others' rout of an apex outfit to liberate its core district on the cheap.
+    if (levelOf(Number(ch.respect)) < (fixture?.minLvl || 0))
+      throw new GameError('level', `Taking ${fixture.name}'s turf takes level ${fixture.minLvl}.`);
     const frac = await outfitStrengthFrac(client, fixture);
     base = liberationCost(fixture, frac);
   } else {
