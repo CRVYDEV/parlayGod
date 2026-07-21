@@ -6,9 +6,20 @@ import crypto from 'node:crypto';
 import { GameError } from './game.js';
 
 // X (Twitter): the client sends the user's OAuth2 access token; we resolve it
-// via /2/users/me. No app secret needed — the user token carries the identity.
+// via /2/users/me. SECURITY — an X OAuth2 *access token* carries no app-audience
+// we can verify (unlike a Privy JWT with its `aud`), so trusting one a user
+// pasted lets ANY app the victim ever authorized mint a session for their
+// OMERTA account (a confused-deputy account-takeover). The correct production
+// path is a server-side authorization-code + PKCE exchange (the token is then
+// app-bound by construction) — deploy-time work. Until that's wired, this
+// bearer-probe stopgap is OFF by default and only usable when an operator
+// explicitly accepts the risk for a closed alpha (`X_TRUST_USER_TOKEN=on` — the
+// SOCIAL_VERIFY_MODE / INVITE_MODE default-safe posture). A misconfigured or
+// default production therefore never silently accepts an unbound X token.
 export async function verifyX(accessToken) {
   if (!accessToken) throw new GameError('token', 'Missing X access token.');
+  if ((process.env.X_TRUST_USER_TOKEN || 'off') !== 'on')
+    throw new GameError('provider_unavailable', 'X sign-in is not enabled on this server.');
   const res = await fetch('https://api.x.com/2/users/me', {
     headers: { authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new GameError('auth_failed', 'X rejected that token.');
