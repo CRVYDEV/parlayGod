@@ -3031,3 +3031,43 @@ founder sign-off levers — the `port:sale` faucet is the one new emission surfa
 parity). Deferred (step two): the offshore RENDEZVOUS (a player-to-player mid-sea handoff), pirate PvP
 (intercept a rival's run — the convoy-ambush twin at sea), naval upgrades (hull/engine tuning like car
 `tune`), and a harbormaster protection racket.
+
+**OVERNIGHT FULL-SYSTEM RED-TEAM (`AUDIT-full-system-v2.md`, 2026-07-21)** — a max-effort audit, SIX
+parallel independent lenses over the ENTIRE codebase (47 src modules) + all 6 Solidity contracts
+(§10.4/economy, concurrency/locks, death/estate/PvP, chain+contracts, auth/infra/agent-surface,
+cross-system economic exploits), every CONFIRMED finding re-verified against source before any fix, a
+regression per behavioural fix, suite 32/32 + sim drift-0 after each batch. **No CRITICAL. No §10.4
+drift.** Fixed in-commit: **E-H1 (HIGH)** `verifyX` trusted any X OAuth2 bearer token with no
+app-audience binding (a confused-deputy account takeover) → gated behind `X_TRUST_USER_TOKEN=on`
+(default-off, the `SOCIAL_VERIFY_MODE`/`INVITE_MODE` posture; the real path is a server-side auth-code
+exchange, deploy-time); **C-HIGH-1** `fire()` ignored the Pen shields (`penSafe`/`inHole`) AND `jailed`
+on the victim, so a jailed/yard-boss-protected/hole'd inmate was assassinatable from the street (jail
+never changes `loc`, and a jailed player can't safehouse — jail was strictly MORE lethal than freedom;
+the exact class `npcHit` was patched for, never applied to fire) → the three victim gates added,
+mirroring npcHit/huntWanted; **C-MED-1** `npcHit` missing the bare `jailed(victim)` gate; **D-MED2
+(HIGH-effort)** mod comp/QA routes could fabricate backed `vig_revenue` via a caller-supplied `txHash`
+(and fees.js booked it unconditionally) → unbacked withdrawal reserve, blinding `runVigInvariants`; now
+real-ETH revenue is booked ONLY by the on-chain watcher — mod routes strip `txHash` unless
+`ALLOW_MOD_REAL_REVENUE=on` (a QA-only flag, default off), fees.js gates on `txHash` like store/bonds
+(regression: flag-off + a fabricated txHash books ZERO revenue); **D-MED1** `assertChainId` guarded only
+the WORKER but the API process signs the vouchers → asserted in the API listen path (a wrong `CHAIN_ID`
+would sign every voucher under the wrong EIP-712 domain); **B-L8** a `CHAIN_ID` mismatch crashed the whole
+worker (taking the §10.4 monitor down) → now disables chain sync fail-closed, worker survives; **B-H1**
+casino `pvpDice` locked `street_tax` before `den_volume`, inverting the PvE trio (AB-BA on the two hottest
+den paths) → reordered `den_volume`-first; **B-M1** `refundPot` iterated funders unsorted (bounty AB-BA
+root) → `ORDER BY contributor`; **F-MED1** the Street-Races WHEEL status board was Sybil-farmable (the
+winner cooldown was inert — the gate checks the challenger, the bump fired unconditionally) → a level
+floor on the LOSER (`WHEEL_MIN_LVL` 10, the WANTED_MIN_LVL anti-Sybil pattern); **E-M1** unthrottled auth
+endpoints (guest-mint Sybil / X-Privy fetch amplification) → a per-IP auth bucket (generous burst 20,
+production-only); plus LOWs (`runEstate` wipes convoy_ambushes+npc_hits; race+boxing leaderboards exclude
+agents; bank/swap guards reject Infinity via `Number.isFinite`; `sweepAuctions` logs poison lots; gear
+tokenId append-only pin strengthened with the tail class). **Flagged (not patched — retry-masked /
+unreachable / accepted / founder-call, ranked in the report):** B-H2 (bounty repost-vs-sweep — a "fix"
+risks a worse deadlock since the repost holds the actor), B-M2/M3/L4 (unreachable/no-clean-fix lock
+inversions), F-MED2 (speakeasy notoriety Sybil — the accepted per-account-cap residual), F-LOW1 (port
+fine wallet-dodge — a pure sink), D-LOW1/2/3 (deploy-checklist config drift, Safe = root of trust),
+E-M2/M3/L1/L2 (infra-hardening backlog). Verified CLEAN: §10.4 across every module, the chain core walls
+(EIP-712/replay/reentrancy/full-reserve-queue/minted-gate/no-owner-mint), all persist-clobber &
+pg-mem-quirk classes, route-auth coverage & no-SQL-injection, loot/shield-ordering/estate-survival, and
+the casino:pvp taxed-transfer family. `forge test` STILL not run (Foundry egress-blocked) — the pre-audit
+gate stands. Suite 32/32 + sim drift-0.
