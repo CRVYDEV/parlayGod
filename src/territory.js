@@ -18,6 +18,16 @@ const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date()
 // the operation's hourly rate = the tier's base × the TYPE's income tilt (step three)
 const ratePerHr = (racket) => (territoryTierOf(racket.tier)?.incomePerHr || 0) * territoryTypeOf(racket.kind).incomeMult;
 
+// STEP FIVE — a specialist's passive fortitude bonus (from the effStat snapshot at assign), and the
+// net scrutiny growth-rate net of a specialist's resistance + a smuggling "Ghost the Route" window
+// (during which the operation doesn't accrue Bureau heat at all). All defensive/risk — no §10.4.
+const specFort = (r) => r.specialist ? Math.floor(Number(r.spec_power || 0) / CONSTANTS.SPECIALIST_FORT_DIV) : 0;
+const scrutinyNet = (r, now = Date.now()) => {
+  if (r.op_ghost_until && new Date(r.op_ghost_until).getTime() > now) return 0; // ghosted — no accrual this window
+  const mult = r.specialist ? CONSTANTS.SPECIALIST_SCRUTINY_MULT : 1;
+  return territoryTypeOf(r.kind).scrutinyPerHr * mult - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
+};
+
 // accrued income for one racket up to the cap, in whole dollars
 function accrued(racket) {
   if (!territoryTierOf(racket.tier)) return 0;
@@ -41,7 +51,7 @@ const isCold = (racket, now = Date.now()) =>
 // GROWS from operating a hot type (net of the decay) — a `numbers` op (scrutinyPerHr 0 < decay) never
 // heats up, `smuggling` climbs fast. Effective (current) scrutiny, clamped:
 function decayedScrutiny(r, now = Date.now()) {
-  const net = territoryTypeOf(r.kind).scrutinyPerHr - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
+  const net = scrutinyNet(r, now); // step five: specialist resistance + a ghost window fold into the rate
   const hrs = Math.max(0, now - new Date(r.scrutiny_at).getTime()) / 3600000;
   return Math.max(0, Math.min(CONSTANTS.TERRITORY_SCRUTINY_CAP, Number(r.scrutiny) + net * hrs));
 }
@@ -54,7 +64,7 @@ function decayedScrutiny(r, now = Date.now()) {
 // the fine clamp). TERRITORY_RAID_P pins the roll for tests (the BUSINESS_RAID_P precedent).
 async function resolveTerritoryRaid(r, treasury, client, h, gangId, actorId) {
   const now = Date.now();
-  const net = territoryTypeOf(r.kind).scrutinyPerHr - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
+  const net = scrutinyNet(r, now); // step five: a specialist/ghost that drops net ≤ 0 means no crackdown this window
   const stored = Number(r.scrutiny);
   const hrs = Math.max(0, now - new Date(r.scrutiny_at).getTime()) / 3600000;
   const eff = Math.max(0, Math.min(CONSTANTS.TERRITORY_SCRUTINY_CAP, stored + net * hrs));
@@ -235,15 +245,16 @@ export async function raidRivalRacket(ch, districtId, client, h) {
   const pending = accrued(r);
   if (pending <= 0) throw new GameError('nothing', "There's nothing in the till to grab right now.");
   const eff = Number(ch.muscle) + Number(ch.cunning) / 2;
+  const effFort = Number(r.fortitude) + specFort(r); // step five: a specialist stiffens the defense on top of bought fortitude
   const p = Math.max(CONSTANTS.TERRITORY_RIVAL_MIN_P, Math.min(CONSTANTS.TERRITORY_RIVAL_MAX_P,
-    CONSTANTS.TERRITORY_RIVAL_BASE_P + (eff - 30) / CONSTANTS.TERRITORY_RIVAL_STAT_SCALE - Number(r.fortitude) * CONSTANTS.TERRITORY_RIVAL_FORT_DEF));
+    CONSTANTS.TERRITORY_RIVAL_BASE_P + (eff - 30) / CONSTANTS.TERRITORY_RIVAL_STAT_SCALE - effFort * CONSTANTS.TERRITORY_RIVAL_FORT_DEF));
   const pEff = process.env.TERRITORY_RIVAL_RAID_P != null ? Number(process.env.TERRITORY_RIVAL_RAID_P) : p; // TEST-ONLY roll knob
   const roll = Math.random();
   const win = roll < pEff;
   ch.energy = Number(ch.energy) - CONSTANTS.TERRITORY_RIVAL_ENERGY;
   ch.heat = Math.min(100, Number(ch.heat) + CONSTANTS.TERRITORY_RIVAL_HEAT);
   await client.query('UPDATE territory_rackets SET raid_cd_until=$2 WHERE district_id=$1', [districtId, new Date(now + CONSTANTS.TERRITORY_RIVAL_CD_MS)]);
-  await h.rngLog(client, ch.id, `territory:raid:${districtId}`, roll, `${win ? 'muscled' : 'repelled'} (P ${pEff.toFixed(3)}, fort ${r.fortitude})`);
+  await h.rngLog(client, ch.id, `territory:raid:${districtId}`, roll, `${win ? 'muscled' : 'repelled'} (P ${pEff.toFixed(3)}, fort ${effFort})`);
   if (!win) {
     ch.health = Math.max(1, Number(ch.health) - CONSTANTS.TERRITORY_RIVAL_FAIL_DMG);
     bus.emit(`gang:${r.owner_gang}`, { type: 'racket_defended', district: districtId });
@@ -263,6 +274,71 @@ export async function raidRivalRacket(ch, districtId, client, h) {
   return { ok: true, district: districtId, win: true, cut };
 }
 
+// ── STEP FIVE — RACKET SPECIALISTS + SPECIAL OPERATIONS ──
+// Assign a family made-man to run a held operation. Passive: a fortitude bonus (their effStat snapshot
+// / SPECIALIST_FORT_DIV) + scrutiny resistance. One racket per specialist. Pure defensive → no §10.4.
+export async function assignSpecialist(ch, districtId, memberId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss assigns the crew.');
+  if (!memberId) throw new GameError('member', 'Name a made man to run it.');
+  const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!r || r.owner_gang !== h.owned.gangId) throw new GameError('no_racket', "Your family doesn't run that operation.");
+  // the assignee must be a LIVING made-man of YOUR family (snapshot their stats; re-assign to refresh)
+  const m = (await client.query(
+    `SELECT c.id, c.muscle, c.cunning, c.respect, c.name FROM characters c
+       JOIN gang_members gm ON gm.character_id = c.id
+      WHERE c.id=$1 AND c.alive AND gm.gang_id=$2`, [memberId, h.owned.gangId])).rows[0];
+  if (!m) throw new GameError('not_member', "That's not one of your made men.");
+  if (levelOf(Number(m.respect)) < CONSTANTS.SPECIALIST_MIN_LVL)
+    throw new GameError('rookie', `A specialist has to be at least level ${CONSTANTS.SPECIALIST_MIN_LVL}.`);
+  // one racket per specialist — a made man can't run two operations at once
+  const busy = (await client.query('SELECT district_id FROM territory_rackets WHERE owner_gang=$1 AND specialist=$2 AND district_id<>$3',
+    [h.owned.gangId, memberId, districtId])).rows[0];
+  if (busy) throw new GameError('assigned', `${m.name} is already running the ${busy.district_id} operation.`);
+  const power = Number(m.muscle) + Number(m.cunning);
+  await client.query('UPDATE territory_rackets SET specialist=$2, spec_power=$3 WHERE district_id=$1', [districtId, memberId, power]);
+  await h.track(client, ch.account_id, 'territory_specialist', { district: districtId, member: memberId });
+  return { ok: true, district: districtId, specialist: m.name, fortBonus: Math.floor(power / CONSTANTS.SPECIALIST_FORT_DIV) };
+}
+
+// Pull the specialist off an operation (free them for another).
+export async function unassignSpecialist(ch, districtId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss assigns the crew.');
+  const r = (await client.query('SELECT owner_gang, specialist FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!r || r.owner_gang !== h.owned.gangId) throw new GameError('no_racket', "Your family doesn't run that operation.");
+  if (!r.specialist) throw new GameError('none', 'No specialist runs that operation.');
+  await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE district_id=$1', [districtId]);
+  return { ok: true, district: districtId };
+}
+
+// Run the operation's TYPE-specific special operation (requires a specialist), on a per-racket cooldown.
+// All §10.4-clean utilities (scrutiny/fortitude — no cash, no faucet): numbers "Cook the Books" clears
+// the heat; protection "Show of Force" +TERRITORY_OP_FORT fortitude (capped); smuggling "Ghost the Route"
+// clears the heat AND suppresses accrual for a window.
+export async function runTerritoryOp(ch, districtId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss calls a special operation.');
+  const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!r || r.owner_gang !== h.owned.gangId) throw new GameError('no_racket', "Your family doesn't run that operation.");
+  if (!r.specialist) throw new GameError('no_specialist', 'Assign a specialist to run a special operation.');
+  const now = Date.now();
+  if (r.op_at && now - new Date(r.op_at).getTime() < CONSTANTS.TERRITORY_OP_CD_MS)
+    throw new GameError('cooldown', 'That operation just ran a special job — give it time.');
+  let op, result;
+  if (r.kind === 'protection') {
+    const lvl = Math.min(CONSTANTS.TERRITORY_FORT_MAX, Number(r.fortitude) + CONSTANTS.TERRITORY_OP_FORT);
+    await client.query('UPDATE territory_rackets SET fortitude=$2, op_at=now() WHERE district_id=$1', [districtId, lvl]);
+    op = 'show_of_force'; result = { fortitude: lvl };
+  } else if (r.kind === 'smuggling') {
+    const until = new Date(now + CONSTANTS.TERRITORY_OP_GHOST_MS);
+    await client.query('UPDATE territory_rackets SET scrutiny=0, scrutiny_at=now(), op_ghost_until=$2, op_at=now() WHERE district_id=$1', [districtId, until]);
+    op = 'ghost_route'; result = { scrutiny: 0, ghostSeconds: Math.ceil(CONSTANTS.TERRITORY_OP_GHOST_MS / 1000) };
+  } else { // numbers (or any other) — cook the books: clear the heat
+    await client.query('UPDATE territory_rackets SET scrutiny=0, scrutiny_at=now(), op_at=now() WHERE district_id=$1', [districtId]);
+    op = 'cook_books'; result = { scrutiny: 0 };
+  }
+  await h.track(client, ch.account_id, 'territory_op', { district: districtId, op });
+  return { ok: true, district: districtId, op, ...result };
+}
+
 // SEIZURE hook — called inside seizeDistrict when a district changes hands. The operation transfers
 // to the victor; uncollected income is FORFEITED (clock resets) — collect before you lose the turf.
 export async function seizeTerritoryRackets(client, districtId, newGang) {
@@ -270,7 +346,8 @@ export async function seizeTerritoryRackets(client, districtId, newGang) {
   // squared (they didn't run up the old owner's arrears; a cold seized racket isn't born cold), AND the
   // heat's off (scrutiny=0 — a seized op isn't born hot; the type/business carries with the turf).
   // step four: a seized op isn't born fortified or on alert — the victor starts fresh on defense too.
-  await client.query('UPDATE territory_rackets SET owner_gang=$2, last_income_at=now(), upkeep_at=now(), scrutiny=0, scrutiny_at=now(), fortitude=0, raid_cd_until=NULL WHERE district_id=$1', [districtId, newGang]);
+  // step five: the old crew scatters — the specialist + any special-op state clear with the turf.
+  await client.query('UPDATE territory_rackets SET owner_gang=$2, last_income_at=now(), upkeep_at=now(), scrutiny=0, scrutiny_at=now(), fortitude=0, raid_cd_until=NULL, specialist=NULL, spec_power=0, op_at=NULL, op_ghost_until=NULL WHERE district_id=$1', [districtId, newGang]);
 }
 
 // Dissolution hook — a family's operations die with it (the district is released; a new holder
@@ -304,6 +381,12 @@ export async function territoryOf(pool, gangId) {
       // step four — the racket-wars layer: defense level + the next fortify cost + rival-raid cooldown
       fortitude: Number(r.fortitude), fortMax: CONSTANTS.TERRITORY_FORT_MAX,
       fortCost: Number(r.fortitude) < CONSTANTS.TERRITORY_FORT_MAX ? territoryFortCost(Number(r.fortitude), Number(r.tier)) : null,
-      raidCdSeconds: r.raid_cd_until ? Math.max(0, Math.ceil((new Date(r.raid_cd_until) - Date.now()) / 1000)) : 0 };
+      raidCdSeconds: r.raid_cd_until ? Math.max(0, Math.ceil((new Date(r.raid_cd_until) - Date.now()) / 1000)) : 0,
+      // step five — the crew: the assigned specialist (+ their fortitude bonus) and the special-op cooldown
+      specialist: r.specialist || null, specFortBonus: specFort(r),
+      opId: r.kind === 'protection' ? 'show_of_force' : r.kind === 'smuggling' ? 'ghost_route' : 'cook_books',
+      opReady: !!r.specialist && !(r.op_at && Date.now() - new Date(r.op_at).getTime() < CONSTANTS.TERRITORY_OP_CD_MS),
+      opCdSeconds: r.op_at ? Math.max(0, Math.ceil((new Date(r.op_at).getTime() + CONSTANTS.TERRITORY_OP_CD_MS - Date.now()) / 1000)) : 0,
+      ghostSeconds: r.op_ghost_until ? Math.max(0, Math.ceil((new Date(r.op_ghost_until) - Date.now()) / 1000)) : 0 };
   });
 }

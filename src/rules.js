@@ -508,6 +508,17 @@ export const CONSTANTS = {
   TERRITORY_RIVAL_BASE_P: 0.6, TERRITORY_RIVAL_FORT_DEF: 0.08, TERRITORY_RIVAL_STAT_SCALE: 200,
   TERRITORY_RIVAL_MIN_P: 0.1, TERRITORY_RIVAL_MAX_P: 0.9,
   TERRITORY_RIVAL_ENERGY: 20, TERRITORY_RIVAL_HEAT: 12, TERRITORY_RIVAL_FAIL_DMG: 15,
+  // STEP FIVE — RACKET SPECIALISTS + SPECIAL OPERATIONS. A boss/underboss assigns a family made-man
+  // (level ≥ SPECIALIST_MIN_LVL) to a held operation: a passive FORTITUDE bonus (their effStat /
+  // SPECIALIST_FORT_DIV, so assigning your muscle matters) + SCRUTINY resistance (net growth ×
+  // SPECIALIST_SCRUTINY_MULT — a made man keeps it quiet). One racket per specialist. Pure defensive/
+  // risk modifiers → ZERO §10.4 (no emission, no new faucet). The special op is racket-TYPE-specific,
+  // requires a specialist, on a per-racket cooldown (TERRITORY_OP_CD_MS) — all §10.4-clean: numbers
+  // "Cook the Books" clears scrutiny; protection "Show of Force" +TERRITORY_OP_FORT fortitude (capped
+  // at FORT_MAX — a small free defensive gift, a sign-off lever); smuggling "Ghost the Route" clears
+  // scrutiny AND suppresses accrual for TERRITORY_OP_GHOST_MS. All numbers are founder sign-off levers.
+  SPECIALIST_MIN_LVL: 5, SPECIALIST_FORT_DIV: 8, SPECIALIST_SCRUTINY_MULT: 0.6,
+  TERRITORY_OP_CD_MS: 12*3600*1000, TERRITORY_OP_FORT: 1, TERRITORY_OP_GHOST_MS: 6*3600*1000,
   // Risk-to-Earn Phase 4 — BACKED EMISSION. STAKE_POOL_BPS of every 12h buyback's bought $OMR is
   // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin

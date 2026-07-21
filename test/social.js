@@ -902,6 +902,38 @@ assert.equal((await call('POST', '/v1/territory/collect', { token: don.token }))
 r = await call('POST', '/v1/territory/docks/upgrade', { token: don.token });
 assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.name, 'Neighborhood Numbers Game'); assert.equal(r.body.tier, 2);
 assert(((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.territory || []).some((t) => t.district === 'docks' && t.tier === 2), 'the gang view shows the tier-2 operation');
+
+// ── STEP FIVE: RACKET SPECIALISTS + SPECIAL OPERATIONS (docks is a tier-2 NUMBERS op held by gangA) ──
+const dkOp = async () => ((await call('GET', '/v1/territory', { token: don.token })).body.territory || []).find((t) => t.district === 'docks');
+// rank + member + level gates
+assert.equal((await call('POST', '/v1/territory/docks/specialist', { token: sal.token, body: { memberId: mook.id } })).body.error, 'rank', 'a soldier does not assign the crew');
+assert.equal((await call('POST', '/v1/territory/docks/specialist', { token: don.token, body: { memberId: rocco.id } })).body.error, 'not_member', "can't assign an outsider");
+await seedCh(mook.id, 'muscle=20, cunning=12, respect=100');   // level ≥ 5, power = 32 → fort bonus floor(32/8)=4
+r = await call('POST', '/v1/territory/docks/specialist', { token: don.token, body: { memberId: mook.id } });
+assert.equal(r.code, 200, 'the boss assigns a made man to the operation'); assert.equal(r.body.fortBonus, 4, 'fort bonus = floor((20+12)/8)');
+let td = await dkOp();
+assert.equal(td.specialist, mook.id, 'the view shows the assigned specialist');
+assert.equal(td.specFortBonus, 4, 'and their fortitude bonus');
+// SPECIAL OP: numbers → "cook the books" (scrutiny → 0), then the per-racket cooldown blocks a repeat
+assert.equal((await call('POST', '/v1/territory/docks/op', { token: sal.token })).body.error, 'rank', 'a soldier does not call a special op');
+r = await call('POST', '/v1/territory/docks/op', { token: don.token });
+assert.equal(r.code, 200, 'the special operation ran'); assert.equal(r.body.op, 'cook_books', 'a numbers op cooks the books');
+assert.equal((await call('POST', '/v1/territory/docks/op', { token: don.token })).body.error, 'cooldown', 'one special op per cooldown');
+assert.equal((await dkOp()).opReady, false, 'the op is on cooldown in the view');
+// protection → "show of force" (+1 fortitude, capped)
+await pool.query(`UPDATE territory_rackets SET kind='protection', op_at=NULL, fortitude=0 WHERE district_id='docks'`);
+r = await call('POST', '/v1/territory/docks/op', { token: don.token });
+assert.equal(r.body.op, 'show_of_force'); assert.equal(r.body.fortitude, 1, 'show of force adds a fortitude level');
+// smuggling → "ghost the route" (scrutiny → 0 + a no-accrual window)
+await pool.query(`UPDATE territory_rackets SET kind='smuggling', op_at=NULL, scrutiny=50 WHERE district_id='docks'`);
+r = await call('POST', '/v1/territory/docks/op', { token: don.token });
+assert.equal(r.body.op, 'ghost_route'); assert.equal(r.body.scrutiny, 0, 'ghosting clears the heat'); assert(r.body.ghostSeconds > 0, 'and opens a no-accrual window');
+// require a specialist for a special op; and unassign frees the slot
+await call('DELETE', '/v1/territory/docks/specialist', { token: don.token });
+await pool.query(`UPDATE territory_rackets SET op_at=NULL WHERE district_id='docks'`);
+assert.equal((await call('POST', '/v1/territory/docks/op', { token: don.token })).body.error, 'no_specialist', 'no special op without a specialist');
+// reset the operation to a clean tier-2 numbers op for the seizure test below
+await pool.query(`UPDATE territory_rackets SET kind='numbers', fortitude=0, scrutiny=0, op_ghost_until=NULL WHERE district_id='docks'`);
 // ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
 const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=400, cash=500000');
 const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name: 'The Claimants', tag: 'CLM' } })).body.gangId;
