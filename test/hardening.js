@@ -152,6 +152,9 @@ assert.equal((await call('POST', '/v1/auth/guest', { body: { inviteCode: code } 
 process.env.INVITE_MODE = 'off';
 
 // ═══════ real OAuth (§4): X login + guest upgrade, provider APIs stubbed ═══════
+// X sign-in is the confused-deputy stopgap — OFF until an operator explicitly enables it
+assert.equal((await call('POST', '/v1/auth/x', { body: { token: 'good-x-token' } })).body.error, 'provider_unavailable', 'X sign-in refused until explicitly enabled');
+process.env.X_TRUST_USER_TOKEN = 'on';
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opts) => {
   if (String(url).includes('api.x.com/2/users/me')) {
@@ -176,6 +179,7 @@ assert.equal((await call('POST', '/v1/auth/upgrade', { token: up.token, body: { 
 assert.equal((await meOf(up.token)).id, gusId, 'possessions survive the upgrade');
 assert.equal((await call('POST', '/v1/auth/privy', { body: { token: 'whatever' } })).code, 400, 'privy unconfigured → clean error');
 globalThis.fetch = realFetch;
+delete process.env.X_TRUST_USER_TOKEN;
 
 // ═══════ season rollover (§8) ═══════
 await seedCh(boss.id, 'season = season - 1'); // boss is level ~51 → floor(lvl/2) prestige

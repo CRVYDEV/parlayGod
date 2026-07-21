@@ -214,6 +214,7 @@ const addsNoDrift = async (name, action, label) => {
 
 // ═══ FINDING (infra HIGH-2): concurrent sign-in for one identity → one account ═══
 {
+  process.env.X_TRUST_USER_TOKEN = 'on'; // enable the alpha stopgap for this mocked-fetch race test
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
     if (String(url).includes('api.x.com/2/users/me')) return { ok: true, json: async () => ({ data: { id: 'x-race-1' } }) };
@@ -224,6 +225,7 @@ const addsNoDrift = async (name, action, label) => {
   const n = Number((await pool.query("SELECT COUNT(*) n FROM accounts WHERE auth_provider='x' AND auth_subject='x-race-1'")).rows[0].n);
   assert.equal(n, 1, `one identity → one account (got ${n})`);
   globalThis.fetch = realFetch;
+  delete process.env.X_TRUST_USER_TOKEN;
 }
 
 // ═══ FINDING (infra HIGH-1): agent throttle follows the DB flag, not the token ═══
