@@ -312,11 +312,20 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
     assert(!/undefined|NaN/.test(c.body), `card ${t} carries no undefined/NaN`);
     assert.equal(c.headers['content-type'], 'image/svg+xml; charset=utf-8', `card ${t} served as SVG`);
   }
+  // (2b) the PNG variant — X/feeds won't unfurl an SVG; resvg rasterizes it (falls back to SVG if absent)
+  const cp = await app.inject({ method: 'GET', url: `/card/legend/${encodeURIComponent('Broadcast Bruno')}.png` });
+  assert.equal(cp.statusCode, 200, 'card .png → 200');
+  const ct = cp.headers['content-type'];
+  assert(/image\/(png|svg\+xml)/.test(ct), 'card .png is a PNG (or SVG fallback when no rasterizer)');
+  if (/image\/png/.test(ct)) {                          // resvg present → real PNG magic bytes
+    const buf = cp.rawPayload || Buffer.from(cp.body, 'binary');
+    assert(buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47, 'the .png body is a valid PNG');
+  }
   // (3) the public profile page — OG unfurl tags + the referral CTA carrying the sharer's name
   const p = await app.inject({ method: 'GET', url: '/u/Broadcast%20Bruno' });
   assert.equal(p.statusCode, 200, 'profile page → 200');
   assert(/text\/html/.test(p.headers['content-type']), 'profile served as HTML');
-  assert(p.body.includes('og:image') && p.body.includes('/card/legend/'), 'profile declares the OG unfurl image');
+  assert(p.body.includes('og:image') && p.body.includes('/card/legend/') && p.body.includes('.png'), 'profile declares the OG unfurl image (PNG variant)');
   assert(p.body.includes('ENTER THE CITY') && p.body.includes('?ref=Broadcast%20Bruno'), 'profile CTA carries the sharer as referral');
   // (4) an unknown name falls back cleanly — never a 500 (a bad share link is harmless)
   const uk = await call('GET', '/v1/u/Nobody%20Here');

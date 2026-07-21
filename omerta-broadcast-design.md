@@ -61,10 +61,30 @@ all four card types are well-formed `<svg>` with no `undefined`/`NaN`, served as
 `image/svg+xml`; the profile page carries the OG unfurl image + the `?ref=` CTA; and an unknown
 name falls back cleanly on all three routes (never a 500).
 
+## Rasterization — the PNG unfurl (BUILT)
+
+X/Twitter and most feeds won't render an SVG `og:image`, so a shared profile needs a real PNG
+or it unfurls with no image. `GET /card/:type/:name.png` rasterizes the card:
+
+- **`src/cardpng.js`** — `renderPng(svg)` via **`@resvg/resvg-js`** (a lightweight native
+  SVG→PNG rasterizer — *no headless browser* in the game backend, the production-appropriate
+  choice for an OG-image endpoint). resvg is an **`optionalDependency`**: if it isn't installed
+  or fails to load, `renderPng` returns `null` and the route **falls back to serving the SVG**,
+  so a lean box (or a failed native build under `npm ci`) never 500s — it just serves SVG until
+  a rasterizer is present.
+- Rendered PNGs are **cached** by the SVG's content hash (the SVG encodes name+stats+ref, so an
+  identical card → an identical key) with a 5-minute TTL and a 256-entry cap — an OG crawler
+  hits a share only a handful of times, so this stays cheap.
+- The profile page's `og:image`/`twitter:image` point at the `.png` variant; the in-app card
+  and the raw `/card/:type/:name` SVG are unchanged.
+- The route degrades on a malformed SVG (caught → SVG fallback) and serves `image/png` with a
+  5-minute cache header. A cold render is ~360ms; cached hits are instant.
+
 ## Deferred
 
 - An **obituary** card type and richer share triggers.
-- **Rasterization** — X/Twitter doesn't reliably render an SVG `og:image`; a PNG snapshot of
-  the card is a production concern (a headless-Chromium or a resvg pass at deploy time).
 - **Funnel instrumentation** — track profile views and card shares alongside the existing
   referral funnel (`GET /v1/mod/funnel`) to measure the loop's lift.
+- A **bundled brand font** — resvg falls back to a system serif (DejaVu on Linux) for the
+  card's Georgia stack; bundling one open serif in the repo would make the PNG output
+  byte-deterministic across hosts (cosmetic, not blocking).

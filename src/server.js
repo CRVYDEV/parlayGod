@@ -41,6 +41,7 @@ import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
 import * as Cards from './cards.js';
+import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit } from './ratelimit.js';
@@ -112,11 +113,18 @@ export async function buildServer() {
   const CARD_TYPES = new Set(['legend', 'wanted', 'whacked', 'join']);
   app.get('/v1/u/:name', async (req, reply) =>            // the safe public dossier (JSON)
     Cards.publicDossier(pool, req.params.name));
-  app.get('/card/:type/:name', async (req, reply) => {    // the shareable 1200×630 SVG poster
+  app.get('/card/:type/:name', async (req, reply) => {    // the shareable 1200×630 poster (.png for feeds, else SVG)
+    const wantPng = req.params.name.endsWith('.png');     // X/Twitter won't unfurl an SVG — /card/legend/<name>.png
+    const rawName = wantPng ? req.params.name.slice(0, -4) : req.params.name;
     const type = CARD_TYPES.has(req.params.type) ? req.params.type : 'legend';
-    const d = await Cards.publicDossier(pool, req.params.name);
+    const d = await Cards.publicDossier(pool, rawName);
+    const svg = Cards.card(type, d.found ? d : { name: rawName, gang: null, level: 1, kills: 0 }, req.query.ref || rawName);
+    if (wantPng) {
+      const png = await renderPng(svg);                   // null when no rasterizer is installed → fall back to SVG
+      if (png) { reply.type('image/png').header('cache-control', 'public, max-age=300'); return reply.send(png); }
+    }
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
-    return reply.send(Cards.card(type, d.found ? d : { name: req.params.name, gang: null, level: 1, kills: 0 }, req.query.ref || req.params.name));
+    return reply.send(svg);
   });
   app.get('/u/:name', async (req, reply) => {             // the public profile page (the champion destination)
     const d = await Cards.publicDossier(pool, req.params.name);

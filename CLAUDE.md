@@ -2783,9 +2783,15 @@ regression-guarded here: `hitmanRankOf(...).title` (was `.name` → `undefined` 
 rank/level/flags with no exact-wealth field, the assassin rank resolves to a real title, all four card types
 are well-formed `<svg>` with no undefined/NaN served as `image/svg+xml`, the profile carries the OG unfurl
 image + the `?ref=` CTA, and an unknown name falls back cleanly on all three routes. Suite green + sim
-drift-0. Deferred: an obituary card type + richer triggers; **rasterization** (X doesn't reliably render an
-SVG og:image — a PNG snapshot via headless-Chromium/resvg is a deploy-time production concern); funnel
-instrumentation (track profile views + card shares alongside `GET /v1/mod/funnel`).
+drift-0. **RASTERIZATION — BUILT** (`src/cardpng.js`): X/feeds won't unfurl an SVG og:image, so
+`GET /card/:type/:name.png` rasterizes the card via **`@resvg/resvg-js`** (a lightweight native SVG→PNG
+pass — no headless browser in the game backend), an **`optionalDependency`**: if it's absent / fails the
+native build, `renderPng` returns null and the route falls back to serving SVG (never 500s). PNGs are
+cached by the SVG's content hash (5-min TTL, 256-cap); the profile `og:image`/`twitter:image` now point at
+the `.png`. `test/hardening.js` asserts the .png route returns a valid PNG (magic bytes) when resvg is
+present, else the SVG fallback. Deferred: an obituary card type + richer triggers; funnel instrumentation
+(track profile views + card shares alongside `GET /v1/mod/funnel`); a bundled brand font (resvg falls back
+to a system serif — cosmetic).
 
 **THE AGENT GATEWAY (agent onboarding + machine discovery) — BUILT** (`AGENTS.md`, `src/agentgateway.js`,
 `src/server.js`, `public/index.html`, `test/hardening.js`; founder-directed "improve the agent experience /

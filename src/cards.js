@@ -110,7 +110,9 @@ export function card(type, d, ref) {
 
 // ── the public profile page — the "champion" destination; a shared link lands here ──
 export function profilePage(d, baseUrl, ref) {
-  const cardUrl = `${baseUrl}/card/legend/${encodeURIComponent(d.name)}`;
+  // og:image points at the PNG variant — X/Twitter/most feeds won't unfurl an SVG (server rasterizes,
+  // falling back to SVG bytes if no rasterizer is installed).
+  const cardUrl = `${baseUrl}/card/legend/${encodeURIComponent(d.name)}.png`;
   const enter = `${baseUrl}/?ref=${encodeURIComponent(ref || d.name)}`;
   const title = d.found ? `${d.name} — ${d.dynastyTier ? d.dynastyTier + ', gone legit' : d.hitmanRank}` : 'OMERTÀ — the city';
   const desc = d.found
