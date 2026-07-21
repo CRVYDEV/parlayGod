@@ -155,9 +155,11 @@ export async function pvpDice(ch, fader, amount, client, h) {
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'casino:pvp', counterparty: loser.id });
   // half the rake to the street, the rest burns — a DIRECT credit, not takeHouse: the pvp rake is
   // carved FROM the winner's payout (real money withheld), so it needs no profit cap and must not
-  // touch the PvE profit book (pvp rows aren't casino:bet/win — the §10.4 den identities stay exact)
-  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]);
+  // touch the PvE profit book (pvp rows aren't casino:bet/win — the §10.4 den identities stay exact).
+  // LOCK ORDER (AUDIT-full-system-v2 B-H1): bump den_volume BEFORE crediting street_tax so this path
+  // matches the PvE trio's den_volume→street_tax order — else the two hottest den paths AB-BA.
   await bumpVolume(client, pot);
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]);
   await bumpStanding(client, h, ch, 'madame', 3, { action: 'fade' }); // back-room action is her favorite kind
   await h.rngLog(client, ch.id, `casino:pvp:${fader.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, fader.id, 'backroom_dice', { from: ch.name, amount: amt, theyWon: !win });

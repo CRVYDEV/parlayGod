@@ -92,7 +92,7 @@ export async function sweepAuctions(pool) {
       await client.query("UPDATE auctions SET status='settled' WHERE lot_id=$1", [lot_id]);
       await client.query('COMMIT');
       settled++;
-    } catch (e) { await client.query('ROLLBACK'); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('[sweepAuctions] lot', lot_id, e?.message || e); } // observability (B-L9): a poison lot no longer settles silently
     finally { client.release(); }
   }
   return { settled, burned };
