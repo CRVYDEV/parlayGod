@@ -290,12 +290,24 @@
     // races (field/wager), or boxing (opponent/yourFighter/record). The generic WIN line below only
     // fires when NONE of those are present, so casino/race/boxing get exactly their own one-liner
     // (these branches were cross-firing: an exhibition win read the race + generic + boxing bits at once).
+    // a win/loss response is "specialized" when it carries a marker for its own describe line — casino
+    // (game), races (field/wager), boxing (opponent/yourFighter/record), a street jump (stolen/dmg),
+    // an extortion (cut), a convoy hijack (taken/hospSeconds). The generic WIN/LOSS lines below only
+    // fire when NONE of those are present (else e.g. a jump — which carries no cash `net` — read "WIN — +$0").
     const spec = body.game || body.field !== undefined || body.wager !== undefined ||
-      body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined;
+      body.opponent !== undefined || body.yourFighter !== undefined || body.record !== undefined ||
+      body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
+      (body.win === false && body.dmg !== undefined);
     if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
     if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
+    // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
+    if (body.win === true && body.stolen !== undefined) bits.push(`they went down — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
+    if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
+    if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
+    if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
@@ -320,7 +332,7 @@
     if (body.dividendPaid !== undefined) bits.push(`the Dynasty Fund paid out ${fmt(body.dividendPaid)} $OMR`);
     if (body.omrSpent !== undefined && body.sku) bits.push(`bought ${body.name} with ${fmt(body.omrSpent)} earned $OMR (PLEX)`);
     if (body.place && body.amount !== undefined) bits.push(`dedicated ${body.place} to ${body.name} (${fmt(body.amount)} $OMR)`);
-    if (body.toOwner !== undefined) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
+    if (body.toOwner !== undefined && body.round) bits.push(`bought ${body.round} — $${fmt(body.toOwner)} to the house${body.regular ? ' (you\'re a regular now)' : ''}`);
     if (body.bottle && body.spent !== undefined) bits.push(`${body.bottle} — the room turned to look`);
     if (body.game && typeof body.win === 'boolean' && body.bet !== undefined) bits.push(body.win ? `the table paid — +$${fmt(Math.abs(body.net ?? 0))}` : `the house keeps it — −$${fmt(Math.abs(body.net ?? body.bet))}`);
     if (body.raid && body.raid.raided) bits.push(`RAIDED — the Prohibition boys took $${fmt(body.raid.seized)} + fined $${fmt(body.raid.fine)}, club dark`);
@@ -344,6 +356,10 @@
     if (body.wireSeconds) bits.push('subscribed to the Street Wire — the intelligence is flowing');
     if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
     if (body.verified && body.wallet) bits.push(`wallet linked — ${body.wallet.slice(0, 6)}…${body.wallet.slice(-4)}${body.feesCredited ? ` · ${body.feesCredited} fee credit(s) applied` : ''}`);
+    // two-party handoffs that otherwise fell through to a bare "done."
+    if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
+    if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
+    if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
     if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
