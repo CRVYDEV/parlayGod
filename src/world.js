@@ -8,10 +8,20 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const enragedNow = (enragedUntil, now = new Date()) => enragedUntil && new Date(enragedUntil) > now;
+const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
+// step four: a held outfit's accrued tribute to its overlord family (lazy §7.1, capped at TRIBUTE_CAP_MS).
+// Only a gang-held outfit with a running clock owes tribute; an unheld/gangless outfit owes nothing.
+function frontierTribute(fixture, tributeAt, now = Date.now()) {
+  if (!tributeAt) return 0;
+  const hrs = Math.min(WORLD.FRONTIER.TRIBUTE_CAP_MS, Math.max(0, now - new Date(tributeAt).getTime())) / 3600000;
+  return Math.floor(frontierTributePerHr(fixture) * hrs);
+}
+// step four: the treasury cost to invade a held outpost — outbid the incumbent's garrison (the SEIZE twin).
+const invadeCost = (garrison) => Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(Number(garrison || 0) * WORLD.FRONTIER.INVADE_OUTBID));
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
@@ -44,7 +54,7 @@ async function currentStrength(client, fixture, now = new Date()) {
 export async function worldBoard(pool, ch = null, h = null) {
   const now = new Date();
   const patrol = cityHourOf(now.getTime()).patrol;
-  const rows = Object.fromEntries((await pool.query('SELECT npc_id, strength, strength_at, enraged_until, held_by_gang, held_since FROM world_npcs')).rows
+  const rows = Object.fromEntries((await pool.query('SELECT npc_id, strength, strength_at, enraged_until, held_by_gang, held_since, garrison, tribute_at FROM world_npcs')).rows
     .map((r) => [r.npc_id, r]));
   const lvl = ch ? levelOf(Number(ch.respect)) : 0;
   const power = ch ? raiderPower(ch, h) : 0;
@@ -83,16 +93,29 @@ export async function worldBoard(pool, ch = null, h = null) {
       const routed = strength <= f.max * WORLD.ROUT_FLOOR_BPS / 10000;
       const enraged = enragedNow(row?.enraged_until, now); // a routed cartel on high alert defends harder
       const holder = row?.held_by_gang && gangNames[row.held_by_gang];
+      const mine = !!(h?.owned?.gangId && h.owned.gangId === row?.held_by_gang);
+      // step four — the outpost economics: a held outfit pays TRIBUTE + carries a garrison a rival outbids
+      const tributePerHr = frontierTributePerHr(f);
       return {
         id: f.id, name: f.name, minLvl: f.minLvl, coop: !!f.coop,
         // never the exact reservoir (like the convoy value band) — a status read
         strengthPct: Math.round(strength / f.max * 100),
         routed, enraged,
-        heldBy: holder ? { name: holder.name, tag: holder.tag, mine: !!(h?.owned?.gangId && h.owned.gangId === row.held_by_gang) } : null,
+        heldBy: holder ? { name: holder.name, tag: holder.tag, mine } : null,
+        tributePerHr,
+        tributePending: mine ? frontierTribute(f, row.tribute_at, now.getTime()) : null, // your accrued tribute on this outpost
+        garrison: holder ? Math.floor(Number(row.garrison || 0)) : null,
+        invadeCost: holder && !mine ? invadeCost(row.garrison) : null, // what it'd cost your family to take it
         canRaid: !!ch && lvl >= f.minLvl,
         odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged) * 100) : null,
       };
     }),
+    // step four: your family's total collectable tribute across every outpost it holds (a treasury faucet)
+    frontier: h?.owned?.gangId ? (() => {
+      let pending = 0, held = 0;
+      for (const f of WORLD_NPCS) { const row = rows[f.id]; if (row?.held_by_gang === h.owned.gangId) { held++; pending += frontierTribute(f, row.tribute_at, now.getTime()); } }
+      return { held, tributePending: pending, canCommand: canCommand({ owned: { gangRole: h.owned.gangRole } }) };
+    })() : null,
   };
 }
 
@@ -228,8 +251,12 @@ export async function raidNpc(ch, npcId, client, h) {
   // (pure status; a gangless router leaves it UNHELD/open). Only changes on the crossing.
   if (routed) {
     const heldGang = h.owned.gangId || null;
-    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6 WHERE npc_id=$1',
-      [fixture.id, after, now, newEnraged, heldGang, now]);
+    // step four: taking the outpost installs a base GARRISON (a rival must outbid it to invade) and starts
+    // the TRIBUTE clock; the old holder's uncollected tribute forfeits (a fresh clock). A gangless router
+    // leaves it open (garrison 0, no tribute clock).
+    const garrison = heldGang ? WORLD.FRONTIER.ROUT_GARRISON : 0;
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6, garrison=$7, tribute_at=$8 WHERE npc_id=$1',
+      [fixture.id, after, now, newEnraged, heldGang, now, garrison, heldGang ? now : null]);
     if (heldGang) bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
   } else {
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
@@ -400,8 +427,10 @@ export async function executeRaid(ch, raidId, client, h) {
   // THE FRONTIER — a rout plants the LEADER's family flag (pure status; gangless leader leaves it open)
   const heldGang = routed ? (h.owned.gangId || null) : undefined;
   if (routed) {
-    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6 WHERE npc_id=$1',
-      [fixture.id, after, now, newEnraged, heldGang, now]);
+    // step four: the rout installs the leader's family garrison + starts the tribute clock (see raidNpc)
+    const garrison = heldGang ? WORLD.FRONTIER.ROUT_GARRISON : 0;
+    await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4, held_by_gang=$5, held_since=$6, garrison=$7, tribute_at=$8 WHERE npc_id=$1',
+      [fixture.id, after, now, newEnraged, heldGang, now, garrison, heldGang ? now : null]);
     bus.emit('streets', { type: 'world_routed', who: ch.name, npc: fixture.name, crew: crewRows.length });
     if (heldGang) bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
   } else {
@@ -437,8 +466,65 @@ export async function sweepStaleRaids(pool) {
 
 // A dissolving family drops every frontier flag it holds (the outfits read open — the house takes its
 // turf back). Called from gang dissolution, under the gang-row lock (no character/npc lock → no cycle).
+// Step four: the garrison + tribute clock reset too (uncollected tribute dies with the family).
 export async function releaseFrontierHolds(client, gangId) {
-  await client.query('UPDATE world_npcs SET held_by_gang=NULL, held_since=NULL WHERE held_by_gang=$1', [gangId]);
+  await client.query('UPDATE world_npcs SET held_by_gang=NULL, held_since=NULL, garrison=0, tribute_at=NULL WHERE held_by_gang=$1', [gangId]);
+}
+
+// ── STEP FOUR — THE FRONTIER MADE REAL (productive + contestable outposts) ──
+// POST /v1/world/collect — bank the accrued TRIBUTE from every outfit the family holds → the treasury.
+// Any member can (the income is the family's — the collectTerritory precedent). Lock order: gang (own,
+// treasury) → world_npcs rows (singletons, last). A §10.4 treasury FAUCET `world:tribute` (character_id
+// NULL, counterparty = the gang — added to the treasury check's IN terms), bounded by the outfit's regen
+// + the 24h cap. Uncollected tribute forfeits on a flag transfer (rout/invasion), so this is pull-or-lose.
+export async function collectFrontier(ch, client, h) {
+  if (!h.owned.gangId) throw new GameError('no_gang', "You're not in a family.");
+  const now = new Date();
+  const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const held = (await client.query('SELECT npc_id, tribute_at FROM world_npcs WHERE held_by_gang=$1 FOR UPDATE', [h.owned.gangId])).rows;
+  let total = 0; const collected = [];
+  for (const r of held) {
+    const fixture = worldNpcOf(r.npc_id);
+    if (!fixture) continue;
+    const owed = frontierTribute(fixture, r.tribute_at, now.getTime());
+    if (owed > 0) {
+      total += owed;
+      collected.push({ npc: r.npc_id, name: fixture.name, tribute: owed });
+      await client.query('UPDATE world_npcs SET tribute_at=$2 WHERE npc_id=$1', [r.npc_id, now]);
+    }
+  }
+  if (total <= 0) return { ok: true, collected: 0, outposts: held.length };
+  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, total]);
+  await h.ledger(client, { currency: 'cash', amount: total, reason: 'world:tribute', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
+  return { ok: true, collected: total, tributes: collected };
+}
+
+// POST /v1/world/:npcId/invade — a boss/underboss takes a RIVAL-held outpost by outbidding its garrison
+// from the treasury (the seizeDistrict pattern — a §10.4 treasury SINK `world:invade`). The flag, a fresh
+// garrison, and the tribute clock transfer; the incumbent's uncollected tribute forfeits. You take an
+// UNHELD outfit by ROUTING it (this is only for taking one from another family). Lock: own gang → world_npcs.
+export async function invadeOutpost(ch, npcId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss marches on the frontier.');
+  const fixture = worldNpcOf(npcId);
+  if (!fixture) throw new GameError('bad_npc', 'No outfit by that name.');
+  const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const row = (await client.query('SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
+  if (!row || !row.held_by_gang) throw new GameError('unheld', `Nobody holds ${fixture.name} — rout it to take the turf.`);
+  if (row.held_by_gang === h.owned.gangId) throw new GameError('held', 'Your family already holds that outpost.');
+  const cost = invadeCost(row.garrison);
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `Marching on ${fixture.name} takes $${cost} from the treasury.`);
+  const now = new Date();
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
+  // the invader installs a fresh garrison (their stake becomes the new defense budget); the old holder's
+  // uncollected tribute forfeits (fresh clock). §10.4: the whole cost BURNS as the war chest (the seize
+  // precedent — only the base garrison is the new budget; here the stake IS the garrison, all one sink).
+  await client.query('UPDATE world_npcs SET held_by_gang=$2, held_since=$3, garrison=$4, tribute_at=$3 WHERE npc_id=$1',
+    [npcId, h.owned.gangId, now, cost]);
+  await h.ledger(client, { currency: 'cash', amount: -cost, reason: 'world:invade', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - cost;
+  bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
+  return { ok: true, npc: npcId, name: fixture.name, cost, garrison: cost };
 }
 
 // runEstate: a dead co-op raid leader's plan is abandoned (the crew_heists precedent) so its crew can

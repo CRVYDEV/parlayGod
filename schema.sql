@@ -832,8 +832,10 @@ CREATE TABLE IF NOT EXISTS world_npcs (
   strength NUMERIC NOT NULL,
   strength_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   enraged_until TIMESTAMPTZ,  -- (step two) a routed cartel is on high alert — defends +ENRAGE_DEF for a window
-  held_by_gang TEXT,          -- (step three) THE FRONTIER: the family that last ROUTED this outfit controls its turf (pure status; toppled on the next rout)
-  held_since TIMESTAMPTZ      -- when the current family took the frontier
+  held_by_gang TEXT,          -- (step three) THE FRONTIER: the family that last ROUTED this outfit controls its turf (toppled on the next rout)
+  held_since TIMESTAMPTZ,     -- when the current family took the frontier
+  garrison NUMERIC NOT NULL DEFAULT 0, -- (step four) the holding family's defense budget on the outpost — a rival INVADES by outbidding it
+  tribute_at TIMESTAMPTZ      -- (step four) last frontier-tribute collection (lazy accrual anchor; the held outfit pays its overlord a bounded, capped tribute)
 );
 
 -- THE FRONTIER — co-op crew raids on the apex outfits (step three). The crew-heist pattern applied

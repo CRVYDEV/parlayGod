@@ -1322,6 +1322,11 @@ export async function buildServer() {
   app.post('/v1/world/raids/:id/go', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.executeRaid(ch, req.params.id, client, h)));
   app.get('/v1/leaderboard/frontier', { preHandler: auth }, async () => World.frontierLeaderboard(pool)); // THE FRONTIER board
+  // step four — THE FRONTIER MADE REAL: collect a held outpost's tribute + invade a rival-held outpost
+  app.post('/v1/world/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.collectFrontier(ch, client, h)));
+  app.post('/v1/world/:npcId/invade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.invadeOutpost(ch, req.params.npcId, client, h)));
   return app;
 }
 
