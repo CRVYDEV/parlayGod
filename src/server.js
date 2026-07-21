@@ -40,6 +40,7 @@ import * as Pass from './pass.js';
 import * as Landmarks from './landmarks.js';
 import * as Ops from './ops.js';
 import { itemArt } from './assets.js';
+import * as Cards from './cards.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
 import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit } from './ratelimit.js';
@@ -105,6 +106,22 @@ export async function buildServer() {
     const item = list && list.find((x) => x.id === req.params.id);
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
     return reply.send(itemArt(req.params.kind, item));
+  });
+  // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
+  // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.
+  const CARD_TYPES = new Set(['legend', 'wanted', 'whacked', 'join']);
+  app.get('/v1/u/:name', async (req, reply) =>            // the safe public dossier (JSON)
+    Cards.publicDossier(pool, req.params.name));
+  app.get('/card/:type/:name', async (req, reply) => {    // the shareable 1200×630 SVG poster
+    const type = CARD_TYPES.has(req.params.type) ? req.params.type : 'legend';
+    const d = await Cards.publicDossier(pool, req.params.name);
+    reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=300');
+    return reply.send(Cards.card(type, d.found ? d : { name: req.params.name, gang: null, level: 1, kills: 0 }, req.query.ref || req.params.name));
+  });
+  app.get('/u/:name', async (req, reply) => {             // the public profile page (the champion destination)
+    const d = await Cards.publicDossier(pool, req.params.name);
+    reply.type('text/html; charset=utf-8');
+    return reply.send(Cards.profilePage(d, baseUrl, req.query.ref || req.params.name));
   });
   // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
   let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';
