@@ -25,7 +25,7 @@ import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
-import { syncFeeEvents, syncClaimedEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncTradeFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -264,6 +264,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.VOUCHER_CLAIM_ADDRESS) {
             const c = await syncClaimedEvents(pool, source, { startBlock });
             if (c.processed) console.log(`👁  claimed sync: freed ${c.processed} voucher(s) (blocks ${c.from}–${c.to})`);
+          }
+          // afterSwap→Vig trade-fee hook (design §2). Dormant unless TRADE_FEE_HOOK_ADDRESS is set;
+          // the watcher is the SOLE producer of source='trade' revenue (no mod route — zero fabrication).
+          if (process.env.TRADE_FEE_HOOK_ADDRESS) {
+            const t = await syncTradeFees(pool, source, { startBlock });
+            if (t.processed) console.log(`💱 trade-fee sync: booked ${t.processed} swap fee(s) to the Vig (blocks ${t.from}–${t.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

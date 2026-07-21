@@ -84,5 +84,43 @@ r = await syncClaimedEvents(pool, source, { startBlock: 0 });
 assert.equal(r.processed, 1, 'claim processed once confirmations clear');
 assert.equal((await pool.query(`SELECT claimed_onchain FROM vouchers WHERE nonce=99`)).rows[0].claimed_onchain, true, 'reserve freed after confirmations');
 
-console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for both fee + Claimed streams');
+// ── Tier B: the afterSwap→Vig trade-fee stream (TradeFeePaid) — same cursor/confirmation/idempotency
+// discipline, its OWN 'trades' cursor, booking source='trade' Vig revenue (design §2). ──
+const { syncTradeFees } = await import('../src/watcher.js');
+const VIG_BPS = Number(process.env.VIG_BPS || 6000);
+const tradeLog = []; // { block, nonce, amount }
+source.tradeFeeLogs = async (from, to) => tradeLog.filter((l) => l.block >= from && l.block <= to)
+  .map((l) => ({ nonce: l.nonce, amount: l.amount, txHash: '0xtrade' + l.nonce }));
+const tradeRev = async (ref) => (await pool.query(`SELECT gross_eth, vig_eth FROM vig_revenue WHERE source='trade' AND ref='${ref}'`)).rows[0];
+
+// a swap fee lands at block 30; head 31 → inside the 3-conf window, not yet booked (reorg-safe)
+tradeLog.push({ block: 30, nonce: 501, amount: wei(0.05) });
+head = 31;
+r = await syncTradeFees(pool, source, { startBlock: 27 });
+assert.equal(r.processed, 0, 'trade fee not booked inside the confirmation window');
+assert.equal(await tradeRev(501), undefined, 'no premature trade revenue');
+
+// head clears confirmations → the fee is booked to the Vig with the exact split
+head = 35; // safeHead 32 ≥ 30
+r = await syncTradeFees(pool, source, { startBlock: 27 });
+assert.equal(r.processed, 1, 'trade fee booked once head clears confirmations');
+const rev = await tradeRev(501);
+assert.equal(Number(rev.gross_eth), 0.05, 'gross ETH recorded');
+assert.equal(Number(rev.vig_eth), Math.round(0.05 * VIG_BPS / 10000 * 1e6) / 1e6, 'Vig share = gross × VIG_BPS');
+assert.equal(await getCursor(pool, 'trades'), 32, 'trades cursor advanced to safeHead (independent of fees/claimed)');
+
+// idempotent re-scan (a reorg-replay of the same nonce) does not double-book
+r = await syncTradeFees(pool, source, { startBlock: 27 });
+assert.equal(r.processed, 0, 'no reprocessing of already-synced trade blocks');
+assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'`)).rows[0].c, 1, 'exactly one trade revenue row (source+ref PK idempotent)');
+
+// downtime backfill: two swap fees fired while "down" (blocks 33,34) are both caught on wake
+tradeLog.push({ block: 33, nonce: 502, amount: wei(0.02) });
+tradeLog.push({ block: 34, nonce: 503, amount: wei(0.08) });
+head = 40;
+r = await syncTradeFees(pool, source, { startBlock: 27 });
+assert.equal(r.processed, 2, 'backfilled both trade fees missed during downtime');
+assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'`)).rows[0].c, 3, 'three trade revenue rows total');
+
+console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + trade-fee streams');
 await app.close();
