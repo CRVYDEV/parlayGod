@@ -111,14 +111,19 @@ export async function buildServer() {
   // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution (§7.13). ──
   // PUBLIC + keyless + read-only; ZERO §10.4 surface (marketing/status only). Wealth is never exact.
   const CARD_TYPES = new Set(['legend', 'wanted', 'whacked', 'join']);
+  // These routes are PUBLIC + keyless, so bound every untrusted string before it renders — a living
+  // name is ≤24 chars, so 48 never truncates a real lookup but caps an attacker's <100KB name that
+  // would otherwise render a giant SVG and make resvg rasterize (CPU/mem) + poison the PNG cache.
+  const clip = (s) => String(s || '').slice(0, 48);
   app.get('/v1/u/:name', async (req, reply) =>            // the safe public dossier (JSON)
-    Cards.publicDossier(pool, req.params.name));
+    Cards.publicDossier(pool, clip(req.params.name)));
   app.get('/card/:type/:name', async (req, reply) => {    // the shareable 1200×630 poster (.png for feeds, else SVG)
     const wantPng = req.params.name.endsWith('.png');     // X/Twitter won't unfurl an SVG — /card/legend/<name>.png
-    const rawName = wantPng ? req.params.name.slice(0, -4) : req.params.name;
+    const rawName = clip(wantPng ? req.params.name.slice(0, -4) : req.params.name);
+    const ref = clip(req.query.ref || rawName);
     const type = CARD_TYPES.has(req.params.type) ? req.params.type : 'legend';
     const d = await Cards.publicDossier(pool, rawName);
-    const svg = Cards.card(type, d.found ? d : { name: rawName, gang: null, level: 1, kills: 0 }, req.query.ref || rawName);
+    const svg = Cards.card(type, d.found ? d : { name: rawName, gang: null, level: 1, kills: 0 }, ref);
     if (wantPng) {
       const png = await renderPng(svg);                   // null when no rasterizer is installed → fall back to SVG
       if (png) { reply.type('image/png').header('cache-control', 'public, max-age=300'); return reply.send(png); }
@@ -127,9 +132,10 @@ export async function buildServer() {
     return reply.send(svg);
   });
   app.get('/u/:name', async (req, reply) => {             // the public profile page (the champion destination)
-    const d = await Cards.publicDossier(pool, req.params.name);
+    const name = clip(req.params.name);
+    const d = await Cards.publicDossier(pool, name);
     reply.type('text/html; charset=utf-8');
-    return reply.send(Cards.profilePage(d, baseUrl, req.query.ref || req.params.name));
+    return reply.send(Cards.profilePage(d, baseUrl, clip(req.query.ref || name)));
   });
   // ── THE AGENT GATEWAY: the machine-discovery layer (agents are first-class players; see AGENTS.md) ──
   let agentsMd = '# OMERTÀ — Agent Guide\n\nGuide file missing (AGENTS.md). See GET /openapi.json and GET /v1/rules.';

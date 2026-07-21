@@ -334,6 +334,19 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert.equal((await app.inject({ method: 'GET', url: '/card/legend/Nobody%20Here' })).statusCode, 200, 'unknown card → 200 (join fallback)');
   assert.equal((await app.inject({ method: 'GET', url: '/u/Nobody%20Here' })).statusCode, 200, 'unknown profile → 200 (join the city)');
   assert.equal((await app.inject({ method: 'GET', url: '/card/bogus/Broadcast%20Bruno' })).statusCode, 200, 'unknown card type → 200 (falls back to legend, never breaks a share)');
+  // (5) SECURITY — these are PUBLIC keyless routes. An oversized ?ref (query, so NOT bounded by
+  //     Fastify's URI cap the way a giant :name path is) is clamped before render, so it can't inflate
+  //     the SVG / make resvg rasterize a giant string / poison the PNG cache. And any HTML/SVG
+  //     metacharacter in the name is escaped (no injection into the SVG/HTML output).
+  const hc = await app.inject({ method: 'GET', url: `/card/legend/Bob?ref=${'B'.repeat(5000)}` });
+  assert.equal(hc.statusCode, 200, 'oversized ?ref → 200 (clamped, no crash)');
+  assert(hc.body.length < 4000, `oversized ?ref is clamped before render (svg ${hc.body.length}b, not ~5000+)`);
+  const xss = '<script>alert(1)</script>';
+  const xc = await app.inject({ method: 'GET', url: `/card/legend/${encodeURIComponent(xss)}` });
+  assert.equal(xc.statusCode, 200, 'injection name → 200');
+  assert(!xc.body.includes('<script>'), 'the card escapes HTML/SVG metacharacters (no raw <script>)');
+  const xp = await app.inject({ method: 'GET', url: `/u/${encodeURIComponent(xss)}?ref=${encodeURIComponent(xss)}` });
+  assert(!xp.body.includes('<script>alert'), 'the profile page escapes the name + ref (no injection)');
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks)`);
