@@ -454,7 +454,16 @@ gates + ledgered sink + view, the raid own/no_gang gates + a pinned WIN (cut →
 rest pending) + the cooldown + a pinned LOSS (health hit, no cut), and the gang-treasuries §10.4
 reconcile with both new reasons. All `TERRITORY_FORT_*`/`TERRITORY_RIVAL_*` numbers are founder sign-off
 levers (the fortify sink + the muscle faucet is a redirect, not new emission). Deferred (step five):
-racket specialists (assigning members) + racket-specific special operations.
+racket specialists (assigning members) + racket-specific special operations. A focused three-lens
+red-team (`AUDIT-territory-racket-wars.md`: §10.4/emission, locks, exploit/grief) returned **no
+CRITICAL/HIGH** and fixed one MED: the rival raid had **no location gate** (the console said "at their
+district" but the server didn't enforce it — a raid could launch from anywhere, breaking the
+convoy/shakedown location-pinned pattern + counterplay); now `ch.loc !== districtId` throws `district`
+(regression added). Verified CLEAN: the emission-neutral clock-advance (`last_income_at = now −
+(pending−cut)/rate` leaves the owner exactly `pending−cut`, total income+muscle bounded by the signed
+rate), the attacker-gang→racket lock order (defender gang never locked → no cycle vs collect/seize/
+establish/fortify/upgrade), the 8h per-racket cooldown bounding grief, and Sybil self-raid gaining
+nothing (§10.4-neutral redirect between your own families).
 
 **FAUCET MEASUREMENT PASS — `tools/sim.js` P9.8–P9.10 (measured this session's three drops).** The three
 "sim + sign-off" faucets (co-op apex raids, boxing exhibition purse, territory type mults) are now measured

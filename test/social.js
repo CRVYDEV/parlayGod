@@ -1023,9 +1023,15 @@ assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM tra
 assert.equal((await call('GET', '/v1/territory', { token: tboss.token })).body.territory.find((t) => t.district === 'canal').fortitude, 1, 'the view shows the fortitude');
 
 // RIVAL RAID — rg muscles canal (tgang's op) for a cut of its pending income
-await seedCh(raider.id, 'energy=200, muscle=80, cunning=40'); // a real earner, past the level floor already (respect 400 → lvl 11)
+await seedCh(raider.id, "energy=200, muscle=80, cunning=40, loc='docks'"); // a real earner, past the level floor already (respect 400 → lvl 11)
 await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval '2 hours', upkeep_at = now(), raid_cd_until=NULL WHERE district_id='canal'`);
+// the raid is location-pinned — you have to be on their block (red-team fix)
+assert.equal((await call('POST', '/v1/territory/canal/raid', { token: raider.token })).body.error, 'district', 'you must be at their district to muscle in');
+await seedCh(raider.id, "loc='canal'");
+assert.equal((await call('POST', '/v1/territory/docks/raid', { token: raider.token })).body.error, 'district', "you can't raid docks from canal (own op, but the location gate fires first)");
+await seedCh(raider.id, "loc='docks'");
 assert.equal((await call('POST', '/v1/territory/docks/raid', { token: raider.token })).body.error, 'own', "you can't muscle your own family's operation");
+await seedCh(raider.id, "loc='canal'"); // travel to the target to run the raid below
 const gruntRaid = await mk('Gangless Gus'); await seedCh(gruntRaid.id, 'energy=200, respect=400');
 assert.equal((await call('POST', '/v1/territory/canal/raid', { token: gruntRaid.token })).body.error, 'no_gang', 'you need a family to bank the take');
 process.env.TERRITORY_RIVAL_RAID_P = '1'; // pin the contest to a WIN (TEST-ONLY, the raid precedent)
