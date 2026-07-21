@@ -15,7 +15,8 @@ import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
-         WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost } from '../src/rules.js';
+         WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
+         frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -457,6 +458,34 @@ for (const ty of TERRITORY_TYPES) {
   }
 }
 note('territory', 'the TYPE tradeoff', 'active vs lazy', 'numbers is cadence-proof; a hot type should be higher-VARIANCE not higher-EV — watch protection (30h-to-hot dodges a daily collect) + smuggling lazy-net (BALANCE B-terr)');
+
+// ════════ P9.11 previously-unmeasured founder-flagged faucets (analytic, from signed constants) ════════
+// Closes the sim-coverage gap the sign-off pass flagged: the World frontier tribute (step four), the
+// Speakeasy bar take, the Pen work faucet, and the World step-five liberation on-ramp. Analytic (the
+// P9.8/9.10 precedent) — pure reads of the constants, no value seeded, so §10.4 is untouched.
+phase('P9.11 sign-off faucets — frontier tribute / speakeasy bar take / pen work / liberation on-ramp');
+// (1) FRONTIER TRIBUTE (World step four): a held outfit pays regenPerHr × TRIBUTE_BPS/1e4, capped 24h.
+let frontierDay = 0;
+for (const f of WORLD_NPCS) frontierDay += frontierTributePerHr(f) * 24;
+note('world', 'frontier tribute (all 5 outfits held)', `≤ $${fmt(frontierDay)}/day base-wide`,
+  `${WORLD.FRONTIER.TRIBUTE_BPS / 100}% of regen, 24h-capped, requires routing to hold — a small treasury faucet vs territory ops`);
+// (2) SPEAKEASY BAR TAKE: a club's base income, 24h-capped, one club per district (6). Top tier is material.
+const seTop = SPEAKEASY.TIERS[SPEAKEASY.TIERS.length - 1];
+const seCapH = SPEAKEASY.INCOME_CAP_MS / 3600000;
+note('speakeasy', `bar take — ${seTop.name} (top tier)`, `$${fmt(seTop.incomePerHr * seCapH)}/day/club`,
+  `${SPEAKEASY.TIERS.length} decor tiers ($${fmt(SPEAKEASY.TIERS[0].incomePerHr * seCapH)}→$${fmt(seTop.incomePerHr * seCapH)}/day), one club per district, ${seCapH}h cap — a territory-scale front (safehouse-gated collect)`);
+note('speakeasy', 'back-room table rake', `${SPEAKEASY.TABLE.RAKE_BPS / 100}% of stake → owner`,
+  `a TRANSFER carved from the stake (never minted; the casino discipline), $${fmt(SPEAKEASY.TABLE.MIN_BET)}–$${fmt(SPEAKEASY.TABLE.MAX_BET)} bets, edge burns`);
+// (3) PEN WORK: yard duty pays a small band per work, energy-gated AND only while jailed → bounded + tiny.
+const penMid = Math.round((PEN.WORK_PAY[0] + PEN.WORK_PAY[1]) / 2);
+note('pen', 'yard work faucet', `~$${fmt(penMid)}/work (${PEN.WORK_ENERGY} energy)`,
+  `only WHILE JAILED (inherently bounded) + shaves ${PEN.WORK_CUT_S}s/work off the sentence — a trickle vs any street loop, self-limiting`);
+// (4) LIBERATION ON-RAMP (World step five): the cost to free each occupied core district at FULL outfit strength.
+for (const [districtId, npcId] of Object.entries(WORLD.OCCUPATION)) {
+  const f = worldNpcOf(npcId);
+  note('world', `liberation on-ramp — ${districtId} (${f.name})`, `$${fmt(liberationCost(f, 1))} at full strength`,
+    `→ floors to $${fmt(WORLD.OCCUPY_MIN)} once the outfit is routed to the reservoir floor (the World-loop discount)`);
+}
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');

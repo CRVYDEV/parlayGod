@@ -2903,3 +2903,22 @@ nothing: Social-PvP core (29 crimes + contracts/hitmen/vendettas), Economy (60 c
 Kitchen, Casino, Pen (4 steps), Speakeasy (4 steps), Loans (4 steps), Law/RICO (4 phases), Underworld (5
 steps), Gangs, Market, Portfolio. The sharpest thin-vs-deep signal is catalog size: `TERRITORY_RACKETS`=3
 and `WORLD_NPCS`=3 and boxing's zero fighter-catalog vs `CARS`=60 / `ASSETS`=30 / `CRIMES`=29.
+
+**THE SIGN-OFF PASS — `SIGN-OFF.md` (founder decision sheet) — BUILT** (`SIGN-OFF.md`, `tools/sim.js`
+P9.11, `BALANCE.md` pointer; founder-directed 2026-07-21). Consolidated every OPEN founder sign-off lever
++ design call scattered across `BALANCE.md` (~50 sections) and the 25 `AUDIT-*.md` residuals into ONE
+ranked, plain-English decision sheet — each row a what/risk/measured-number/recommendation/dial with a
+SHIP / CHANGE / WATCH verdict (Tier 0 the two applied-but-not-production-signed retunes; Tier 1 the biggest
+faucets/levers; Tier 2 real balance risks; Tier 3 the Pen tuning set; Tier 4 loan-sharking calls; Tier 5
+accept-for-alpha; Tier 6 the SEPARATE legal+audit-gated chain track). Gathered via three parallel extractor
+subagents (BALANCE open flags / audit residuals / sim-coverage catalog), each cross-checked. Closed the
+sim-measurement gap the pass surfaced: `tools/sim.js` gained **P9.11** — analytic probes (the P9.8/9.10
+precedent, zero value seeded, §10.4 untouched) for the previously-unmeasured founder-flagged faucets:
+**frontier tribute ≤ $157k/day base-wide** (World step four), **speakeasy bar take $3.12M/day/club at top
+tier** (newly surfaced as a territory-scale front — the one row flagged to sim net-of-upkeep-and-raid before
+production), **pen yard-work ~$400/work** (self-limiting, jailed-only), and the **World step-five liberation
+on-ramp** ($45k docks → $3.6M neon at full outfit strength, flooring to $30k once routed). Sim stays drift-0
++ suite 30/30. The headline recommendations flagged for a real-money economy: speakeasy bar-take net EV,
+the apex solo-raid floor (gate to crews), the fight-fix Sybil cap, and the Tier-6 chain gates (run
+`forge test`). Nothing was unilaterally retuned (ground rule #1) — the sheet is decision-ready, awaiting the
+founder's SHIP/CHANGE/WATCH per row.

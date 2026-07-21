@@ -1,5 +1,11 @@
 # OMERTÀ — Balance Sign-off (all economy levers, measured, one document)
 
+> **➤ For the founder-facing, ranked, plain-English decision sheet, see [`SIGN-OFF.md`](./SIGN-OFF.md)** —
+> it gathers every open lever below (and every audit's flagged residual) into one page with a SHIP/CHANGE/
+> WATCH recommendation on each. This file (`BALANCE.md`) is the technical detail behind those rows. The
+> sim now measures the previously-unmeasured faucets (`tools/sim.js` P9.11: frontier tribute, speakeasy
+> bar take, pen work, the liberation on-ramp).
+
 **How to use this:** every tunable number in the game is in the tables below with what the
 simulation measured and a recommendation. Rows marked **KEEP** are working as designed — signing
 this document accepts them. Rows marked **DECIDE** need your call (ranked list at the bottom).
