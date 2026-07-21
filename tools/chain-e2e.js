@@ -70,8 +70,9 @@ const fees = await deploy('OmertaFees', [deployer.account.address, deployer.acco
 step('OmertaFees deployed', fees);
 await write(deployer, gearVault, 'GearVault', 'setMinter', [vc]);
 step('GearVault minter = VoucherClaim (fail-closed: caps still gate every id)');
+await write(deployer, gearVault, 'GearVault', 'setGearCap', [1n, 100n]); // G-MED-1: the authoritative asset-layer cap (survives a minter swap)
 await write(deployer, vc, 'VoucherClaim', 'setGearSupplyCap', [1n, 100n]);
-step('gear id 1 capped at 100 (everything else stays uncapped = unmintable)');
+step('gear id 1 capped at 100 on BOTH the asset (GearVault) + the bridge (VoucherClaim); everything else stays uncapped = unmintable)');
 const TRANCHE = parseUnits('1000', 18);
 await write(deployer, omr, 'OMR', 'transfer', [vc, TRANCHE]);
 step('tranche funded', `${formatUnits(TRANCHE, 18)} OMR → VoucherClaim`);

@@ -350,7 +350,7 @@ export async function sweepStaleHeists(pool) {
         await client.query('DELETE FROM crew_heist_members WHERE heist_id=$1', [s.id]);
         await client.query('COMMIT');
         swept++;
-      } catch (e) { await client.query('ROLLBACK'); throw e; }
+      } catch (e) { await client.query('ROLLBACK'); console.error('[sweepStaleHeists] plan', s.id, e?.message || e); } // per-row isolation (AUDIT-full-system-v2 I-LOW): a poison plan no longer aborts the rest of the tick
     }
     return { swept };
   } finally { client.release(); }
