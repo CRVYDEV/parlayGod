@@ -319,8 +319,11 @@
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
     if (body.win === true && body.stolen !== undefined) bits.push(`they went down — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
-    if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
+    if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
     if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
+    if (body.district && body.win === true && body.cut !== undefined && !body.kind) bits.push(`muscled the block — grabbed $${fmt(body.cut)} from their operation`);
+    if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
+    if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
@@ -790,15 +793,19 @@
       <h2 style="margin-top:12px">Territory Operations</h2>
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
-        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}
+        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div>
-          ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}</div>`).join('')}</div>`
+          ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}
+          ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no operations — a boss can establish one on held turf</span>'}
       ${boss ? `<div style="margin-top:6px">
         <button class="act" data-do="POST /v1/territory/collect">collect income → treasury</button>
         <button class="act" data-do="POST /v1/territory/upkeep">pay upkeep (treasury)</button>
         <select id="terr-kind"><option value="numbers">Numbers Game (safe ×1.0)</option><option value="protection">Protection Racket (×1.15, some heat)</option><option value="smuggling">Smuggling Ring (×1.35, hot)</option></select>
         <button class="act" id="terr-establish">establish here (${me.loc})</button></div>` : ''}
+      <div style="margin-top:6px"><span class="d" style="color:var(--dim);font-size:11px">Muscle a RIVAL family's operation for a cut of its pending income (you must be at their district):</span><br>
+        <input id="terr-raid-dist" placeholder="district (e.g. canal)" size="14">
+        <button class="act" id="terr-raid-go">raid a rival op</button></div>
 
       <h2 style="margin-top:12px">Tribute</h2>
       <input id="trib-amt" placeholder="amount" size="10">
@@ -855,6 +862,8 @@
       alert('THE EMPIRE — biggest territorial families\\n\\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\\n') || 'no territory income logged yet')); }; }
     { const te = $('#terr-establish'); if (te) te.onclick = () =>
       act('POST', `/v1/territory/${me.loc}/establish`, { kind: $('#terr-kind').value }).then(() => renderFamily()); }
+    { const tr = $('#terr-raid-go'); if (tr) tr.onclick = () => {
+      const d = $('#terr-raid-dist').value.trim(); if (d) act('POST', `/v1/territory/${d}/raid`, {}).then(() => renderFamily()); }; }
     t.querySelector('#trib-go').onclick = () =>
       act('POST', '/v1/gangs/tribute', { amount: Number(t.querySelector('#trib-amt').value) }).then(() => renderFamily());
     t.querySelector('#tribo-go').onclick = () =>

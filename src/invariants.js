@@ -54,7 +54,12 @@ export async function runLedgerInvariants(pool) {
   // Phase 3 territory rackets: `territory:income` is a treasury FAUCET, `territory:establish` a SINK,
   // and (recurring sinks) `territory:upkeep` a treasury SINK too — all character_id NULL (gang-level).
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
-  const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep','territory:raid')"));
+  const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep','territory:raid','territory:fortify')"));
+  // STEP FOUR — a RIVAL raid muscles a held operation for a CUT of its pending income: `territory:muscle`
+  // is a treasury FAUCET (character_id NULL, counterparty = the RAIDER's gang) that REDIRECTS uncollected
+  // income (the owner's clock advances so they collect that much less — the business-shakedown pattern),
+  // so total territory:income+muscle emission stays bounded by the signed curve. A treasury IN term.
+  const territoryMuscleIn = await sum(pool, "currency='cash' AND reason='territory:muscle'");
   // Den step 2: the neon family's fight fix is a treasury sink (character_id NULL, like gang:war)
   const fixOut = -(await sum(pool, "currency='cash' AND reason='casino:fix'"));
   // Convoy step 2: the destination toll is a TRANSFER — the shipper's negative row mirrors the
@@ -68,7 +73,7 @@ export async function runLedgerInvariants(pool) {
   const worldTributeIn = await sum(pool, "currency='cash' AND reason='world:tribute'");
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.

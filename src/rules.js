@@ -487,6 +487,21 @@ export const CONSTANTS = {
   // then the heat's off (scrutiny→0). TERRITORY_RAID_P is a TEST-ONLY roll knob (the BUSINESS_RAID_P precedent).
   TERRITORY_SCRUTINY_DECAY_HR: 4, TERRITORY_SCRUTINY_CAP: 100, TERRITORY_RAID_THRESHOLD: 60,
   TERRITORY_RAID_P_PER_MIN: 0.0015, TERRITORY_RAID_FINE_RATE: 0.10,
+  // STEP FOUR — the RACKET-WARS layer (between-war contestability + a treasury defense sink). All
+  // numbers are founder sign-off levers. (1) FORTIFY: a boss/underboss buys a defense level from the
+  // treasury (`territory:fortify` cash SINK, cost climbs with the level × the tier), capped FORT_MAX —
+  // each level lowers a RIVAL raid's success (it does NOT touch the signed Bureau-crackdown math). (2)
+  // RIVAL RAID: a made man of ANOTHER family muscles a held operation for a CUT of its PENDING income
+  // (`territory:muscle`, a treasury FAUCET that REDIRECTS uncollected income — the business-shakedown
+  // pattern: the owner keeps the rest pending, so total territory:income+muscle emission is bounded by
+  // the same signed curve → §10.4-neutral). A muscle/cunning contest vs the fortitude; a landed raid
+  // draws law heat + sets a per-racket cooldown (win OR lose — the owner isn't ground down); a failed
+  // raid costs the raider health. TERRITORY_RIVAL_RAID_P is a TEST-ONLY roll knob (the raid precedent).
+  TERRITORY_FORT_MAX: 5, TERRITORY_FORT_COST_BASE: 100000,
+  TERRITORY_RIVAL_CUT_BPS: 3000, TERRITORY_RIVAL_CD_MS: 8*3600*1000, TERRITORY_RIVAL_MIN_LVL: 8,
+  TERRITORY_RIVAL_BASE_P: 0.6, TERRITORY_RIVAL_FORT_DEF: 0.08, TERRITORY_RIVAL_STAT_SCALE: 200,
+  TERRITORY_RIVAL_MIN_P: 0.1, TERRITORY_RIVAL_MAX_P: 0.9,
+  TERRITORY_RIVAL_ENERGY: 20, TERRITORY_RIVAL_HEAT: 12, TERRITORY_RIVAL_FAIL_DMG: 15,
   // Risk-to-Earn Phase 4 — BACKED EMISSION. STAKE_POOL_BPS of every 12h buyback's bought $OMR is
   // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin
@@ -1396,6 +1411,10 @@ export const territoryRankOf = (earned) =>
 // cumulative build cost of an operation at `tier` — the basis for the seizure war premium
 export const territoryBuildCost = (tier = 0) =>
   TERRITORY_RACKETS.filter((t) => t.tier <= Number(tier)).reduce((a, t) => a + t.cost, 0);
+// STEP FOUR — the treasury cost to raise a racket's fortitude to `level` (climbs with the level and
+// the operation's tier — a bigger, more valuable op costs more to defend). Founder sign-off lever.
+export const territoryFortCost = (level, tier = 1) =>
+  Math.floor(CONSTANTS.TERRITORY_FORT_COST_BASE * (Number(level) + 1) * Number(tier));
 // Business Empire — the PREMIUM, acquired-later personal front layer (distinct from the flat
 // mid-game ASSETS/RACKETS). Each kind is level-gated ("acquired later"), with a tier ladder:
 //   cost          — cash to BUY tier 1 / UPGRADE to the next tier

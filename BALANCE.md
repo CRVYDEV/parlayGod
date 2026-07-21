@@ -1455,3 +1455,17 @@ to the house). §10.4-exact (a new `poker tourney escrow` check reconciles pool 
 refund − take − death). Levers (`TOURNEY.BUYIN` $5k, `RAKE_BPS` 500, `PAYOUTS` [.5,.3,.2],
 `MIN_ENTRANTS` 2, `REGISTER_MS` 24h) are founder sign-off — none touch a signed faucet; the tournament
 is a SINK (the rake) on the players' pooled cash, like the fight book but player-funded.
+
+## Territory step four — FORTIFICATION + RIVAL RAIDS — SIGN-OFF NOTE
+
+Two additions, both founder sign-off levers. **Fortify** (`territory:fortify`, `territoryFortCost` = base
+$100k × (level+1) × tier, capped 5) is a pure recurring TREASURY SINK — clearly economy-positive (the late
+game always wants more sinks). **Rival raids** (`territory:muscle`, 30% of a target op's pending income) are
+**§10.4-NEUTRAL by construction**: the cut REDIRECTS uncollected income the owner would otherwise collect as
+`territory:income` (the owner's clock advances so they keep the rest pending — the business-shakedown
+pattern), so total `territory:income + territory:muscle` emission is bounded by the SAME sim-signed income
+curve — no new faucet, just a contestable split. Anti-grief: a per-racket 8h cooldown (win OR lose) bounds
+how fast one op can be ground down; a level-8 floor + energy cost + a failed-raid health hit + P1.3 safehouse
+block bound the raider. All `TERRITORY_FORT_*` / `TERRITORY_RIVAL_*` numbers (cut %, cooldown, contest
+scaling, fortitude defense per level) are sign-off levers — sim the contested-income realized $/day and the
+fortify sink drain before production.

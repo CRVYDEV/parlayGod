@@ -6,11 +6,14 @@
 // `territory:income` a treasury cash FAUCET — both character_id NULL (gang-level, like gang:war), so
 // the character-cash check is untouched and the treasury check reconciles them. The on-chain
 // tradeable-NFT layer (minted_onchain) is dormant/deferred, the M6 pattern.
-import { GameError } from './game.js';
+import { GameError, bus } from './game.js';
 import { DISTRICTS, TERRITORY_RACKETS, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryRankOf, CONSTANTS } from './rules.js';
+         territoryFortCost, territoryRankOf, levelOf, CONSTANTS } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
+const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // the operation's hourly rate = the tier's base × the TYPE's income tilt (step three)
 const ratePerHr = (racket) => (territoryTierOf(racket.tier)?.incomePerHr || 0) * territoryTypeOf(racket.kind).incomeMult;
@@ -183,13 +186,87 @@ export async function payTerritoryUpkeep(ch, client, h) {
   return { ok: true, paid, fronts: settled, ...(stillOwed > 0 ? { stillOwed } : {}) };
 }
 
+// STEP FOUR — FORTIFY: a boss/underboss buys a defense level for an operation from the treasury (a
+// §10.4 `territory:fortify` cash SINK, cost climbing with the level × the tier). Each level lowers a
+// RIVAL raid's success — it does NOT touch the signed Bureau-crackdown math. Capped at FORT_MAX.
+export async function fortifyRacket(ch, districtId, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss fortifies the rackets.');
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!r) throw new GameError('no_racket', 'No operation there to fortify.');
+  if (r.owner_gang !== h.owned.gangId) throw new GameError('not_yours', "That's not your operation.");
+  const level = Number(r.fortitude);
+  if (level >= CONSTANTS.TERRITORY_FORT_MAX) throw new GameError('maxed', 'That operation is dug in as deep as it goes.');
+  const cost = territoryFortCost(level, Number(r.tier));
+  if (Number(g.treasury) < cost) throw new GameError('treasury', `Fortifying to level ${level + 1} takes $${cost} from the treasury.`);
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
+  await client.query('UPDATE territory_rackets SET fortitude=$2 WHERE district_id=$1', [districtId, level + 1]);
+  await h.ledger(client, { currency: 'cash', amount: -cost, reason: 'territory:fortify', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - cost;
+  return { ok: true, district: districtId, fortitude: level + 1, cost };
+}
+
+// STEP FOUR — RIVAL RAID: a made man of ANOTHER family muscles a held operation for a CUT of its
+// PENDING income (the business-shakedown pattern at the gang level). A muscle/cunning contest vs the
+// operation's fortitude; a landed raid REDIRECTS the cut to the raider's treasury (`territory:muscle`,
+// a treasury FAUCET — the owner's clock advances so they keep the rest pending, and total
+// income+muscle stays bounded by the signed curve → §10.4-neutral), draws law heat, and sets a
+// per-racket cooldown (win OR lose — the owner isn't ground down). A failed raid costs the raider
+// health. LOCK ORDER: attacker char (withCharacter) → attacker gang → target racket (the territory
+// gang-before-racket convention; the DEFENDER gang is never locked — only the contested racket row).
+export async function raidRivalRacket(ch, districtId, client, h) {
+  if (!h.owned.gangId) throw new GameError('no_gang', 'You need a family to bank the take.');
+  if (jailed(ch)) throw new GameError('jailed', 'Not from lockup.');
+  if (hospitalized(ch)) throw new GameError('hospitalized', "You're in no shape for muscle work.");
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run a raid from a safehouse.");  // P1.3
+  if (levelOf(Number(ch.respect)) < CONSTANTS.TERRITORY_RIVAL_MIN_LVL)
+    throw new GameError('rookie', `Muscling a rival operation takes level ${CONSTANTS.TERRITORY_RIVAL_MIN_LVL}.`);
+  if (Number(ch.energy) < CONSTANTS.TERRITORY_RIVAL_ENERGY) throw new GameError('energy', 'Not enough energy for a raid.');
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
+  if (!r) throw new GameError('no_racket', 'No operation runs there.');
+  if (r.owner_gang === h.owned.gangId) throw new GameError('own', "That's your own family's operation.");
+  const now = Date.now();
+  if (r.raid_cd_until && new Date(r.raid_cd_until) > new Date(now)) throw new GameError('cooldown', 'That operation is on alert — muscle in later.');
+  const pending = accrued(r);
+  if (pending <= 0) throw new GameError('nothing', "There's nothing in the till to grab right now.");
+  const eff = Number(ch.muscle) + Number(ch.cunning) / 2;
+  const p = Math.max(CONSTANTS.TERRITORY_RIVAL_MIN_P, Math.min(CONSTANTS.TERRITORY_RIVAL_MAX_P,
+    CONSTANTS.TERRITORY_RIVAL_BASE_P + (eff - 30) / CONSTANTS.TERRITORY_RIVAL_STAT_SCALE - Number(r.fortitude) * CONSTANTS.TERRITORY_RIVAL_FORT_DEF));
+  const pEff = process.env.TERRITORY_RIVAL_RAID_P != null ? Number(process.env.TERRITORY_RIVAL_RAID_P) : p; // TEST-ONLY roll knob
+  const roll = Math.random();
+  const win = roll < pEff;
+  ch.energy = Number(ch.energy) - CONSTANTS.TERRITORY_RIVAL_ENERGY;
+  ch.heat = Math.min(100, Number(ch.heat) + CONSTANTS.TERRITORY_RIVAL_HEAT);
+  await client.query('UPDATE territory_rackets SET raid_cd_until=$2 WHERE district_id=$1', [districtId, new Date(now + CONSTANTS.TERRITORY_RIVAL_CD_MS)]);
+  await h.rngLog(client, ch.id, `territory:raid:${districtId}`, roll, `${win ? 'muscled' : 'repelled'} (P ${pEff.toFixed(3)}, fort ${r.fortitude})`);
+  if (!win) {
+    ch.health = Math.max(1, Number(ch.health) - CONSTANTS.TERRITORY_RIVAL_FAIL_DMG);
+    bus.emit(`gang:${r.owner_gang}`, { type: 'racket_defended', district: districtId });
+    await h.track(client, ch.account_id, 'territory_raid', { district: districtId, win: false });
+    return { ok: true, district: districtId, win: false, dmg: CONSTANTS.TERRITORY_RIVAL_FAIL_DMG };
+  }
+  const cut = Math.floor(pending * CONSTANTS.TERRITORY_RIVAL_CUT_BPS / 10000);
+  // advance the owner's clock so their remaining pending = pending − cut (the shakedown/convoy pattern)
+  const rate = ratePerHr(r);
+  const remainMs = rate > 0 ? Math.floor((pending - cut) / rate * 3600000) : 0;
+  await client.query('UPDATE territory_rackets SET last_income_at=$2 WHERE district_id=$1', [districtId, new Date(now - remainMs)]);
+  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [h.owned.gangId, cut]);
+  await h.ledger(client, { currency: 'cash', amount: cut, reason: 'territory:muscle', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + cut;
+  bus.emit(`gang:${r.owner_gang}`, { type: 'racket_raided', district: districtId, lost: cut });
+  await h.track(client, ch.account_id, 'territory_raid', { district: districtId, win: true, cut });
+  return { ok: true, district: districtId, win: true, cut };
+}
+
 // SEIZURE hook — called inside seizeDistrict when a district changes hands. The operation transfers
 // to the victor; uncollected income is FORFEITED (clock resets) — collect before you lose the turf.
 export async function seizeTerritoryRackets(client, districtId, newGang) {
   // the victor inherits a fresh operation — clocks reset (uncollected income forfeits), the pad is
   // squared (they didn't run up the old owner's arrears; a cold seized racket isn't born cold), AND the
   // heat's off (scrutiny=0 — a seized op isn't born hot; the type/business carries with the turf).
-  await client.query('UPDATE territory_rackets SET owner_gang=$2, last_income_at=now(), upkeep_at=now(), scrutiny=0, scrutiny_at=now() WHERE district_id=$1', [districtId, newGang]);
+  // step four: a seized op isn't born fortified or on alert — the victor starts fresh on defense too.
+  await client.query('UPDATE territory_rackets SET owner_gang=$2, last_income_at=now(), upkeep_at=now(), scrutiny=0, scrutiny_at=now(), fortitude=0, raid_cd_until=NULL WHERE district_id=$1', [districtId, newGang]);
 }
 
 // Dissolution hook — a family's operations die with it (the district is released; a new holder
@@ -219,6 +296,10 @@ export async function territoryOf(pool, gangId) {
       upkeepPerHr: Math.floor((t?.incomePerHr || 0) * type.incomeMult * (CONSTANTS.TERRITORY_UPKEEP_BPS / 10000)),
       upkeepOwed: upkeepOwed(r), cold: isCold(r),
       // step three — the Bureau: current scrutiny + whether it's raid-eligible (a hot type over the line)
-      scrutiny: Math.round(scr), raidThreshold: CONSTANTS.TERRITORY_RAID_THRESHOLD, raidRisk: scr >= CONSTANTS.TERRITORY_RAID_THRESHOLD };
+      scrutiny: Math.round(scr), raidThreshold: CONSTANTS.TERRITORY_RAID_THRESHOLD, raidRisk: scr >= CONSTANTS.TERRITORY_RAID_THRESHOLD,
+      // step four — the racket-wars layer: defense level + the next fortify cost + rival-raid cooldown
+      fortitude: Number(r.fortitude), fortMax: CONSTANTS.TERRITORY_FORT_MAX,
+      fortCost: Number(r.fortitude) < CONSTANTS.TERRITORY_FORT_MAX ? territoryFortCost(Number(r.fortitude), Number(r.tier)) : null,
+      raidCdSeconds: r.raid_cd_until ? Math.max(0, Math.ceil((new Date(r.raid_cd_until) - Date.now()) / 1000)) : 0 };
   });
 }
