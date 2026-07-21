@@ -204,3 +204,80 @@ Wire the trade watcher through the same gate.
 
 The prototype target is #3: it's the smallest hook that pays for its own audit by making the Vig
 self-sustaining on real market activity — the strongest possible version of "spenders fund earners."
+
+---
+
+## 7. Test specification (the afterSwap→Vig hook)
+
+The build is de-risked because the **backend half is already proven**: a throwaway probe drove
+`recordVigRevenue(source='trade')` through the BUILT `runVigBuyback` + `runVigInvariants` +
+`runLedgerInvariants` and it reconciled end-to-end. The delta at build time is only the hook contract,
+the watcher, the mod-gate, and wiring these cases into a committed suite.
+
+### Reference vector (canonical expected values — from the verified probe)
+Fixtures: `VIG_BPS=6000`, buyback `priceOmrPerEth=1000`, `RESERVE_BPS=5000`; revenue = one `fee` of
+0.01 ETH + two `trade` of 0.05 and 0.03 ETH.
+- gross = **0.09** ETH; vig share = **0.054** ETH (60%); ethSpent = **0.054**; omrBought = **54**;
+  toReserve = **27**; toPrize = **27**.
+- `runVigInvariants.ok === true` (all six: spend≤revenue, split exact, reserve fully backed, reserve
+  not under-funded, extraction≤reserve, prizes≤bought).
+- `runLedgerInvariants.ok === true` with **0** `transactions` rows for the trade revenue (out-of-band).
+
+### Tier A — backend rail (runnable the moment a `trade` producer exists; today via a direct call)
+File: extend `test/vig.js` (or a new `test/vig-trade.js` wired into `npm test`). Drive the source the
+way the watcher will: `recordVigRevenue(client, { source:'trade', ref:<nonce>, kind:'trade', amountWei })`.
+- **A1 — trade revenue splits like fee revenue.** After recording, `vig_revenue` has a `source='trade'`
+  row with `gross_eth`=fee, `vig_eth`=`round6(fee×VIG_BPS/1e4)`. If a dedicated `TRADE_VIG_BPS=10000`
+  lever is added, assert 100% instead — the test pins whichever is chosen.
+- **A2 — the buyback spends the mixed unspent revenue.** `runVigBuyback({priceOmrPerEth:1000})` →
+  `ethSpent` = Σ vig_eth over fee+trade; `omrBought = ethSpent×price`; `toReserve/toPrize` split by
+  `RESERVE_BPS`. Assert the reference vector exactly.
+- **A3 — the real-value invariant stays green with a mixed source.** `runVigInvariants().ok===true`;
+  assert each of the six checks individually so a future regression names the broken one.
+- **A4 — idempotency.** Re-recording the same `(source='trade', ref)` returns `{duplicate:true}` and adds
+  no row / no double-spend. (Proven in the probe.)
+- **A5 — §10.4 in-game untouched.** `runLedgerInvariants().ok===true` and
+  `SELECT count(*) FROM transactions WHERE reason LIKE 'trade%'` = 0 — trade ETH is out-of-band real
+  value, zero conservation-set rows. (Proven in the probe.)
+- **A6 — extraction ≤ inflow is *widened*, not touched.** Record ONLY a small `fee`, sign a withdrawal
+  voucher up to it, assert the queue caps there; then add `trade` revenue + re-buyback and assert the
+  reserve grows and a larger withdrawal now signs — trade fees raise the ceiling, never bypass it.
+
+### Tier B — watcher + gate (gated on the hook/watcher/route being built)
+- **B1 — the watcher books trade revenue from a real log.** Mirror `test/watcher.js`'s `syncFeeEvents`
+  with a synthetic `TradeFeePaid(nonce, amountWei)` log stream → `recordVigRevenue(source='trade',
+  ref=nonce)`; assert cursor-after-success + idempotent re-processing (a replayed log is a no-op).
+- **B2 — the D-MED2 mod-fabrication gate (the security regression).** With `ALLOW_MOD_REAL_REVENUE`
+  unset, a mod/QA route CANNOT inject `source='trade'` revenue (books ZERO vig_eth); with the flag on,
+  it can (QA). This is the twin of the store D-MED2 regression — real trade revenue comes ONLY from the
+  watcher observing a genuine log.
+- **B3 — reorg / confirmations.** Inherited from the watcher pattern; assert a `CHAIN_CONFIRMATIONS`-deep
+  reorg of a `TradeFeePaid` log doesn't double-book (the fee/Claimed streams already cover this shape).
+
+### Tier C — the hook contract (Foundry, `omerta-contracts/test/`)
+Mirror the `OmertaFees` test shape (exact-fee / forward-to-wallet / monotonic-nonce / owner-only).
+- **C1 — exact fee take.** `afterSwap` skims `feeBps` of the ETH-leg delta; assert the wallet received
+  exactly that and the emitted `TradeFeePaid.amountWei` matches.
+- **C2 — forward-in-tx, custody nothing.** Contract OMR/ETH balance is 0 after; CEI + `nonReentrant`.
+- **C3 — monotonic nonce.** Two swaps → nonces N, N+1 (the off-chain idempotency key is unique).
+- **C4 — kill-switch.** `setFeeBps(0)` (owner-only) → subsequent swaps skim nothing, pool trades
+  normally (fail-open); `pause()` behaves per design.
+- **C5 — access control.** `afterSwap` is `onlyPoolManager`; `setFeeBps`/`setFeeWallet`/`pause` are
+  `onlyOwner` (Ownable2Step); a non-owner reverts.
+- **C6 — a griefing fee recipient cannot brick the pool.** Design decision to assert: if the fee
+  forward would revert, the swap must NOT revert (skip the fee, keep trading) — else a hostile/paused
+  wallet halts all trading. Test a reverting recipient → swap still succeeds, fee skipped, no
+  `TradeFeePaid` emitted. (The trusted Safe wallet never reverts, but the property must hold.)
+- **C7 — fuzz the fee math.** Over random swap sizes: `0 ≤ fee ≤ ethLeg`, no overflow (0.8.26 checked),
+  fee monotonic in swap size. `forge test` must pass (the standing pre-mainnet gate).
+
+### Tier D — sim (analytic, optional, the `tools/sim.js` P9.x pattern)
+- **D1 — flywheel contribution probe.** Given a daily OMR/ETH volume assumption V and `HOOK_FEE_BPS`,
+  print trade-fee ETH/day → Vig $OMR/day → reserve+prize/day, so the fee lever is measured against the
+  extraction demand before production (a sign-off number in BALANCE.md, never a §10.4 assertion — trade
+  revenue is out-of-band).
+
+### Build order for the test work
+Write **Tier A** first (it runs today against the built rail — the fastest proof), then **Tier C** with
+the contract, then **Tier B** with the watcher, then **Tier D** in the sim. Ship no hook to mainnet until
+Tier C's `forge test` passes and the whole thing clears the third-party contract audit.
