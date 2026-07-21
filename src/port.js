@@ -9,7 +9,12 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, levelOf, cityHourOf } from './rules.js';
+import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, levelOf, cityHourOf } from './rules.js';
+
+// THE SMUGGLER'S LEGEND — lifetime contraband value landed, account-level (survives death — the boxing/
+// wheel/war-effort precedent). Direct SQL on the account (NUMERIC, arith-safe); status only, no §10.4.
+const bumpSmuggled = (client, accountId, amt) =>
+  client.query('UPDATE account_persistent SET smuggled = smuggled + $2 WHERE account_id=$1', [accountId, Math.max(0, Math.floor(Number(amt) || 0))]);
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -139,10 +144,28 @@ export async function collectRun(ch, boatId, client, h) {
     const sale = Number(boat.run_hold) * route.sell;
     ch.cash = Number(ch.cash) + sale;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: sale, reason: 'port:sale' });
+    await bumpSmuggled(client, ch.account_id, sale);   // THE SMUGGLER'S LEGEND (status, survives death)
+    // THE HARBORMASTER (step three): the family HOLDING the docks tolls a clean landing — a §10.4 TRANSFER
+    // (shipper pocket→bank → holder treasury, the convoy-toll twin). NPC-held / your own family = free;
+    // clamped to pocket+bank, never gates the freight, charged only if the treasury credit lands (dissolution race).
+    let toll = 0;
+    const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [PORT.DISTRICT])).rows[0]?.holder_gang;
+    if (holder && holder !== h.owned.gangId && sale > 0) {
+      toll = Math.min(Math.floor(sale * PORT.STEP3.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
+      if (toll > 0) {
+        const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
+        if (upd.rowCount) {
+          const fromPocket = Math.min(toll, Math.max(0, Math.floor(Number(ch.cash))));
+          ch.cash = Number(ch.cash) - fromPocket;
+          ch.bank = Number(ch.bank) - (toll - fromPocket);
+          await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -toll, reason: 'port:toll' });
+        } else toll = 0;
+      }
+    }
     await clearRun();
     if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.name, value: sale });
-    await h.track(client, ch.account_id, 'port', { act: 'land', route: route.id, sale });
-    return { ok: true, interdicted: false, landed: sale, cost: Number(boat.run_cost), net: sale - Number(boat.run_cost), route: route.id };
+    await h.track(client, ch.account_id, 'port', { act: 'land', route: route.id, sale, toll });
+    return { ok: true, interdicted: false, landed: sale, cost: Number(boat.run_cost), net: sale - Number(boat.run_cost) - toll, toll, route: route.id };
   }
   // INTERDICTED — cargo seized, a fine (pocket then bank, the raid-fine precedent), heat, and maybe the boat sinks
   const fine = Math.min(Math.floor(Number(boat.run_cost) * PORT.FINE_RATE), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
@@ -208,7 +231,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
     const full = Number(boat.run_hold) * (route?.sell || 0);
     const take = Math.floor(full * S.PIRATE_TAKE_BPS / 10000);
     ch.cash = Number(ch.cash) + take;
-    if (take > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'port:piracy' });
+    if (take > 0) { await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'port:piracy' }); await bumpSmuggled(client, ch.account_id, take); }
     await client.query('UPDATE boats SET run_until=NULL, run_route=NULL, run_hold=0, run_cost=0, run_escort=false WHERE id=$1', [targetBoatId]);
     await clearIntercepts(client, targetBoatId);
     await h.notify(client, boat.character_id, 'port_pirated', { route: boat.run_route, taken: take });
@@ -304,6 +327,11 @@ export async function portBoard(ch, client, h) {
     return { boatId: s.id, runner: s.runner, route: s.run_route, routeName: r?.name,
       band: valueBand(Number(s.run_hold) * (r?.sell || 0)), etaSeconds: Math.ceil((new Date(s.run_until).getTime() - now) / 1000) };
   });
+  // THE SMUGGLER'S LEGEND (step three) + THE HARBORMASTER: who holds the docks (a toll on a clean landing)
+  const smuggled = Number((await client.query('SELECT smuggled FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.smuggled || 0);
+  const holderRow = (await client.query(
+    `SELECT g.name, g.tag, d.holder_gang FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang WHERE d.id=$1`, [PORT.DISTRICT])).rows[0];
+  const tolled = holderRow?.holder_gang && holderRow.holder_gang !== h.owned.gangId;
   return {
     atDocks: ch.loc === PORT.DISTRICT, district: PORT.DISTRICT,
     catalog: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed, resale: boatResale(b.id) })),
@@ -311,5 +339,15 @@ export async function portBoard(ch, client, h) {
     supplyLeft: supplyState(ch).left, supplyCap: PORT.SUPPLY_CAP_DAY,
     seas, piracy: { minLevel: PORT.STEP2.PIRATE_MIN_LEVEL, energy: PORT.STEP2.PIRATE_ENERGY, ammo: PORT.STEP2.PIRATE_AMMO, takeBps: PORT.STEP2.PIRATE_TAKE_BPS },
     upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP },
+    legend: { smuggled, rank: portRankOf(smuggled).title },
+    harbormaster: { holder: holderRow?.holder_gang ? { name: holderRow.name, tag: holderRow.tag } : null, tollBps: PORT.STEP3.TOLL_BPS, tolled: !!tolled },
   };
+}
+
+// GET /v1/leaderboard/port — THE SMUGGLER'S LEGEND (biggest lifetime landed value; agents excluded)
+export async function portLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT a.smuggled, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
+      WHERE a.smuggled > 0 AND NOT a.agent_flag ORDER BY a.smuggled DESC LIMIT 15`)).rows;
+  return { smugglers: rows.map((r) => ({ name: r.name, smuggled: Number(r.smuggled), rank: portRankOf(r.smuggled).title })) };
 }

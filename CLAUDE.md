@@ -3101,8 +3101,23 @@ hold/speed on the board, piracy (the seas band, level + once gates, a WIN's redi
 hospitalization), and the rendezvous (closed-boat gate + the handoff moving the run + consuming the flag).
 Suite 32/32 + sim drift-0. All `STEP2.*` numbers are founder sign-off levers — sim the piracy faucet before
 production (it can only reduce emission, but the ammo cost + PvP gate keep it a skill play, not a farm).
-Deferred (step three): the contraband MARKET (land goods as a tradeable commodity), harbor berths, a smuggler's
-legend, a harbormaster racket, Coast-Guard heat into the Law meter.
+**Step three — THE SMUGGLER'S LEGEND + THE HARBORMASTER — BUILT** (`src/port.js`, `src/rules.js` `PORT.STEP3`,
+`schema.sql`, `src/invariants.js`, `test/port.js`). **(1) THE SMUGGLER'S LEGEND** — `account_persistent.smuggled`
+(lifetime contraband value landed = every clean collect + piracy take, bumped by direct SQL, NUMERIC arith-safe;
+account-level → SURVIVES DEATH, the boxing-wins/wheel/war-effort precedent) + `LEGEND_RANKS` (Deckhand → The
+Kingpin of the Coast, `portRankOf`) + `GET /v1/leaderboard/port` (`portLeaderboard`, agents excluded). PURE
+STATUS — **zero §10.4** (landed value isn't a currency; the cash rides `port:sale`/`port:piracy`, so the test
+asserts `legend.smuggled == the account's lifetime port:sale + port:piracy`). Surfaced on `GET /v1/port`
+(`legend {smuggled, rank}`) + a console banner. **(2) THE HARBORMASTER** — the family HOLDING the docks tolls
+every clean landing there: `port:toll` = `TOLL_BPS` (5%) of the sale, a §10.4 TRANSFER (shipper pocket→bank →
+holder treasury, the convoy-toll twin — clamped to pocket+bank, never gates the freight, charged only if the
+credit lands; NPC-held / your own family = free). The gang-treasuries check gained `portTollIn`. Ties the solo
+Port into turf/family AND synergizes with the World-occupation loop (docks start NPC-occupied → a family
+LIBERATES it, then earns tolls). Surfaced on `GET /v1/port` (`harbormaster {holder, tollBps, tolled}`) + a
+console warning chip. `test/port.js` covers the legend (the identity + rank + leaderboard + DEATH survival) and
+the harbormaster (a held-docks 5% toll → treasury, the net reflects it, the gang-treasuries §10.4 reconcile).
+`PORT.STEP3.*` are founder sign-off levers. Suite 32/32 + sim drift-0. Deferred (step four): the contraband
+MARKET (land goods as a tradeable commodity), harbor berths, Coast-Guard heat into the Law meter.
 
 **OVERNIGHT FULL-SYSTEM RED-TEAM (`AUDIT-full-system-v2.md`, 2026-07-21)** — a max-effort audit, SIX
 parallel independent lenses over the ENTIRE codebase (47 src modules) + all 6 Solidity contracts
