@@ -60,8 +60,12 @@ export async function runLedgerInvariants(pool) {
   // Convoy step 2: the destination toll is a TRANSFER — the shipper's negative row mirrors the
   // holder treasury's credit (the gang:tribute pattern).
   const tollIn = -(await sum(pool, "currency='cash' AND reason='convoy:toll'"));
+  // World step 4 THE FRONTIER: a held outfit's tribute is a treasury FAUCET (character_id NULL, like
+  // territory:income); invading a held outpost is a treasury SINK (like a turf seize). Both counterparty=gang.
+  const worldTributeIn = await sum(pool, "currency='cash' AND reason='world:tribute'");
+  const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + tollIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + tollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.

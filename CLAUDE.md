@@ -1144,6 +1144,34 @@ emission is still bounded by REGEN (you can't extract past the reservoir), but p
 now flow, so sim + sign-off the apex `regenPerHr`/`GRAB` before production (the only new emission surface;
 `COOP_*` numbers are all sign-off levers). Still deferred: NPC outfits holding actual player-map DISTRICTS
 (the fully-invasive turf-model rewire — the status frontier stands in). [Per-district racket-type choice: BUILT — see Territory step three.]
+**Step four — THE FRONTIER MADE REAL (productive + contestable outposts) — BUILT** (`src/world.js`,
+`src/rules.js`, `test/world.js`; `WORLD.FRONTIER` rules-tail block, new `world_npcs.garrison`/`tribute_at`).
+Turns the status frontier flag into REAL turf without rewiring the signed 6-district turf-perk map. A held
+outfit is now a conquered VASSAL: **(1) TRIBUTE** — it pays its overlord family a bounded, lazy-accrued
+tribute to the treasury (`frontierTribute` — `regenPerHr × FRONTIER.TRIBUTE_BPS/10000`, NOT drawn from the
+shared reservoir — the vassal's protection money — capped at `TRIBUTE_CAP_MS` 24h); `collectFrontier`
+(`POST /v1/world/collect`, any member — the collectTerritory precedent) banks it, a §10.4 treasury FAUCET
+`world:tribute` (character_id NULL, counterparty=gang; added to the gang-treasuries check's IN terms). Base-
+wide max ~$157k/day across all 5 outfits (regen-metered + capped + requires routing to hold), a small
+well-defended faucet. **(2) GARRISON + INVASION** — routing installs a base `FRONTIER.ROUT_GARRISON`; a
+rival boss/underboss `invadeOutpost` (`POST /v1/world/:npcId/invade`) takes a RIVAL-held outpost by
+outbidding the garrison from the treasury (`max(INVADE_BASE, garrison × INVADE_OUTBID)` — the seizeDistrict
+pattern), a §10.4 treasury SINK `world:invade` (added to the OUT terms); the flag/garrison/tribute-clock
+transfer, the incumbent's uncollected tribute forfeits (the territory-seizure precedent). You take an UNHELD
+outfit by ROUTING it (`unheld` gate); you can't invade your own (`held`). Both rout branches (solo `raidNpc`
++ co-op `executeRaid`) now install the garrison + start the tribute clock; `releaseFrontierHolds` (gang
+dissolution) resets garrison + tribute_at too. Lock order: own gang → world_npcs (singleton, last) — no
+cycle vs a concurrent raid (everyone locks the singleton last). `world:` was already in the cash vocabulary,
+so no vocab change — only the gang-treasuries check gained the two terms. Board (`GET /v1/world`) surfaces
+`tributePerHr`/`tributePending`/`garrison`/`invadeCost` per outfit + a `frontier {held, tributePending,
+canCommand}` summary; console City tab gained a frontier-tribute collect card + an invade button on
+rival-held outfits. `test/world.js` proves the rout installs the garrison + clock, tribute accrual + the 24h
+cap + the ledgered `world:tribute` faucet, the invade gates (rank/unheld/held) + the outbid cost +
+`world:invade` sink + flag/garrison transfer, and the gang-treasuries §10.4 reconcile (drift == the seeded
+rival treasury only). Suite 30/30 + sim drift-0. `FRONTIER.TRIBUTE_BPS`/`_CAP_MS`/`ROUT_GARRISON`/
+`INVADE_BASE`/`INVADE_OUTBID` are founder SIM sign-off levers — a NEW (small, bounded) emission surface
+(BALANCE.md). Still deferred: literal NPC occupation of the 6 signed core districts (the fullest turf-model
+rewire — this outpost layer makes the frontier real turf without touching the signed district perks).
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

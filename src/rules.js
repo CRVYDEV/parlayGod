@@ -958,12 +958,29 @@ export const WORLD = {
   COOP_MAX_P: 0.85,                       // even a full crew is never certain
   COOP_LEADER_WEIGHT: 1.2,                // the leader who fronts the op takes a bigger cut (the heist precedent)
   COOP_TTL_MS: 60 * 60 * 1000,            // a stale plan is swept (nothing staked → nothing to refund)
-  // THE FRONTIER (family conquest, PURE STATUS — no §10.4 surface): whoever lands the ROUT (solo or
-  // co-op) plants their FAMILY'S flag on the outfit's turf; the next rout topples it. A dominance
-  // leaderboard (families ranked by outfits held, weighted by the outfit's scale). Dies with the family.
+  // THE FRONTIER (family conquest): whoever lands the ROUT (solo or co-op) plants their FAMILY'S flag on
+  // the outfit's turf; the next rout topples it. A dominance leaderboard (families ranked by outfits held,
+  // weighted by the outfit's scale). Dies with the family.
+  // ── STEP FOUR — THE FRONTIER MADE REAL (productive + contestable outposts) ──
+  // A held outfit is a conquered vassal: it pays its overlord family a bounded, lazy-accrued TRIBUTE to the
+  // treasury (a §10.4 faucet `world:tribute`, NOT drawn from the shared reservoir — the vassal's protection
+  // money — metered by the outfit's regen + hard-capped, so total base-wide emission is small + well-defended).
+  // A rival family INVADES a held outpost by outbidding its GARRISON from the treasury (`world:invade` sink —
+  // the seizeDistrict pattern); routing installs a base garrison + starts the tribute clock. Uncollected
+  // tribute forfeits on any flag transfer (rout or invasion), like territory seizure. Numbers are founder
+  // SIM sign-off levers (a NEW emission surface — ground rule #1).
+  FRONTIER: {
+    TRIBUTE_BPS: 200,                 // tribute/hr = the outfit's regenPerHr × this/10000 (2% — a small vassal cut)
+    TRIBUTE_CAP_MS: 24 * 3600 * 1000, // accrual caps at a day (the territory-income precedent)
+    ROUT_GARRISON: 25000,             // the base defense installed when a family takes an outpost by routing it
+    INVADE_BASE: 50000,               // the floor treasury cost to invade a held outpost…
+    INVADE_OUTBID: 1.5,               // …or 1.5× the incumbent's garrison, whichever is higher (the SEIZE_OUTBID twin)
+  },
 };
 export const worldRankOf = (dmg) =>
   [...WORLD.WAR_RANKS].reverse().find((r) => Number(dmg) >= r.min) || WORLD.WAR_RANKS[0];
+// step four: a held outfit's tribute-per-hour to its overlord family (a bounded slice of the outfit's regen).
+export const frontierTributePerHr = (fixture) => Math.floor((fixture?.regenPerHr || 0) * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
 
 // THE PEN — the prison meta-game (design omerta-the-pen-design.md). Turns `jail_until` dead time into
 // a place: work the yard down, buy contraband, pay for protection, bribe out — and the marquee

@@ -1189,3 +1189,26 @@ Both are now the recommended defaults (still sim-signed, not yet production-sign
 PRE-EXISTING date-flaky test uncovered en route: `test/growth.js`'s kitchen Bureau-raid loop used a 30-min
 accrual window that, on a `heatDecay=2` city-event day, decayed heat 100→40 (below the raid threshold)
 before the roll — a 5-min window keeps heat ≥90 so the raid stays reachable on any day.
+
+## Post-signing addendum — World step four: THE FRONTIER MADE REAL (a new emission surface, sign-off pending)
+
+The status frontier (a held NPC outfit's flag) became real turf: a held outfit pays a bounded TRIBUTE to
+the overlord family's treasury, and a rival family INVADES a held outpost by outbidding its garrison. All
+numbers are founder SIM sign-off levers — the tribute is a **NEW cash faucet**, so measure it before
+production (ground rule #1):
+
+- `WORLD.FRONTIER.TRIBUTE_BPS` 200 (2% of the outfit's `regenPerHr`) / `TRIBUTE_CAP_MS` 24h. Per-outfit
+  tribute/day: dockrats $2,400 · zappa $5,760 · kryl $19,200 · moreau $43,200 · volkov $86,400. **Base-wide
+  max ≈ $157k/day** across ALL five outfits (one holder each) — tiny vs the raid reservoirs' millions/day
+  ceilings, and it requires ROUTING the outfit to hold it (apex outfits need a co-op crew), so it's a small,
+  well-defended, regen-metered faucet. §10.4-clean: `world:tribute` is a ledgered treasury faucet in the
+  gang-treasuries check. **Sim rec:** add a frontier-tribute probe (hold each outfit, collect over a day) to
+  confirm the analytic $157k/day base-wide ceiling; keep unless it dwarfs a family's other treasury inflows.
+- `ROUT_GARRISON` $25k (installed on rout — the defense a rival outbids), `INVADE_BASE` $50k /
+  `INVADE_OUTBID` 1.5× (the treasury cost to take a held outpost — a `world:invade` sink, the seizeDistrict
+  twin). Pure treasury→burn sink (helps extraction-≤-inflow), so no emission concern — the levers just set
+  how contested the frontier is. **KEEP** unless invasion feels too cheap/expensive vs the tribute it wins.
+
+Design intent: the frontier is now income + contestable (rout to claim → collect tribute → defend vs
+invasion) rather than a leaderboard flag, WITHOUT touching the signed 6-district turf-perk map. Deferred:
+literal NPC occupation of the core districts (the fullest turf rewire).

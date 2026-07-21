@@ -262,6 +262,73 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM world_raid_members
 assert.equal((await call('POST', '/v1/world/kryl/plan', { token: stranded.token })).code, 200, 'and the freed soldier can plan a fresh raid');
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STEP FOUR — THE FRONTIER MADE REAL (productive + contestable outposts)
+// ─────────────────────────────────────────────────────────────────────────────
+// the step-three rout left the Frontier Mob (FRM, gangId) holding Kryl — now it's REAL turf.
+const kf = worldNpcOf('kryl');
+const kTributePerHr = Math.floor(kf.regenPerHr * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
+// (1) the rout installed a base GARRISON + started the TRIBUTE clock
+let kRow = (await pool.query(`SELECT garrison, tribute_at, held_by_gang FROM world_npcs WHERE npc_id='kryl'`)).rows[0];
+assert.equal(Number(kRow.garrison), WORLD.FRONTIER.ROUT_GARRISON, 'the rout installed the base garrison');
+assert(kRow.tribute_at, 'and started the tribute clock');
+assert.equal(kRow.held_by_gang, gangId, 'the Frontier Mob holds the outpost');
+// the board surfaces the outpost economics to the holder
+board = (await call('GET', '/v1/world', { token: boss.token })).body;
+let kb = board.npcs.find((n) => n.id === 'kryl');
+assert.equal(kb.tributePerHr, kTributePerHr, 'the board shows the tribute rate');
+assert.equal(kb.garrison, WORLD.FRONTIER.ROUT_GARRISON, 'and the garrison a rival must outbid');
+assert.equal(board.frontier.held, 1, 'the family holds one outpost');
+
+// (2) collect the tribute — warp the clock back 5h; a MEMBER banks it to the treasury (a ledgered faucet)
+await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '5 hours' WHERE npc_id='kryl'`);
+const treas0 = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gangId}'`)).rows[0].treasury);
+const col = await call('POST', '/v1/world/collect', { token: soldier.token });   // any member collects → treasury
+assert.equal(col.code, 200, 'a member collects the frontier tribute');
+assert.equal(col.body.collected, kTributePerHr * 5, 'tribute == rate × hours held');
+const treas1 = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gangId}'`)).rows[0].treasury);
+assert.equal(treas1 - treas0, kTributePerHr * 5, 'the treasury banks exactly the tribute');
+assert.equal(await ledgerOf(soldier.id, 'cash', 'world:tribute'), 0, 'the tribute is character_id NULL (gang-level) — not on the collector');
+const tributeLedgered = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND reason='world:tribute'`)).rows[0].s);
+assert.equal(tributeLedgered, kTributePerHr * 5, 'the tribute is ledgered world:tribute (a treasury faucet)');
+// the 24h CAP — warp back 48h, collect only a day's worth
+await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '48 hours' WHERE npc_id='kryl'`);
+const cap = await call('POST', '/v1/world/collect', { token: soldier.token });
+assert.equal(cap.body.collected, kTributePerHr * 24, 'tribute accrual caps at 24h');
+
+// (3) invasion gates
+assert.equal((await call('POST', '/v1/world/kryl/invade', { token: soldier.token })).body.error, 'rank', 'only the boss/underboss marches on the frontier');
+assert.equal((await call('POST', '/v1/world/dockrats/invade', { token: boss.token })).body.error, 'unheld', 'you rout an UNHELD outfit — you don’t invade it');
+assert.equal((await call('POST', '/v1/world/kryl/invade', { token: boss.token })).body.error, 'held', 'you don’t invade your own outpost');
+
+// (4) a RIVAL family invades the Frontier Mob's Kryl — outbids the garrison from the treasury
+const rboss = await mk('Rival Don');
+await seedCh(rboss.id, 'respect=2000, cash=100000');
+assert.equal((await call('POST', '/v1/gangs', { token: rboss.token, body: { name: 'The Usurpers', tag: 'USR' } })).code, 200, 'the rival family is founded');
+const rivalGang = (await meOf(rboss.token)).gang.id;
+const RIVAL_SEED = 500000;
+await pool.query(`UPDATE gangs SET treasury=${RIVAL_SEED} WHERE id='${rivalGang}'`);
+const expectCost = Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(WORLD.FRONTIER.ROUT_GARRISON * WORLD.FRONTIER.INVADE_OUTBID));
+const inv = await call('POST', '/v1/world/kryl/invade', { token: rboss.token });
+assert.equal(inv.code, 200, 'the rival marches on the outpost');
+assert.equal(inv.body.cost, expectCost, 'the cost outbids the incumbent garrison (max of base, 1.5× garrison)');
+assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${rivalGang}'`)).rows[0].treasury), RIVAL_SEED - expectCost, 'the treasury pays the war chest');
+assert.equal(await ledgerOf(rboss.id, 'cash', 'world:invade'), 0, 'the invade cost is character_id NULL (gang-level)');
+const invadeLedgered = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND reason='world:invade'`)).rows[0].s);
+assert.equal(invadeLedgered, -expectCost, 'the invade cost is a ledgered treasury SINK');
+kRow = (await pool.query(`SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id='kryl'`)).rows[0];
+assert.equal(kRow.held_by_gang, rivalGang, 'the outpost flies the Usurpers’ flag now');
+assert.equal(Number(kRow.garrison), expectCost, 'the invader’s stake is the new garrison');
+board = (await call('GET', '/v1/world', { token: boss.token })).body;
+kb = board.npcs.find((n) => n.id === 'kryl');
+assert.equal(kb.heldBy.mine, false, 'the Frontier Mob no longer holds Kryl');
+assert.equal(kb.invadeCost, Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(expectCost * WORLD.FRONTIER.INVADE_OUTBID)), 'the board quotes what it’d cost to take it back');
+
+// (5) §10.4 — the gang-treasuries check reconciles world:tribute (+) and world:invade (−); the only
+// unexplained drift is the SQL-seeded rival treasury (fully-earned tribute needs no seed)
+const gt = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert.equal(gt.lhs - gt.rhs, RIVAL_SEED, 'gang treasuries reconcile world:tribute/world:invade — drift == the rival seed only');
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 4 — the day/night clock
 // ─────────────────────────────────────────────────────────────────────────────
 const noonUTC = Date.UTC(2026, 0, 1, 15, 0, 0);  // 15:00 UTC — inside the patrol window
@@ -279,5 +346,5 @@ assert.equal(Math.round(bustProbOf(indicted, noonUTC) / bustProbOf(indicted, nig
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `world:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family)');
+console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family) + STEP FOUR — THE FRONTIER MADE REAL (a rout installs a garrison + tribute clock; a member collects the outpost’s TRIBUTE to the treasury — a ledgered world:tribute faucet capped at 24h; a rival INVADES by outbidding the garrison — a ledgered world:invade sink transferring the flag/garrison/clock; rank/unheld/held gates; the gang-treasuries §10.4 check reconciles both)');
 process.exit(0);
