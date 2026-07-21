@@ -2411,6 +2411,9 @@
     t.innerHTML = `
       <h2>The Build <span class="d" style="font-size:10px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
         <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
+      <div class="d" style="font-size:10px;margin:-4px 0 6px;color:var(--dim)">Bloodline (prestige ${sk.prestige ?? 0}):
+        ${sk.points?.prestigeBonus ? `+${sk.points.prestigeBonus} bonus point${sk.points.prestigeBonus > 1 ? 's' : ''}` : `no bonus points yet (1 per ${sk.prestigePerPoint || 10} prestige)`}
+        · your heir is born knowing ${sk.memorySlots ?? 0}/${sk.memoryMax ?? 3} of your basics (muscle memory — 1 slot per ${sk.prestigePerSlot || 8} prestige)</div>
       <div class="grid">${Object.entries(branches).map(([br, list]) => `
         <div class="card"><span class="t" style="text-transform:capitalize">${br}</span>
           ${list.sort((a, b) => a.tier - b.tier).map((s) => `

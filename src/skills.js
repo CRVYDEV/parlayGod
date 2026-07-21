@@ -13,10 +13,15 @@ import { GameError } from './game.js';
 import { SKILLS, skillOf, activeOf, levelOf, assetEnergyCap, M8 } from './rules.js';
 import { spendOmr } from './vanity.js';
 
-const pointsOf = (ch, owned) => {
-  const total = Math.floor(levelOf(Number(ch.respect)) / SKILLS.LVL_PER_POINT);
+// STEP THREE — PRESTIGE POINTS: a long-lived bloodline gets a small bonus point budget on top of the
+// level-derived one (capped). Pure build power, no currency, no §10.4 surface. Prestige is account-level.
+const prestigePoints = (prestige) => Math.min(SKILLS.PRESTIGE_POINT_MAX, Math.floor(Number(prestige || 0) / SKILLS.PRESTIGE_PER_POINT));
+const pointsOf = (ch, owned, prestige = 0) => {
+  const fromLevel = Math.floor(levelOf(Number(ch.respect)) / SKILLS.LVL_PER_POINT);
+  const bonus = prestigePoints(prestige);
+  const total = fromLevel + bonus;
   const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
-  return { total, spent, available: Math.max(0, total - spent) };
+  return { total, spent, available: Math.max(0, total - spent), fromLevel, prestigeBonus: bonus };
 };
 
 // LEARN — spend derived points; previous tier in the branch is the prerequisite.
@@ -29,13 +34,13 @@ export async function learnSkill(ch, skillId, client, h) {
     if (!h.owned.skills.has(prereq.id))
       throw new GameError('prereq', `${s.name} builds on ${prereq.name} — learn that first.`);
   }
-  const pts = pointsOf(ch, h.owned);
+  const pts = pointsOf(ch, h.owned, h.acct?.prestige);
   if (s.cost > pts.available)
     throw new GameError('points', `${s.name} takes ${s.cost} point(s) — you have ${pts.available}. Points come with levels.`);
   await client.query('INSERT INTO character_skills (character_id, skill_id) VALUES ($1,$2)', [ch.id, s.id]);
   h.owned.skills.add(s.id); // the view (and any same-txn touchpoint) sees it immediately
   await h.track(client, ch.account_id, 'skill_learned', { skill: s.id });
-  return { ok: true, learned: s.id, name: s.name, points: pointsOf(ch, h.owned) };
+  return { ok: true, learned: s.id, name: s.name, points: pointsOf(ch, h.owned, h.acct?.prestige) };
 }
 
 // ── STEP TWO — ACTIVE ABILITIES (the new mechanic): a capstone-unlocked resource/cooldown BURST on a
@@ -82,7 +87,7 @@ export async function respecOne(ch, skillId, client, h) {
   h.owned.skills.delete(s.id);
   ch.respec_at = new Date();
   await h.track(client, ch.account_id, 'skill_respec_one', { skill: s.id });
-  return { ok: true, unlearned: s.id, name: s.name, omr: SKILLS.RESPEC_ONE_OMR, points: pointsOf(ch, h.owned) };
+  return { ok: true, unlearned: s.id, name: s.name, omr: SKILLS.RESPEC_ONE_OMR, points: pointsOf(ch, h.owned, h.acct?.prestige) };
 }
 
 // RESPEC — unlearn everything for RESPEC_OMR (a §10.4 burn), on the shared respec cooldown.
@@ -96,18 +101,40 @@ export async function respecSkills(ch, client, h) {
   h.owned.skills = new Set();
   ch.respec_at = new Date();
   await h.track(client, ch.account_id, 'skill_respec', { unlearned });
-  return { ok: true, unlearned, omr: SKILLS.RESPEC_OMR, points: pointsOf(ch, h.owned) };
+  return { ok: true, unlearned, omr: SKILLS.RESPEC_OMR, points: pointsOf(ch, h.owned, h.acct?.prestige) };
 }
 
 // The board — the full tree, what this street knows, and the point budget.
 export function skillsBoard(ch, h) {
   const cdLeft = ch.active_at ? Math.max(0, SKILLS.ACTIVE_CD_MS - (Date.now() - new Date(ch.active_at).getTime())) : 0;
+  const prestige = Number(h.acct?.prestige || 0);
   return {
     lvlPerPoint: SKILLS.LVL_PER_POINT, respecOmr: SKILLS.RESPEC_OMR, respecOneOmr: SKILLS.RESPEC_ONE_OMR,
-    points: pointsOf(ch, h.owned),
+    points: pointsOf(ch, h.owned, prestige),
     tree: SKILLS.TREE.map((s) => ({ ...s, known: h.owned.skills.has(s.id) })),
     // step two: capstone-unlocked ACTIVE abilities + their shared cooldown
     actives: SKILLS.ACTIVES.map((a) => ({ id: a.id, name: a.name, desc: a.desc, req: a.req, unlocked: h.owned.skills.has(a.req) })),
     activeCooldownSeconds: Math.ceil(cdLeft / 1000),
+    // step three: how prestige carries into a new street — the bonus points now, the memory slots at death
+    prestige, memorySlots: memorySlotsOf(prestige), memoryMax: SKILLS.MEMORY_MAX,
+    prestigePerSlot: SKILLS.PRESTIGE_PER_SLOT, prestigePerPoint: SKILLS.PRESTIGE_PER_POINT,
   };
+}
+
+// STEP THREE — MUSCLE MEMORY: how many of the deceased's FOUNDATION skills the heir is born knowing.
+// Capped at MEMORY_MAX; one slot per PRESTIGE_PER_SLOT prestige. The estate carries a lowest-tier-first
+// prefix (prereq-safe) — read this both in the board (display) and in runEstate (the actual carry).
+export const memorySlotsOf = (prestige) =>
+  Math.min(SKILLS.MEMORY_MAX, Math.floor(Number(prestige || 0) / SKILLS.PRESTIGE_PER_SLOT));
+
+// The prefix of a skill set the heir remembers: lowest tiers first (a prereq-safe prefix of the branches).
+export function rememberedSkills(skillIds, prestige) {
+  const slots = memorySlotsOf(prestige);
+  if (slots <= 0) return [];
+  return [...skillIds]
+    .map((id) => skillOf(id))
+    .filter(Boolean)
+    .sort((a, b) => a.tier - b.tier || a.branch.localeCompare(b.branch))
+    .slice(0, slots)
+    .map((s) => s.id);
 }

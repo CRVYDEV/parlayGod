@@ -4,6 +4,7 @@
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding } from './game.js';
+import { rememberedSkills } from './skills.js';
 import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
@@ -1292,6 +1293,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const acct = h.victimAcct;
   const lvl = levelOf(Number(victim.respect));
   const legacy = Math.floor(lvl / 2);
+  const priorPrestige = Number(acct.prestige);  // muscle memory reads the bloodline's ACCUMULATED prestige (pre-death) — a fresh line's skills still fully die
   acct.prestige = Number(acct.prestige) + legacy;
   acct.deaths = Number(acct.deaths) + 1;
 
@@ -1330,6 +1332,13 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
+  // MUSCLE MEMORY (Skills step three): a long bloodline is born remembering a lowest-tier-first
+  // PREFIX of the deceased's skills — up to min(MEMORY_MAX, floor(prestige/PRESTIGE_PER_SLOT))
+  // slots. Read from the loaded set BEFORE the character_skills wipe below; sorting tier-ASC
+  // makes the prefix prereq-safe (any skill's tier-(t−1) same-branch prereq sorts earlier).
+  // Skills still DIE with the street (this is a small head start, not survival); MEMORY_MAX 0 or
+  // a short bloodline (prestige < PRESTIGE_PER_SLOT) restores the hard rule. Pure build, no §10.4.
+  const rememberedSkillIds = rememberedSkills([...(h.victimOwned.skills || [])], priorPrestige);
   for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
@@ -1467,6 +1476,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   for (const m of remembered)
     await client.query('INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,$2,$3)', [heirId, m.npc, m.s]);
   report.kept.memory = remembered.length;
+  // MUSCLE MEMORY — the heir is born knowing a prereq-safe prefix of the bloodline's skills
+  for (const sid of rememberedSkillIds)
+    await client.query('INSERT INTO character_skills (character_id, skill_id) VALUES ($1,$2)', [heirId, sid]);
+  report.kept.skills = rememberedSkillIds.length;
   await h.notify(client, heirId, 'estate', report);
   // VENDETTA — a player fire-kill swears the bloodline against the killer's (NPC/mod deaths
   // don't: no street to swear against). One active vendetta per account pair; a repeat kill

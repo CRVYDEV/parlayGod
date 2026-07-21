@@ -1279,6 +1279,14 @@ export const SKILLS = {
         FENCE_MULT: 1.08, BROKER_FEE_MULT: 0.5, TRUNK_BONUS: 3, JAIL_MULT: 0.8, CONVOY_MULT: 0.8,
         // step-two capstone stacks (multiplicative on the branch signature; the prereq chain guarantees the base skill is owned)
         MADE_MAN_MULT: 1.08, KINGPIN_MULT: 1.08, ROAD_BOSS_TRUNK: 3 },
+  // STEP THREE — PRESTIGE carries into the build (the deferred founder call; softens death, so a
+  // SIGN-OFF lever). Skills still DIE with the street, BUT: (1) MUSCLE MEMORY — the heir is born
+  // remembering up to min(MEMORY_MAX, floor(prestige/PRESTIGE_PER_SLOT)) of the deceased's FOUNDATION
+  // skills (lowest tiers first, so a prefix of the tree — prereq-safe; a veteran's basics carry). (2)
+  // PRESTIGE POINTS — a long-lived bloodline gets floor(prestige/PRESTIGE_PER_POINT) bonus skill points
+  // (capped PRESTIGE_POINT_MAX) on top of the level-derived budget — a small head start, not a currency
+  // (no §10.4 surface). MEMORY_MAX 0 / PRESTIGE_POINT_MAX 0 restores the hard "skills die" rule.
+  MEMORY_MAX: 3, PRESTIGE_PER_SLOT: 8, PRESTIGE_PER_POINT: 10, PRESTIGE_POINT_MAX: 3,
 };
 export const activeOf = (id) => SKILLS.ACTIVES.find((a) => a.id === id) || null;
 export const skillOf = (id) => SKILLS.TREE.find((s) => s.id === id) || null;
