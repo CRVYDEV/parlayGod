@@ -1653,6 +1653,7 @@ export const SPEAKEASY = {
   MIN_LEVEL: 15,             // a made man's venue
   OPEN_COST: 750000,         // $ to establish the club (a cash sink)
   INCOME_CAP_MS: 86400000,   // 24h base bar-take cap (the business pattern)
+  UPKEEP_BPS: 2000,          // SIGN-OFF (net-EV): protection + wages come off the top of every collect (the business-'pad' 20% rate) — the bar take is no longer a risk-free faucet; a §10.4 speakeasy: cash sink
   VISIT_CD_MS: 3600000,      // 1h per-(patron,club) round cooldown
   NAME_OMR: 8,               // name the club ($OMR vanity burn)
   REGULAR_VISITS: 10,        // visits to become a "regular" (status)

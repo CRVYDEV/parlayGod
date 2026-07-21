@@ -1315,3 +1315,14 @@ in the game** — ~$3.12M/day at the top, ≈ a maxed territory op ×1.6–2, un
 sub-week payback at every tier. **FOUNDER DIAL (not retuned — ground rule #1):** if it should be taxed like
 other endgame fronts, add (a) a passive-owner notoriety/upkeep drip (the business-`pad` precedent) or (b)
 trim the `SPEAKEASY.TIERS[].incomePerHr` curve. Flagged for sign-off with the numbers in hand.
+
+### Speakeasy upkeep — the founder dial SHIPPED (2026-07-21)
+
+Founder chose the upkeep drip (over trimming the income curve) to tax the passive bar take. Applied +
+tested (suite 30/30, sim drift-0): **`SPEAKEASY.UPKEEP_BPS` (2000 = 20%)** comes off the top of every
+`collectSpeakeasy` as a `speakeasy:upkeep` cash SINK (the business-'pad' 20% rate). §10.4-clean — both the
+`speakeasy:income` faucet and the `speakeasy:upkeep` sink are character_id'd under the existing `speakeasy:`
+cash prefix (zero invariant/vocabulary change; the per-character check reconciles). Effect: top-tier net
+$3.12M → **$2.496M/day**, payback ~6.0d → ~7.5d; every tier keeps 80% of gross. The `incomePerHr` curve
+remains the further dial if a leaner front is wanted. `test/speakeasy.js` asserts gross/upkeep/net + the
+ledgered sink; sim P9.12 prints net-of-upkeep by tier.
