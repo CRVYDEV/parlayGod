@@ -65,6 +65,7 @@ assert(m.cash > 60000 && m.cb >= 1, `earned a bankroll organically (cash ${m.cas
 
 assert.equal((await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'Barksdale Org', tag: 'BO' } })).code, 200);
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: boss.token, body: { amount: 31000 } })).code, 200);
+await pool.query(`UPDATE districts SET npc_holder=NULL WHERE id='docks'`); // World step five: this hardening flow just needs a seizable district (bypass the NPC occupation)
 assert.equal((await call('POST', '/v1/districts/docks/seize', { token: boss.token })).code, 200);
 
 // garage: boost two, melt one (tithe), fence one

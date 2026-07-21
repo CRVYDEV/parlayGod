@@ -1230,3 +1230,25 @@ convoy collection). Two balance items flagged, NOT patched (ground rule #1):
   so never permanent for anyone who can rout the outfit — but a sub-apex family can be locked out of an
   apex outpost held by a rival. Dial: a garrison decay-over-time, an invade cooldown, or a cap on the
   ratchet. Founder call (feature = an escalating war chest vs annoyance = a stuck-high state).
+
+## Post-signing addendum — World step five: THE OCCUPATION (a change to the signed turf ON-RAMP, sign-off)
+
+The 5 apex outfits now literally garrison 5 of the 6 core districts (dockrats→docks, zappa→brick,
+kryl→canal, moreau→foundry, volkov→neon; `cathedral` free). A family LIBERATES an occupied district via
+`seizeDistrict`, and the cost scales with the occupying outfit's LIVE strength (`liberationCost` =
+`outfit.max × OCCUPY_BPS/10000 × strengthFrac`, floored `OCCUPY_MIN`). §10.4-clean (the existing
+`turf:seize:` sink; the sim stays drift-0). **This is a change to the signed turf on-ramp — founder SIM
+sign-off before production (ground rule #1):**
+- **The signed district PERK VALUES are UNTOUCHED** (docks +50% contraband, neon +15% income, etc.) —
+  only WHO you take the district from changed (an NPC garrison, not a free grab). The perk is dormant while
+  occupied (holder_gang NULL, exactly like an unowned district) and active the moment a family holds it.
+- **The on-ramp:** 5/6 core districts start NPC-held. Liberation cost at FULL outfit strength scales with
+  the outfit tier: docks $45k · brick $120k · canal $450k · foundry $1.5M · neon $3.6M. The weak-outfit
+  districts (~$45k–$120k) are a soft on-ramp that teaches the World raid loop (rout the outfit → its
+  district floors at $30k); `cathedral` stays a pure free ($30k `SEIZE_BASE`) grab. A fresh family can
+  still get turf, but the cheap free-seize of a valuable district is gone — the prizes are conquests now.
+- **The interlock** (the point of the capstone): beating an outfit down (routing its reservoir) drops its
+  district's liberation cost in real time, so the World pillar and core turf are now one loop.
+- Levers: `WORLD.OCCUPATION` (the mapping — occupy fewer districts to soften the on-ramp), `OCCUPY_BPS`
+  3000 (the full-strength cost fraction), `OCCUPY_MIN` 30000 (the floor). Sim the net on-ramp EV + the
+  time-to-first-turf for a new family before production.

@@ -45,7 +45,8 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
-         RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf } from './rules.js';
+         RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
+         worldNpcOf, liberationCost } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -868,10 +869,23 @@ export async function buildServer() {
     finally { client.release(); }
   });
   app.get('/v1/districts', async () => {
-    const r = await pool.query('SELECT d.id, d.holder_gang, d.garrison, g.name AS gang_name, g.tag FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang');
-    return { districts: r.rows.map((d) => ({ id: d.id, perk: DISTRICTS.find((x) => x.id === d.id)?.perk,
-      holder: d.holder_gang ? { gangId: d.holder_gang, name: d.gang_name, tag: d.tag } : null,
-      garrison: Math.floor(Number(d.garrison)) })) };
+    const r = await pool.query('SELECT d.id, d.holder_gang, d.garrison, d.npc_holder, g.name AS gang_name, g.tag FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang');
+    // step five — THE OCCUPATION: quote the LIVE liberation cost for each NPC-garrisoned district (scales
+    // with the occupying outfit's current strength, so the raid loop cheapens turf).
+    const out = [];
+    for (const d of r.rows) {
+      const base = { id: d.id, perk: DISTRICTS.find((x) => x.id === d.id)?.perk,
+        holder: d.holder_gang ? { gangId: d.holder_gang, name: d.gang_name, tag: d.tag } : null,
+        garrison: Math.floor(Number(d.garrison)) };
+      if (d.npc_holder) {
+        const fx = worldNpcOf(d.npc_holder);
+        const frac = await World.outfitStrengthFrac(pool, fx);
+        base.occupiedBy = { npc: d.npc_holder, name: fx?.name || d.npc_holder, strengthPct: Math.round(frac * 100) };
+        base.liberationCost = liberationCost(fx, frac);
+      }
+      out.push(base);
+    }
+    return { districts: out };
   });
 
   // ── M3: the streets (§5.2) ──

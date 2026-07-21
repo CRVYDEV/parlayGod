@@ -690,6 +690,7 @@
     const com = (await api('GET', '/v1/commission')).body || {};
     const mySeat = (com.seats || []).find((s) => s.name === g.name);
     const boss = me.gang.role === 'boss' || me.gang.role === 'underboss';
+    const distr = (await api('GET', '/v1/districts')).body?.districts || [];
     t.innerHTML = `
       <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.foundation ? ` <span class="chip good">${g.foundation}</span>` : ''} — you are ${me.gang.role}</h2>
       <div class="grid">
@@ -725,9 +726,13 @@
       <button class="act" id="tribo-go">pool $OMR</button>
       <span class="d" style="color:var(--dim);font-size:11px">tribute builds the treasury AND the family's season standing</span>
 
-      <h2 style="margin-top:12px">War & Turf</h2>
-      ${boss ? `<button class="act" data-do="POST /v1/districts/${me.loc}/seize">seize ${me.loc}</button>` : ''}
-      ${boss ? `<input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}
+      <h2 style="margin-top:12px">War & Turf <span class="d" style="font-size:10px">(the apex outfits garrison the core districts — beat one down in The City, then LIBERATE its turf here)</span></h2>
+      <div class="grid">${distr.map((d) => `
+        <div class="card"><span class="t">${d.id}${d.perk ? '' : ''}</span> ${d.occupiedBy ? `<span class="chip bad">occupied — ${d.occupiedBy.name} @ ${d.occupiedBy.strengthPct}%</span>` : d.holder ? `<span class="chip ${d.holder.tag === g.tag ? 'good' : ''}">[${d.holder.tag}]</span>` : '<span class="chip">open</span>'}
+          <div class="d">${d.perk || ''}</div>
+          ${d.occupiedBy ? `<div class="d" style="color:var(--dim)">liberate for $${fmt(d.liberationCost)} (rout ${d.occupiedBy.name} to cheapen it)</div>` : d.holder ? `<div class="d" style="color:var(--dim)">garrison $${fmt(d.garrison)}</div>` : ''}
+          ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
+      ${boss ? `<div style="margin-top:8px"><input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button></div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}
 
       <h2 style="margin-top:12px">The Commission ${mySeat ? `<span class="chip good">seated — #${(com.seats || []).indexOf(mySeat) + 1}</span>` : '<span class="chip">no seat</span>'}</h2>
       <div class="d" style="color:var(--dim);font-size:11px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
