@@ -5,7 +5,37 @@ build (muscle memory + bonus points); (2) **randomized starting stats + a 0.01-E
 Lenses: §10.4/economy, death/estate/persist-clobber, concurrency/locks, exploit/grief, chain-boundary.
 Every claim verified against source. **No CRITICAL/HIGH.** One MED lock-order fix applied in-commit.
 
-## Fixed in-commit
+## Second pass — Skills step four (GRANDMASTERY) + a concurrency re-review
+
+A follow-up red-team over the grandmastery drop + a deeper concurrency look at the re-roll. **No
+CRITICAL/HIGH.** One MED lock-hygiene fix applied.
+
+**MED — the re-roll's rare AB-BA vs `mintCharacter` now surfaces as a clean `contention`, not a 500.**
+`withCharacter` locks character→account (canonical) and the earlier fix aligned `rerollCharacter` to
+the same order, so a re-roll racing any normal action is deadlock-free. The one residual is
+`mintCharacter`, which locks account→character(implicit UPDATE) — the reverse — so a *same-account*
+mint + re-roll fired simultaneously (double-tap; both are once-off chain-fee-gated) could 40P01. That
+already self-heals via Postgres abort, but it surfaced as a raw 500. **Fix:** `rerollCharacter`'s catch
+now runs `deadlockToRetry(e)` (the codebase-standard 40P01/23505 → retryable `contention` mapping), so
+the rare edge is a clean retry instead of a 500. (mintCharacter's own inconsistency is pre-existing and
+out of scope; the common re-roll-vs-`withCharacter` path is already correct.)
+
+**Grandmastery — verified CLEAN.** Owning both capstones of a pair DERIVES the grandmastery (no cost,
+no state — recomputed from the owned-skills Set on every read via `grandmasteriesFor`), so there's
+nothing to persist and nothing to clobber. The ultimate actives move only energy/nerve (regen
+resources) + op-cooldowns (`heist_at`/`world_raid_at`, which ride `persistCharacter`) — ZERO §10.4, the
+same surface as the step-two capstone actives (sim drift-0). `useActive` gates an ultimate on BOTH
+capstones (`ult.reqs.every(...)`, tested — the locked Warlord is refused). The reduced cooldown
+(`activeCdFor`) is applied CONSISTENTLY at the gate, the returned `cooldownSeconds`, AND the board's
+`activeCdSeconds`/`activeCooldownSeconds` (all read the same helper) — no way to bypass the cooldown by
+a stale display. `active_at` is written by direct SQL (outside the persist positional UPDATE — the
+step-two discipline), so no clobber. **Death:** a capstone is tier-4, and muscle memory only carries a
+tier-ASC prefix of ≤3 slots (all tier-1/2), so a capstone — hence a grandmastery — is NEVER inherited;
+the heir must re-earn both, no death-softening. The faster cooldown is pure pacing (energy/nerve refill
+over time anyway; the burst just tops them — never `jail_until` or a §10.4 cap), bounded by the
+per-action gates, so no unbounded exploit.
+
+## Fixed in-commit (first pass)
 
 **MED — the re-roll's lock order could lose a build (and risked an AB-BA vs the canonical order).**
 `rerollCharacter` originally locked `account_persistent FOR UPDATE` first and issued a bare
