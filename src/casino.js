@@ -602,9 +602,13 @@ export async function enterTournament(ch, client, h) {
 export async function resolveTournament(client, tid) {
   const t0 = (await client.query('SELECT * FROM poker_tournaments WHERE id=$1', [tid])).rows[0];
   if (!t0 || t0.status !== 'open') return null;
-  // LOCK ORDER: entrant chars sorted → tournament row (the resolveMainEvent discipline)
+  // LOCK ORDER: entrant chars sorted → poker_state → tournament row. poker_state MUST be locked
+  // BEFORE the tournament row here — clearCurrent() below writes it, and enterTournament locks
+  // poker_state → tournament, so locking the tournament first would AB-BA a concurrent entry
+  // (red-team: a real deadlock, previously only masked by the deadlockToRetry/worker retry).
   const entChars = (await client.query('SELECT character_id FROM poker_entries WHERE tournament_id=$1', [tid])).rows.map((r) => r.character_id).sort();
   for (const cid of entChars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  await client.query('SELECT current FROM poker_state WHERE id=1 FOR UPDATE');
   const t = (await client.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open' FOR UPDATE", [tid])).rows[0];
   if (!t) return null;
   const pool = Number(t.pool);

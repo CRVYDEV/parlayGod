@@ -695,7 +695,17 @@ district gate, the short-field refund + closed-window + double-entry gates, a 3-
 dead entrant's stake burned + the top places splitting net of rake, and the escrow §10.4 check.
 Suite 32/32 + sim drift-0. All `TOURNEY.*` numbers are founder sign-off levers. Deferred (step five):
 true multi-way ring poker with live betting streets + a bracketed multi-table tournament (both need
-turn-based session state).
+turn-based session state). A focused three-lens red-team (`AUDIT-casino-tournament.md`: §10.4/escrow,
+enter→settle concurrency, exploit/grief) returned **no CRITICAL/HIGH** and fixed one MED: an
+enter-vs-settle deadlock — `resolveTournament` locked the tournament row before `poker_state` (via
+`clearCurrent`) while `enterTournament` locks `poker_state`→tournament (AB-BA, masked by the standard
+40P01 retry); `resolveTournament` now locks `poker_state` before the tournament row, acyclic. Verified
+CLEAN: the escrow identity exactness (open/resolved/refunded each reconcile), the half-take→street_tax
++ full-NULL-row being the audited casino:pvp pattern (`street_tax.pool` cash isn't a §10.4 bucket),
+the materialization/settle serialization + idempotency + no-persist-clobber + poker_entries kept out of
+the estate wipe, and alt-stuffing being −EV (renormalized `−rake/N` for every entrant, no dilution).
+Design note (flagged, not a defect): the tournament is a chance-based pooled lottery (server-dealt
+random hands), not skill poker — matches the den's other games.
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,
