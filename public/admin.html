@@ -173,7 +173,15 @@
       + barRow('linked a wallet', pr.linked_wallet || 0)
       + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
       + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
+      + renderBroadcast(fn.broadcast)
       + renderReferral(fn.referral);
+  }
+  function renderBroadcast(bc) {
+    if (!bc) return '';
+    const kinds = Object.entries(bc.byKind || {}).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ') || '—';
+    return `<div class="note" style="margin-top:8px;color:var(--neon)">THE BROADCAST — ${fmt(bc.shares)} share intents from ${fmt(bc.sharers)} players <span style="color:var(--dim)">(the top of the organic funnel)</span></div>`
+      + `<div class="row"><span class="k">by kind</span><span class="v">${kinds}</span></div>`
+      + `<div class="row"><span class="k">referred / share</span><span class="v">${bc.referredPerShare} <span style="color:var(--dim)">signups per share</span></span></div>`;
   }
   function renderReferral(rf) {
     if (!rf) return '';

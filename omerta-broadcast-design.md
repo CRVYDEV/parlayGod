@@ -80,11 +80,29 @@ or it unfurls with no image. `GET /card/:type/:name.png` rasterizes the card:
 - The route degrades on a malformed SVG (caught → SVG fallback) and serves `image/png` with a
   5-minute cache header. A cold render is ~360ms; cached hits are instant.
 
+## Funnel instrumentation — measuring the loop (BUILT)
+
+You can't optimize what you can't see, so the share loop is now measured end-to-end:
+
+- **`POST /v1/broadcast/shared {kind}`** — a fire-and-forget beacon the client hits when a
+  player taps 📣 broadcast or **brag on X**. It's **authed** (bounded by real accounts + the
+  rate limiter — deliberately *not* an unauthenticated write, which a keyless telemetry beacon
+  on a public route would be), records `track('broadcast_share', {kind})`, and touches no §10.4
+  surface. `kind` ∈ {dossier, win, wanted, whacked}.
+- **`funnelStats` → `broadcast` block** (`GET /v1/mod/funnel`): `shares`, `byKind`, distinct
+  `sharers`, and **`referredPerShare`** (signups-on-a-code ÷ shares) — the reach→conversion
+  number that ties the top of the funnel (shares) to the middle (`referral.referred`) and the
+  bottom (`referral.qualified` + the K-factor already there). So the founder can read the whole
+  organic loop in one call: **shares → referred signups → qualified recruits → K-factor**.
+- Surfaced on the **admin dashboard** (`public/admin.html`) as a "THE BROADCAST" line in the
+  Onboarding Funnel panel, above the referral funnel.
+- Deliberately **not** tracking the keyless `GET /u/:name` / `GET /card/…` hits — those are
+  dominated by OG crawlers and would be an unauthenticated DB-write amplifier; raw view counts
+  are an edge/CDN-analytics concern, not an app write.
+
 ## Deferred
 
 - An **obituary** card type and richer share triggers.
-- **Funnel instrumentation** — track profile views and card shares alongside the existing
-  referral funnel (`GET /v1/mod/funnel`) to measure the loop's lift.
 - A **bundled brand font** — resvg falls back to a system serif (DejaVu on Linux) for the
   card's Georgia stack; bundling one open serif in the repo would make the PNG output
   byte-deterministic across hosts (cosmetic, not blocking).
