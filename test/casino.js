@@ -298,6 +298,22 @@ assert(Number((await pool.query(`SELECT COUNT(*) n FROM rng_audit WHERE action L
 // THE regulatory line holds through the table games too
 const omrAfterBJ = (await meOf(token)).omr;
 
+// red-team regression: a LIVE blackjack hand's pending payout is RESERVED (openLiability), so the
+// street can't be tipped against an unresolved hand — parity with the numbers/fight reservation
+let bigLive = null;
+for (let i = 0; i < 25 && !bigLive; i++) { await seed('nerve=50');
+  const d = await call('POST', '/v1/casino/blackjack', { token, body: { amount: CASINO.HIGH_MAX } });
+  assert.equal(d.code, 200, `big deal (${JSON.stringify(d.body)})`);
+  if (!d.body.done) bigLive = d.body; // a natural resolved — deal again until a live hand sits
+}
+assert(bigLive, 'a live high-stakes hand sits'); // Lou is level 58 → the high-stakes room
+await seed('nerve=50');
+const taxBeforeRes = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a dice round while a big hand is live');
+assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), taxBeforeRes,
+  'no street tip while the live blackjack hand reserves more than the realized profit');
+await call('POST', '/v1/casino/blackjack/stand', { token }); // resolve so no hand lingers into the §10.4 check
+
 // ── HEADS-UP HOLD'EM: consent-by-listing, best 5-of-7 wins the raked pot, a tie splits ──
 await pool.query(`UPDATE characters SET cash=5000000, loc='neon' WHERE id='${did}'`); // Danny sits at the table
 assert.equal((await call('POST', `/v1/casino/poker/${did}`, { token, body: { amount: 1000 } })).body.error, 'not_dealing', 'no hand without a listing');

@@ -663,7 +663,17 @@ bet/win ledger sums, the one-live-hand + no-double-after-hit gates, rng-audit) +
 den-profit identity + $OMR-untouched holding. Suite 32/32 + sim drift-0. All step-three numbers
 (`CASINO.BJ_*`, `POKER_MIN`) are founder sign-off levers (BALANCE.md — a net sink, no signed faucet
 touched). Deferred (step four): true multi-way ring poker + a live TOURNAMENT prize pool (both need
-turn-based session state this atomic architecture defers), blackjack splits/insurance.
+turn-based session state this atomic architecture defers), blackjack splits/insurance. A focused
+three-lens red-team (`AUDIT-casino-tables.md`: §10.4/den-book, stateful-hand concurrency, exploit/
+grief) returned **no CRITICAL/HIGH** and fixed one MED (regression added): `openLiability` reserved
+the numbers/fight exposure but NOT a live blackjack hand's pending payout, so the street could be
+tipped against an unresolved hand (parity gap, not a §10.4 drift — the den identities hold either
+way + the cap is soft) — now each live hand's max gross payout (`bet × (dbl?2:1) × 2`) is reserved.
+Verified CLEAN: the den-profit identity + per-character cash exactness, the `blackjack_hands` direct-
+SQL/char-lock discipline (no persist-clobber, deals serialize → `hand` gate, the PK-23505 path
+unreachable), `poker_limit` persist parity + `playPoker`'s den_volume→street_tax lock order (the
+B-H1 posture), infinite-deck un-countability, −EV poker collusion, no hole-card leak (only the
+dealer up-card is exposed until resolve), and abandonment being pure self-forfeit.
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,
