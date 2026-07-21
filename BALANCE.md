@@ -1372,3 +1372,25 @@ cap). Measured in `tools/sim.js` P9.14 (analytic, zero value seeded, §10.4 unto
 
 `port:sale` is the emission surface — sim the net EV per route before production (measured at parity).
 Suite 32/32 + sim drift-0.
+
+## AUDIT-full-system-v2 economic flags (2026-07-21) — founder sign-off (NOT patched, ground rule #1)
+
+The overnight full-system red-team found NO new unbounded $OMR extraction (the reserve queue holds —
+in-game $OMR faucets are all extraction-capped). Two CONFIRMED IN-GAME-CASH Sybil-split findings defeat
+a SIGNED balance lever; left for founder decision because a "fix" would retune/redesign a signed number
+and the Sybil-of-a-per-account-cap posture is accepted game-wide (fight-fix / referral precedent):
+
+- **J-1 — bank-interest whale-taper is per-character (defeats signed D5).** The D5 taper (full 2%/day on
+  the first $10M/character, 10% of rate beyond) has no cross-account aggregation, so a whale who splits
+  $100M across 10 alt banks earns ~$2M/day vs ~$380k/day consolidated (~5.3×). Bank balances are also
+  loot-safe (`whack:loot` takes pocket + in-transit only). It's a FAUCET amplification (bank:interest),
+  in-game cash, extraction-capped — but it un-bounds the exact exponential the D5 taper was signed to
+  cap. **Options:** accept as the Sybil posture (each alt still needs ~$10M parked + the capital moved
+  in), OR a global/account-aggregated taper (a design change), OR make alt banks loot-exposed. `accrual.js`
+  bank-interest block; `rules.js` BANK_TAPER_ABOVE $10M / BANK_TAPER_KEEP 10%.
+- **J-2 — `pen:work` cash faucet has no level floor + no per-account daily cap.** Every sibling faucet
+  has a rookie floor (npcHit/WANTED/fight-bet) or a daily cap + agent-exclusion (social tasks); yard work
+  (`pen.js:workYard`, ~$400/15 energy, jailed-only) has neither. Self-limiting per sim P9.11 (jailed-only,
+  energy-bounded, shaves the sentence), so magnitude is modest — but the structural inconsistency stands.
+  **Rec:** add `PEN.WORK_MIN_LVL` (the WHEEL_MIN_LVL/npcHit-floor pattern) + optionally a per-(account,day)
+  cap if the alt-grind is seen in the alpha. `rules.js` PEN.WORK_ENERGY/WORK_PAY/WORK_CUT_S are the levers.

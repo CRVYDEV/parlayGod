@@ -66,3 +66,51 @@ suite (32/32) + sim (drift-0) green after each batch. **No CRITICAL found. No §
 §10.4 across all modules; EIP-712/replay/reentrancy/full-reserve-queue/minted-gate; persist-clobber &
 pg-mem-quirk classes; route-auth coverage & no-SQL-injection; loot/shield-ordering/estate-wipe/
 account-survival; casino:pvp taxed-transfer family; the pool-vs-account cross-module lock directions.
+
+---
+
+## WAVE 2 — four deeper targeted lenses (2026-07-21)
+
+Emphasis: "check all contract interactions" + adversarially re-verify Wave-1's own fixes.
+
+- **G — deep Solidity contract re-audit (all 6 + cross-contract web): no CRITICAL/HIGH.** One new
+  finding a single pass missed → **G-MED-1**: the per-gearId LIFETIME cap lived only in VoucherClaim
+  (the swappable bridge); a Safe `setMinter(VC-v2)` reset the count → 2×+ circulating gear supply.
+  **FIXED** — moved the authoritative cap to GearVault (`cap`/`minted`/`setGearCap`, fail-closed;
+  survives a minter swap); VoucherClaim keeps a pre-flight; Foundry minter-swap regressions added;
+  contracts compile clean. Accepted trust-model items (LOW, not patched): VoucherClaim.sweep asymmetry
+  (Safe = root of trust), bond signer-controlled price (blast radius = daily cap, as designed),
+  staking APY retroactivity (pool-bounded). All core walls (EIP-712/replay/reentrancy incl. the 1155
+  receiver hook/CEI/access-control/init/pool-separation/daily-caps) re-verified sound.
+- **H — adversarial re-verification of Wave-1's fixes: all 4 commits VERDICT SOUND.** No reintroduced
+  exploit, no second unguarded revenue path, no side-effect-then-throw, no new lock cycle. Two
+  deploy notes: refundPot's contributor-sort is the already-flagged B-H2 (no new cycle); the per-IP
+  auth throttle needs `trustProxy` behind a proxy → **FIXED** with a `TRUST_PROXY=on` env knob
+  (default off — XFF is spoofable without a trusted proxy).
+- **I — lazy-accrual engine + every worker sweep: exceptionally clean, no CRITICAL/HIGH/MED.** The
+  §7.1 invariant (cap offline gain, re-anchor the marker, ledger every faucet, resolve idempotently)
+  holds across all ~25 touchpoints; every prior scar (Law dtMin, rout re-mint, season-prize lock,
+  pacing-neutral raid windows, token buckets) verified intact. One LOW → **FIXED**: sweepStaleHeists +
+  sweepStaleBreaks re-threw per-row (aborting the tick) → now `continue`+log like every other sweep.
+- **J — deep mid/late-game economic exploits: NO new CONFIRMED unbounded $OMR-extraction exploit.**
+  The extraction cap is airtight — `chain_reserve.funded_omr` is fed ONLY by Vig real-revenue paths
+  (buyback/prize-backing/pass) + the flagged legacy `mod/reserve/fund`; no player path funds the
+  withdrawal reserve without real ETH, so every in-game $OMR faucet (mission/daily/referral/dividend/
+  stake/prize/pass) is queue-bounded. Two CONFIRMED IN-GAME-CASH findings, both defeating a SIGNED
+  balance lever via Sybil-split → **FLAGGED for founder sign-off (not patched, ground rule #1 — signed
+  levers + no §10.4 leak + extraction-capped):** **(J-1)** the D5 bank-interest whale-taper is
+  per-character, so splitting capital across alts earns the full 2%/day on unlimited principal (~5.3×
+  the intended; bank balances are also loot-safe — `whack:loot` takes pocket/in-transit only); **(J-2)**
+  `pen:work` cash faucet has no level floor + no per-account daily cap unlike its siblings (self-limiting
+  per sim P9.11, but the structural inconsistency stands — rec: `WORK_MIN_LVL` + a daily cap). Recorded
+  in BALANCE.md. Everything else (treasury/family-contract laundering, dividend/loan/world/territory/
+  business/casino/referral/commission/estate/auction/wire/stake) verified as accepted bounded
+  redistribution or clean. **Coverage note:** heists/convoy/market got the §10.4 (lens A) + lock (lens B)
+  passes but J's dedicated economic-exploit read of those three did not complete → closed by Wave 3.
+
+## WAVE 3 — the one coverage gap (2026-07-21)
+- **K — heists/convoy/market dedicated economic-exploit + escrow lock-race read** (J's acknowledged gap):
+  (running)
+
+Wave-2 fixes committed d44472a. Suite 32/32 + sim drift-0; contracts compile clean (0 warnings).
+`forge test` remains the pre-mainnet gate (Foundry egress-blocked).
