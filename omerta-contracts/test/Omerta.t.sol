@@ -333,6 +333,38 @@ contract OmertaTest is Test {
         vm.stopPrank();
     }
 
+    function test_reroll_fee_defaults_to_mint_forwards_and_repeats() public {
+        (OmertaFees f, address payable dev) = _fees();
+        assertEq(f.rerollFee(), 0.01 ether, "re-roll defaults to the mint fee (0.01 ETH)");
+        vm.deal(player, 1 ether);
+        vm.startPrank(player);
+        // re-roll is REPEATABLE — pay it twice, each forwards straight to dev, nonce advances each time
+        vm.expectEmit(true, true, false, true, address(f));
+        emit OmertaFees.RerollFeePaid(player, 1, 0.01 ether);
+        f.payRerollFee{value: 0.01 ether}();
+        f.payRerollFee{value: 0.01 ether}();
+        // wrong value reverts (exact-fee)
+        vm.expectRevert(abi.encodeWithSelector(OmertaFees.WrongFee.selector, 0.02 ether, 0.01 ether));
+        f.payRerollFee{value: 0.02 ether}();
+        vm.stopPrank();
+        assertEq(dev.balance, 0.02 ether, "both re-rolls reached the dev wallet");
+        assertEq(address(f).balance, 0, "contract custodies nothing");
+        assertEq(f.nonce(), 2, "each re-roll advances the monotonic nonce");
+    }
+
+    function test_only_owner_sets_reroll_fee_and_zero_reverts() public {
+        (OmertaFees f, ) = _fees();
+        vm.prank(player);
+        vm.expectRevert(); // Ownable: not the owner
+        f.setRerollFee(0.05 ether);
+        vm.startPrank(safe);
+        vm.expectRevert(OmertaFees.ZeroFee.selector);
+        f.setRerollFee(0);                 // a 0 re-roll fee would make off-chain re-rolls free
+        f.setRerollFee(0.05 ether);
+        vm.stopPrank();
+        assertEq(f.rerollFee(), 0.05 ether, "owner retuned the re-roll fee");
+    }
+
     function test_only_owner_sets_fees_and_recipient() public {
         (OmertaFees f, ) = _fees();
         vm.startPrank(player);

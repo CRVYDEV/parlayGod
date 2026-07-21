@@ -209,6 +209,18 @@ balance lever, not pure status; `MEMORY_MAX 0` / `PRESTIGE_POINT_MAX 0` reverts 
 rule. Watch: does memory-carry make repeat-death too cheap for a whale bloodline? (the dial is
 PRESTIGE_PER_SLOT — raise it to demand a deeper dynasty per remembered skill).
 
+### Randomized starting builds + the 0.01-ETH re-roll (sign-off pending; BALANCE-NEUTRAL)
+Fresh characters now `rollStats()` a unique muscle/cunning/speed spread instead of flat 5/5/5, and a
+paid 0.01-ETH re-roll (`POST /v1/character/reroll`, infinitely repeatable) re-rolls it. **Both are
+TOTAL-CONSERVED** — `CREATE_STAT_MIN` 3 / `CREATE_STAT_TOTAL` 15, each stat in [3,9], always summing
+to 15 (the same budget as the old fixed build) — so the aggregate stat economy is UNCHANGED (sim
+drift-0, suite 32/32, §10.4 untouched: a re-roll writes zero `transactions` rows, the ETH is
+out-of-band). The ONLY change is build IDENTITY (a muscle spike costs speed). Levers: `CREATE_STAT_MIN`
+(the spread floor — at 5 it collapses to the old fixed 5/5/5; at 3 a stat can reach 9) and the on-chain
+`rerollFee` (defaults 0.01 ETH, owner-settable). No cooldown on the re-roll — the ETH cost is the
+throttle (total-conserved, so no power-shopping exploit). Watch only whether a stat-weighted meta makes
+certain spreads out-perform balanced (a build-identity question, not a power-budget one).
+
 ## Post-signing addendum — the Underworld (named NPCs, sign-off pending)
 
 Relationship perks as NEW single-touchpoint modifiers, same discipline as skills — nothing

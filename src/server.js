@@ -51,7 +51,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO } from './rules.js';
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -294,7 +294,13 @@ export async function buildServer() {
     if (nameClash.rows.length) throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.');
     const season = Math.floor(dayOf() / 28);
     const id = uid();
-    await pool.query('INSERT INTO characters (id, account_id, name, season) VALUES ($1,$2,$3,$4)', [id, req.user.sub, name, season]);
+    // every fresh character rolls a UNIQUE build — same fixed budget (no power creep), different
+    // shape (no two the same). Server-authoritative randomness, logged to rng_audit (§ ground rule #3).
+    const st = rollStats();
+    await pool.query('INSERT INTO characters (id, account_id, name, season, muscle, cunning, speed) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id, req.user.sub, name, season, st.muscle, st.cunning, st.speed]);
+    await pool.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
+      [uid(), id, 'roll_stats', Math.random(), `${st.muscle}/${st.cunning}/${st.speed}`]);
     // apply any Store Street-Wire window parked while the account had no living character (audit)
     await Store.claimPendingWire(pool, req.user.sub, id);
     if (req.body?.referralCode) {
@@ -1358,6 +1364,9 @@ export async function buildServer() {
   // ── §11 entry/revive fees (paid on-chain to OmertaFees → dev wallet) ──
   // Spend a paid mint credit to make your character permanent (the two-tier upgrade).
   app.post('/v1/character/mint', { preHandler: auth }, async (req) => Fees.mintCharacter(pool, req.user.sub));
+  // Spend a paid re-roll credit (0.01 ETH each on-chain) to re-roll your build — total-conserved,
+  // rng_audit'd, infinitely repeatable (one credit per re-roll).
+  app.post('/v1/character/reroll', { preHandler: auth }, async (req) => Fees.rerollCharacter(pool, req.user.sub));
   app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
   // Ops/manual reconciliation of an on-chain payment (the worker's watcher does this live from
   // MintFeePaid/RespawnFeePaid events; this endpoint is the manual + test path for the same call).
