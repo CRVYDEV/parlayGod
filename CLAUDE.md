@@ -635,7 +635,35 @@ table to `HIGH_MAX` $2M; pots ≥ `HIGH_FEED` $250k hit the streets feed). `numb
 `fight_bets` joined the runEstate wipe. Tests: fade gates/board, exact PvP transfer + rake split
 both directions, fight side/cap/one-per-week gates, fix rank/turf/once/treasury paths, fixed +
 seed-drawn settlements, rakeback cursor exactness + no-double-claim, and the treasury §10.4 check
-reconciling `casino:fix`. All step-two numbers are founder sign-off levers.
+reconciling `casino:fix`. All step-two numbers are founder sign-off levers. **Step three — the TABLE
+GAMES — BUILT** (`src/casino.js`, `test/casino.js`; on the audited den-book accounting, so **NO new
+emission** — both games are house-favorable in expectation, a NET SINK): **BLACKJACK** (stateful PvE)
+— `POST /v1/casino/blackjack {amount}` deals (bet taken + profit-booked at deal, `casino:bet:blackjack`);
+the hand persists in `blackjack_hands` (one live hand per street, joined the runEstate wipe) across
+`hit|stand|double` — each its own atomic txn under withCharacter — until it resolves and the payout
+credits (`casino:win:blackjack`). Infinite deck (independent draws, rng-audited); dealer stands on
+`BJ_DEALER_MIN` 17 + hits SOFT 17 (`BJ_HIT_SOFT_17`, the authentic ~0.6% edge); a natural pays 3:2
+(`BJ_PAYS_BPS` 15000); double = a first-two-cards second stake + one card + auto-stand. Same book
+plumbing as dice (bumpProfit / profit-capped takeHouse / bumpVolume) so the `den profit` §10.4 identity
+(profit == PvE bets − wins) stays exact. **HEADS-UP HOLD'EM** (PvP showdown) — consent-by-listing: a
+dealer posts a `characters.poker_limit` (`POST /v1/casino/poker/deal {limit}` — the fade pattern, a
+new persisted column at `persistCharacter` $61 + the view); a challenger antes an equal stake
+(`POST /v1/casino/poker/:targetId {amount}`, withTwoCharacters), both are dealt 2 hole + a shared
+5-card board (a real 52-card shuffle, a 7-card best-hand evaluator), best hand takes the pot − 5%
+`PVP_RAKE_BPS` (half → street tax / half burns — the back-room-dice `casino:pvp` mechanism, §10.4-exact
+per character); a tie SPLITS (stakes returned, no rake, no money moves); one atomic showdown (multi-
+street betting deferred). §10.4: `casino:bet:blackjack`/`casino:win:blackjack` ride the existing
+`casino:` prefix (zero invariant/vocab change; they join the den-book bet/win LIKE patterns); poker is
+the audited `casino:pvp` transfer. `denInfo` (`GET /v1/casino`) surfaces the live blackjack hand + the
+open poker tables; `/v1/rules` gained a `casino` block; the console Den tab gained blackjack (deal/hit/
+stand/double + the live-hand render) + a Hold'em table (open/play); `describe()` humanizes both.
+`test/casino.js` proves a mixed session (deal/hit/stand/double, cash-delta==net per hand, the
+bet/win ledger sums, the one-live-hand + no-double-after-hit gates, rng-audit) + heads-up poker
+(the taxed transfer + rake split both ways + a split, valid hand names + a 5-card board) with the
+den-profit identity + $OMR-untouched holding. Suite 32/32 + sim drift-0. All step-three numbers
+(`CASINO.BJ_*`, `POKER_MIN`) are founder sign-off levers (BALANCE.md — a net sink, no signed faucet
+touched). Deferred (step four): true multi-way ring poker + a live TOURNAMENT prize pool (both need
+turn-based session state this atomic architecture defers), blackjack splits/insurance.
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

@@ -1432,3 +1432,15 @@ and the Sybil-of-a-per-account-cap posture is accepted game-wide (fight-fix / re
   energy-bounded, shaves the sentence), so magnitude is modest — but the structural inconsistency stands.
   **Rec:** add `PEN.WORK_MIN_LVL` (the WHEEL_MIN_LVL/npcHit-floor pattern) + optionally a per-(account,day)
   cap if the alt-grind is seen in the alpha. `rules.js` PEN.WORK_ENERGY/WORK_PAY/WORK_CUT_S are the levers.
+
+## Gambling Den step three — table games (blackjack + heads-up poker) — SIGN-OFF NOTE
+
+Blackjack and heads-up Hold'em ride the audited den-book accounting and add **NO new emission
+surface**: blackjack's stake→profit→payout is booked exactly like dice (the street is tipped only
+from realized profit via `takeHouse`/`denAvailable`; the `casino:bet:blackjack`/`casino:win:blackjack`
+rows join the den-profit §10.4 identity), and poker is a pure `casino:pvp` transfer with the same 5%
+rake (half → buyback, half burns). Both are HOUSE-FAVORABLE in expectation (a NET SINK) — blackjack
+at the authentic dealer-hits-soft-17 ~0.6% edge, poker rake at 5% of the pot. Levers
+(`CASINO.BJ_PAYS_BPS` 15000 = 3:2, `BJ_DEALER_MIN` 17, `BJ_HIT_SOFT_17` true, `CASINO.POKER_MIN`) are
+founder sign-off — none touch a signed faucet. §10.4 stays drift-0 (den profit == PvE bets − wins,
+proven in test/casino.js over a mixed dice+blackjack+poker session).

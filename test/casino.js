@@ -235,6 +235,102 @@ assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM tra
   rr.body.rakeback, 'the rakeback is a ledgered casino: faucet');
 assert.equal((await call('POST', '/v1/business/collect', { token })).body.rakeback, undefined, 'no double-claim — the cursor advanced');
 
+// ══════════ STEP THREE: the TABLE GAMES — blackjack (stateful PvE) + heads-up hold'em (PvP) ══════════
+
+// ── BLACKJACK: deal → hit / stand / double, every hand's cash delta == its reported net ──
+await seed("cash = cash + 5000000, nerve=50, loc='neon'"); seededCash += 5000000;
+// gates: no live hand yet
+assert.equal((await call('POST', '/v1/casino/blackjack/hit', { token })).body.error, 'no_hand', 'no hit without a hand');
+assert.equal((await call('POST', '/v1/casino/blackjack/stand', { token })).body.error, 'no_hand', 'no stand without a hand');
+// the one-live-hand gate: deal until a hand actually sits (a natural resolves instantly), then re-deal is refused
+let liveDeal = null;
+for (let i = 0; i < 20 && !liveDeal; i++) {
+  await seed('nerve=50');
+  const d = await call('POST', '/v1/casino/blackjack', { token, body: { amount: 1000 } });
+  assert.equal(d.code, 200, `deal (${JSON.stringify(d.body)})`);
+  if (!d.body.done) liveDeal = d.body; else { /* an instant natural — count it below */ }
+}
+assert(liveDeal, 'a live hand was dealt');
+assert.equal(liveDeal.player.length, 2, 'two cards up front');
+assert.equal((await call('POST', '/v1/casino/blackjack', { token, body: { amount: 1000 } })).body.error, 'hand', 'one live hand at a time');
+// hit past two cards, THEN double is refused (double is a first-two-cards move)
+const afterHit = await call('POST', '/v1/casino/blackjack/hit', { token });
+if (!afterHit.body.done) assert.equal((await call('POST', '/v1/casino/blackjack/double', { token })).body.error, 'double', 'no double after a hit');
+// clean up the live hand
+if (!afterHit.body.done) await call('POST', '/v1/casino/blackjack/stand', { token });
+
+let bjStaked = 0, bjPaid = 0, bjWins = 0, bjLosses = 0, bjBusts = 0, bjDoubles = 0, bjNaturals = 0;
+async function playHand(strategy) {
+  await seed('nerve=50');
+  const pre = (await meOf(token)).cash;
+  let r = await call('POST', '/v1/casino/blackjack', { token, body: { amount: 1000 } });
+  assert.equal(r.code, 200, `deal (${JSON.stringify(r.body)})`);
+  while (!r.body.done) {
+    if (strategy === 'double' && r.body.canDouble) r = await call('POST', '/v1/casino/blackjack/double', { token });
+    else if (strategy === 'hit' && r.body.playerTotal < 17) r = await call('POST', '/v1/casino/blackjack/hit', { token });
+    else r = await call('POST', '/v1/casino/blackjack/stand', { token });
+    assert.equal(r.code, 200, `action (${JSON.stringify(r.body)})`);
+  }
+  const post = (await meOf(token)).cash;
+  assert.equal(post - pre, r.body.net, `cash moved by exactly the net (${r.body.outcome})`);
+  bjStaked += r.body.bet; bjPaid += r.body.payout;
+  if (r.body.outcome === 'bust') bjBusts++;
+  if (r.body.outcome === 'blackjack') bjNaturals++;
+  if (r.body.net > 0) bjWins++; else if (r.body.net < 0) bjLosses++;
+  if (r.body.bet === 2000) bjDoubles++;
+  return r.body;
+}
+// count the earlier auto-resolved deals into the ledger totals too (they staked $1000 each and paid out)
+const bjBetPre = -(await sum('casino:bet:blackjack')); // includes the gate-loop deals above
+const bjWinPre = await sum('casino:win:blackjack');
+for (let i = 0; i < 60; i++) await playHand('stand');
+for (let i = 0; i < 15; i++) await playHand('hit');
+for (let i = 0; i < 15; i++) await playHand('double');
+assert(bjWins > 0 && bjLosses > 0, `blackjack saw both wins and losses (${bjWins}W/${bjLosses}L)`);
+assert(bjBusts > 0, 'a hit-strategy hand busted at least once');
+assert(bjDoubles > 0, 'at least one hand doubled down (bet $2000)');
+// the ledger knows every blackjack dollar: bets == −staked, wins == payouts (matched against the
+// den book's profit identity below and the global §10.4 check at the end)
+assert.equal(-(await sum('casino:bet:blackjack')), bjBetPre + bjStaked, 'every stake is a ledgered casino:bet:blackjack sink');
+assert.equal(await sum('casino:win:blackjack'), bjWinPre + bjPaid, 'every payout is a ledgered casino:win:blackjack faucet');
+// every blackjack draw is rng-audited (deal + at least one dealer/hit event per resolved hand)
+assert(Number((await pool.query(`SELECT COUNT(*) n FROM rng_audit WHERE action LIKE 'casino:blackjack:%' AND character_id='${cid}'`)).rows[0].n) > 90, 'blackjack draws are rng-audited');
+// THE regulatory line holds through the table games too
+const omrAfterBJ = (await meOf(token)).omr;
+
+// ── HEADS-UP HOLD'EM: consent-by-listing, best 5-of-7 wins the raked pot, a tie splits ──
+await pool.query(`UPDATE characters SET cash=5000000, loc='neon' WHERE id='${did}'`); // Danny sits at the table
+assert.equal((await call('POST', `/v1/casino/poker/${did}`, { token, body: { amount: 1000 } })).body.error, 'not_dealing', 'no hand without a listing');
+assert.equal((await call('POST', '/v1/casino/poker/deal', { token: t2, body: { limit: 10 } })).body.error, 'limit', 'poker limits respect the table minimum');
+rr = await call('POST', '/v1/casino/poker/deal', { token: t2, body: { limit: 50000 } });
+assert.equal(rr.code, 200, 'danny opens a poker table'); assert.equal(rr.body.character.pokerLimit, 50000, 'surfaced in the view');
+assert((await call('GET', '/v1/casino', { token })).body.poker.tables.some((t) => t.id === did), 'danny is a poker table on the board');
+assert.equal((await call('POST', `/v1/casino/poker/${did}`, { token, body: { amount: 60000 } })).body.error, 'limit', 'the poker limit binds');
+let pkW = 0, pkL = 0, pkPush = 0;
+for (let i = 0; i < 40 && (pkW === 0 || pkL === 0); i++) {
+  const louPre = (await meOf(token)).cash, danPre = (await meOf(t2)).cash;
+  const taxP = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+  const g = await call('POST', `/v1/casino/poker/${did}`, { token, body: { amount: 2000 } });
+  assert.equal(g.code, 200, `poker hand resolves (${JSON.stringify(g.body)})`);
+  assert.equal(g.body.board.length, 5, 'five community cards'); assert.equal(g.body.yourHole.length, 2, 'two hole cards');
+  assert(typeof g.body.yourHand === 'string' && typeof g.body.theirHand === 'string', 'both hands named');
+  if (g.body.result === 'push') { pkPush++;
+    assert.equal((await meOf(token)).cash, louPre, 'a tie moves no money'); assert.equal(g.body.rake, 0, 'no rake on a split');
+  } else {
+    const rake = g.body.rake; assert.equal(rake, Math.ceil(4000 * 0.05), 'poker rake is 5% of the pot');
+    if (g.body.result === 'win') { pkW++;
+      assert.equal((await meOf(token)).cash, louPre + 2000 - rake, 'winner nets stake − rake');
+      assert.equal((await meOf(t2)).cash, danPre - 2000, 'loser pays the stake');
+    } else { pkL++;
+      assert.equal((await meOf(token)).cash, louPre - 2000, 'loser pays the stake');
+      assert.equal((await meOf(t2)).cash, danPre + 2000 - rake, 'winner nets stake − rake');
+    }
+    assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool) - taxP, Math.floor(rake / 2), 'half the poker rake to the street, the rest burns');
+  }
+}
+assert(pkW > 0 && pkL > 0, `heads-up poker saw both sides win (${pkW}W/${pkL}L, ${pkPush} split)`);
+assert.equal((await meOf(token)).omr, omrAfterBJ, 'poker never touches $OMR either');
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
@@ -252,5 +348,5 @@ assert(denP?.ok, `den profit == PvE bets − wins (drift ${denP?.drift})`);
 const denD = inv.checks.find((c) => c.name === 'den distributions');
 assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), §10.4 identity + vocabulary + treasury checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), §10.4 identity + vocabulary + treasury + den checks hold`);
 await app.close();

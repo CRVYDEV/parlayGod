@@ -12,6 +12,16 @@ import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARK
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const d6 = () => 1 + Math.floor(Math.random() * 6);
+// blackjack: an infinite deck (each draw independent, unpredictable — the same server RNG as dice).
+// rank ints 1=Ace … 11/12/13 = J/Q/K; face cards count 10, the ace 11 or 1.
+const drawCard = () => 1 + Math.floor(Math.random() * 13);
+const parseCards = (s) => (s ? String(s).split(',').map(Number) : []);
+function handValue(cards) {
+  let total = 0, aces = 0;
+  for (const c of cards) { const v = c >= 10 ? 10 : c; if (c === 1) { aces++; total += 11; } else total += v; }
+  while (total > 21 && aces > 0) { total -= 10; aces--; } // an ace drops 11→1 to dodge a bust
+  return { total, soft: aces > 0 };
+}
 
 // ── the house's book (econ pass — the mint-on-top fix) ──
 // The street's cut and the fronts' rakeback are paid ONLY out of the den's REALIZED profit
@@ -311,6 +321,229 @@ export async function claimNumbers(ch, client, h) {
   return { ok: true, settled: tickets.length, won, results };
 }
 
+// ── BLACKJACK (stateful PvE): deal → hit / stand / double ──
+// The bet is taken and profit-booked at DEAL; the hand persists (blackjack_hands, one live hand per
+// street) across hit/stand/double calls — each its own atomic txn under withCharacter — until it
+// resolves and the payout (if any) is credited. Same book accounting as dice (casino:bet/win:blackjack,
+// the profit-capped street tip). Dealer stands on BJ_DEALER_MIN and hits soft 17; a natural pays 3:2.
+async function payBlackjack(ch, client, h, payout) { // the win/refund faucet + profit book
+  if (payout > 0) {
+    ch.cash = Number(ch.cash) + payout;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:blackjack' });
+    await bumpProfit(client, -payout);
+  }
+}
+// play the dealer out (hit while < min, and once more on a soft 17 if the rule says so) and settle
+async function resolveDealer(ch, client, h, hand, player, dealer, dbl) {
+  const eff = Number(hand.bet) * (dbl ? 2 : 1);
+  const pv = handValue(player);
+  const dcards = [...dealer];
+  for (;;) {
+    const v = handValue(dcards);
+    const mustHit = v.total < CASINO.BJ_DEALER_MIN || (v.total === CASINO.BJ_DEALER_MIN && v.soft && CASINO.BJ_HIT_SOFT_17);
+    if (!mustHit) break;
+    const c = drawCard(); dcards.push(c);
+    await h.rngLog(client, ch.id, 'casino:blackjack:dealer', c, `dealer ${c}`);
+  }
+  const dv = handValue(dcards);
+  let payout = 0, outcome;
+  if (dv.total > 21) { payout = eff * 2; outcome = 'dealer_bust'; }
+  else if (pv.total > dv.total) { payout = eff * 2; outcome = 'win'; }
+  else if (pv.total < dv.total) { payout = 0; outcome = 'loss'; }
+  else { payout = eff; outcome = 'push'; }
+  await client.query('DELETE FROM blackjack_hands WHERE character_id=$1', [ch.id]);
+  await payBlackjack(ch, client, h, payout);
+  await h.rngLog(client, ch.id, 'casino:blackjack:end', pv.total, `${outcome} p${pv.total} d${dv.total} pay $${payout}`);
+  await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'resolve', outcome });
+  return { ok: true, game: 'blackjack', done: true, outcome, bet: eff, player, dealer: dcards,
+    playerTotal: pv.total, dealerTotal: dv.total, payout, net: payout - eff };
+}
+
+export async function blackjackDeal(ch, amount, client, h) {
+  const max = levelOf(Number(ch.respect)) >= CASINO.HIGH_LVL || npcTier(h, 'madame') >= 2 ? CASINO.HIGH_MAX : CASINO.MAX_BET;
+  const amt = gateBet(ch, amount, CASINO.MIN_BET, max);
+  if ((await client.query('SELECT 1 FROM blackjack_hands WHERE character_id=$1', [ch.id])).rows[0])
+    throw new GameError('hand', "Finish the hand you're in first.");
+  // MADAME T1 comps the seat — a hand costs no nerve (the dice pacing perk)
+  if (npcTier(h, 'madame') < 1) {
+    if (Number(ch.nerve) < CASINO.BJ_NERVE) throw new GameError('nerve', 'Even a hand takes nerve.');
+    ch.nerve = Number(ch.nerve) - CASINO.BJ_NERVE;
+  }
+  ch.cash = Number(ch.cash) - amt;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:blackjack' });
+  await bumpProfit(client, amt);
+  await takeHouse(client, h, Math.ceil(amt * 0.01));
+  await bumpVolume(client, amt);
+  await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // a table on her floor is business
+
+  const player = [drawCard(), drawCard()];
+  const dealer = [drawCard(), drawCard()];
+  await h.rngLog(client, ch.id, 'casino:blackjack:deal', player[0], `deal p[${player}] up ${dealer[0]}`);
+  const pv = handValue(player), dv = handValue(dealer);
+  const pBJ = pv.total === 21, dBJ = dv.total === 21;
+  if (pBJ || dBJ) { // a natural on either side ends it at the deal
+    let payout = 0, outcome;
+    if (pBJ && dBJ) { payout = amt; outcome = 'push'; }
+    else if (pBJ) { payout = amt + Math.floor(amt * CASINO.BJ_PAYS_BPS / 10000); outcome = 'blackjack'; }
+    else outcome = 'dealer_blackjack';
+    await payBlackjack(ch, client, h, payout);
+    await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', outcome });
+    return { ok: true, game: 'blackjack', done: true, outcome, bet: amt, player, dealer,
+      playerTotal: pv.total, dealerTotal: dv.total, payout, net: payout - amt };
+  }
+  await client.query('INSERT INTO blackjack_hands (character_id, bet, player, dealer) VALUES ($1,$2,$3,$4)',
+    [ch.id, amt, player.join(','), dealer.join(',')]);
+  await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', amt });
+  return { ok: true, game: 'blackjack', done: false, bet: amt, player, dealerUp: dealer[0],
+    playerTotal: pv.total, canDouble: true };
+}
+
+export async function blackjackHit(ch, client, h) {
+  const hand = (await client.query('SELECT * FROM blackjack_hands WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!hand) throw new GameError('no_hand', 'No hand in play — deal first.');
+  const player = parseCards(hand.player), dealer = parseCards(hand.dealer);
+  const card = drawCard(); player.push(card);
+  const pv = handValue(player);
+  await h.rngLog(client, ch.id, 'casino:blackjack:hit', card, `hit ${card} -> ${pv.total}`);
+  if (pv.total > 21) { // bust — the bet was taken at deal, no payout, hand closes
+    await client.query('DELETE FROM blackjack_hands WHERE character_id=$1', [ch.id]);
+    await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'bust' });
+    return { ok: true, game: 'blackjack', done: true, outcome: 'bust', bet: Number(hand.bet), player,
+      dealer, playerTotal: pv.total, payout: 0, net: -Number(hand.bet) };
+  }
+  await client.query('UPDATE blackjack_hands SET player=$2 WHERE character_id=$1', [ch.id, player.join(',')]);
+  return { ok: true, game: 'blackjack', done: false, bet: Number(hand.bet), player, dealerUp: dealer[0],
+    playerTotal: pv.total, canDouble: false };
+}
+
+export async function blackjackStand(ch, client, h) {
+  const hand = (await client.query('SELECT * FROM blackjack_hands WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!hand) throw new GameError('no_hand', 'No hand in play — deal first.');
+  return resolveDealer(ch, client, h, hand, parseCards(hand.player), parseCards(hand.dealer), hand.dbl);
+}
+
+export async function blackjackDouble(ch, client, h) {
+  const hand = (await client.query('SELECT * FROM blackjack_hands WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!hand) throw new GameError('no_hand', 'No hand in play — deal first.');
+  const player = parseCards(hand.player), dealer = parseCards(hand.dealer);
+  if (player.length !== 2) throw new GameError('double', 'Double only on your first two cards.');
+  const bet = Number(hand.bet);
+  if (Number(ch.cash) < bet) throw new GameError('cash', 'Not enough in pocket to double.');
+  ch.cash = Number(ch.cash) - bet;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -bet, reason: 'casino:bet:blackjack' });
+  await bumpProfit(client, bet);
+  await bumpVolume(client, bet);
+  const card = drawCard(); player.push(card); // exactly one card, then stand
+  const pv = handValue(player);
+  await h.rngLog(client, ch.id, 'casino:blackjack:double', card, `double ${card} -> ${pv.total}`);
+  if (pv.total > 21) {
+    await client.query('DELETE FROM blackjack_hands WHERE character_id=$1', [ch.id]);
+    await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'double_bust' });
+    return { ok: true, game: 'blackjack', done: true, outcome: 'bust', bet: bet * 2, player, dealer,
+      playerTotal: pv.total, payout: 0, net: -bet * 2 };
+  }
+  return resolveDealer(ch, client, h, hand, player, dealer, true);
+}
+
+// ── HEADS-UP HOLD'EM (PvP showdown, runs under withTwoCharacters) ──
+// Consent-by-listing (a dealer posts a poker_limit — the fade pattern). A challenger antes an equal
+// stake; both are dealt 2 hole + a shared 5-card board, best 5-of-7 wins the pot minus PVP_RAKE_BPS
+// (half → street tax, half burns — the back-room-dice mechanism, §10.4-exact per character). A tie
+// splits (stakes returned, no rake). One atomic showdown — no betting streets (turn-based sessions
+// are deferred).
+function evalFive(cs) { // returns a comparable tuple [category, ...tiebreakers], higher is better
+  const ranks = cs.map((c) => c.rank).sort((a, b) => b - a);
+  const flush = cs.every((c) => c.suit === cs[0].suit);
+  const uniq = [...new Set(ranks)];
+  let straightHigh = 0;
+  if (uniq.length === 5) {
+    if (uniq[0] - uniq[4] === 4) straightHigh = uniq[0];
+    else if (uniq[0] === 14 && uniq[1] === 5 && uniq[4] === 2) straightHigh = 5; // the wheel A-2-3-4-5
+  }
+  const counts = {};
+  for (const r of ranks) counts[r] = (counts[r] || 0) + 1;
+  const groups = Object.entries(counts).map(([r, c]) => [c, +r]).sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  const shape = groups.map((g) => g[0]).join('');
+  const k = groups.map((g) => g[1]);
+  if (straightHigh && flush) return [8, straightHigh];
+  if (shape === '41') return [7, k[0], k[1]];
+  if (shape === '32') return [6, k[0], k[1]];
+  if (flush) return [5, ...ranks];
+  if (straightHigh) return [4, straightHigh];
+  if (shape === '311') return [3, k[0], k[1], k[2]];
+  if (shape === '221') return [2, k[0], k[1], k[2]];
+  if (shape === '2111') return [1, k[0], k[1], k[2], k[3]];
+  return [0, ...ranks];
+}
+function cmpHand(a, b) { for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x - y; } return 0; }
+function best7(seven) { // the best 5-card hand out of 7 (21 combinations — small and exact)
+  let best = null;
+  for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) for (let c = b + 1; c < 5; c++)
+    for (let d = c + 1; d < 6; d++) for (let e = d + 1; e < 7; e++) {
+      const s = evalFive([seven[a], seven[b], seven[c], seven[d], seven[e]]);
+      if (!best || cmpHand(s, best) > 0) best = s;
+    }
+  return best;
+}
+const HAND_NAMES = ['high card', 'a pair', 'two pair', 'trips', 'a straight', 'a flush', 'a full house', 'quads', 'a straight flush'];
+const handName = (score) => HAND_NAMES[score[0]];
+function dealPoker() { // a real 52-card shuffle — distinct cards matter for poker
+  const deck = [];
+  for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) deck.push({ rank: r, suit: s });
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+  return { a: [deck[0], deck[1]], b: [deck[2], deck[3]], board: deck.slice(4, 9) };
+}
+
+export function setPokerLimit(ch, limit) {
+  const v = limit == null || Number(limit) === 0 ? null : Math.floor(Number(limit));
+  if (v != null && !(v >= CASINO.POKER_MIN && v <= CASINO.MAX_BET))
+    throw new GameError('limit', `Poker limits run $${CASINO.POKER_MIN}–$${CASINO.MAX_BET} (0 clears).`);
+  ch.poker_limit = v;
+  return { ok: true, pokerLimit: v };
+}
+
+export async function playPoker(ch, dealer, amount, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The table is on the ${CASINO.DISTRICT}.`);
+  const limit = dealer.poker_limit != null ? Math.floor(Number(dealer.poker_limit)) : 0;
+  if (!(limit > 0)) throw new GameError('not_dealing', "They're not dealing a hand.");
+  if (jailed(dealer) || hospitalized(dealer) || dealer.loc !== CASINO.DISTRICT)
+    throw new GameError('unavailable', "They're not at the table right now.");
+  const amt = Math.floor(Number(amount));
+  if (!(amt >= CASINO.POKER_MIN)) throw new GameError('min', `Table minimum is $${CASINO.POKER_MIN}.`);
+  if (amt > limit) throw new GameError('limit', `They'll only play up to $${limit}.`);
+  if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
+  if (Number(dealer.cash) < amt) throw new GameError('their_cash', "They can't cover it right now.");
+
+  const { a, b, board } = dealPoker();
+  const chScore = best7([...a, ...board]), dlScore = best7([...b, ...board]);
+  const c = cmpHand(chScore, dlScore);
+  const pot = amt * 2;
+  const rake = Math.ceil(pot * CASINO.PVP_RAKE_BPS / 10000);
+  let result;
+  if (c === 0) result = 'push'; // a genuine tie — each keeps their stake, no rake, no money moves
+  else {
+    const win = c > 0;
+    const winner = win ? ch : dealer, loser = win ? dealer : ch;
+    loser.cash = Number(loser.cash) - amt;
+    winner.cash = Number(winner.cash) + amt - rake; // their own stake never left; net +stake − rake
+    await h.ledger(client, { characterId: loser.id, currency: 'cash', amount: -amt, reason: 'casino:pvp', counterparty: winner.id });
+    await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'casino:pvp', counterparty: loser.id });
+    // bump volume BEFORE crediting street_tax (the den_volume→street_tax lock order — AUDIT-full-system-v2 B-H1)
+    await bumpVolume(client, pot);
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]);
+    result = win ? 'win' : 'loss';
+  }
+  await bumpStanding(client, h, ch, 'madame', 3, { action: 'fade' }); // back-room action is her favorite kind
+  await h.rngLog(client, ch.id, `casino:poker:${dealer.id}`, chScore[0], `${result} you[${handName(chScore)}] them[${handName(dlScore)}]`);
+  await h.notify(client, dealer.id, 'poker_hand', { from: ch.name, amount: amt, theyWon: result === 'loss' });
+  await h.track(client, ch.account_id, 'casino', { game: 'poker', amt, result });
+  if (pot >= CASINO.HIGH_FEED && result !== 'push') bus.emit('streets', { type: 'highroller', who: `${ch.name} v ${dealer.name}`, amount: pot, win: result === 'win' });
+  return { ok: true, game: 'poker', bet: amt, yourHole: a, theirHole: b, board,
+    yourHand: handName(chScore), theirHand: handName(dlScore), result, rake: result === 'push' ? 0 : rake,
+    net: result === 'win' ? amt - rake : result === 'loss' ? -amt : 0 };
+}
+
 // The den's front window: yesterday's number, your open tickets, the table limits.
 export async function denInfo(pool, characterId) {
   const today = dayOf();
@@ -322,6 +555,13 @@ export async function denInfo(pool, characterId) {
   const faders = (await pool.query(
     `SELECT id, name, fade_limit FROM characters WHERE alive AND fade_limit IS NOT NULL AND loc=$1 AND id<>$2 ORDER BY fade_limit DESC LIMIT 20`,
     [CASINO.DISTRICT, characterId])).rows.map((f) => ({ id: f.id, name: f.name, fadeLimit: Math.floor(Number(f.fade_limit)) }));
+  // step three: the live blackjack hand (if any) + the open poker tables (consent-by-listing)
+  const bj = (await pool.query('SELECT bet, dbl, player, dealer FROM blackjack_hands WHERE character_id=$1', [characterId])).rows[0];
+  const hand = bj ? (() => { const p = parseCards(bj.player), d = parseCards(bj.dealer);
+    return { bet: Number(bj.bet), doubled: !!bj.dbl, player: p, playerTotal: handValue(p).total, dealerUp: d[0], canDouble: p.length === 2 && !bj.dbl }; })() : null;
+  const pokerTables = (await pool.query(
+    `SELECT id, name, poker_limit FROM characters WHERE alive AND poker_limit IS NOT NULL AND loc=$1 AND id<>$2 ORDER BY poker_limit DESC LIMIT 20`,
+    [CASINO.DISTRICT, characterId])).rows.map((f) => ({ id: f.id, name: f.name, limit: Math.floor(Number(f.poker_limit)) }));
   return {
     district: CASINO.DISTRICT,
     dice: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: '1:1 pass line',
@@ -331,5 +571,7 @@ export async function denInfo(pool, characterId) {
     tickets,
     fight: { ...boutOf(week), max: CASINO.FIGHT_MAX, myBets: bet },
     backroom: { rakeBps: CASINO.PVP_RAKE_BPS, faders },
+    blackjack: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: `${CASINO.BJ_PAYS_BPS / 10000 * 2}:2 on a natural`, hand },
+    poker: { min: CASINO.POKER_MIN, maxBet: CASINO.MAX_BET, rakeBps: CASINO.PVP_RAKE_BPS, tables: pokerTables },
   };
 }

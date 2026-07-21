@@ -84,3 +84,32 @@ the table limits.
   `casino:rakeback`). The Den feeds the Business Empire layer.
 - **The high-stakes room** — at level `HIGH_LVL` (30) the PvE table takes up to `HIGH_MAX` ($2M)
   a roll; pots ≥ `HIGH_FEED` ($250k) hit the public streets feed (whale theater).
+
+## Step three — the TABLE GAMES (BUILT)
+
+Real table games at the Neon Mile, on the audited den-book accounting (no new emission — the house
+edge is booked as profit and the street is tipped only from realized profit; on average both games
+are house-favorable, i.e. a SINK). CASH ONLY (the regulatory line). All numbers are founder sign-off
+levers (`CASINO.BJ_*`, `CASINO.POKER_MIN`).
+
+- **Blackjack (stateful PvE)** — a real hand you play out. `POST /v1/casino/blackjack {amount}` deals
+  (bet taken + profit-booked at deal, `casino:bet:blackjack`); the hand persists in `blackjack_hands`
+  (one live hand per street) across `POST /v1/casino/blackjack/hit|stand|double` — each its own atomic
+  txn under `withCharacter` — until it resolves and the payout (if any) credits (`casino:win:blackjack`).
+  Infinite deck (independent draws, the same server RNG as dice, rng-audited); dealer stands on
+  `BJ_DEALER_MIN` (17) and hits SOFT 17 (`BJ_HIT_SOFT_17` — the authentic ~0.6% edge); a natural pays
+  3:2 (`BJ_PAYS_BPS` 15000). Double is a first-two-cards move (stakes a second bet, one card, auto-stand).
+  Same book accounting as dice (bumpProfit / profit-capped `takeHouse` / bumpVolume). Dies with the
+  street (`blackjack_hands` joined the runEstate wipe).
+- **Heads-up Hold'em (PvP showdown)** — consent-by-listing: a dealer posts a `poker_limit`
+  (`POST /v1/casino/poker/deal {limit}` — the fade pattern, a new persisted character column). A
+  challenger antes an equal stake (`POST /v1/casino/poker/:targetId {amount}`, `withTwoCharacters`);
+  both are dealt 2 hole + a shared 5-card board (a real 52-card shuffle), best 5-of-7 wins the pot minus
+  `PVP_RAKE_BPS` (5%, half → street tax / half burns — the back-room-dice mechanism, `casino:pvp`,
+  §10.4-exact per character). A tie splits (stakes returned, no rake, no money moves). ONE atomic
+  showdown — no multi-street betting (turn-based sessions are deferred). Gates: both at neon, dealer
+  available, stake ≤ limit, both cover it, not self.
+
+**Deferred (step four candidates):** true multi-way ring poker + a live scheduled TOURNAMENT with a
+prize pool (both need turn-based session state this atomic one-call architecture doesn't hold),
+blackjack splits/insurance, a poker sit-n-go.
