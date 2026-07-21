@@ -101,8 +101,46 @@ vig = await vigOf();
 assert(vig.invariants.ok, `extraction ≤ inflow still holds after a real withdrawal: ${JSON.stringify(vig.invariants.checks.filter((c) => !c.ok))}`);
 assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9, 'extracted $OMR ≤ the Vig-funded reserve');
 
-// ── (7) §10.4 in-game conservation holds with the prize mint + PLEX/withdraw burns in the mix ──
-assert((await runLedgerInvariants(pool)).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns)');
+// ── (6b) TIER A (omerta-uniswap-hooks-design.md §7): a TRADE-fee source — the afterSwap→Vig hook's
+// revenue — flows through the SAME rail as gameplay fees, proving the hook's backend is near-zero new
+// code. The mainnet watcher will call recordVigRevenue(source='trade'); here we drive it directly (no
+// hook/watcher built yet — chain-dormant). Key property: trade fees WIDEN extraction ≤ inflow, never
+// bypass it. ──
+const { recordVigRevenue } = await import('../src/vig.js');
+const ethWei = (e) => BigInt(Math.round(e * 1e18)).toString();
+const fundedBefore = vig.invariants.summary.funded;
+const vigRevBefore = vig.status.vigRevenueEth;
+{
+  const c = await pool.connect();
+  await c.query('BEGIN');
+  await recordVigRevenue(c, { source: 'trade', ref: '0xtrade1', kind: 'trade', amountWei: ethWei(0.05) });
+  await recordVigRevenue(c, { source: 'trade', ref: '0xtrade2', kind: 'trade', amountWei: ethWei(0.03) });
+  const dup = await recordVigRevenue(c, { source: 'trade', ref: '0xtrade1', kind: 'trade', amountWei: ethWei(0.05) }); // A4
+  await c.query('COMMIT'); c.release();
+  assert.equal(dup.duplicate, true, 'A4: a re-delivered trade log is idempotent (no double-count)');
+}
+// A1: trade revenue takes the same 60% Vig share as a fee (0.08 gross × 0.6 = 0.048 added)
+vig = await vigOf();
+assert(near(vig.status.vigRevenueEth, vigRevBefore + 0.048), 'A1: the trade fee took the 60% Vig share');
+assert(near(vig.status.unspentEth, 0.048), 'A1: the trade revenue is unspent, awaiting the buyback');
+// A5: §10.4 in-game untouched — trade ETH is out-of-band real value (zero transactions rows)
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'trade%'")).rows[0].n), 0, 'A5: trade revenue writes ZERO in-game transactions rows');
+// A2: the buyback converts the trade revenue to hard $OMR (0.048 ETH × 2000 = 96), split 48 reserve/48 prize
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
+assert(near(r.body.ethSpent, 0.048) && near(r.body.omrBought, 96), 'A2: the buyback spends exactly the trade revenue');
+assert(near(r.body.toReserve, 48) && near(r.body.toPrize, 48), 'A2: split 50/50 like any buyback');
+// A3: every Vig check stays green with a 'trade' source mixed in with 'fee'
+vig = await vigOf();
+assert(vig.invariants.ok, `A3: every Vig check green with a trade source: ${JSON.stringify(vig.invariants.checks.filter((c) => !c.ok))}`);
+// A6: extraction ≤ inflow is WIDENED — the reserve grew by the trade buyback's share, and a further
+// withdrawal signs against that new backing (never a bypass; the queue still caps at funded).
+assert(near(vig.invariants.summary.funded - fundedBefore, 48), 'A6: the trade fee added 48 $OMR of reserve backing — more extraction headroom');
+r = await call('POST', '/v1/withdraw', { token, body: { amount: 10 } });
+assert.equal(r.body.status, 'signed', 'A6: a further withdrawal signs against the trade-widened reserve');
+assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9, 'A6: extraction never exceeds the funded reserve');
 
-console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → PLEX bridge (pay fees in earned $OMR) → real Vig-funded withdrawal, extraction-≤-inflow invariant + §10.4 conservation holding throughout');
+// ── (7) §10.4 in-game conservation holds with the prize mint + PLEX/withdraw burns + the trade source in the mix ──
+assert((await runLedgerInvariants(pool)).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns; trade revenue is out-of-band)');
+
+console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → PLEX bridge (pay fees in earned $OMR) → real Vig-funded withdrawal + TIER A: a TRADE-fee source (the afterSwap→Vig hook rail) splits/buys/reconciles end-to-end and WIDENS extraction≤inflow, §10.4 untouched — the extraction-≤-inflow invariant + §10.4 conservation holding throughout');
 await app.close();
