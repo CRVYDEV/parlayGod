@@ -1444,3 +1444,14 @@ at the authentic dealer-hits-soft-17 ~0.6% edge, poker rake at 5% of the pot. Le
 (`CASINO.BJ_PAYS_BPS` 15000 = 3:2, `BJ_DEALER_MIN` 17, `BJ_HIT_SOFT_17` true, `CASINO.POKER_MIN`) are
 founder sign-off — none touch a signed faucet. §10.4 stays drift-0 (den profit == PvE bets − wins,
 proven in test/casino.js over a mixed dice+blackjack+poker session).
+
+## Gambling Den step four — the POKER TOURNAMENT — SIGN-OFF NOTE
+
+The scheduled poker tournament is a pure competitive CASH REDISTRIBUTION with NO new emission: buy-ins
+escrow into a pool, the worker deals + pays the top places from that pool net of a 5% house rake
+(`TOURNEY.RAKE_BPS`, half → the buyback / half burns). Payouts are RENORMALIZED to the field size, so
+the field's net loss is exactly the rake regardless of turnout (an unpaid place never leaks its share
+to the house). §10.4-exact (a new `poker tourney escrow` check reconciles pool == Σ buyin − win −
+refund − take − death). Levers (`TOURNEY.BUYIN` $5k, `RAKE_BPS` 500, `PAYOUTS` [.5,.3,.2],
+`MIN_ENTRANTS` 2, `REGISTER_MS` 24h) are founder sign-off — none touch a signed faucet; the tournament
+is a SINK (the rake) on the players' pooled cash, like the fight book but player-funded.

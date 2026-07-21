@@ -823,6 +823,30 @@ CREATE TABLE IF NOT EXISTS blackjack_hands (
   dealer TEXT NOT NULL                  -- the dealer's cards (only the up-card is revealed until stand)
 );
 
+-- Den step four: THE POKER TOURNAMENT — a scheduled, escrow-funded, worker-resolved showdown (the
+-- boxing main-event pattern). Players buy in during an open window (each buy-in ESCROWS into the
+-- pool); the worker deals every live entrant an independent 7-card hand and pays the top places a
+-- share of the pool net of a house rake — a competitive CASH redistribution (no new emission). At
+-- most one OPEN tournament at a time (poker_state.current); a new one materializes on the next entry
+-- after the last resolves. §10.4: a new escrow check (pool == Σ buyin − win − take − refund − death).
+CREATE TABLE IF NOT EXISTS poker_tournaments (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'open',    -- open → resolved | refunded
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolves_at TIMESTAMPTZ NOT NULL,       -- registration closes here; the worker settles after
+  pool INT NOT NULL DEFAULT 0             -- Σ escrowed buy-ins (a convenience mirror of the entries)
+);
+CREATE TABLE IF NOT EXISTS poker_entries (
+  tournament_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  buyin INT NOT NULL,
+  place INT,                             -- final placing, filled at settle
+  hand TEXT,                             -- the dealt best-hand name, filled at settle
+  PRIMARY KEY (tournament_id, character_id)
+);
+CREATE TABLE IF NOT EXISTS poker_state ( id INT PRIMARY KEY, current TEXT );
+INSERT INTO poker_state (id, current) SELECT 1, NULL WHERE NOT EXISTS (SELECT 1 FROM poker_state);
+
 -- VENDETTAS: a player fire-kill swears the victim's bloodline (ACCOUNT) against the killer's —
 -- surviving both sides' deaths until settled (a revenge fire-kill, 2x rep) or lapsed. One active
 -- vendetta per pair (a repeat kill refreshes the clock). Zero money flows — pure status + the

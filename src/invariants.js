@@ -232,6 +232,19 @@ export async function runLedgerInvariants(pool) {
     push('den distributions', Number(denRow.distributed), denTakes + denRake);
   }
 
+  // (f6) THE POKER TOURNAMENT escrow (the boxing-bet-escrow twin, den step four): the pool held on
+  // OPEN tournaments == buy-ins posted − prizes won − the house take (NULL 'casino:tourney:take':
+  // half street tax + half burn) − refunds (a short field) − dead-entrant burns (NULL
+  // 'casino:tourney:death'). These exact-reason matches sit UNDER the 'casino:bet:%'/'casino:win:%'
+  // den-profit LIKE patterns, so a tournament's buyin/win never touch the PvE house book.
+  const trEscrow = await one(pool, "SELECT COALESCE(SUM(pool),0) s FROM poker_tournaments WHERE status='open'");
+  const trPosted = -(await sum(pool, "currency='cash' AND reason='casino:tourney:buyin'"));
+  const trWins = await sum(pool, "currency='cash' AND reason='casino:tourney:win'");
+  const trRefunds = await sum(pool, "currency='cash' AND reason='casino:tourney:refund'");
+  const trTake = -(await sum(pool, "currency='cash' AND reason='casino:tourney:take'"));
+  const trDeath = -(await sum(pool, "currency='cash' AND reason='casino:tourney:death'"));
+  push('poker tourney escrow', trEscrow, trPosted - trWins - trRefunds - trTake - trDeath);
+
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
   for (const [cur, prefixes] of Object.entries(KNOWN_REASONS)) {

@@ -592,6 +592,12 @@ export const CASINO = {
   // §10.4-exact per character). A tie splits (each stake returned, no rake). One atomic showdown
   // (true multi-street betting needs turn-based sessions this architecture defers).
   POKER_MIN: 100,
+  // THE POKER TOURNAMENT (scheduled showdown) — a CASH buy-in escrows into a pool; the worker deals
+  // every live entrant an independent 7-card hand and pays the top places a share of the pool net of
+  // RAKE_BPS (half → street tax / half burns). A pure competitive redistribution (no new emission —
+  // the field is net-negative by the rake). One open tournament at a time; a new one opens on the
+  // next entry after the last settles. `TOURNEY_MS` env is TEST-ONLY (the SEARCH_MS pattern).
+  TOURNEY: { BUYIN: 5000, REGISTER_MS: 86400000, MIN_ENTRANTS: 2, RAKE_BPS: 500, PAYOUTS: [0.5, 0.3, 0.2] },
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)
