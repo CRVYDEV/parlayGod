@@ -1189,6 +1189,32 @@ can't invade kryl/lvl-20). Still flagged for founder sign-off (NOT patched, grou
 garrison ratchet (×1.5/invasion, no decay/cooldown) can price a sub-apex family out of an apex outpost —
 a pure sink, rout-resettable, so never permanent, but a garrison-decay or invade-cooldown is the dial.
 Suite 30/30 + sim drift-0.
+**Step five — THE OCCUPATION (NPC outfits garrison the CORE districts) — BUILT** (`src/rules.js`,
+`src/social.js`, `schema.sql`, `test/social.js`; the deferred "fullest turf-model rewire"). The 5 apex
+outfits now literally OCCUPY 5 of the 6 signed core districts (`WORLD.OCCUPATION` mapping dockrats→docks …
+volkov→neon; `cathedral` stays FREE as the on-ramp), seeded on a fresh map via idempotent schema UPDATEs
+(only a PRISTINE district is occupied, so a re-run never re-occupies a liberated/held one). An occupied
+district can't be freely seized — a family **LIBERATES** it through the SAME `seizeDistrict` (a new
+`npc_holder` branch), and the cost SCALES WITH THE OCCUPYING OUTFIT'S LIVE STRENGTH (`outfitStrengthFrac`
+in world.js — a LOCKLESS quote; `liberationCost` = `outfit.max × OCCUPY_BPS/10000 × strengthFrac`, floored
+`OCCUPY_MIN` $30k) — so **the World raid loop is the path to core turf**: beat an outfit down (rout its
+reservoir) and its district goes from the full garrison (docks $45k … neon $3.6M at full strength) to the
+$30k floor. **The signed district PERKS are UNTOUCHED** (dormant while occupied — `holder_gang` NULL gives
+no perk, exactly as an unowned district — active the moment a family holds it); liberation clears
+`npc_holder`, sets `holder_gang`, and the paid cost becomes the new player garrison. §10.4: liberation is
+the EXISTING `turf:seize:<district>` treasury sink (already in the gang-treasuries check) — ZERO invariant
+change; a dissolved family's district goes unowned (not re-occupied); NPC districts carry no territory
+racket (the transfer is skipped). `GET /v1/districts` surfaces `occupiedBy {npc,name,strengthPct}` +
+`liberationCost`; the console Family "War & Turf" section shows every core district's occupier/holder + the
+live liberation cost + a stand-here liberate button. `test/social.js` proves the occupation seed (canal by
+kryl), the full-strength cost ($450k), the strength interlock (a floored outfit → $30k), the ledgered
+liberation, `npc_holder` cleared + the perk now held; the existing docks-seize test became a liberation
+($45k). Suite 30/30 + sim drift-0. **Founder SIM sign-off flag (BALANCE.md):** this changes the signed turf
+ON-RAMP — 5/6 core districts start NPC-held, so a fresh family's cheap free-seize is now a small liberation
+(the weak outfits' districts are ~$45k–$120k, effectively a soft on-ramp that teaches the World loop;
+`cathedral` stays free). Perk VALUES unchanged; `OCCUPATION`/`OCCUPY_BPS`/`OCCUPY_MIN` + the mapping are
+all sign-off levers. The World pillar is now feature-complete (visible city → rival outfits + co-op raids →
+war-effort/frontier → productive+contestable outposts → **NPC-occupied core turf**).
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

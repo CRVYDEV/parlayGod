@@ -49,6 +49,19 @@ async function currentStrength(client, fixture, now = new Date()) {
   return { strength: regened, enragedUntil: row.enraged_until };
 }
 
+// STEP FIVE (THE OCCUPATION): the outfit's LIVE strength as a fraction of max — a LOCKLESS read used to
+// price a core-district LIBERATION (seizeDistrict), so beating the outfit down cheapens its turf in real
+// time. No FOR UPDATE (it's a cost quote; the district-row lock serializes the actual transfer). An
+// un-touched outfit (no row yet — seeded at max on its first raid) reads at full strength.
+export async function outfitStrengthFrac(client, fixture) {
+  if (!fixture) return 1;
+  const row = (await client.query('SELECT strength, strength_at FROM world_npcs WHERE npc_id=$1', [fixture.id])).rows[0];
+  if (!row) return 1;
+  const hrs = Math.max(0, (Date.now() - new Date(row.strength_at).getTime()) / 3600000);
+  const strength = Math.min(fixture.max, Number(row.strength) + fixture.regenPerHr * hrs);
+  return Math.max(0, Math.min(1, strength / fixture.max));
+}
+
 // GET /v1/world — the NPC board (public read: each outfit's status band + your raid odds tonight).
 // Uses a fresh connection so a read doesn't lock; strength is the regened (effective) value.
 export async function worldBoard(pool, ch = null, h = null) {

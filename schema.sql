@@ -268,7 +268,8 @@ CREATE TABLE IF NOT EXISTS districts (
   id TEXT PRIMARY KEY,
   holder_gang TEXT,
   garrison NUMERIC NOT NULL DEFAULT 0,
-  seized_at TIMESTAMPTZ
+  seized_at TIMESTAMPTZ,
+  npc_holder TEXT            -- THE OCCUPATION (World step five): an apex NPC outfit garrisons this core district; a family must LIBERATE it (seizeDistrict) — the perk is dormant until then
 );
 INSERT INTO districts (id) SELECT 'docks'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='docks');
 INSERT INTO districts (id) SELECT 'neon'      WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='neon');
@@ -276,6 +277,15 @@ INSERT INTO districts (id) SELECT 'foundry'   WHERE NOT EXISTS (SELECT 1 FROM di
 INSERT INTO districts (id) SELECT 'brick'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='brick');
 INSERT INTO districts (id) SELECT 'canal'     WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='canal');
 INSERT INTO districts (id) SELECT 'cathedral' WHERE NOT EXISTS (SELECT 1 FROM districts WHERE id='cathedral');
+-- THE OCCUPATION (World step five): the apex outfits garrison 5 of 6 core districts on a FRESH map. Only a
+-- PRISTINE (never-touched) district is occupied, so a re-run never re-occupies a district a family has
+-- since liberated/held (cathedral stays free — the fallback on-ramp). Keep this mapping in lockstep with
+-- rules.js WORLD.OCCUPATION.
+UPDATE districts SET npc_holder='dockrats' WHERE id='docks'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
+UPDATE districts SET npc_holder='zappa'    WHERE id='brick'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
+UPDATE districts SET npc_holder='kryl'     WHERE id='canal'   AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
+UPDATE districts SET npc_holder='moreau'   WHERE id='foundry' AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
+UPDATE districts SET npc_holder='volkov'   WHERE id='neon'    AND holder_gang IS NULL AND npc_holder IS NULL AND garrison=0;
 -- Contract board (M7 Phase 1). One escrow pot per (target, kind):
 --   'hospitalize' — collectible by a winning jump OR a completed kill
 --   'kill'        — collectible ONLY by a completed hit (fire); a premium contract

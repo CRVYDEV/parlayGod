@@ -163,6 +163,7 @@ const gangId = (await call('POST', '/v1/gangs', { token, body: { name: 'Neon Kin
 assert(gangId, 'lou founded a family'); seededCash -= 0; // founding is ledgered, not seeded
 assert.equal((await call('POST', '/v1/gangs/tribute', { token, body: { amount: 100000 } })).code, 200, 'war chest funded');
 assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } })).body.error, 'turf', 'the fix belongs to whoever runs neon');
+await pool.query(`UPDATE districts SET npc_holder=NULL WHERE id='neon'`); // World step five: this test just needs the family to hold neon (bypass the apex NPC occupation)
 assert.equal((await call('POST', '/v1/districts/neon/seize', { token })).code, 200, 'the Kings took the Mile');
 const treasuryPreFix = (await call('GET', `/v1/gangs/${gangId}`, {})).body.gang.treasury;
 const madamePreFix = (await call('GET', '/v1/underworld', { token })).body.npcs.find((n) => n.id === 'madame').standing;

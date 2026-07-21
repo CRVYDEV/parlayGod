@@ -9,10 +9,11 @@ import {
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
+  worldNpcOf, liberationCost,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
-import { releaseFrontierHolds, abandonRaidsAtDeath } from './world.js';
+import { releaseFrontierHolds, abandonRaidsAtDeath, outfitStrengthFrac } from './world.js';
 import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
@@ -235,26 +236,41 @@ export async function seizeDistrict(ch, districtId, client, h) {
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
   const d = (await client.query('SELECT * FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
   if (d.holder_gang === h.owned.gangId) throw new GameError('held', 'You already hold that district.');
-  const base = d.holder_gang ? Math.max(M3.SEIZE_BASE, Math.floor(Number(d.garrison) * M3.SEIZE_OUTBID)) : M3.SEIZE_BASE;
-  // sim-audit F5: a district with a PRODUCTIVE OPERATION costs a war premium scaled to what's
-  // being taken — TERRITORY_SEIZE_BPS of the operation's cumulative build cost. Seizing a maxed
-  // Smuggling Front is no longer ~18× cheaper than building one; the snowball pays freight.
-  const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
-  const premium = op ? Math.floor(territoryBuildCost(op.tier) * M3.TERRITORY_SEIZE_BPS / 10000) : 0;
+  // STEP FIVE — THE OCCUPATION: an NPC-garrisoned district is LIBERATED (not seized from a player). The
+  // cost scales with the occupying outfit's LIVE strength (a lockless quote — beat it down first and its
+  // turf goes cheap), floored at OCCUPY_MIN. No territory racket transfers (an NPC district has none).
+  const occupied = !!d.npc_holder;
+  let base, premium = 0;
+  if (occupied) {
+    const fixture = worldNpcOf(d.npc_holder);
+    const frac = await outfitStrengthFrac(client, fixture);
+    base = liberationCost(fixture, frac);
+  } else {
+    base = d.holder_gang ? Math.max(M3.SEIZE_BASE, Math.floor(Number(d.garrison) * M3.SEIZE_OUTBID)) : M3.SEIZE_BASE;
+    // sim-audit F5: a district with a PRODUCTIVE OPERATION costs a war premium scaled to what's
+    // being taken — TERRITORY_SEIZE_BPS of the operation's cumulative build cost. Seizing a maxed
+    // Smuggling Front is no longer ~18× cheaper than building one; the snowball pays freight.
+    const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
+    premium = op ? Math.floor(territoryBuildCost(op.tier) * M3.TERRITORY_SEIZE_BPS / 10000) : 0;
+  }
   const cost = base + premium;
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  if (Number(g.treasury) < cost) throw new GameError('treasury', `Seizing that district takes $${cost} from the treasury${premium ? ` ($${premium} of it the war premium on its operation)` : ''}.`);
-  // the garrison burns — turf costs the family real money (§10.4 sink); only the garrison part
-  // becomes the new defense budget (the premium burned taking the operation)
+  if (Number(g.treasury) < cost)
+    throw new GameError('treasury', occupied
+      ? `Liberating that district from the ${worldNpcOf(d.npc_holder)?.name || 'occupiers'} takes $${cost} from the treasury (beat the outfit down to cheapen it).`
+      : `Seizing that district takes $${cost} from the treasury${premium ? ` ($${premium} of it the war premium on its operation)` : ''}.`);
+  // the garrison burns — turf costs the family real money (§10.4 sink); only the garrison part becomes the
+  // new defense budget (the premium burned taking the operation). Liberation clears the NPC occupier.
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, cost]);
-  await client.query('UPDATE districts SET holder_gang=$2, garrison=$3, seized_at=$4 WHERE id=$1', [districtId, h.owned.gangId, base, now()]);
+  await client.query('UPDATE districts SET holder_gang=$2, npc_holder=NULL, garrison=$3, seized_at=$4 WHERE id=$1', [districtId, h.owned.gangId, base, now()]);
   await h.ledger(client, { currency: 'cash', amount: -cost, reason: `turf:seize:${districtId}`, counterparty: h.owned.gangId });
   // Phase 3: the district's productive operation (if any) transfers to the victor with the turf —
   // wars are now fought over income, not just a treasury cut. Uncollected income forfeits (clock resets).
-  await seizeTerritoryRackets(client, districtId, h.owned.gangId);
+  if (!occupied) await seizeTerritoryRackets(client, districtId, h.owned.gangId);
   if (!h.owned.held.includes(districtId)) h.owned.held.push(districtId);
-  bus.emit('streets', { type: 'seize', district: districtId, gang: g.name });
-  return { ok: true, district: districtId, garrison: base, premium, cost };
+  bus.emit('streets', occupied ? { type: 'liberated', district: districtId, gang: g.name, npc: worldNpcOf(d.npc_holder)?.name }
+    : { type: 'seize', district: districtId, gang: g.name });
+  return { ok: true, district: districtId, garrison: base, premium, cost, liberated: occupied };
 }
 
 // ═══════════════════ JUMPS (§7.6) ═══════════════════

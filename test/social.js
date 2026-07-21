@@ -58,9 +58,11 @@ let gA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang;
 assert.equal(gA.treasury, 100000, 'treasury credited');
 if (familyTaskOf(weekOf()).key === 'tribute') assert(gA.weekly.progress >= 100000, 'weekly tribute task progressed');
 
-// ── turf (§5.5): seize the Docks, then buy goods 5% cheaper standing on it ──
+// ── turf (§5.5) + THE OCCUPATION (World step five): LIBERATE the Docks from its NPC garrison (dockrats),
+// then buy goods 5% cheaper standing on it. At full outfit strength the cost = dockrats.max × OCCUPY_BPS.
 r = await call('POST', `/v1/districts/docks/seize`, { token: don.token });
-assert.equal(r.code, 200, 'district seized'); assert.equal(r.body.garrison, 30000);
+assert.equal(r.code, 200, 'district liberated'); assert.equal(r.body.liberated, true, 'docks starts NPC-occupied — a liberation');
+assert.equal(r.body.garrison, 45000, 'liberation cost at full outfit strength = 150000 × OCCUPY_BPS/10000');
 assert.equal((await call('POST', `/v1/districts/docks/seize`, { token: don.token })).code, 400, 'already held');
 const board = (await call('GET', '/v1/market/prices', {})).body;
 r = await call('POST', '/v1/goods/buy', { token: don.token, body: { goodId: 'gin', qty: 1 } });
@@ -68,6 +70,27 @@ assert.equal(r.code, 200, 'goods bought on own turf');
 assert.equal(r.body.unit, Math.round(board.goods.docks.gin * 0.95), 'turf discount −5% applied');
 const districts = (await call('GET', '/v1/districts', {})).body.districts;
 assert.equal(districts.find((d) => d.id === 'docks').holder.tag, 'DON', 'holder listed');
+
+// ── THE OCCUPATION (World step five) — the raid loop cheapens core turf ──
+// canal is garrisoned by the Kryl Syndicate (max 1.5M): at full strength it costs 1.5M × OCCUPY_BPS/10000 = $450k
+let dboard = (await call('GET', '/v1/districts', {})).body.districts;
+const canal0 = dboard.find((d) => d.id === 'canal');
+assert(canal0.occupiedBy && canal0.occupiedBy.npc === 'kryl', 'canal is occupied by the Kryl Syndicate');
+assert.equal(canal0.liberationCost, 450000, 'at full outfit strength the liberation cost is the full garrison');
+assert(dboard.find((d) => d.id === 'cathedral' && !d.occupiedBy), 'cathedral is the free fallback district');
+// beat the outfit down (seed its reservoir near the floor) → its district goes cheap (the interlock)
+await pool.query(`DELETE FROM world_npcs WHERE npc_id='kryl'`);
+await pool.query(`INSERT INTO world_npcs (npc_id, strength, strength_at) VALUES ('kryl', 30000, now())`); // ~2% of max
+assert.equal((await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal').liberationCost, 30000,
+  'a beaten-down outfit’s turf floors at OCCUPY_MIN — the World raid loop is the path to core turf');
+// now the family liberates canal cheaply from the treasury (a §10.4 turf:seize sink; the perk was dormant, now theirs)
+const treasBefore = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
+r = await call('POST', '/v1/districts/canal/seize', { token: don.token });
+assert.equal(r.code, 200, 'canal liberated'); assert.equal(r.body.liberated, true); assert.equal(r.body.cost, 30000, 'paid the floored cost');
+assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury, treasBefore - 30000, 'the treasury paid the liberation');
+const canalNow = (await call('GET', '/v1/districts', {})).body.districts.find((d) => d.id === 'canal');
+assert.equal(canalNow.occupiedBy, undefined, 'canal is no longer NPC-occupied');
+assert.equal(canalNow.holder.tag, 'DON', 'the Fabrizi hold it now (the +10% crime-payout perk is live)');
 
 // ── melt tithe (§7.5): 25% of rounds to the family armory, $30/round to treasury ──
 let car = null;

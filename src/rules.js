@@ -981,6 +981,21 @@ export const worldRankOf = (dmg) =>
   [...WORLD.WAR_RANKS].reverse().find((r) => Number(dmg) >= r.min) || WORLD.WAR_RANKS[0];
 // step four: a held outfit's tribute-per-hour to its overlord family (a bounded slice of the outfit's regen).
 export const frontierTributePerHr = (fixture) => Math.floor((fixture?.regenPerHr || 0) * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
+// ── STEP FIVE — THE OCCUPATION: apex outfits garrison the CORE player-map districts ──
+// An occupied district can't be freely seized — a family LIBERATES it (seizeDistrict's npc branch), and
+// the cost SCALES WITH THE OUTFIT'S LIVE STRENGTH, so the World raid loop is the path to core turf (beat
+// the outfit down → its district goes cheap). The signed district PERKS are UNTOUCHED (dormant while
+// occupied; active once a family holds it). §10.4: liberation is the existing `turf:seize:` treasury sink.
+// The mapping + numbers are founder SIM sign-off levers (a change to the signed turf ON-RAMP, ground rule
+// #1). `cathedral` stays FREE as the fallback on-ramp; a dissolved family's district goes unowned (not re-
+// occupied). 5 of 6 core districts start occupied, difficulty scaling with the outfit tier.
+WORLD.OCCUPATION = { docks: 'dockrats', brick: 'zappa', canal: 'kryl', foundry: 'moreau', neon: 'volkov' };
+WORLD.OCCUPY_BPS = 3000;    // liberation cost at FULL strength = outfit.max × this/10000 (× the live strength fraction)
+WORLD.OCCUPY_MIN = 30000;   // …floored (a routed outfit's turf is cheap, not free — the SEIZE_BASE floor)
+export const occupierOf = (districtId) => WORLD.OCCUPATION[districtId] || null;
+// the treasury cost to liberate an occupied district, given the outfit and its live strength fraction [0..1]
+export const liberationCost = (fixture, strengthFrac) =>
+  Math.max(WORLD.OCCUPY_MIN, Math.floor((fixture?.max || 0) * WORLD.OCCUPY_BPS / 10000 * Math.max(0, Math.min(1, strengthFrac))));
 
 // THE PEN — the prison meta-game (design omerta-the-pen-design.md). Turns `jail_until` dead time into
 // a place: work the yard down, buy contraband, pay for protection, bribe out — and the marquee
