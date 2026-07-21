@@ -19,14 +19,21 @@ const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date()
 const ratePerHr = (racket) => (territoryTierOf(racket.tier)?.incomePerHr || 0) * territoryTypeOf(racket.kind).incomeMult;
 
 // STEP FIVE — a specialist's passive fortitude bonus (from the effStat snapshot at assign), and the
-// net scrutiny growth-rate net of a specialist's resistance + a smuggling "Ghost the Route" window
-// (during which the operation doesn't accrue Bureau heat at all). All defensive/risk — no §10.4.
+// net scrutiny growth-rate net of a specialist's resistance. All defensive/risk — no §10.4.
 const specFort = (r) => r.specialist ? Math.floor(Number(r.spec_power || 0) / CONSTANTS.SPECIALIST_FORT_DIV) : 0;
-const scrutinyNet = (r, now = Date.now()) => {
-  if (r.op_ghost_until && new Date(r.op_ghost_until).getTime() > now) return 0; // ghosted — no accrual this window
+const scrutinyNet = (r) => {
   const mult = r.specialist ? CONSTANTS.SPECIALIST_SCRUTINY_MULT : 1;
   return territoryTypeOf(r.kind).scrutinyPerHr * mult - CONSTANTS.TERRITORY_SCRUTINY_DECAY_HR;
 };
+// the effective START of the scrutiny accrual clock — the LATER of the stored `scrutiny_at` and any
+// "Ghost the Route" window end. RED-TEAM FIX: suppressing accrual by returning net=0 during the window
+// (the first cut) was wrong — once the window ended, `hrs` since `scrutiny_at` still spanned the ghosted
+// hours, so the op silently CAUGHT UP (accruing over the window it was supposed to skip). Starting the
+// clock at max(scrutiny_at, op_ghost_until) instead skips the window for real: DURING it the start is in
+// the future (hrs=0, no growth) and AFTER it accrual counts only post-window time — robust even if a
+// collect writes scrutiny_at=now() mid-window (op_ghost_until still wins), and a stale past window is
+// harmless (a later collect's fresh scrutiny_at exceeds it).
+const scrutinyStartMs = (r) => Math.max(new Date(r.scrutiny_at).getTime(), r.op_ghost_until ? new Date(r.op_ghost_until).getTime() : 0);
 
 // accrued income for one racket up to the cap, in whole dollars
 function accrued(racket) {
@@ -51,8 +58,8 @@ const isCold = (racket, now = Date.now()) =>
 // GROWS from operating a hot type (net of the decay) — a `numbers` op (scrutinyPerHr 0 < decay) never
 // heats up, `smuggling` climbs fast. Effective (current) scrutiny, clamped:
 function decayedScrutiny(r, now = Date.now()) {
-  const net = scrutinyNet(r, now); // step five: specialist resistance + a ghost window fold into the rate
-  const hrs = Math.max(0, now - new Date(r.scrutiny_at).getTime()) / 3600000;
+  const net = scrutinyNet(r); // step five: a specialist's resistance folds into the rate
+  const hrs = Math.max(0, now - scrutinyStartMs(r)) / 3600000; // …and a ghost window skips its hours entirely
   return Math.max(0, Math.min(CONSTANTS.TERRITORY_SCRUTINY_CAP, Number(r.scrutiny) + net * hrs));
 }
 
@@ -64,9 +71,11 @@ function decayedScrutiny(r, now = Date.now()) {
 // the fine clamp). TERRITORY_RAID_P pins the roll for tests (the BUSINESS_RAID_P precedent).
 async function resolveTerritoryRaid(r, treasury, client, h, gangId, actorId) {
   const now = Date.now();
-  const net = scrutinyNet(r, now); // step five: a specialist/ghost that drops net ≤ 0 means no crackdown this window
+  const net = scrutinyNet(r); // step five: a specialist dropping net ≤ 0 means no crackdown
   const stored = Number(r.scrutiny);
-  const hrs = Math.max(0, now - new Date(r.scrutiny_at).getTime()) / 3600000;
+  // …and a ghost window contributes zero hours (start clock at max(scrutiny_at, op_ghost_until)), so
+  // during it hrs=0 → no above-threshold time → the roll below can't fire; after it, only post-window time counts
+  const hrs = Math.max(0, now - scrutinyStartMs(r)) / 3600000;
   const eff = Math.max(0, Math.min(CONSTANTS.TERRITORY_SCRUTINY_CAP, stored + net * hrs));
   if (net > 0 && eff >= CONSTANTS.TERRITORY_RAID_THRESHOLD) {
     // the hours the op actually sat above the threshold this window (linear growth from `stored`)
