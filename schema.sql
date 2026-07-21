@@ -170,6 +170,8 @@ CREATE TABLE IF NOT EXISTS characters (
   disinfo_until TIMESTAMPTZ,                        -- THE WIRE step three: DISINFORMATION — while current, any WIRETAP reading you gets cooked private signals (a $OMR sink; an informant sees through it)
   active_at TIMESTAMPTZ,                            -- SKILLS step two: shared cooldown across capstone-unlocked ACTIVE abilities
   race_at TIMESTAMPTZ,                              -- STREET RACES: per-driver race cooldown (written by direct SQL, outside persist — the active_at pattern)
+  port_used NUMERIC NOT NULL DEFAULT 0,             -- THE PORT: contraband bought in the rolling 24h supply window (the D3 wash-cap token bucket; direct SQL, outside persist)
+  port_at TIMESTAMPTZ,                              -- …the window's start marker
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -188,6 +190,21 @@ CREATE TABLE IF NOT EXISTS cars (
   race_limit INT,                                 -- STREET RACES: listed to race for a wager up to this (consent-by-listing, the fade/bout pattern); NULL = not on the strip
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- THE PORT — maritime smuggling. A boat is an ownable vessel (bought like a car): a hold (cargo scale) +
+-- speed (Coast Guard evasion). A run stores its state on the row (run_until = at sea; NULL = docked). Boats
+-- can be impounded/sunk (the row deleted) and die with the street (the runEstate wipe).
+CREATE TABLE IF NOT EXISTS boats (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  run_until TIMESTAMPTZ,                          -- at sea until this; NULL = docked
+  run_route TEXT,                                 -- the active route (risk tier)
+  run_hold INT NOT NULL DEFAULT 0,                -- cargo units this run
+  run_cost NUMERIC NOT NULL DEFAULT 0,            -- what the cargo cost (the fine + loss-at-risk basis)
+  run_escort BOOLEAN NOT NULL DEFAULT false,      -- an escort was hired (cuts interdiction)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_boats_char ON boats (character_id);
 CREATE TABLE IF NOT EXISTS character_items (
   character_id TEXT NOT NULL,
   item_id TEXT NOT NULL,
