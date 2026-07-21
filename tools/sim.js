@@ -487,6 +487,25 @@ for (const [districtId, npcId] of Object.entries(WORLD.OCCUPATION)) {
     `→ floors to $${fmt(WORLD.OCCUPY_MIN)} once the outfit is routed to the reservoir floor (the World-loop discount)`);
 }
 
+// ════════ P9.12 speakeasy bar take — NET EV by tier (the sign-off's one flagged big faucet) ════════
+// The sign-off flagged the top-tier bar take ($3.12M/day) as the one large faucet never measured NET of
+// its costs. The honest picture (analytic, from the signed constants): the bar take is a PASSIVE lazy
+// income (24h-capped). NOTORIETY — hence the Bureau-raid risk — comes from the back-room TABLE (8/play)
+// and busy ROUNDS (2 each), which are PATRON-driven, not the owner's collect; a bar-take-ONLY owner draws
+// ~0 notoriety, so ~0 raid tax. There is NO recurring "pad" upkeep on a speakeasy (unlike a business
+// front). So for a passive club, NET ≈ GROSS — the raid layer only bites an owner who runs a busy table.
+phase('P9.12 speakeasy — bar-take NET EV + build payback by tier (the flagged faucet)');
+let seBuild = SPEAKEASY.OPEN_COST;
+for (const t of SPEAKEASY.TIERS) {
+  seBuild += t.cost; // cumulative capital to reach this tier (open + every upgrade)
+  const grossDay = t.incomePerHr * (SPEAKEASY.INCOME_CAP_MS / 3600000);
+  const paybackDays = grossDay > 0 ? seBuild / grossDay : Infinity;
+  note('speakeasy', `${t.name} (t${t.tier}) bar take`, `$${fmt(grossDay)}/day gross ≈ NET (passive)`,
+    `build-to-here $${fmt(seBuild)} → payback ~${paybackDays.toFixed(1)}d; passive collect draws ~0 notoriety → ~0 raid tax (table/rounds are patron-driven); no upkeep; safehouse-gated collect (D2)`);
+}
+note('speakeasy', 'net-EV verdict', 'a large, low-risk, fast-payback faucet',
+  `top tier ~$3.12M/day (≈ a maxed territory op ×1.6-2), un-raided when run passively, ~5.7d payback — FLAG: richness of the incomePerHr curve or a passive-owner notoriety/upkeep is the founder dial (BALANCE speakeasy)`);
+
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);
