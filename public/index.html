@@ -797,10 +797,16 @@
       <h2 style="margin-top:12px">Territory Operations</h2>
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
-        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}
+        <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}${op.specialist ? ` <span class="chip good">specialist +${op.specFortBonus}🛡️</span>` : ''}${op.ghostSeconds > 0 ? ' <span class="chip">👻 ghosted</span>' : ''}
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div>
           ${op.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${op.scrutiny}/${op.raidThreshold} — a crackdown seizes the pending + fines the treasury</div>` : ''}
-          ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}</div>`).join('')}</div>`
+          ${boss && op.fortCost != null ? `<button class="act" data-do="POST /v1/territory/${op.district}/fortify">fortify → lvl ${op.fortitude + 1} ($${fmt(op.fortCost)})</button>` : ''}
+          ${boss ? `<div style="margin-top:4px">
+            ${op.specialist
+              ? `<button class="act" data-do="DELETE /v1/territory/${op.district}/specialist">pull specialist</button>`
+              : `<select id="spec-${op.district}">${(g.members || []).map((m) => `<option value="${m.id}">${m.name}</option>`).join('')}</select> <button class="act" data-spec="${op.district}">assign specialist</button>`}
+            <button class="act" data-terrop="${op.district}" ${op.opReady ? '' : 'disabled'}>${op.opId === 'show_of_force' ? 'Show of Force' : op.opId === 'ghost_route' ? 'Ghost the Route' : 'Cook the Books'}${op.opReady ? '' : ` (${Math.ceil((op.opCdSeconds || 0) / 60)}m)`}</button>
+          </div>` : ''}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no operations — a boss can establish one on held turf</span>'}
       ${boss ? `<div style="margin-top:6px">
         <button class="act" data-do="POST /v1/territory/collect">collect income → treasury</button>
@@ -852,6 +858,9 @@
         <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (25 $OMR)</button></div></div>` : ''}
 
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
+    t.querySelectorAll('[data-spec]').forEach((b) => b.onclick = () => {
+      const sel = $(`#spec-${b.dataset.spec}`); act('POST', `/v1/territory/${b.dataset.spec}/specialist`, { memberId: sel && sel.value }).then(() => renderFamily()); });
+    t.querySelectorAll('[data-terrop]').forEach((b) => b.onclick = () => act('POST', `/v1/territory/${b.dataset.terrop}/op`, {}).then(() => renderFamily()));
     { const cg = $('#crest-go'); if (cg) cg.onclick = () => act('POST', '/v1/gangs/vanity/color', { color: $('#crest-color').value.trim() }).then(() => renderFamily()); }
     { const fr = $('#fam-rename-go'); if (fr) fr.onclick = () => act('POST', '/v1/gangs/vanity/name', { name: $('#fam-rename').value.trim(), tag: $('#fam-retag').value.trim() }).then(() => renderFamily()); }
     { const flb = $('#foundation-lb-link'); if (flb) flb.onclick = async (e) => {

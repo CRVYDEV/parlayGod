@@ -446,6 +446,13 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.fortifyRacket(ch, req.params.districtId, client, h)));
   app.post('/v1/territory/:districtId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.raidRivalRacket(ch, req.params.districtId, client, h)));
+  // step five — racket specialists + special operations
+  app.post('/v1/territory/:districtId/specialist', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.assignSpecialist(ch, req.params.districtId, req.body?.memberId, client, h)));
+  app.delete('/v1/territory/:districtId/specialist', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.unassignSpecialist(ch, req.params.districtId, client, h)));
+  app.post('/v1/territory/:districtId/op', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.runTerritoryOp(ch, req.params.districtId, client, h)));
   app.get('/v1/territory', { preHandler: auth }, async (req) => {
     const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
     return { territory: gid ? await Territory.territoryOf(pool, gid) : [] };

@@ -643,6 +643,10 @@ CREATE TABLE IF NOT EXISTS territory_rackets (
   scrutiny_at TIMESTAMPTZ NOT NULL DEFAULT now(),    -- the scrutiny clock (reset on a raid + on seizure — a seized op isn't born hot)
   fortitude INT NOT NULL DEFAULT 0,                  -- (step four) defense level — bought from the treasury; each level lowers a RIVAL raid's success (not the signed Bureau math)
   raid_cd_until TIMESTAMPTZ,                         -- (step four) per-racket cooldown after a rival raid attempt (win or lose) — protects the owner from being ground down
+  specialist TEXT,                                   -- (step five) a family made-man assigned to run this operation: passive fortitude + scrutiny resistance (a status role, no §10.4)
+  spec_power INT NOT NULL DEFAULT 0,                 -- snapshot of the specialist's effStat at assign (the fortitude-bonus basis; re-assign to refresh)
+  op_at TIMESTAMPTZ,                                 -- (step five) last special-operation timestamp (the per-racket op cooldown)
+  op_ghost_until TIMESTAMPTZ,                        -- (step five) smuggling "Ghost the Route" — the scrutiny-accrual-suppressed window
   established_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   minted_onchain BOOLEAN NOT NULL DEFAULT false
 );

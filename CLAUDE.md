@@ -3418,3 +3418,31 @@ lacking OmertaBond's over-sweep guard (Safe = root of trust), port warehouse→f
 Commission seasonal standing, and the shared-dividend-pool allocation — all previously-known/accepted.
 `forge test` STILL not run (Foundry egress-blocked) — the pre-mainnet gate stands. Suite 32/32 + sim
 drift-0.
+
+**Territory step five — RACKET SPECIALISTS + SPECIAL OPERATIONS — BUILT** (`src/territory.js`,
+`src/rules.js`, `schema.sql`, `test/social.js`; the deferred step-five items — the roster-involvement +
+active-play depth the income layer lacked). New columns `territory_rackets.specialist`/`spec_power`/
+`op_at`/`op_ghost_until`. **(1) SPECIALISTS** (`assignSpecialist`/`unassignSpecialist`, `POST`/`DELETE
+/v1/territory/:id/specialist`): a boss/underboss assigns a LIVING family made-man (level ≥
+`SPECIALIST_MIN_LVL` 5) to a held operation — one racket per specialist. Passive, PURELY DEFENSIVE (no
+§10.4): a FORTITUDE bonus (`specFort` = the member's muscle+cunning snapshot / `SPECIALIST_FORT_DIV` 8,
+so assigning your muscle matters) folded into `raidRivalRacket`'s P, AND SCRUTINY resistance (net Bureau
+growth × `SPECIALIST_SCRUTINY_MULT` 0.6 via the new `scrutinyNet` helper threaded into `decayedScrutiny`
++ `resolveTerritoryRaid`). **(2) SPECIAL OPERATIONS** (`runTerritoryOp`, `POST /v1/territory/:id/op`,
+requires a specialist, per-racket `TERRITORY_OP_CD_MS` 12h cooldown) — racket-TYPE-specific, ALL
+§10.4-clean (scrutiny/fortitude only, zero cash / zero faucet / zero invariant change): **numbers →
+"Cook the Books"** clears scrutiny; **protection → "Show of Force"** +`TERRITORY_OP_FORT` 1 fortitude
+(capped at `FORT_MAX`); **smuggling → "Ghost the Route"** clears scrutiny AND suppresses accrual for
+`TERRITORY_OP_GHOST_MS` 6h (`op_ghost_until` → `scrutinyNet` returns 0 in the window; robust vs a collect
+resetting `scrutiny_at`). Seizure/dissolution scatter the crew (specialist + op state reset in
+`seizeTerritoryRackets`; `releaseTerritoryRackets` deletes the rows). Lock order: the actor's char
+(withCharacter) → the racket row only (the ops touch no treasury, so no gang lock, no cycle). Snapshot
+`spec_power` (re-assign to refresh — the consent-by-listing precedent). `territoryOf` surfaces
+`specialist`/`specFortBonus`/`opId`/`opReady`/`opCdSeconds`/`ghostSeconds`; the console Family tab gained a
+specialist picker (from the roster) + pull + a type-labelled special-op button + specialist/ghost chips.
+`test/social.js` covers the rank/member/level gates, the assign + fort-bonus (floor((20+12)/8)=4), all
+three type ops + the cooldown, the no-specialist gate, and unassign. Suite 32/32 + sim drift-0. All
+`SPECIALIST_*`/`TERRITORY_OP_*` numbers are founder sign-off levers (defensive/pacing, off the signed
+income + Bureau surfaces — the `TERRITORY_OP_FORT` free fortitude level is the one minor lever, bounded
+by the cooldown + `FORT_MAX`). The Territory pillar is now feature-complete (rackets → types + the Bureau
+→ empire/leaderboard → fortify + rival raids + upkeep → specialists + special ops).
