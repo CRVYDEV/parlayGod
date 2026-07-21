@@ -1172,6 +1172,21 @@ rival treasury only). Suite 30/30 + sim drift-0. `FRONTIER.TRIBUTE_BPS`/`_CAP_MS
 `INVADE_BASE`/`INVADE_OUTBID` are founder SIM sign-off levers — a NEW (small, bounded) emission surface
 (BALANCE.md). Still deferred: literal NPC occupation of the 6 signed core districts (the fullest turf-model
 rewire — this outpost layer makes the frontier real turf without touching the signed district perks).
+A **three-lens red-team over step four** (`AUDIT-world-frontier.md`: §10.4+emission, concurrency/locks,
+exploit/grief) returned **no CRITICAL/HIGH/MED**: §10.4 exact (tribute faucet + invade sink reconcile in
+the gang-treasuries check; the faucet is reservoir-independent, 24h-capped, `tribute_at`-metered so
+collect-spam yields ~0, and every flag transfer forfeits + resets the clock so no stale-accrual
+inheritance), lock order sound (own-gang → world_npcs-singleton-last, all pairs acyclic incl. invade-vs-
+dissolution and two-rival-invade with an EvalPlanQual outbid re-read; mirrors exact), and no unbounded/
+free extraction or free grief. Fixed in-commit (regression added): **F1 (LOW)** `collectFrontier` was
+missing the SIGNED **D2 "shield, not bunker"** safehouse gate its sibling `collectTerritory` enforces —
+a safehoused member could bank frontier tribute while untargetable; now `safeHoused(ch)` throws `safe`
+(closing a hole in a signed anti-abuse bound, matching territory/business/convoy collection). Flagged for
+founder sign-off (NOT patched, ground rule #1): **B1** `invadeOutpost` has no level gate (a low boss with
+$50k can hold an apex outpost once it's in play — money not muscle takes a bought outpost; add a `minLvl`
+gate if undesired), and **B2** the garrison ratchet (×1.5/invasion, no decay/cooldown) can price a
+sub-apex family out of an apex outpost — a pure sink, rout-resettable, so never permanent, but a
+garrison-decay or invade-cooldown is the dial. Suite 30/30 + sim drift-0.
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World
