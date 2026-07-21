@@ -671,8 +671,11 @@ export async function peekContracts(ch, client, h) {
 async function refundPot(client, target, kind, skipId = null) {
   // LEFT JOIN: a family-funded share (contributor = gang id, funder_gang) has no characters row —
   // an inner join would silently drop it from the refund and leak the escrow.
+  // ORDER BY contributor (AUDIT-full-system-v2 B-M1): the loop's UPDATEs row-lock each funder in read
+  // order, so a stable sort makes every refundPot acquire funder locks in the same order — no two
+  // reposts (or a repost vs the worker sweep) can AB-BA on an overlapping funder set.
   const funders = (await client.query(
-    'SELECT bc.contributor, bc.amount, bc.funder_gang, c.alive FROM bounty_contributors bc LEFT JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2',
+    'SELECT bc.contributor, bc.amount, bc.funder_gang, c.alive FROM bounty_contributors bc LEFT JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2 ORDER BY bc.contributor',
     [target, kind])).rows;
   let refunded = 0, selfRefund = 0;
   for (const f of funders) {
@@ -859,6 +862,12 @@ export async function fire(ch, victim, client, h, rounds) {
   if (safeHoused(victim)) throw new GameError('safe', "They've gone to ground — your people can't place them.");
   // THE LAW Phase 4: a rat in witness protection is beyond reach — the marshals have them.
   if (witproActive(victim)) throw new GameError('witpro', "The marshals have them. That one's untouchable for now.");
+  // THE PEN's shields — parity with npcHit/huntWanted (AUDIT-full-system-v2 C-HIGH-1). A jailed man
+  // is unreachable on the STREET; the shank (which requires the killer be jailed too) is the in-cell
+  // path. Without these, jail is strictly MORE lethal than freedom — a jailed player can't safehouse.
+  if (penSafe(victim)) throw new GameError('protected', "They're covered inside — you can't get to them in the yard.");
+  if (inHole(victim)) throw new GameError('segregated', "They're in the hole — nobody reaches them there.");
+  if (jailed(victim)) throw new GameError('jailed', "They're in lockup — no reaching them on the street. Shank them inside.");
   // family omertà — VOID for a rat (an informant has forfeited the family's protection; audit:
   // the rat badge must actually make them fair game, or a rat hiding in a strong family defeats
   // the contract-magnet the waiver promises).
@@ -1142,6 +1151,9 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   if (penSafe(victim)) throw new GameError('protected', "They're covered inside — no contractor gets to them.");
   if (inHole(victim)) throw new GameError('segregated', "They're in the hole — nobody reaches them there.");
   if (witproActive(victim)) throw new GameError('witpro', "The marshals have them locked away — no contractor gets near.");
+  // a bare jailed inmate is street-unreachable too (parity with fire/huntWanted; AUDIT-full-system-v2
+  // C-MED-1) — a contractor can't walk into a cell; the shank is the in-jail path.
+  if (jailed(victim)) throw new GameError('jailed', "They're in lockup — no contractor reaches them on the street.");
   if (ch.npchit_at && new Date(ch.npchit_at) > new Date()) throw new GameError('cooldown', 'Your contact needs time between jobs.');
   // BALANCE D4 — per-TARGET cooldown: a whale could repeat-reset ONE rival every 6h by cycling
   // the payer cooldown; now each (payer, target) pair rests NPC_HIT_TARGET_CD_MS between attempts
@@ -1318,8 +1330,12 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const remembered = Object.entries(h.victimOwned.npc || {})
     .map(([npc, s]) => ({ npc, s: Math.floor(Number(s) * UNDERWORLD.STEP2.MEMORY_BPS / 10000) }))
     .filter((r) => r.s >= 1);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
+  // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
+  // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
+  // never inherits them, but no orphans left behind).
+  await client.query('DELETE FROM npc_hits WHERE payer=$1 OR target=$1', [victim.id]);
   // World step three: a dead co-op raid leader's plan is abandoned so the crew can recrew (the
   // crew_heists precedent — the member rows above are already wiped; this frees the leadership).
   await abandonRaidsAtDeath(client, victim.id);
