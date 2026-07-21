@@ -1022,6 +1022,27 @@ the energy burst to the level-scaled cap, and per-skill respec (leaf-first `depe
 shared cooldown). Suite 30/30 + sim drift-0. `MADE_MAN_MULT`/`KINGPIN_MULT`/`ROAD_BOSS_TRUNK`/`CAPSTONE_COST`/
 `ACTIVE_CD_MS`/`RESPEC_ONE_OMR` are founder sign-off levers. Still deferred: prestige-carried skill slots (the
 founder call — it would soften death).
+**Step three — PRESTIGE CARRIES INTO THE BUILD — BUILT** (`src/skills.js`, `src/social.js`, `src/rules.js`
+`SKILLS` tail, `test/skills.js`; the deferred founder call — it softens death, so a SIGN-OFF lever, not pure
+status). Prestige (the account-level death legend) now grants a small BUILD head start on a new street — NO
+currency, NO §10.4 surface (skill points are derived/never stored; carried skills are a pure ownership move).
+**(1) PRESTIGE POINTS** — `pointsOf(ch, owned, prestige)` adds `min(PRESTIGE_POINT_MAX 3, floor(prestige/
+PRESTIGE_PER_POINT 10))` bonus skill points on top of the level-derived budget (surfaced as
+`points.prestigeBonus`/`fromLevel`); a small edge (≤3 extra points = one extra tier-3 skill), NOT a level
+skip (the tier prereq chain still gates a maxed branch at lvl 40). Threaded through `learnSkill`/`respecOne`/
+`respecSkills`/`skillsBoard` via `h.acct?.prestige`. **(2) MUSCLE MEMORY** — `runEstate` (social.js) captures
+the deceased's loaded `h.victimOwned.skills` BEFORE the `character_skills` wipe and, after the heir INSERT,
+carries a **lowest-tier-first PREFIX** (`rememberedSkills` in skills.js — `min(MEMORY_MAX 3, floor(priorPrestige/
+PRESTIGE_PER_SLOT 8))` slots, sorted tier-ASC so the prefix is prereq-safe by construction). Read from the
+bloodline's **PRE-death accumulated prestige** (`priorPrestige`, captured before the `+legacy` bump) — so a
+FRESH line's skills still fully die (the first death of a lvl-25 street inherits 0 memory since prestige is 0
+then). `report.kept.skills` on the estate report; the board surfaces `prestige`/`memorySlots`/`memoryMax`/
+`prestigePerSlot`/`prestigePerPoint` + a console "Bloodline" line on The Life tab. Skills still DIE with the
+street (this is a head start, not survival); `MEMORY_MAX 0` / `PRESTIGE_POINT_MAX 0` reverts to the hard rule.
+`test/skills.js` proves the bonus points (prestige 24 → +2, total 8 @ lvl 25), the 3-slot muscle-memory carry
+(the heir born knowing the three tier-1 basics — the tier-2s die), and that a prestige-0 line stays unschooled
+(the `wil` estate case). Suite 32/32 + sim drift-0. `MEMORY_MAX`/`PRESTIGE_PER_SLOT`/`PRESTIGE_PER_POINT`/
+`PRESTIGE_POINT_MAX` are founder sign-off levers (they soften death — flagged in BALANCE.md).
 
 **The Underworld (step one) — BUILT** (`src/underworld.js`, `test/underworld.js` — the 16th suite
 file; design `omerta-underworld-design.md`). Named NPCs as RELATIONSHIPS — skills are what you are,

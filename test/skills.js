@@ -159,12 +159,35 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
   -(SKILLS.RESPEC_OMR + SKILLS.RESPEC_ONE_OMR), 'the single-skill burn is ledgered respec:skills too (vic full + ex one)');
 assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.token })).body.error, 'cooldown', 'per-skill respec shares the daily cooldown');
 
+// ── STEP THREE: PRESTIGE POINTS + MUSCLE MEMORY (prestige carries into a new street) ──
+const dyn = await mk('Dynasty Don');
+const dynAcct = `(SELECT account_id FROM characters WHERE id='${dyn.id}')`;
+await seedCh(dyn.id, "cash=500000, respect=2304, loc='docks'");  // level 25 → 6 level points
+// a long bloodline: prestige 24 → +2 bonus points (floor(24/10), cap 3) and 3 memory slots (floor(24/8), cap 3)
+await pool.query(`UPDATE account_persistent SET prestige=24 WHERE account_id=${dynAcct}`);
+r = await call('GET', '/v1/skills', { token: dyn.token });
+assert.equal(r.body.points.fromLevel, 6, 'six points from level 25');
+assert.equal(r.body.points.prestigeBonus, 2, 'prestige 24 grants two bonus points (1 per 10, capped 3)');
+assert.equal(r.body.points.total, 8, 'eight points total — the bloodline head start');
+assert.equal(r.body.memorySlots, 3, 'prestige 24 → three muscle-memory slots (1 per 8, capped 3)');
+// spend across all three branches (1+2 operator, 1 enforcer, 1+2 wheelman = 7 of 8 points)
+for (const s of ['fast_talker', 'fence_network', 'bruiser', 'pack_mule', 'getaway'])
+  assert.equal((await call('POST', `/v1/skills/${s}`, { token: dyn.token })).code, 200, `${s} learned`);
+assert.equal((await call('GET', '/v1/skills', { token: dyn.token })).body.points.available, 1, 'one bonus point still free');
+// death: the heir is born remembering the three LOWEST-tier skills (a prereq-safe prefix)
+const dk = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: dyn.id },
+  headers: { 'x-mod-key': 'test-mod-key' } });
+assert.equal(dk.statusCode, 200, 'the Don is retired');
+const dh = await meOf(dyn.token);
+assert.deepEqual([...(dh.skills || [])].sort(), ['bruiser', 'fast_talker', 'pack_mule'],
+  'the heir remembers the three tier-1 basics (lowest-tier prefix, prereq-safe) — the tier-2s died');
+// a fresh account (prestige 0) inherits NOTHING — muscle memory is earned by a long bloodline
 // ── the estate wipes the build; the §10.4 vocabulary stays closed ──
 const kill = await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: wil.id },
   headers: { 'x-mod-key': 'test-mod-key' } });
 assert.equal(kill.statusCode, 200, 'the Commission retires wil');
 const heir = await meOf(wil.token);
-assert.equal((heir.skills || []).length, 0, 'the heir starts unschooled — skills died with the street');
+assert.equal((heir.skills || []).length, 0, 'a prestige-0 heir starts unschooled — skills died with the street');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM character_skills WHERE character_id='${wil.id}'`)).rows[0].n), 0, 'the rows are gone');
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `respec:skills rides the respec prefix (${JSON.stringify(vocab.unknown || [])})`);

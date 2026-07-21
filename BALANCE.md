@@ -191,6 +191,24 @@ per-skill build-swapping around fights is still impossible. Capstones are lvl-40
 (one maxed branch); watch the made_man×bruiser and kingpin×fence_network multiplicative stacks in
 the sim pass.
 
+### Skills step three — prestige carries into the build (SOFTENS DEATH, sign-off pending)
+The deferred founder call: prestige (the account-level death legend) now grants a small BUILD head
+start on a new street. **No currency, no §10.4 surface** (skill points are derived, never stored;
+skills carried are a pure ownership move). Two levers, both restore the hard "skills die with the
+street" rule at 0: **(1) PRESTIGE POINTS** — `PRESTIGE_PER_POINT` 10 / `PRESTIGE_POINT_MAX` 3: a
+long bloodline gets `min(3, floor(prestige/10))` bonus skill points on top of the level-derived
+budget — a small edge (≤3 extra points = one extra tier-3 skill), NOT a way to skip levels (the
+tier prereq chain still gates a maxed branch at lvl 40). **(2) MUSCLE MEMORY** — `PRESTIGE_PER_SLOT`
+8 / `MEMORY_MAX` 3: the heir is born knowing a **lowest-tier-first PREFIX** of the deceased's skills
+(`min(3, floor(priorPrestige/8))` slots), read from the bloodline's **pre-death accumulated
+prestige** (so a FRESH line's skills still fully die — the first death of a lvl-25 street grants 0
+memory since prestige is 0 at that moment). The prefix is prereq-safe by construction (any skill at
+tier t sorts after all tier<t, so its same-branch tier-(t−1) prereq is always included). This
+SOFTENS DEATH — a veteran bloodline keeps ~2-3 foundation skills across a street — so it's a genuine
+balance lever, not pure status; `MEMORY_MAX 0` / `PRESTIGE_POINT_MAX 0` reverts to the M-era hard
+rule. Watch: does memory-carry make repeat-death too cheap for a whale bloodline? (the dial is
+PRESTIGE_PER_SLOT — raise it to demand a deeper dynasty per remembered skill).
+
 ## Post-signing addendum — the Underworld (named NPCs, sign-off pending)
 
 Relationship perks as NEW single-touchpoint modifiers, same discipline as skills — nothing
