@@ -1257,3 +1257,31 @@ CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
 /admin clickjacking) fixed/hardened; the agent/MCP + supply-chain lenses confirmed CLEAN of CRITICAL/HIGH;
 the MCP prompt-injection design surface + build-dep hygiene flagged. §10.4 untouched. Suite 33/33 + sim
 drift-0. (Malicious-player attack-chain lens pending — addendum next.)**
+
+### Round 20 addendum — malicious-player attack-chain (a1e16d34)
+**CLEAN of CRITICAL/HIGH — the value-creation + on-chain over-extraction surface is soundly BLOCKED.** All
+six attacker narratives traced through real code: "print money" (§10.4 check (a)/(d) forces
+`balance == 500·count + Σ ledger`, every faucet ledgered + net-negative-EV or cooldown/cap-bounded, every
+two-party take carved-from-stake never minted); "extract more than earned" (the full-reserve queue: burn-on-
+withdraw, `committedOutstanding` counts signed OR claimed + `funded_omr` never decrements → cumulative
+extraction ≤ inflow by construction; replay impossible, reclaim fails-closed with no reader, `markClaimed`
+positive-guarded to signed (the R19 fix), real-ETH revenue txHash-gated); "steal another's asset" (every
+refund credits the rightful party with the killer/self in-memory mirror, ownership re-checked under lock);
+"top the leaderboard" (loser-level floors on the alt-farmable legend axes incl. the R18 boxing floor;
+spend-based status boards have no achievement floor to undercut); "denial for profit" (directed-squat +
+fortify bounded). Two findings, both founder calls (NOT patched, ground rule #1):
+- **Port warehouse→fence emission-above-intent (MED, balance):** `fenceMultOf(day)` is a PRE-OBSERVABLE
+  deterministic §7.11 hash (0.85–1.25) and warehoused `contraband` never decays, so a savvy smuggler waits
+  for a high-mult day (~1.20 best-of-7) → the `port:fence` faucet realizes ~14–20% ABOVE the route-rate the
+  sim measures — §10.4-clean (ledgered) but sim-invisible. **Same item the Round 17 cross-system lens
+  flagged, now independently confirmed at MED.** Explicit `PORT.STEP4` sign-off lever → flagged, not
+  retuned. Dial: roll the mult at FENCE time with `Math.random()` (like `collectRun`'s interdiction roll,
+  so it isn't pre-observable) and/or decay warehoused contraband and/or clamp realized ≤ 1.0.
+- **Safehoused-still-jumpable (LOW, by-design):** `jump` omits the safehouse victim-gate (documented — a
+  safehouse is a survival shield vs lethal contracts, not an anti-mugging bunker); bounded (the victim is
+  hospitalized after → one jump per hosp cycle; jump touches only POCKET cash so banking defeats the drain).
+
+**Round 20 FINAL: 2 MED (MCP retry-safety, SOCIAL_VERIFY fail-open) + 2 LOW (MCP redirect, /admin
+clickjacking) fixed; all three lenses (agent/MCP, supply-chain/secrets, malicious-player attack-chain)
+confirmed CLEAN of CRITICAL/HIGH; the port fence-timing emission (now MED, two-finder-confirmed) + the MCP
+prompt-injection design surface flagged for founder sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**
