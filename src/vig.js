@@ -95,7 +95,7 @@ const sumEth = async (pool, table, col, where = '') =>
 // that hard cap (`ethToSpend ≤ unspent`) is the root of "extraction ≤ inflow".
 export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
   const price = Number(priceOmrPerEth);
-  if (!(price > 0)) throw new GameError('price', 'A buyback needs a positive $OMR/ETH price.');
+  if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'A buyback needs a positive $OMR/ETH price.');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -103,6 +103,18 @@ export async function runVigBuyback(pool, { priceOmrPerEth, maxEth } = {}) {
     // bot + a manual mod call, say) can't both read the same `alreadySpent` and each spend the full
     // unspent revenue → over-buy → unbacked reserve. payPrizes already locks this row first.
     await client.query('SELECT balance FROM vig_prize_pool WHERE id=1 FOR UPDATE');
+    // (red-team R41 MED) `omrBought = ethToSpend × price` mints in-game $OMR (via the prize/reserve split)
+    // that BOTH the §10.4 sweep and runVigInvariants read as legitimate — neither sanity-checks the price
+    // against reality. A leaked/abused mod key passing a wildly inflated price would mint $OMR past real
+    // inflow (breaking extraction-≤-inflow) invisibly. On mainnet the DEX bot supplies a real TWAP; a real
+    // price has CONTINUITY between 12h buybacks — so once a first buyback establishes a reference, bound
+    // each subsequent price to a generous factor of the last (up OR down). This is a fraud/fat-finger
+    // sanity bound on the mod parameter, not a game-balance lever (env-configurable ops dial); the very
+    // first buyback is the unavoidable bootstrap (Safe = root of trust). A real TWAP never trips 10×.
+    const jump = Number(process.env.VIG_MAX_PRICE_JUMP) || 10;
+    const last = Number((await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY id DESC LIMIT 1')).rows[0]?.price_omr_per_eth || 0);
+    if (last > 0 && (price > last * jump || price < last / jump))
+      throw new GameError('price_sanity', `Buyback price ${price} is more than ${jump}× off the last (${last}) — refusing (set VIG_MAX_PRICE_JUMP to override).`);
     const revenueIn = await sumEth(client, 'vig_revenue', 'vig_eth');
     const alreadySpent = await sumEth(client, 'vig_buyback', 'eth_spent');
     let ethToSpend = round6(revenueIn - alreadySpent);           // only ever spend money that came in
