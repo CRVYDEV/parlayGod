@@ -1553,3 +1553,54 @@ deliberately no flag-time reject (so a future auditor doesn't re-add it). The te
 **Round 24 verdict: 1 input-validation fix (TRACK_RACES hasOwnProperty — the last raw object-key lookup) +
 regression; 1 over-eager fix reverted (race-flag hygiene is working-as-designed). Estate wipe + object-claim
 composition verified complete. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 25 — Auth/session/token/idempotency lifecycle + Accrual/timing/clock-skew
+
+Two under-swept-this-loop surfaces. **No CRITICAL/HIGH/MED.** One LOW keyless-DoS fix; the timing/accrual
+class verified entirely clean.
+
+**CONFIRMED + FIXED — `GET /v1/ws` upgrade is outside every rate-limit bucket (LOW, keyless pre-auth DoS).**
+`src/server.js` throttles keyless heavy GETs per-IP (`/card`,`/u`,`/v1/u`,`/v1/art`,`/v1/landmarks` via
+`checkPublicRateLimit`) and authed `/v1` GETs per-account (via `checkReadLimit` after `jwtVerify`). But the
+WS upgrade carries its bearer in `Sec-WebSocket-Protocol` (`bearer, <token>`), NOT the `Authorization`
+header — so the `/v1` read branch's `req.jwtVerify()` throws → `catch { return }` → the read bucket is never
+consumed, and `/v1/ws` was not in the public-branch enumeration. Each connect attempt does a real
+`jwt.verify` (HMAC) + socket churn, bounded by nothing (the per-account `WS_MAX_PER_ACCOUNT` cap runs AFTER
+verify and invalid-token attempts never register). Exactly the keyless-heavy-GET class the codebase already
+closed for the other render routes (R13/R19). **Fix:** added `|| req.url.startsWith('/v1/ws')` to the
+`checkPublicRateLimit` per-IP branch, bounding the pre-auth upgrade like the other keyless endpoints
+(generous, only bites a flood). No-op in the test env (`rateLimitsEnabled()` false without production/
+`DATABASE_URL`/`RATE_LIMIT=on`); security + hardening suites green.
+
+**Verified CLEAN (both lenses — extensive):**
+- **Auth/idempotency:** idempotency keys are PK-scoped `(account_id, key)` (A's key can't replay to B),
+  2xx-ONLY store with 4xx/5xx reservation DELETE (a stored error can't replay), reserve-before-execute wins-
+  once (409 `in_progress` for the loser) + the R4 re-reserve loop, body-bound hash, two-horizon prune. JWT
+  `sub` always server-generated (no client-injected sub); ban + agent status read from DB not the token (a
+  pre-flag token can't dodge the agent throttle); agent bucket keyed on accountId (rotating keys hit the same
+  bucket); banned rejected at every door incl. WS. SIWE nonce single-use + 10-min expiry + account+nonce
+  binding + malformed-sig clean-400 + wallet uniqueness; Privy ES256-pinned, no keys[0] fallback, aud
+  scalar-or-array fail-closed, JWKS-fetch fail-closed; X path flag-gated off. Rate buckets correctly
+  separated (h/a/s/rd/auth-IP/pub-IP), read per-call from env. Every mutating route behind `auth`; every
+  `/v1/mod/*` behind `modAuth` (timing-safe compare); OpenAPI security derived from real preHandler names;
+  no IDOR (actor always `req.user.sub`, `:params` are targets with ownership/consent enforced inside).
+- **Accrual/timing/clock-skew:** NO over-credit, stuck-window, or clock-corruption defect. The backward-clock
+  guard `dtMs = Math.max(0, now-last)` + `if (dtMs<1000) return` neutralizes a rewound clock (zero accrual,
+  no negative-underflow mint); every token bucket (bank credit, wash/port/RWA/launder caps, business/
+  territory/speakeasy scrutiny, crew wages/upkeep) re-stamps its `_at` clock and caps BOTH refill and spend
+  (`min(elapsed, cap)`); the clock-rewind "leave owner exactly pending−cut" writes (territory raid, business
+  shakedown) are cap-bounded so the next read can't over-credit; staking's uncapped accrual is provably
+  outside `omrBuckets` (a pool-backed pending claim); every client-supplied duration (loan term, market TTL,
+  directed window, bounty TTL) is clamped before `now + x`; worker windows use server constants + idempotent
+  status flips; every `*Active`/cooldown helper is `> now` (a backward clock only lengthens a window —
+  benign). No double-accrual.
+
+**FLAGGED (informational, accepted design — not patched):** no per-token JWT revocation (stateless tradeoff;
+ban-the-account is the lever, checked fresh from DB every request); `agent_flag` irreversible (footgun);
+guest-mint Sybil at the per-IP `auth:` floor (referral/social faucets are agent-excluded + playtime-gated);
+`trustProxy` operator-config dichotomy. All previously known/accepted.
+
+**Round 25 verdict: 1 keyless-DoS fix (the /v1/ws upgrade joins the per-IP public throttle); auth lifecycle
++ timing/accrual class verified sound. §10.4 untouched. Suite 33/33 + sim drift-0.**
