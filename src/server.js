@@ -17,6 +17,7 @@ import * as Territory from './territory.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
+import * as Stable from './stable.js';
 import * as Races from './races.js';
 import * as Port from './port.js';
 import * as Bonds from './bonds.js';
@@ -51,7 +52,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf } from './rules.js';
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -501,6 +502,9 @@ export async function buildServer() {
       minStake: BOXING.MIN_STAKE, maxStake: BOXING.MAX_STAKE, ranks: BOXING.RANKS, rakeBps: BOXING.RAKE_BPS,
       stableMax: BOXING.STABLE_MAX, npcTiers: BOXING.NPC_TIERS, legendRanks: BOXING.LEGEND_RANKS,
       betMin: BOXING.BET_MIN, betMax: BOXING.BET_MAX, betRakeBps: BOXING.BET_RAKE_BPS, defenseMs: BOXING.DEFENSE_MS, calloutMs: BOXING.CALLOUT_MS },
+    stable: { minLevel: STABLE.MIN_LEVEL, kinds: STABLE.KINDS, meets: STABLE.MEETS, trainCost: STABLE.TRAIN_COST,
+      trainEnergy: STABLE.TRAIN_ENERGY, statCap: STABLE.STAT_CAP, stats: STABLE.STATS, stableMax: STABLE.STABLE_MAX,
+      minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE, ranks: STABLE.RANKS, legendRanks: STABLE.LEGEND_RANKS, rakeBps: STABLE.RAKE_BPS },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -634,6 +638,24 @@ export async function buildServer() {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return Boxing.boxingLeaderboard(pool, cid || '');
   });
+
+  // ── THE STABLE — own the dogs & the ponies (buy/train/list/circuit(PvE)/match(PvP) + the legend) ──
+  app.get('/v1/stable', { preHandler: auth }, async (req) => {
+    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
+    return Stable.stableBoard(pool, cid || '');
+  });
+  app.post('/v1/stable/buy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.buyRacer(ch, req.body?.kind, req.body?.name, client, h)));
+  app.post('/v1/stable/train/:racerId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.trainRacer(ch, req.params.racerId, req.body?.stat, client, h)));
+  app.post('/v1/stable/list/:racerId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.listRacer(ch, req.params.racerId, req.body?.limit, client, h)));
+  app.post('/v1/stable/circuit/:racerId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.raceCircuit(ch, req.params.racerId, req.body?.meet, client, h)));
+  app.post('/v1/stable/match/:opponentId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
+      Stable.matchRace(ch, opponent, req.body, client, h)));
+  app.get('/v1/leaderboard/stable', { preHandler: auth }, async () => Stable.stableLeaderboard(pool));
 
   // ── STREET RACES — the deep car catalog as a competitive loop (PvE circuit + PvP wagers + tuning) ──
   app.get('/v1/races', { preHandler: auth }, async (req) =>

@@ -765,6 +765,37 @@ covers the field/odds board (no `p` leak), the bad-race/min/max/runner gates, a 
 claimed at the posted odds, a LOSING horse settling to nothing, the one-bet-per-race-per-day gate, and
 the §10.4 per-character reconcile ($OMR untouched). Suite 32/32 + sim drift-0 (17 checks). All `TRACK`
 numbers are founder sign-off levers — a net-sink book, no signed faucet touched (BALANCE.md).
+**THE STABLE — own the dogs & the ponies — BUILT** (`src/stable.js`, `test/stable.js` — the 33rd suite;
+the ownership layer under The Track's betting card, the boxing-stable pattern applied to racing animals).
+An owner BUYS a young racer — a `STABLE.KINDS` dog (`Greyhound` $30k) or horse (`Racehorse` $120k, pricier +
+rolls higher; a cash SINK `stable:buy`, level-gated `MIN_LEVEL` 6, one-of-two-kinds, stats rolled in the
+kind's range), TRAINS its speed/stamina/heart (cash+energy SINK `stable:train`, capped `STAT_CAP` 25), and
+RACES it. SPEED FORM = speed+stamina+heart+rand(`VARIANCE`). Two loops, both CASH (the Den's rule): the PvE
+**CIRCUIT** (`raceCircuit`, `POST /v1/stable/circuit/:racerId` — a `STABLE.MEETS[kind]` tier: the fee BURNS
+win/lose `stable:fee`, the purse pays only on a win `stable:purse` — **the ONE new faucet, the boxing-
+exhibition twin**, bounded by the per-racer `CIRCUIT_CD_MS` 6h cooldown + injury-on-loss + needing the FORM),
+and the PvP **MATCH RACE** (`matchRace`, `POST /v1/stable/match/:opponentId`, two-party — consent-by-listing
+via `racers.race_limit`, **same kind only**, the audited **casino:pvp** taxed transfer `stable:race`: winner
+nets wager − 5% rake, half rake → street tax/buyback, half burns — NO escrow, NO new faucet; the loser's
+racer laid up `INJURY_MS` 4h). Run up to `STABLE_MAX` 4. Racers **DIE WITH THE STREET** (`racers` joined the
+runEstate wipe — the fighters precedent); the owner's lifetime wins are an account-level LEGEND
+(`account_persistent.racer_wins`, bumped by direct SQL — SURVIVES DEATH, the boxing-legend/hitman-rep
+precedent) ranked `STABLE.LEGEND_RANKS` on `GET /v1/leaderboard/stable`; per-racer records ride
+`STABLE.RANKS`. §10.4: `stable:` joined the cash `KNOWN_REASONS` (buy/train/fee SINKS + purse FAUCET + the
+race PvP transfer, all character_id'd → the per-character cash check reconciles; the PvP rake→pool/burn is
+the audited casino:pvp mechanism). New `racers` table (+ indices) + `racer_wins` legend col; racer stat/record
+writes are ABSOLUTE INT (the pg-mem quirk). Routes `POST /v1/stable/buy|/train/:id|/list/:id|/circuit/:id|
+/match/:opp`, `GET /v1/stable|/leaderboard/stable`; `/v1/rules` gained a `stable` catalog; a **"The Stable"**
+console tab (Vice group — your stable with train/list/circuit buttons, the field with match-a-rival, the owner
+legend) + `describe()`. `test/stable.js` covers the buy gates + sink, train (bad-stat/energy/cap/ownership +
+sink), the circuit (bad-meet/cooldown gates, a win's purse faucet + a loss's fee-only burn + injury + the
+legend), the match (self/kind/limit gates, the casino:pvp taxed transfer + the rake split, injury-on-loss, the
+legend), the board + leaderboard, DEATH (the stable wiped, the legend survives), and the §10.4 per-character
+reconcile + vocabulary. Suite 33/33 + sim drift-0. All `STABLE` numbers are founder sign-off levers — the
+`stable:purse` circuit faucet is the one new emission surface (sim + sign-off, BALANCE.md, the boxing-
+exhibition precedent). Deferred (step two): breeding (offspring inherit stats), stable staff/trainers (the
+Underworld tie-in), and entering your OWN racer into The Track's daily seed-drawn betting card (the direct
+Track tie-in).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

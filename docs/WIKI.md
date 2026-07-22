@@ -281,6 +281,16 @@ profit**. `GET /v1/casino` [public].
   draw doesn't). Claim matured tickets lazily at the posted odds.
 - **Rakeback** — casino-business owners split 1% of den stake volume.
 
+### The Stable — own the dogs & the ponies
+
+Beyond betting the Track, you can OWN racing animals (the boxing-stable pattern). **Buy** a greyhound ($30k)
+or a racehorse ($120k) at level 6+ (`/v1/stable/buy`), **train** its speed/stamina/heart (`/v1/stable/train/:id`,
+cash+energy, capped), and **race** it — the PvE **circuit** for a purse (`/v1/stable/circuit/:id` — the entry
+fee burns win/lose, the purse pays only on a win) or a PvP **match race** against a rival owner's racer of the
+same kind (`/v1/stable/match/:opponentId` — consent-by-listing a wager; the winner takes the pot minus a 5%
+vig). Run up to 4. Racers **die with your street**; your lifetime wins are an **owner legend** that survives
+death (`/v1/leaderboard/stable`). CASH only.
+
 ---
 
 ## 12. The Speakeasy
