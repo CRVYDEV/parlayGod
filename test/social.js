@@ -11,7 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
-import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost } from '../src/rules.js';
+import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -895,6 +895,18 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${donAcct}' AND gear_id='brasspin'`)).rows[0].n), 0, 'the on-chain gear was NOT looted — it left the game, out of reach');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM account_gear WHERE account_id='${garyAcct}' AND gear_id='brasspin' AND minted_onchain`)).rows[0].n), 1, 'the extracted piece stays with the bloodline account, safe');
 delete process.env.GEAR_LOOT_CHANCE; // restore the production default for the rest of the suite
+
+// ── THE PORT step five: WAREHOUSED CONTRABAND is a LOOT surface on a fire-kill (the P1.1 twin) ──
+// contraband is a cash-book-value COMMODITY, not a §10.4 currency — the loot is a pure ownership move
+// (no ledger row, no drift), bounded by CONTRA_LOOT_RATE; the remainder dies with the victim.
+const smuggler = await mk('Smuggler Sid'); await seedCh(smuggler.id, "respect=400, muscle=1, speed=1, loc='docks'");
+await seedCh(smuggler.id, 'contraband = 100000');            // Sid is sitting on a warehoused stash
+const donContraBefore = Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${don.id}'`)).rows[0].c);
+const ks = await whack(smuggler.id);
+assert(ks.kill, 'the smuggler went down');
+assert.equal(ks.contraLoot, Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), 'the killer seized CONTRA_LOOT_RATE of the warehoused contraband');
+assert.equal(Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${don.id}'`)).rows[0].c), donContraBefore + Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), "the looted contraband is now the killer's (a pure ownership move — no ledger)");
+assert.equal(Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${smuggler.id}'`)).rows[0].c), 100000 - Math.floor(100000 * PORT.STEP5.CONTRA_LOOT_RATE), 'the victim lost exactly the looted share (the remainder dies with the street)');
 
 // ── Risk-to-Earn Phase 3: TERRITORY RACKETS — productive, seizable capital ──
 // gangA (DON) holds 'docks' (seized at the top). Establish an operation, earn from it, upgrade it,

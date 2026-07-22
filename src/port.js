@@ -187,6 +187,10 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   ch.bank = Number(ch.bank) - (fine - fromPocket);
   if (fine > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fine, reason: 'port:fine' });
   ch.heat = Math.min(100, Number(ch.heat || 0) + PORT.BUST_HEAT);
+  // step five — the Coast Guard bust builds a FEDERAL case: it feeds the RICO investigation meter
+  // (heat_exposure), not just the volatile heat number, so repeat smuggling draws the Bureau. Persisted
+  // positionally by persistCharacter (like the heat bump above) — no direct SQL needed.
+  ch.heat_exposure = Number(ch.heat_exposure || 0) + PORT.STEP5.BUST_EXPOSURE;
   // a flat SINK_P sub-roll on a bust impounds/sinks the boat (PORT_SINK pins it for tests, the roll-knob precedent)
   const boatLost = process.env.PORT_SINK != null ? process.env.PORT_SINK === '1' : Math.random() < PORT.SINK_P;
   await clearIntercepts(client, boat.id);

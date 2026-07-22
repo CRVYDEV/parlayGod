@@ -66,12 +66,15 @@ process.env.PORT_INTERDICT_P = '1'; process.env.PORT_SINK = '0';
 await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
 const coastalCost = boatOf('cutter').hold * PORT.ROUTES.find((x) => x.id === 'coastal').buy;
 const heatBefore = (await meOf(cap.token)).heat;
+const expBefore = Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e);
 const cashB = await cashOf(cap.token);
 r = await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token });
 assert.equal(r.body.interdicted, true, 'the Coast Guard was waiting'); assert.equal(r.body.sunk, false, 'the boat made it home');
 assert.equal(r.body.fine, Math.floor(coastalCost * PORT.FINE_RATE), 'a fine of FINE_RATE × the cargo cost (port:fine sink)');
 assert.equal(await cashOf(cap.token), cashB - r.body.fine, 'the fine came off the top');
 assert((await meOf(cap.token)).heat > heatBefore, 'the bust spiked the heat');
+// STEP FIVE — the Coast Guard bust builds a FEDERAL case: it feeds the RICO investigation meter
+assert.equal(Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e), expBefore + PORT.STEP5.BUST_EXPOSURE, 'the bust fed the Law meter (heat_exposure) — repeat smuggling draws the Bureau');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM boats WHERE id='${cutter}'`)).rows[0].c), 1, 'the surviving boat is back in the fleet');
 
 // ── the SUPPLY CAP: sourcing past the daily cap is refused ──

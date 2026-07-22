@@ -9,7 +9,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
+  VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
   worldNpcOf, liberationCost,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
@@ -988,6 +988,19 @@ export async function fire(ch, victim, client, h, rounds) {
     }
     // ground rule #3: log EVERY roll (pass or fail), not just the ones that strip gear
     await h.rngLog(client, ch.id, `gearloot:${victim.id}`, gearRoll, gearLoot ? `looted ${gearLoot}` : 'none');
+    // PORT step five — WAREHOUSED CONTRABAND LOOT (the P1.1 loot-surface twin): a marked man risks the
+    // stash he warehoused to fence later. A pure ownership move — contraband is a cash-book-value commodity,
+    // NOT a §10.4 currency (the gear-loot precedent, no ledger row), bounded by what was legitimately
+    // sourced under the supply cap. Absolute reads (NUMERIC, arith-safe); the remainder dies with the street.
+    let contraLoot = 0;
+    const vContra = Math.floor(Number(victim.contraband) || 0);
+    if (vContra > 0) {
+      contraLoot = Math.floor(vContra * PORT.STEP5.CONTRA_LOOT_RATE);
+      if (contraLoot > 0) {
+        await client.query('UPDATE characters SET contraband = contraband - $2 WHERE id=$1', [victim.id, contraLoot]);
+        await client.query('UPDATE characters SET contraband = contraband + $2 WHERE id=$1', [ch.id, contraLoot]);
+      }
+    }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // VENDETTA SETTLEMENT — if this kill answers a blood debt (my bloodline sworn against
     // theirs, inside the window), the vendetta is settled: the row closes, the street hears,
@@ -1035,7 +1048,7 @@ export async function fire(ch, victim, client, h, rounds) {
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
-    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
+    return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
       vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──

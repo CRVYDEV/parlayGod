@@ -2211,6 +2211,17 @@ PORT.STEP4 = {
 };
 // today's fence multiplier — a deterministic §7.11 daily drift (a smuggler times the market: warehouse, fence high)
 export const fenceMultOf = (day = dayOf()) => PORT.STEP4.FENCE_LO + hash01('fence:' + day + ':' + MARKET_SEED) * PORT.STEP4.FENCE_SPAN;
+// ── THE PORT step five: the Coast Guard feeds the LAW meter + warehoused contraband is a LOOT surface ──
+PORT.STEP5 = {
+  // a Coast Guard BUST (interdiction) now also builds a federal case: it adds to the RICO investigation
+  // meter (heat_exposure), not just the volatile heat number — so repeat smuggling draws the Bureau (ties
+  // the Port's PvE antagonist into the Law/RICO system). Tunable; off the signed heat curve, a NEW Law lever.
+  BUST_EXPOSURE: 25,
+  // a player FIRE-kill loots this fraction of the victim's WAREHOUSED contraband (the P1.1 loot-surface
+  // twin): warehousing to fence later is now a RISK for a marked man. A pure ownership move (contraband is
+  // a cash-book-value commodity, not a §10.4 currency — the gear-loot precedent), bounded by the supply cap.
+  CONTRA_LOOT_RATE: 0.5,
+};
 
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
