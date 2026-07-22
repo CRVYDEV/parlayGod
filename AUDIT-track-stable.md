@@ -70,3 +70,64 @@ Independently verified sound:
   alt) is the accepted `casino:pvp` / consent-by-listing posture; injury-on-loss throttles repeat-farming.
 
 Suite 33/33 + sim drift-0 (18 checks, incl. `stakes escrow`).
+
+---
+
+# AUDIT — The Track step three (RUN IN THE CARD)
+
+A follow-up three-lens red-team over the step-three drop (player-owned racers entered into the daily
+betting card, with fixed-odds locking) — same three parallel adversarial agents, each tracing findings
+against source.
+
+Scope: `enterTrackRace` / `sweepTrackEntries` (the new player-entry path), the merged-field draw
+(`trackFieldOf`/`trackWinnerOf` with `entries`), the fixed-odds lock on `betTrack`/`claimTrack`, the
+`casino:track:entry` fee, and the `track_entries` schema + estate handling.
+
+## Verdict: two defects confirmed and FIXED (1 MED, 1 LOW); everything else CLEAN
+
+**Lens A (§10.4 / fixed-odds)** and **Lens C (death / estate / exploit)** returned CLEAN:
+- the `casino:track:entry` nomination fee is a character_id'd `casino:` cash SINK → the buyback pool (the
+  `pen:commissary` precedent); the per-character cash check reconciles it and the den-book identity is
+  untouched (the fee never enters the PvE book);
+- **fixed odds are bounded** — a ticket locks `track_bets.odds` at bet time and `claimTrack` pays the
+  LOCKED odds; a player runner's `p` at `FIELD=6` peaks at 0.667 (a maxed favorite), well under the
+  0.909 threshold where the 1.1 odds floor would flip a runner +EV, so every ticket stays −EV and
+  `openLiability` (which reserves `stake × MAX_ODDS`) always covers the locked payout;
+- `track_entries` is correctly EXCLUDED from the runEstate wipe (the snapshot survives so a dead owner's
+  entry still settles as status-only — no money moves at settle); `p` / `MARKET_SEED` never leak
+  (`trackCard` strips `p`); self-betting on your own runner is −EV like any other ticket.
+
+**Lens B (concurrency)** confirmed two real, real-Postgres-only defects (pg-mem is single-threaded):
+
+- **MED — concurrent-entry post collision** (`enterTrackRace`): the `SELECT COUNT(*) FROM track_entries`
+  that computes the outside post was taken with no shared lock held, so two different owners entering the
+  same `(day,race)` could both read `n=0` → both compute `post=5` → both INSERT (the PK is
+  `(day,race,character_id)`, which does NOT catch a post collision). Harm: `trackFieldOf`'s
+  `byPost[post]=e` silently overwrites one runner (the other owner paid the fee for a phantom entry), a
+  `PLAYER_SLOTS` breach, and a double win-credit in the sweep. **No §10.4 drift** (the fee is ledgered;
+  `racer_wins`/`wins` are status). **FIXED**: lock the `street_tax` singleton (`SELECT 1 … FOR UPDATE`)
+  BEFORE the COUNT — the count→post→INSERT window is now serialized. The `street_tax` row is the one this
+  path credits anyway, and locking it last preserves the canonical `char → racer → singletons-last`
+  order (no new lock edge, no AB-BA).
+
+- **LOW — `racers.wins` non-atomic lost-update** (`sweepTrackEntries`): the win-credit read
+  `SELECT wins FROM racers WHERE id=$1` (no `FOR UPDATE`) then wrote an absolute value, so a concurrent
+  `raceCircuit`/`matchRace` win on the same racer could lose a `+1`. Status-only, no §10.4 surface.
+  **FIXED**: `SELECT wins … FOR UPDATE` serializes it. (The account-legend increment already used the
+  concurrency-safe atomic `racer_wins = racer_wins + 1` under the UPDATE's own row lock — SOUND, left.)
+
+## Regression added (`test/casino.js`)
+
+A **distinct-posts + slot-cap** test: two owners entering the same fresh card get DISTINCT posts (6 then
+5 — the serialized count→post→INSERT), a third → `full` at `PLAYER_SLOTS=2`. pg-mem can't reproduce the
+race, so the test pins the CORRECTNESS the `street_tax` lock guarantees under real concurrency (no two
+entries share a post).
+
+## Flagged (accepted, no action)
+- Orphaned `track_bets` over-reserving `openLiability` at death is the shared pre-existing den-liveness
+  nuisance (never mints — the stake already burned into den profit), not a leak.
+- A `UNIQUE(day,race,post)` schema backstop was considered redundant given the `street_tax` serialization
+  and left out to avoid a 23505 surface on the hot path (the lock is the primary guard, the correctness
+  test the proof).
+
+Suite 33/33 + sim drift-0 (18 checks).
