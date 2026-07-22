@@ -1625,7 +1625,20 @@ gang-treasuries §10.4 reconcile with `world:reinforce`. Suite 33/33 + sim drift
 antagonist is now two-way (you raid the cartels; the cartels raid you back). All `UPRISING.*` numbers are
 founder sign-off levers (pacing + a sink — no emission surface). Deferred (step seven): the uprising also
 reclaiming an occupied CORE district (step five) if undefended; a repel paying a bounded morale/war-effort
-bonus; a cross-outfit cartel war.
+bonus; a cross-outfit cartel war. A **three-lens red-team** (`AUDIT-world-uprising.md`: §10.4/emission,
+concurrency/locks, exploit/grief) returned **no CRITICAL/HIGH/MED** — §10.4 exact (`world:reinforce` a
+correctly-subtracted treasury sink; the reclaim writes zero ledger rows since garrison is a `world_npcs`
+number never a treasury balance; the tribute suspension a 24h-capped DEFERRAL that can only reduce
+emission), lock order sound (`world_npcs` locked last everywhere, `world_uprisings` single-writer so no
+AB-BA; materialize idempotent via the day PK, resolve latched via `FOR UPDATE`+status), and the schedule
+server-authoritative + grief-proof (strength moves down-only via raids, so a rival can't inflate a
+holder's `need`). Fixed two LOWs (regression each): the board's `upriseNeed` was computed from view-time
+strength but the reckoning uses resolve-time strength (higher after regen) — it now surfaces the
+FULL-STRENGTH worst-case need (reinforce to it and regen can't trap you); and the silent per-row sweep
+catch now logs (the `sweepAuctions` precedent). Flagged (NOT patched, ground rule #1): sub-apex uprisings
+are toothless (dockrats/zappa full-strength need < `ROUT_GARRISON` 25k, so their outposts always repel —
+the `THRESHOLD_BPS`/garrison-floor dial), and worker-downtime skips a missed day's reckoning (accepted for
+a scheduled event). Suite 33/33 + sim drift-0.
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

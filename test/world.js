@@ -364,6 +364,8 @@ assert.equal(board.uprising.npc, 'kryl', 'the board shows Kryl rising up');
 const upn = board.npcs.find((n) => n.id === 'kryl');
 assert.equal(upn.rising, true, 'Kryl is flagged rising on the board');
 assert.equal(upn.tributePending, 0, 'a rebelling vassal pays no tribute (suspended while rising)');
+// red-team LOW-1: the board shows the FULL-STRENGTH (worst-case) need — reinforce to this and regen can't trap you
+assert.equal(upn.upriseNeed, Math.floor(worldNpcOf('kryl').max * WORLD.UPRISING.THRESHOLD_BPS / 10000), 'upriseNeed is the full-strength safe target (not the view-time value)');
 // collectFrontier skips a rising outfit — warp the clock, collect returns nothing while Kryl is in revolt
 await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '5 hours' WHERE npc_id='kryl'`);
 assert.equal((await call('POST', '/v1/world/collect', { token: rboss.token })).body.collected, 0, 'no tribute collected from a rebelling outpost');
