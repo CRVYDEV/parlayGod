@@ -400,3 +400,48 @@ WS/ledger-scan DoS), RNG deploy guards, and cosmetic display fixes — never a v
 conservation hole. Residual items are LOW / deploy-config / founder-sign-off, catalogued above and in
 BALANCE.md. **The injection surface (both HIGHs) is the one place the codebase was genuinely exposed;
 it is now closed. The economic core was already sound and stayed sound.**
+
+## Round 8 — three fresh lenses (time/clock manipulation, unicode/encoding, Solidity contract math)
+
+**Verdict: 1 MED (homoglyph impersonation) fixed. Time/clock + Solidity + number-parsing all sound.**
+
+### Fixed
+- **Homoglyph / zero-width / bidi impersonation on the identity name fields (MED).** Character name (=
+  referral code = broadcast identity) and gang name used cleanText + length only — no charset regex —
+  while the cosmetic name fields (fighter/racer/speakeasy/dynasty) already enforce `/^[\w .,'&-]+$/`. So
+  `Vitо` (Cyrillic о) coexisted with `Vito` and rendered identically across every social surface (contract
+  board, leaderboards, gang roster, streets feed, broadcast profile/OG card); a trailing U+200B or a U+202E
+  bidi override did the same → cross-surface impersonation. Applied the same ASCII charset guard to
+  character/gang create + both renames (`\w` no-`u`-flag = ASCII-only → rejects Cyrillic/zero-width/bidi).
+  §10.4-untouched. Regression rewritten to the reject contract (markup + homoglyph + zero-width all 400).
+
+### Verified CLEAN (not patched)
+- **Solidity contracts (a694) — no CRIT/HIGH/MED.** Fresh source read: no-mint/fixed-supply, tranche caps
+  checked before the state write under `nonReentrant`, full CEI/reentrancy on every ETH path, complete
+  access control, and — the highest-risk surface — the live off-chain signers (chain.js Voucher, README
+  BondQuote) match the on-chain typehashes byte-for-byte with multiply-before-divide payout math that
+  floors toward the treasury. Findings are all pre-mainnet gates, NOT code bugs to patch here (Solidity
+  needs a working Foundry env): F1 OmertaBond.claim not pausable (design call — pin with a test), F2 the
+  header comment overstates what MAX_DISCOUNT_BPS bounds (the real bound is tranche+daily-cap), F3 the
+  BondQuote signer parity test must be added when the bond signer ships, F4 deploy checklist (dailyCapOMR
+  must be nonzero on both bridges — the OmertaBond fixture uses 0; polBps must == BONDS.POL_BPS; signer/
+  chainId must match). `forge test` remains the hard pre-mainnet gate.
+- **Time/clock (aad0) — no CRIT/HIGH.** Accrual delta self-consistent (JS-written/JS-read, negatives
+  floored), no hard-reset token bucket survives (all continuous `used = max(0, used − elapsed×rate)`),
+  gang-income double-collect prevented by the gang+racket FOR UPDATE, cooldowns are lock-fresh + the
+  direct-SQL ones (race_at/active_at) are absent from persist (no clobber), season rollover idempotent,
+  negatives floored everywhere. One LOW non-exploitable consistency smell: the lazy-income clocks
+  (territory/business/speakeasy) mix Postgres `now()` writes with `Date.now()` reads — NOT
+  player-controllable (the delta is app-vs-DB host clock skew), §10.4-safe (the ledger always equals the
+  computed amount), mitigated entirely by tight app/DB NTP; flagged for consistency (standardize on one
+  clock per subsystem), not retuned.
+- **Unicode/parsing (adf9) — clean besides Finding 1.** Every money-route amount rejects Infinity/NaN
+  (`Number.isFinite && >0` directly or downstream — swap/bank/stake/casino/market/portfolio/boxing/stable/
+  races/auction/bonds all covered); the cleanText+esc XSS defense is complete (the one survivor `'` is
+  inert in double-quoted attrs + text, no inline-`<script>` name sink); auth (Privy alg-pinned/JWKS/aud/
+  exp, SIWE EIP-55-canonical wallet uniqueness) sound; no `...req.body` spread anywhere (no prototype
+  pollution); ledger reasons are server literals (player text never reaches a reason). LOW-MED note: the
+  keyless card route resolves names case-insensitively vs a case-sensitive unique index → a case-variant
+  can ambiguously resolve the public profile card (banded status only) — folded into the charset flag.
+
+**Round 8 verdict: 1 MED fix (homoglyph). Contracts, timing, and parsing sound. Suite green + sim drift-0.**
