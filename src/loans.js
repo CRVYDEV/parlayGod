@@ -385,6 +385,12 @@ export async function voidLoansAtDeath(client, victimId, h, killerCh = null, loo
       // receivable (and any pledged collateral) passes to the lender's HEIR, who can still collect.
       // §10.4-neutral (no money moves; the claim + the pledge just change hands — the principal already
       // moved at take-time). No heir (a lender who somehow dies without one) falls back to voiding.
+      // ORDERING NOTE (R37): runEstate calls voidLoansAtDeath (loot-before-stake) BEFORE it INSERTs the heir
+      // character row, so this reassigns lender_character to an id whose row doesn't exist yet in the txn —
+      // safe TODAY because the schema declares no FK on lender_character (the row is created a few lines
+      // later in the SAME txn, so the committed state is consistent). If an FK on loans.lender_character is
+      // ever added, this reassignment must move to AFTER the heir INSERT (split voidLoansAtDeath's loot pass
+      // from its inherit pass), or the estate txn will FK-fail here.
       if (heirId) {
         await client.query('UPDATE loans SET lender_character=$2 WHERE id=$1', [l.id, heirId]);
         await h.notify(client, l.borrower_character, 'loan_inherited', { reason: 'lender_dead' });
