@@ -2260,3 +2260,62 @@ manual idempotency-replay check returned NO reachable bug — the randomness sur
 boot-guarded and the numeric-input surface is comprehensively guarded against mint/drain/drift. Two already-known/
 guarded residuals recorded (seed rotation; the Idiom-B implicit-Infinity-rejection watch-item), neither patched.
 Suite 34/34 + sim drift-0 (docs-only round).
+
+## Round 37 — cross-system economic exploit CHAINS + the auth/token/session surface
+
+Two lenses over the two highest-value classes single-system audits can't reach: (1) cross-system economic
+exploit CHAINS (combine ≥2 mechanics to net-mint, over-extract a BACKED pool, or drift §10.4 across a system
+boundary — the residual risk once every single system is saturated); (2) the full auth/token/session/
+access-control surface. Plus a manual verification of the one informational note the chain lens surfaced.
+
+**No reachable bug — both lenses CLEAN (no CRITICAL/HIGH/MED).** Verified at source:
+
+- **Cross-system exploit chains** — all 8 candidate chains + novel variants traced end-to-end through the
+  ledger: (1) loan→invest→dividend is bounded — `invest` burns 85% + funds the shared `rwa_dividend_pool` 15%,
+  the whole amount leaves the account (invested $OMR is BURNED, not recoverable), `claimDividend` pays
+  `min(basis×rate, pool)` with grants at cost-basis 0 (free-riders earn nothing) so cumulative paid ≤ funded;
+  (2) family-contract laundering is the §10.4-clean, founder-accepted 2%-cost treasury cashout (no member
+  collects; a non-member confederate pays real ammo/jump cost); (3) casino take+rakeback both cap at
+  `denAvailable = profit − distributed − openLiability` (the econ-pass mint-on-top fix holds across dice/
+  blackjack/track; PvP/tournament/futurity/GP/stakes each carry their own escrow check, never touching the
+  PvE book); (4) the safehouse passive stack — every productive-income COLLECTION is D2-gated (business/
+  territory/world-frontier/port/speakeasy), only lazy racket/asset/bank ACCRUAL reaches a sheltered player
+  (the sim-flagged, founder-accepted landlord item, a §10.4-legal faucet); (5) the referral farm is
+  Sybil-bounded (all CASH faucets, agent-excluded at every level, once-ever-latched, tier-2 requires the
+  middle link's `ref_paid`, the push scales cash only never $OMR); (6) PLEX/Store/Vig can't double-count —
+  `plex:*` burns $OMR for an entitlement (doesn't fund the reserve), and real-revenue booking into
+  `vig_revenue` is `if (txHash)`-gated in BOTH store.js AND fees.js with all mod routes stripping a caller
+  txHash unless `ALLOW_MOD_REAL_REVENUE=on` (the D-MED2 fix holds for store + bonds; withdrawal stays
+  reserve-bounded); (7) loan-paper/death passes the receivable+collateral to the heir §10.4-neutrally (no
+  double-credit, disjoint from the $OMR loot); (8) market/auction escrow at death loots/refunds/burns
+  correctly (the escrow identities reconcile; the $OMR-auction-bid loot-proofing is the accepted F3 flag).
+  Every chain is a §10.4-neutral redistribution, a bounded pool, or a previously-flagged-accepted item — no
+  net mint, no backed-pool over-extraction, no cross-boundary drift.
+- **auth/token/session** — JWT is HMAC-string-pinned (`@fastify/jwt`, no alg:none / no RS-ES confusion since
+  no asymmetric verify key is configured), the dev-fallback secret is refused in `hardened` mode, and ban +
+  agent status are read from the DB at EVERY check (a pre-flag agent token still gets the 1/3s throttle; a
+  banned account is 403'd at the door); guest→upgrade binds only the caller's own row (UNIQUE(auth_provider,
+  auth_subject) + catch→linked_elsewhere, atomic); agent-key minting only hardens limits (no un-set route);
+  invite consume is a single atomic `uses_left-1 WHERE uses_left>0` with every account-creating path gated
+  (guest + provider-for-new-identities); the preHandler order is per-IP-auth-throttle → jwtVerify → ban →
+  rate-limit → idempotency, with ALL 265 mutating `/v1` routes carrying `auth` and ALL 25 `/v1/mod` routes
+  carrying `modAuth` (the global hook defers the 401 to route-level auth, so a route missing it would run
+  unauthenticated — none do), `MOD_KEY` a length-guarded `timingSafeEqual` refused-if-unset, and the WS token
+  read from the subprotocol + verified + ban-checked + per-IP-throttled; Privy (ES256-pinned, JWKS-by-kid with
+  no keys[0] fallback, iss/exp/sub/aud-scalar-or-array all mandatory), SIWE (per-account nonce + 10-min expiry
+  + account-bound message + malformed→clean-400 + unique-index), and X (inert by default — `verifyX` throws
+  before any DB work unless `X_TRUST_USER_TOKEN=on`) are all sound. Only residuals are the known config-gated
+  items (`X_TRUST_USER_TOKEN`, and a deploy setting neither `NODE_ENV=production` nor `DATABASE_URL`).
+
+**One documented latent note (NOT a reachable bug; a doc-only mitigation added):** `runEstate` calls
+`voidLoansAtDeath` (which reassigns a dead lender's `loans.lender_character` to the heir id) BEFORE it INSERTs
+the heir character row — required ordering, since the loan-escrow LOOT must run before the heir's legacy
+`stake` is computed. Safe TODAY because the schema declares no FK on `lender_character` (the heir row is
+created a few lines later in the SAME txn → the committed state is consistent). Added an ORDERING NOTE comment
+at `loans.js:388` so a future FK-tightening on `lender_character` splits the loot pass from the inherit pass
+rather than FK-failing the estate txn. Zero behavior change (loans test still passes).
+
+**Round 37 verdict:** both highest-value cross-boundary lenses (economic exploit-chains, auth/token/session)
+returned NO reachable bug — the §10.4 backstop + the per-escrow checks + the txHash revenue gate close the
+interaction surface, and the auth chain is comprehensively hardened. One latent FK-ordering footgun documented
+in-code (doc-only). Suite 34/34 + sim drift-0.
