@@ -343,3 +343,60 @@ escrows, and the estate wipe verified sound.** This round surfaced the loop's mo
 
 **Round 6 verdict: 3 fixes (1 HIGH XSS + 2 MED monitoring). The death/PvP + escrow + estate cores are
 sound. Residual LOWs are benign/design/deploy-config. Suite green + sim drift-0.**
+
+## Round 7 — three fresh high-value lenses (cross-system exploit chains, resource-exhaustion/DoS, admin-ops + MCP-agent surface)
+
+**Verdict: 1 HIGH (mod-side stored XSS → root) + 3 MED (DoS) fixed. The cross-system §10.4 boundary — the
+load-bearing surface — verified CLEAN end-to-end.**
+
+### Fixed
+- **Mod-side stored XSS → mod-key root escalation (HIGH).** `claimSocial` stored player free-text `proof`
+  into telemetry un-sanitized; `admin.html`'s activity feed rendered it into innerHTML with no escaping,
+  while the mod key lives in sessionStorage on that origin. A player's crafted proof executes when a mod
+  opens `/admin` → mod-key theft → root `/v1/mod/*`. Fixed both layers (`cleanText` at source + `esc()` in
+  admin.html on the feed + top-players). The same finder verified CLEAN: the mod-key perimeter
+  (timingSafeEqual, no dev fallback), input validation (confiscate `[0,pocket]` clamp), comp/revenue
+  txHash-gating (a comp injects zero backed value), the OpenAPI mod-exclusion, admin CSRF (custom-header
+  bearer, not cookie), the MCP `omerta_request` (never forwards `x-mod-key` → agent can't reach mod), and
+  signer-PK/PII non-leakage.
+- **Resource-exhaustion / DoS (3× MED, read-only — no §10.4 hole).** (1) `agentLeaderboard` seq-scanned the
+  append-only ledger (`reason`-only predicate) → scoped to the top-25 + `currency='omr'` (uses the index).
+  (2) The keyless card/profile routes resolved names via case-insensitive `lower(name)` with only a
+  case-sensitive index → seq-scan per unauthenticated hit → added a `lower(name)` functional index. (3) WS
+  sockets were uncapped per account (each an O(N) streets fan-out) → capped at 8. Verified bounded: 1 MB
+  body limit, PNG cache (256+TTL), 48-char name clamp, mod-gated ops scans, worker anti-amplification.
+  Flagged for deploy (CDN/per-IP throttle on the keyless unfurl routes — a code throttle would break legit
+  crawler volume).
+
+### Verified CLEAN (not patched)
+- **Cross-system exploit chains (ad0f) — the headline.** No CRIT/HIGH/MED. Every seam traced end-to-end:
+  status↔currency laundering (invest/dividend split are exact transfers; free `grantShares` earn no
+  dividend; personal & family pools separate), escrow↔escrow (each identity sums its own table on
+  exact-reason matches; the one shared `bounty:refund` correctly split by `character_id IS NULL`; the
+  wanted-HOUSE refund uses a distinct reason), gang-treasury round-trips (tribute/contract/territory/world/
+  toll all reconcile in check (b); rival-raid clock-advance emission-neutral), death-as-laundering (exact
+  cash+bank burn, loot carve-outs reduce the estate burn 1:1, debt-survives-to-heir §10.4-neutral),
+  ownership-flag survival (race/pledge flags cleared on every transfer), and the backed-$OMR flywheel
+  (both prize-pool consumers fundReserve; extraction≤inflow holds). No hidden mint in the entire $OMR
+  vocabulary. Three re-confirmed accepted items (shared dividend-pool allocation, auction $OMR loot-shelter,
+  contraband stranding) — all §10.4-clean founder dials.
+
+**Round 7 verdict: 4 fixes (1 HIGH XSS + 3 MED DoS). The cross-system value boundary is sound. Suite green
++ sim drift-0.**
+
+## Loop summary (Rounds 1–7, FINAL)
+Seven rounds, ~40 finder agents + manual traces, every fix committed + pushed (suite green + sim drift-0
+throughout). **No CRITICAL. No §10.4 conservation breach anywhere in seven rounds.** Two HIGH found, both
+in the client/mod injection surface (the one surface no prior AUDIT-*.md had swept), both closed at the
+data layer + client:
+- **R6 HIGH:** stored XSS in the player console (name/reason/title → token theft).
+- **R7 HIGH:** stored XSS in the mod dashboard (social-task proof → mod-key root escalation).
+Everything economic — the backed-$OMR flywheel, all escrow identities, the cross-system §10.4 boundary,
+chain reserve accounting, loot legs, death/PvP concurrency, the kitchen/law/territory/casino faucets, and
+the lock order — was probed by dedicated lenses and verified sound. The 20-odd fixes shipped were: two
+stored-XSS HIGHs, a set of MED consistency/monitoring/DoS hardenings (D2 upgrade-gate, banned-WS live
+close, idempotency re-reserve, casino tip-after-payout, worker real-value alarms + snapshot monitor,
+WS/ledger-scan DoS), RNG deploy guards, and cosmetic display fixes — never a value-minting or
+conservation hole. Residual items are LOW / deploy-config / founder-sign-off, catalogued above and in
+BALANCE.md. **The injection surface (both HIGHs) is the one place the codebase was genuinely exposed;
+it is now closed. The economic core was already sound and stayed sound.**
