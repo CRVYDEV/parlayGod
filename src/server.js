@@ -1266,6 +1266,11 @@ export async function buildServer() {
 
   // ── M3: websocket gateway (§5.6) — channels: me, streets, gang:{id} ──
   await app.register(websocket);
+  // (red-team R4 auth F1) A live intel-feed registry keyed by account — the connect-time banned
+  // check (below) only guards NEW connections, so a mid-session ban left an already-open socket
+  // feeding streets/gang chatter until the client chose to disconnect, falsifying the documented
+  // "banned-WS close" guarantee. The ban handler closes every open socket for the banned account.
+  const wsClients = new Map(); // accountId -> Set<socket>
   app.get('/v1/ws', { websocket: true }, async (socket, req) => {
     let accountId;
     try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
@@ -1281,9 +1286,18 @@ export async function buildServer() {
     const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')]];
     if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
     for (const [ev, fn] of subs) G.bus.on(ev, fn);
-    socket.on('close', () => { for (const [ev, fn] of subs) G.bus.off(ev, fn); });
+    let set = wsClients.get(accountId); if (!set) wsClients.set(accountId, set = new Set()); set.add(socket);
+    socket.on('close', () => {
+      for (const [ev, fn] of subs) G.bus.off(ev, fn);
+      const s = wsClients.get(accountId); if (s) { s.delete(socket); if (!s.size) wsClients.delete(accountId); }
+    });
     socket.send(JSON.stringify({ channel: 'hello', characterId: me.id }));
   });
+  // close every live socket for an account (its own 'close' handler tears down the bus subs + registry)
+  const closeAccountSockets = (accountId, code, reason) => {
+    const s = wsClients.get(accountId); if (!s) return;
+    for (const sock of [...s]) { try { sock.close(code, reason); } catch { /* already gone */ } }
+  };
 
   // ── M4: the Kitchen (§5.3, §7.10) ──
   app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>
@@ -1348,6 +1362,7 @@ export async function buildServer() {
     await pool.query("UPDATE accounts SET status='banned' WHERE id=$1", [accountId]);
     await pool.query('INSERT INTO bans (account_id, kind, reason, by_mod) VALUES ($1,$2,$3,$4)',
       [accountId, 'ban', reason || null, 'mod']);
+    closeAccountSockets(accountId, 4003, 'banned'); // red-team R4 F1: cut the live intel feed now, not at their leisure
     return { ok: true };
   });
   app.post('/v1/mod/kill', { preHandler: modAuth }, async (req) => {
