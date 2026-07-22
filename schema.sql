@@ -894,9 +894,18 @@ CREATE TABLE IF NOT EXISTS vendettas (
   avenger_account TEXT NOT NULL,
   target_account TEXT NOT NULL,
   sworn TEXT NOT NULL,                 -- the dead street's name (who this is for)
+  kills INT NOT NULL DEFAULT 1,        -- step two: how many times the target's line has bled the avenger's — the ESCALATION counter (deeper feud → longer TTL + a higher tier)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (avenger_account, target_account)
+);
+-- step two: THE SIT-DOWN — a consensual peace offer between two bloodlines. The proposer offers; the
+-- other bloodline accepts to clear BOTH-direction vendettas (a non-violent exit from a blood feud).
+CREATE TABLE IF NOT EXISTS feud_peace_offers (
+  from_account TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (from_account, target_account)
 );
 
 -- THE LAW Phase 4 — informants. A `flip` (turning state's evidence) creates a witness: the case

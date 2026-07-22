@@ -9,7 +9,7 @@ import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
-  VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
+  VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
   worldNpcOf, liberationCost,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
@@ -1508,22 +1508,85 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // don't: no street to swear against). One active vendetta per account pair; a repeat kill
   // refreshes the clock. The heir is born owing blood.
   if (opts.vendetta && opts.killerCh) {
-    const until = new Date(Date.now() + VENDETTA.TTL_MS);
-    // UPDATE-first, INSERT on zero rows (audit F3): the hourly sweep can DELETE an expired row
-    // between a SELECT and its UPDATE, silently losing the refreshed vendetta while the heir is
-    // still told they owe blood. UPDATE either locks the row (the sweep's re-check then skips
-    // it — no longer expired) or touches nothing and the INSERT writes fresh.
-    const upd = await client.query('UPDATE vendettas SET sworn=$3, expires_at=$4 WHERE avenger_account=$1 AND target_account=$2',
-      [victim.account_id, opts.killerCh.account_id, victim.name, until]);
-    if (!upd.rowCount) await client.query('INSERT INTO vendettas (avenger_account, target_account, sworn, expires_at) VALUES ($1,$2,$3,$4)',
-      [victim.account_id, opts.killerCh.account_id, victim.name, until]);
-    await h.notify(client, heirId, 'vendetta', { against: killerName, for: victim.name,
-      days: Math.round(VENDETTA.TTL_MS / 86400000) });
+    // step two — ESCALATION: a repeat kill DEEPENS the feud (kills++), and a deeper feud carries a
+    // longer TTL (feudTierOf(kills).ttlMult — access/timing only, off §10.4 + the sim balance) so a
+    // War of Extinction won't lapse from waiting. UPDATE-first, INSERT on zero rows (audit F3): the
+    // hourly sweep can DELETE an expired row between a SELECT and its UPDATE — the UPDATE either locks
+    // the row (the sweep's re-check then skips it) or touches nothing and the INSERT writes fresh at 1.
+    const prior = Number((await client.query('SELECT kills FROM vendettas WHERE avenger_account=$1 AND target_account=$2',
+      [victim.account_id, opts.killerCh.account_id])).rows[0]?.kills || 0);
+    const kills = prior + 1;
+    const tier = feudTierOf(kills);
+    const until = new Date(Date.now() + VENDETTA.TTL_MS * tier.ttlMult);
+    const upd = await client.query('UPDATE vendettas SET sworn=$3, expires_at=$4, kills=$5 WHERE avenger_account=$1 AND target_account=$2',
+      [victim.account_id, opts.killerCh.account_id, victim.name, until, kills]);
+    if (!upd.rowCount) await client.query('INSERT INTO vendettas (avenger_account, target_account, sworn, expires_at, kills) VALUES ($1,$2,$3,$4,$5)',
+      [victim.account_id, opts.killerCh.account_id, victim.name, until, kills]);
+    // a fresh vendetta ends any pending sit-down between the two lines — blood reopens the books
+    await client.query('DELETE FROM feud_peace_offers WHERE (from_account=$1 AND target_account=$2) OR (from_account=$2 AND target_account=$1)',
+      [victim.account_id, opts.killerCh.account_id]);
+    await h.notify(client, heirId, 'vendetta', { against: killerName, for: victim.name, tier: tier.name,
+      days: Math.round(VENDETTA.TTL_MS * tier.ttlMult / 86400000) });
   }
   // §12 + §10.4: the death event carries the destroyed fleet size for car conservation
   await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
     [uid(), victim.account_id, 'death', JSON.stringify({ by: killerName, cars: h.victimOwned.cars.length, lvl })]);
   return { heirId, report, orderLoot: mkt.looted };
+}
+
+// ═══════════════ VENDETTA step two — THE SIT-DOWN (consensual peace) + the blood-debt board ═══════════════
+// Both are PURE STATUS (no money, no currency — §10.4 untouched by construction). A feud is a two-way
+// affair; peace clears BOTH directions between the two bloodlines. No lock beyond the actor's char row
+// (the vendetta/offer rows are account-keyed and the writes are idempotent).
+const acctOfTarget = async (client, targetCharId) =>
+  (await client.query('SELECT account_id, name FROM characters WHERE id=$1', [targetCharId])).rows[0] || null;
+const activeFeudBetween = async (client, a, b) => !!(await client.query(
+  `SELECT 1 FROM vendettas WHERE ((avenger_account=$1 AND target_account=$2) OR (avenger_account=$2 AND target_account=$1))
+     AND expires_at > now() LIMIT 1`, [a, b])).rows[0];
+
+// POST /v1/feud/:targetId/peace — offer to bury the hatchet with the target's bloodline.
+export async function proposePeace(ch, targetId, client, h) {
+  const t = await acctOfTarget(client, targetId);
+  if (!t) throw new GameError('no_target', 'Nobody by that name.');
+  if (t.account_id === ch.account_id) throw new GameError('self', 'You are not at war with yourself.');
+  if (!(await activeFeudBetween(client, ch.account_id, t.account_id))) throw new GameError('no_feud', 'No blood between your lines to settle.');
+  // UPDATE-first / INSERT (a re-offer just refreshes the timestamp; the PK stops a dup)
+  const upd = await client.query('UPDATE feud_peace_offers SET at=now() WHERE from_account=$1 AND target_account=$2', [ch.account_id, t.account_id]);
+  if (!upd.rowCount) {
+    try { await client.query('INSERT INTO feud_peace_offers (from_account, target_account) VALUES ($1,$2)', [ch.account_id, t.account_id]); }
+    catch { /* raced to the same offer — already standing */ }
+  }
+  await h.notify(client, targetId, 'feud_peace_offer', { from: ch.name });
+  return { ok: true, proposedTo: t.name };
+}
+
+// POST /v1/feud/:targetId/peace/accept — accept the target's standing offer; clears BOTH-direction feuds.
+export async function acceptPeace(ch, targetId, client, h) {
+  const t = await acctOfTarget(client, targetId);
+  if (!t) throw new GameError('no_target', 'Nobody by that name.');
+  const offer = (await client.query('SELECT 1 FROM feud_peace_offers WHERE from_account=$1 AND target_account=$2', [t.account_id, ch.account_id])).rows[0];
+  if (!offer) throw new GameError('no_offer', "They haven't offered peace.");
+  // the sit-down: clear every vendetta between the two lines (both directions) + all offers
+  await client.query('DELETE FROM vendettas WHERE (avenger_account=$1 AND target_account=$2) OR (avenger_account=$2 AND target_account=$1)', [ch.account_id, t.account_id]);
+  await client.query('DELETE FROM feud_peace_offers WHERE (from_account=$1 AND target_account=$2) OR (from_account=$2 AND target_account=$1)', [ch.account_id, t.account_id]);
+  await h.notify(client, targetId, 'feud_peace_made', { with: ch.name });
+  bus.emit('streets', { type: 'vendetta_peace', a: ch.name, b: t.name });
+  return { ok: true, peaceWith: t.name };
+}
+
+// GET /v1/leaderboard/feuds — the deadliest ACTIVE blood feuds across the base (by kills). Pure status:
+// each side is the bloodline's CURRENT living street; a line with no living character is skipped.
+export async function feudLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT v.avenger_account, v.target_account, v.kills, v.expires_at,
+            av.name AS avenger, tg.name AS target
+       FROM vendettas v
+       JOIN characters av ON av.account_id = v.avenger_account AND av.alive
+       JOIN characters tg ON tg.account_id = v.target_account AND tg.alive
+      WHERE v.expires_at > now()
+      ORDER BY v.kills DESC, v.expires_at DESC LIMIT 15`)).rows;
+  return { feuds: rows.map((r) => ({ avenger: r.avenger, target: r.target, kills: Number(r.kills),
+    tier: feudTierOf(r.kills).name, expiresSeconds: Math.max(0, Math.ceil((new Date(r.expires_at) - Date.now()) / 1000)) })) };
 }
 
 // ═══════════════════ BUSTING (§7.8) ═══════════════════

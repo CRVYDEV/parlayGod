@@ -253,7 +253,7 @@
     <dt>In transit / Unbonding</dt><dd>Fresh bank deposits and just-unstaked $OMR sit exposed for a window — a killer loots them. Wait for cash to <b>clear</b> and $OMR to finish <b>unbonding</b> before you count it safe.</dd>
     <dt>Skills</dt><dd>Every four levels you earn a skill point. Spend them in <b>The Life</b> on a branch — Enforcer, Operator, or Wheelman — for permanent edges. They die with your street.</dd>
     <dt>The Family / Turf / Commission</dt><dd>Join a family for backup, <b>turf</b> income, and <b>wars</b>. <b>Tribute</b> is what you kick up; the <b>Commission</b> is the five biggest families setting the week's rules.</dd>
-    <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect.</dd>
+    <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect. Kill them again and it DEEPENS (Vendetta → Blood Feud → War of Extinction — a longer window). Or hold a <b>sit-down</b> and both lines bury it in peace.</dd>
     <dt>The Underworld</dt><dd>Named fixers — the Doc, Vinnie, Bella, Big Tuna, the Madame. Earn their <b>standing</b> by working their corner of the game for discounts and favors. Cross them and they hold a grudge.</dd>
     <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> does the same to a laundering front. Watched heat — you can't just wait it out.</dd>
     <dt>The Wire</dt><dd>Information you buy with $OMR: <b>tap</b> a rival to see what they're holding and whether they're hunting you; <b>sweep</b> your own lines clean; <b>subscribe</b> to the Street Wire for forecasts and threat chatter.</dd>
@@ -314,6 +314,8 @@
       body.stolen !== undefined || body.cut !== undefined || body.taken !== undefined || body.hospSeconds !== undefined ||
       (body.win === false && body.dmg !== undefined);
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
+    if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
+    if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
     if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
@@ -1480,7 +1482,21 @@
       act('POST', `/v1/streets/${b.dataset.npchit}/npchit`, { tier: t.querySelector(`[data-npctier="${b.dataset.npchit}"]`).value }).then(() => renderPvp()));
     t.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/bodyguard/hire/${b.dataset.hire}`, {}).then(() => renderPvp()));
-    t.querySelectorAll('[data-feud]').forEach((b) => b.onclick = () => act('GET', `/v1/feud/${b.dataset.feud}`));
+    t.querySelectorAll('[data-feud]').forEach((b) => b.onclick = async () => {
+      const f = (await api('GET', `/v1/feud/${b.dataset.feud}`)).body || {};
+      const line = `Blood feud with ${f.bloodline}\n\nbodies — you took ${f.kills?.theirs || 0}, they took ${f.kills?.ours || 0}` +
+        (f.myVendetta ? `\n\n⚔ YOUR VENDETTA (${f.myVendetta.tier}) — for ${f.myVendetta.sworn}, ${Math.ceil((f.myVendetta.expiresSeconds || 0) / 86400)}d left` : '') +
+        (f.theirVendetta ? `\n🩸 they've sworn one on YOU (${f.theirVendetta.tier})` : '') +
+        (f.peace?.theyOffered ? '\n\n🕊 they\'ve OFFERED PEACE — accept to bury it' : f.peace?.iOffered ? '\n\n🕊 your peace offer stands' : '');
+      // THE SIT-DOWN: accept a standing offer, else offer peace if there's a live feud
+      if (f.peace?.theyOffered && confirm(line + '\n\nAccept the sit-down and bury this feud?')) {
+        await act('POST', `/v1/feud/${b.dataset.feud}/peace/accept`, {}); return;
+      }
+      if ((f.myVendetta || f.theirVendetta) && !f.peace?.iOffered && confirm(line + '\n\nSue for peace (offer a sit-down)?')) {
+        await act('POST', `/v1/feud/${b.dataset.feud}/peace`, {}); return;
+      }
+      toast(line.split('\n')[0]);
+    });
     t.querySelectorAll('[data-fire]').forEach((b) => b.onclick = async () => {
       const r = await act('POST', `/v1/streets/${b.dataset.fire}/fire`, {});
       // the server consumes the search on every resolved shot (kill or miss) — clear the local

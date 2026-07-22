@@ -51,7 +51,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats } from './rules.js';
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -1101,13 +1101,23 @@ export async function buildServer() {
     const oursDown = await count(theirs.account_id, myAcct);   // bodies they took from us
     const theirsDown = await count(myAcct, theirs.account_id); // bodies we took from them
     const vend = async (a, b) => (await pool.query(
-      'SELECT sworn, expires_at FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()', [a, b])).rows[0] || null;
+      'SELECT sworn, expires_at, kills FROM vendettas WHERE avenger_account=$1 AND target_account=$2 AND expires_at > now()', [a, b])).rows[0] || null;
     const mineV = await vend(myAcct, theirs.account_id), theirsV = await vend(theirs.account_id, myAcct);
+    // step two: pending sit-down offers in either direction + the feud tier
+    const offer = async (from, to) => !!(await pool.query('SELECT 1 FROM feud_peace_offers WHERE from_account=$1 AND target_account=$2', [from, to])).rows[0];
     return { bloodline: theirs.name, kills: { ours: theirsDown, theirs: oursDown },
       bloodOwed: oursDown - theirsDown, // positive: they owe us bodies
-      myVendetta: mineV ? { sworn: mineV.sworn, expiresSeconds: Math.max(0, Math.ceil((new Date(mineV.expires_at) - Date.now()) / 1000)) } : null,
-      theirVendetta: !!theirsV };
+      myVendetta: mineV ? { sworn: mineV.sworn, kills: Number(mineV.kills), tier: feudTierOf(mineV.kills).name,
+        expiresSeconds: Math.max(0, Math.ceil((new Date(mineV.expires_at) - Date.now()) / 1000)) } : null,
+      theirVendetta: theirsV ? { kills: Number(theirsV.kills), tier: feudTierOf(theirsV.kills).name } : null,
+      peace: { iOffered: await offer(myAcct, theirs.account_id), theyOffered: await offer(theirs.account_id, myAcct) } };
   });
+  // VENDETTA step two — THE SIT-DOWN: offer / accept a consensual peace (clears both-direction feuds)
+  app.post('/v1/feud/:targetId/peace', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.proposePeace(ch, req.params.targetId, client, h)));
+  app.post('/v1/feud/:targetId/peace/accept', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.acceptPeace(ch, req.params.targetId, client, h)));
+  app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));
   // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
   app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier)));

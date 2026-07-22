@@ -1204,9 +1204,57 @@ assert.equal((await meOf(vitoB.token)).vendettas.length, 0, 'the debt is off the
 // the cycle turns: Kane's heir is born owing US blood — and a lapsed vendetta grants nothing
 feud = (await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token })).body;
 assert.equal(feud.bloodOwed, 0, 'a body for a body — the ledger is square');
-assert.equal(feud.theirVendetta, true, 'but their heir has sworn the next round');
+assert(feud.theirVendetta && feud.theirVendetta.tier === 'Vendetta', 'but their heir has sworn the next round (a fresh Vendetta)');
 await pool.query(`UPDATE vendettas SET expires_at = now() - interval '1 minute' WHERE target_account = (SELECT account_id FROM characters WHERE id='${vHeir.id}')`);
-assert.equal((await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token })).body.theirVendetta, false, 'a lapsed vendetta is no vendetta');
+assert.equal((await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token })).body.theirVendetta, null, 'a lapsed vendetta is no vendetta');
+
+// ══ VENDETTA step two — ESCALATION + THE SIT-DOWN + the blood-debt board (pure status) ══
+// escalation: a repeat kill DEEPENS the feud (kills++, a higher tier + a longer TTL). Seed a live
+// vendetta at kills=1, then a real repeat kill escalates it to a Blood Feud with a stretched window.
+const esK = await mk('Escalation Kane'); const esV = await mk('Escalation Vito');
+await seedCh(esK.id, "respect=400, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
+await seedCh(esV.id, "respect=400, muscle=1, loc='docks', hosp_until=NULL");
+assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: esK.token })).code, 200, 'armed');
+await call('POST', `/v1/streets/${esV.id}/search`, { token: esK.token });
+k = (await call('POST', `/v1/streets/${esV.id}/fire`, { token: esK.token, body: { rounds: 6000 } })).body;
+assert.equal(k.kill, true, 'first blood — a Vendetta opens');
+const esVacct = (await pool.query(`SELECT account_id FROM characters WHERE id='${esV.id}'`)).rows[0].account_id;
+const esKacct = (await pool.query(`SELECT account_id FROM characters WHERE id='${esK.id}'`)).rows[0].account_id;
+let vrow = (await pool.query(`SELECT kills, expires_at FROM vendettas WHERE avenger_account='${esVacct}' AND target_account='${esKacct}'`)).rows[0];
+assert.equal(Number(vrow.kills), 1, 'the feud opens at kills=1 (Vendetta)');
+const firstExpiry = new Date(vrow.expires_at).getTime();
+// the killer runs it back on the heir → the feud DEEPENS
+const esVheir = await meOf(esV.token);
+await seedCh(esVheir.id, "muscle=1, loc='docks', hosp_until=NULL, jail_until=NULL");
+await seedCh(esK.id, "muscle=100, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
+await call('POST', `/v1/streets/${esVheir.id}/search`, { token: esK.token });
+k = (await call('POST', `/v1/streets/${esVheir.id}/fire`, { token: esK.token, body: { rounds: 6000 } })).body;
+assert.equal(k.kill, true, 'blood again');
+vrow = (await pool.query(`SELECT kills, expires_at FROM vendettas WHERE avenger_account='${esVacct}' AND target_account='${esKacct}'`)).rows[0];
+assert.equal(Number(vrow.kills), 2, 'the feud DEEPENED to kills=2 (Blood Feud)');
+assert(new Date(vrow.expires_at).getTime() > firstExpiry + 2 * 86400000, 'a Blood Feud carries a LONGER window (ttlMult 1.5×)');
+const esVheir2 = await meOf(esV.token);
+let esFeud = (await call('GET', `/v1/feud/${esK.id}`, { token: esV.token })).body;
+assert.equal(esFeud.myVendetta.tier, 'Blood Feud', 'the ledger shows the escalated tier');
+assert.equal(esFeud.myVendetta.kills, 2, 'and the blood count');
+
+// THE SIT-DOWN: peace gates + the consensual clear
+const neutral = await mk('Neutral Ned');
+assert.equal((await call('POST', `/v1/feud/${esK.id}/peace`, { token: neutral.token })).body.error, 'no_feud', 'no peace to offer without a feud');
+assert.equal((await call('POST', `/v1/feud/${esV.id}/peace/accept`, { token: esK.token })).body.error, 'no_offer', "can't accept an offer that isn't there");
+r = await call('POST', `/v1/feud/${esK.id}/peace`, { token: esV.token }); // the aggrieved line sues for peace
+assert.equal(r.code, 200, 'peace offered'); assert.equal(r.body.proposedTo, 'Escalation Kane', 'to the other bloodline');
+assert(((await call('GET', `/v1/feud/${esK.id}`, { token: esV.token })).body.peace.iOffered), 'the offer stands on the ledger');
+r = await call('POST', `/v1/feud/${esVheir2.id}/peace/accept`, { token: esK.token }); // the killer accepts
+assert.equal(r.code, 200, 'the sit-down is held'); assert.equal(r.body.peaceWith, esVheir2.name, 'peace with the aggrieved line');
+assert.equal((await call('GET', `/v1/feud/${esK.id}`, { token: esV.token })).body.myVendetta, null, 'the feud is BURIED — no more vendetta');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM vendettas WHERE avenger_account='${esVacct}' AND target_account='${esKacct}'`)).rows[0].n), 0, 'the vendetta row is gone');
+
+// THE BLOOD-DEBT BOARD: a live feud (seed one) ranks by kills
+await pool.query(`INSERT INTO vendettas (avenger_account, target_account, sworn, kills, expires_at) VALUES ('${esVacct}','${esKacct}','A Ghost',5, now() + interval '10 days')`);
+const feudBoard = (await call('GET', '/v1/leaderboard/feuds', { token: esV.token })).body;
+const top = feudBoard.feuds.find((f) => f.avenger === esVheir2.name && f.target === 'Escalation Kane');
+assert(top && top.kills === 5 && top.tier === 'War of Extinction', 'the deadliest feud tops the blood-debt board at its tier');
 const kaneHeir = await meOf(kane.token);
 await pool.query(`UPDATE characters SET cash=20000 WHERE id='${kaneHeir.id}'`);
 r = await call('POST', `/v1/streets/${(await meOf(vitoB.token)).id}/bounty`, { token: kane.token, body: { amount: 600, kind: 'kill', hitman: mook.id } });
@@ -1268,5 +1316,5 @@ const rhsEsc = -(await tsum("reason='bounty:post'")) - (await tsum("reason='gang
   - (await tsum("reason='bounty:claim'")) - (await tsum("reason='bounty:refund'")) + (await tsum("reason='death:bounty'"));
 assert(Math.abs(escNow - rhsEsc) <= 1, `bounty/contract escrow reconciles: bucket ${escNow} vs ledger ${rhsEsc}`);
 
-console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing)');
+console.log('✅ M3 social test passed — gangs, tribute+weekly, turf (+perks), melt tithe, exchange, jumps, bounty, contract board, hit→death/estate, busting, notifications, websocket push, buyback family split, §10.4 invariants, M7 assassin rep + NPC hitmen + safehouse/fire-heat/war-kills + family contracts (treasury-funded, member lockout, refunds) + bodyguards (hire/absorb/betrayal, before-insurance ordering) + M8 Tailor & Engraver vanity sinks (name/title/plate/crest/rename — ledgered vanity:* burns) + M8 intel sinks (anon fee, peek pierces anon) + M8 family seals ($OMR tribute → pooled reserve → sequential ladder, ledgered burns) + THE FOUNDATION (family charity: rank gate, empty-reserve rejection, sequential tiers from the reserve, badge on all three views + philanthropy leaderboard, softens members\' RICO odds, ledgered foundation:tier burns; STEP TWO: freeload gate — the trial-soften only helps a member who joined before the case was filed) + M7-P3 territory rackets (establish/collect/upgrade, income cap, SEIZURE transfers the operation to the victor, treasury §10.4 reconcile) + VENDETTAS (heir born owing blood, feud ledger, waived directed floor, 2x settlement rep, the cycle turns, lapsed = nothing; STEP TWO: ESCALATION (a repeat kill deepens the feud — kills++ / a higher tier / a longer TTL), THE SIT-DOWN (consensual peace gates + the both-direction clear), and the blood-debt leaderboard — all pure status)');
 await app.close();
