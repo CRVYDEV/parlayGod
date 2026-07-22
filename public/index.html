@@ -173,7 +173,22 @@
   .landing .signin { max-width: 470px; margin: 26px auto 0; text-align: center; }
   .landing .lfoot { text-align: center; color: var(--dim); font-size: 11px; margin-top: 30px;
     border-top: 1px solid var(--line); padding-top: 16px; line-height: 1.7; }
-  @media (max-width: 760px) { .landing { padding: 3vh 12px 30px; } .landing .hero h1 { letter-spacing: 6px; } }
+  /* THE WIRE — a rotating police-scanner ticker under the hero, to make the city feel alive */
+  .wire-ticker { display: flex; align-items: center; gap: 12px; max-width: 720px; margin: 20px auto 0;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 9px 14px;
+    font-family: 'Courier New', monospace; font-size: 12.5px; }
+  .wire-ticker .wl { color: var(--blood); font-size: 9.5px; letter-spacing: 2px; white-space: nowrap;
+    border-right: 1px solid var(--line); padding-right: 12px; }
+  .wire-ticker .wl::before { content: '● '; }
+  .wire-ticker #wire-line { color: var(--dim); transition: opacity .4s; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  /* the three-step orientation strip + secondary CTA */
+  .landing .steps { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; color: var(--dim);
+    font-size: 12.5px; margin: 4px auto 20px; }
+  .landing .steps b { color: var(--neon); font-weight: normal; }
+  .landing .encore { text-align: center; margin: 4px 0 8px; }
+  @media (max-width: 760px) { .landing { padding: 3vh 12px 30px; } .landing .hero h1 { letter-spacing: 6px; }
+    .wire-ticker { font-size: 11.5px; } }
 
   .hidden { display: none !important; }
   label.f { display: block; text-align: left; color: var(--dim); font-size: 11px; margin: 8px 0 2px; }
@@ -192,7 +207,10 @@
     </div>
     <button class="act cta" id="btn-guest">ENTER AS A GHOST</button>
     <div class="ctahint">No wallet, no email — one tap. Claim it with X / Privy later without losing the street.</div>
+    <div class="wire-ticker"><span class="wl">THE WIRE</span><span id="wire-line">tuning in&hellip;</span></div>
   </div>
+
+  <div class="steps"><span><b>①</b> step out as a ghost</span><span><b>②</b> find your hustle</span><span><b>③</b> take the city</span></div>
 
   <div class="pill-grid">
     <div class="pill"><h3>A city that breathes</h3><p>Daily events, economic weather, a day/night beat. The Law builds real RICO cases against you; rival cartels raid back. Nothing here sits still.</p></div>
@@ -207,6 +225,8 @@
     <h2>A REAL ECONOMY</h2>
     <p>Server-authoritative, sim-audited, and honest to the cent — a built-in ledger proves no money is ever minted from nothing. What you earn is yours to keep, spend, or (at launch) extract on-chain as $OMR. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
   </div>
+
+  <div class="encore"><button class="act cta" id="btn-guest2">MAKE YOUR BONES →</button></div>
 
   <div class="signin">
     <div class="sub" style="font-size:11px;color:var(--dim);margin-bottom:6px">Already made? Sign in with a provider token:</div>
@@ -671,10 +691,41 @@
     else toast(r.body?.message || r.body?.error || 'no dice', true);
     return false;
   };
-  $('#btn-guest').onclick = async () => {
+  const enterAsGhost = async () => {
     const inviteCode = $('#invite-code').value.trim();
     landToken(await api('POST', '/v1/auth/guest', inviteCode ? { inviteCode } : {}));
   };
+  $('#btn-guest').onclick = enterAsGhost;
+  { const g2 = $('#btn-guest2'); if (g2) g2.onclick = enterAsGhost; } // the secondary CTA at the foot of the pitch
+
+  // THE WIRE — a rotating police-scanner ticker on the landing (fictional flavor; makes the city feel alive
+  // on a fresh alpha with no real events yet). Cycles a curated list; pure client-side, no API dependency.
+  (function wireTicker() {
+    const el = $('#wire-line'); if (!el) return;
+    const LINES = [
+      'a body turned up in the canal — nobody at the docks saw a thing',
+      'the Marchetti family declared war on the Ricci crew over the neon strip',
+      'a numbers ticket hit 600-to-1 down on Mott Street',
+      'the Bureau kicked a speakeasy door on Cathedral Hill — three made men in the wagon',
+      'somebody torched a smuggler\'s truck on the canal road',
+      'a made man walked out of lockup — the guard\'s pockets look heavier',
+      'the Commission voted open season; the safehouses are half price',
+      'a ghost boat slipped the Coast Guard on the deep run',
+      'a champ lost his belt in the back room of the Copa',
+      'a welsher got his legs done outside the Blue Room',
+      'the Colombo dynasty went legit — bought a whole block, clean',
+      'a hit contract on a rat doubled overnight — everyone\'s got a gun out',
+      'the docks changed hands again — that\'s the third family this season',
+      'a heist crew cracked the fed train; one of them talked',
+      'a pink slip changed hands on the strip — somebody walked home',
+    ];
+    let i = Math.floor((Date.now() / 1000)) % LINES.length;
+    el.textContent = LINES[i];
+    setInterval(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { i = (i + 1) % LINES.length; el.textContent = LINES[i]; el.style.opacity = '1'; }, 400);
+    }, 4200);
+  })();
   $('#btn-provider').onclick = async () => {
     const provider = $('#auth-provider').value, tok = $('#auth-token').value.trim();
     if (!tok) return toast('paste a provider token first', true);
