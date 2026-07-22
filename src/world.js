@@ -122,8 +122,12 @@ export async function worldBoard(pool, ch = null, h = null) {
         tributePerHr,
         tributePending: mine ? (isRising ? 0 : frontierTribute(f, row.tribute_at, now.getTime())) : null, // a rebelling vassal pays no tribute
         garrison: holder ? Math.floor(Number(row.garrison || 0)) : null,
-        // step six: what a HELD outpost needs on its garrison to hold the line against the uprising's reckoning
-        upriseNeed: mine && isRising ? Math.floor(f.max * WORLD.UPRISING.THRESHOLD_BPS / 10000 * (strength / f.max)) : null,
+        // step six: the garrison a HELD outpost needs to GUARANTEE a repel at the reckoning. Red-team LOW-1:
+        // the reckoning scales `need` by the outfit's RESOLVE-time strength (higher after regen than at this
+        // read), so surface the FULL-STRENGTH (worst-case) need — reinforce to this and you can't be caught
+        // out by regen. A beaten-down outfit's real need is lower (the interlock still holds at the reckoning),
+        // so this is the conservative safe target, never an under-statement that traps the defender.
+        upriseNeed: mine && isRising ? Math.floor(f.max * WORLD.UPRISING.THRESHOLD_BPS / 10000) : null,
         reinforceMin: mine ? WORLD.UPRISING.REINFORCE_MIN : null, // the floor to stiffen your garrison
         invadeCost: holder && !mine ? invadeCost(row.garrison) : null, // what it'd cost your family to take it
         canRaid: !!ch && lvl >= f.minLvl && !f.coop, // SIGN-OFF (1.3): apex (coop) outfits need a crew, not a solo hit
@@ -635,7 +639,7 @@ export async function sweepUprisings(pool) {
   for (const u of due) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); await resolveUprising(client, Number(u.day), u.npc_id); await client.query('COMMIT'); resolved++; }
-    catch (e) { await client.query('ROLLBACK'); } // transient → next tick retries (idempotent)
+    catch (e) { await client.query('ROLLBACK'); console.error(`uprising sweep failed (day ${u.day}, ${u.npc_id}):`, e?.message || e); } // transient → next tick retries; a persistent failure is logged (the sweepAuctions poison-row precedent)
     finally { client.release(); }
   }
   return { resolved, active: up ? up.id : null };
