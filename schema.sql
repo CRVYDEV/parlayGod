@@ -1528,6 +1528,10 @@ CREATE TABLE IF NOT EXISTS rng_audit (
 -- ── Indexes & integrity (audit hardening) — after all tables exist ──
 -- No two LIVING characters may share a name (referral codes resolve by name, §7.13).
 CREATE UNIQUE INDEX IF NOT EXISTS ux_char_name_alive ON characters (name) WHERE alive;
+-- (red-team R7 DoS) the keyless broadcast routes (GET /card, /u, /v1/u) resolve a name
+-- case-insensitively via lower(c.name)=lower($1); the unique index above is case-sensitive so it
+-- couldn't serve them → a seq-scan of characters on every unauthenticated card/profile/unfurl hit.
+CREATE INDEX IF NOT EXISTS ix_char_lower_name ON characters (lower(name));
 -- Hot paths that would otherwise full-scan under load: the Streets board, gang
 -- rosters, the exchange, and the nightly §10.4 ledger sweep.
 CREATE INDEX IF NOT EXISTS ix_char_respect ON characters (respect);
