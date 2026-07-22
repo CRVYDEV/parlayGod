@@ -497,7 +497,7 @@ export async function sweepMainEvents(pool) {
       await resolveMainEvent(client, id);
       await client.query('COMMIT');
       resolved++;
-    } catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → the next tick retries (idempotent)
+    } catch (e) { await client.query('ROLLBACK'); console.error('[sweepMainEvents]', id, e?.code || e?.message || e); } // 40P01 / transient → the next tick retries; a PERSISTENT throw freezes this bout's bet escrow → log it (the sweepAuctions poison-row precedent)
     finally { client.release(); }
   }
   return { resolved };

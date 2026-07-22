@@ -86,3 +86,27 @@ gap this round.
   resolve-snapshot tables correctly excluded. **Fixed (hygiene):** `daily_progress` (character-keyed,
   value-less daily-contract counters/claimed flags) was neither wiped nor account-level → orphan rows on
   death; added to the runEstate wipe list. No §10.4 surface (holds no value; heir gets a fresh id).
+- **Escrow-identity integrity (all 10 checks) — CLEAN.** Bounty/market/loan/auction/poker-tourney/futurity/
+  grand-prix/stakes/boxing-bet/convoy-insurance all reconcile under every interleaving traced (estate-burn
+  vs expiry-sweep, claim-vs-burn, cancel-vs-sweep double-refund, multi-winner split leak) — each closed by
+  shared-lock serialization + remainder-into-take. No stray cross-module escrow writer.
+- **Two-party transfer rails — CLEAN.** Every settlement rail (bodyguard/round/buyout/standover/table/
+  pvpDice/poker/bout/matchRace/challenge/pinkslip/repay/collect/buyPaper/fill/shakedown/inside-job/tribute/
+  toll/family-contract) carves its take, uses sorted chars→accounts→leaves→singletons locks, reads consent
+  from the locked limit row, and self-guards. The only untaxed path (loan-default disbursement) is the
+  ALREADY-SIGNED-OFF collusion rail (one-shot per alt, MAX_ACTIVE=1, welsher+WANTED) — no new exposure.
+- **persist-clobber + pg-mem INT-quirk (exhaustive mechanical sweep) — CLEAN.** The quirk was empirically
+  pinned to `intcol = intcol − $param` only (163 arithmetic-UPDATE sites; 30 parameterized subtractions,
+  all NUMERIC targets; INT columns only ever get addition/literal-`−1`) → zero vulnerable sites. No
+  persist-clobber: every direct-SQL write to a persisted column runs in a worker/hand-rolled txn that never
+  calls persist; every non-persisted in-memory field has a backing direct-SQL mirror.
+- **Worker sweep races — value-moving sweeps SOUND** (per-item transactional, idempotent under a status
+  lock, no worker AB-BA, no bare-pool value move besides the R1-fixed wire one). **Fixed (observability
+  parity):** six cash-escrow resolvers (`sweepGrandPrix`, `sweepFuturity`, `sweepTournaments`,
+  `sweepTrackEntries`, `sweepStakes`, `sweepMainEvents`) had a silent `catch { ROLLBACK }` — a persistently-
+  throwing item would retry forever with frozen escrow and NO alarm (the §10.4 check reconciles as
+  open==posted, "correctly stuck"). Added `console.error` poison-row logging (the `sweepAuctions`/
+  `sweepUprisings` precedent) to all six + the three no-value NPC/raid sweeps for consistency.
+
+**Round 2 verdict: no CRITICAL/HIGH/MED §10.4, lock, auth, or contract defect. 2 small correctness/hygiene
+fixes (estate `daily_progress` wipe, worker poison-row logging). Suite 33/33 + sim drift-0.**
