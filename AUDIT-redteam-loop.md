@@ -787,3 +787,65 @@ gap. Griefing flagged as a PvP-balance sign-off item; §10.4 untouched. Suite 33
 
 **Round 13 FINAL: 2 HIGH (MCP SSRF/token-exfil + keyless card-DoS) + 1 MED (ghost-character race) fixed;
 griefing flagged as a PvP-balance sign-off item. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 14 — worker resilience · static/deploy · logging/PII · time/day-boundary/seed
+Four fresh peripheral lenses (the infra/operational surface the economic-core rounds don't reach).
+Every finding re-verified vs source; behavioural fixes carry a regression or a boot/consistency guard.
+**No CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **Worker resilience (F3, MED — FIXED).** Both the hourly `tick` and the 30s chain `syncTick` were
+  driven by `setInterval` with a non-awaited async callback — a long-running tick (a big season
+  rollover, a slow DB, a large getLogs backfill after downtime) would still be running when the next
+  interval fired, so two ticks ran CONCURRENTLY in-process: a self-inflicted double-worker (double
+  buyback, racing sweeps, a block range double-processed). Fix: an in-flight `ticking`/`syncing` boolean
+  guard on each — a slow tick makes the next fire SKIP, never overlap (`src/worker.js`). The per-job
+  `safe()` isolation (a poison row can't starve the §10.4 monitor) was already in place and verified.
+- **Watcher poison-log (F2, MED — FIXED).** `syncFeeEvents`/`syncClaimedEvents`/`syncTradeFees` looped
+  over logs with no per-log isolation, and `recordFeePayment` throws on a DETERMINISTIC data fault
+  (`bad_fee_kind`/`bad_payer`/`bad_nonce`) BEFORE its idempotency txn — so a single malformed log would
+  throw every tick, the cursor would never advance, and every legit fee behind it would be permanently
+  stuck (a DoS on the whole fee/claim pipeline). Fix: a per-log `isolate()` that SKIPS a poison log (it
+  can never succeed) but RE-THROWS a transient error (DB timeout/serialization) so the cursor does NOT
+  advance and the window re-scans idempotently next tick — never losing a real fee (`src/watcher.js`).
+- **WS `?token=` query credential (logging F1, MED — FIXED).** The WS gateway still accepted the
+  full-access session bearer via `?token=` (the code's own comment warns it leaks into proxy/CDN access
+  logs + browser history → account takeover). R12 already moved the console to the `Sec-WebSocket-Protocol`
+  header, so nothing in-repo needed the query fallback. GATED it behind `WS_ALLOW_QUERY_TOKEN` (default
+  OFF — the fail-closed INVITE_MODE posture); the four WS tests were converted to the header/subprotocol
+  path (the real production credential path). `src/server.js` + `test/security.js` + `test/social.js`.
+- **Backup dump perms (static/deploy LOW — FIXED).** `tools/backup.sh` wrote a COMPLETE DB copy (accounts,
+  wallet addresses, the whole ledger) with default umask — group/world-readable on a shared/misconfigured
+  host. Added `umask 077` + `chmod 600` on the dump + a comment flagging the DSN-on-argv password leak
+  (recommend `~/.pgpass`/`PGSERVICEFILE`).
+- **Mixed clock on §9 fire-readiness (time F2, LOW — FIXED).** `searches.started_at` was written by the DB
+  `now()` default but the fire-readiness gate (and the `placedAt` countdown) compared it against JS
+  `Date.now()` — the one mixed-clock outlier in the codebase (every other timer is JS-set AND JS-read). A
+  persistent DB-behind-app skew would let a hunter fire that skew EARLY on every contract. Fix: set
+  `started_at` from `Date.now()` in the INSERT so both ends use one clock (`src/social.js`).
+- **Weak-seed floor (time F1(a), LOW-MED — HARDENED).** The seeded money draws use FNV-1a truncated to
+  mod 1000, and the public prices board leaks many (known-prefix → mod-1000) pairs — so a SHORT/low-entropy
+  operator `MARKET_SEED` is offline-recoverable, after which every numbers/track/fight draw is computable.
+  A long random seed is not recoverable → seed hygiene. Added a min-entropy floor to the hardened boot
+  guard (≥24 chars, ≥8 distinct — the fail-closed JWT/seed posture; `src/server.js`).
+
+**FLAGGED, not patched (ground rule #1 / detected-with-backstop / scale-only):**
+- **time F1(b) — swap FNV→keyed HMAC for the money draws** (founder call): a keyed cryptographic hash would
+  make even a mediocre seed + the public price surface unexploitable, but it changes EVERY deterministic
+  draw/price output — a mechanic surface. The seed-entropy floor above closes the practical risk; the hash
+  swap is a sign-off item.
+- **logging F2 — pg error `detail`/`where` in operator logs** (LOW defense-in-depth): a UNIQUE clash logs
+  the offending row value (external id / 0x address / living name) into operator logs. Not a hard-secret
+  leak (node-postgres does NOT attach SQL params, verified — tokens/agent-keys/auth_subjects passed as
+  params are safe). A redaction of the global handler's full-error dump is the dial.
+- **worker F1/F4/F5** — the `fundReserve` crash-seam (conservative-direction, caught by nightly
+  `runVigInvariants` + manual `mod/reserve/fund`), the monolithic season txn (availability/scale-only, alpha
+  population small), the single-worker convoy-spawn TOCTOU (known self-correcting, the world-raid precedent).
+- **static MED — no migration path** (already flagged in CLAUDE.md; fresh-DB alpha unaffected).
+- **law.js flip-notify names the informant to the victim** — BY DESIGN (the informant-collapse counterplay
+  requires the mark to know whom to hunt; the streets feed stays anonymous). Confirmed intent, no change.
+
+**Round 14 verdict: 3 MED (worker tick re-entrancy, watcher poison-log DoS, WS query-token credential) +
+3 LOW (backup perms, mixed-clock fire gate, weak-seed floor) fixed/hardened; FNV→HMAC + pg-detail redaction
+flagged for sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**

@@ -278,8 +278,18 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };
-  await tick();
-  setInterval(tick, 3600 * 1000);
+  // (red-team R14 F3) setInterval does NOT wait for an async callback — if a tick runs long
+  // (a big season rollover, a slow DB), the next interval fires while it's still going, so two
+  // ticks run concurrently in-process (a self-inflicted double-worker: double buyback, racing
+  // sweeps). Guard with an in-flight flag so a slow tick just skips the next fire, not overlaps it.
+  let ticking = false;
+  const guardedTick = async () => {
+    if (ticking) { console.warn('worker: previous tick still running — skipping this interval'); return; }
+    ticking = true;
+    try { await tick(); } finally { ticking = false; }
+  };
+  await guardedTick();
+  setInterval(guardedTick, 3600 * 1000);
 
   // §11 chain-event sync (audit F2/F3): POLL getLogs over a persisted block cursor, staying
   // CHAIN_CONFIRMATIONS behind head — so worker downtime backfills (no lost fee credits) and a
@@ -315,8 +325,16 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };
-      await syncTick();
-      setInterval(syncTick, Number(process.env.CHAIN_POLL_MS || 30000));
+      // (red-team R14 F3) same re-entrancy guard as the hourly tick — a slow getLogs sweep (a big
+      // backfill after downtime) must not overlap the next 30s poll and double-process a block range.
+      let syncing = false;
+      const guardedSync = async () => {
+        if (syncing) return;
+        syncing = true;
+        try { await syncTick(); } finally { syncing = false; }
+      };
+      await guardedSync();
+      setInterval(guardedSync, Number(process.env.CHAIN_POLL_MS || 30000));
       console.log(`⛓  chain sync polling every ${Number(process.env.CHAIN_POLL_MS || 30000) / 1000}s, ${DEFAULT_CONFIRMATIONS} confirmations behind head`);
     }
   }

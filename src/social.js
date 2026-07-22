@@ -839,7 +839,11 @@ export async function startSearch(ch, targetCharacterId, client, h) {
   if (tg?.gang_id && tg.gang_id === h.owned.gangId && !t.rat && !isWanted(t)) throw new GameError('family', "They're family. Omertà.");
   const cur = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (cur) throw new GameError('searching', 'Your people are already out looking. Call them off first.');
-  await client.query('INSERT INTO searches (hunter, target) VALUES ($1,$2)', [ch.id, targetCharacterId]);
+  // (red-team R14 F2) set started_at from the JS clock, not the DB `now()` default — the fire-readiness
+  // gate below reads it back with `Date.now()` (as does the placedAt countdown), and every other timer in
+  // the codebase (shoot_cd_until, bank_intransit_at, unbond_at, last_accrued_at) is JS-set AND JS-read.
+  // A persistent DB-behind-app skew on the DB default would otherwise let a hunter fire that skew early.
+  await client.query('INSERT INTO searches (hunter, target, started_at) VALUES ($1,$2,$3)', [ch.id, targetCharacterId, new Date(Date.now())]);
   // EXECUTIONER (skills) × VINNIE T3 (underworld): the assassin's people work faster —
   // applied here AND at fire's readiness check via hunterSearchMs (both read the HUNTER's
   // build+standing, so the two clocks agree). Stacking flagged; both sign-off levers.
