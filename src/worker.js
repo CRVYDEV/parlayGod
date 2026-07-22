@@ -263,9 +263,15 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (vr && (vr.omrReclaimed > 0 || vr.gearRestored > 0)) console.log(`♻️  vouchers: reclaimed ${vr.omrReclaimed.toFixed(3)} $OMR + restored ${vr.gearRestored} gear from expired claims`);
     if (dayOf() !== lastInvariantDay) {
       lastInvariantDay = dayOf();
-      // prune idempotency keys older than a day (incl. any reservation orphaned by a
-      // crash between reserve and response, which would otherwise 409 that key forever)
-      await safe('idempotency prune', () => pool.query("DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'"));
+      // (red-team R15 F1) Prune on TWO horizons. COMPLETED rows (status<>0, holding a stored response)
+      // prune at 24h — the replay window. ORPHAN reservations (status=0) prune at a MUCH longer 7-day
+      // horizon: a status=0 row is ambiguous between "handler never committed" (safe to reclaim) and
+      // "handler COMMITTED value but the onSend store never landed" (a crash, or a swallowed store-UPDATE
+      // failure). Reclaiming the LATTER lets a same-key retry re-execute the already-committed action (a
+      // double-spend). Keeping status=0 rows for a week means that key keeps 409'ing long past any real
+      // client retry, while a genuinely-dead reservation is still eventually reclaimed (never 409s forever).
+      await safe('idempotency prune (completed)', () => pool.query("DELETE FROM idempotency WHERE status <> 0 AND created_at < now() - interval '24 hours'"));
+      await safe('idempotency prune (orphan reservations)', () => pool.query("DELETE FROM idempotency WHERE status = 0 AND created_at < now() - interval '7 days'"));
       const inv = await safe('§10.4 invariants', () => runLedgerInvariants(pool));
       if (inv) console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
       // (red-team R6 A) also run the real-VALUE invariants nightly and route drift through the SAME

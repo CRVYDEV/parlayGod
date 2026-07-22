@@ -200,6 +200,27 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal(clash.code, 422, 'same key + different body → 422');
 }
 
+// ═══ FINDING (red-team R15 F1): the idempotency prune uses TWO horizons — a committed-but-unstored
+// (status=0 orphan) key must NOT be reclaimed at 24h (that would let a >24h retry double-execute); only
+// genuinely-stale orphans reclaim at 7d, while completed rows (status<>0) prune at 24h. ═══
+{
+  const p = await mk('Prune Pete');
+  const acct = (await pool.query(`SELECT account_id FROM characters WHERE id='${p.id}'`)).rows[0].account_id;
+  const put = (key, status, ageInterval) => pool.query(
+    `INSERT INTO idempotency (account_id, key, status, body_hash, response, created_at)
+       VALUES ($1,$2,$3,'h','', now() - interval '${ageInterval}')`, [acct, key, status]);
+  await put('pk-done-old', 200, '25 hours');   // completed, stale → pruned at 24h
+  await put('pk-done-new', 200, '1 hour');      // completed, fresh → survives
+  await put('pk-orphan-8d', 0, '8 days');       // orphan reservation, very stale → pruned at 7d
+  await put('pk-orphan-2d', 0, '2 days');        // orphan reservation, <7d → MUST survive (double-spend guard)
+  // run the exact two-horizon prune the worker runs
+  await pool.query("DELETE FROM idempotency WHERE status <> 0 AND created_at < now() - interval '24 hours'");
+  await pool.query("DELETE FROM idempotency WHERE status = 0 AND created_at < now() - interval '7 days'");
+  const surviving = (await pool.query(`SELECT key FROM idempotency WHERE account_id=$1 ORDER BY key`, [acct])).rows.map((r) => r.key);
+  assert.deepEqual(surviving, ['pk-done-new', 'pk-orphan-2d'],
+    'completed<24h and orphan<7d survive; completed>24h and orphan>7d are pruned (committed-but-unstored key stays 409ing past any real retry)');
+}
+
 // ═══ FINDING (infra HIGH-3): a 1-use invite code survives a concurrent stampede ═══
 {
   process.env.INVITE_MODE = 'on';

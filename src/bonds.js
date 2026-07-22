@@ -118,7 +118,9 @@ export async function reconcileBonds(pool, accountId, address) {
 // ── the treasury tops up the bond tranche (the budget the protocol will bond out). A treasury act (mod). ──
 export async function fundBondTranche(pool, omr) {
   const amt = num(omr);
-  if (!(amt > 0)) throw new GameError('bad_amount', 'Fund a positive OMR amount.');
+  // (red-team R15 L1) reject Infinity/NaN too — `Number(Infinity) > 0` would set capacity_omr to Infinity
+  // (mod-gated + out-of-band bucket, but parity with the player-facing finite guards).
+  if (!Number.isFinite(amt) || !(amt > 0)) throw new GameError('bad_amount', 'Fund a positive OMR amount.');
   await pool.query('UPDATE bond_reserve SET capacity_omr = capacity_omr + $1 WHERE id=1', [round6(amt)]);
   const r = (await pool.query('SELECT capacity_omr, committed_omr FROM bond_reserve WHERE id=1')).rows[0];
   return { ok: true, added: round6(amt), capacityOmr: round6(Number(r.capacity_omr)), committedOmr: round6(Number(r.committed_omr)) };

@@ -393,6 +393,15 @@ export async function placeBoutBet(ch, boutId, body, client, h) {
 // dead-funder precedent), unlock the surviving fighter. Shared by the estate hook + a belt-and-suspenders
 // path in resolve. A bettor who is the in-memory KILLER is credited in memory (the refundPot discipline). ──
 async function cancelBout(client, bout, killerCh) {
+  // (red-team R15) LOCK the bout row before reading the bet set. cancelMainEventsAtDeath reads bouts
+  // UNLOCKED, and the escrow funders are third-party spectators the estate never locks — so without this
+  // a placeBoutBet landing between the bet-read and the status flip strands that bet's escrow (missed by
+  // the refund loop, then the bout is cancelled so resolveMainEvent never pays it) → boxing bet escrow
+  // §10.4 drift + burned spectator cash. Re-entrant on the resolve path (it already holds this row).
+  // Re-read status under the lock and bail if another path already resolved/cancelled it (idempotent).
+  const locked = (await client.query("SELECT * FROM boxing_bouts WHERE id=$1 FOR UPDATE", [bout.id])).rows[0];
+  if (!locked || locked.status !== 'booked') return; // already resolved/cancelled — no double refund
+  bout = locked;
   const bets = (await client.query(
     'SELECT b.bettor_char, b.amount, c.alive FROM boxing_bets b LEFT JOIN characters c ON c.id=b.bettor_char WHERE b.bout_id=$1', [bout.id])).rows;
   for (const b of bets) {
