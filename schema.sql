@@ -863,6 +863,29 @@ CREATE TABLE IF NOT EXISTS poker_entries (
 CREATE TABLE IF NOT EXISTS poker_state ( id INT PRIMARY KEY, current TEXT );
 INSERT INTO poker_state (id, current) SELECT 1, NULL WHERE NOT EXISTS (SELECT 1 FROM poker_state);
 
+-- STREET RACES step 3 — THE GRAND PRIX: a scheduled, worker-resolved CASH parimutuel (the poker-tournament
+-- twin, on the races side). At most one OPEN grand prix at a time (grand_prix_state.current); a new one
+-- materializes on the next entry after the last settles. §10.4: a `grand prix escrow` check (pool == Σ
+-- buyin − win − refund − take − death). The entrant's car POWER is SNAPSHOTTED at entry (the car isn't
+-- escrowed — only the cash buy-in is — so it can be freely used/sold after; you race the form you entered).
+CREATE TABLE IF NOT EXISTS grand_prix (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'open',    -- open → resolved | refunded
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolves_at TIMESTAMPTZ NOT NULL,       -- registration closes here; the worker settles after
+  pool INT NOT NULL DEFAULT 0             -- Σ escrowed buy-ins (a convenience mirror of the entries)
+);
+CREATE TABLE IF NOT EXISTS grand_prix_entries (
+  gp_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  buyin INT NOT NULL,
+  power INT NOT NULL,                     -- the car's race power snapshotted at entry (the race is power + rand(VARIANCE))
+  place INT,                             -- final placing, filled at settle
+  PRIMARY KEY (gp_id, character_id)
+);
+CREATE TABLE IF NOT EXISTS grand_prix_state ( id INT PRIMARY KEY, current TEXT );
+INSERT INTO grand_prix_state (id, current) SELECT 1, NULL WHERE NOT EXISTS (SELECT 1 FROM grand_prix_state);
+
 -- VENDETTAS: a player fire-kill swears the victim's bloodline (ACCOUNT) against the killer's —
 -- surviving both sides' deaths until settled (a revenge fire-kill, 2x rep) or lapsed. One active
 -- vendetta per pair (a repeat kill refreshes the clock). Zero money flows — pure status + the

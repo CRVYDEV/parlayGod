@@ -3286,6 +3286,38 @@ currency, car-conservation-neutral; `race:nos` a character_id'd sink on the exis
 (chars→accounts→cars, acyclic, TOCTOU-safe under the car lock), death (flags are row fields not pointers),
 and grief (both-consent, WHEEL floor, no warehouse). Accepted (flagged): a deliberate pink loss is a
 near-tax-free car gift — but the market already allows that (list at the min bid), §10.4-clean.
+**Step three — THE GRAND PRIX — BUILT** (`src/races.js`, `src/rules.js` `RACES.GP`, `schema.sql`,
+`src/invariants.js`, `src/worker.js`, `test/races.js`; the deferred centerpiece — a scheduled,
+worker-resolved CASH parimutuel, the **poker-tournament escrow twin** on the races side). Drivers
+`enterGrandPrix` (`POST /v1/races/gp {car}`) — a `GP.BUYIN` ($25k) cash ESCROWS into a pool during an open
+window (`GP.REGISTER_MS` 30 min; `GRAND_PRIX_MS` env TEST-ONLY, the SEARCH_MS pattern); the car isn't
+escrowed (only the cash is) so its race POWER is SNAPSHOTTED at entry (`grand_prix_entries.power`) — you
+race the form you entered, and the car is free to use/sell after. One open GP at a time
+(`grand_prix_state.current`), a fresh one materializing on the next entry after the last settles (the
+tournament pattern). The worker (`sweepGrandPrix`→`resolveGrandPrix`, wired in worker.js) races every LIVE
+entrant (`power + rand(VARIANCE)`), ranks DESC (fast/tuned iron wins, the road is fickle), and pays the top
+`min(field, PAYOUTS.length)` places a RENORMALIZED share of the pool net of `GP.RAKE_BPS` (5%, half →
+street tax/buyback, half burns) — so the house edge stays the rake at any turnout; ties split; a dead
+entrant's stake burns (`race:gp:death`); a field < `GP.MIN_ENTRANTS` (3) refunds the grid. A pure
+competitive REDISTRIBUTION — **no new faucet** (unlike the PvE purse), skill+gear decides (distinct from
+the poker tournament's pure chance). §10.4: every `race:gp:*` reason rides the existing `race:` cash
+vocabulary (**zero reason change**) + a NEW **`grand prix escrow`** check (open pool == Σ buyin − win −
+refund − take − death — the poker-tourney-escrow twin). **Lock order** = the tournament posture exactly:
+enter locks char → `grand_prix_state` → gp row; `resolveGrandPrix` locks entrant chars sorted →
+`grand_prix_state` → gp row (state BEFORE the gp row, so a concurrent entry can't AB-BA — the
+AUDIT-casino-tournament fix, mirrored). Board (`GET /v1/races`) surfaces the open GP (pool/grid/clock/your
+entry); `/v1/rules` gained `grandPrix`; the console Street Races tab gained a Grand Prix card + `describe()`.
+`test/races.js` covers the enter gates (level/no-car/double-entry), the buy-in escrow + the §10.4
+grand-prix-escrow check mid-open, a full grid settled by the worker (a dead entrant's stake burned + the
+top places splitting net of rake, escrow closing to `wins+take+death==Σbuyin`), a short-grid refund, and
+the state clearing for the next race. Suite 31/31 + sim drift-0. All `GP.*` numbers are founder sign-off
+levers (a redistribution, no signed faucet touched). **Red-team:** the escrow surface is a faithful port
+of the already-audited poker tournament — §10.4 escrow identity exact (open == posted; resolved nets 0),
+the enter-vs-settle lock order acyclic (state-before-row), single-writer worker settle (no player-lock
+races, idempotent status gate), the power SNAPSHOT sidesteps a "car gone at resolve" bug, alt-stuffing is
+−EV (renormalized −rake/N), and a dead/estated entrant burns cleanly (the §10.4 death row is NULL-character,
+excluded from the per-character check). The Street Races pillar is now feature-complete (PvE circuit + PvP
+wager + tuning + THE WHEEL → pink slips + nitrous → the Grand Prix).
 
 **THE PORT — maritime smuggling (step one) — BUILT** (`src/port.js`, `test/port.js` — the 32nd suite;
 design `omerta-the-port-design.md`). The SEA counterpart to convoys — deliberately distinct: convoys move

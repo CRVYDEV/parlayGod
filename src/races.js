@@ -7,7 +7,8 @@
 //     the pot − a 5% rake (half → street tax/buyback, half burns), the loser's car takes damage. NO escrow.
 //   • TUNING (tuneCar) — a cash sink that adds race power (the car-progression the catalog lacked).
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
-import { GameError, bus } from './game.js';
+import crypto from 'node:crypto';
+import { GameError, bus, ledger, notify, rngLog } from './game.js';
 import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -272,13 +273,151 @@ export async function raceBoard(ch, client, h) {
   });
   const wins = Number((await client.query('SELECT race_wins FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.race_wins || 0);
   const cdLeft = ch.race_at && new Date(ch.race_at).getTime() > now ? Math.ceil((new Date(ch.race_at).getTime() - now) / 1000) : 0;
+  const grandPrix = await grandPrixInfo(client, ch);
   return {
     cars, strip,
     tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse, fieldPower: t.fieldPower })),
     tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX },
     nos: { cost: RACES.NOS_COST, max: RACES.NOS_MAX, power: RACES.NOS_POWER },
+    grandPrix,
     legend: { wins, rank: raceRankOf(wins).name }, cooldownSeconds: cdLeft,
   };
+}
+
+// ── THE GRAND PRIX (step 3) — a scheduled, worker-resolved CASH parimutuel (the poker-tournament twin) ──
+const gpMs = () => Number(process.env.GRAND_PRIX_MS) || RACES.GP.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
+
+// POST /v1/races/gp {car} — buy into the open Grand Prix (cash ESCROWS; the car's power is snapshotted).
+export async function enterGrandPrix(ch, carId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No racing from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to drive.");
+  if (levelOf(Number(ch.respect)) < RACES.GP.MIN_LEVEL) throw new GameError('level', `The Grand Prix runs at level ${RACES.GP.MIN_LEVEL}.`);
+  const car = raceable(h, carId); // a car you own, not on the block / pledged
+  const buyin = RACES.GP.BUYIN;
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The buy-in is $${buyin}.`);
+  const power = carPower(car.model_id, car.trim_id, car.tune, ch.speed, car.dmg); // SNAPSHOT the form at entry
+  // materialize/find the open grand prix under the state singleton lock (LOCK ORDER: char → gp_state → gp)
+  const st = (await client.query('SELECT current FROM grand_prix_state WHERE id=1 FOR UPDATE')).rows[0];
+  let g = st.current ? (await client.query("SELECT * FROM grand_prix WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
+  if (!g) {
+    const id = crypto.randomUUID();
+    const resolvesAt = new Date(Date.now() + gpMs());
+    await client.query('INSERT INTO grand_prix (id, status, resolves_at, pool) VALUES ($1,$2,$3,0)', [id, 'open', resolvesAt]);
+    await client.query('UPDATE grand_prix_state SET current=$1 WHERE id=1', [id]);
+    g = { id, status: 'open', resolves_at: resolvesAt, pool: 0 };
+  } else if (new Date(g.resolves_at) <= new Date()) {
+    throw new GameError('closed', 'The grid is set — this race is about to run. Try again after it settles.');
+  }
+  if ((await client.query('SELECT 1 FROM grand_prix_entries WHERE gp_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
+    throw new GameError('entered', "You're already on the grid for this race.");
+  ch.cash = Number(ch.cash) - buyin;
+  await client.query('INSERT INTO grand_prix_entries (gp_id, character_id, buyin, power) VALUES ($1,$2,$3,$4)', [g.id, ch.id, buyin, power]);
+  await client.query('UPDATE grand_prix SET pool = pool + $2 WHERE id=$1', [g.id, buyin]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -buyin, reason: 'race:gp:buyin', counterparty: g.id });
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM grand_prix_entries WHERE gp_id=$1', [g.id])).rows[0].n);
+  await h.track(client, ch.account_id, 'race', { mode: 'gp', buyin });
+  bus.emit('streets', { type: 'gp_entry', who: ch.name, entrants });
+  return { ok: true, grandPrix: g.id, buyin, power, pool: Number(g.pool) + buyin, entrants,
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
+// Worker settle: race every LIVE entrant (snapshotted power + rand(VARIANCE)), rank, pay the top places a
+// share of the pool net of the rake. Single-writer (no player-lock races), idempotent (status gate).
+export async function resolveGrandPrix(client, gpId) {
+  const g0 = (await client.query('SELECT * FROM grand_prix WHERE id=$1', [gpId])).rows[0];
+  if (!g0 || g0.status !== 'open') return null;
+  // LOCK ORDER: entrant chars sorted → gp_state → gp row (gp_state BEFORE the gp row — enterGrandPrix locks
+  // gp_state → gp, so locking gp first would AB-BA a concurrent entry; the resolveTournament posture).
+  const entChars = (await client.query('SELECT character_id FROM grand_prix_entries WHERE gp_id=$1', [gpId])).rows.map((r) => r.character_id).sort();
+  for (const cid of entChars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  await client.query('SELECT current FROM grand_prix_state WHERE id=1 FOR UPDATE');
+  const g = (await client.query("SELECT * FROM grand_prix WHERE id=$1 AND status='open' FOR UPDATE", [gpId])).rows[0];
+  if (!g) return null;
+  const pool = Number(g.pool);
+  const entries = (await client.query(
+    'SELECT e.character_id, e.buyin, e.power, c.alive, c.name FROM grand_prix_entries e LEFT JOIN characters c ON c.id=e.character_id WHERE e.gp_id=$1', [gpId])).rows;
+  let deadBurn = 0;
+  const live = [];
+  for (const e of entries) {
+    if (e.alive) live.push(e);
+    else { deadBurn += Number(e.buyin); await ledger(client, { currency: 'cash', amount: -Number(e.buyin), reason: 'race:gp:death', counterparty: gpId }); }
+  }
+  const clearCurrent = async () => { await client.query('UPDATE grand_prix_state SET current=NULL WHERE id=1 AND current=$1', [gpId]); };
+  if (live.length < RACES.GP.MIN_ENTRANTS) { // not a full grid — refund the field, burn the dead
+    for (const e of live) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, Number(e.buyin)]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: Number(e.buyin), reason: 'race:gp:refund', counterparty: gpId });
+      await notify(client, e.character_id, 'gp_refund', { buyin: Number(e.buyin) });
+    }
+    await client.query("UPDATE grand_prix SET status='refunded' WHERE id=$1", [gpId]);
+    await clearCurrent();
+    return { grandPrix: gpId, refunded: live.length };
+  }
+  // race: snapshotted power + rand(0,VARIANCE) each; rank DESC (fast/tuned iron wins, the road is fickle)
+  const ranked = live.map((e) => ({ ...e, score: Number(e.power) + rand(0, RACES.VARIANCE) })).sort((a, b) => b.score - a.score);
+  const livePool = pool - deadBurn;
+  const rake = Math.floor(livePool * RACES.GP.RAKE_BPS / 10000);
+  const net = livePool - rake;
+  // pay the top min(field, PAYOUTS.length) places, RENORMALIZED to the field so the house edge stays the
+  // rake regardless of turnout (an unpaid place otherwise leaks its share to the take).
+  const frac = RACES.GP.PAYOUTS.slice(0, ranked.length);
+  const denom = frac.reduce((a, b) => a + b, 0) || 1;
+  const placeShare = frac.map((f) => Math.floor(net * f / denom));
+  const payouts = new Array(ranked.length).fill(0);
+  for (let i = 0; i < ranked.length;) { // group ties (equal final score) — split the covered places' shares
+    let j = i; while (j + 1 < ranked.length && ranked[j + 1].score === ranked[i].score) j++;
+    let sum = 0; for (let p = i; p <= j; p++) sum += placeShare[p] || 0;
+    const each = Math.floor(sum / (j - i + 1));
+    for (let p = i; p <= j; p++) payouts[p] = each;
+    i = j + 1;
+  }
+  let handedOut = 0;
+  for (let i = 0; i < ranked.length; i++) {
+    const e = ranked[i], payout = payouts[i];
+    if (payout > 0) {
+      handedOut += payout;
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, payout]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: payout, reason: 'race:gp:win', counterparty: gpId });
+    }
+    await client.query('UPDATE grand_prix_entries SET place=$3 WHERE gp_id=$1 AND character_id=$2', [gpId, e.character_id, i + 1]);
+    await notify(client, e.character_id, 'gp_result', { place: i + 1, of: ranked.length, payout });
+  }
+  const totalTake = rake + (net - handedOut); // the rake + any rounding/unpaid remainder = the house cut
+  if (totalTake > 0) {
+    await ledger(client, { currency: 'cash', amount: -totalTake, reason: 'race:gp:take', counterparty: gpId });
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(totalTake / 2)]); // half → the buyback, half burns
+  }
+  await client.query("UPDATE grand_prix SET status='resolved' WHERE id=$1", [gpId]);
+  await clearCurrent();
+  await rngLog(client, ranked[0].character_id, `race:gp:${gpId}`, ranked[0].score, `winner ${ranked[0].name} · ${ranked.length} runners · pool $${pool}`);
+  bus.emit('streets', { type: 'gp_result', winner: ranked[0].name, pool, runners: ranked.length });
+  return { grandPrix: gpId, runners: ranked.length, pool, winner: ranked[0].name, take: totalTake };
+}
+
+// worker sweep — settle every open grand prix past its window (per-race txn, idempotent; a poison race
+// can't starve the rest).
+export async function sweepGrandPrix(pool) {
+  const due = (await pool.query("SELECT id FROM grand_prix WHERE status='open' AND resolves_at <= now() ORDER BY resolves_at")).rows;
+  let resolved = 0;
+  for (const { id } of due) {
+    const client = await pool.connect();
+    try { await client.query('BEGIN'); await resolveGrandPrix(client, id); await client.query('COMMIT'); resolved++; }
+    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved };
+}
+
+// the open Grand Prix summary for the board (pool, grid, your entry, the clock)
+async function grandPrixInfo(client, ch) {
+  const st = (await client.query('SELECT current FROM grand_prix_state WHERE id=1')).rows[0];
+  const g = st?.current ? (await client.query("SELECT * FROM grand_prix WHERE id=$1 AND status='open'", [st.current])).rows[0] : null;
+  if (!g) return { open: false, buyin: RACES.GP.BUYIN, minLevel: RACES.GP.MIN_LEVEL, minEntrants: RACES.GP.MIN_ENTRANTS };
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM grand_prix_entries WHERE gp_id=$1', [g.id])).rows[0].n);
+  const mine = !!(await client.query('SELECT 1 FROM grand_prix_entries WHERE gp_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0];
+  return { open: true, id: g.id, buyin: RACES.GP.BUYIN, minLevel: RACES.GP.MIN_LEVEL, minEntrants: RACES.GP.MIN_ENTRANTS,
+    pool: Number(g.pool), entrants, entered: mine,
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
 }
 
 // GET /v1/leaderboard/races — THE WHEEL: the base's winningest drivers (account-level, survives death).
