@@ -241,7 +241,7 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   // persisted by persistCharacter — the SQL write is authoritative).
   let carSeized = null;
   if (loan.collateral_car) {
-    await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false WHERE id=$1', [loan.collateral_car, ch.id]); // clear race flags on seizure (lender consent)
+    await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [loan.collateral_car, ch.id]); // clear race flags on seizure (lender consent)
     if (h.victimOwned?.cars) h.victimOwned.cars = h.victimOwned.cars.filter((c) => c.id !== loan.collateral_car);
     // push the FULL row into the lender's garage (the market auction-settle precedent) — a bare
     // {id} stub would render the seized car with null model/trim/dmg in this response's view.
@@ -477,7 +477,7 @@ export async function sweepLoans(pool, opts = {}) {
       if (loan.lender_character !== pre.lender_character || loan.borrower_character !== pre.borrower_character) { await client.query('ROLLBACK'); continue; }
       // the pledged car goes to the lender (it can only still be pledged to a LIVE active loan)
       const car = (await client.query('SELECT id FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
-      if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false WHERE id=$1', [loan.collateral_car, loan.lender_character]); // clear race flags on forfeit (lender consent)
+      if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [loan.collateral_car, loan.lender_character]); // clear race flags on forfeit (lender consent)
       await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
       await notify(client, loan.lender_character, 'loan_forfeited', { car: !!car });
       await notify(client, loan.borrower_character, 'loan_forfeited', { car: !!car, lost: true });
