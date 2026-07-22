@@ -1874,3 +1874,59 @@ constraints (all bounds app-validated, consistent — informational).
 machines + every money "one per Y" constraint verified sound. 1 generalized operational MED (no migration
 path) flagged as a high-priority founder deploy item + MED-2 (no FKs) defense-in-depth. No code change.
 Suite 33/33 + sim drift-0 (unchanged).**
+
+---
+
+## Round 31 — MCP server + agent gateway (single-finder, saturation cadence)
+
+The one significant agent-facing component not yet code-audited this loop. **No CRITICAL/HIGH/MED — CLEAN.**
+No code change.
+
+**omerta-mcp/ + src/agentgateway.js — VERIFIED SOUND.** The universal `omerta_request{method,path,body}`
+escape hatch resolves `new URL(path, BASE+'/')` and HARD-ASSERTS `url.origin === BASE.origin` before any
+fetch (SSRF/traversal/`@evil`/`//evil`/`\\evil` all rejected or kept on-origin), attaches the bearer only
+after the check, uses `redirect:'manual'` (defense-in-depth vs on-origin→off-origin redirect), and sets no
+user-controlled headers. Strictly the player's own bearer — no MOD_KEY path. Idempotency key = sha256(method
+path body) sliced to 128 bits (distinct requests → distinct keys; an intentional repeat replays, the safe
+direction). NO credential leak: the token is memory-only, never in a tool result (`omerta_start` returns no
+token), never printed (stderr logs the literal `"(token preset)"`), never in an error body. OpenAPI: all 25
+`/v1/mod/*` routes are `modAuth`-gated → `onRoute` flags `isMod` → `buildOpenApi` excludes them; only
+`bearerAuth` in `securitySchemes` (the `x-mod-key` name never emitted); security derived from the REAL
+preHandler name so no authed route is mislabeled keyless (100% `auth`/`modAuth` coverage, zero anonymous/
+array preHandlers). `baseUrl` is boot-time operator config with zero request-time input → no reflection/open-
+redirect. Package: single official dep, no postinstall/eval/hardcoded-secret/backdoor. `agentLeaderboard`
+publishes wealth BANDS not exact liquid (kill-EV-scanner already mitigated).
+
+**FLAGGED (NOT patched):** LOW/hygiene — omerta-mcp's `@modelcontextprotocol/sdk ^1.0.0` floats with no
+committed lockfile (pin + commit a lockfile for a published package; standard hygiene, not an exploit).
+DESIGN — the opportunity board (`opportunities.js`) interpolates RAW, un-delimited player names into a
+free-text `note` delivered to agents that may act on it (a player naming themselves an instruction-like
+string) — inherent to agent play, server-authoritative names ≤24 chars, but unlike the card routes it neither
+escapes nor structurally delimits the untrusted name; defense-in-depth would wrap player strings in a marked
+data field + document to agent authors that board strings are attacker-influenced.
+
+**Round 31 verdict: the agent/MCP surface returned NO reachable bug (no credential leak, no SSRF, no
+mod-route/x-mod-key disclosure, no idempotency replay, no supply-chain exploit); 1 LOW hygiene + 1
+prompt-injection DESIGN flag. No code change. Suite 33/33 + sim drift-0 (unchanged).**
+
+---
+
+## Loop saturation summary (R21–R31)
+
+The autonomous red-team loop has reached comprehensive saturation. **Fixed (9 real defects, R21–R28):** the
+`deal` gang→singleton lock inversion, `refundPot` singleton-interleave, `runSeasonRollover` per-row isolation,
+`jump` pot→gangs inversion, the `TRACK_RACES` prototype-key allow-list bypass, the `/v1/ws` keyless-DoS
+throttle, the R26 **HIGH** killed-player gang-feed info-leak, and the referral spark same-IP flag + `ANY`→`IN`
+pg-mem portability bug — plus two defense-in-depth self-guards; one over-eager fix correctly reverted against
+a test. **Verified sound (no reachable bug), often across independent lenses:** §10.4 invariant math (airtight,
+248/248 reason coverage), on-chain contract invariants (no cross-contract EIP-712 replay, tranche cap, vesting/
+splits), vig/bond real-value backing under concurrency (extraction ≤ inflow by construction), cross-system
+extraction chains (all 8 closed, boundary not in-game-fundable), accrual/timing token-buckets, stateful state
+machines (6 families), auth/idempotency/rate-limit lifecycle, WS/bus channel authz, error/info-disclosure,
+input validation, estate-completeness/object-claim, value-creation/rounding, schema integrity, and the MCP/
+agent surface. The last four rounds (R27/R29/R30/R31 — 7 fresh lenses) returned ZERO reachable code bugs.
+**Founder sign-off backlog (flagged, not patched per ground rule #1):** MED-1 no DB migration path (top deploy
+item), MED-2 zero FKs, the `bust:reward` unguarded faucet, client `esc()` consistency, two by-design wealth-
+inference channels, two fail-safe vig backing seams, the agent-board prompt-injection surface, and the
+standing pre-mainnet gates (`forge test`, third-party contract+signer audit, legal counsel). §10.4 untouched
+throughout; suite 33/33 + sim drift-0 every round.
