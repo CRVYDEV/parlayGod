@@ -1401,6 +1401,17 @@ All `RACES` numbers are founder sign-off levers (the exhibition-purse precedent)
   tournament's chance); alt-stuffing is −rake/N per head (−EV). **The ideal for a competitive mechanic — a
   sink, no signed faucet touched.** `GP.*` are sign-off levers. Suite 31/31 + sim drift-0.
 
+## CONVOY step three — NPC TRUCKING (2026-07-22; the ambush loop's PvE target)
+The worker keeps `CONVOY.NPC.TARGET` (2) unmarked NPC trucks on the road; players hijack them via the
+existing ambush. The hijacked GOODS (sold via the market) are the one new faucet. **Measured (P9.17):**
+throughput = `TARGET × 86.4M/CONVOY.MS` = 96 trucks/day, avg manifest ~$4.5k (11 units × ~$410 base) →
+**~$216k/day base-wide at 50% hijacked (realistic), ~$433k/day ceiling (100% hijacked).** At
+boxing/territory parity (~$300-400k/day base-wide), the World-raid precedent — a bounded, SHARED PvE faucet
+(any player can hijack, capped MAX_AMBUSHES=3/truck + the trunk cap; guards repel some). §10.4-invisible
+(goods aren't a §10.4 currency; the sale is the existing market faucet). **Sign-off:** `TARGET` /
+`NPC.MIN_QTY`-`MAX_QTY` are the dials if the base-wide magnitude wants trimming; the ceiling assumes 100%
+hijack (unrealistic — guarded trucks repel). KEEP-at-parity recommendation.
+
 ## THE PORT — maritime smuggling (2026-07-21; offshore contraband import by boat)
 
 The SEA counterpart to convoys. Boats are a buyable asset (like cars, `boats` table); runs source

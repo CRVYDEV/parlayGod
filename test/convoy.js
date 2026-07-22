@@ -7,8 +7,10 @@
 process.env.CONVOY_MS = '600000'; // 10-minute road for the test (TEST-ONLY knob, SEARCH_MS pattern)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
+import { spawnNpcConvoys, despawnArrivedNpc } from '../src/convoy.js';
 import { CONVOY, goodPriceOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import crypto from 'node:crypto';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -171,9 +173,38 @@ assert.equal(Number((await pool.query('SELECT pool FROM convoy_insurance WHERE i
 const checks2 = (await runLedgerInvariants(pool)).checks;
 assert(checks2.find((c) => c.name === 'convoy insurance pool').ok, 'the insurance-pool §10.4 check reconciles (premiums − payouts)');
 
+// ── STEP THREE — NPC TRUCKING: worker-run unmarked trucks players can hijack (the ambush loop's PvE target) ──
+// the worker keeps CONVOY.NPC.TARGET on the road
+let sp = await spawnNpcConvoys(pool);
+assert.equal(sp.spawned, CONVOY.NPC.TARGET, `the road is topped up to ${CONVOY.NPC.TARGET} NPC trucks`);
+assert.equal(Number((await pool.query("SELECT COUNT(*) n FROM convoys WHERE is_npc AND status='transit'")).rows[0].n), CONVOY.NPC.TARGET, 'NPC convoys are on the road');
+assert.equal((await spawnNpcConvoys(pool)).spawned, 0, 'already at TARGET — no over-spawn');
+// seed a KNOWN NPC convoy (guards none, a fat gin manifest) for a deterministic hijack
+const npcId = crypto.randomUUID();
+await pool.query(`INSERT INTO convoys (id, owner_character, is_npc, owner_gang, origin, destination, status, guards, departed_at, arrives_at) VALUES ('${npcId}',NULL,true,NULL,'docks','neon','transit',10, now(), now() + interval '10 minutes')`);
+await pool.query(`INSERT INTO convoy_cargo (convoy_id, good_id, qty) VALUES ('${npcId}','gin',12)`);
+// it shows on the public board as an unmarked truck (no owner), flagged npc
+const board = (await call('GET', '/v1/convoys', { token: harry.token })).body;
+const onBoard = board.inTransit.find((c) => c.id === npcId);
+assert(onBoard && onBoard.npc === true && onBoard.owner === 'an unmarked truck', 'the NPC truck is an ambushable target on the board');
+// a strong raider hijacks it — the goods land in his trunk, and the NULL owner never crashes the notify
+await seedCh(harry.id, "muscle=100, speed=40, energy=200, ammo=500, health=100, cash=100000, jail_until=NULL, hosp_until=NULL, safe_until=NULL, loc='docks'");
+const harryGinPre = (await meOf(harry.token)).cargo?.gin || 0;
+r = await call('POST', `/v1/convoy/${npcId}/ambush`, { token: harry.token });
+assert.equal(r.code, 200, 'the ambush runs on an NPC truck'); assert.equal(r.body.win, true, 'the strong raider takes the freight');
+assert((await meOf(harry.token)).cargo.gin > harryGinPre, "the NPC truck's gin landed in the raider's trunk");
+// an ARRIVED NPC convoy despawns (the driver delivered; the remaining freight leaves the world)
+const goneId = crypto.randomUUID();
+await pool.query(`INSERT INTO convoys (id, owner_character, is_npc, owner_gang, origin, destination, status, guards, departed_at, arrives_at) VALUES ('${goneId}',NULL,true,NULL,'docks','neon','transit',10, now() - interval '20 minutes', now() - interval '1 minute')`);
+await pool.query(`INSERT INTO convoy_cargo (convoy_id, good_id, qty) VALUES ('${goneId}','silk',8)`);
+const dsp = await despawnArrivedNpc(pool);
+assert(dsp.despawned >= 1, 'the arrived NPC truck despawned');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoys WHERE id='${goneId}'`)).rows[0].n), 0, 'the delivered NPC convoy is gone');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoy_cargo WHERE convoy_id='${goneId}'`)).rows[0].n), 0, 'its cargo is gone too (no faucet on a delivered truck)');
+
 // ── §10.4: the vocabulary knows the convoy reasons (cash + ammo) ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `convoy:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ Convoy test passed — bulk loading beyond the trunk, guard-fee sink ledgered, band-only road board, ambush gates (own/family/safehouse/once/spent), deterministic hijack (trunk-capped transfer, remainder rolls on, shipper notified), deterministic repel (hospital, freight untouched), arrival + at-destination collect + STEP TWO: destination toll (treasury credit, §10.4 exact), degrading multi-ambush (per-character once, 3-cap, wear in the audit), insured freight (premium → pool, pool-capped claim, §10.4 pool check), vocabulary');
+console.log('✅ Convoy test passed — bulk loading beyond the trunk, guard-fee sink ledgered, band-only road board, ambush gates (own/family/safehouse/once/spent), deterministic hijack (trunk-capped transfer, remainder rolls on, shipper notified), deterministic repel (hospital, freight untouched), arrival + at-destination collect + STEP TWO: destination toll (treasury credit, §10.4 exact), degrading multi-ambush (per-character once, 3-cap, wear in the audit), insured freight (premium → pool, pool-capped claim, §10.4 pool check), vocabulary; STEP THREE: NPC TRUCKING (the worker tops the road to TARGET unmarked trucks, no over-spawn, an NPC truck on the public board, a deterministic hijack landing goods in the raider trunk with no owner to notify, and an arrived NPC convoy despawning with its cargo — no faucet on a delivered truck)');
 await app.close();

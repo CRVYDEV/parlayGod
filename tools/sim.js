@@ -18,7 +18,8 @@ import { runLedgerInvariants } from '../src/invariants.js';
 import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
-         PORT, boatOf, portRouteOf, interdictChance } from '../src/rules.js';
+         PORT, boatOf, portRouteOf, interdictChance,
+         CONVOY, DISTRICTS, goodPriceOf } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -593,6 +594,25 @@ phase('P9.16 grand prix — house edge + net sink (a redistribution, not a fauce
     const burned = Math.round(houseTake / 2);             // half burns (a §10.4 cash sink), half → street tax
     note('races', `Grand Prix — ${field}-driver pool $${fmt(pool)}`, `house edge ${(rake*100).toFixed(1)}% · burns $${fmt(burned)}`,
       `winners split $${fmt(pool - houseTake)} (${RACES.GP.PAYOUTS.map((p)=>Math.round(p*100)+'%').join('/')}); the field funds the winners — ZERO new emission, net cash SINK $${fmt(burned)}/race (the burned half-rake). Skill+gear decides, alt-stuffing is −rake/N per head (−EV)`);
+  }
+}
+
+// ════════ P9.17 NPC TRUCKING — the convoy-hijack faucet (bounded goods injection) ════════
+// The worker keeps CONVOY.NPC.TARGET trucks on the road, each living CONVOY.MS then despawning + respawning.
+// A hijacked truck injects its manifest's GOODS into the raider's trunk → sold via the market (the one new
+// faucet). Base-wide daily max = throughput × avg manifest × hijack-fraction. Analytic — no value seeded.
+// The World-raid precedent: a bounded PvE faucet, sign-off vs boxing/territory (~$300-400k/day base-wide).
+phase('P9.17 NPC trucking — the hijack goods faucet (bounded, base-wide)');
+{ const perDay = CONVOY.NPC.TARGET * (86400000 / CONVOY.MS);           // trucks that pass through the road per day
+  const avgQty = (CONVOY.NPC.MIN_QTY + CONVOY.NPC.MAX_QTY) / 2;
+  // avg unit base value across the NPC loot table + the districts (goodPriceOf is the deterministic §7.11 hash)
+  let sum = 0, n = 0;
+  for (const g of CONVOY.NPC.GOODS) for (const d of DISTRICTS) { sum += goodPriceOf(g, d.id); n++; }
+  const avgUnit = sum / n, avgManifest = avgQty * avgUnit;
+  const injectedPerDay = perDay * avgManifest;                          // if EVERY truck were fully hijacked
+  for (const [label, hit] of [['~50% hijacked (realistic)', 0.5], ['100% hijacked (ceiling)', 1.0]]) {
+    note('convoy', `NPC trucking faucet — ${label}`, `~$${fmt(Math.round(injectedPerDay * hit))}/day base-wide`,
+      `${CONVOY.NPC.TARGET} trucks on the road × ${(86400000/CONVOY.MS).toFixed(0)} turnovers/day = ${perDay.toFixed(0)} trucks · avg manifest ~$${fmt(Math.round(avgManifest))} (${avgQty} units × ~$${Math.round(avgUnit)}) · hijack ${(hit*100).toFixed(0)}% — a goods faucet realized at market sale, bounded by TARGET/lifetime/trunk cap; sign-off vs boxing/territory`);
   }
 }
 

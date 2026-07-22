@@ -1018,7 +1018,8 @@ CREATE INDEX IF NOT EXISTS ix_heist_members_char ON crew_heist_members (characte
 -- currency); the only money flow is the convoy:guards cash sink. Design: omerta-convoys-design.md.
 CREATE TABLE IF NOT EXISTS convoys (
   id TEXT PRIMARY KEY,
-  owner_character TEXT NOT NULL,
+  owner_character TEXT,                       -- NULL for an NPC convoy (step three — worker-run trucking players can hijack)
+  is_npc BOOLEAN NOT NULL DEFAULT false,      -- step three: a worker-spawned NPC convoy (no owner; despawns on arrival)
   owner_gang TEXT,                            -- snapshot at depart (turf defense bonus)
   origin TEXT NOT NULL,
   destination TEXT NOT NULL,

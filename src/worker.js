@@ -21,6 +21,7 @@ import { sweepStaleRaids } from './world.js';
 import { sweepWire, sweepWireAlerts } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
+import { spawnNpcConvoys, despawnArrivedNpc } from './convoy.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
@@ -204,6 +205,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (wrd?.swept > 0) console.log(`🗡  world: swept ${wrd.swept} stale co-op raid plan(s)`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
+    // CONVOY step three: NPC TRUCKING — despawn arrived NPC trucks, then top the road back up to TARGET
+    const npcGone = await safe('npc convoy despawn', () => despawnArrivedNpc(pool));
+    const npcNew = await safe('npc convoy spawn', () => spawnNpcConvoys(pool));
+    if ((npcGone?.despawned > 0) || (npcNew?.spawned > 0)) console.log(`🚚 convoy: NPC trucks −${npcGone?.despawned || 0} +${npcNew?.spawned || 0}`);
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
     const auc = await safe('auction sweep', () => sweepAuctions(pool));
     if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
