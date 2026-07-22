@@ -308,7 +308,13 @@ export async function reserveStatus(pool) {
 // the watcher can't reach it, but the mod /reserve/claimed route could, and marking it would shrink
 // `available` by re-committing a refunded amount.) Unit-testable core.
 export async function markClaimed(pool, nonce) {
-  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain AND status<>'expired' AND status<>'cancelled' RETURNING id", [nonce]);
+  // (red-team R19 F2) POSITIVE guard: only a SIGNED voucher can be claimed. A real Claimed event names a
+  // signed voucher (an on-chain claim() needs a valid signature), and the reclaim path calls this only on
+  // a status='signed' row — so 'signed' covers every legitimate caller. The old exclusion-guard
+  // (status<>'expired' AND <>'cancelled') let the mod /reserve/claimed route flip a QUEUED (never-signed)
+  // voucher to claimed on an operator typo → its burned $OMR permanently stranded (drainQueue/cancel both
+  // require status='queued'). 'signed' also gives idempotency (a re-claim finds status='claimed'≠'signed').
+  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND status='signed' RETURNING id", [nonce]);
   // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY refunded (expired or
   // cancelled) is the exact double-resolution the reserve model forbids (the player would hold the tokens
   // AND the refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever

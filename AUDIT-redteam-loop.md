@@ -1120,3 +1120,81 @@ regression on the one behavioural gate. **No CRITICAL/HIGH. No §10.4 drift.** S
 2 INFO hardening (estate cb/ammo escrow lock, missions_done wipe) fixed; client-side security + the
 runEstate death-path confirmed CLEAN of live vulnerabilities. Client XSS-at-sink hardening + JWT-storage
 flagged for a founder architectural call. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 19 — rate-limit correctness/bypass · chain reserve/queue accounting · worker sweep-sequence
+Three last-distinct technical lenses (the chain withdrawal queue is the highest-value real-money target).
+Every finding re-verified vs source; regressions on the two behavioural fixes. **No CRITICAL/HIGH. No §10.4
+drift.** Suite 33/33 + sim drift-0.
+
+- **HEAD-method throttle bypass (rate-limit MED-HIGH — FIXED).** Fastify 5 auto-generates a HEAD route per
+  GET (`exposeHeadRoutes` default on) that runs the SAME handler + `auth` preHandler, but every throttle
+  branch gated on `req.method === 'GET'` — so `HEAD /v1/me` ran `withCharacter` (FOR UPDATE + a held pool
+  connection) UNTHROTTLED, reopening BOTH the R10 pool-pinning defense and the R1 agent-1/3s-cadence defense.
+  Fixed: the agent-GET throttle + the read limiter + the public per-IP limiter now treat HEAD as a read
+  (`GET || HEAD`) — behavior-preserving (HEAD still works for infra/health-checks, just throttled like GET).
+  `src/server.js`.
+- **Keyless heavy GET routes unthrottled (rate-limit MED — FIXED).** `/v1/art` (SVG-render per hit) and
+  `/v1/landmarks` (full-table scan) are keyless (no `auth`), so an unauthenticated caller sent no token →
+  the `/v1` read limiter early-returned → they were throttled by NOTHING (the public per-IP allowlist was
+  only `/card`,`/u`,`/v1/u`). Added both to the public allowlist → the unauthenticated origin-DoS is bounded.
+  `src/server.js`.
+- **`markClaimed` queued-voucher strand (chain LOW — FIXED).** `markClaimed` guarded by EXCLUSION
+  (`status<>'expired' AND <>'cancelled'`) but not `status='queued'` — so the mod `/reserve/claimed` route
+  could, on an operator nonce typo, flip a QUEUED (never-signed) voucher to `'claimed'`, PERMANENTLY
+  stranding its burned $OMR (drainQueue + cancel both require `status='queued'`; never signed → unclaimable
+  on-chain) + falsely counting it in `committedOutstanding`. A real `Claimed` event only ever names a
+  SIGNED voucher, so restricted the guard to the positive `status='signed'` (watcher-neutral, idempotent —
+  a re-claim finds `status='claimed'≠'signed'`, and the double-resolution detector still fires on
+  expired/cancelled). Regression: `markClaimed` no-ops on a queued voucher, which stays drainable.
+  `src/chain.js` + `test/chain.js`.
+- **Watcher poison-isolation symmetry (worker LOW — HARDENED).** `syncClaimedEvents`/`syncTradeFees` lacked
+  the R14 per-log `isolate()` wrapper `syncFeeEvents` got — a deterministic-poison log would freeze the
+  cursor instead of skipping. Little live surface (`markClaimed` takes a nonce; the cursor advances only
+  after the window's loop), but closed the asymmetry. `src/watcher.js`.
+
+**Lenses that came back CLEAN (confirmed):**
+- **Chain reserve/withdrawal-queue accounting** — no live over-sign / peg-break / double-spend / reserve
+  double-free through any automated path. `requestWithdraw`'s full-reserve gate has NO TOCTOU (the
+  `chain_reserve FOR UPDATE` mutex serializes the read-decide-write; `committedOutstanding` = signed OR
+  claimed is the right gate quantity, committed-ever ≤ funded); nonce allocation is atomic + collision-free;
+  `drainQueue` can't double/over-sign (whole-loop reserve lock, per-voucher re-check, fresh deadline);
+  `markClaimed` doesn't free room + is idempotent; `reclaimExpiredVouchers` is fail-closed (no reader → never
+  refund; `usedNonce` on-chain consult under lock; deadline-past property closes the reclaim-vs-claim race);
+  `cancelQueuedWithdraw` can't refund a just-signed voucher; lock order acyclic; §10.4 net-0 through every
+  transition. Two residuals flagged below.
+- **Worker sweep-sequence** — every value-moving sweep follows characters-sorted→object→singleton, re-checks
+  a status/`_at` flag under the lock, per-item idempotent txn; within-tick ordering correct (buyback zeroes
+  the pool before later credits accrue for the next cycle; season prize snapshotted before the reset, granted
+  under the winner's char lock; despawn-before-spawn; materialize-vs-resolve disjoint by day); worker-vs-player
+  races closed (`huntWanted` re-checks `alive`+`isWanted` under lock → no double-estate; `sweepLaw` re-checks
+  `indicted_at`; every escrow sweep locks chars-before-pot). Partial-tick failure resumes at k+1 via status
+  filters. The re-entrancy guard + two-horizon prune (R14/R15) intact.
+- **Rate-limit core** — every mutating route is guarded (284 `/v1` POST/DELETE through the human/agent bucket,
+  auth per-IP, mod key-only); the agent throttle is DB-driven (defeats a pre-flag token); the swap bucket is
+  taken after the main (strictly stricter, no cheaper fall-through); 429 releases no idempotency key + a
+  replay consumes a token; token-bucket math is sound (burst-capped, backward-clock fail-closed, eviction-
+  refill reasoning holds); Redis `INCR` is atomic (no double-grant race).
+
+**FLAGGED for founder sign-off (NOT patched — deploy-posture/ops/accepted, ground rule #1):**
+- **`trustProxy` dichotomy (rate-limit MED, deploy):** OFF (default) behind a proxy collapses all signups to
+  one global `auth:` bucket (a spammer locks out all new accounts); ON without an XFF-scrubbing edge lets a
+  spoofed `X-Forwarded-For` mint unlimited buckets (Sybil). A deploy-doc hard requirement (edge overwrites
+  XFF, origin unreachable except through it) + optionally a per-IP-AND-per-invite mint bound.
+- **`funded_omr ≤ on-chain contract balance` (chain MED, ops):** enforced only by the Vig path; the legacy
+  `POST /v1/mod/reserve/fund` can bump `funded_omr` with no matching on-chain transfer → signed-but-
+  unclaimable vouchers. Caught POST-HOC by the nightly `runVigInvariants` "reserve fully backed" alarm — a
+  documented ops-discipline posture, not a live code defect (mod-gated).
+- **Redis fixed-window boundary doubling (rate-limit LOW):** ~2× burst at a window edge (swap 12/min vs 6);
+  a token-bucket Lua script would remove it (Redis-mode only, can't test here). The non-atomic INCR+PEXPIRE
+  strands a TTL-less key on crash (fails CLOSED — availability nit).
+- **Worker single-instance (LOW, deploy):** `spawnNpcConvoys` reads the NPC count unlocked → a horizontally-
+  scaled worker double-spawns (the accepted world-raid-precedent single-worker posture); the loans→huntWanted
+  same-tick coupling (a fresh welsher hunted the tick they default — WANTED carries no grace contract);
+  post-commit `fundReserve` under-funding (caught by nightly vig invariants).
+
+**Round 19 verdict: 2 rate-limit fixes (HEAD-throttle bypass MED-HIGH, keyless-GET DoS MED) + 1 chain fix
+(markClaimed queued-strand LOW) + 1 watcher hardening; chain reserve/queue accounting, worker sweep-sequence,
+and rate-limit core confirmed CLEAN of live exploits; trustProxy/reserve-backing/Redis/single-worker flagged
+for deploy-posture sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**
