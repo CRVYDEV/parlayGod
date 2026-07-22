@@ -1544,6 +1544,9 @@ CREATE INDEX IF NOT EXISTS ix_listings_created ON listings (created_at);
 CREATE INDEX IF NOT EXISTS ix_tx_currency_reason ON transactions (currency, reason);
 CREATE INDEX IF NOT EXISTS ix_tx_character ON transactions (character_id);
 CREATE INDEX IF NOT EXISTS ix_rng_action ON rng_audit (action);
+-- (red-team R16) funnelStats filters telemetry by event ('broadcast_share'/'first_week_step'); without
+-- this the admin dashboard's 15s poll seq-scanned the whole (fastest-growing) telemetry table twice.
+CREATE INDEX IF NOT EXISTS ix_telemetry_event ON telemetry (event);
 CREATE INDEX IF NOT EXISTS ix_notif_char_undelivered ON notifications (character_id) WHERE NOT delivered;
 -- one wallet address binds to at most one account (§4)
 CREATE UNIQUE INDEX IF NOT EXISTS ux_wallet_address ON account_persistent (wallet_address) WHERE wallet_address IS NOT NULL;

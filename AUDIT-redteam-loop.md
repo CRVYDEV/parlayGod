@@ -913,3 +913,71 @@ regardless); the speakeasy back-room table variance faucet (§10.4-clean).
 **Round 15 verdict: 1 MED (boxing estate-cancel escrow race) + 1 LOW (idempotency committed-but-unstored
 double-execute) fixed + 1 finite-guard hardening; wallet/auth, numeric, and idempotency-core lenses
 confirmed CLEAN. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 16 — Solidity contracts · DoS/resource-exhaustion · state-machine/escrow abuse · input-validation/injection
+Four fresh lenses. Every finding re-verified vs source; a regression per behavioural fix. **No
+CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **Prototype-key crash-500 ×2 (input-validation LOW — FIXED).** Two catalog resolvers used direct
+  object-indexing, so a `'__proto__'`/`'constructor'`/`'hasOwnProperty'` value returned `Object.prototype`
+  (truthy) and slipped the enum gate: **(1)** `stableKindOf` (`POST /v1/stable/buy {kind:'__proto__'}`) →
+  bypasses the `!k` gate → NaN cost/stats → the `INT NOT NULL` racer INSERT rejects NaN → 500 + rollback
+  (DoS, no corruption — the cash mutation is undone); **(2)** `ART_CATALOGS[req.params.kind]` on the
+  KEYLESS PUBLIC `GET /v1/art/:kind/:id` → `Object.prototype` passes the `list &&` guard → `.find` is
+  undefined → uncaught TypeError 500. Both fixed with the codebase's own `Object.prototype.hasOwnProperty.call`
+  pattern (the `decorStyleOf`/`landmarkOf` precedent — `stableKindOf` was the only rules.js resolver still
+  object-indexing). Regression: prototype-key `kind` values return a clean `'kind'` error, not a 500.
+  `src/rules.js` + `src/server.js` + `test/stable.js`.
+- **Telemetry seq-scan (DoS MED — FIXED).** `funnelStats` filters `telemetry` by `event`
+  (`broadcast_share`/`first_week_step`) with no index, so the admin dashboard's 15s poll seq-scanned the
+  whole (fastest-growing) telemetry table twice each cycle. Added `ix_telemetry_event`. `schema.sql`.
+
+**Lenses that came back CLEAN (confirmed):**
+- **Solidity contracts** (all six) — no CRITICAL/HIGH/MED. The five load-bearing invariants hold on manual
+  review: no-mint / pre-funded-transfer-only with the tranche cap enforced BEFORE commit
+  (`committedOMR+payout ≤ balanceOf`), EIP-712 domain + `VOUCHER_TYPEHASH` field/type order EXACT parity
+  with `src/chain.js` on the live voucher path (+ chainId/verifyingContract binding → no cross-chain/instance
+  replay, high-`s` rejected, MAX_TTL backstops on both contracts), CEI + `nonReentrant` on every
+  value-moving external (the ERC-1155 mint callback inert — receiver isn't the minter), Safe-owned-from-deploy
+  with no owner-mint + a fail-closed gear cap surviving a minter swap, and vesting/rounding that floors
+  down (can't exceed/bypass the cap). Residuals all LOW/accepted-by-design Safe-trust (VoucherClaim.sweep
+  lacks OmertaBond's committed-backing guard; reverting-recipient recoverable DoS; APY retroactivity;
+  daily-cap contention) + deploy-checklist notes (gearId↔MARKET positional binding must stay append-only;
+  no OmertaBond deploy script). `forge test` remains the standing pre-mainnet gate (Foundry egress-blocked).
+- **State-machine / escrow-lifecycle / cooldown** — no CRITICAL/HIGH/MED. The boxing bet-escrow fix's
+  siblings are ALL guarded: every terminal transition (casino futurity/tournament/GP/stakes, bounty,
+  market, loans, auction, convoy-insurance, heist/pen-break) re-checks its status column UNDER the row
+  `FOR UPDATE` lock, not just at read; cooldowns are set win-or-lose on the contested row (not the actor,
+  no re-entry reset); the estate wipe-list split (den house-book games wiped, peer-money escrows KEPT for
+  the resolver) is correct. One LOW self-healing TOCTOU noted (`postBounty` on a dying target — a live pot
+  on a dead mark, refunded in full by the TTL sweep; never a §10.4 drift).
+- **DoS core surfaces bounded** — the opportunity board + every discrete board are SQL-`LIMIT`ed (contracts
+  100 / market 100 / convoys 30 / loans 50) so attacker-posted rows can't inflate them; the WS per-account
+  cap (8, TOCTOU-closed) + heartbeat + bus cleanup; the ratelimit-bucket TTL sweep; the cardpng cache
+  (256/5min, worker-thread raster — no event-loop block); `runEstate`/`loadOwned` bounded by per-account
+  caps; no ReDoS (linear regexes + length clips + 1MB bodyLimit).
+
+**FLAGGED for founder sign-off (NOT patched — operational/architectural/accepted, ground rule #1):**
+- **DoS #1 (HIGH-rated availability, architectural):** `withCharacter`-on-GET takes a write `FOR UPDATE`
+  on the caller's own row + ~24 queries, so ~20 concurrent `GET /v1/me` from ONE account block on that row
+  while each holds a pool connection (`PG_POOL_MAX` 20) → transient server-wide pool starvation; the read
+  burst (60) exceeds the pool. Recommended (a founder call — touches the hottest path): size the read
+  burst ≤ pool, a per-account in-flight cap (the `wsReserving` pattern), or a read-only no-lock GET fast
+  path. Not patched autonomously — a wrong change here breaks every authed request.
+- **DoS #3/#4/#5:** the admin dashboard's 15s poll of the full §10.4 sweep over `transactions`/`rng_audit`
+  (mod-gated, scales with table growth — cache/lengthen the interval); five leaderboards
+  (portfolio/family-portfolio/nightlife/stable/boxing) that load all rows + slice in JS (the aggregating
+  ones can't take a naive SQL LIMIT); missing indexes on the `account_persistent` leaderboard columns
+  (LOW — already SQL-`LIMIT`ed, small table); and a per-account/day dedup on `POST /v1/broadcast/shared`.
+- **Contract Safe-trust items** (VoucherClaim.sweep guard, recipient-DoS, APY retroactivity) — a Solidity
+  change gated on `forge test`, which can't run here; all accepted-by-design (Safe = root of trust).
+- **Name-uniqueness case mismatch** — DOCUMENTED/accepted (schema.sql:1536: uniqueness is case-sensitive,
+  resolution uses `lower(name)` + `ix_char_lower_name`), so "Vito"/"vito" can coexist + resolve ambiguously.
+  A deliberate design choice, not reversed.
+
+**Round 16 verdict: 2 LOW prototype-key crash-500s + 1 MED telemetry seq-scan fixed; Solidity,
+state-machine/escrow, and DoS-core lenses confirmed CLEAN; the pool-starvation availability item + the
+dashboard/leaderboard scaling items flagged for a founder architectural call. §10.4 untouched. Suite
+33/33 + sim drift-0.**
