@@ -584,3 +584,64 @@ re-verified conservation-tight (no §10.4 breach, no over-extraction, no mint).
 **Round 10 verdict: 1 MED (unthrottled-GET pool-exhaustion) + 3 LOW correctness/defense-in-depth fixes.
 The worker, chain-reserve, request-lifecycle, and AMM/buyback cores re-verified sound (no §10.4 breach,
 no over-extraction, no mint). Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 11 — two-party PvP locks · input validation/type-confusion · kitchen+§7.1 accrual · state-machine interlocks
+
+Four gameplay-correctness lenses. One MED PvP gate-asymmetry + one LOW shield race fixed; the money/
+lock/accrual cores re-verified sound.
+
+### Fixed (regression added for the MED)
+- **State-machine FINDING 1 (MED) — witness protection was a one-sided kill window.** `witproActive` was
+  enforced ONLY on the victim (untargetable) and NEVER on the actor — unlike safehouse, which is "a
+  shield, not a bunker" (blocks your own offense). So a flipped rat (`flip`→`enterWitpro`) got a
+  one-time window to `fire`/`jump`/`npcHit` rivals with total immunity — every retaliation bounced off
+  their witpro victim-shield. Fix: mirror the safehouse actor-block exactly — `if (witproActive(ch))
+  throw` in `fire`/`jump`/`npcHit` (the assassination trio; a search that can't fire is inert, and a
+  posted bounty is fulfilled by a reachable third party, so those aren't immunity holes). Regression in
+  `test/social.js` (witpro'd actor can't jump/fire/npchit; the gate lapses cleanly).
+- **Two-party PvP Finding 1 (LOW) — bodyguard shared-guard concurrent double-absorb.** `bodyguardAbsorbs`
+  read the guard (a THIRD character neither party locks) UNLOCKED then wrote it, so a guard shared across
+  principals could absorb N simultaneous cross-victim hits for a SINGLE hospitalization (both concurrent
+  hits saw them un-hospitalized before either committed). §10.4-none (health/hosp aren't currency). Fix:
+  claim the guard ATOMICALLY — a conditional `UPDATE … WHERE hosp_until<=now() … RETURNING` lets exactly
+  ONE concurrent absorb win (the second blocks on the row, re-reads hosp_until in the future → no match).
+  No NEW lock/cycle (the final write already locked the guard row); clobber-safe (no in-memory guard copy).
+- **Two-party PvP Note A (INFO) — `callOutChamp` locks `boxing_title` before a fighter (inverse order).**
+  Safe today only because the fighter is always the caller's own char-locked contender; added a
+  ⚠️ comment so a future edit that touches a non-char-held fighter from a title-first path doesn't
+  silently reintroduce an AB-BA vs `fightBout`/`resolveMainEvent`.
+
+### Verified CLEAN / flagged (not patched)
+- **Input validation / type-confusion (ae3a) — CLEAN, no CRIT/HIGH/MED.** Every amount/qty/stake/bid/
+  price routes through one of two safe idioms (`Math.floor(Number(x)||0)`+MIN-reject+finite-cover, or
+  explicit `Number.isFinite`+bound) — no negative-sink-flip, Infinity-cap-bypass, NaN-ledger, or
+  float-accretion in any money route; enum/kind/tier/role fields allowlisted; free-text through
+  `cleanText`/`String().slice`; no `...req.body` spread / `Object.assign` / prototype-pollution vector.
+  Residuals all non-exploitable (mod-gated un-floored floats behind the mod key, unreachable dead-code
+  bracket lookups, backstopped `*Of` default-fallthroughs).
+- **Two-party PvP locks (afe8) — well-hardened.** Canonical characters→accounts→gangs→leaves→singletons
+  order holds across every recently-built PvP (boxing/races/stable/speakeasy/convoy/port/world/territory/
+  casino/business/market/heist/pen/loan); TOCTOU re-verify-under-lock present; self-deal blocked; refundPot/
+  direct-SQL-third-party persist discipline holds. The two known retry-masked classes (market `bidListing`
+  reciprocal-outbid, leader-vs-pairwise-PvP) confirmed unchanged (no NEW cycle).
+- **Kitchen + §7.1 accrual (a734) — no hard §10.4 mint, no double-collect, no double-accrue.** One
+  accrue/txn, full-window marker advance, lab can't dodge the Bureau raid (it resolves in the universal
+  `accrue()` before every action), deal/collect faucet integrity, `crewCold` gates offline sales, every
+  reason vocabularied. One LOW FLAGGED (F1): crew offline-sales lacks the D2b daily token bucket that
+  racket/bank income have — §10.4-SAFE (converts finite paid-for stash to cash at an inferior fixed rate,
+  bounded by stash + cook throughput, never a mint), so a founder balance-lever (ground rule #1), not a
+  silent retune.
+- **State-machine (aa68) — victim-reachability matrix complete + heir-carry clean.** Necro-hits blocked
+  (`AND alive FOR UPDATE`), heir born with every timer NULL, death clears searches, hole-re-jail cap
+  holds, all shield/absorb orderings exclusive. Two items flagged not-patched: FINDING 2 (casino
+  back-room PvP gates `jailed` but not `safeHoused`, unlike the speakeasy's "seen in public" siblings — a
+  design-consistency call on whether the den is a "public venue", not a clear bug — changes what a
+  safehoused player may do) and FINDING 3 (shakedown/standover gate victim `hospitalized` only — the
+  coherent attack-the-asset model; a founder confirm on whether a jailed owner's club should be
+  standover-seizable).
+
+**Round 11 verdict: 1 MED (witpro actor gate) + 1 LOW (bodyguard double-absorb) fixed + 1 INFO comment.
+Input-validation, PvP-locks, kitchen/accrual, and the state matrix re-verified sound. Suite 33/33 + sim
+drift-0.**

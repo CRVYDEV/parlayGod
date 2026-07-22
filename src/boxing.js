@@ -95,6 +95,14 @@ export async function enforceBeltDefense(pool) {
 // main event) or DUCKS it (the worker forfeits the belt to the challenger past the deadline). No §10.4.
 export async function callOutChamp(ch, fighterId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No callouts from a cell.');
+  // (red-team R11 Note A) This locks boxing_title (a singleton) BEFORE a fighter row (line 107) — the
+  // INVERSE of the canonical boxing fighter→title order (fightBout/acceptCallout/resolveMainEvent). It's
+  // SAFE ONLY because the fighter locked here is always the caller's OWN contender (line 106 re-checks
+  // `top.character_id === ch.id`), whose char is already exclusively held by withCharacter — so any
+  // counter-path that would lock this fighter must first block on the held caller char (it locks the
+  // owner's char before the fighter). ⚠️ If a future edit makes this (or any title-first path) touch a
+  // fighter the actor does NOT already char-hold, it becomes a real AB-BA vs fightBout/resolveMainEvent —
+  // lock the fighter's owner char first, or the fighter before the title.
   const title = (await client.query('SELECT * FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
   if (!title || !title.holder_fighter) throw new GameError('no_champ', 'There is no champion to call out.');
   if (title.holder_char === ch.id) throw new GameError('self', "You hold the belt — you can't call yourself out.");

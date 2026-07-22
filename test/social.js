@@ -510,6 +510,23 @@ assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hire
   await pool.query(`DELETE FROM searches WHERE hunter='${don.id}'`); // clear don's lingering search (it never resolved)
 }
 
+// ═══ red-team R11: witness protection is a SHIELD, not a free-kill window ═══
+// (witpro made the holder UNTARGETABLE but was never enforced on the ACTOR — a flipped rat could
+// fire/jump/npchit rivals with total immunity. Mirror the safehouse actor-block: witpro'd = no offense.)
+{
+  const wp = await mk('Rat Ricky'); const mark = await mk('Marked Marv');
+  await seedCh(wp.id, "witpro_until = now() + interval '1 hour', energy=200, ammo=8000, cash=5000000, respect=200000, jail_until=NULL, hosp_until=NULL, safe_until=NULL, shoot_cd_until=NULL, loc='docks'");
+  await seedCh(mark.id, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, witpro_until=NULL, loc='docks', respect=200");
+  assert.equal((await call('POST', `/v1/streets/${mark.id}/jump`, { token: wp.token })).body.error, 'witpro', 'a witpro-protected actor cannot jump');
+  await call('POST', `/v1/streets/${mark.id}/search`, { token: wp.token }); // SEARCH_MS=0 → matured; the actor witpro gate still refuses the fire
+  assert.equal((await call('POST', `/v1/streets/${mark.id}/fire`, { token: wp.token, body: { rounds: 2200 } })).body.error, 'witpro', 'a witpro-protected actor cannot fire');
+  assert.equal((await call('POST', `/v1/streets/${mark.id}/npchit`, { token: wp.token, body: { tier: 'professional' } })).body.error, 'witpro', 'a witpro-protected actor cannot arrange an NPC hit');
+  // the gate is purely the state — once witpro lapses the same actor can act again
+  await seedCh(wp.id, 'witpro_until=NULL');
+  assert(((await call('POST', `/v1/streets/${mark.id}/jump`, { token: wp.token })).body.error || '') !== 'witpro', 'witpro lapses cleanly — the actor can act again');
+  await pool.query(`DELETE FROM searches WHERE hunter='${wp.id}'`);
+}
+
 // a fresh, killable mark: loop the server roll until the contractor lands a kill → the estate runs
 const kt = await mk('Killable Kelly'); await seedCh(kt.id, 'respect=100'); // level ~6 → professional ≈ 0.52
 let killed = false;
