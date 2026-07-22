@@ -1812,3 +1812,65 @@ ever wired into automated season rollover (the CLAUDE.md-deferred item).
 **Round 29 verdict: both lenses (error-disclosure + vig/bond concurrency) returned NO reachable bug; the
 error perimeter + the extraction-backing layer under concurrency verified sound. 2 by-design wealth-inference
 + 2 fail-safe backing seams flagged. No code change. Suite 33/33 + sim drift-0 (unchanged).**
+
+---
+
+## Round 30 — Stateful state-machine correctness + Schema integrity
+
+Two narrow pg-mem-invisible lenses (un-re-checked transitions + missing DB constraints — the surfaces
+tests structurally can't reach). **No CRITICAL/HIGH. No reachable bug — no code change this round.** One
+generalized operational MED flagged for the founder deploy process.
+
+**Stateful state machines (all 6 families) — VERIFIED SOUND.** Every multi-step persisted machine advances
+via `FOR UPDATE` + a status/owner re-check under the char/account/singleton lock, with state-singleton-
+before-row ordering on the escrow resolvers — no interleaving double-advances, re-enters a terminal state,
+mis-times the stake, or strands a live counterparty: **blackjack** (`blackjack_hands` PK → no two live hands;
+bet debited at DEAL so abandon forfeits nothing + can't re-deal; double gated `length!==2`; house-book
+atomic via the `den_volume` row lock); **poker/tournament** (one-shot under withTwoCharacters; enter/resolve
+lock `poker_state` before the row, status re-checked, closed-window rejected); **boxing belt/callout/main-
+event** (both fighter rows + the `boxing_title` singleton locked before the `booked` check → no double-book/
+double-belt/double-pay; resolve-vs-cancel-at-death both `status='booked'`-gated); **pen shank/break/hole**
+(`pen_break_members` UNIQUE + executeBreak re-verifies the crew + re-checks jailed/hole/hosp under lock; shiv
+consumed absolutely); **convoy/port** (row `FOR UPDATE` + status/`atSea` re-check → no depart/collect/ambush
+twice, window-disjoint); **loan/market/auction/GP/futurity/stakes** (row/state lock + status re-check → the
+settled row can't re-resolve; market `buyListing` kind-guard + outbid-refund-under-lock intact). Two NON-
+exploitable quirks (cosmetic, no value/state corruption): a boxing callout-block grief (a third manager
+booking the #1 contender's LISTED fighter to time out the champ's accept — gated by the contender's own
+consent-by-listing) and a belt-strip during a booked title window (practically unreachable: DEFENSE_MS 7d ≫
+the ~30min bout; the fight still decides the belt).
+
+**Schema integrity — no missing-UNIQUE, no active orphan.** Every money/identity "one X per Y" the code
+assumes IS PK/UNIQUE-backed (bounties/bounty_contributors/businesses/territory_rackets/speakeasies/landmarks/
+gang_members/searches/batches/blackjack_hands/idempotency/mission_omr/wiretaps/vouchers/nonce PKs/vig_revenue
+PK(source,ref)/portfolios/referrals/social_claims/…), or correctly app-lock-serialized where a partial-unique
+trips pg-mem (one-living-char-per-account via `account_persistent FOR UPDATE`; one-open-tournament via the
+`*_state` singleton lock). The runEstate wipe list was cross-referenced against every `character_id` table +
+gang dissolution + the account-level survivor set → **currently complete, no active orphan**. All currency
+columns carry `NOT NULL DEFAULT 0`; per-instance money columns are `NOT NULL` + always inserted with a value
+→ no NULL-into-arithmetic path.
+
+**FLAGGED for the founder deploy process (operational, NOT patched — a founder/migration-strategy decision
+with real test-breakage risk):** **MED-1 — no migration path.** schema.sql is 100% `CREATE TABLE IF NOT
+EXISTS` with ZERO `ALTER TABLE`, applied via one `pool.query(SCHEMA)` on boot. On an ALREADY-created Postgres
+DB, `CREATE TABLE IF NOT EXISTS` is a no-op, so every column added to a table's CREATE block AFTER that table
+first existed is silently ABSENT on an in-place upgrade → an alpha→v2 in-place migration would 500 every path
+touching a new column (track_bets.odds/bet_racer_id, commission_votes.standing, gang_members.joined_at,
+characters.wire_tier/contraband/berths/pen_faction/heat_exposure, + ~40 more added across the game's life).
+Fresh deploys + the pg-mem/CI path are UNAFFECTED (a fresh boot creates every column) — which is exactly why
+no test catches it. CLAUDE.md flagged this for ONE column (the `joined_at` "L3 deploy note"); the fix was
+never added and the problem generalized. NOT auto-patched because (a) `ALTER TABLE … ADD COLUMN IF NOT
+EXISTS` risks breaking the pg-mem/CI schema-apply (pg-mem's limited ALTER support → could break all 33
+suites), (b) the real-Postgres path is un-testable here (no Postgres), and (c) migration strategy is a
+founder decision. **Recommendation:** generate the migration from a real diff (`pg_dump` of prod vs the
+current schema.sql) into an idempotent `ADD COLUMN IF NOT EXISTS` block run ONLY against real Postgres
+(guarded by `DATABASE_URL`, outside the pg-mem path), or adopt a proper migration tool — before ANY in-place
+upgrade. **MED-2 (defense-in-depth):** zero FKs / zero `ON DELETE` — referential integrity is 100% the
+runEstate wipe loop (complete today, but a future forgotten `character_id` table orphans silently, invisible
+to Postgres AND pg-mem — the class that produced the historical port_intercepts/npc_hits/convoy_ambushes
+orphans); an `ON DELETE`-less FK per character-owned table would make it fail-closed. **LOW:** zero CHECK
+constraints (all bounds app-validated, consistent — informational).
+
+**Round 30 verdict: both lenses (state machines + schema integrity) returned NO reachable bug; all 6 state
+machines + every money "one per Y" constraint verified sound. 1 generalized operational MED (no migration
+path) flagged as a high-priority founder deploy item + MED-2 (no FKs) defense-in-depth. No code change.
+Suite 33/33 + sim drift-0 (unchanged).**
