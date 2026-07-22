@@ -683,35 +683,27 @@ export async function peekContracts(ch, client, h) {
 async function refundPot(client, target, kind, skipId = null) {
   // LEFT JOIN: a family-funded share (contributor = gang id, funder_gang) has no characters row —
   // an inner join would silently drop it from the refund and leak the escrow.
-  // ORDER BY contributor (AUDIT-full-system-v2 B-M1): the loop's UPDATEs row-lock each funder in read
-  // order, so a stable sort makes every refundPot acquire funder locks in the same order — no two
-  // reposts (or a repost vs the worker sweep) can AB-BA on an overlapping funder set.
+  // ORDER BY contributor (AUDIT-full-system-v2 B-M1): a stable sort makes every refundPot acquire
+  // funder locks in the same order — no two reposts (or a repost vs the worker sweep) can AB-BA on an
+  // overlapping funder set. R22 lock-order: but the raw contributor sort interleaved the 'HOUSE'
+  // street_tax credit (a SINGLETON) and the gang treasuries among the character funders by uid order,
+  // locking a singleton/gang BEFORE a character funder whose uid sorts after them — violating the
+  // global characters → gangs → singletons order and AB-BA'ing vs any takeHouse (holds a char, wants
+  // street_tax) or runBuyback (holds a gang, wants street_tax). So process funders in TIER order:
+  // characters first, then gangs, then the single deferred 'HOUSE' street_tax write LAST. Each tier
+  // still iterates contributor-sorted (the B-M1 cross-repost consistency is preserved within tier).
   const funders = (await client.query(
     'SELECT bc.contributor, bc.amount, bc.funder_gang, c.alive FROM bounty_contributors bc LEFT JOIN characters c ON c.id = bc.contributor WHERE bc.target_character=$1 AND bc.kind=$2 ORDER BY bc.contributor',
     [target, kind])).rows;
-  let refunded = 0, selfRefund = 0;
-  for (const f of funders) {
+  let refunded = 0, selfRefund = 0, houseAmt = 0;
+  const charFunders = funders.filter((f) => !f.funder_gang && f.contributor !== 'HOUSE');
+  const gangFunders = funders.filter((f) => f.funder_gang);
+  const houseFunders = funders.filter((f) => !f.funder_gang && f.contributor === 'HOUSE');
+  // TIER 1 — character funders (living refund / self-refund carried in memory / dead-man burn)
+  for (const f of charFunders) {
     const amt = Math.floor(Number(f.amount));
     if (amt <= 0) continue;
-    if (f.funder_gang) {
-      // a family's stake goes home to the treasury (a §10.4 bucket transfer, character_id NULL so
-      // character-cash reconciliation is untouched); a DISSOLVED family's stake burns like a dead
-      // funder's — there is no treasury left to take it home.
-      const g = (await client.query('SELECT id FROM gangs WHERE id=$1', [f.contributor])).rows[0];
-      if (g) {
-        await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [f.contributor, amt]);
-        await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
-      } else {
-        await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target });
-      }
-    } else if (f.contributor === 'HOUSE') {
-      // LOAN step 4: the underworld's WANTED_BOUNTY goes home to the confiscation POOL on expiry (a
-      // §10.4 bucket transfer, character_id NULL). A DISTINCT reason (`bounty:wanted:refund`) — a plain
-      // `bounty:refund` NULL row is indistinguishable from a family-contract refund and would drift the
-      // gang-treasuries check (b), which sums NULL bounty:refund as treasury inflow (audit HIGH).
-      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
-      await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:wanted:refund', counterparty: target });
-    } else if (f.contributor === skipId) {
+    if (f.contributor === skipId) {
       selfRefund += amt; // caller applies to the poster's in-memory cash
       await ledger(client, { characterId: f.contributor, currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
     } else if (f.alive) {
@@ -722,6 +714,35 @@ async function refundPot(client, target, kind, skipId = null) {
     }
     refunded += amt;
   }
+  // TIER 2 — gang funders: a family's stake goes home to the treasury (a §10.4 bucket transfer,
+  // character_id NULL so character-cash reconciliation is untouched); a DISSOLVED family's stake burns
+  // like a dead funder's — there is no treasury left to take it home.
+  for (const f of gangFunders) {
+    const amt = Math.floor(Number(f.amount));
+    if (amt <= 0) continue;
+    const g = (await client.query('SELECT id FROM gangs WHERE id=$1', [f.contributor])).rows[0];
+    if (g) {
+      await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [f.contributor, amt]);
+      await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:refund', counterparty: target });
+    } else {
+      await ledger(client, { currency: 'cash', amount: -amt, reason: 'death:bounty', counterparty: target });
+    }
+    refunded += amt;
+  }
+  // TIER 3 (singleton, LAST) — LOAN step 4: the underworld's WANTED_BOUNTY goes home to the
+  // confiscation POOL on expiry (a §10.4 bucket transfer, character_id NULL). A DISTINCT reason
+  // (`bounty:wanted:refund`) — a plain `bounty:refund` NULL row is indistinguishable from a
+  // family-contract refund and would drift the gang-treasuries check (b), which sums NULL
+  // bounty:refund as treasury inflow (audit HIGH). One deferred street_tax write keeps the singleton
+  // strictly the last lock acquired.
+  for (const f of houseFunders) {
+    const amt = Math.floor(Number(f.amount));
+    if (amt <= 0) continue;
+    houseAmt += amt;
+    refunded += amt;
+    await ledger(client, { currency: 'cash', amount: amt, reason: 'bounty:wanted:refund', counterparty: target });
+  }
+  if (houseAmt > 0) await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [houseAmt]);
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [target, kind]);
   await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [target, kind]);
   return { refunded, selfRefund };

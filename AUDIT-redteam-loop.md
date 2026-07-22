@@ -1372,3 +1372,74 @@ correction, the same class as the runBuyback fix it aligns with).
 
 **Round 21 verdict (foundational-drift lens): 1 confirmed lock-order inversion FIXED (deal gang→singleton);
 core persist/vocabulary/rounding verified SOUND. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 22 — Singleton lock-order sweep + Worker-sweep idempotency/partial-failure
+
+Two dedicated lenses over the deal-finding's neighbourhood: (1) EVERY path locking ≥2 of {char, account,
+gang, singleton/state}, and (2) every value-moving worker sweep's idempotency / partial-failure / double-
+resolution. **No CRITICAL/HIGH.** Two confirmed structural fixes.
+
+**CONFIRMED + FIXED — `refundPot` interleaves the `'HOUSE'` street_tax singleton (and gang treasuries)
+among the character funders (MED, retry-masked AB-BA, higher-frequency than the deal one).** `src/social.js`
+`refundPot` iterated funders `ORDER BY contributor` (a B-M1 stability sort) but the loop body writes across
+THREE tiers inside that one raw-string-sorted loop: gangs (line 702), the `street_tax` singleton (712, the
+`'HOUSE'` loan-WANTED pool-bounty contributor), and characters (718). Since `'HOUSE'` (0x48) sorts among the
+lowercase-hex uids, a funder whose uid begins `a-f` (~37.5%) is processed AFTER `'HOUSE'` — so `street_tax`
+is locked BEFORE that character/gang funder, violating the global `characters → gangs → singletons` order.
+Two real cycles: **(A)** `refundPot` holds `street_tax`(712) → wants char C(718) vs ANY player doing a
+`takeHouse` under their own char lock (casino bet / fence / laylow / pen / market / speakeasy — the most
+ubiquitous counterparty in the codebase); **(B)** holds `street_tax` → wants gang G(702) vs `runBuyback`
+(gangs → street_tax). Both fire on a `(wanted-defaulter,'kill')` pot (the only pot carrying `HOUSE`) being
+reposted/cancelled/swept while a funder is concurrently held. Retry-masked (40P01→`contention`), but a
+genuine violation of the codebase's own "singletons last" discipline — and B-M1's `ORDER BY contributor` is
+precisely what interleaves the singleton among the funders. **Fix:** partition the funder set and process
+in strict tier order — TIER 1 characters (living refund / self-refund-in-memory / dead-man burn), TIER 2
+gangs (treasury home / dissolved burn), TIER 3 the single DEFERRED `'HOUSE'` `street_tax` credit LAST (one
+accumulated write). Each tier still iterates contributor-sorted (B-M1 cross-repost consistency preserved
+within tier). §10.4-neutral (identical reasons/amounts/sums — only the UPDATE order changed). Covered by
+the existing bounty-refund + WANTED-refund tests (social + loans, both green); pg-mem can't exercise the
+`FOR UPDATE` blocking so the fix is a documented ordering correction.
+
+**CONFIRMED + FIXED — `runSeasonRollover` was the only value-moving sweep without per-row isolation (LOW,
+latent — season-wide stall blast radius).** `src/worker.js` ran the entire rollover — the SPCX season-prize
+`grantShares` + notification for the top-N, and for EVERY rolling character the respect/season reset +
+prestige bump + telemetry insert, plus the gang seasonal reset — in ONE monolithic `BEGIN`/`COMMIT`. Every
+sibling sweep isolates per row; this one didn't, so a single persistently-throwing per-character statement
+(a constraint/FK on notifications/telemetry/portfolios/account_persistent) would roll the WHOLE batch back
+every tick → NO character's level→prestige conversion ever lands and the season never advances for anyone
+until manual intervention (poison-row starvation, total blast radius). LOW only because no guaranteed
+persistent-throw trigger could be constructed (grantShares is defensively guarded, the bulk statements are
+simple), but the impact if triggered is a game-wide season stall. **Fix:** restructured to ONE txn per
+character (the established sibling pattern) — the prize/roll set is snapshotted in a short read (order-
+independent), each character converts in its own `pool.connect()`+txn with the `season < current` marker +
+`FOR UPDATE` re-check (idempotent + resumable; partial progress persists across a crash instead of the old
+all-or-nothing), a poison row is caught+rolled-back+skipped, and the gang reset runs in its own final txn.
+The F3/F4 char→portfolios lock order is preserved (the grant still runs under the winner's char lock).
+Covered by the existing rollover tests (commission + portfolio, both green).
+
+**Verified CLEAN (the substance of both lenses — cited inventory):**
+- **Lock-order sweep:** every OTHER multi-tier path holds gang→singleton or has no reverse counterparty —
+  `bumpFamilyTask` (gang→street_tax), the now-fixed `deal`, `claimFamilyDividend`/`familyInvest`/seal/
+  foundation (gang→reserve), `runBuyback` (the canonical gang→singleton), `jump`/`fire` war-score (sorted
+  `WHERE id IN`), territory (gang-only), world (gang→`world_npcs` singleton-last), convoy (convoy→gang→
+  insurance singleton-last), loans `squareWanted`/`collectLoan` (pot before street_tax, the prior fix). No
+  other inversion.
+- **Worker sweeps:** all escrow-backed resolvers (tournament/futurity/grand-prix/stakes/main-event/auction/
+  market/bounty-sweep/loans) verified idempotent (re-select the terminal row `FOR UPDATE` + re-check open
+  status inside the settling txn) with per-item isolation (per-row txn + try/catch/ROLLBACK) and materialize-
+  races serialized on the `*_state` singleton; claim-then-grant on fees/store/wire-alerts; fail-closed
+  voucher reclaim; cross-sweep double-resolution (estate-vs-bounty, loan-forfeit-vs-death, main-event-cancel-
+  vs-resolve) mutually exclusive via lock order + status guards. No double-pay, no escrow leak on crash, no
+  §10.4 drift.
+
+**FLAGGED (not patched — known/accepted):** `settlePassStipend`'s post-commit `fundReserve` (chain.js:101)
+is the documented, accepted `payPrizes` pattern — a crash in that window leaves the player paid + the reserve
+under-backed by `pay`, but the two-sided vig invariant (`reserve not under-funded`) is explicitly designed to
+ALERT on exactly this "crash-lost fundReserve" (in-game §10.4 stays exact — `prize:omr` is an enumerated
+mint). Not a new defect.
+
+**Round 22 verdict: 2 structural fixes (refundPot tier-ordering — the higher-frequency AB-BA; season-rollover
+per-row isolation — the total-stall robustness gap). Escrow/settle/idempotency layer confirmed SOUND. §10.4
+untouched. Suite 33/33 + sim drift-0.**
