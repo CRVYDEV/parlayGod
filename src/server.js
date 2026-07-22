@@ -256,9 +256,12 @@ export async function buildServer() {
     // (red-team R19 F2) also throttle the keyless HEAVY GETs — /v1/art renders an SVG per hit and
     // /v1/landmarks does a full-table scan; both are keyless (no auth preHandler), so an unauthenticated
     // caller sends no token → the /v1 read limiter below early-returns → they were throttled by NOTHING.
+    // (red-team R25 L1) /v1/ws is the same class — the WS upgrade carries its token in the subprotocol,
+    // NOT the Authorization header, so the /v1 read branch's jwtVerify throws → catch/return, unthrottled;
+    // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
-          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks'))) {
+          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
