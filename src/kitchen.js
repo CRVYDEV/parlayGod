@@ -137,10 +137,14 @@ export async function deal(ch, drugId, qty, client, h) {
   ch.heat = Math.min(100, Number(ch.heat || 0) + heatGain);
   s.qty = Number(s.qty) - n;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `deal:${drugId}` });
+  // Global lock order is characters → accounts → gangs → singletons: bumpFamilyTask (gang, then
+  // street_tax on weekly completion) MUST precede takeHouse (the street_tax singleton). The old
+  // order locked street_tax first, AB-BA deadlocking a deal-week against the 12h buyback (which
+  // was itself explicitly hardened to lock gangs before street_tax — worker.js runBuyback).
+  await bumpFamilyTask(client, h, 'deal', n);
   await takeHouse(client, tax);
   await h.track(client, ch.account_id, 'deal', { drug: drugId, units: n, heat: Math.round(heatGain * 10) / 10 });
   await h.bumpDaily(client, ch.id, 'deal');
-  await bumpFamilyTask(client, h, 'deal', n);
   return { ok: true, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
     cornerPremium: cornerPremium > 0,
     tradeRank: tradeRankIdx(Number(ch.trade_rep)) };
