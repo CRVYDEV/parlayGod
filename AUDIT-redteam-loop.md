@@ -1323,3 +1323,52 @@ work, no src bug; noted for the founder / a future coverage pass):**
 drift-detection proof); the broader per-escrow-check negatives + sim escrow cross-load flagged as the
 highest-value follow-up coverage. §10.4 untouched. Suite 33/33 + sim drift-0. (Foundational-drift lens
 pending — addendum next.)**
+
+---
+
+## Round 21 addendum — Foundational / oldest-modules DRIFT lens (economy · kitchen · game · social-M3 · accrual)
+
+A dedicated re-audit of the OLDEST core modules — hunting a persist-clobber, a §10.4 reason-vocabulary
+gap, or a value-minting rounding bug hiding in the foundational code the whole game rests on. The core
+is holding up: **no persist-clobber, no vocabulary gap, no minting rounding path.** One genuine (low-
+severity, retry-masked) lock-order inversion found and FIXED.
+
+**CONFIRMED + FIXED — `deal` inverts the documented gang→singleton lock order (LOW, retry-masked AB-BA).**
+`src/kitchen.js` `deal` locked the `street_tax` singleton via `takeHouse` (was line 140) BEFORE locking
+the gang via `bumpFamilyTask` (line 143) — i.e. *singleton-before-gang*, the lone violation of the global
+`characters → accounts → gangs → singletons` order that every other `bumpFamilyTask` caller (crime/jump/
+gta/tribute/melt-tithe) honors. The live counterparty is `worker.js:runBuyback`, which was EXPLICITLY
+hardened (its own comment) to lock `gangs → street_tax` precisely to avoid this AB-BA against a family
+finishing its weekly contract — but `deal` itself was never realigned. Real cycle:
+`runBuyback` holds gang G (worker.js:66) → wants `street_tax` (worker.js:68); `deal` holds `street_tax`
+(kitchen.js takeHouse) → wants gang G (bumpFamilyTask). Blast radius is narrow (bites only when the WEEKLY
+family task is `deal` AND the 12h buyback processes that member's gang concurrently) and correctness-safe
+(40P01 → `deadlockToRetry` → clean `contention` retry) — but it's a stale deviation from the invariant the
+neighbouring code documents, and any future gang-then-street_tax feature in a deal-week would upgrade it
+from a rare worker retry to a player-facing deadlock. **Fix:** reordered `deal` so `bumpFamilyTask` (gang,
+then `street_tax` on weekly completion) precedes `takeHouse` (the singleton) — restoring gang→singleton in
+both the completes-the-weekly and the doesn't-complete branches. Behavior-preserving (a pure reorder of
+independent side effects); covered by the existing `deal` tests in test/growth.js (pg-mem can't exercise
+`FOR UPDATE` blocking, so no concurrency regression is possible — the fix is a documented ordering
+correction, the same class as the runBuyback fix it aligns with).
+
+**Verified SOUND (the substance of the re-audit):**
+- **Persist layer — no clobber, no gap.** Full `characters` schema diffed against the `persistCharacter`
+  positional list + `account_persistent` writes vs `persistAccount`: every in-memory-mutated column is
+  persisted, every deliberately direct-SQL column (`pen_faction`, `wire_tier`, `disinfo_until`,
+  `active_at`, `race_at`, `port_used/at`, `contraband`, `berths`, …) is correctly OUT of the positional
+  list. Risky two-party/headless writes spot-checked clean (bodyguardAbsorbs third-party, respawn revive,
+  resolveBust, collectLoan welsher/wanted, relative-SQL credit grants under the account lock).
+- **§10.4 reason vocabulary — no gap.** Every distinct ledger `reason:` string across all 47 modules matched
+  against `KNOWN_REASONS` — including the split where bare `jump`/`fire` are ammo reasons while `jump:steal`/
+  `whack:*` are the cash rows. No orphan reason, no unemitted vocabulary entry that matters.
+- **AMM swap + kitchen math — no value extraction.** Buy `netIn`/`out` is a pool transfer (bucket-sum
+  unchanged to full precision); sell `net = floor(...)` with the `net≤0` dust guard + Infinity/NaN guards;
+  `deal` gross/net integer-exact, tax→untracked house pool; cook/collect crate math + weighted-avg stash
+  merge consistent.
+- **Accrual `_at` clocks + estate/loot/dissolution** all §10.4-exact (wall-clock releases above the <1s
+  early-return; estate burns exact cash+bank; loot carved before the death-burn; gang dissolution burns/
+  releases every bucket; war spoils net to zero across Σ treasury).
+
+**Round 21 verdict (foundational-drift lens): 1 confirmed lock-order inversion FIXED (deal gang→singleton);
+core persist/vocabulary/rounding verified SOUND. Suite 33/33 + sim drift-0.**
