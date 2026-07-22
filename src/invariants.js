@@ -250,6 +250,18 @@ export async function runLedgerInvariants(pool) {
   const trDeath = -(await sum(pool, "currency='cash' AND reason='casino:tourney:death'"));
   push('poker tourney escrow', trEscrow, trPosted - trWins - trRefunds - trTake - trDeath);
 
+  // (f7) THE GRAND PRIX escrow (the poker-tourney twin, street-races step three): the pool held on OPEN
+  // grand prix == buy-ins posted − prizes won − refunds (a short grid) − the house take (NULL
+  // 'race:gp:take': half street tax + half burn) − dead-entrant burns (NULL 'race:gp:death'). All ride
+  // the 'race:' cash vocabulary; a pure competitive REDISTRIBUTION (no new faucet — unlike the PvE purse).
+  const gpEscrow = await one(pool, "SELECT COALESCE(SUM(pool),0) s FROM grand_prix WHERE status='open'");
+  const gpPosted = -(await sum(pool, "currency='cash' AND reason='race:gp:buyin'"));
+  const gpWins = await sum(pool, "currency='cash' AND reason='race:gp:win'");
+  const gpRefunds = await sum(pool, "currency='cash' AND reason='race:gp:refund'");
+  const gpTake = -(await sum(pool, "currency='cash' AND reason='race:gp:take'"));
+  const gpDeath = -(await sum(pool, "currency='cash' AND reason='race:gp:death'"));
+  push('grand prix escrow', gpEscrow, gpPosted - gpWins - gpRefunds - gpTake - gpDeath);
+
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
   for (const [cur, prefixes] of Object.entries(KNOWN_REASONS)) {

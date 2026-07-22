@@ -335,6 +335,7 @@
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) bits.push(body.win ? `🏁 took the checkered — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}` : `🏁 ate the loss — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`);
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
+    if (body.grandPrix && body.buyin !== undefined && body.pool !== undefined) bits.push(`🏁 on the grid — $${fmt(body.buyin)} in · pool $${fmt(body.pool)}, ${body.entrants} runner${body.entrants > 1 ? 's' : ''}`);
     if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
     if (body.seized) bits.push(`collected $${fmt(body.seized)}${body.carSeized ? ' + their car' : ''}`);
     if (body.pay) bits.push(`+$${fmt(body.pay)}${body.streak ? ` (day ${body.streak})` : ''}`);
@@ -2030,7 +2031,14 @@
           ${s.limit ? `<input id="rc-w-${s.carId}" type="number" placeholder="wager $" style="width:90px"><button class="act" data-race="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''}>race</button>` : ''}
           ${s.forPinks ? `<button class="act" data-pinkrace="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''} style="color:var(--bad)">🎀 for pinks</button>` : ''}</span></div>`).join('') : '<div class="d">Nobody\'s on the strip right now. List one of your own — for a wager or for pinks — to draw a challenger.</div>'}
       </div>
+      ${b.grandPrix ? `<div class="card"><span class="t">The Grand Prix <span class="chip">the big race</span></span>
+        <div class="d">A scheduled cash race — buy in with your best iron, the whole grid runs at once, the top 3 split the pot (minus a 5% cut). Pure skill + variance; no one takes your car.</div>
+        ${b.grandPrix.open ? `<div class="row" style="margin-top:6px"><span>💰 pool $${fmt(b.grandPrix.pool)} · ${b.grandPrix.entrants} on the grid${b.grandPrix.closesSeconds ? ` · grid closes in ${mins(b.grandPrix.closesSeconds)}` : ' · about to run'}${b.grandPrix.entered ? ' · <span class="chip good">you\'re in</span>' : ''}</span>
+          ${!b.grandPrix.entered ? `<span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${cd > 0 || !cars.length ? '' : ''}>enter — $${fmt(b.grandPrix.buyin)}</button></span>` : '<span class="chip">good luck out there</span>'}</div>`
+          : `<div class="row" style="margin-top:6px"><span class="d">No race on the card. Enter to open one (level ${b.grandPrix.minLevel}+, ${b.grandPrix.minEntrants}+ runners or the field is refunded).</span><span><select id="rc-gp-car">${carOpts}</select><button class="act" id="rc-gp"${!cars.length ? ' disabled' : ''}>open it — $${fmt(b.grandPrix.buyin)}</button></span></div>`}
+      </div>` : ''}
       <button class="act" id="rc-lb">🏁 THE WHEEL — the leaderboard</button>`;
+    { const gp = $('#rc-gp'); if (gp) gp.onclick = () => act('POST', '/v1/races/gp', { car: $('#rc-gp-car').value }).then(() => renderRaces()); }
     t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc, nos: $('#rc-nos-npc')?.checked || false }).then(() => renderRaces()));
     t.querySelectorAll('[data-tune]').forEach((x) => x.onclick = () => act('POST', `/v1/races/tune/${x.dataset.tune}`, null).then(() => renderRaces()));
     t.querySelectorAll('[data-nos]').forEach((x) => x.onclick = () => act('POST', `/v1/races/nos/${x.dataset.nos}`, null).then(() => renderRaces()));

@@ -1940,6 +1940,20 @@ export const RACES = {
     { min: 0, name: 'Sunday Driver' }, { min: 10, name: 'Street Racer' }, { min: 40, name: 'The Wheelman' },
     { min: 120, name: 'King of the Strip' }, { min: 400, name: 'The Phantom' },
   ],
+  // step 3 — THE GRAND PRIX: a scheduled, worker-resolved CASH parimutuel (the boxing-main-event / poker-
+  // tournament escrow twin). Drivers buy in (cash ESCROWS into a pool during an open window), the worker
+  // races every live entrant (their car's snapshotted power + rand(VARIANCE)) and pays the top places a
+  // RENORMALIZED share of the pool net of the rake (half → street tax/buyback, half burns). A pure
+  // competitive REDISTRIBUTION — no new faucet (unlike the PvE purse). §10.4: a new `grand prix escrow`
+  // check. All numbers are founder sign-off levers.
+  GP: {
+    MIN_LEVEL: 12,             // the big race — a made wheelman's game
+    BUYIN: 25000,              // cash escrowed per entry
+    RAKE_BPS: 500,             // 5% off the pool at settle (half → street tax, half burns — the casino:pvp/tourney split)
+    MIN_ENTRANTS: 3,           // fewer live runners → the whole field is refunded
+    PAYOUTS: [0.6, 0.3, 0.1],  // top-3 split (renormalized to the field so the edge stays the rake at any turnout)
+    REGISTER_MS: 30 * 60 * 1000, // registration window (GRAND_PRIX_MS env overrides for tests — the SEARCH_MS pattern)
+  },
 };
 export const raceTierOf = (id) => RACES.TIERS.find((t) => t.id === id) || null;
 export const raceRankOf = (wins) =>

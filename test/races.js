@@ -8,6 +8,7 @@ process.env.RACE_CD_MS = '0'; // TEST-ONLY: no cooldown between runs
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
+import { sweepGrandPrix } from '../src/races.js';
 import { RACES, carPower, carVal, levelOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -197,6 +198,55 @@ assert.equal(bought.race_limit, null, 'the wager listing was CLEARED on transfer
 assert.equal(bought.pink_slip, false, 'the pink-slip flag was CLEARED on transfer (no unconsented car loss)');
 assert(!(await call('GET', '/v1/races', { token: seller.token })).body.strip.find((s) => s.carId === flagCar), "the sold car is off the strip — the buyer must opt in themselves");
 
+// ── STEP THREE — THE GRAND PRIX (a scheduled cash parimutuel; the poker-tournament twin) ──
+process.env.GRAND_PRIX_MS = '3600000'; // a 1h window so the whole grid can enter before it runs
+const GP = RACES.GP;
+const gpSum = async (reason) => Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='${reason}'`)).rows[0].s);
+// four drivers (level 30), each with a car; one will die before the flag drops
+const gpd = [];
+for (let i = 0; i < 4; i++) {
+  const d = await mk(`GP Driver ${i}`);
+  await pool.query(`UPDATE characters SET respect=3600, speed=${200 - i * 30} WHERE id='${d.id}'`);
+  await seedCash(d.id, 200000);
+  gpd.push({ ...d, car: await mkCar(d.id, 'pigeon', 'stock', 0) });
+}
+// gates: a rookie is under the level floor; you must enter with a car you own
+const gpRk = await mk('GP Rookie'); await pool.query(`UPDATE characters SET respect=100 WHERE id='${gpRk.id}'`); await seedCash(gpRk.id, 200000);
+const gpRkCar = await mkCar(gpRk.id, 'junker', 'stock', 0);
+assert.equal((await call('POST', '/v1/races/gp', { token: gpRk.token, body: { car: gpRkCar } })).body.error, 'level', `the Grand Prix has a level ${GP.MIN_LEVEL} floor`);
+assert.equal((await call('POST', '/v1/races/gp', { token: gpd[0].token, body: { car: 'nope' } })).body.error, 'no_car', 'must enter with a car you own');
+// all four buy into the same open grand prix
+for (const d of gpd) assert.equal((await call('POST', '/v1/races/gp', { token: d.token, body: { car: d.car } })).code, 200, `${d.id} on the grid`);
+assert.equal((await call('POST', '/v1/races/gp', { token: gpd[0].token, body: { car: gpd[0].car } })).body.error, 'entered', 'no double entry');
+const gpId = (await pool.query("SELECT id FROM grand_prix WHERE status='open'")).rows[0].id;
+assert.equal(Number((await pool.query(`SELECT pool FROM grand_prix WHERE id='${gpId}'`)).rows[0].pool), 4 * GP.BUYIN, 'the pool holds all four buy-ins');
+// escrow mid-open: the §10.4 grand-prix-escrow check reconciles
+assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow reconciles mid-open');
+// one driver's street DIES before the flag — his stake burns at settle
+await pool.query(`UPDATE characters SET alive=false WHERE id='${gpd[3].id}'`);
+const winPre = await gpSum('race:gp:win'), takePre = -(await gpSum('race:gp:take')), deathPre = -(await gpSum('race:gp:death'));
+await pool.query(`UPDATE grand_prix SET resolves_at = now() - interval '1 minute' WHERE id='${gpId}'`);
+await sweepGrandPrix(pool);
+assert.equal((await pool.query(`SELECT status FROM grand_prix WHERE id='${gpId}'`)).rows[0].status, 'resolved', 'the grand prix settled');
+const win2 = await gpSum('race:gp:win') - winPre, take2 = -(await gpSum('race:gp:take')) + takePre, death2 = -(await gpSum('race:gp:death')) + deathPre;
+assert.equal(death2, GP.BUYIN, "the dead entrant's stake burned (race:gp:death)");
+assert.equal(win2 + take2 + death2, 4 * GP.BUYIN, 'buy-ins == prizes + house take + the dead burn (escrow closes)');
+const placed = (await pool.query(`SELECT place FROM grand_prix_entries WHERE gp_id='${gpId}' AND place IS NOT NULL ORDER BY place`)).rows;
+assert.equal(placed.length, 3, 'the three LIVE runners were ranked (the dead man is not)');
+assert((await pool.query('SELECT current FROM grand_prix_state WHERE id=1')).rows[0].current === null, 'the state cleared for the next race');
+assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow holds after settle');
+// a SHORT grid (< MIN_ENTRANTS) is refunded, not raced
+const sf1 = await mk('Short Grid 1'); const sf2 = await mk('Short Grid 2');
+for (const d of [sf1, sf2]) { await pool.query(`UPDATE characters SET respect=3600 WHERE id='${d.id}'`); await seedCash(d.id, 100000); }
+await call('POST', '/v1/races/gp', { token: sf1.token, body: { car: await mkCar(sf1.id, 'junker', 'stock', 0) } });
+await call('POST', '/v1/races/gp', { token: sf2.token, body: { car: await mkCar(sf2.id, 'junker', 'stock', 0) } });
+const sfId = (await pool.query("SELECT id FROM grand_prix WHERE status='open'")).rows[0].id;
+const sf1Pre = (await meOf(sf1.token)).cash;
+await pool.query(`UPDATE grand_prix SET resolves_at = now() - interval '1 minute' WHERE id='${sfId}'`);
+await sweepGrandPrix(pool);
+assert.equal((await pool.query(`SELECT status FROM grand_prix WHERE id='${sfId}'`)).rows[0].status, 'refunded', 'a short grid is refunded');
+assert.equal((await meOf(sf1.token)).cash, sf1Pre + GP.BUYIN, 'the buy-in was refunded whole');
+
 // ── the leaderboard: THE WHEEL ranks the winningest drivers ──
 const lb = (await call('GET', '/v1/leaderboard/races', { token: racer.token })).body;
 assert(lb.drivers.find((d) => d.name === 'Speed Demon' && d.wins >= 2), 'the racer ranks on THE WHEEL');
@@ -208,5 +258,5 @@ assert(vocab.ok, `race: rides the cash vocabulary (${JSON.stringify(vocab.unknow
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cashCheck.drift, seeded, `the only cash drift is the seeded stake (${seeded}) — every race spend/purse/wager reconciles`);
 
-console.log('✅ Street Races test passed — car power (sqrt value + tune + wheelman speed), the PvE circuit (fee BURNS win/lose + bounded purse on a win, level/tier gates), tuning (cash sink + power gain + the cap), PvP wager races (the casino:pvp taxed transfer — winner nets wager minus rake, half to the street tax, the loser car damaged; self/min/max/not_listed/limit gates), THE WHEEL legend + the leaderboard; STEP TWO: NITROUS (a per-car cash-sink charge, capped, consumed win/lose for a power bump) and PINK SLIPS (race for the car itself — the winner TAKES the loser car, a §10.4-neutral ownership transfer: car conservation holds, no ledger row, no cash moves), and section 10.4 (race: vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
+console.log('✅ Street Races test passed — car power (sqrt value + tune + wheelman speed), the PvE circuit (fee BURNS win/lose + bounded purse on a win, level/tier gates), tuning (cash sink + power gain + the cap), PvP wager races (the casino:pvp taxed transfer — winner nets wager minus rake, half to the street tax, the loser car damaged; self/min/max/not_listed/limit gates), THE WHEEL legend + the leaderboard; STEP TWO: NITROUS (a per-car cash-sink charge, capped, consumed win/lose for a power bump) and PINK SLIPS (race for the car itself — the winner TAKES the loser car, a §10.4-neutral ownership transfer: car conservation holds, no ledger row, no cash moves); STEP THREE: THE GRAND PRIX (a scheduled cash parimutuel — the poker-tournament twin: buy-in escrow, level/no-car/double-entry gates, a full grid settled by the worker with a dead entrant\'s stake burned + the top places splitting net of rake, a short grid refunded, and the new grand-prix-escrow §10.4 check), and section 10.4 (race: vocabulary + the per-character cash check reconciles — drift equals the seeded stake only)');
 await app.close();
