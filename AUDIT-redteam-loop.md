@@ -2527,3 +2527,50 @@ raw account dump / no wallet-secret leak). **Residual sweep:** no `TODO`/`FIXME`
 monitor-invisible $OMR mint past inflow) FIXED with a structural price-continuity bound + regression; every
 other mod route + all reads confirmed parameter-safe, and the residual surface is clean. Suite 34/34 + sim
 drift-0.
+
+## Round 42 — co-op / crew MULTI-PARTY (3+) coordination (the distinct class two-party PvP didn't cover)
+
+A dedicated lens over the 3+-member crew-coordination class (a leader assembles a crew, one execute pays/jails/
+loots the WHOLE crew): crew heists (+ inside job), co-op world raids, co-op pen breaks, and convoy multi-ambush
+— hunting phantom-pay, double-refund, farmed-value, §10.4 drift, and deadlock across the N-member lifecycle.
+
+**No reachable bug — the co-op class is SOUND (no CRITICAL/HIGH/MED).** All four systems share a disciplined,
+correct pattern, verified at source:
+- **N-member lock order + acyclicity + the crew_changed TOCTOU guard**: every execute (`executeHeist`/
+  `executeRaid`/`executeBreak`) locks leader (withCharacter) → member chars SORTED BY ID → the op row (→ the
+  `world_npcs` singleton LAST for raids); the crew is RE-READ under the op-row lock and compared as a sorted-id
+  join-string, so a joiner between the unlocked board-read and the row lock mismatches → `crew_changed` (never
+  paid), and a counted member can't leave mid-execute (execute holds their char lock; leave/join lock the op
+  row first). 40P01/23505 → `contention` via `deadlockToRetry`.
+- **Payout/cost under the lock**: the pot is computed + split entirely AFTER the op-row lock + crew_changed
+  guard; members are paid/jailed/costed by ABSOLUTE direct-SQL UPDATE off the locked crew (never in-memory that
+  persistCharacter — which only persists the leader — could clobber); each share is a per-character ledgered
+  faucet/sink (heist:crew/heist:inside/heist:crew:rat; world:raid cash+ammo).
+- **The RAT**: read under the op-row lock (a late rat is blocked — needs the ratter's char lock execute holds);
+  the heist cut is bounded to `stake × HEIST_RAT_BPS` with the stake sunk (join-and-rat Sybil = net-negative),
+  the pen rat is RELIEF-ONLY (no cut below the rat's own sentence — the AUDIT-session-drops-2 F1 fix); never
+  named (the feed emits a generic `heist_blown`/`breakout_foiled` and holes/jails everyone incl. the rat so the
+  roster can't out the free man).
+- **Stale sweeps**: refund only a LIVING leader (a dead leader's stake stays sunk), idempotent via the re-locked
+  `status='planning'` recheck, leader-char-before-op-row order consistent with execute → no double-pay/refund on
+  execute-vs-sweep or two-worker races. **Death mid-op**: membership rows wiped in runEstate, dead-leader plans
+  abandoned + orphan crew freed, the `alive FOR UPDATE` member re-read drops a dead member from a concurrent
+  execute. **One-active-op** enforced by the account char-lock serialization + DB backstops
+  (`pen_break_members.character_id UNIQUE`, `convoy_ambushes PK`); convoy multi-ambush holds the convoy row
+  FOR UPDATE throughout so the `MAX_AMBUSHES` cap + win-only slot/wear are race-safe. All gates present
+  (safehouse/jailed/hosp on plan/join/execute + crew readiness, inside-job feds_watching, world apex coop-only).
+
+**One trivial consistency alignment made (a cosmetic UX gap, NOT a security bug):** `abandonRaidsAtDeath` freed
+a dead co-op-raid leader's orphaned crew but — unlike the heist (`heist_abandoned`) and break (`break_abandoned`)
+death-paths — didn't NOTIFY them, so a dead raid-leader's raiders found an empty board with no message. Aligned
+it to the established precedent: runEstate now captures the raid orphans BEFORE `abandonRaidsAtDeath` deletes
+their rows and sends each a `raid_abandoned` notify. Notify-only (zero value/gate/§10.4 impact); full suite green.
+The agent's other note (`crew_heist_members`/`world_raid_members` lack the `UNIQUE(character_id)` backstop
+`pen_break_members` has) is NOT reachable — every membership INSERT is serialized by the account's char lock, a
+character belongs to one account — so it's left as a documented belt-and-suspenders note (adding a constraint
+wouldn't apply to an in-place-upgraded DB anyway; ground rule discipline — not a reachable defect).
+
+**Round 42 verdict:** the co-op/crew multi-party coordination class (heists/world-raids/pen-breaks/convoy
+multi-ambush) returned NO reachable bug — the sorted-lock + crew_changed-TOCTOU + absolute-SQL-payout +
+relief-only-rat + living-leader-sweep pattern is uniform and correct; one cosmetic notify-gap aligned to the
+heist/break precedent. Suite 34/34 + sim drift-0.
