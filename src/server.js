@@ -517,7 +517,8 @@ export async function buildServer() {
       blackjack: { paysBps: CASINO.BJ_PAYS_BPS, dealerMin: CASINO.BJ_DEALER_MIN, hitSoft17: CASINO.BJ_HIT_SOFT_17 },
       poker: { min: CASINO.POKER_MIN, rakeBps: CASINO.PVP_RAKE_BPS },
       tournament: { buyin: CASINO.TOURNEY.BUYIN, rakeBps: CASINO.TOURNEY.RAKE_BPS, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS },
-      pvpRakeBps: CASINO.PVP_RAKE_BPS, fight: { max: CASINO.FIGHT_MAX, minLvl: CASINO.FIGHT_BET_MIN_LVL } },
+      pvpRakeBps: CASINO.PVP_RAKE_BPS, fight: { max: CASINO.FIGHT_MAX, minLvl: CASINO.FIGHT_BET_MIN_LVL },
+      track: { minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, field: CASINO.TRACK.FIELD, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000) } },
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -962,6 +963,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimFight(ch, client, h)));
   app.post('/v1/casino/fight/fix', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.fixFight(ch, req.body?.winner, client, h)));
+  // THE TRACK: the dogs & the ponies — a daily race card, one WIN bet per race per day
+  app.post('/v1/casino/track', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.betTrack(ch, req.body?.race, req.body?.runner, req.body?.amount, client, h)));
+  app.post('/v1/casino/track/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimTrack(ch, client, h)));
   // step three: BLACKJACK (stateful PvE — deal/hit/stand/double) + heads-up HOLD'EM (PvP showdown)
   app.post('/v1/casino/blackjack', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.blackjackDeal(ch, req.body?.amount, client, h)));

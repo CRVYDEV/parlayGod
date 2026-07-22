@@ -630,6 +630,16 @@ export const CASINO = {
   // the field is net-negative by the rake). One open tournament at a time; a new one opens on the
   // next entry after the last settles. `TOURNEY_MS` env is TEST-ONLY (the SEARCH_MS pattern).
   TOURNEY: { BUYIN: 5000, REGISTER_MS: 86400000, MIN_ENTRANTS: 2, RAKE_BPS: 500, PAYOUTS: [0.5, 0.3, 0.2] },
+  // ── THE TRACK: the dogs & the ponies (all founder sign-off levers) ──
+  // A daily race card — greyhounds and horses. Each race draws a FIELD of runners off the §7.11
+  // seed, each with a true win probability p and posted decimal odds = (1/p)×(1−EDGE), so the
+  // book takes a uniform EDGE takeout on every runner (the historically accurate ~15% track vig).
+  // The winner is drawn from the seed weighted by the TRUE p (the odds carry the edge, the draw
+  // does not). One WIN bet per race per street per day (up to 2/day — dogs + horses), resolved
+  // lazily the next day (the numbers/fight pattern), CASH ONLY, small-capped → a bounded faucet
+  // that's a NET SINK in expectation (like every den game). Fixed-odds + solo-playable + always
+  // available: the classic day at the track, distinct from the parimutuel poker tournament.
+  TRACK: { MIN_BET: 50, MAX_BET: 10000, FIELD: 6, EDGE: 0.15, MAX_ODDS: 25 },
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)

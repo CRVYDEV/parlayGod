@@ -812,6 +812,16 @@ CREATE TABLE IF NOT EXISTS fight_fixes (
   gang_id TEXT NOT NULL,
   winner TEXT NOT NULL
 );
+-- THE TRACK: a daily race card (greyhounds + horses). One WIN bet per race per street per day,
+-- resolved lazily the next day against the seed-drawn winner (the numbers/fight pattern). CASH only.
+CREATE TABLE IF NOT EXISTS track_bets (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  race TEXT NOT NULL,               -- 'dogs' (greyhounds) | 'horses'
+  runner INT NOT NULL,              -- the field index they backed
+  stake INT NOT NULL,
+  PRIMARY KEY (character_id, day, race)
+);
 -- Den step two: lifetime den stake volume (a COUNTER, not a money bucket — no §10.4 impact).
 -- Casino-business owners earn rakeback against the volume that flowed since their cursor.
 CREATE TABLE IF NOT EXISTS den_volume (

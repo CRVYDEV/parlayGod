@@ -275,6 +275,10 @@ profit**. `GET /v1/casino` [public].
   listing a fade limit; symmetric 2d6; winner takes the pot minus a 5% rake.
 - **The weekly Fight** (`/v1/casino/fight`, `/fight/claim`) — one capped $5k bet/week on a favorite (wins
   65%); the boss of the family holding Neon can **fix** the result once a week for $50k from the treasury.
+- **The Track** (`/v1/casino/track`, `/track/claim`) — the dogs & the ponies. A **daily** race card
+  (greyhounds + horses), each a field of 6 runners with posted odds carrying a uniform ~15% takeout. One
+  **win** bet per race per day, $50–$10k; the winner is the seed draw (fair — the odds carry the vig, the
+  draw doesn't). Claim matured tickets lazily at the posted odds.
 - **Rakeback** — casino-business owners split 1% of den stake volume.
 
 ---
