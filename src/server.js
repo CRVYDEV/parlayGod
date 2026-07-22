@@ -1280,12 +1280,16 @@ export async function buildServer() {
   // feeding streets/gang chatter until the client chose to disconnect, falsifying the documented
   // "banned-WS close" guarantee. The ban handler closes every open socket for the banned account.
   const wsClients = new Map(); // accountId -> Set<socket>
+  const WS_MAX_PER_ACCOUNT = 8; // (red-team R7 DoS) one token can't open unlimited sockets — each adds a
+  // 'streets' bus listener, so N sockets make every streets emit O(N) server-wide; 8 covers legit multi-tab.
   app.get('/v1/ws', { websocket: true }, async (socket, req) => {
     let accountId;
     try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
     catch { socket.close(4001, 'auth'); return; }
     // banned accounts must not keep a live intel feed (REST re-checks per request;
     // the socket is long-lived, so check status at connect)
+    const existing = wsClients.get(accountId); // (red-team R7 DoS) bound sockets-per-account before the DB work
+    if (existing && existing.size >= WS_MAX_PER_ACCOUNT) { socket.close(4008, 'too_many'); return; }
     const acct = (await pool.query('SELECT status FROM accounts WHERE id=$1', [accountId])).rows[0];
     if (!acct || acct.status === 'banned') { socket.close(4003, 'banned'); return; }
     const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
