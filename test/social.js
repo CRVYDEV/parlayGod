@@ -992,6 +992,14 @@ assert.equal(r.body.op, 'ghost_route'); assert.equal(r.body.scrutiny, 0, 'ghosti
 assert.equal((await call('DELETE', '/v1/territory/docks/specialist', { token: don.token })).code, 200, 'the boss pulls the specialist');
 await pool.query(`UPDATE territory_rackets SET op_at=NULL WHERE district_id='docks'`);
 assert.equal((await call('POST', '/v1/territory/docks/op', { token: don.token })).body.error, 'no_specialist', 'no special op without a specialist');
+// RED-TEAM R32 regression: a specialist who LEAVES or is KICKED must lose the post too — the passive
+// bonus is a snapshot, so an unmirrored departure kept buffing a racket the man no longer defends (worse:
+// after he joins a rival, his stats would shield the operation his new family raids). removeMember now
+// mirrors the death-path clear. Re-assign mook, kick him, and the docks post must go empty.
+await call('POST', '/v1/territory/docks/specialist', { token: don.token, body: { memberId: mook.id } });
+assert.equal((await dkOp()).specialist, mook.id, 're-assigned mook as the docks specialist');
+assert.equal((await call('POST', '/v1/gangs/kick', { token: don.token, body: { characterId: mook.id } })).code, 200, 'the boss kicks the specialist out of the family');
+assert.equal((await dkOp()).specialist, null, 'kicking the specialist clears the racket post (R32: mirror the death-path clear, no stale buff)');
 // RED-TEAM regression: the ghost window must SKIP its hours, not retroactively catch up once it ends.
 // Simulate the op ran 8h ago (scrutiny_at) with the 6h window ended 2h ago (op_ghost_until) — smuggling
 // net is 14−4=10/hr, so only the 2 post-window hours count → scrutiny ≈ 20, NOT 8h×10 = 80 (the old bug).

@@ -1973,3 +1973,69 @@ MOD_KEY, RATE_LIMIT, TRUST_PROXY-if-proxied, INVARIANT_WEBHOOK_URL), the chain-v
 test-only knobs the boot guard already rejects, the two processes (API + worker), the automatic first-boot
 schema+column-migration, a post-deploy smoke check, and the still-gated mainnet items. Suite 34/34 + sim
 drift-0.
+
+## Round 32 — three fresh dedicated lenses over the least-loop-audited newest surfaces
+
+The loop had saturated the older systems (R27/R29/R30/R31 returned zero reachable bugs), so R32 pointed
+three fresh-lens agents at the newest un-loop-audited code plus a manual lens on the keyless public surface:
+(1) THE WIRE step five (`sweepStandingWatches` — a WORKER that autonomously BURNS a player's $OMR) +
+enroll/cancel/subscribe/tiered ladder; (2) THE PORT steps four–five (warehouse/`fenceContraband`/`rentBerth`,
+the Coast-Guard→`heat_exposure` RICO tie-in, and the contraband-loot-on-fire-kill); (3) THE GRAND PRIX
+cash-parimutuel escrow (`enterGrandPrix`/`resolveGrandPrix` + the new `grand prix escrow` §10.4 check); and
+manually the public keyless routes (cards/profile/openapi/agents/llms).
+
+**One confirmed defect (LOW–MED) FIXED — a stale territory specialist survives leave/kick:**
+The Territory step-five specialist bonus is a SNAPSHOT (`territory.js:23-26` `specFort`/`scrutinyNet` read the
+frozen `spec_power` and only test `r.specialist` truthy — never re-validating living family membership). The
+DEATH path already clears it (`social.js:1419` `UPDATE territory_rackets SET specialist=NULL, spec_power=0
+WHERE specialist=$1`), but the DEPARTURE path did NOT: `removeMember` (leave via `leaveGang` / kick via
+`kickMember`) deleted the `gang_members` row and never touched `territory_rackets`, and
+`releaseTerritoryRackets` only fires on full dissolution. So a specialist who left/was kicked kept buffing the
+racket's fortitude + scrutiny-resistance indefinitely — worse, after joining a RIVAL family his stats would
+shield the very operation his new family raids. Impact is bounded + §10.4-clean (defensive/pacing only, no
+cash/faucet, not stackable, capped by the rival-raid P clamp) → LOW–MED, and it self-heals on the man's
+eventual death, but it contradicted the explicit death-path invariant. **Fix:** `removeMember` (`social.js:84`)
+now mirrors the death-path clear right after deleting the membership row — `UPDATE territory_rackets SET
+specialist=NULL, spec_power=0 WHERE specialist=$1` (on dissolution the rackets are released below anyway; in
+the survive path this clears exactly the departing specialist). **Regression** (`test/social.js`): re-assign a
+specialist, KICK them, assert the racket's `specialist` goes null.
+
+**Verified CLEAN (no CRITICAL/HIGH/MED), each traced to source:**
+- **THE WIRE step five** — `sweepStandingWatches` only decrements $OMR paired with a negative `intel:watch`
+  row (in the omr `KNOWN_REASONS` + the `omrBurns` `intel:%` term), never mints; the load-bearing no-double-burn
+  property holds — each renewal `BEGIN`s and locks `account_persistent … FOR UPDATE` BEFORE the affordability
+  read+decrement, and every player omr-spend path takes the SAME account lock at load (withCharacter /
+  withTwoCharacters / persistAccount absolute-write) → they serialize, the stale-read clobber is impossible;
+  two worker ticks serialize and the in-txn tap re-read makes the loser `ROLLBACK`; watchSlots cap oldest-first
+  (a tier downgrade renews fewer); `wire_tier` is a direct-SQL column outside the persist positional list; the
+  once-per-12h renew guard holds; a bad tier falls back to tier-1 config and charges the resolved tier (no
+  pay-low-get-high).
+- **THE PORT steps four–five** — `port:fence`/`port:berth`/`port:buy` are ledgered cash reasons under the
+  `port:` prefix; the fence faucet is bounded by legitimately-sourced (supply-capped) warehoused stock —
+  `fenceMultOf` 0.85–1.25 is a market-timing lever on already-earned stock, not a mint; `contraband`/`berths`
+  are direct-SQL NUMERIC/INT columns (absolute writes) outside the persist list (no clobber); warehouse collect
+  + fence are both safehouse-blocked (D2); the Coast-Guard `heat_exposure` bump is in-memory persisted once
+  (positional $47, no double-count) and moves no value; `harborToll` follows characters→accounts→gangs order.
+- **contraband-loot-on-fire-kill** (`social.js:1033-1041`) — a conserving pure ownership move (victim −X /
+  killer +X, no ledger row since contraband isn't a §10.4 currency), bounded by the victim's supply-capped
+  stock, PLAYER-fire-kill-only (NPC/mod/huntWanted call runEstate directly and never reach the block), and the
+  `contraband` column is outside the persist list so neither side is clobbered.
+- **THE GRAND PRIX escrow** — a faithful port of the audited poker-tournament/stakes escrow: the `grand prix
+  escrow` identity is provably 0 on every terminal state (settled / short-field refund / all-dead) with all
+  rounding + tie-split drift absorbed into `totalTake` (no cent minted/leaked); lock order mirrors the tournament
+  exactly (char → grand_prix_state → grand_prix on both enter and resolve, STATE-before-ROW → no AB-BA);
+  enter-vs-settle is safe (the `closed` gate rejects any buy-in past `resolves_at`; settle idempotent via the
+  `status='open'` re-check + `clearCurrent AND current=$1`; PK backstops duplicate entry); resolve uses the
+  entry POWER snapshot (selling/melting/pledging the car after entry can't crash it); `grand_prix_entries` is
+  deliberately estate-wipe-excluded so a dead entrant's stake burns `race:gp:death` at resolve; alt-stuffing is
+  −EV; the rake is the audited casino:pvp NULL-take-row mechanism, not a mint-on-top.
+- **the public keyless surface** (cards/profile/openapi/agents/llms) — `clip(48)` bounds render+rasterize cost,
+  card types whitelisted, `checkPublicRateLimit` per-IP covers the heavy GETs (R19/R25), the PNG cache is
+  content-hashed+capped, `publicDossier` returns bands only (no exact wealth — the anti-precise-kill-EV rule
+  holds), every dynamic field `esc()`'d / `encodeURIComponent`'d, and the OpenAPI contract `continue`s on the
+  real `r.isMod` flag so `/v1/mod/*` never enters `paths` and no `x-mod-key` scheme is advertised.
+
+**Round 32 verdict:** one LOW–MED stale-specialist inconsistency on leave/kick FIXED (mirrors the death-path
+clear) + regression; the three highest-value newest surfaces (autonomous $OMR-burning worker, the Port
+warehouse/fence/loot faucets, the Grand Prix cash escrow) and the keyless public surface all confirmed CLEAN.
+Suite 34/34 + sim drift-0.

@@ -81,6 +81,12 @@ export async function removeMember(client, gangId, characterId) {
   // txn already holds the actor's character/account locks, so gangs-after-characters order is kept.
   await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [gangId]);
   await client.query('DELETE FROM gang_members WHERE gang_id=$1 AND character_id=$2', [gangId, characterId]);
+  // territory step five (red-team R32): a departed/kicked made-man can't keep running the family's
+  // operation either — mirror the death-path clear (runEstate) so a leaver's snapshot specialist bonus
+  // (fortitude/scrutiny resistance) doesn't buff a racket he no longer defends (worse: after he joins a
+  // rival, his stats would shield the operation his new family raids). On dissolution the rackets are
+  // released below anyway; in the survive path this clears exactly the departing specialist.
+  await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [characterId]);
   const left = (await client.query(
     "SELECT character_id, role FROM gang_members WHERE gang_id=$1 ORDER BY CASE role WHEN 'underboss' THEN 0 WHEN 'capo' THEN 1 ELSE 2 END, character_id", [gangId])).rows;
   if (!left.length) {
