@@ -1499,3 +1499,57 @@ clearer error semantics. Zero behavioral change; test/casino.js green.
 **Round 23 verdict: 1 lock-order fix (jump pot→gangs — the last two-party inversion), 2 defense-in-depth
 self-guards; value-creation across all six newest faucet modules confirmed net-zero/bounded. §10.4
 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 24 — Numeric input-validation sweep + Estate completeness / object-claim consistency
+
+Two fresh orthogonal lenses over the newest modules. **No CRITICAL/HIGH/MED.** One confirmed input-
+validation fix; the estate + object-claim surfaces verified complete (one "LOW" turned out to be working-
+as-designed on inspection — reverted an over-eager fix).
+
+**CONFIRMED + FIXED — `TRACK_RACES[race]` raw object-literal lookup slips the allow-list (LOW, defense-in-
+depth).** `src/casino.js` indexed `TRACK_RACES = {dogs, horses}` by the client `race` param via a raw
+`TRACK_RACES[race]` at `trackFieldOf` and `betTrack` — the LAST raw object-key lookup in the codebase
+(every sibling — `stableKindOf`, `landmarkOf`, `decorStyleOf`, `ART_CATALOGS` — uses `hasOwnProperty`). A
+prototype key (`__proto__`/`constructor`/…) resolves truthy and slips the intended `'dogs'|'horses'`
+allow-list. Confirmed NOT exploitable (the field is a fixed-size FIELD=6 loop, never over `pool.length`; the
+phantom race resolves as a fair, house-edged −EV game with the `casino:bet/win:track` ledger + `bumpProfit`
+staying consistent — no §10.4 drift, no mint, no crash — the only effect is extra −EV bets keyed to
+arbitrary strings), but a real allow-list bypass. **Fix:** added `trackPoolOf(race)` using
+`Object.prototype.hasOwnProperty.call`, used at both sites (`betTrack` is the write-gate, so no prototype-key
+race can be persisted for `claimTrack` to re-read). Regression: a `constructor`/`__proto__` race is rejected
+with the `'race'` error (test/casino.js).
+
+**REVERTED (working-as-designed, NOT a bug — ground rule #1).** The estate lens flagged a "LOW" race-flag
+hygiene nit: `raceable` rejects `listed||pledged` but `listCar`/loan-pledge don't reject `race_limit`/
+`pink_slip` (asymmetric). I initially added a symmetric flag-time reject — but test/races.js:191 asserts a
+race-flagged car MUST be listable, because the audited races-step-two design is "allow the multi-claim, and
+CLEAR the foreign flags on the four ownership-transfer sinks" (the buyer/lender gets a clean car). The only
+residual (a same-owner pledge→repay leaving the owner's OWN race listing intact) is defensible — the owner
+listed it, ownership never changed. Reverted both edits; left a NOTE in market.js documenting why there is
+deliberately no flag-time reject (so a future auditor doesn't re-add it). The test caught the over-eager fix.
+
+**Verified CLEAN (both lenses):**
+- **Input validation:** the NaN/Infinity/negative/type-confusion/length class is uniformly hardened across
+  the newest modules — every amount/stake/wager/bet/price is `Math.floor` + `Number.isFinite` + MIN/MAX (or a
+  downstream balance gate that catches Infinity); `gateBet` (dice/numbers/track/futurity/blackjack), races/
+  boxing/speakeasy/stable/loans/market/world/pen/auction/portfolio/landmarks/social all verified;
+  `spendOmr` itself guards `isFinite && >0` so a negative can never invert a burn into a mint; every catalog
+  resolver uses `Array.find` or `hasOwnProperty` (TRACK_RACES was the sole exception, now fixed); `cards.js`
+  escapes every SVG-interpolated field + bands wealth; no client-sized loops (crews gap-bounded, qty clamped).
+- **Estate completeness:** all ~50 per-character FK tables classified — WIPED in the runEstate loop / custom
+  wiper, ACCOUNT-LEVEL survivor (heir inherits), or escrow-entry (deliberately excluded, reaped by a worker
+  resolve with a `*:death` burn / backer refund). NO orphan, NO stranded §10.4 escrow. Cross-object death
+  ordering safe (cars deleted before voidLoansAtDeath; dead lender's loan+collateral reassigned to the heir;
+  heirId threaded early). The newest tables (boats/contraband/berths, fighters+belt+bets, speakeasies+patrons,
+  racers, port_intercepts, territory specialist, wire_watches/informants, pen factions/breaks) all handled.
+- **Object-claim consistency:** all four multi-claim matrices compose at execution — CAR (all 5 transfer
+  sinks clear listed/pledged/race/nos; race execution re-checks listed||pledged; the races-step-two consent
+  class is closed), BOAT (sell/upgrade reject atSea; intercept requires outAtSea; port_intercepts cleared on
+  every run start/end/handoff via clearIntercepts), FIGHTER (booked/injured reject on both sides everywhere),
+  RACER (correctly non-exclusive — never escrowed, per-owner PKs prevent double-entry, injured-gated).
+
+**Round 24 verdict: 1 input-validation fix (TRACK_RACES hasOwnProperty — the last raw object-key lookup) +
+regression; 1 over-eager fix reverted (race-flag hygiene is working-as-designed). Estate wipe + object-claim
+composition verified complete. §10.4 untouched. Suite 33/33 + sim drift-0.**

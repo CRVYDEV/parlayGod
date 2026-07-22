@@ -68,6 +68,8 @@ export async function listItem(ch, opts, client, h) {
     if (!car) throw new GameError('no_car', 'Not your iron.');
     if (car.listed) throw new GameError('listed', "It's already on the block.");
     if (car.pledged) throw new GameError('pledged', "That car's pledged as loan collateral — square the debt first."); // Loan step 2
+    // NOTE: a race-flagged car MAY be listed — the transfer sinks clear race_limit/pink_slip on sale
+    // (races step-two, the buyer gets a clean car), so no flag-time reject here (test/races.js:191).
     const minBid = Math.floor(Number(opts.minBid) || 0);
     if (minBid < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE}.`);
     const buyNow = opts.buyNow != null ? Math.floor(Number(opts.buyNow)) : null;
