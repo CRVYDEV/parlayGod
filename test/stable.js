@@ -105,6 +105,19 @@ assert.equal(await racerWins(aa.aid), 2, 'the match win banked a second career w
 const beaten = (await pool.query(`SELECT losses, injured_until FROM racers WHERE id='${rival}'`)).rows[0];
 assert(Number(beaten.losses) === 1 && beaten.injured_until && new Date(beaten.injured_until) > new Date(), 'the beaten racer took the L + is laid up');
 
+// ── regression (full-system red-team v4): the LEGEND floor. A match win vs a SUB-floor loser banks NO
+// career win (racer_wins) — anti-Sybil, so the owner leaderboard can't be farmed by beating a fresh alt.
+const runt = await mk('Runt Rookie');
+await seed(runt.id, `respect=${lvlRespect(STABLE.LEGEND_MIN_LVL - 1)}`); // one level below the floor
+await grantCash(runt.id, 4000000);
+const runtDog = (await call('POST', '/v1/stable/buy', { token: runt.token, body: { kind: 'dog', name: 'Runt Dog' } })).body.id;
+await pool.query(`UPDATE racers SET speed=6, stamina=6, heart=6 WHERE id='${runtDog}'`);
+await call('POST', `/v1/stable/list/${runtDog}`, { token: runt.token, body: { limit: 50000 } });
+const winsBeforeRunt = await racerWins(aa.aid);
+const runtMatch = await call('POST', `/v1/stable/match/${runt.id}`, { token: aa.token, body: { myRacer: ghost, theirRacer: runtDog, stake: 10000 } });
+assert.equal(runtMatch.body.win, true, 'the maxed dog beats the runt (a lock)');
+assert.equal(await racerWins(aa.aid), winsBeforeRunt, 'NO career win banked — the loser was below the LEGEND floor');
+
 // ── the board (your stable + the field) + the leaderboard (records + LEGEND) ──
 const board = (await call('GET', '/v1/stable', { token: aa.token })).body;
 assert(board.stable.find((r) => r.id === ghost), 'the sheet shows your stable');

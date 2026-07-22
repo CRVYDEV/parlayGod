@@ -524,6 +524,47 @@ assert.equal(e3.body.error, 'full', `the card is full at PLAYER_SLOTS=${CASINO.T
 // clear these fresh entries so they don't disturb the §10.4 sweep below
 await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].id}','${owners[1].id}')`);
 
+// ── regression (full-system red-team v4, HIGH): THE SCRATCHED-RUNNER REFUND. A bettor backs a post at LONG
+// NPC odds; a STRONG player racer is then ENTERED at that same post. The winner is drawn from the MERGED
+// field, so without the fix the bettor would collect the strong racer's win at the locked longshot NPC
+// price. The bet snapshots WHICH runner it backed (bet_racer_id); if the identity at that post changes →
+// the ticket SCRATCHES (1:1 refund), it never pays the stale price. A plain NPC bet that stays put still pays.
+{
+  const { body: { token: bTok } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: bTok, body: { name: 'Scratch Sam' } });
+  const bId = (await meOf(bTok)).id;
+  await pool.query(`UPDATE characters SET respect=400, cash=200000, loc='neon' WHERE id='${bId}'`);
+  // bet the OUTSIDE post (the last slot, index FIELD-1) while it's still a plain NPC → bet_racer_id NULL
+  const scratchBet = await call('POST', '/v1/casino/track', { token: bTok, body: { race: 'horses', runner: CASINO.TRACK.FIELD - 1, amount: 500 } });
+  assert.equal(scratchBet.code, 200, 'the scratch bet placed on the NPC outside post');
+  assert.equal(scratchBet.body.player, false, 'backed a plain NPC runner (no player racer there yet)');
+  // now a STRONG player racer ENTERS the horses card and lands on that outside post
+  const { body: { token: sTok } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: sTok, body: { name: 'Strong Steve' } });
+  const sId = (await meOf(sTok)).id;
+  await pool.query(`UPDATE characters SET respect=400, cash=300000, loc='neon' WHERE id='${sId}'`);
+  const sBuy = await call('POST', '/v1/stable/buy', { token: sTok, body: { kind: 'horse', name: 'Steve Horse' } });
+  const sRacer = sBuy.body.id;
+  await pool.query(`UPDATE racers SET speed=25, stamina=25, heart=25 WHERE id='${sRacer}'`);
+  const sEnt = await call('POST', `/v1/casino/track/enter/${sRacer}`, { token: sTok });
+  assert.equal(sEnt.code, 200, 'the strong racer enters the horses card');
+  assert.equal(sEnt.body.post, CASINO.TRACK.FIELD, 'and takes the outside post the bettor backed');
+  // find a past day where the outside post (with the strong entry merged) WINS the horses
+  const sEntry = [{ post: CASINO.TRACK.FIELD - 1, form: 75, racer_name: 'Steve Horse', character_id: sId, racer_id: sRacer }];
+  let sWinDay = null; for (let d = dayOf() - 1; d > dayOf() - 500 && sWinDay === null; d--) if (winnerIdx('horses', d, sEntry) === CASINO.TRACK.FIELD - 1) sWinDay = d;
+  assert(sWinDay !== null, 'found a day the merged outside post wins');
+  await pool.query(`UPDATE track_bets SET day=${sWinDay} WHERE character_id='${bId}' AND race='horses'`);
+  await pool.query(`UPDATE track_entries SET day=${sWinDay} WHERE character_id='${sId}' AND race='horses'`);
+  const scratchPre = (await meOf(bTok)).cash;
+  const scratchClaim = await call('POST', '/v1/casino/track/claim', { token: bTok });
+  assert.equal(scratchClaim.body.settled, 1, 'the scratch ticket settled');
+  assert.equal(scratchClaim.body.results[0].scratched, true, 'the runner backed was replaced by a player entry → SCRATCHED');
+  assert.equal(scratchClaim.body.results[0].hit, false, 'a scratch is not a hit');
+  assert.equal(scratchClaim.body.won, 500, 'the stake is REFUNDED 1:1 — never paid at the locked longshot odds');
+  assert.equal((await meOf(bTok)).cash, scratchPre + 500, 'exactly the stake came back');
+  await pool.query(`DELETE FROM track_entries WHERE character_id='${sId}'`); // don't disturb the §10.4 sweep below
+}
+
 // ══════════ THE FUTURITY (Track step four): the crowd-bet marquee for player-owned racers ══════════
 process.env.FUTURITY_MS = String(30 * 60 * 1000); // a real window so betting stays open (we backdate to settle)
 // three owners each nominate a racer — a clear FAVORITE (form 75) + two longshots (form 3)

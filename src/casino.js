@@ -355,7 +355,10 @@ export async function betTrack(ch, race, runner, amount, client, h) {
   const existing = (await client.query('SELECT 1 FROM track_bets WHERE character_id=$1 AND day=$2 AND race=$3', [ch.id, day, race])).rows[0];
   if (existing) throw new GameError('bet', 'One ticket a race — the window knows your face.');
   const pick = field[idx];
-  await client.query('INSERT INTO track_bets (character_id, day, race, runner, stake, odds) VALUES ($1,$2,$3,$4,$5,$6)', [ch.id, day, race, idx, amt, pick.odds]);
+  // snapshot WHICH runner was backed (a player racerId, or NULL for an NPC). If a strong racer later ENTERS
+  // this post, the NPC you backed is scratched — claimTrack refunds rather than paying the stale longshot
+  // odds (audit HIGH: the fixed-odds lock was per-POST, so a player could bet a longshot post then upgrade it).
+  await client.query('INSERT INTO track_bets (character_id, day, race, runner, stake, odds, bet_racer_id) VALUES ($1,$2,$3,$4,$5,$6,$7)', [ch.id, day, race, idx, amt, pick.odds, pick.racerId || null]);
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:track' });
   await bumpProfit(client, amt);              // the open bet's odds exposure is held back by openLiability
@@ -379,6 +382,22 @@ export async function claimTrack(ch, client, h) {
     const entries = await entriesFor(client, b.race, d);
     const winner = trackWinnerOf(b.race, d, entries);
     const field = trackFieldOf(b.race, d, entries);
+    // SCRATCH check (audit HIGH): the runner backed must still occupy the post. If a player racer was
+    // ENTERED at this post after the bet (bet_racer_id NULL but a racerId now sits there, or a different
+    // racerId), the runner you backed is gone — REFUND the stake (1:1, the den-book scratch), never the
+    // stale locked price. (bet_racer_id is NULL for pre-audit tickets → treated as NPC, the common case.)
+    const cur = field[Number(b.runner)];
+    const backed = b.bet_racer_id || null;
+    const nowAt = cur ? (cur.racerId || null) : null;
+    if (backed !== nowAt) {
+      const refund = Number(b.stake);
+      won += refund; ch.cash = Number(ch.cash) + refund;
+      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: refund, reason: 'casino:win:track' });
+      await bumpProfit(client, -refund); // the bet's profit bump is reversed → the den book nets 0 on a scratch
+      results.push({ day: d, race: b.race, runner: Number(b.runner), winner, winnerName: field[winner].name, hit: false, scratched: true });
+      await client.query('DELETE FROM track_bets WHERE character_id=$1 AND day=$2 AND race=$3', [ch.id, d, b.race]);
+      continue;
+    }
     const hit = Number(b.runner) === winner;
     if (hit) {
       const odds = b.odds != null ? Number(b.odds) : field[Number(b.runner)].odds; // locked odds; fall back for pre-step-three tickets
@@ -445,6 +464,10 @@ export async function sweepTrackEntries(pool) {
       for (const e of entries) {
         const wonIt = Number(e.post) === winner;
         if (wonIt) {
+          // audit v4 MED-1: lock the owner's ACCOUNT before the racer, matching the player's
+          // account→racer order (withCharacter locks account_persistent first) — else this worker's
+          // racer→account order is an AB-BA vs a concurrent circuit/match on the same racer.
+          await client.query('SELECT 1 FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id=$1) FOR UPDATE', [e.character_id]);
           const rr = (await client.query('SELECT wins FROM racers WHERE id=$1 FOR UPDATE', [e.racer_id])).rows[0]; // may be gone (bred/sold/dead) — the win still counts for the owner legend; FOR UPDATE serializes vs a concurrent circuit/match win on the same racer (absolute INT write, no lost update)
           if (rr) await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [e.racer_id, Number(rr.wins) + 1]); // absolute (pg-mem INT-arith)
           await client.query('UPDATE account_persistent SET racer_wins = racer_wins + 1 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [e.character_id]);
@@ -471,11 +494,9 @@ const futurityMs = () => Number(process.env.FUTURITY_MS) || CASINO.FUTURITY.REGI
 export async function nominateFuturity(ch, racerId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No nominations from lockup.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The futurity runs on the ${CASINO.DISTRICT}.`);
-  const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
-  if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
-  if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
-  if (Number(ch.cash) < CASINO.FUTURITY.NOMINATE_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.FUTURITY.NOMINATE_FEE}.`);
-  // materialize/find the open futurity under the state singleton lock (LOCK ORDER: char → racer → state → card)
+  // materialize/find the open futurity under the state singleton lock FIRST, THEN lock the racer (LOCK
+  // ORDER: char → account [withCharacter] → futurity_state → card → racer — audit v4 MED-1: resolveFuturity
+  // locks state→card→racer, so nominate must lock state BEFORE the racer or it's an AB-BA on the state singleton).
   const st = (await client.query('SELECT current FROM futurity_state WHERE id=1 FOR UPDATE')).rows[0];
   let g = st.current ? (await client.query("SELECT * FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
   if (g && new Date(g.resolves_at) <= new Date()) g = null; // the window closed — the sweep will settle it; a new card opens
@@ -486,6 +507,10 @@ export async function nominateFuturity(ch, racerId, client, h) {
     await client.query('UPDATE futurity_state SET current=$1 WHERE id=1', [id]);
     g = { id, resolves_at: resolvesAt };
   }
+  const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
+  if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
+  if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
+  if (Number(ch.cash) < CASINO.FUTURITY.NOMINATE_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.FUTURITY.NOMINATE_FEE}.`);
   if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
     throw new GameError('entered', "You've already got a runner in this futurity.");
   // INVARIANT: racer_id is unique within a card — resolveFuturity keys place-updates + bet buckets on it.
@@ -534,8 +559,10 @@ export async function betFuturity(ch, racerId, amount, client, h) {
 
 // ── worker resolution — race the field at window close, pay the parimutuel pool (the boxing main-event
 // twin). LOCK ORDER: runner-owner + bettor chars sorted → futurity_state → the card row (state BEFORE the
-// row — nominate locks state→card, so no AB-BA). A dead owner's runner SCRATCHES (its backers refunded);
-// a dead bettor's escrow burns. The field is frozen at window close, so the pre-read is stable. ──
+// row — nominate locks state→card, so no AB-BA) → then, at legend-bump time, account_persistent[winner] →
+// racers[winner] (account before racer — the player-side order, see below). A dead owner's runner SCRATCHES
+// (its backers refunded); a dead bettor's escrow burns. The field is frozen at window close, so the pre-read
+// is stable. ──
 export async function resolveFuturity(client, futurityId) {
   const g0 = (await client.query('SELECT * FROM futurities WHERE id=$1', [futurityId])).rows[0];
   if (!g0 || g0.status !== 'open') return null; // already settled (idempotent)
@@ -570,7 +597,11 @@ export async function resolveFuturity(client, futurityId) {
   // race: snapshotted form + rand(0,VARIANCE) each; rank DESC (the best animal wins, the going is fickle)
   const ranked = live.map((r) => ({ ...r, score: Number(r.form) + rand(0, CASINO.FUTURITY.VARIANCE) })).sort((a, b) => b.score - a.score);
   const winner = ranked[0];
-  // status: the winner's record + the owner LEGEND (account-level, survives death — the sweepTrackEntries pattern)
+  // status: the winner's record + the owner LEGEND (account-level, survives death — the sweepTrackEntries pattern).
+  // LOCK ORDER: account_persistent BEFORE racers — every player-side racer action holds account_persistent[owner]
+  // (via withCharacter) then locks the racers row (account → racer); mirror that here so resolve can't AB-BA a
+  // concurrent train/circuit/match on the winner's animal.
+  await client.query('SELECT 1 FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id=$1) FOR UPDATE', [winner.character_id]);
   const rr = (await client.query('SELECT wins FROM racers WHERE id=$1 FOR UPDATE', [winner.racer_id])).rows[0]; // may be gone (bred/sold) — the win still counts for the owner legend
   if (rr) await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [winner.racer_id, Number(rr.wins) + 1]);
   await client.query('UPDATE account_persistent SET racer_wins = racer_wins + 1 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [winner.character_id]);

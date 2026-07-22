@@ -177,7 +177,9 @@ export async function matchRace(ch, opponent, body, client, h) {
   // records + injury — absolute INT writes (pg-mem arithmetic-UPDATE quirk)
   await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [winnerR.id, Number(winnerR.wins) + 1]);
   await client.query('UPDATE racers SET losses=$2, injured_until=$3 WHERE id=$1', [loserR.id, Number(loserR.losses) + 1, new Date(Date.now() + STABLE.INJURY_MS)]);
-  await bumpLegend(client, winner.account_id);
+  // the owner LEGEND (racer_wins) only counts vs a loser at/above the floor — anti-Sybil (the RACES.WHEEL_MIN_LVL
+  // precedent; a status board can't be farmed by beating a fresh throwaway alt over and over)
+  if (levelOf(Number(loser.respect)) >= STABLE.LEGEND_MIN_LVL) await bumpLegend(client, winner.account_id);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]); // half → the buyback, half burns
   await h.rngLog(client, ch.id, `stable:race:${or.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, opponent.id, 'stable_race', { from: ch.name, yours: or.name, mine: r.name, amount: amt, theyWon: !win });
@@ -395,9 +397,4 @@ export async function stableLeaderboard(pool) {
       WHERE a.racer_wins > 0 AND NOT a.agent_flag ORDER BY a.racer_wins DESC LIMIT 15`)).rows // agents excluded from the human status board
     .map((r) => ({ owner: r.name, wins: Number(r.racer_wins), title: racerLegendOf(r.racer_wins).name }));
   return { racers, legend };
-}
-
-// estate hook — a dead owner's whole stable is done (character-level).
-export async function wipeRacersAtDeath(client, characterId) {
-  await client.query('DELETE FROM racers WHERE character_id=$1', [characterId]);
 }
