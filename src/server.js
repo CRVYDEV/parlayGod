@@ -45,7 +45,7 @@ import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
-import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit } from './ratelimit.js';
+import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit, checkPublicRateLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
@@ -226,6 +226,16 @@ export async function buildServer() {
     // so throttle them per-IP — bounds guest-mint Sybil floods + X/Privy auth-fetch amplification.
     if (rateLimitsEnabled() && req.method === 'POST' && req.url.startsWith('/v1/auth')) {
       const limited = await checkAuthRateLimit({ ip: req.ip });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
+    // (red-team R13 F1/F2) the keyless public render routes (/card SVG+PNG, /u profile, /v1/u dossier)
+    // do real per-hit work (an SVG→PNG raster + a DB dossier) and are NOT under the /v1 read-limiter — an
+    // unauthenticated flood from one origin could pin the server. Throttle them per-IP (generous, only
+    // bites a flood). Placed before the /v1 read branch so /v1/u (keyless) is covered too.
+    if (rateLimitsEnabled() && req.method === 'GET'
+      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/'))) {
+      const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }

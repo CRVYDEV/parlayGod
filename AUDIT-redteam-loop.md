@@ -713,3 +713,56 @@ server-mitigated (flagged for a dedicated escaping pass).
 **Round 12 verdict: 1 MED (JWT-in-WS-URL) + 2 LOW (Privy hardening) fixed. Contracts, cross-system §10.4,
 and the auth perimeter re-verified sound; the client XSS is server-mitigated + flagged for a dedicated
 escaping pass. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 13 — ReDoS/algo-complexity DoS · MCP+agent-gateway · griefing/soft-lock · data-integrity
+
+Fresh un-swept classes. TWO HIGH fixed (an SSRF/token-exfil in the shipped MCP package + a keyless
+event-loop-stall DoS); the griefing gap is a PvP-balance sign-off item; the economic/§10.4 core untouched.
+
+### Fixed
+- **MCP Finding 1 (HIGH — SSRF / agent-key exfiltration).** `omerta_request` in the shipped `omerta-mcp`
+  package forwarded the agent-controlled `path` via a raw `BASE + path` string concat and attached the
+  PERMANENT agent bearer to every call — so a crafted path (`@evil.com/x` → host evil.com, `//evil.com`,
+  a full `https://…`) steered the fetch off-origin and exfiltrated the 90-day agent key (→ account
+  takeover + on-chain extraction). Realistically triggerable via prompt-injection through the
+  attacker-controlled game content agents are told to poll (names, contract reasons, the feed). Fix:
+  resolve `path` against BASE with `new URL` and HARD-ASSERT `url.origin === BASE.origin` before fetching
+  or attaching the token — verified it blocks `//host`/scheme-prefixed/`\\`-steering while allowing every
+  legit `/v1/...` path.
+- **ReDoS Finding 1 (HIGH — keyless event-loop-stall DoS).** `GET /card/:type/:name.png` is keyless,
+  unthrottled (non-`/v1` → outside the read-limiter), and rasterized the SVG→PNG SYNCHRONOUSLY (resvg
+  `.render()` blocks the libuv loop ~tens of ms/call); `name`+`?ref=` feed the SVG-hash cache key so
+  distinct values miss cache every hit → one origin flooding it stalls the whole server. Fix: (1) switch
+  to resvg `renderAsync` (rasterize on a WORKER THREAD — no event-loop block), and (2) a per-IP throttle
+  (`checkPublicRateLimit`, default 5/s burst 30) on the keyless render routes (`/card`,`/u`,`/v1/u`) in
+  the preHandler — generous for legit OG-crawler unfurls, bounding a single-origin flood. Also closes
+  **ReDoS Finding 2** (the same keyless `/u`/`/card`/`/v1/u` throttle gap).
+
+### Verified CLEAN / flagged (not patched)
+- **ReDoS/algo-complexity (adda) — no ReDoS.** Every client-facing regex is linear (no nested quantifiers/
+  ambiguous alternation); Fastify body limit 1MB + maxParamLength 100 (not raised); input-driven loops
+  clamped (`Math.min(qty, cap, have)`, no `new Array(qty)`/`.repeat`). Residuals flagged: F3 (`funnelStats`
+  loads the full telemetry subset with no LIMIT — mod-gated, admin polls 15s) + F4 (portfolio leaderboards
+  full-scan, authed + read-bucketed) — add `LIMIT`/windowing as the tables grow; lower urgency.
+- **MCP / agent gateway (aaec) — beyond Finding 1, clean.** Mod routes unreachable via the proxy (no
+  x-mod-key sent → server 401s), /openapi.json excludes /v1/mod + declares only bearerAuth, baseUrl is
+  server-config not Host-controllable, /v1/opportunities leaks only public banded board data (anon posters
+  nulled, directed pots skipped, no own-head contract, convoy value-band-only), no secrets in the docs, no
+  eval/shell-injection. LOW flagged: the MCP mints a fresh idempotency UUID per call (defeats retry-safety
+  — a tool-retry double-executes; README overstates it) + the agent leaderboard's `extracted` is the one
+  un-banded numeric (lifetime-withdrawn, weak signal).
+- **Griefing / soft-lock (a1e8) — one systematic PvP-BALANCE gap, FLAGGED for founder sign-off.** `jump`
+  is the outlier PvP verb with NO per-(attacker,target) cooldown, NO location gate, NO rookie level floor,
+  and safehouse deliberately doesn't block it — while every sibling (`npcHit`/`fire`/shakedown/raid/
+  standover/piracy) has those gates. → no-counterplay rookie harassment (jump every ~3min/JUMP_HOSP_MS
+  from any district, steal pocket cash+crates), most damaging to new players (a stated founder priority);
+  + `postBounty` has no target level floor (rookie head-pricing). These touch sim-audited PvP mechanics —
+  a design/balance call (ground rule #1: don't unilaterally retune), flagged prominently. Verified CLEAN:
+  gang-leadership succession (no bossless lock), co-op crew stranding (status='planning' filter + worker
+  sweep), loan-repay counterparty (heir reassign, always squarable), per-venue cooldowns, estate cleanup.
+- **Data-integrity / schema (a3ea) — still running; verdict appended next round.**
+
+**Round 13 verdict: 2 HIGH fixed (MCP SSRF/token-exfil + keyless card-DoS) + the keyless-route throttle
+gap. Griefing flagged as a PvP-balance sign-off item; §10.4 untouched. Suite 33/33 + sim drift-0.**
