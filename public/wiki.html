@@ -200,7 +200,7 @@ const SECTIONS = [
       <li><b>The Numbers</b> — pick 0–999, one ticket/day, pays 600:1.</li>
       <li><b>Back-room PvP dice</b> — consent by listing a fade limit; winner takes the pot − 5% rake.</li>
       <li><b>The weekly Fight</b> — one $5k bet on a favorite; the Neon-holding boss can <b>fix</b> it for $50k.</li>
-      <li><b>The Track</b> — the dogs &amp; the ponies. A daily card (greyhounds + horses), 6 runners with posted odds (~15% takeout); one $50–$10k win bet per race/day, seed-drawn winner, lazy claim.</li></ul>
+      <li><b>The Track</b> — the dogs &amp; the ponies. A daily card (greyhounds + horses), 6 runners with posted odds (~15% takeout); one $50–$10k win bet per race/day, seed-drawn winner, lazy claim at the LOCKED odds. Own a racer? <b>Run it in the card</b> ($5k nomination, up to 2 owner posts a race) — the town bets on your animal.</li></ul>
       ${R(`GET /v1/casino [public] · POST /v1/casino/dice · /numbers[/claim] · /fade · /dice/:id · /fight[/claim|/fix] · /track[/claim]`)}` },
 
   { id: 'stable', group: 'Money', title: 'The Stable', tag: 'own the dogs & the ponies',

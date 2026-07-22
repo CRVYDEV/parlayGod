@@ -821,9 +821,31 @@ circuit faucet, boxing-exhibition parity). `test/stable.js` covers breeding (sam
 head-start range, parents consumed, the ledgered sink) + the stakes (buy-in escrow, a short-field refund,
 one-per-owner gate, a full-field worker settle to the top places net of rake, and the `stakes escrow` §10.4
 check). Suite 33/33 + sim drift-0 (18 checks). All `BREED_*`/`STAKES.*` numbers are founder sign-off levers
-(the stakes is a redistribution — no signed faucet touched). Deferred (step three): entering your racer into
-The Track's DAILY seed-drawn betting card so the town bets on player-owned animals (the daily-card rewire,
-deferred for the cleaner worker-resolved Stakes).
+(the stakes is a redistribution — no signed faucet touched). **Step three — RUN IN THE CARD — BUILT** (`src/casino.js`, `test/casino.js`; the last racing piece — a
+player's own racer runs in The Track's DAILY seed-drawn card so the whole town bets on player-owned animals).
+`enterTrackRace` (`POST /v1/casino/track/enter/:racerId`) enters a FIT racer (its kind → the dogs/horses race)
+into today's card, taking one of the last `TRACK.PLAYER_SLOTS` (2) posts; a cash `ENTRY_FEE` ($5k) nomination
+sink (`casino:track:entry` → the buyback, the pen:commissary precedent). The racer's FORM is SNAPSHOTTED into
+`track_entries` (self-contained — race/breed/sell it after). `trackFieldOf(race, day, entries)` MERGES player
+entries into the field (a form-derived weight `0.2 + (form/75)×1.8`, the NPC band → a maxed racer is the
+short-priced favorite), and `trackWinnerOf` draws the winner from the merged p. The town bets via the SAME
+`betTrack` — now **fixed-odds**: the odds are LOCKED on the ticket at bet time (`track_bets.odds`, a
+bookmaker's board that shifts as runners enter), and `claimTrack` pays the locked odds (falls back to the
+field odds for pre-step-three tickets). §10.4: the entry fee is a character_id'd `casino:` cash sink (check (a)
+reconciles); the betting is the UNCHANGED den book (`casino:bet:track`/`casino:win:track`); **no owner purse
+in step three** (status only — deferred sim-gated option) so the racer running is §10.4-neutral on the owner
+side. The worker `sweepTrackEntries` banks each entered racer's card win the next day (its record + the
+account `racer_wins` legend — direct SQL, survives death), idempotent (`settled` flag), per-(day,race) txn.
+`track_entries` is EXCLUDED from the estate wipe (the snapshot must survive so the frozen field/winner
+resolve — the stakes_entries precedent). New `track_entries` table + `track_bets.odds` column; `denInfo`
+surfaces the merged card (player runners flagged) + your entries; console Den-tab Track section shows ★
+player runners + a run-in-the-card control; `describe()` + `/v1/rules` + a defensive `FIELD ≥ 4` comment.
+`test/casino.js` covers the district/one-per-card gates + the ledgered entry sink, the merged card (the maxed
+racer as the flagged favorite), a bet paid at the LOCKED odds, and the worker banking the win (record + legend,
+idempotent). Suite 33/33 + sim drift-0 (18 checks). All `TRACK.PLAYER_SLOTS`/`ENTRY_FEE` numbers are founder
+sign-off levers. The Stable + Track racing pillar is now feature-complete (own → train → circuit/match →
+breed/stakes → run in the town's card). Deferred (sim-gated): an owner PURSE for a card win (a den-book-capped
+faucet, the rakeback discipline).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

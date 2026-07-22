@@ -523,7 +523,8 @@ export async function buildServer() {
       poker: { min: CASINO.POKER_MIN, rakeBps: CASINO.PVP_RAKE_BPS },
       tournament: { buyin: CASINO.TOURNEY.BUYIN, rakeBps: CASINO.TOURNEY.RAKE_BPS, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS },
       pvpRakeBps: CASINO.PVP_RAKE_BPS, fight: { max: CASINO.FIGHT_MAX, minLvl: CASINO.FIGHT_BET_MIN_LVL },
-      track: { minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, field: CASINO.TRACK.FIELD, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000) } },
+      track: { minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, field: CASINO.TRACK.FIELD, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000),
+        playerSlots: CASINO.TRACK.PLAYER_SLOTS, entryFee: CASINO.TRACK.ENTRY_FEE } },
   }));
   app.post('/v1/business/:kind/buy', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.buyBusiness(ch, req.params.kind, client, h)));
@@ -996,6 +997,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.betTrack(ch, req.body?.race, req.body?.runner, req.body?.amount, client, h)));
   app.post('/v1/casino/track/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.claimTrack(ch, client, h)));
+  // step three — RUN IN THE CARD: enter one of your racers into today's card (the town bets on it)
+  app.post('/v1/casino/track/enter/:racerId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.enterTrackRace(ch, req.params.racerId, client, h)));
   // step three: BLACKJACK (stateful PvE — deal/hit/stand/double) + heads-up HOLD'EM (PvP showdown)
   app.post('/v1/casino/blackjack', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.blackjackDeal(ch, req.body?.amount, client, h)));

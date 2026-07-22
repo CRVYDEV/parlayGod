@@ -26,7 +26,7 @@ import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
-import { sweepTournaments } from './casino.js';
+import { sweepTournaments, sweepTrackEntries } from './casino.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
 import { syncFeeEvents, syncClaimedEvents, syncTradeFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
@@ -219,6 +219,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE GAMBLING DEN (step four): settle any poker TOURNAMENT past its registration window — deal + pay
     const trn = await safe('tournament sweep', () => sweepTournaments(pool));
     if (trn && trn.resolved > 0) console.log(`🃏 den: settled ${trn.resolved} poker tournament(s)`);
+    // THE TRACK (step three): the day after, bank each entered racer's card result (status only)
+    const trk = await safe('track entries sweep', () => sweepTrackEntries(pool));
+    if (trk && trk.settled > 0) console.log(`🏇 track: settled ${trk.settled} card entr${trk.settled === 1 ? 'y' : 'ies'}`);
     // STREET RACES (step three): settle any GRAND PRIX past its window — race the grid + pay the top places
     const gp = await safe('grand prix sweep', () => sweepGrandPrix(pool));
     if (gp && gp.resolved > 0) console.log(`🏁 races: settled ${gp.resolved} grand prix`);

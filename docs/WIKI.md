@@ -293,7 +293,11 @@ death (`/v1/leaderboard/stable`). CASH only. **Breed** two same-kind racers into
 form (`/v1/stable/breed` — a head start, not a cap-skip; both parents retire). Enter **The Stakes**
 (`/v1/stable/stakes/:id`) — a scheduled marquee race the town's best animal wins; a cash buy-in escrows into
 a purse, the worker races the field, the top places split net of a 5% rake. (Mickey the Cornerman — the
-Underworld boxing fixture — trains your animals too: his standing discounts training sessions.)
+Underworld boxing fixture — trains your animals too: his standing discounts training sessions.) **Run in the
+card** (`/v1/casino/track/enter/:racerId`) — enter a fit racer into The Track's daily card (its kind's race,
+$5k nomination fee, up to 2 owner posts a race); the whole town bets on it via the normal card, and the worker
+banks its win to the racer's record + your owner legend. Track bets now lock **fixed odds** at bet time (the
+price you took), so a player runner entering mid-day shifts the board without changing settled tickets.
 
 ---
 
