@@ -766,3 +766,24 @@ event-loop-stall DoS); the griefing gap is a PvP-balance sign-off item; the econ
 
 **Round 13 verdict: 2 HIGH fixed (MCP SSRF/token-exfil + keyless card-DoS) + the keyless-route throttle
 gap. Griefing flagged as a PvP-balance sign-off item; §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+### Round 13 addendum — data-integrity (a3ea)
+- **MEDIUM fixed — duplicate living character per account.** `POST /v1/character` was a raced
+  check-then-insert (raw `pool.query`, no lock, no backstop): two concurrent creates with DIFFERENT
+  names both passed the existence SELECT and both INSERTed → a second uncontrollable "ghost" living
+  character (every load reads `rows[0]`), permanently pinning the account at ≥2 living (not §10.4 — the
+  drift monitor counts genesis per-character, so it's silent state corruption). Fix: serialize the create
+  on the `account_persistent` row `FOR UPDATE` (the withCharacter idiom) — a concurrent second create
+  blocks then sees the first's committed character → clean `exists`. (A partial `UNIQUE(account_id) WHERE
+  alive` index would be the DB-level backstop but trips pg-mem's `account_id = ANY(...)` planner in the
+  referral-spark path — the lock is the pg-mem-compatible + idiomatic fix; real-Postgres FOR UPDATE
+  serialization is the true race backstop.) `runEstate` flips the dead row `alive=false` before the heir
+  INSERT, so bloodline succession never contends. Regression in `test/security.js` (the sequential
+  invariant — a second create on a live account → `exists`, exactly one living; the concurrent race isn't
+  pg-mem-assertable). Verified CLEAN otherwise: zero FK/cascade orphans that carry value (chars never
+  hard-deleted, estate/dissolution wipes thorough), no money-column overflow (NUMERIC), nullable
+  listing/pool columns all `!= null`/`COALESCE`-guarded. LOW flagged (same as R9): dead-character
+  `missions_done`/`notifications` orphan-row accumulation — harmless storage growth.
+
+**Round 13 FINAL: 2 HIGH (MCP SSRF/token-exfil + keyless card-DoS) + 1 MED (ghost-character race) fixed;
+griefing flagged as a PvP-balance sign-off item. §10.4 untouched. Suite 33/33 + sim drift-0.**
