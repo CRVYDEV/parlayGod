@@ -15,7 +15,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 const BASE = (process.env.OMERTA_BASE_URL || 'https://playomerta.com').replace(/\/$/, '');
 let token = process.env.OMERTA_TOKEN || null;
@@ -36,10 +36,19 @@ async function api(method, path, body) {
   if (url.origin !== new URL(BASE).origin) return { status: 0, body: { error: 'bad_path', message: 'path must stay on the OMERTA origin' } };
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
-  const opts = { method, headers };
+  // (red-team R20) redirect:'manual' — the origin hard-assert above validates only the initial URL; an
+  // on-origin open redirect would otherwise be FOLLOWED off-origin (undici strips Authorization cross-origin,
+  // so no token leak, but keep it defense-in-depth). A real route never 3xx-redirects.
+  const opts = { method, headers, redirect: 'manual' };
   if (body !== undefined && method !== 'GET') {
     headers['content-type'] = 'application/json';
-    headers['idempotency-key'] = randomUUID();
+    // (red-team R20) DETERMINISTIC idempotency key = hash of {method,path,body}, NOT a fresh UUID per call.
+    // A fresh UUID meant a downstream-LLM retry of a money mutation (re-calling omerta_request with the same
+    // {method,path,body} after an ambiguous/timed-out result) sent a NEW key → the server executed it as a
+    // fresh action = accidental double withdraw/swap, contradicting the retry-safety AGENTS.md promises.
+    // Content-hash → a logical retry replays the stored response; a genuinely-different request gets a
+    // distinct key. (An intentional identical repeat replays too — the safe default for money moves.)
+    headers['idempotency-key'] = createHash('sha256').update(`${method} ${path} ${JSON.stringify(body)}`).digest('hex').slice(0, 32);
     opts.body = JSON.stringify(body);
   }
   let res, text;

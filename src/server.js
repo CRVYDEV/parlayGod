@@ -131,7 +131,9 @@ export async function buildServer() {
   // the LIVE-OPS dashboard (mod-key gated client-side; every call carries x-mod-key) — public/admin.html
   let adminHtml = '<!doctype html><title>OMERTA ops</title><p>Ops console file missing (public/admin.html).</p>';
   try { adminHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'admin.html'), 'utf8'); } catch { /* headless */ }
-  app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').send(adminHtml));
+  // (red-team R20) the mod ops console — deny framing (clickjacking defense-in-depth; the dashboard holds
+  // the mod key in sessionStorage and drives confiscate/ban/mint). No CSP (would break its inline scripts).
+  app.get('/admin', async (req, reply) => reply.type('text/html; charset=utf-8').header('X-Frame-Options', 'DENY').header('Referrer-Policy', 'no-referrer').send(adminHtml));
   // the CODEX: the in-game wiki — every system + gameplay loop (public/wiki.html); public, read-only
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }

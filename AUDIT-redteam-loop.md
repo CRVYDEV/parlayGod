@@ -1198,3 +1198,62 @@ drift.** Suite 33/33 + sim drift-0.
 (markClaimed queued-strand LOW) + 1 watcher hardening; chain reserve/queue accounting, worker sweep-sequence,
 and rate-limit core confirmed CLEAN of live exploits; trustProxy/reserve-backing/Redis/single-worker flagged
 for deploy-posture sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 20 — agent/MCP surface · supply-chain/secrets/config · malicious-player attack-chain
+Three final-distinct lenses. Every finding re-verified vs source; a regression on the fail-open guard. **No
+CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **MCP idempotency retry-safety (agent MED — FIXED).** `omerta-mcp/index.js` minted a fresh
+  `randomUUID()` idempotency key PER call, so a downstream-LLM retry of a money mutation (re-calling
+  `omerta_request` with the same `{method,path,body}` after an ambiguous/timed-out result) sent a NEW key →
+  the server executed it as a fresh action = accidental double withdraw/swap — contradicting the retry-safety
+  the code comment + AGENTS.md promise. Fixed: the key is now a DETERMINISTIC `sha256(method path body)` so a
+  logical retry replays the stored response (the safe default for money moves). `omerta-mcp/index.js`.
+- **MCP redirect-follow (agent LOW — HARDENED).** The origin hard-assert validated only the initial URL;
+  `fetch` followed 3xx redirects, so an on-origin open redirect would be followed off-origin (bounded —
+  undici strips Authorization cross-origin, and no on-origin open redirect exists). Added `redirect: 'manual'`.
+  `omerta-mcp/index.js`.
+- **`SOCIAL_VERIFY_MODE=trust` fail-open faucet (supply-chain MED — FIXED).** `socialRewardsLive()` returned
+  true for any mode `!== 'off'`, so a production server left on the alpha's honor-system `trust` would pay the
+  Spread-the-Word cash faucet to the whole base on ZERO proof — unlike `verify.js`, which THROWS in production
+  on `trust`. Mirrored that guard: `socialRewardsLive()` now returns false for `trust` in production
+  (fail-closed — a prod server that forgot `SOCIAL_VERIFY_MODE=live` pays nobody), while the alpha keeps
+  `trust`. Regression: the guard returns false under `NODE_ENV=production` + `trust`, true otherwise.
+  `src/growth.js` + `test/growth.js`.
+- **`/admin` clickjacking header (supply-chain LOW — HARDENED).** The mod ops console (holds the mod key in
+  sessionStorage, drives confiscate/ban/mint) served no `X-Frame-Options` → framing/clickjacking surface.
+  Added `X-Frame-Options: DENY` + `Referrer-Policy: no-referrer` (no CSP — would break its inline scripts).
+  `src/server.js`.
+
+**Lenses that came back CLEAN (confirmed):**
+- **Agent/MCP surface** — the R13 SSRF fix is robust against 21 bypass payloads (parsed-origin comparison
+  defeats the string-concat class entirely); the mod surface is unreachable (`omerta_request` attaches only
+  the agent bearer, never `x-mod-key`; `modAuth` rejects `/v1/mod/*`); the OpenAPI excludes the mod surface
+  two independent ways (preHandler-name `modAuth` + `/v1/mod/` URL) and never emits the `x-mod-key` scheme;
+  the Opportunity Board leaks nothing beyond the individual boards (directed/own-head/anon skipped, convoy
+  value-band not manifest, no auction reserve, funders never present); the agent leaderboard is banded; the
+  agent-key mint is not an escalation. One design-level residual flagged (prompt-injection: attacker game
+  text → MCP tool output + the general money tool — inherent to autonomous-agent-with-tools; charset limit +
+  cleanText reduce but don't eliminate).
+- **Supply-chain / secrets / config** — NO hardcoded real secret anywhere (only well-known public anvil
+  keys in tests); every security control fails CLOSED (JWT_SECRET/MARKET_SEED/MOD_KEY/DATABASE_URL boot
+  guards, ALLOW_MOD_REAL_REVENUE/X_TRUST_USER_TOKEN/WS_ALLOW_QUERY_TOKEN/TRUST_PROXY all default-off, the
+  29-knob test-only boot-refuse list is COMPLETE); no secret logged / no CORS / JWT-in-header (no CSRF) /
+  no static-path-traversal / optional resvg degrades cleanly; `.env` gitignored, no committed credential.
+
+**FLAGGED for founder sign-off (NOT patched — design/deploy/hygiene, ground rule #1):**
+- **MCP prompt-injection surface (agent MED, design):** an autonomous agent reading attacker-controlled game
+  text (names/contract-reasons/feed) that also holds the general `omerta_request` money tool is a
+  prompt-injection target. Inherent to the pattern; mitigation is a structured untrusted-content envelope in
+  the MCP output + an AGENTS.md warning that game text is untrusted — a design hardening, not a one-line fix.
+- **Ad-hoc contract-build deps (supply-chain LOW):** `tools/compile-contracts.js` pulls `solc`/OZ via
+  `npm i --no-save` (no lockfile integrity) — but `out-js/` is gitignored and mainnet is Foundry-pinned +
+  audit-gated; pin them in a build lockfile only if `out-js` ever feeds a production deploy.
+- **No CSP on `/` and `/wiki` (LOW):** the player console + wiki lack a CSP (thin surface — no cookie auth).
+
+**Round 20 verdict (2 of 3 lenses): 2 MED (MCP retry-safety, SOCIAL_VERIFY fail-open) + 2 LOW (MCP redirect,
+/admin clickjacking) fixed/hardened; the agent/MCP + supply-chain lenses confirmed CLEAN of CRITICAL/HIGH;
+the MCP prompt-injection design surface + build-dep hygiene flagged. §10.4 untouched. Suite 33/33 + sim
+drift-0. (Malicious-player attack-chain lens pending — addendum next.)**

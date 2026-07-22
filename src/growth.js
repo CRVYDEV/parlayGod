@@ -336,7 +336,16 @@ export async function claimOnboard(ch, taskId, client, h) {
 // social-task faucet with no verification configured), agent-flagged accounts are excluded, and
 // each task pays ONCE per (account, day). Cash only — never $OMR (the v24 rule). Share URLs carry
 // the player's living name as their referral code, so sharing feeds the §7.13 referral loop.
-export function socialRewardsLive() { return (process.env.SOCIAL_VERIFY_MODE || 'off') !== 'off'; }
+export function socialRewardsLive() {
+  const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
+  if (mode === 'off') return false;
+  // (red-team R20) 'trust' is an honor-system faucet — NEVER live in production (mirror verify.js's own
+  // production guard, so the two readers of SOCIAL_VERIFY_MODE agree). A prod server that forgot to set
+  // 'live' pays NOBODY the Spread-the-Word cash rather than paying the whole base on zero proof; the alpha
+  // (non-production) keeps 'trust' live as documented.
+  if (mode === 'trust' && process.env.NODE_ENV === 'production') return false;
+  return true;
+}
 
 export async function socialBoard(pool, accountId, ch) {
   const day = dayOf();
