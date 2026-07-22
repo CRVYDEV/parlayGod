@@ -927,8 +927,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveBreak(ch, req.params.id, client, h)));
   app.post('/v1/pen/break/:id/go', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.executeBreak(ch, req.params.id, client, h)));
-  app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h)));
+  app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) => {
+    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h));
+    await closeSocketsOnKill(r, req.params.targetId);
+    return r;
+  });
   // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)
   app.post('/v1/pen/burner/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.burnerHit(ch, victim, client, h, req.body?.tier)));
@@ -1311,8 +1314,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.acceptPeace(ch, req.params.targetId, client, h)));
   app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));
   // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
-  app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier)));
+  app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) => {
+    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier));
+    await closeSocketsOnKill(r, req.params.targetId);
+    return r;
+  });
   // M7 Phase 4: go to ground in a safehouse — earnable defense (untargetable by fire/NPC-hit).
   app.post('/v1/safehouse', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.enterSafehouse(ch, client, h)));
@@ -1346,8 +1352,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.startSearch(ch, req.params.targetId, client, h)));
   app.delete('/v1/streets/search', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => S.callOffSearch(ch, client)));
-  app.post('/v1/streets/:targetId/fire', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.fire(ch, victim, client, h, req.body?.rounds)));
+  app.post('/v1/streets/:targetId/fire', { preHandler: auth }, async (req) => {
+    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.fire(ch, victim, client, h, req.body?.rounds));
+    await closeSocketsOnKill(r, req.params.targetId); // a kill left the victim's account gangless — cut its stale gang: feed
+    return r;
+  });
   app.post('/v1/streets/:targetId/bust', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.bust(ch, victim, client, h)));
 
@@ -1457,6 +1466,20 @@ export async function buildServer() {
     const s = wsClients.get(accountId); if (!s) return;
     for (const sock of [...s]) { try { sock.close(code, reason); } catch { /* already gone */ } }
   };
+  // (red-team R26 WS) A killed character's account is left GANGLESS (runEstate → removeMember; the heir is
+  // born with no family), but its live socket keeps the dead street's `gang:` subscription — a stale mole
+  // into the former family's private war/contract/tribute/racket feed. runEstate can't reach wsClients
+  // (a buildApp closure), so the KILL ROUTES must close the victim's sockets post-COMMIT, mirroring the
+  // leave/kick fix (R9). Look the account up server-side by the victim CHARACTER id (the row survives as
+  // alive=false — never deleted), never exposing the account UUID. Non-fatal like kick: a throw here would
+  // surface a 5xx AFTER the kill committed → the onSend idempotency release → a retry re-runs the kill.
+  const closeSocketsOnKill = async (result, victimCharId) => {
+    try {
+      if (!(result && (result.kill === true || result.killed === true)) || !victimCharId) return;
+      const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [victimCharId])).rows[0];
+      if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
+    } catch (e) { console.error('kill socket-close (post-commit, non-fatal)', e?.code || e); }
+  };
 
   // ── M4: the Kitchen (§5.3, §7.10) ──
   app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>
@@ -1540,6 +1563,7 @@ export async function buildServer() {
         [victim.account_id, victimAcct.prestige, victimAcct.deaths]);
       if (reason) await G.track(client, victim.account_id, 'mod_kill_reason', { reason });
       await client.query('COMMIT');
+      closeAccountSockets(victim.account_id, 4009, 'gang_changed'); // R26 WS: the heir is gangless — cut the dead street's stale gang: feed
       return { ok: true, heirId: estate.heirId };
     // runEstate → removeMember can hit a war-partner AB-BA (40P01); this hand-rolled txn isn't
     // wrapped by withCharacter, so map it to a clean retry here too (audit MED) instead of a 500.
