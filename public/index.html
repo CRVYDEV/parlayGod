@@ -506,26 +506,56 @@
   // ── wallet integration: EIP-6963 multi-wallet discovery (MetaMask, Robinhood Wallet, Coinbase, Rabby, …) ──
   // Modern injected wallets ANNOUNCE themselves; we collect them so the player can pick which one to connect
   // instead of being stuck with whichever grabbed `window.ethereum`. Falls back to the legacy provider.
-  const wallets = new Map(); // rdns → { info:{name,icon,rdns}, provider }
+  const wallets = new Map(); // rdns → { info:{name,icon,rdns}, provider }  (desktop/extension injected wallets)
   let connectedProvider = null;
+  let wcProvider = null; // memoized WalletConnect (mobile) provider
   window.addEventListener('eip6963:announceProvider', (e) => {
     if (e.detail?.info?.rdns) wallets.set(e.detail.info.rdns, e.detail);
   });
   try { window.dispatchEvent(new Event('eip6963:requestProvider')); } catch {}
 
-  // resolve a provider to use: the connected one, or a discovered one (a picker if >1), or legacy window.ethereum.
+  // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): lazy-loaded from a CDN only when
+  // chosen, so the console stays a single zero-dep file otherwise. DORMANT unless the server surfaces a
+  // WalletConnect Cloud project id in /v1/rules. `.connect()` renders the SDK's own QR (desktop) / deep-link
+  // (mobile) modal, so scanning with a phone wallet drops into the SAME EIP-1193 flow as an injected wallet.
+  async function getWalletConnect() {
+    if (wcProvider) return wcProvider;
+    const cfg = rules?.walletConnect;
+    if (!cfg?.projectId) throw new Error('WalletConnect is not enabled on this server');
+    const { EthereumProvider } = await import('https://esm.sh/@walletconnect/ethereum-provider@2');
+    const p = await EthereumProvider.init({
+      projectId: cfg.projectId,
+      chains: [cfg.chainId], optionalChains: [cfg.chainId],
+      showQrModal: true,
+      metadata: { name: 'OMERTÀ', description: 'A noir mob RPG', url: location.origin, icons: [] },
+    });
+    p.__wc = true;
+    p.on?.('disconnect', () => { if (connectedProvider === p) connectedProvider = null; wcProvider = null; });
+    await p.connect(); // opens the QR / mobile-wallet chooser; resolves once the phone approves the session
+    wcProvider = p;
+    return p;
+  }
+
+  // resolve a provider to use: the connected one, else a chosen injected wallet or WalletConnect (a picker if
+  // more than one option), else legacy window.ethereum. Injected + WalletConnect are unified as EIP-1193.
   function pickProvider() {
     if (connectedProvider) return Promise.resolve(connectedProvider);
-    const list = [...wallets.values()];
-    if (list.length === 0) return Promise.resolve(window.ethereum || null); // legacy single-provider fallback
-    if (list.length === 1) return Promise.resolve(list[0].provider);
-    // >1 wallet installed → let the player choose (MetaMask vs Robinhood Wallet vs …)
+    const opts = [...wallets.values()].map((w) => ({ name: w.info.name, icon: w.info.icon, get: () => Promise.resolve(w.provider) }));
+    if (rules?.walletConnect?.projectId) opts.push({ name: 'WalletConnect (mobile)', icon: null, wc: true, get: () => getWalletConnect() });
+    if (opts.length === 0) return Promise.resolve(window.ethereum || null); // legacy single-provider fallback
+    if (opts.length === 1) return opts[0].get();
+    // >1 option → let the player choose (MetaMask vs Robinhood Wallet vs WalletConnect vs …)
     return new Promise((resolve) => {
       const box = $('#walletpick-list');
-      box.innerHTML = list.map((w, i) => `<button class="act" data-wi="${i}" style="display:flex;align-items:center;gap:10px;justify-content:flex-start;text-align:left">
-        ${w.info.icon ? `<img src="${w.info.icon}" alt="" width="24" height="24" style="border-radius:5px">` : ''}<span>${esc(w.info.name)}</span></button>`).join('');
-      const done = (p) => { $('#walletpick').classList.add('hidden'); resolve(p); };
-      box.querySelectorAll('[data-wi]').forEach((b) => b.onclick = () => done(list[Number(b.dataset.wi)].provider));
+      box.innerHTML = opts.map((o, i) => `<button class="act" data-wi="${i}" style="display:flex;align-items:center;gap:10px;justify-content:flex-start;text-align:left">
+        ${o.icon ? `<img src="${o.icon}" alt="" width="24" height="24" style="border-radius:5px">` : (o.wc ? '<span style="font-size:18px">📱</span>' : '')}<span>${esc(o.name)}</span></button>`).join('');
+      const done = async (opt) => {
+        $('#walletpick').classList.add('hidden');
+        if (!opt) return resolve(null);
+        try { resolve(await opt.get()); }
+        catch (e) { toast(e?.message ? 'wallet: ' + e.message : 'wallet connect failed', true); resolve(null); }
+      };
+      box.querySelectorAll('[data-wi]').forEach((b) => b.onclick = () => done(opts[Number(b.dataset.wi)]));
       $('#walletpick-cancel').onclick = () => done(null);
       $('#walletpick').classList.remove('hidden');
     });
@@ -2508,7 +2538,7 @@
       <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:10px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
       <div class="card">${me.wallet
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
-        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge with your browser wallet — MetaMask, Robinhood Wallet, or any injected wallet — to link it. Nothing leaves your wallet; it just proves the address.</div>
+        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Robinhood Wallet, or any injected wallet on desktop${rules?.walletConnect ? ', or scan with a mobile wallet (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat)</span></h2>

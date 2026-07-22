@@ -362,6 +362,14 @@ delete process.env.DAILY_CAP_OMR;
   delete process.env.OMERTA_BOND_ADDRESS;
   assert.throws(() => bondChainConfig(), /chain_unconfigured|missing/i, 'bondChainConfig throws when the bond chain is unconfigured');
   process.env.OMERTA_BOND_ADDRESS = savedBond;
+
+  // WalletConnect (mobile) config surface: /v1/rules exposes the public projectId when set, else null (dormant)
+  assert.equal((await call('GET', '/v1/rules')).body.walletConnect, null, 'WalletConnect is dormant (null) without WALLETCONNECT_PROJECT_ID');
+  process.env.WALLETCONNECT_PROJECT_ID = 'wc-test-project-id';
+  const wc = (await call('GET', '/v1/rules')).body.walletConnect;
+  assert.equal(wc?.projectId, 'wc-test-project-id', 'the public WalletConnect project id is surfaced when configured');
+  assert.equal(wc?.chainId, 46630, 'the WalletConnect chain to request matches CHAIN_ID');
+  delete process.env.WALLETCONNECT_PROJECT_ID;
 }
 
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet)');

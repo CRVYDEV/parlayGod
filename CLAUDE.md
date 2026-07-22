@@ -3081,6 +3081,14 @@ gets `no_quote`), rebuilds the exact signed tuple, and returns `{to, value, data
 `0x606262a5` (`bond((address,uint256×6),bytes)`) verified against viem. Chain-dormant (the submit only works once
 the bond chain is configured — mainnet-gated). `test/chain.js` decodes the calldata and asserts it's a `bond()`
 call carrying the right nonce/payer/sig, targets OmertaBond with the principal as `value`, and is account-scoped.
+**WalletConnect (mobile) — BUILT** (`public/index.html`, `src/server.js` `/v1/rules`): the picker gained a
+**WalletConnect (mobile)** option that LAZY-LOADS `@walletconnect/ethereum-provider` from a CDN only when chosen
+(so the console stays a single zero-dep file otherwise) and `.connect()`s — the SDK renders its own QR (desktop) /
+deep-link (mobile) modal, so scanning with **Robinhood Wallet / MetaMask Mobile / any WC wallet** drops into the
+SAME EIP-1193 flow (`connectedProvider`) as an injected wallet — SIWE link + bond submit both work over it. It's
+**DORMANT unless `WALLETCONNECT_PROJECT_ID` is set** — `/v1/rules` surfaces `walletConnect {projectId, chainId}`
+(the projectId is public/client-embedded by design; `chainId` = `CHAIN_ID` or 1) and the console hides the option
+when null. `test/chain.js` asserts the config surface (null without the env, the public id + chainId with it).
 STILL deferred before real bonds flow: the POL-pairing + DEX buyback bots, the on-chain Store paywall.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,

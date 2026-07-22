@@ -76,6 +76,7 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `OMERTA_BOND_ADDRESS` | **the `Bonded` → `recordBond` bond sync (NEW — now wired)** | books the event's authoritative payout + POL/Vig split; idempotent on nonce |
 | `TRADE_FEE_HOOK_ADDRESS` | the afterSwap→Vig trade-fee sync | only when the DEX hook ships |
 | `MINT_FEE_ETH` / `RESPAWN_FEE_ETH` | the PLEX price quote | ETH-denominated; keep == the contract fees |
+| `WALLETCONNECT_PROJECT_ID` | the console's **WalletConnect (mobile)** option (Robinhood Wallet / MetaMask Mobile) | a public WalletConnect Cloud project id; unset ⇒ the console hides the option. Surfaced in `/v1/rules`; set `CHAIN_ID` too so it requests the right chain |
 | `PLEX_MINT_OMR` / `PLEX_RESPAWN_OMR` | PLEX floor prices | sign-off levers |
 | `VIG_BPS` / `VIG_RESERVE_BPS` / `VIG_MAX_PRICE_JUMP` | Vig split + the buyback price-sanity bound | — |
 
