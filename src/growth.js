@@ -236,7 +236,7 @@ export async function recruiterLeaderboard(pool, limit = 20) {
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        LEFT JOIN gang_members gm ON gm.character_id = c.id
        LEFT JOIN gangs g ON g.id = gm.gang_id
-      WHERE a.recruits > 0
+      WHERE a.recruits > 0 AND NOT a.agent_flag
       ORDER BY a.recruits DESC LIMIT $1`, [limit])).rows;
   return rows.map((r) => ({ name: r.name, gang: r.gang || null, tag: r.tag || null,
     recruits: Number(r.recruits), rank: recruitRankOf(Number(r.recruits)), agent: !!r.agent_flag }));
