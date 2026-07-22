@@ -3,7 +3,7 @@
 // seal/Portfolio precedent). The ONLY §10.4 flow is the enumerated `estate:*` $OMR BURN, paid through
 // the vanity `spendOmr` till (account bucket) so the burn discipline lives in one place. Account-level
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
-import { GameError } from './game.js';
+import { GameError, cleanText } from './game.js';
 import { ESTATE, estateTierOf, estateFeatureOf, carVal, tickerPriceOf, hitmanRankOf, sealOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
@@ -100,8 +100,8 @@ export async function unlockFeature(ch, featureId, client, h) {
 export async function nameEstate(ch, name, client, h) {
   const cur = await loadEstate(client, ch.account_id);
   if (Number(cur.tier || 0) < 1) throw new GameError('no_estate', "Buy a place before you name it.");
-  const n = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 32);
-  if (n.length < 2) throw new GameError('name', 'Give the place a name (2–32 characters).');
+  const n = cleanText(name).replace(/\s+/g, ' ').trim().slice(0, 32); // strip HTML-injection chars (stored-XSS fix, R6)
+  if (n.length < 2) throw new GameError('name', 'Give the place a name (2–32 characters, no < > " markup).');
   await spendOmr(client, h, ESTATE.NAME_OMR, 'estate:name');
   await upsertEstate(client, ch.account_id, { name: n, spent_omr: Number(cur.spent_omr || 0) + ESTATE.NAME_OMR });
   return { ok: true, name: n };
