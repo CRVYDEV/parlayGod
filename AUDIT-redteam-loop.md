@@ -2379,3 +2379,51 @@ input-validation/coercion, idempotency replay, cross-system economic exploit-cha
 Solidity contracts, and the WebSocket/bus realtime surface. Remaining risk is operational (`forge test`, seed
 secrecy/rotation, the config-gated auth flags) and the founder balance/sign-off backlog — not reachable code
 defects. Suite 34/34 + sim drift-0 throughout.
+
+## Round 39 — the two most catastrophic-if-wrong surfaces: death/estate + gang-dissolution completeness, and accrual/timing precision
+
+Two lenses over the highest-consequence surfaces: (1) a systematic death/estate + gang-dissolution
+COMPLETENESS sweep (every character/gang/account-touching table wiped, survived, or transferred correctly — a
+single orphan or double-handle here is catastrophic and can be §10.4-invisible if the table isn't a currency);
+(2) accrual/timing/clock precision (sub-cent drift, negative-time, token-bucket boundaries, split remainders —
+the classic §10.4-drift sources a coarse sim can miss).
+
+**No reachable bug — both lenses CLEAN/COMPLETE (no CRITICAL/HIGH/MED/LOW).** Verified at source:
+
+- **Death/estate + dissolution completeness** — all 66 schema tables enumerated, the 63 with a
+  character/gang/account reference each verified to do exactly ONE correct thing: 30 per-character tables WIPED
+  in the runEstate loop (cars/boats/businesses/racers/fighters-via-wiper/skills/npc-standing/pen/convoy/port/
+  daily/etc.); the differently-named refs handled by named wipers (bounties/searches/wiretaps/npc_hits/
+  speakeasies/boxing/convoys/listings/loans/informants/crew-heist+pen-break+world-raid leaders/territory
+  specialist); the ACCOUNT-level survivors correctly NOT wiped so the heir inherits (portfolios/estates/bonds/
+  auctions/landmarks/account_gear/referrals/vendettas + every account_persistent legend); and the deliberately-
+  unwiped ESCROW snapshots (stakes/poker/grand-prix/futurity/boxing-bets/track entries) all resolved at the
+  worker with a `*:death` burn behind an alive-filter (dead entrants burn, live ones pay — not orphans). The
+  ordering is correct — shields (bodyguard→respawn-token→witpro/pen) → loot-carve IN MEMORY (chop/cash/omr/
+  gear/contraband/escrow carved from the victim before the estate reads `cash+bank` and burns the remainder) →
+  heir INSERT + account survivor-bumps AFTER the wipe; a killer-as-funder/bidder/bettor/principal refund lands
+  in memory (never an SQL credit persistCharacter would clobber); dead rows are never re-persisted. All four
+  death entry points thread the killer correctly (player fire-kill loots+rep+vendetta; npcHit no loot;
+  mod-kill/huntWanted headless no loot but prestige+deaths persisted; pen-shank no loot + claimBounty separate;
+  respawn-token skips the estate entirely). Gang dissolution burns treasury/reserve/ammo `gang:dissolved`
+  (§10.4-ledgered), releases districts/territory/frontier, deletes votes/portfolios (vetoes kept by design),
+  and the escrowed gang-contract stake burns at the later refundPot resolve (different bucket, no double-count).
+  Informational-only: dead-character `notifications` rows accumulate (cosmetic row-hygiene, no money/live-player/
+  §10.4 impact — the heir has a fresh id, nobody reads a dead feed); transactions/rng_audit correctly retained;
+  the R37 voidLoansAtDeath latent-FK note already documented in-source.
+- **Accrual/timing precision** — elapsed is `Math.max(0, …)`-clamped on EVERY time-proportional faucet (a
+  future/skewed marker yields 0, never a negative drain), the `dt<1000ms` early-return + end-of-accrual
+  `last_accrued_at` write gate double-count without dropping a window, each faucet ledgers EXACTLY the floored
+  credited amount (bank interest ledgers the exact applied delta by construction — the historical sub-cent gate
+  correctly removed), all token buckets (wash/launder/port/rwa/bank_credit/racket_credit/noto) are continuous
+  leaky-buckets (`refill = elapsed×rate`, no calendar-window 2×), every split (parimutuel/rake/dividend/vig)
+  floors with the LAST recipient mopping the remainder so it sums exactly (no `Math.round` mint), the wall-clock
+  Make-Risk-Pay releases persist + `>0`-guard (idempotent, can't re-fire), and the staking claim pays
+  `floor(min(rewards,pool)×1e6)/1e6` (never overdraws the pool). One accepted-design note (bank interest is a
+  self-consistent JS-float delta).
+
+**Round 39 verdict:** the two most catastrophic-if-wrong surfaces (death/estate + dissolution completeness over
+all 66 tables; accrual/timing precision) returned NO reachable bug — every lifecycle table is correctly wiped/
+survived/transferred with correct shield+loot ordering, and the timing surface is clamp-safe + floor-exact +
+bucket-continuous. Suite 34/34 + sim drift-0 (docs-only round). The loop is 5-of-6 recent rounds CLEAN; the
+remaining risk is operational + founder-balance, not reachable code defects.
