@@ -1,0 +1,66 @@
+# OMERTÀ — Render Blueprint. ONE file → the whole GAME stack: the API + the background worker + a Postgres DB.
+#
+# How to use (see DEPLOY-CHECKLIST.md for the click-by-click): push this repo to GitHub, then on Render pick
+# "New +" → "Blueprint" → this repo. Render reads this file, creates all three pieces, GENERATES the secrets,
+# and deploys. No terminal, no config typing.
+#
+# This brings the GAME live only. The blockchain layer stays DORMANT (there are deliberately NO CHAIN_* vars
+# here) — you activate it later for mainnet by adding those vars to these same services (see CHAIN-DEPLOY.md).
+
+databases:
+  - name: omerta-db
+    plan: basic-256mb            # a small always-on Postgres (~$6/mo). Your data persists across restarts.
+                                 # (A "free" Postgres exists but expires — use it only to kick the tires.)
+
+envVarGroups:
+  - name: omerta-secrets         # shared by BOTH processes so MARKET_SEED matches (the draws must agree)
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true      # signs player login tokens (Render makes a strong random value)
+      - key: MARKET_SEED
+        generateValue: true      # the secret seed behind Numbers/Track/Fight/goods price draws (§7.11)
+      - key: MOD_KEY
+        generateValue: true      # gates the /admin dashboard + mod tools — reveal it in the Render dashboard
+
+services:
+  # 1) the game server — serves the website (/), the admin dashboard (/admin), the wiki (/wiki), and the API
+  - type: web
+    name: omerta-api
+    runtime: node
+    plan: starter                # always-on (~$7/mo). The free tier SLEEPS when idle — bad for a live game.
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /v1/session  # Render pings this; 200 = the server is healthy
+    autoDeploy: true              # redeploys automatically when you push to the connected branch
+    envVars:
+      - fromGroup: omerta-secrets
+      - key: NODE_ENV
+        value: production
+      - key: SOCIAL_VERIFY_MODE
+        value: live               # REQUIRED in production or social/First-Week rewards pay nothing
+      - key: RATE_LIMIT
+        value: "on"
+      - key: TRUST_PROXY
+        value: "on"               # Render sits behind a load balancer → per-IP throttles use the real client IP
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omerta-db
+          property: connectionString
+
+  # 2) the background worker — the 12h buyback, the nightly §10.4 economy monitor, and every timed settlement.
+  #    Run exactly ONE. The game works without it, but income/settlements/alerts stall — keep it running.
+  - type: worker
+    name: omerta-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run worker
+    autoDeploy: true
+    envVars:
+      - fromGroup: omerta-secrets
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omerta-db
+          property: connectionString
