@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepTournaments, trackFieldOf, sweepTrackEntries } from '../src/casino.js';
+import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -523,6 +523,75 @@ assert.equal(e3.body.error, 'full', `the card is full at PLAYER_SLOTS=${CASINO.T
 // clear these fresh entries so they don't disturb the §10.4 sweep below
 await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].id}','${owners[1].id}')`);
 
+// ══════════ THE FUTURITY (Track step four): the crowd-bet marquee for player-owned racers ══════════
+process.env.FUTURITY_MS = String(30 * 60 * 1000); // a real window so betting stays open (we backdate to settle)
+// three owners each nominate a racer — a clear FAVORITE (form 75) + two longshots (form 3)
+const fu = [];
+for (const [nm, spd] of [['Fav', 25], ['Long A', 1], ['Long B', 1]]) {
+  const { body: { token: t } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: t, body: { name: `Fut ${nm}` } });
+  const id = (await meOf(t)).id;
+  await pool.query(`UPDATE characters SET respect=400, cash=300000, loc='neon' WHERE id='${id}'`);
+  const aid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a;
+  const b = await call('POST', '/v1/stable/buy', { token: t, body: { kind: 'dog', name: `${nm} Dog` } });
+  const racer = b.body.id;
+  await pool.query(`UPDATE racers SET speed=${spd}, stamina=${spd}, heart=${spd} WHERE id='${racer}'`);
+  fu.push({ t, id, aid, racer, nm });
+}
+// nomination gates: at the track + the fee burns
+await pool.query(`UPDATE characters SET loc='docks' WHERE id='${fu[0].id}'`);
+assert.equal((await call('POST', `/v1/casino/futurity/nominate/${fu[0].racer}`, { token: fu[0].t })).body.error, 'district', 'nominations are taken at the track');
+await pool.query(`UPDATE characters SET loc='neon' WHERE id='${fu[0].id}'`);
+const cashPreNom = (await meOf(fu[0].t)).cash;
+const nom = await call('POST', `/v1/casino/futurity/nominate/${fu[0].racer}`, { token: fu[0].t });
+assert.equal(nom.code, 200, 'the favorite is nominated'); assert.equal(nom.body.racer, 'Fav Dog', 'the right racer');
+assert.equal((await meOf(fu[0].t)).cash, cashPreNom - CASINO.FUTURITY.NOMINATE_FEE, 'the nomination fee left the pocket');
+assert.equal(-(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:futurity:nom' AND character_id='${fu[0].id}'`)).rows[0].s)), CASINO.FUTURITY.NOMINATE_FEE, 'ledgered casino:futurity:nom sink');
+assert.equal((await call('POST', `/v1/casino/futurity/nominate/${fu[0].racer}`, { token: fu[0].t })).body.error, 'entered', 'one runner per owner per card');
+await call('POST', `/v1/casino/futurity/nominate/${fu[1].racer}`, { token: fu[1].t });
+await call('POST', `/v1/casino/futurity/nominate/${fu[2].racer}`, { token: fu[2].t });
+const fid = nom.body.futurity;
+// an owner can't bet their own card
+assert.equal((await call('POST', '/v1/casino/futurity/bet', { token: fu[0].t, body: { racerId: fu[0].racer, amount: 1000 } })).body.error, 'own_event', 'no betting on your own race');
+// two spectators bet: A backs the favorite, B backs a longshot
+const spec = [];
+for (const nm of ['Punter A', 'Punter B']) {
+  const { body: { token: t } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: t, body: { name: nm } });
+  const id = (await meOf(t)).id;
+  await pool.query(`UPDATE characters SET respect=400, cash=100000, loc='neon' WHERE id='${id}'`);
+  spec.push({ t, id, nm });
+}
+assert.equal((await call('POST', '/v1/casino/futurity/bet', { token: spec[0].t, body: { racerId: 'nope', amount: 1000 } })).body.error, 'bad_runner', 'bet on a real runner');
+const betA = await call('POST', '/v1/casino/futurity/bet', { token: spec[0].t, body: { racerId: fu[0].racer, amount: 1000 } });
+assert.equal(betA.code, 200, 'Punter A backs the favorite'); assert.equal(betA.body.on, 'Fav Dog', 'on the favorite');
+assert.equal((await call('POST', '/v1/casino/futurity/bet', { token: spec[0].t, body: { racerId: fu[1].racer, amount: 500 } })).body.error, 'already_bet', 'one bet per bettor');
+await call('POST', '/v1/casino/futurity/bet', { token: spec[1].t, body: { racerId: fu[1].racer, amount: 1000 } });
+// §10.4 MID-window: the futurity escrow == the two live bets ($2000)
+let invMid = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'futurity escrow');
+assert(invMid.ok && Math.abs(invMid.lhs - 2000) < 1, `mid-window escrow == the live pool (lhs ${invMid.lhs})`);
+// backdate the window + settle via the worker
+await pool.query(`UPDATE futurities SET resolves_at='${new Date(Date.now() - 1000).toISOString()}' WHERE id='${fid}'`);
+const favLegPre = Number((await pool.query(`SELECT racer_wins FROM account_persistent WHERE account_id='${fu[0].aid}'`)).rows[0].racer_wins);
+const punterAPre = (await meOf(spec[0].t)).cash, punterBPre = (await meOf(spec[1].t)).cash;
+const favOwnerPre = (await meOf(fu[0].t)).cash;
+await sweepFuturity(pool);
+assert.equal((await pool.query(`SELECT status FROM futurities WHERE id='${fid}'`)).rows[0].status, 'resolved', 'the futurity settled');
+assert.equal((await pool.query(`SELECT winner_racer FROM futurities WHERE id='${fid}'`)).rows[0].winner_racer, fu[0].racer, 'the favorite won (form 75 vs 3)');
+// the winner's owner legend banked (account-level) + the racer record
+assert.equal(Number((await pool.query(`SELECT racer_wins FROM account_persistent WHERE account_id='${fu[0].aid}'`)).rows[0].racer_wins), favLegPre + 1, 'the owner legend banked the win');
+assert.equal(Number((await pool.query(`SELECT wins FROM racers WHERE id='${fu[0].racer}'`)).rows[0].wins), 1, "the racer's futurity win on its record");
+// the parimutuel: A (backed the winner) gets stake back + the losing pool net of 5% vig; B loses; the owner takes half the rake as a purse
+// rake = floor(1000*0.05)=50; distributable=950; A payout=1000+950=1950 (net +950); purse=25; houseCut=25
+assert.equal((await meOf(spec[0].t)).cash, punterAPre + 1950, 'Punter A collected stake + the losing pool net of vig');
+assert.equal((await meOf(spec[1].t)).cash, punterBPre, 'Punter B lost their stake (escrowed pre-sweep, nothing back)');
+assert.equal((await meOf(fu[0].t)).cash, favOwnerPre + 25, 'the winning owner took the promoter purse (half the rake)');
+assert.equal(-(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:futurity:take'`)).rows[0].s)), 25, 'the house vig ledgered (NULL take)');
+await sweepFuturity(pool); // idempotent — a second sweep settles nothing
+// §10.4 POST-settle: the futurity escrow closes to 0 (posted − wins − refunds − purse − take − death == 0, no open pool)
+const invFut = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'futurity escrow');
+assert(invFut && invFut.ok, `futurity escrow reconciles post-settle (lhs ${invFut?.lhs}, rhs ${invFut?.rhs})`);
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
@@ -542,5 +611,5 @@ assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 const trFinal = inv.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trFinal?.ok, `poker tourney escrow holds at the end (drift ${trFinal?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent), §10.4 identity + vocabulary + treasury + den + tourney-escrow checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the LOCKED odds, winning + losing tickets ledgered casino:*:track) + step three RUN IN THE CARD (a player enters a fit racer into the day's card — the district/one-per-card gates + the casino:track:entry nomination sink, the merged field showing the maxed racer as the short-priced favorite flagged player:true, a bet paid at the locked odds, and the worker banking the racer's card win to its record + the owner legend, idempotent) + step four THE FUTURITY (the crowd-bet marquee — owners nominate player racers for a burned casino:futurity:nom fee, the town bets parimutuel, the worker races the field and pays the winner's backers the losing pool net of vig / the owner a promoter purse / half-vig→buyback; the district/own_event/bad_runner/already_bet gates, the distinct-posts regression + slot cap, and the new futurity-escrow §10.4 check mid-window + closing to 0), §10.4 identity + vocabulary + treasury + den + tourney-escrow + futurity-escrow checks hold`);
 await app.close();

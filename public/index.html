@@ -366,6 +366,8 @@
       `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
     if (body.game === 'track') bits.push(`down on ${body.horse} (${body.odds}:1) in the ${body.race} — $${fmt(body.stake)} to win`);
     if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
+    if (body.futurity && body.racer && body.fee !== undefined && body.form !== undefined) bits.push(`${body.racer} (form ${body.form}) is nominated to the futurity — the whole town's betting on the field`);
+    if (body.futurity && body.on && body.amount !== undefined) bits.push(`$${fmt(body.amount)} on ${body.on} in the futurity`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);
     if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
@@ -1249,6 +1251,15 @@
           <button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`;
         return `<div class="d" style="color:var(--dim);font-size:11px">pool <b>$${fmt(tr.pool)}</b> · ${tr.entrants} seated · closes in ${Math.ceil((tr.closesSeconds || 0) / 60)}m${tr.seated ? ' · <b style="color:var(--gold)">you\'re in</b>' : ''}</div>
           ${tr.seated ? '' : `<button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`}`; })()}
+      <h2 style="margin-top:14px">The Futurity <span class="d" style="font-size:10px">(nominate a racer — the whole town bets on the field)</span></h2>
+      ${(() => { const fu = den.futurity || {};
+        if (fu.open === false) return `<div class="d" style="color:var(--dim);font-size:11px">No futurity taking nominations. Nominate one of your racers ($${fmt(fu.nominateFee)} fee) to open the card — the crowd bets parimutuel; the top runner's owner takes a promoter purse.</div>
+          <input id="fut-nom" placeholder="racer id to nominate" size="18"><button class="act" id="fut-nom-go">nominate ($${fmt(fu.nominateFee)})</button>`;
+        const rows = (fu.field || []).map((r) => `<div class="d" style="font-size:11px">${r.racer} <span style="color:var(--dim)">(${r.kind}, form ${r.form})</span> · pool $${fmt(r.pool)}${fu.yourBet && fu.yourBet.racerId === r.racerId ? ' · <b style="color:var(--gold)">your bet</b>' : ''} ${!fu.mine && !fu.yourBet ? `<a href="#" class="fut-bet" data-id="${r.racerId}" style="color:var(--gold)">bet</a>` : ''}</div>`).join('');
+        return `<div class="d" style="color:var(--dim);font-size:11px">pool <b>$${fmt(fu.pool)}</b> · ${(fu.field || []).length}/${fu.fieldMax} runners · closes in ${Math.ceil((fu.closesSeconds || 0) / 60)}m${fu.mine ? ' · <b style="color:var(--gold)">your runner\'s in</b>' : ''}</div>
+          ${rows}
+          ${fu.mine || fu.yourBet ? '' : `<input id="fut-bet-amt" placeholder="bet amount" size="10" value="${fu.minBet}">`}
+          ${fu.mine ? '' : `<div style="margin-top:6px"><input id="fut-nom2" placeholder="nominate another racer id" size="18"><button class="act" id="fut-nom2-go">nominate ($${fmt(fu.nominateFee)})</button></div>`}`; })()}
       <h2 style="margin-top:14px">Back Room</h2>
       <div class="d" style="color:var(--dim);font-size:11px">faders: ${(den.backroom?.faders || []).map((f) => `${f.name} ($${fmt(f.fadeLimit)})`).join(', ') || 'nobody'}</div>
       <input id="fade-limit" placeholder="your fade limit" size="12">
@@ -1259,6 +1270,9 @@
     t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#trk-go').onclick = () => act('POST', '/v1/casino/track', { race: t.querySelector('#trk-race').value, runner: Number(t.querySelector('#trk-runner').value) - 1, amount: Number(t.querySelector('#trk-amt').value) });
     if (t.querySelector('#trk-enter')) t.querySelector('#trk-enter').onclick = () => act('POST', `/v1/casino/track/enter/${t.querySelector('#trk-racer').value.trim()}`, null).then(() => renderDen());
+    if (t.querySelector('#fut-nom-go')) t.querySelector('#fut-nom-go').onclick = () => act('POST', `/v1/casino/futurity/nominate/${t.querySelector('#fut-nom').value.trim()}`, null).then(() => renderDen());
+    if (t.querySelector('#fut-nom2-go')) t.querySelector('#fut-nom2-go').onclick = () => act('POST', `/v1/casino/futurity/nominate/${t.querySelector('#fut-nom2').value.trim()}`, null).then(() => renderDen());
+    t.querySelectorAll('.fut-bet').forEach((a) => a.onclick = (e) => { e.preventDefault(); act('POST', '/v1/casino/futurity/bet', { racerId: a.dataset.id, amount: Number(t.querySelector('#fut-bet-amt')?.value || 0) }).then(() => renderDen()); });
     t.querySelector('#fade-set').onclick = () => act('POST', '/v1/casino/fade', { limit: Number(t.querySelector('#fade-limit').value) });
     if (t.querySelector('#bj-go')) t.querySelector('#bj-go').onclick = () => act('POST', '/v1/casino/blackjack', { amount: Number(t.querySelector('#bj-amt').value) });
     t.querySelector('#pk-set').onclick = () => act('POST', '/v1/casino/poker/deal', { limit: Number(t.querySelector('#pk-limit').value) });

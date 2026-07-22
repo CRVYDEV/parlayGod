@@ -298,6 +298,12 @@ card** (`/v1/casino/track/enter/:racerId`) — enter a fit racer into The Track'
 $5k nomination fee, up to 2 owner posts a race); the whole town bets on it via the normal card, and the worker
 banks its win to the racer's record + your owner legend. Track bets now lock **fixed odds** at bet time (the
 price you took), so a player runner entering mid-day shifts the board without changing settled tickets.
+**The Futurity** (`/v1/casino/futurity/nominate/:racerId`, `/v1/casino/futurity/bet`) — the marquee where
+the Stable and the Track meet. Owners **nominate** player-owned racers ($5k fee, up to 8 in the field) and
+the **whole town bets parimutuel** on the race (one bet per bettor; you can't bet a card you've a runner in).
+At window close the worker races the field on form; the winner's backers split the losing pool net of a 5%
+vig, the winning owner takes a promoter's purse, and the racer banks a win. Distinct from The Stakes: The
+Stakes is owners competing for a pooled buy-in; the Futurity is the crowd betting on the field.
 
 ---
 

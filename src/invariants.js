@@ -273,6 +273,23 @@ export async function runLedgerInvariants(pool) {
   const skDeath = -(await sum(pool, "currency='cash' AND reason='stable:stakes:death'"));
   push('stakes escrow', skEscrow, skPosted - skWins - skRefunds - skTake - skDeath);
 
+  // (f9) THE FUTURITY escrow (the boxing-bet-escrow twin, Track step four): the parimutuel BET pool held
+  // on OPEN futurities == posted ('casino:futurity:bet') − winner payouts ('casino:futurity:win': stake
+  // back + pro-rata cut) − refunds ('casino:futurity:refund': a scratched runner / one-sided book /
+  // scrapped card) − the winning owner's promoter purse ('casino:futurity:purse') − the house vig (NULL
+  // 'casino:futurity:take': half street tax + half burn) − dead-bettor burns (NULL 'casino:futurity:death').
+  // The nomination fee ('casino:futurity:nom', a char'd sink → the buyback) is NOT escrow — a check-(a) row.
+  // These exact-reason matches sit UNDER the den-book 'casino:bet:%'/'casino:win:%' LIKE patterns, so a
+  // futurity never touches the PvE house book.
+  const fuEscrow = await one(pool, "SELECT COALESCE(SUM(pool),0) s FROM futurities WHERE status='open'");
+  const fuPosted = -(await sum(pool, "currency='cash' AND reason='casino:futurity:bet'"));
+  const fuWins = await sum(pool, "currency='cash' AND reason='casino:futurity:win'");
+  const fuRefunds = await sum(pool, "currency='cash' AND reason='casino:futurity:refund'");
+  const fuPurse = await sum(pool, "currency='cash' AND reason='casino:futurity:purse'");
+  const fuTake = -(await sum(pool, "currency='cash' AND reason='casino:futurity:take'"));
+  const fuDeath = -(await sum(pool, "currency='cash' AND reason='casino:futurity:death'"));
+  push('futurity escrow', fuEscrow, fuPosted - fuWins - fuRefunds - fuPurse - fuTake - fuDeath);
+
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
   for (const [cur, prefixes] of Object.entries(KNOWN_REASONS)) {

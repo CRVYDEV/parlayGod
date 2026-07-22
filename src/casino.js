@@ -13,6 +13,7 @@ import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARK
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
 const d6 = () => 1 + Math.floor(Math.random() * 6);
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1)); // inclusive (the stable.js form-roll)
 // blackjack: an infinite deck (each draw independent, unpredictable — the same server RNG as dice).
 // rank ints 1=Ace … 11/12/13 = J/Q/K; face cards count 10, the ace 11 or 1.
 const drawCard = () => 1 + Math.floor(Math.random() * 13);
@@ -456,6 +457,191 @@ export async function sweepTrackEntries(pool) {
     finally { client.release(); }
   }
   return { settled };
+}
+
+// ══════════ THE FUTURITY (Track step four) — the marquee race the whole town bets on ══════════
+// The boxing-main-event twin on the racing side: owners NOMINATE a player-owned racer (a burned
+// NOMINATE_FEE → the buyback, the track-entry precedent — NOT an escrow); the crowd bets parimutuel on
+// the field; the worker races it at window close and pays the losing pool to the winner's backers, net
+// of vig. Distinct from THE STAKES (owner buy-in competition). One open futurity at a time
+// (futurity_state.current); a new one materializes on the next nomination after the last settles.
+const futurityMs = () => Number(process.env.FUTURITY_MS) || CASINO.FUTURITY.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
+
+// ── nominate one of your fit racers into the open futurity card. Form snapshotted; the fee burns. ──
+export async function nominateFuturity(ch, racerId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No nominations from lockup.');
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The futurity runs on the ${CASINO.DISTRICT}.`);
+  const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
+  if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
+  if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
+  if (Number(ch.cash) < CASINO.FUTURITY.NOMINATE_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.FUTURITY.NOMINATE_FEE}.`);
+  // materialize/find the open futurity under the state singleton lock (LOCK ORDER: char → racer → state → card)
+  const st = (await client.query('SELECT current FROM futurity_state WHERE id=1 FOR UPDATE')).rows[0];
+  let g = st.current ? (await client.query("SELECT * FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
+  if (g && new Date(g.resolves_at) <= new Date()) g = null; // the window closed — the sweep will settle it; a new card opens
+  if (!g) {
+    const id = crypto.randomUUID();
+    const resolvesAt = new Date(Date.now() + futurityMs());
+    await client.query('INSERT INTO futurities (id, status, resolves_at, pool) VALUES ($1,$2,$3,0)', [id, 'open', resolvesAt]);
+    await client.query('UPDATE futurity_state SET current=$1 WHERE id=1', [id]);
+    g = { id, resolves_at: resolvesAt };
+  }
+  if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
+    throw new GameError('entered', "You've already got a runner in this futurity.");
+  const n = Number((await client.query('SELECT COUNT(*) n FROM futurity_runners WHERE futurity_id=$1', [g.id])).rows[0].n);
+  if (n >= CASINO.FUTURITY.FIELD_MAX) throw new GameError('full', `The card's full — ${CASINO.FUTURITY.FIELD_MAX} runners.`);
+  const f = Number(r.speed) + Number(r.stamina) + Number(r.heart);
+  ch.cash = Number(ch.cash) - CASINO.FUTURITY.NOMINATE_FEE;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CASINO.FUTURITY.NOMINATE_FEE, reason: 'casino:futurity:nom', counterparty: g.id });
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [CASINO.FUTURITY.NOMINATE_FEE]); // → the buyback (non-refundable, the track-entry precedent)
+  await client.query('INSERT INTO futurity_runners (futurity_id, racer_id, character_id, racer_name, kind, form) VALUES ($1,$2,$3,$4,$5,$6)',
+    [g.id, r.id, ch.id, r.name, r.kind, f]);
+  await h.track(client, ch.account_id, 'casino', { game: 'futurity_nominate' });
+  bus.emit('streets', { type: 'futurity_nominate', who: ch.name, racer: r.name });
+  return { ok: true, futurity: g.id, racer: r.name, form: f, fee: CASINO.FUTURITY.NOMINATE_FEE,
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
+// ── bet CASH (parimutuel) on a nominated racer in the open futurity. One bet per bettor; an owner with
+// a runner in the field can't bet (inside stake — the boxing own_event rule). Escrows into the pool. ──
+export async function betFuturity(ch, racerId, amount, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No action from a cell.');
+  const st = (await client.query('SELECT current FROM futurity_state WHERE id=1')).rows[0];
+  const g = st?.current ? (await client.query("SELECT * FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
+  if (!g) throw new GameError('no_futurity', "There's no futurity taking bets right now.");
+  if (new Date(g.resolves_at) <= new Date()) throw new GameError('closed', 'Betting on the futurity is closed.');
+  const amt = gateBet(ch, amount, CASINO.FUTURITY.MIN_BET, CASINO.FUTURITY.MAX_BET);
+  const runner = (await client.query('SELECT racer_name FROM futurity_runners WHERE futurity_id=$1 AND racer_id=$2', [g.id, racerId])).rows[0];
+  if (!runner) throw new GameError('bad_runner', 'Bet on one of the runners in the field.');
+  if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
+    throw new GameError('own_event', "You've got a runner in this card — no betting on your own race.");
+  if ((await client.query('SELECT 1 FROM futurity_bets WHERE futurity_id=$1 AND bettor_char=$2', [g.id, ch.id])).rows[0])
+    throw new GameError('already_bet', "You've already got action on this futurity.");
+  ch.cash = Number(ch.cash) - amt;
+  await client.query('INSERT INTO futurity_bets (futurity_id, bettor_char, racer_id, amount) VALUES ($1,$2,$3,$4)', [g.id, ch.id, racerId, amt]);
+  await client.query('UPDATE futurities SET pool = pool + $2 WHERE id=$1', [g.id, amt]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:futurity:bet', counterparty: g.id });
+  await h.track(client, ch.account_id, 'casino', { game: 'futurity_bet', amt });
+  return { ok: true, futurity: g.id, on: runner.racer_name, amount: amt };
+}
+
+// ── worker resolution — race the field at window close, pay the parimutuel pool (the boxing main-event
+// twin). LOCK ORDER: runner-owner + bettor chars sorted → futurity_state → the card row (state BEFORE the
+// row — nominate locks state→card, so no AB-BA). A dead owner's runner SCRATCHES (its backers refunded);
+// a dead bettor's escrow burns. The field is frozen at window close, so the pre-read is stable. ──
+export async function resolveFuturity(client, futurityId) {
+  const g0 = (await client.query('SELECT * FROM futurities WHERE id=$1', [futurityId])).rows[0];
+  if (!g0 || g0.status !== 'open') return null; // already settled (idempotent)
+  const runnerChars = (await client.query('SELECT character_id FROM futurity_runners WHERE futurity_id=$1', [futurityId])).rows.map((r) => r.character_id);
+  const betChars = (await client.query('SELECT bettor_char FROM futurity_bets WHERE futurity_id=$1', [futurityId])).rows.map((r) => r.bettor_char);
+  const chars = [...new Set([...runnerChars, ...betChars])].sort();
+  for (const cid of chars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  await client.query('SELECT current FROM futurity_state WHERE id=1 FOR UPDATE');
+  const g = (await client.query("SELECT * FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [futurityId])).rows[0];
+  if (!g) return null;
+  const clearCurrent = async () => { await client.query('UPDATE futurity_state SET current=NULL WHERE id=1 AND current=$1', [futurityId]); };
+  const runners = (await client.query(
+    'SELECT r.racer_id, r.character_id, r.racer_name, r.form, c.alive FROM futurity_runners r LEFT JOIN characters c ON c.id=r.character_id WHERE r.futurity_id=$1', [futurityId])).rows;
+  const live = runners.filter((r) => r.alive); // a dead owner's stable is gone — that runner scratches
+  const runningIds = new Set(live.map((r) => r.racer_id));
+  // bets: dead bettors burn; live bets on a SCRATCHED runner are refunded (a scratch — the runner didn't go)
+  const bets = (await client.query(
+    'SELECT b.bettor_char, b.racer_id, b.amount, c.alive FROM futurity_bets b LEFT JOIN characters c ON c.id=b.bettor_char WHERE b.futurity_id=$1', [futurityId])).rows;
+  const refundBet = async (b) => {
+    await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, Number(b.amount)]);
+    await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: Number(b.amount), reason: 'casino:futurity:refund', counterparty: futurityId });
+  };
+  if (live.length < CASINO.FUTURITY.MIN_RUNNERS) { // the card didn't fill — scrap it, refund every LIVE bet, burn the dead
+    for (const b of bets) {
+      if (b.alive) await refundBet(b);
+      else await ledger(client, { currency: 'cash', amount: -Number(b.amount), reason: 'casino:futurity:death', counterparty: futurityId });
+    }
+    await client.query("UPDATE futurities SET status='scrapped' WHERE id=$1", [futurityId]);
+    await clearCurrent();
+    return { futurity: futurityId, scrapped: true, runners: live.length };
+  }
+  // race: snapshotted form + rand(0,VARIANCE) each; rank DESC (the best animal wins, the going is fickle)
+  const ranked = live.map((r) => ({ ...r, score: Number(r.form) + rand(0, CASINO.FUTURITY.VARIANCE) })).sort((a, b) => b.score - a.score);
+  const winner = ranked[0];
+  // status: the winner's record + the owner LEGEND (account-level, survives death — the sweepTrackEntries pattern)
+  const rr = (await client.query('SELECT wins FROM racers WHERE id=$1 FOR UPDATE', [winner.racer_id])).rows[0]; // may be gone (bred/sold) — the win still counts for the owner legend
+  if (rr) await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [winner.racer_id, Number(rr.wins) + 1]);
+  await client.query('UPDATE account_persistent SET racer_wins = racer_wins + 1 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [winner.character_id]);
+  for (let i = 0; i < ranked.length; i++)
+    await client.query('UPDATE futurity_runners SET place=$3 WHERE futurity_id=$1 AND racer_id=$2', [futurityId, ranked[i].racer_id, i + 1]);
+  // ── the SPECTATOR pot (a CASH parimutuel) ──
+  const winBets = [], loseBets = [];
+  for (const b of bets) {
+    if (!b.alive) { await ledger(client, { currency: 'cash', amount: -Number(b.amount), reason: 'casino:futurity:death', counterparty: futurityId }); continue; } // dead bettor's escrow burns
+    if (!runningIds.has(b.racer_id)) { await refundBet(b); continue; } // backed a scratched runner → refund
+    if (b.racer_id === winner.racer_id) winBets.push(b); else loseBets.push(b);
+  }
+  const totalWin = winBets.reduce((a, b) => a + Number(b.amount), 0);
+  const totalLose = loseBets.reduce((a, b) => a + Number(b.amount), 0);
+  let purse = 0, houseCut = 0;
+  if (totalWin === 0) { // no action on the winner — refund every remaining live bet (the one-sided book)
+    for (const b of loseBets) await refundBet(b);
+  } else {
+    const rake = Math.floor(totalLose * CASINO.FUTURITY.RAKE_BPS / 10000);
+    const ownerAlive = winner.alive;
+    purse = ownerAlive ? Math.floor(rake / 2) : 0;   // the winning owner's cut (from the rake) — only if alive
+    houseCut = rake - purse;                          // → half street-tax buyback, half burns
+    const distributable = totalLose - rake;           // the losing pot, net of vig, split pro-rata among winners
+    let handedOut = 0;
+    for (let i = 0; i < winBets.length; i++) {
+      const b = winBets[i];
+      const share = i === winBets.length - 1 ? distributable - handedOut : Math.floor(distributable * Number(b.amount) / totalWin);
+      handedOut += share;
+      const payout = Number(b.amount) + share;        // stake back + pro-rata cut of the losers
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [b.bettor_char, payout]);
+      await ledger(client, { characterId: b.bettor_char, currency: 'cash', amount: payout, reason: 'casino:futurity:win', counterparty: futurityId });
+    }
+    if (purse > 0) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [winner.character_id, purse]);
+      await ledger(client, { characterId: winner.character_id, currency: 'cash', amount: purse, reason: 'casino:futurity:purse', counterparty: futurityId });
+    }
+    if (houseCut > 0) {
+      await ledger(client, { currency: 'cash', amount: -houseCut, reason: 'casino:futurity:take', counterparty: futurityId });
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(houseCut / 2)]); // half → the buyback, half burns
+    }
+  }
+  await client.query("UPDATE futurities SET status='resolved', winner_racer=$2 WHERE id=$1", [futurityId, winner.racer_id]);
+  await clearCurrent();
+  await rngLog(client, winner.character_id, `casino:futurity:${futurityId}`, winner.score, `winner ${winner.racer_name} · ${ranked.length} runners · pool $${Number(g.pool)}`);
+  bus.emit('streets', { type: 'futurity_result', winner: winner.racer_name, runners: ranked.length });
+  for (const r of ranked) await notify(client, r.character_id, 'futurity_result', { racer: r.racer_name, place: ranked.indexOf(r) + 1, of: ranked.length, won: r.racer_id === winner.racer_id });
+  return { futurity: futurityId, winner: winner.racer_name, runners: ranked.length, pot: totalWin + totalLose, purse, houseCut };
+}
+
+// worker sweep — settle every open futurity past its window (per-card txn, idempotent).
+export async function sweepFuturity(pool) {
+  const due = (await pool.query("SELECT id FROM futurities WHERE status='open' AND resolves_at <= now() ORDER BY resolves_at")).rows;
+  let resolved = 0;
+  for (const { id } of due) {
+    const client = await pool.connect();
+    try { await client.query('BEGIN'); await resolveFuturity(client, id); await client.query('COMMIT'); resolved++; }
+    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved };
+}
+
+// the open futurity (if one's registering) — surfaced on the den board with the LIVE parimutuel pool per runner.
+async function futurityInfo(pool, characterId) {
+  const st = (await pool.query('SELECT current FROM futurity_state WHERE id=1')).rows[0];
+  const g = st?.current ? (await pool.query("SELECT * FROM futurities WHERE id=$1 AND status='open'", [st.current])).rows[0] : null;
+  const base = { nominateFee: CASINO.FUTURITY.NOMINATE_FEE, minRunners: CASINO.FUTURITY.MIN_RUNNERS, fieldMax: CASINO.FUTURITY.FIELD_MAX,
+    minBet: CASINO.FUTURITY.MIN_BET, maxBet: CASINO.FUTURITY.MAX_BET };
+  if (!g || new Date(g.resolves_at) <= new Date()) return { ...base, open: false };
+  const runners = (await pool.query('SELECT racer_id, racer_name, kind, form, character_id FROM futurity_runners WHERE futurity_id=$1 ORDER BY form DESC', [g.id])).rows;
+  const bets = (await pool.query('SELECT racer_id, amount FROM futurity_bets WHERE futurity_id=$1', [g.id])).rows;
+  const poolByRunner = {}; for (const b of bets) poolByRunner[b.racer_id] = (poolByRunner[b.racer_id] || 0) + Number(b.amount);
+  const myBet = (await pool.query('SELECT racer_id, amount FROM futurity_bets WHERE futurity_id=$1 AND bettor_char=$2', [g.id, characterId])).rows[0];
+  return { ...base, open: true, id: g.id, pool: Number(g.pool),
+    mine: runners.some((r) => r.character_id === characterId),
+    yourBet: myBet ? { racerId: myBet.racer_id, amount: Number(myBet.amount) } : null,
+    field: runners.map((r) => ({ racerId: r.racer_id, racer: r.racer_name, kind: r.kind, form: Number(r.form), pool: poolByRunner[r.racer_id] || 0 })),
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
 }
 
 // ── THE NUMBERS: pick 0–999, one ticket per street per day, pays 600:1 on the day's draw ──
@@ -916,5 +1102,6 @@ export async function denInfo(pool, characterId) {
     blackjack: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: `${CASINO.BJ_PAYS_BPS / 10000 * 2}:2 on a natural`, hand },
     poker: { min: CASINO.POKER_MIN, maxBet: CASINO.MAX_BET, rakeBps: CASINO.PVP_RAKE_BPS, tables: pokerTables },
     tournament: tourney,
+    futurity: await futurityInfo(pool, characterId),
   };
 }
