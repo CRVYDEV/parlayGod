@@ -129,26 +129,33 @@ export async function runBuyback(pool, opts = {}) {
 // §7.9 formula) and reset respect. Batched; each character is row-locked.
 export async function runSeasonRollover(pool, opts = {}) {
   const current = opts.season ?? Math.floor(dayOf() / 28);
-  const client = await pool.connect();
   let converted = 0;
+  // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the reset
+  // below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so no §10.4
+  // currency moves and no chance is involved (rank is earned). Account-level → survives death. Only
+  // characters rolling over this season (season < current) with respect are eligible. The snapshot is
+  // a read (order-independent); the GRANT is deferred into each winner's own locked per-char txn below
+  // so it runs UNDER the winner's `char FOR UPDATE` (F3/F4 char→portfolios order).
+  const s0 = await pool.connect();
+  let leaders, rows;
   try {
-    await client.query('BEGIN');
-    // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the
-    // reset below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so
-    // no §10.4 currency moves and no chance is involved (rank is earned). Account-level → survives
-    // death. Only characters rolling over this season (season < current) with respect are eligible.
-    // audit F3/F4: the snapshot picks the winners here, but the GRANT is deferred into the reset loop
-    // below so it runs UNDER the winner's `char FOR UPDATE` lock — matching invest's char→portfolios
-    // order. Granting here (unlocked) was the sole `portfolios` writer holding no character lock, a
-    // latent lost-update/deadlock vs a concurrent same-ticker invest. Now closed by lock-ordering.
-    const leaders = (await client.query(
+    leaders = (await s0.query(
       'SELECT id FROM characters WHERE alive AND season < $1 AND respect > 0 ORDER BY respect DESC, id LIMIT $2',
       [current, PORTFOLIO.SEASON_PRIZES.length])).rows;
-    const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
-    const rows = (await client.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
-    for (const { id } of rows) {
+    rows = (await s0.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
+  } finally { s0.release(); }
+  const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
+  // R22 (worker-sweep-isolation lens): ONE txn per character — the monolithic single-txn rollover was
+  // the lone value-moving sweep without per-row isolation, so a single persistently-throwing row would
+  // roll back the WHOLE batch every tick and stall the season for EVERYONE. Per-char txn matches every
+  // sibling sweep: a poison row is skipped (logged), the rest convert; the `season < current` marker +
+  // per-row FOR UPDATE re-check keep it idempotent + resumable (partial progress persists across a crash).
+  for (const { id } of rows) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
       const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [id])).rows[0];
-      if (!ch || ch.season >= current) continue;
+      if (!ch || ch.season >= current) { await client.query('ROLLBACK'); continue; }
       const prize = prizeByChar.get(id); // grant the season prize while THIS char row is locked (F3/F4)
       if (prize) {
         const g = await grantShares(client, ch.account_id, PORTFOLIO.SEASON_TICKER, prize.omrWorth);
@@ -161,16 +168,19 @@ export async function runSeasonRollover(pool, opts = {}) {
         await client.query('UPDATE account_persistent SET prestige = prestige + $2 WHERE account_id=$1', [ch.account_id, legacy]);
       await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
         [crypto.randomUUID(), ch.account_id, 'season_convert', JSON.stringify({ season: current, legacy })]);
+      await client.query('COMMIT');
       converted++;
-    }
-    // econ pass: the COMMISSION ladder is seasonal — a new season re-contests the chamber.
-    // gangs.season is the lazy marker (the character-conversion pattern above), so the reset is
-    // idempotent per season and a fresh gang (season 0) is stamped current on its first sweep.
-    await client.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE season < $1', [current]);
-    await client.query('COMMIT');
-    return { season: current, converted };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
-  finally { client.release(); }
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); } // poison row skipped, batch continues
+    finally { client.release(); }
+  }
+  // econ pass: the COMMISSION ladder is seasonal — a new season re-contests the chamber. gangs.season
+  // is the lazy marker (the character-conversion pattern above), so the reset is idempotent per season
+  // and a fresh gang (season 0) is stamped current on its first sweep. Own txn (isolated from the loop).
+  const sg = await pool.connect();
+  try {
+    await sg.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE season < $1', [current]);
+  } finally { sg.release(); }
+  return { season: current, converted };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
