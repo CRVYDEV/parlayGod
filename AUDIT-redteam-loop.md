@@ -221,3 +221,72 @@ notes + 2 balance flags for founder sign-off. Suite 33/33 + sim drift-0.**
 escrow, loot, referral, and gang-dissolution cores are sound; residual items are LOW/deploy-config/
 founder-sign-off (drainQueue liveness, mod-trust claimed, invite budget, social trust-mode, auction
 loot-shelter, tier-2 missed-fire).**
+
+## Round 5 — six deep economic lenses (kitchen, Law/RICO, territory/frontier emission, backed-$OMR flywheel, status-modifier composition, co-op crew) + a manual route-wrapper sweep
+
+**Verdict: NO CRITICAL/HIGH/MED across all six lenses. The economy cores are sound.** Only code changes: 2
+cosmetic display fixes (view cargoCap/skillPoints). Everything else is founder-sign-off / design-call.
+
+### Fixed
+- **Status-modifier cosmetics (2 display bugs).** The character view under-reported `cargoCap` (omitted the
+  `road_boss` capstone's +trunk — a maxed Wheelman shown a smaller trunk than `trunkCap()` enforces) and
+  `skillPoints` (omitted the prestige bonus `pointsOf()` grants). Display-only — enforcement was already
+  correct — the view now mirrors the canonical helpers exactly.
+
+### Verified CLEAN (no patch)
+- **Vig / backed-$OMR flywheel (ad20) — the critical one.** No $OMR mint beyond backing exists: staking
+  rewards, dividends (personal + family pools, kept separate), and the pass stipend are all pool-bounded
+  TRANSFERS (in `omrBuckets`, in neither the mint nor burn term); `prize:omr` is the SOLE in-game mint,
+  1:1 backed by real-revenue-bought hard $OMR moved pool→reserve. `runVigInvariants` (spend≤revenue,
+  split-exact, reserve-fully-backed, extraction≤reserve) holds by construction; the fabricated-`vig_revenue`
+  surface is closed by the `txHash`/`ALLOW_MOD_REAL_REVENUE` gate; PLEX burns (never mints); the AMM LP
+  carve pairs event-fund $OMR (mints nothing). Extraction ≤ inflow holds.
+- **Kitchen/drug economy (a17c).** Every cook/collect/deal/crew-sale ledgered + reconciles §10.4 check (a);
+  the on-ramp +50% phases out exactly at trade-rank 1 (signed curve untouched); the crew-cold gate closes
+  the offline-sale dodge; the Bureau raid seizes without double-count; cook/collect is race-safe; the
+  victim's post-accrual stash decrement persists (no re-sale exploit). 2 by-design balance notes (hire
+  defers the nut, bounded; 3-day cold-grace).
+- **Law/RICO courtroom (a2ba).** Forfeiture reconciles the per-character cash check exactly (pocket-then-
+  bank, floored, staked-$OMR/gear safe, NOT death); the conviction floor (0.045) forbids a minted
+  acquittal; the informant collapse/meter/sweep are single-resolution + bounded (GREATEST/floor); rat/
+  wanted omertà scoping is consistent across every kill site. 2 sign-off (demandTrial cheap reset,
+  foundation `joined_at` fail-open on legacy NULL — deploy migration note).
+- **Territory/frontier/occupation (a77f).** The emission-neutral clock-advance is provably `cut+residual ≤
+  pending` (deflationary); the gang-treasuries §10.4 check categorizes every reason correctly; seizure/
+  invade/liberation never double-credit; the NPC-raid rout bonus fires only on the floor-crossing. Design
+  flags (§10.4-safe): a rival can muscle a COLD op the owner can't collect; rising-vassal tribute is a
+  capped deferral vs the board's "pays no tribute" copy.
+- **Co-op crew (heist/convoy/port) (aa2c).** Pot splits floored ≤ pot (no mint); the rat is a net sink
+  (ring −EV); insurance underwriting cap makes a colluding ring's net extraction ≤0 by construction;
+  degrading multi-ambush wears only on a WIN; the toll/port faucets are supply-cap/regen bounded; piracy
+  is a <100% redirect (emission only falls); goods conserve by count; every direct-SQL column
+  (contraband/port_used/berths) is confirmed OUT of the persist positional UPDATE (no clobber); the lock
+  order is acyclic. Design flags: inside-job can rob a COLD front's pending (CONSISTENT with shakedown —
+  neither PvP path gates cold, a "neglected front is vulnerable" design call, §10.4-clean); warehouse→fence
+  ≤1.25× variance faucet (BALANCE.md); joiner-rat individually +EV (intended betrayal, ring −EV).
+- **Manual route-wrapper sweep.** Every inline `pool.query` mutation in server.js is legit infrastructure
+  (idempotency store, account/character creation, agent-flag, notifications-deliver, ban/invite) — NO
+  player economic route bypasses the withCharacter/withTwoCharacters ledger+lock discipline. Character
+  creation sets genesis state (server-authoritative rollStats), not a §10.4 transfer.
+
+### Founder sign-off items surfaced (NOT bugs, ranked)
+Status-modifier WATCH: (W1) skills melt (fence_network×kingpin ×1.1664) cheapens the melt→ammo faucet —
+the D1 kill-EV anchor the Underworld deliberately won't touch, now indirectly moved by Skills (emission-
+bounded, a `FENCE_MULT` lever); (W2) a grandmaster active clears `world_raid_at` (2h < the 4h active CD) →
+~+50% solo tap-rate on non-apex outfits (emission-neutral, but a status modifier reaching a signed cash-
+faucet's pacing). Plus the territory cold-muscle / inside-job-cold design call, demandTrial reset, and the
+kitchen ramp-phase notes. All §10.4-clean.
+
+**Round 5 verdict: 2 cosmetic fixes; the Vig backing wall, kitchen faucets, law forfeiture, territory
+emission, co-op payouts, and the route-wrapper discipline are all sound. Suite 33/33 + sim drift-0.**
+
+## Loop summary (Rounds 1–5)
+Five rounds, ~30 finder agents + manual traces. **No CRITICAL, no HIGH exploitable-by-a-player defect, no
+§10.4 conservation breach anywhere.** Fixes shipped: R1 (5 + a balance flag), R2 (2 hygiene/observability),
+R3 (D2 upgrade-gate, heat clamp, RNG deploy guards, spendOmr guard), R4 (banned-WS live close, casino
+tip-after-payout, idempotency re-reserve + post-commit render guard, recruiter agent exclusion), R5 (2 view
+display fixes). The recurring theme: real but bounded defects — signed-rule consistency cracks, intra-call
+ordering, idempotency-retry seams, and display drift — never a value-minting or conservation hole. The
+backed-$OMR flywheel, escrow identities, chain reserve, loot legs, auth boundary, and lock order are the
+load-bearing surfaces and all verified sound. Residuals are LOW / deploy-config / founder-sign-off, tracked
+above and in BALANCE.md.
