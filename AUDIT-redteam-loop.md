@@ -981,3 +981,67 @@ CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
 state-machine/escrow, and DoS-core lenses confirmed CLEAN; the pool-starvation availability item + the
 dashboard/leaderboard scaling items flagged for a founder architectural call. §10.4 untouched. Suite
 33/33 + sim drift-0.**
+
+---
+
+## Round 17 — cross-system value-chains · accrual/timing/clock · authorization matrix · websocket/bus/notify
+Four fresh lenses aimed at emergent (multi-system) risk. Every finding re-verified vs source. **No
+CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **`busted` streets wealth leak (websocket MED — FIXED).** `resolveBust` emitted `{type:'busted', who,
+  forfeited: total}` to the server-wide `streets` feed, and `total = FORFEIT_RATE × (pocket+bank)` with
+  `FORFEIT_RATE` a PUBLIC constant — so any connected socket could invert `liquid = forfeited/FORFEIT_RATE`
+  to the victim's EXACT cash+bank for free, a no-cost precise-wealth oracle undercutting the paid Wire
+  dossier (which BANDS wealth) + the anti-precise-kill-EV rule every other wealth surface respects
+  (convoy emits a value band; kill/jump emit names only). Fix: the streets emit now carries only THAT a
+  bust happened (`{type:'busted', who}`) — the exact figure stays on the victim's own `me:` notify + the
+  private return/telemetry. `src/law.js`. (No test read the streets field; the response body is unchanged.)
+
+**Lenses that came back CLEAN (confirmed):**
+- **Cross-system economic exploit chains** — no unbounded value creation, no NEW Sybil-scalable +EV rail
+  beyond the accepted set. Every consensual A→B cash transfer is taxed 2–5% (market/exchange, speakeasy
+  round/buyout, bodyguard, loan repay/collect/paper, all casino/boxing/race/stable PvP); the only untaxed
+  A→B is the already-accepted directed loan (`MAX_ACTIVE=1`). All loot rates <100% → self-funded rings are
+  −EV; parimutuels net −rake to a controlling ring (profit needs outside money); convoy insurance is
+  underwriting-capped ≤0/account; shakedown/rival-raid clock-advance is emission-neutral; the hard
+  extraction bound is the full-reserve withdrawal queue (extraction ≤ inflow), not any in-game cap.
+- **Lazy accrual / timing / clock** — no double-accrual, no backward-clock mint, no clock-advance
+  arithmetic error, no worker-vs-read double-count. The emission-neutral clock-advance math is exact at
+  the cap boundary (verified algebra), `max(0,dt)` clamps are present at every dt site, collects reset
+  the clock to `now()` (never `now−cap`), every collect is atomic under a serializing lock, and the
+  uncapped staking-rewards accrual is §10.4-safe (rewards excluded from `omrBuckets`; paid pool-bounded).
+- **Websocket / bus / notifications** — channel auth sound (`me:` bound to the authed live char, `gang:`
+  from server-side current membership, no `socket.on('message')` so no client-chosen channel, R9
+  leave/kick drop intact), no notification injection (targets server-derived, payloads escaped), the `me:`
+  feed isn't a free hunt/bounty oracle (startSearch silent → the Wire tap is still the paid way to learn
+  you're hunted), shared-channel payloads banded (convoy valueBand, anon-contract family omitted), and the
+  keyless card/profile routes expose only the banded dossier (never exact wealth, `esc()`'d, clipped).
+
+**FLAGGED for founder sign-off (NOT patched — balance/calibration/documented, ground rule #1):**
+- **Cumulative faucet stacking (cross-system MED):** each "one new faucet" was sim-measured in ISOLATION
+  ("maxed 3-stable", "top-tier speakeasy"), but a fully-built endgame whale runs territory + up to 5
+  businesses + port + a 3-fighter boxing stable + a 4-racer stable + street-race purses + world raids +
+  convoys + casino rakeback in parallel — the sim never SUMS them, so aggregate endgame $/day has no
+  measured ceiling. Recommend a sim probe summing a fully-built character's realized $/day vs the
+  Risk-to-Earn target before production. §10.4-clean (every faucet ledgered) — a calibration gap, not a leak.
+- **Port fence-timing (cross-system LOW-MED):** `fenceMultOf` is deterministic/public (0.85–1.25) and the
+  supply cap gates SOURCING not warehousing/fencing, so a savvy player accumulates then dumps on the 1.25
+  peak day → ~15–25% realized uplift over the sim's auto-fence baseline. Refines the already-flagged port
+  sign-off item; counterweight is the 50% contraband loot on a fire-kill.
+- **Crew sales not daily-bucketed (accrual LOW-MED):** offline kitchen crew sales are metered only by the
+  per-touch 8h cap, NOT the refilling `racket_credit_ms` token bucket the D2b fix gave rackets — so pinging
+  any `withCharacter` action every <8h realizes ~24h/day of sell-time vs the bucketed racket rate. NOT a
+  §10.4 mint (bounded by the finite stash, ledgered `crew:sales`, heat-self-limiting) — a balance-parity
+  call: add a `crew_credit_ms` bucket IF the sim signed the kitchen loop at 8–12h/day. Founder dial.
+- **`upgradeRacket` Bureau-raid dodge (accrual LOW):** ALREADY documented/flagged — `upgradeRacket` banks
+  pending without the `resolveTerritoryRaid` roll that `upgradeBusiness`/`upgradeSpeakeasy` do. Bounded
+  (scrutiny not cleared → a later collect still rolls it). The `upgradeSpeakeasy` parity fix is the dial;
+  left for founder sign-off (touches the signed raid balance).
+- **Port haul exact-value streets emit (websocket LOW):** `port_landing`/`port_fence` ship an exact haul
+  value (vs convoy's band) — but it's realized-income theater at arrival (no ambush possible), like the
+  accepted casino highroller stake. Band it for convoy parity if desired.
+
+**Round 17 verdict (3 of 4 lenses): 1 MED (busted streets exact-wealth leak) fixed; cross-system,
+accrual/timing, and websocket lenses confirmed CLEAN; faucet-stacking + port-timing + crew-bucket +
+upgradeRacket flagged for founder calibration. §10.4 untouched. Suite 33/33 + sim drift-0. (Authorization-
+matrix lens pending — addendum next.)**
