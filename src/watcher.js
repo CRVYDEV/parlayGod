@@ -79,7 +79,10 @@ export async function syncClaimedEvents(pool, source, opts = {}) {
   if (!w) return { processed: 0 };
   const logs = await source.claimedLogs(w.from, w.to);
   let processed = 0;
-  for (const l of logs) { await markClaimed(pool, Number(l.nonce)); processed++; }
+  // (red-team R19 F3) per-log isolation symmetry with syncFeeEvents — a deterministic-poison log is
+  // skipped (can never succeed) while a transient error re-throws so the cursor doesn't advance past a
+  // good log. markClaimed has little deterministic-throw surface today, but this closes the asymmetry.
+  for (const l of logs) { if (await isolate('claimed', () => markClaimed(pool, Number(l.nonce)))) processed++; }
   await setCursor(pool, 'claimed', w.to);
   return { processed, from: w.from, to: w.to };
 }
@@ -93,7 +96,8 @@ export async function syncTradeFees(pool, source, opts = {}) {
   if (!w) return { processed: 0 };
   const logs = await source.tradeFeeLogs(w.from, w.to);
   let processed = 0;
-  for (const l of logs) { await recordTradeFee(pool, { nonce: l.nonce, amountWei: l.amount }); processed++; }
+  // (red-team R19 F3) per-log isolation symmetry with syncFeeEvents (see syncClaimedEvents).
+  for (const l of logs) { if (await isolate('trade', () => recordTradeFee(pool, { nonce: l.nonce, amountWei: l.amount }))) processed++; }
   await setCursor(pool, 'trades', w.to);
   return { processed, from: w.from, to: w.to };
 }

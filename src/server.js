@@ -208,7 +208,10 @@ export async function buildServer() {
     // agent could poll a read endpoint (e.g. GET /v1/me) at unlimited rate to DODGE the §10.2 agent 1/3s
     // hard throttle — the global limiter only guards POST/DELETE. Enforce the AGENT bucket on authed GETs
     // here; humans are left unthrottled on GETs so multi-tab console loads never 429 — only the agent cadence closes.
-    if (rateLimitsEnabled() && a.agent_flag && req.method === 'GET') {
+    // (red-team R19 F1) HEAD too — Fastify 5 auto-generates a HEAD route per GET (exposeHeadRoutes) that
+    // runs the SAME handler, but `=== 'GET'` alone let `HEAD /v1/me` dodge this agent cadence + the read
+    // limiter below while still running withCharacter (FOR UPDATE + a held connection). Treat HEAD as a read.
+    if (rateLimitsEnabled() && a.agent_flag && (req.method === 'GET' || req.method === 'HEAD')) {
       const limited = await checkRateLimit({ accountId: req.user.sub, agent: true, path: req.routeOptions?.url || req.url });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -248,8 +251,12 @@ export async function buildServer() {
     // do real per-hit work (an SVG→PNG raster + a DB dossier) and are NOT under the /v1 read-limiter — an
     // unauthenticated flood from one origin could pin the server. Throttle them per-IP (generous, only
     // bites a flood). Placed before the /v1 read branch so /v1/u (keyless) is covered too.
-    if (rateLimitsEnabled() && req.method === 'GET'
-      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/'))) {
+    // (red-team R19 F2) also throttle the keyless HEAVY GETs — /v1/art renders an SVG per hit and
+    // /v1/landmarks does a full-table scan; both are keyless (no auth preHandler), so an unauthenticated
+    // caller sends no token → the /v1 read limiter below early-returns → they were throttled by NOTHING.
+    if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
+      && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
+          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -259,7 +266,7 @@ export async function buildServer() {
     // concurrent-GET flood from one account can pin the pool and starve everyone. Throttle authed /v1
     // GETs per-account with a GENEROUS bucket (never bites the console's debounced polling/re-render).
     // jwtVerify is cheap + no DB; a keyless/public GET (no token) falls through unthrottled.
-    if (rateLimitsEnabled() && req.method === 'GET'
+    if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && req.url.startsWith('/v1') && !req.url.startsWith('/v1/mod')) {
       try { await req.jwtVerify(); } catch { return; }
       const limited = await checkReadLimit({ accountId: req.user.sub });

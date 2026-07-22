@@ -15,7 +15,7 @@ process.env.CHAIN_ID = '46630';
 process.env.MOD_KEY = 'test-mod-key';
 
 const { buildServer } = await import('../src/server.js');
-const { chainConfig, VOUCHER_TYPES } = await import('../src/chain.js');
+const { chainConfig, VOUCHER_TYPES, markClaimed } = await import('../src/chain.js');
 const { reconcileFees } = await import('../src/fees.js');
 const { runLedgerInvariants } = await import('../src/invariants.js');
 
@@ -108,6 +108,12 @@ r = await call('POST', `/v1/withdraw/${vB}/cancel`, { token });
 assert.equal(r.code, 200, 'the queued withdrawal cancels'); assert.equal(r.body.refunded, 5, 'the burned $OMR is refunded');
 assert.equal((await meOf(token)).omr, omrBeforeB, '$OMR fully restored — no stuck funds (net-0 reversal)');
 assert.equal((await call('POST', `/v1/withdraw/${vB}/cancel`, { token })).body.error, 'not_queued', 'a cancelled voucher cannot be cancelled again');
+
+// ── (red-team R19 F2) markClaimed must NO-OP on a QUEUED (never-signed) voucher — the mod /reserve/claimed
+//    route could otherwise flip a queued voucher to 'claimed' on an operator typo, permanently stranding
+//    its burned $OMR (drainQueue/cancel both require status='queued'). Voucher A is still queued here. ──
+assert.equal((await markClaimed(pool, nonceA)).claimed, 0, "markClaimed no-ops on a queued voucher (only status='signed' is claimable)");
+assert.equal((await pool.query('SELECT status FROM vouchers WHERE nonce=$1', [nonceA])).rows[0].status, 'queued', 'the queued voucher is untouched — still drainable');
 
 // Safe funds a tranche → the queue drains FIFO and signs A
 r = await call('POST', '/v1/mod/reserve/fund', { body: { amount: 100 }, headers: modH });
