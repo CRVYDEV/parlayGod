@@ -1,6 +1,6 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
-import { GameError } from './game.js';
+import { GameError, cleanText } from './game.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
@@ -277,9 +277,13 @@ export async function agentLeaderboard(pool, limit = 25) {
       ORDER BY (c.cash + c.bank) DESC LIMIT $1`, [limit])).rows;
   // $OMR extracted on-chain per account (withdraw:omr is a §10.4 burn — the true extraction signal).
   // Aggregate in JS: pg-mem lacks ABS(), and the withdraw debit is a negative ledger amount.
+  // (red-team R7 DoS) scope to the returned top-25 accounts AND include currency='omr' so the query
+  // uses ix_tx_currency_reason (currency,reason) — the reason-only predicate seq-scanned the whole
+  // append-only ledger (the largest, forever-growing table) on every hit.
   const ext = {};
-  for (const r of (await pool.query(
-    "SELECT account_id, amount FROM transactions WHERE reason='withdraw:omr'")).rows)
+  const acctIds = rows.map((r) => r.account_id);
+  if (acctIds.length) for (const r of (await pool.query(
+    "SELECT account_id, amount FROM transactions WHERE currency='omr' AND reason='withdraw:omr' AND account_id = ANY($1)", [acctIds])).rows)
     ext[r.account_id] = (ext[r.account_id] || 0) + Math.abs(Number(r.amount));
   // audit: publish BANDS, not exact liquid — an exact net worth lets a hunter compute precise kill-EV
   // on a named agent (the convoy value-band precedent). Rank still uses the exact figure server-side.
@@ -364,7 +368,10 @@ export async function claimSocial(ch, taskId, proof, client, h) {
   const cash = SOCIAL_TASKS.CASH + (allDone ? SOCIAL_TASKS.ALL_BONUS : 0); // fold the all-done bonus in (the onboard-capstone precedent)
   ch.cash = Number(ch.cash) + cash;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: `social:${taskId}` });
-  await h.track(client, h.accountId, 'social_task', { task: taskId, allDone, proof: String(proof || '').slice(0, 300) });
+  // (red-team R7 HIGH) cleanText the proof — it's player free-text surfaced verbatim on the mod /admin
+  // activity feed (innerHTML), where the mod key lives in sessionStorage → unescaped markup was a
+  // mod-side stored XSS → root escalation. Strip < > " ` at the source like every other display field.
+  await h.track(client, h.accountId, 'social_task', { task: taskId, allDone, proof: cleanText(proof).slice(0, 300) });
   return { ok: true, kind: 'social', task: taskId, cash, allDone };
 }
 

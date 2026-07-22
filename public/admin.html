@@ -79,6 +79,10 @@
 <script>
   const $ = (s) => document.querySelector(s);
   const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  // (red-team R7 HIGH) escape player-controlled strings before innerHTML — the activity feed is a
+  // generic telemetry passthrough and the top-players list carries player names; the mod key lives in
+  // sessionStorage here, so an unescaped payload is a mod-side stored XSS → root escalation.
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let mkey = sessionStorage.getItem('omerta_mod_key') || '';
   let timer = null;
 
@@ -199,9 +203,9 @@
     const t = ov?.top || {};
     $('#p-top').querySelector('.body').innerHTML =
       `<div class="note">top streets by respect</div>`
-      + (t.players || []).slice(0, 6).map((p, i) => rowHtml(`${i + 1}. ${p.name}`, `${fmt(p.respect)} rsp · $${fmt(p.netWorth)}`)).join('')
+      + (t.players || []).slice(0, 6).map((p, i) => rowHtml(`${i + 1}. ${esc(p.name)}`, `${fmt(p.respect)} rsp · $${fmt(p.netWorth)}`)).join('')
       + `<div class="note" style="margin-top:8px">top families by treasury</div>`
-      + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${g.name} [${g.tag}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
+      + (t.gangs || []).slice(0, 6).map((g, i) => rowHtml(`${i + 1}. ${esc(g.name)} [${esc(g.tag)}]`, `$${fmt(g.treasury)}${g.warsWon ? ` · ${g.warsWon}W` : ''}`)).join('');
   }
 
   function renderChain(res, vig, em, rev) {
@@ -229,8 +233,8 @@
     $('#p-activity').querySelector('.body').innerHTML = evs.map((e) => {
       const t = e.at ? new Date(e.at).toLocaleTimeString() : '';
       const p = e.props || {}; const bits = Object.entries(p).slice(0, 3).map(([k, val]) =>
-        `${k}=${typeof val === 'object' ? JSON.stringify(val) : val}`).join(' ');
-      return `<div class="e"><b>${e.event}</b> <span style="float:right">${t}</span><br>${bits}</div>`;
+        `${esc(k)}=${esc(typeof val === 'object' ? JSON.stringify(val) : val)}`).join(' ');
+      return `<div class="e"><b>${esc(e.event)}</b> <span style="float:right">${t}</span><br>${bits}</div>`;
     }).join('') || '<div class="note">quiet on the wire…</div>';
   }
 
