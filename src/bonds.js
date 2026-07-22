@@ -89,9 +89,23 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     const real = !!txHash;
     const polEth = onchain ? round6(num(onchainPol)) : (real ? round6(eth * BONDS.POL_BPS / 10000) : 0);
     const vigEth = onchain ? round6(num(onchainVig)) : (real ? round6(eth - round6(eth * BONDS.POL_BPS / 10000)) : 0);
+    // THE QUOTE-SIGNER ENRICHMENT: the Bonded event omits the quote's price/discount (it emits only the
+    // resolved payout + POL/Vig split), so the watcher's effective values (payout/eth, disc 0) are a
+    // fallback. If the server-signed quote is on file (chain.js:quoteBond persisted it by nonce), recover
+    // the TRUE price + discount for the record — so oracle_price + discount_bps are the real bond terms and
+    // the invariant's `discounts ≤ MAX` check sees the actual number. Mark the quote consumed. No quote
+    // (a mod comp/QA bond, or a bond made out-of-band) → the effective fallback stands.
+    let recPrice = round6(price), recDisc = disc;
+    if (onchain) {
+      const q = (await client.query('SELECT price, discount_bps FROM bond_quotes WHERE nonce=$1', [n])).rows[0];
+      if (q) {
+        recPrice = round6(Number(q.price)); recDisc = Number(q.discount_bps);
+        await client.query("UPDATE bond_quotes SET status='bonded' WHERE nonce=$1", [n]);
+      }
+    }
     await client.query(
       'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms, tx_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-      [uid(), n, acct, addr, round6(eth), payout, round6(price), disc, vestMs, txHash]);
+      [uid(), n, acct, addr, round6(eth), payout, recPrice, recDisc, vestMs, txHash]);
     await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2 WHERE id=1', [payout, polEth]);
     if (real && !(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
