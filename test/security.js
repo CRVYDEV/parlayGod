@@ -315,6 +315,22 @@ const addsNoDrift = async (name, action, label) => {
   const gClose = new Promise((res) => { gws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   assert.equal((await call('POST', '/v1/gangs/leave', { token: founder.token })).code, 200, 'left the family');
   assert.equal(await gClose, 4009, 'leaving the family closes the live socket (ex-member drops the gang: feed)');
+
+  // red-team R26 WS: the DEATH path was MISSED by R9 — a killed member's account is left gangless
+  // (runEstate → removeMember; the heir has no family), but its live socket kept the dead street's
+  // private gang: feed. A kill now closes the victim's sockets too, like leave/kick.
+  const dg = await call('POST', '/v1/auth/guest', {});
+  const dtok = dg.body.token;
+  const dcreate = await call('POST', '/v1/character', { token: dtok, body: { name: 'Whacked Wiseguy' } });
+  assert.equal(dcreate.code, 200, `doomed character created (${JSON.stringify(dcreate.body)})`);
+  const doomed = { token: dtok, id: (await meOf(dtok)).id };
+  await seedCh(doomed.id, 'respect = 5000000, cash = 50000000');
+  assert.equal((await call('POST', '/v1/gangs', { token: doomed.token, body: { name: 'The Doomed Family', tag: 'DMD' } })).code, 200, 'doomed founds a family');
+  const dws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', doomed.token]);
+  await new Promise((res, rej) => { dws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; dws.onerror = rej; setTimeout(rej, 4000); });
+  const dClose = new Promise((res) => { dws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
+  assert.equal((await call('POST', '/v1/mod/kill', { body: { characterId: doomed.id }, headers: modH })).code, 200, 'the don is whacked (estate → gangless heir)');
+  assert.equal(await dClose, 4009, "a kill closes the dead street's live socket (heir drops the former family gang: feed)");
 }
 
 // ═══ FINDING (infra LOW-1): living-character names are unique ═══

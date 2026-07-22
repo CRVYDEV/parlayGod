@@ -1604,3 +1604,56 @@ guest-mint Sybil at the per-IP `auth:` floor (referral/social faucets are agent-
 
 **Round 25 verdict: 1 keyless-DoS fix (the /v1/ws upgrade joins the per-IP public throttle); auth lifecycle
 + timing/accrual class verified sound. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 26 — §10.4 invariant reconstruction math + WS/bus channel authz & notification leakage
+
+Two high-value fresh lenses. **No CRITICAL.** One HIGH info-leak fix; the §10.4 invariant itself verified
+AIRTIGHT.
+
+**CONFIRMED + FIXED — the DEATH path leaves a stale `gang:` WS subscription (HIGH, private-feed leak).**
+The `/v1/ws` gateway derives a socket's channels ONCE at connect: `me:<charId>`, `streets`, and
+`gang:<gangId>`. R9 closed leave/kick by calling `closeAccountSockets` post-commit so the ex-member's socket
+drops the family feed — but the DEATH path was missed. On any kill, `runEstate → removeMember` makes the heir
+GANGLESS, yet the kill routes (`fire`/`npchit`/`pen shank`/`mod kill`) never closed the victim's sockets
+(`runEstate` can't — `wsClients` is a `buildApp` closure). So a killed player's still-open socket kept
+forwarding the former family's PRIVATE `gang:` feed — real-time kill-contracts on named targets, war
+declarations + spoils, tribute amounts, racket-raid losses, weekly-contract completion, commission votes — to
+someone no longer in the family (a live mole if their heir joins a rival). The browser auto-pongs the
+heartbeat, so the window is effectively unbounded. **Fix:** added a `closeSocketsOnKill(result, victimCharId)`
+helper next to `closeAccountSockets` and wired it into all four kill routes — on a `kill:true`/`killed:true`
+result it looks the victim's account up server-side by the victim CHARACTER id (the row survives as
+`alive=false`, never deleted — verified at social.js:1557) and `closeAccountSockets(…, 4009, 'gang_changed')`,
+mirroring kick exactly (post-commit, non-fatal try/catch so a lookup blip can't 5xx after the kill committed →
+release the idempotency key → re-execute). Mod-kill uses `victim.account_id` already in scope. Regression:
+test/security.js seeds a gang-founding member with a live WS, mod-kills them, and asserts the socket closes
+with 4009 (mirroring the leave-closes-socket test). **FLAGGED residual (not a HIGH):** worker-hunt kills
+(bounty-hunter/`huntWanted`) run in the worker process and can't reach `wsClients` — a narrower gap (the
+victim must be online with an open socket in a gang AND killed specifically by a worker hunt; self-heals on
+any reconnect); noted for a future cross-process socket-close signal.
+
+**Verified AIRTIGHT — the §10.4 invariant reconstruction math (the core safety net).** A machine-checked
+adversarial audit of invariants.js: extracted all 248 distinct emitted `(currency, reason)` pairs across
+src/*.js and re-ran the exact prefix-matcher offline → **0 unmatched** (every ledger row of every currency
+maps to a `KNOWN_REASONS` term; no faucet/sink slips a sum, no prefix over-matches — `casino:bet:%`/`win:%`
+correctly miss `tourney`/`futurity`/`pvp`/`track:entry`; `bounty:refund` exact ≠ `bounty:wanted:refund`).
+Bucket completeness confirmed: every in-game soft-$OMR holding is in `omrBuckets` (account omr+staked+
+unbonding, amm, street_tax.fund, gang reserves, stake_pool, both dividend pools, live auction bids); cash/cb/
+ammo fully summed. The hard-$OMR/ETH pools (vig/chain-reserve/bond/rwa-revenue) are correctly EXCLUDED and
+fail-LOUD — they cross into §10.4 only via the ledgered `prize:omr` mint, so any un-minted bridge trips the
+check. Escrow identities (bounty/market/loan/convoy-insurance/den/boxing-bet/tourney/GP/stakes/futurity/
+auction) verified term-complete + sign-exact, no double-count; the two load-bearing properties — character-
+cash is reason-independent (a misclassified cash reason can't mint) + the hard/soft boundary is fail-loud —
+make it robust, not just complete.
+
+**Verified CLEAN (WS/bus, the rest):** channel-subscription IDOR structurally impossible (no client `message`
+handler; channels derived entirely server-side from `req.user.sub`); notification backfill keyed on
+server-derived `me.id` (no id IDOR); the anon-contract streets leak fully closed incl. top-ups; wire tap/
+informant sources never auto-leak to the target; npcHit/bounty-hunter anonymity intact; gang emits derive the
+id from the actor's membership; ban closes sockets (4003), leave/kick (4009); cross-session/same-account +
+guest→provider upgrade correctly scoped.
+
+**Round 26 verdict: 1 HIGH WS info-leak fix (kill routes now drop the dead street's gang: feed) + regression;
+the §10.4 invariant math verified airtight; WS/bus authz otherwise sound. §10.4 untouched. Suite 33/33 + sim
+drift-0.**
