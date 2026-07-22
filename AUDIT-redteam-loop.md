@@ -2574,3 +2574,45 @@ wouldn't apply to an in-place-upgraded DB anyway; ground rule discipline — not
 multi-ambush) returned NO reachable bug — the sorted-lock + crew_changed-TOCTOU + absolute-SQL-payout +
 relief-only-rat + living-leader-sweep pattern is uniform and correct; one cosmetic notify-gap aligned to the
 heist/break precedent. Suite 34/34 + sim drift-0.
+
+## Round 43 — the kitchen / drug economy (the oldest complex economic engine, un-dedicated this window)
+
+A dedicated lens over the M4 kitchen loop (src/kitchen.js + its §7.1 accrual half): buy makings → cook (lab
+tiers, $OMR burn) → collect (batch/crates/quality) → deal (demand×quality×event×trade-rank) → crew (offline
+sales) → laylow/cleanpapers, plus the Bureau raids. Hunting faucet mint/over-sell/double-collect/§10.4 drift.
+
+**No reachable bug — the kitchen economy is SOUND (no CRITICAL/HIGH/MED).** Verified at source:
+- **Concurrency/double-spend**: every kitchen route runs in `withCharacter` (char row `FOR UPDATE`), so cook/
+  collect/deal/crew serialize per-character. `cook` enforces one batch at a time (the fresh-under-lock
+  `h.owned.batch` guard) with an atomic makings+cb decrement + batch INSERT; `collect` DELETEs the batch then
+  credits the stash under the lock → each batch collects exactly once.
+- **Deal coercion**: `qty` is clamped to the real stash line (`max(1, min(floor(Number(qty)||0)||1, s.qty))` —
+  negative/NaN/huge all collapse into `[1, s.qty]`); price is FULLY server-computed (`d.base × demandOf() ×
+  s.quality × event × rankBonus × cornerPremium` — the route has no `price`/`quality` field); nerve/heat/
+  trade_rep server-side; payout ledgered `deal:<drug>` exactly (the 1% fee burns, tax → the non-§10.4 pool,
+  both carved from gross).
+- **Crew offline faucet**: bounded by `min(stashTotal, …)` + `cappedMin` (offline-cap), reduces the stash in
+  place, resets `last_accrued_at`, and the `dt<1000ms` early-return blocks same-second double-sell; the cold
+  gate (`!crewCold`) correctly SKIPS the faucet when the nut is unpaid ≥3d; `crew:wages`/`crew:sales`/
+  `crew:hire` ledgered. **Bureau raid**: a pure ownership seizure (`floor(qty×uniform(.3,.6))`, no mint), jail
+  set, window exponent capped `max(1, cappedMin) ≤ 480`; no test-only roll knob for the kitchen raid.
+- **On-ramp bonus** rank-0-gated (auto-expires at rank 1, read pre-deal, applied once); **lab $OMR burn**
+  sequential, balance+omr-checked, both `lab:` rows ledgered, the `omr>0` guard correct; **makings prices** are
+  deterministic §7.11 FNV hashes (client can't pick a favorable price), buy bounded by balance. Every kitchen
+  reason is in `KNOWN_REASONS`; persistence writes every accrual-clock column so no faucet re-fires.
+
+**One player-UNFAVORABLE consistency detail FLAGGED for founder sign-off (NOT patched — ground rule #1):**
+the crew-sale Bureau-raid probability (`accrual.js:121`, `p = (heat−60)/2000`) reads heat BEFORE it's clamped to
+100 (the clamp is at `:138`), so over a large offline window a very hot stash can push the raid probability
+above what the heat-100 ceiling implies — whereas the sibling Law-exposure gain (`:157`) was DELIBERATELY fed
+the clamped `hv` (`:146`) to avoid exactly this. This is **not a security bug**: it is strictly
+player-UNFAVORABLE (raids MORE likely, stash seized — no gain, no mint, no §10.4 drift), and it touches the
+sim-audited heat/Bureau-raid probability surface, which ground rule #1 reserves as a founder call (heat surfaces
+are never unilaterally retuned). Recorded for founder sign-off: clamp the raid-probability heat feed to
+`min(100, heat)` for parity with the exposure path (a tiny player-favorable nudge on very hot offline stashes),
+or leave as-is (the current behavior is a harsher-but-harmless raid on a neglected hot stash).
+
+**Round 43 verdict:** the kitchen/drug economy returned NO reachable security bug — every faucet/sink is
+server-computed, bounded, ledgered, and char-lock-serialized. One player-unfavorable heat-clamp-parity detail on
+the sim-audited Bureau-raid surface flagged for founder sign-off, not patched. Suite 34/34 + sim drift-0
+(docs-only round).
