@@ -642,7 +642,14 @@ export const CASINO = {
   // FIELD must stay ≥ 4: the per-runner house edge is guaranteed only while the top runner's p can't
   // approach the odds floor — at FIELD 6 the max p is ~0.67 (edge safe by a wide margin); a field of ≤3
   // would push the favorite's p toward the 1.1 clamp/rounding zone and the edge would need re-deriving.
-  TRACK: { MIN_BET: 50, MAX_BET: 10000, FIELD: 6, EDGE: 0.15, MAX_ODDS: 25 },
+  // STEP THREE — RUN IN THE CARD: a player enters a fit racer into the day's card (its kind's race),
+  // taking one of the last PLAYER_SLOTS posts. Its win weight is form-derived (0.2 + (form/75)×1.8, the
+  // NPC weight band), so a trained animal is the favorite. A cash ENTRY_FEE (a §10.4 sink → the buyback,
+  // the pen:commissary precedent) is the nomination fee; the town bets on it via the normal card. Fixed
+  // odds are LOCKED on each ticket at bet time (track_bets.odds) — a bookmaker's board that shifts as
+  // runners enter, so a bettor is paid at the price they took. The worker banks the racer's win the next
+  // day (status: its record + the owner legend — no owner purse in step three; that's a sim-gated option).
+  TRACK: { MIN_BET: 50, MAX_BET: 10000, FIELD: 6, EDGE: 0.15, MAX_ODDS: 25, PLAYER_SLOTS: 2, ENTRY_FEE: 5000 },
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)

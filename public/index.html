@@ -365,6 +365,7 @@
       body.outcome === 'push' ? "a push — your bet's returned" :
       `${body.playerTotal} vs the dealer's ${body.dealerTotal} — ${body.net > 0 ? `+$${fmt(body.net)}` : body.net < 0 ? `−$${fmt(Math.abs(body.net))}` : 'even'}`);
     if (body.game === 'track') bits.push(`down on ${body.horse} (${body.odds}:1) in the ${body.race} — $${fmt(body.stake)} to win`);
+    if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);
     if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
@@ -1221,12 +1222,15 @@
       <button class="act" data-do="POST /v1/casino/fight/claim">claim bets</button>
       <h2 style="margin-top:14px">The Track <span class="d" style="font-size:10px">(the dogs &amp; the ponies — daily card, one bet a race, pays the posted odds)</span></h2>
       ${(() => { const tk = den.track || {};
-        const card = (race, runners) => `<div class="d" style="font-size:11px;margin:3px 0"><b>${race === 'dogs' ? '🐕 The Greyhounds' : '🐎 The Ponies'}:</b> ${(runners || []).map((rn) => `${rn.post}. ${rn.name} <span style="color:var(--gold)">${rn.odds}:1</span>`).join(' &nbsp;·&nbsp; ') || '—'}</div>`;
+        const card = (race, runners) => `<div class="d" style="font-size:11px;margin:3px 0"><b>${race === 'dogs' ? '🐕 The Greyhounds' : '🐎 The Ponies'}:</b> ${(runners || []).map((rn) => `${rn.post}. ${rn.player ? '<span style="color:var(--neon)">' + rn.name + ' ★</span>' : rn.name} <span style="color:var(--gold)">${rn.odds}:1</span>`).join(' &nbsp;·&nbsp; ') || '—'}</div>`;
+        const mine = (tk.myEntries || []).map((e) => `${e.racer} in the ${e.race} (post ${e.post}, form ${e.form})`).join(' · ');
         return card('dogs', tk.dogs) + card('horses', tk.horses) +
-          `<div style="margin-top:4px"><select id="trk-race"><option value="dogs">the dogs</option><option value="horses">the horses</option></select>
+          `${mine ? `<div class="d" style="font-size:11px;color:var(--neon)">your runners: ${mine}</div>` : ''}
+           <div style="margin-top:4px"><select id="trk-race"><option value="dogs">the dogs</option><option value="horses">the horses</option></select>
            <input id="trk-runner" placeholder="post #" size="5"> <input id="trk-amt" placeholder="stake" size="8" value="500">
            <button class="act" id="trk-go">bet the race</button>
-           <button class="act" data-do="POST /v1/casino/track/claim">claim tickets</button></div>`; })()}
+           <button class="act" data-do="POST /v1/casino/track/claim">claim tickets</button></div>
+           <div style="margin-top:4px" class="d" style="font-size:10px">★ = a player's racer. Run your own (fee $${fmt(tk.entryFee || 5000)}, ${tk.playerSlots || 2} owner posts a race): <input id="trk-racer" placeholder="racer id" size="14"> <button class="act" id="trk-enter">run in the card</button></div>`; })()}
       <h2 style="margin-top:14px">Blackjack <span class="d" style="font-size:10px">(a natural pays 3:2 — dealer stands on 17)</span></h2>
       ${(() => { const hd = den.blackjack?.hand; const rk = (c) => c === 1 ? 'A' : c === 11 ? 'J' : c === 12 ? 'Q' : c === 13 ? 'K' : String(c);
         if (hd) return `<div class="d" style="font-size:12px">your hand: <b>${hd.player.map(rk).join(' ')}</b> (${hd.playerTotal}) &nbsp;·&nbsp; dealer shows: <b>${rk(hd.dealerUp)}</b> &nbsp;·&nbsp; bet $${fmt(hd.bet)}${hd.doubled ? ' (doubled)' : ''}</div>
@@ -1254,6 +1258,7 @@
     t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#trk-go').onclick = () => act('POST', '/v1/casino/track', { race: t.querySelector('#trk-race').value, runner: Number(t.querySelector('#trk-runner').value) - 1, amount: Number(t.querySelector('#trk-amt').value) });
+    if (t.querySelector('#trk-enter')) t.querySelector('#trk-enter').onclick = () => act('POST', `/v1/casino/track/enter/${t.querySelector('#trk-racer').value.trim()}`, null).then(() => renderDen());
     t.querySelector('#fade-set').onclick = () => act('POST', '/v1/casino/fade', { limit: Number(t.querySelector('#fade-limit').value) });
     if (t.querySelector('#bj-go')) t.querySelector('#bj-go').onclick = () => act('POST', '/v1/casino/blackjack', { amount: Number(t.querySelector('#bj-amt').value) });
     t.querySelector('#pk-set').onclick = () => act('POST', '/v1/casino/poker/deal', { limit: Number(t.querySelector('#pk-limit').value) });

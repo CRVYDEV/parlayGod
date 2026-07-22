@@ -865,8 +865,25 @@ CREATE TABLE IF NOT EXISTS track_bets (
   race TEXT NOT NULL,               -- 'dogs' (greyhounds) | 'horses'
   runner INT NOT NULL,              -- the field index they backed
   stake INT NOT NULL,
+  odds NUMERIC,                     -- (step three) the fixed odds LOCKED at bet time (a bookmaker's board); null = pre-step-three, falls back to the field odds
   PRIMARY KEY (character_id, day, race)
 );
+-- THE TRACK step three: a player enters a fit racer into the day's card, taking one of the last
+-- PLAYER_SLOTS posts of its kind's race. Its FORM is snapshotted (the racer isn't escrowed — race/breed/
+-- sell it after); the merged field (NPC + player entries) is what the town bets on. The worker banks the
+-- racer's win the next day (status only). One entry per character per race per day.
+CREATE TABLE IF NOT EXISTS track_entries (
+  day INT NOT NULL,
+  race TEXT NOT NULL,               -- 'dogs' | 'horses'
+  post INT NOT NULL,                -- the field index (0-based) this racer occupies
+  character_id TEXT NOT NULL,       -- the owner (for the legend + notify)
+  racer_id TEXT NOT NULL,           -- the entered racer (may be gone by settle — bred/sold/dead; the snapshot stands)
+  racer_name TEXT NOT NULL,
+  form INT NOT NULL,                -- the racer's form snapshotted at entry (drives its win weight)
+  settled BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (day, race, character_id)
+);
+CREATE INDEX IF NOT EXISTS ix_track_entries_open ON track_entries (day, race);
 -- Den step two: lifetime den stake volume (a COUNTER, not a money bucket — no §10.4 impact).
 -- Casino-business owners earn rakeback against the volume that flowed since their cursor.
 CREATE TABLE IF NOT EXISTS den_volume (

@@ -297,50 +297,64 @@ const RACEHORSES = ['War Admiral', 'Sea Biscuit', 'Man o’ Sand', 'Dark Star', 
   'Whirlaway', 'Gallant Fox', 'Citation', 'Northern Bell', 'Silky Sullivan'];
 const TRACK_RACES = { dogs: GREYHOUNDS, horses: RACEHORSES };
 
-// today's field for a race — deterministic per day + race off the seed
-export function trackFieldOf(race, day = dayOf()) {
+// a player racer's win weight from its form (the NPC weight band [0.2, 2.0] — a maxed form 75 → 2.0,
+// so a trained animal is the favorite; a weak one a longshot). Step three.
+const trackWeight = (form) => 0.2 + Math.min(1, Math.max(0, Number(form)) / 75) * 1.8;
+// today's field for a race — the seed-drawn NPCs, with any PLAYER ENTRIES merged in at their posts.
+// `entries` (0-based post + snapshotted form/name) come from track_entries; empty → the pure NPC card
+// (backward-compatible with the pre-step-three callers + the test).
+export function trackFieldOf(race, day = dayOf(), entries = []) {
   const pool = TRACK_RACES[race];
   if (!pool) return null;
   const { FIELD, EDGE, MAX_ODDS } = CASINO.TRACK;
   const start = Math.floor(hash01(`track:${race}:${day}:${MARKET_SEED}`) * pool.length);
-  const ws = [];
-  let wsum = 0;
+  const byPost = {};
+  for (const e of entries) byPost[Number(e.post)] = e;
+  const ws = [], meta = [];
   for (let k = 0; k < FIELD; k++) {
-    const w = 0.2 + hash01(`trackw:${race}:${day}:${k}:${MARKET_SEED}`) * 1.8; // [0.2, 2.0]
-    ws.push(w); wsum += w;
+    const e = byPost[k];
+    if (e) { ws.push(trackWeight(e.form)); meta.push({ name: e.racer_name, player: true, ownerId: e.character_id, racerId: e.racer_id }); }
+    else { ws.push(0.2 + hash01(`trackw:${race}:${day}:${k}:${MARKET_SEED}`) * 1.8); meta.push({ name: pool[(start + k) % pool.length], player: false }); }
   }
+  const wsum = ws.reduce((a, b) => a + b, 0);
   const runners = [];
   for (let k = 0; k < FIELD; k++) {
     const p = ws[k] / wsum;
     const odds = Math.min(MAX_ODDS, Math.max(1.1, Math.round((1 / p) * (1 - EDGE) * 100) / 100));
-    runners.push({ post: k + 1, name: pool[(start + k) % pool.length], odds, p });
+    runners.push({ post: k + 1, name: meta[k].name, odds, p, player: meta[k].player, ownerId: meta[k].ownerId, racerId: meta[k].racerId });
   }
   return runners;
 }
-// the day's winner index for a race — the seed draw weighted by the TRUE p (edge-free)
-function trackWinnerOf(race, day) {
-  const runners = trackFieldOf(race, day);
+// the day's winner index for a race — the seed draw weighted by the TRUE (merged) p (edge-free)
+function trackWinnerOf(race, day, entries = []) {
+  const runners = trackFieldOf(race, day, entries);
   const r = hash01(`trackwin:${race}:${day}:${MARKET_SEED}`);
   let acc = 0;
   for (let k = 0; k < runners.length; k++) { acc += runners[k].p; if (r < acc) return k; }
   return runners.length - 1;
 }
-// the card as shown to a player (no p leaked — just the field + odds)
-function trackCardOf(day = dayOf()) {
-  const strip = (rs) => rs.map(({ post, name, odds }) => ({ post, name, odds }));
-  return { day, dogs: strip(trackFieldOf('dogs', day)), horses: strip(trackFieldOf('horses', day)) };
+// the player entries for a (day, race) — the frozen field additions (reader = client or pool)
+async function entriesFor(reader, race, day) {
+  return (await reader.query('SELECT post, character_id, racer_id, racer_name, form FROM track_entries WHERE day=$1 AND race=$2', [day, race])).rows;
+}
+// the card as shown (no p leaked — post/name/odds + a player flag)
+async function trackCard(reader, day = dayOf()) {
+  const strip = (rs) => rs.map(({ post, name, odds, player }) => ({ post, name, odds, player: !!player }));
+  return { day, dogs: strip(trackFieldOf('dogs', day, await entriesFor(reader, 'dogs', day))),
+    horses: strip(trackFieldOf('horses', day, await entriesFor(reader, 'horses', day))) };
 }
 
 export async function betTrack(ch, race, runner, amount, client, h) {
   if (!TRACK_RACES[race]) throw new GameError('race', "Bet the 'dogs' or the 'horses'.");
   const amt = gateBet(ch, amount, CASINO.TRACK.MIN_BET, CASINO.TRACK.MAX_BET);
   const idx = Math.floor(Number(runner));
-  const field = trackFieldOf(race);
-  if (!(idx >= 0 && idx < field.length)) throw new GameError('runner', `Pick a post, 1 through ${field.length}.`);
   const day = dayOf();
+  const field = trackFieldOf(race, day, await entriesFor(client, race, day)); // the merged field (NPC + player entries)
+  if (!(idx >= 0 && idx < field.length)) throw new GameError('runner', `Pick a post, 1 through ${field.length}.`);
   const existing = (await client.query('SELECT 1 FROM track_bets WHERE character_id=$1 AND day=$2 AND race=$3', [ch.id, day, race])).rows[0];
   if (existing) throw new GameError('bet', 'One ticket a race — the window knows your face.');
-  await client.query('INSERT INTO track_bets (character_id, day, race, runner, stake) VALUES ($1,$2,$3,$4,$5)', [ch.id, day, race, idx, amt]);
+  const pick = field[idx];
+  await client.query('INSERT INTO track_bets (character_id, day, race, runner, stake, odds) VALUES ($1,$2,$3,$4,$5,$6)', [ch.id, day, race, idx, amt, pick.odds]);
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:track' });
   await bumpProfit(client, amt);              // the open bet's odds exposure is held back by openLiability
@@ -348,11 +362,11 @@ export async function betTrack(ch, race, runner, amount, client, h) {
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 2, { action: 'track' }); // her floor, her book
   await h.track(client, ch.account_id, 'casino', { game: 'track', race, runner: idx, amt });
-  const pick = field[idx];
-  return { ok: true, game: 'track', race, day, runner: idx, post: pick.post, horse: pick.name, odds: pick.odds, stake: amt };
+  return { ok: true, game: 'track', race, day, runner: idx, post: pick.post, horse: pick.name, odds: pick.odds, stake: amt, player: !!pick.player };
 }
 
-// settle every matured ticket (day < today — the race ran at the day's end)
+// settle every matured ticket (day < today — the race ran at the day's end). Pays the LOCKED odds
+// (a bookmaker's board — the price you took), the winner from the merged field of the entry day.
 export async function claimTrack(ch, client, h) {
   const today = dayOf();
   const bets = (await client.query('SELECT * FROM track_bets WHERE character_id=$1 AND day < $2 FOR UPDATE', [ch.id, today])).rows;
@@ -361,11 +375,13 @@ export async function claimTrack(ch, client, h) {
   const results = [];
   for (const b of bets) {
     const d = Number(b.day);
-    const winner = trackWinnerOf(b.race, d);
-    const field = trackFieldOf(b.race, d);
+    const entries = await entriesFor(client, b.race, d);
+    const winner = trackWinnerOf(b.race, d, entries);
+    const field = trackFieldOf(b.race, d, entries);
     const hit = Number(b.runner) === winner;
     if (hit) {
-      const payout = Math.floor(Number(b.stake) * field[Number(b.runner)].odds);
+      const odds = b.odds != null ? Number(b.odds) : field[Number(b.runner)].odds; // locked odds; fall back for pre-step-three tickets
+      const payout = Math.floor(Number(b.stake) * odds);
       won += payout;
       ch.cash = Number(ch.cash) + payout;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:track' });
@@ -376,6 +392,65 @@ export async function claimTrack(ch, client, h) {
   }
   await h.track(client, ch.account_id, 'casino', { game: 'track_claim', settled: bets.length, won });
   return { ok: true, settled: bets.length, won, results };
+}
+
+// ── RUN IN THE CARD (step three): enter a fit racer into today's card of its kind. A cash ENTRY_FEE
+// (nomination fee → the buyback, the pen:commissary precedent); the racer's FORM is snapshotted so it
+// can be raced/bred/sold after. The town bets on it via the normal card; the worker banks its win. ──
+export async function enterTrackRace(ch, racerId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No entries from lockup.');
+  if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The track runs on the ${CASINO.DISTRICT}.`);
+  const r = (await client.query('SELECT * FROM racers WHERE id=$1 FOR UPDATE', [racerId])).rows[0];
+  if (!r || r.character_id !== ch.id) throw new GameError('no_racer', "That's not one of your racers.");
+  if (r.injured_until && new Date(r.injured_until) > new Date()) throw new GameError('injured', 'That racer is laid up — let them heal.');
+  const race = r.kind === 'horse' ? 'horses' : 'dogs';
+  const day = dayOf();
+  if ((await client.query('SELECT 1 FROM track_entries WHERE day=$1 AND race=$2 AND character_id=$3', [day, race, ch.id])).rows[0])
+    throw new GameError('entered', "You've already got a runner in today's card.");
+  const n = Number((await client.query('SELECT COUNT(*) n FROM track_entries WHERE day=$1 AND race=$2', [day, race])).rows[0].n);
+  if (n >= CASINO.TRACK.PLAYER_SLOTS) throw new GameError('full', `The card's full — ${CASINO.TRACK.PLAYER_SLOTS} owner post${CASINO.TRACK.PLAYER_SLOTS === 1 ? '' : 's'} a race.`);
+  if (Number(ch.cash) < CASINO.TRACK.ENTRY_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.TRACK.ENTRY_FEE}.`);
+  const post = CASINO.TRACK.FIELD - 1 - n; // fill the outside posts
+  const f = Number(r.speed) + Number(r.stamina) + Number(r.heart);
+  ch.cash = Number(ch.cash) - CASINO.TRACK.ENTRY_FEE;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CASINO.TRACK.ENTRY_FEE, reason: 'casino:track:entry' });
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [CASINO.TRACK.ENTRY_FEE]); // → the buyback (pen:commissary precedent)
+  await client.query('INSERT INTO track_entries (day, race, post, character_id, racer_id, racer_name, form) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [day, race, post, ch.id, r.id, r.name, f]);
+  await h.track(client, ch.account_id, 'casino', { game: 'track_entry', race });
+  bus.emit('streets', { type: 'track_entry', who: ch.name, racer: r.name, race });
+  const odds = trackFieldOf(race, day, await entriesFor(client, race, day))[post].odds;
+  return { ok: true, race, post: post + 1, racer: r.name, form: f, fee: CASINO.TRACK.ENTRY_FEE, odds };
+}
+
+// worker: the day after, bank each entered racer's card result (status only — the racer's record + the
+// owner's account legend; no money moves). Per (day,race) txn, idempotent (the `settled` flag).
+export async function sweepTrackEntries(pool) {
+  const today = dayOf();
+  const groups = (await pool.query('SELECT DISTINCT day, race FROM track_entries WHERE day < $1 AND NOT settled', [today])).rows;
+  let settled = 0;
+  for (const g of groups) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const entries = (await client.query('SELECT * FROM track_entries WHERE day=$1 AND race=$2 AND NOT settled FOR UPDATE', [g.day, g.race])).rows;
+      if (!entries.length) { await client.query('ROLLBACK'); client.release(); continue; }
+      const winner = trackWinnerOf(g.race, Number(g.day), entries);
+      for (const e of entries) {
+        const wonIt = Number(e.post) === winner;
+        if (wonIt) {
+          const rr = (await client.query('SELECT wins FROM racers WHERE id=$1', [e.racer_id])).rows[0]; // may be gone (bred/sold/dead) — the win still counts for the owner legend
+          if (rr) await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [e.racer_id, Number(rr.wins) + 1]); // absolute (pg-mem INT-arith)
+          await client.query('UPDATE account_persistent SET racer_wins = racer_wins + 1 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [e.character_id]);
+        }
+        await notify(client, e.character_id, 'track_result', { racer: e.racer_name, race: g.race, won: wonIt });
+      }
+      await client.query('UPDATE track_entries SET settled=true WHERE day=$1 AND race=$2', [g.day, g.race]);
+      await client.query('COMMIT'); settled += entries.length;
+    } catch (e) { await client.query('ROLLBACK'); } // transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { settled };
 }
 
 // ── THE NUMBERS: pick 0–999, one ticket per street per day, pays 600:1 on the day's draw ──
@@ -793,9 +868,15 @@ export async function denInfo(pool, characterId) {
   const week = weekOf();
   const bet = (await pool.query('SELECT week, side, stake FROM fight_bets WHERE character_id=$1 ORDER BY week', [characterId])).rows
     .map((b) => ({ week: Number(b.week), side: b.side, stake: Number(b.stake), matured: Number(b.week) < week }));
-  const trackBets = (await pool.query('SELECT day, race, runner, stake FROM track_bets WHERE character_id=$1 ORDER BY day', [characterId])).rows
-    .map((t) => { const f = trackFieldOf(t.race, Number(t.day)); const r = f[Number(t.runner)];
-      return { day: Number(t.day), race: t.race, runner: Number(t.runner), post: r?.post, name: r?.name, odds: r?.odds, stake: Number(t.stake), matured: Number(t.day) < today }; });
+  const trackBetRows = (await pool.query('SELECT day, race, runner, stake, odds FROM track_bets WHERE character_id=$1 ORDER BY day', [characterId])).rows;
+  const trackBets = [];
+  for (const t of trackBetRows) {
+    const f = trackFieldOf(t.race, Number(t.day), await entriesFor(pool, t.race, Number(t.day))); const r = f[Number(t.runner)];
+    trackBets.push({ day: Number(t.day), race: t.race, runner: Number(t.runner), post: r?.post, name: r?.name,
+      odds: t.odds != null ? Number(t.odds) : r?.odds, stake: Number(t.stake), matured: Number(t.day) < today });
+  }
+  const myTrackEntries = (await pool.query('SELECT race, post, racer_name, form FROM track_entries WHERE character_id=$1 AND day=$2', [characterId, today])).rows
+    .map((e) => ({ race: e.race, post: Number(e.post) + 1, racer: e.racer_name, form: Number(e.form) }));
   const faders = (await pool.query(
     `SELECT id, name, fade_limit FROM characters WHERE alive AND fade_limit IS NOT NULL AND loc=$1 AND id<>$2 ORDER BY fade_limit DESC LIMIT 20`,
     [CASINO.DISTRICT, characterId])).rows.map((f) => ({ id: f.id, name: f.name, fadeLimit: Math.floor(Number(f.fade_limit)) }));
@@ -824,7 +905,8 @@ export async function denInfo(pool, characterId) {
       yesterday: numbersDrawOf(today - 1) },
     tickets,
     fight: { ...boutOf(week), max: CASINO.FIGHT_MAX, myBets: bet },
-    track: { ...trackCardOf(today), minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000), myBets: trackBets },
+    track: { ...(await trackCard(pool, today)), minBet: CASINO.TRACK.MIN_BET, maxBet: CASINO.TRACK.MAX_BET, edgeBps: Math.round(CASINO.TRACK.EDGE * 10000),
+      playerSlots: CASINO.TRACK.PLAYER_SLOTS, entryFee: CASINO.TRACK.ENTRY_FEE, myBets: trackBets, myEntries: myTrackEntries },
     backroom: { rakeBps: CASINO.PVP_RAKE_BPS, faders },
     blackjack: { minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET, pays: `${CASINO.BJ_PAYS_BPS / 10000 * 2}:2 on a natural`, hand },
     poker: { min: CASINO.POKER_MIN, maxBet: CASINO.MAX_BET, rakeBps: CASINO.PVP_RAKE_BPS, tables: pokerTables },
