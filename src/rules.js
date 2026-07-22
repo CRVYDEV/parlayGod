@@ -853,7 +853,16 @@ export const sealOf = (tier = 0) => GANG_SEALS.find((s) => s.tier === Number(tie
 // first revenge pays a ONE-TIME 2x base per feud direction and repeat trading decays 2/k —
 // bounded by the decay + the economics (level floor, ammo, searches). Founder dial: divide by
 // priors+2 on vendetta kills to make revenge rep-neutral.
-export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2 };
+export const VENDETTA = { TTL_MS: 7 * 24 * 3600 * 1000, REP_BONUS: 2,
+  // step two — ESCALATION: each time the target's line bleeds the avenger's again the feud DEEPENS
+  // (kills++). A deeper feud carries a higher TIER (pure STATUS — a badge on the ledger/leaderboard)
+  // and a longer TTL (ttlMult — access/timing only, off §10.4 + the sim-audited balance): a War of
+  // Extinction won't lapse from waiting, so you must settle it or sue for peace. The REP_BONUS on
+  // settlement is unchanged (the signed status lever). Founder sign-off levers.
+  TIERS: [{ min: 1, name: 'Vendetta', ttlMult: 1 }, { min: 2, name: 'Blood Feud', ttlMult: 1.5 },
+          { min: 4, name: 'War of Extinction', ttlMult: 2 }] };
+export const feudTierOf = (kills) =>
+  [...VENDETTA.TIERS].reverse().find((t) => Number(kills || 1) >= t.min) || VENDETTA.TIERS[0];
 // THE LAW / RICO / INFORMANTS — the state-run PvE antagonist (design omerta-law-rico-design.md).
 // Heat already ACCRUES all over the game (deals, fire, npchit, launder, shakedown); nothing about
 // that changes (sim-audited surfaces stay put, ground rule #1). THE LAW is everything DOWNSTREAM of

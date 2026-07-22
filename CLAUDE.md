@@ -780,6 +780,28 @@ race-proof).
 active vendettas both directions). Worker sweeps lapsed rows (reads filter anyway). Tests: heir
 inheritance + notification, ledger, waiver, 66-rep settlement (2× with 0 priors), the reverse debt,
 lapsed-grants-nothing. TTL/bonus are cosmetic-axis founder levers (outside the signed economy).
+**Step two — ESCALATION + THE SIT-DOWN + the blood-debt board — BUILT** (`src/social.js`, `src/rules.js`
+`VENDETTA.TIERS`/`feudTierOf`, `schema.sql`, `test/social.js`; the deferred deepen — PURE STATUS,
+§10.4-untouched by construction, conflict-forward). **(1) ESCALATION** — `vendettas.kills` counts how many
+times the target's line has bled the avenger's; a repeat fire-kill in `runEstate` bumps it (`kills++`) and a
+deeper feud carries a higher TIER (`VENDETTA.TIERS`: Vendetta → Blood Feud → War of Extinction, `feudTierOf`)
++ a longer TTL (`tier.ttlMult` 1 / 1.5 / 2 — access/timing only, off §10.4 + the sim-audited balance) so a
+War of Extinction won't lapse from waiting — you must SETTLE it or sue for peace. The settlement `REP_BONUS`
+(2×) is unchanged (the signed status lever). **(2) THE SIT-DOWN** (`proposePeace`/`acceptPeace`,
+`POST /v1/feud/:targetId/peace` + `/peace/accept`) — a consensual, non-violent exit: one bloodline offers,
+the other accepts to clear BOTH-direction vendettas + all offers between the pair (a fresh kill DELETEs any
+pending offer — blood reopens the books). New `feud_peace_offers` table (account×account, both survive
+death); gates `no_feud`/`no_offer`/`self`. **(3) THE BLOOD-DEBT LEADERBOARD** (`GET /v1/leaderboard/feuds`,
+`feudLeaderboard`) — the deadliest ACTIVE feuds ranked by kills, each side the bloodline's CURRENT living
+street (a line with no living character is skipped). The feud ledger (`GET /v1/feud/:characterId`) gained
+`myVendetta.tier`/`.kills`, `theirVendetta {tier,kills}` (was a bool — the one existing test assertion
+updated), and `peace {iOffered, theyOffered}`; the console Wet Work "feud" button became a sit-down UI
+(offer/accept from the ledger popup) + `describe()` + the glossary. §10.4: zero money moves (the sim +
+per-character checks stay drift-0); `feud_peace_offers`/`vendettas.kills` are account-level status.
+`test/social.js` proves a real repeat-kill escalation (kills 1→2, Blood Feud tier, a stretched window), the
+sit-down (propose/accept gates + the both-direction clear), and the leaderboard (the deadliest feud tops it
+at its tier). Suite 31/31 + sim drift-0. All `VENDETTA.TIERS`/`ttlMult` numbers are cosmetic-axis founder
+sign-off levers.
 
 **Crew heists (THE BIG SCORE, step one) — BUILT** (`src/heists.js`, `test/heists.js` — the 11th
 suite file; design `omerta-crew-heists-design.md`). The game's first CO-OP content: a leader picks
