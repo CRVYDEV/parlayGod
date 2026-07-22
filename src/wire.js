@@ -360,6 +360,11 @@ export async function sweepWire(pool) {
 // §10.4-clean: intel:watch is a $OMR BURN under the existing intel: vocabulary (no new bucket/faucet).
 // LOCK ORDER: account_persistent[watcher] FOR UPDATE (serializes vs withCharacter/persistAccount so the
 // omr decrement can't be clobbered), then the leaf tap row — no character rows locked, so no cycle.
+// ATOMICITY (red-team R1): each renewal runs in its OWN pool.connect()+BEGIN/COMMIT — the sweepLoans/
+// settlePassStipend convention — so the FOR UPDATE lock actually PERSISTS across the affordability check
+// and the decrement+ledger+tap-update commit together (or roll back). A bare-pool.query version left the
+// lock inert (autocommit dropped it at statement end), enabling a same-account TOCTOU overspend + a §10.4
+// drift on a crash between the omr decrement and its ledger row.
 export async function sweepStandingWatches(pool, renewWithinMs = 30 * 60 * 1000) {
   // subscribed, alive watchers who hold at least one standing watch
   const watchers = (await pool.query(
@@ -376,22 +381,31 @@ export async function sweepStandingWatches(pool, renewWithinMs = 30 * 60 * 1000)
          FROM wire_watches wa JOIN characters t ON t.id = wa.target_character AND t.alive
         WHERE wa.watcher_character=$1 ORDER BY wa.created_at LIMIT $2`, [w.id, cfg.watchSlots])).rows;
     if (!rows.length) continue;
-    const ops = Number((await pool.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [w.account_id])).rows[0]?.intel_ops || 0);
-    const cost = intelCost(WIRE.TAP_OMR, ops);
     for (const r of rows) {
-      // is the tap missing or lapsing within the renew window? (only renew when it needs it — not every tick)
-      const tap = (await pool.query('SELECT expires_at FROM wiretaps WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target])).rows[0];
-      if (tap && new Date(tap.expires_at).getTime() - Date.now() > renewWithinMs) continue; // still comfortably live
-      // affordability + burn under the account lock (serializes vs persistAccount — no clobber)
-      const bal = (await pool.query('SELECT omr FROM account_persistent WHERE account_id=$1 FOR UPDATE', [w.account_id])).rows[0];
-      if (!bal || Number(bal.omr) < cost) { paused++; continue; }  // broke — the watch pauses (tap lapses)
-      await pool.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [w.account_id, cost]);
-      await ledger(pool, { accountId: w.account_id, currency: 'omr', amount: -cost, reason: 'intel:watch' });
-      const exp = new Date(Date.now() + WIRE.TAP_MS);
-      const upd = await pool.query('UPDATE wiretaps SET expires_at=$3 WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target, exp]);
-      if (!upd.rowCount) await pool.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [w.id, r.target, exp]);
-      await pool.query('UPDATE account_persistent SET intel_ops = intel_ops + 1 WHERE account_id=$1', [w.account_id]);
-      renewed++;
+      // cheap unlocked pre-filter: skip when the tap is comfortably live (the authoritative re-check is
+      // inside the txn below, so a race here is harmless — it only decides whether to open a connection)
+      const pre = (await pool.query('SELECT expires_at FROM wiretaps WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target])).rows[0];
+      if (pre && new Date(pre.expires_at).getTime() - Date.now() > renewWithinMs) continue;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // lock the account, re-read balance + ops UNDER the lock (the affordability gate now holds)
+        const acct = (await client.query('SELECT omr, intel_ops FROM account_persistent WHERE account_id=$1 FOR UPDATE', [w.account_id])).rows[0];
+        const cost = intelCost(WIRE.TAP_OMR, Number(acct?.intel_ops || 0));
+        // re-check the tap under the txn: a concurrent manual re-tap may have refreshed it since the pre-filter
+        const tap = (await client.query('SELECT expires_at FROM wiretaps WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target])).rows[0];
+        if (tap && new Date(tap.expires_at).getTime() - Date.now() > renewWithinMs) { await client.query('ROLLBACK'); continue; }
+        if (!acct || Number(acct.omr) < cost) { await client.query('ROLLBACK'); paused++; continue; } // broke → the watch pauses
+        await client.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [w.account_id, cost]);
+        await ledger(client, { accountId: w.account_id, currency: 'omr', amount: -cost, reason: 'intel:watch' });
+        const exp = new Date(Date.now() + WIRE.TAP_MS);
+        const upd = await client.query('UPDATE wiretaps SET expires_at=$3 WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target, exp]);
+        if (!upd.rowCount) await client.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [w.id, r.target, exp]);
+        await client.query('UPDATE account_persistent SET intel_ops = intel_ops + 1 WHERE account_id=$1', [w.account_id]);
+        await client.query('COMMIT');
+        renewed++;
+      } catch (e) { await client.query('ROLLBACK'); console.error('sweepStandingWatches', w.id, r.target, e.message); }
+      finally { client.release(); }
     }
   }
   return { renewed, paused };

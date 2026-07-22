@@ -61,6 +61,18 @@ export async function makeChainReader() {
   if (!process.env.CHAIN_RPC_URL || !process.env.VOUCHER_CLAIM_ADDRESS || !isAddress(process.env.VOUCHER_CLAIM_ADDRESS)) return null;
   const { createPublicClient, http } = await import('viem');
   const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  // WRONG-CHAIN GUARD (red-team R1): reclaim runs OUTSIDE the worker's assertChainId gate, and a voucher
+  // genuinely claimed on chain X (whose Claimed event the sync couldn't record) must NEVER be refunded by
+  // trusting a usedNonce()=false answer from a SAME-ADDRESS contract on a DIFFERENT chain Y (a colliding
+  // deploy) — that is a chain-boundary double-spend the ledger can't see. So if CHAIN_ID is set, the reader
+  // MUST be on that chain; otherwise fail CLOSED (return null → reclaim skips, never refunds blind — the
+  // existing null-reader fail-safe). assertChainId's intent, applied to the reader itself.
+  if (process.env.CHAIN_ID) {
+    try {
+      const rpcChainId = Number(await client.getChainId());
+      if (Number(process.env.CHAIN_ID) !== rpcChainId) return null;
+    } catch { return null; } // can't confirm the chain → don't trust any usedNonce answer from it
+  }
   const address = getAddress(process.env.VOUCHER_CLAIM_ADDRESS);
   const abi = [{ type: 'function', name: 'usedNonce', stateMutability: 'view',
     inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }];

@@ -242,6 +242,26 @@ const addsNoDrift = async (name, action, label) => {
   process.env.RATE_LIMIT = 'off';
 }
 
+// ═══ FINDING (red-team R1): the §10.2 agent throttle now covers authed GET reads too — an agent could
+// poll GET /v1/me (a withCharacter accrual + ledger-write path) at unlimited rate to dodge the 1/3s
+// cadence, since the global limiter only guarded POST/DELETE. Humans stay UNTHROTTLED on GETs so
+// multi-tab console loads never 429. ═══
+{
+  const human = await mk('Poller Pete');
+  const ag = await mk('Polling Agent');
+  await call('POST', '/v1/auth/agent-key', { token: ag.token }); // flag the agent in the DB
+  process.env.RATE_LIMIT = 'on';
+  const h1 = await call('GET', '/v1/me', { token: human.token });
+  const h2 = await call('GET', '/v1/me', { token: human.token });
+  assert.equal(h1.code, 200, 'human first GET /v1/me ok');
+  assert.equal(h2.code, 200, 'a human is NOT throttled on GETs — console multi-tab loads must not 429');
+  const g1 = await call('GET', '/v1/me', { token: ag.token });
+  const g2 = await call('GET', '/v1/me', { token: ag.token });
+  assert.equal(g1.code, 200, 'agent first GET /v1/me allowed');
+  assert.equal(g2.code, 429, 'agent second GET /v1/me within 3s is throttled — the §10.2 cadence now covers hidden-write reads');
+  process.env.RATE_LIMIT = 'off';
+}
+
 // ═══ FINDING (infra MED-4): banned accounts lose the websocket feed ═══
 {
   const banned = await mk('Doomed Don');

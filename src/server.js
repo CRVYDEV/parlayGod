@@ -160,9 +160,20 @@ export async function buildServer() {
   });
   const auth = async (req, reply) => {
     await req.jwtVerify();
-    // §10.3 — banned accounts are refused at the door
-    const a = (await pool.query('SELECT status FROM accounts WHERE id=$1', [req.user.sub])).rows[0];
+    // §10.3 — banned accounts are refused at the door (agent_flag rides the same query — no extra round-trip)
+    const a = (await pool.query(
+      'SELECT a.status, ap.agent_flag FROM accounts a LEFT JOIN account_persistent ap ON ap.account_id=a.id WHERE a.id=$1',
+      [req.user.sub])).rows[0];
     if (!a || a.status === 'banned') return reply.code(403).send({ error: 'banned' });
+    // R1: authed GET reads run through withCharacter (lazy accrual + ledger/telemetry writes) too, so an
+    // agent could poll a read endpoint (e.g. GET /v1/me) at unlimited rate to DODGE the §10.2 agent 1/3s
+    // hard throttle — the global limiter only guards POST/DELETE. Enforce the AGENT bucket on authed GETs
+    // here; humans are left unthrottled on GETs so multi-tab console loads never 429 — only the agent cadence closes.
+    if (rateLimitsEnabled() && a.agent_flag && req.method === 'GET') {
+      const limited = await checkRateLimit({ accountId: req.user.sub, agent: true, path: req.routeOptions?.url || req.url });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
   };
   // Mod endpoints (§10.3) authenticate with the MOD_KEY header, never a player JWT.
   // Constant-time compare (audit L1) — the one secret-equality check on the mod perimeter.
