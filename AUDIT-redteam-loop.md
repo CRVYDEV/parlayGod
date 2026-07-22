@@ -158,3 +158,66 @@ fixes (estate `daily_progress` wipe, worker poison-row logging). Suite 33/33 + s
 **Round 3 verdict: no CRITICAL/HIGH. 1 MED (D2 upgrade-gate, signed-rule consistency), 1 LOW (heat clamp),
 2 deploy-hardening (MARKET_SEED + test-knob boot guards), 1 defense-in-depth (spendOmr guard). 3 design
 notes + 2 balance flags for founder sign-off. Suite 33/33 + sim drift-0.**
+
+## Round 4 — six fresh lenses (HTTP idempotency/rate-limit, auth/session, chain reserve, casino den-book, referral anti-Sybil, market/loot escrow) + a manual gang-dissolution trace
+
+**Verdict: no CRITICAL/HIGH. 4 real fixes (1 auth MED, 1 casino LOW-MED §10.4-adjacent, 1 idempotency MED,
+1 idempotency LOW) + 1 defense-in-depth. The escrow/loot/chain/referral cores verified sound.**
+
+### Fixed
+- **Auth F1 (MED) — banned live sockets.** `/v1/ws` checked `banned` only at CONNECT; a mid-session ban
+  left an open socket feeding streets/gang/me intel until the client disconnected, falsifying the
+  documented "banned-WS close" guarantee (a banned scout feeding a gang live streets data). Added a
+  per-account socket registry; `mod/ban` now closes every live socket (4003). Regression opens a live
+  socket, bans, asserts it closes.
+- **Casino F1 (LOW-MED) — den tip before payout booked.** The econ-pass tips the street/rakeback ONLY
+  from realized profit; the deferred games insert the liability before tipping, but the two same-call
+  games (dice, blackjack DEAL) tipped BEFORE booking the round's payout/liability → a winning round
+  over-reported profit and minted a bounded ~1%-of-stake tip into `street_tax.pool` (the buyback loop,
+  §10.4-invisible — the exact class the econ-pass closed). Reordered `takeHouse` to run after the
+  payout/INSERT. Casino per-round house-book mirror updated to the corrected ordering.
+- **Idempotency MED — proceed-unreserved on the release race.** On an INSERT PK-conflict, if the SELECT
+  then found the row GONE (the holder's 4xx/5xx DELETEd its reservation — e.g. the `contention` error we
+  tell clients to retry), the handler PROCEEDED WITHOUT re-reserving → onSend stored nothing → a retry
+  re-executed = double bank/spend. Now loops and re-INSERTs so every proceeding request holds a
+  reservation; refuses (409) on a pathological storm rather than run unprotected.
+- **Idempotency finding-2 (LOW) — post-commit render releases the key.** `view()`/`coachOf()` runs after
+  COMMIT; a throw (corrupt `onboard` column) surfaced a 500 → key DELETEd → retry re-executed the
+  committed action. Guarded the render in both wrappers — degrade the snapshot to null, never the 2xx.
+- **Referral L1 (defense-in-depth) — recruiter board agent exclusion made explicit.** `recruiterLeaderboard`
+  relied solely on the "agents never bump `recruits`" invariant (boxing/port/races boards have an explicit
+  `NOT agent_flag`); added the explicit predicate so a future `recruits` writer can't surface an agent.
+
+### Verified CLEAN (not patched)
+- **Chain reserve/withdrawal (afa8):** no CRIT/HIGH — nonce allocation single-threaded under
+  `chain_reserve FOR UPDATE`, `committed ≤ funded` inductive, queued-cancel double/after-sign safe, the
+  R3 reclaim no-reader-skip + `usedNonce` + grace + under-lock re-check holds, fees.js nonce-PK
+  idempotency + Vig txHash-gate + atomic reconcile, §10.4 `withdraw:omr` exact in all four voucher
+  states. 2 LOW flagged (drainQueue has no standalone trigger — liveness; `mod/reserve/claimed` has no
+  on-chain verify — mod-trust).
+- **Market/auction escrow + P1.1 loot (a067):** no defects — market/auction/order escrow identities
+  reconcile, the audited kind-guard holds, loot legs are §10.4-exact and clobber-safe, death paths clean.
+  1 accepted item (auction $OMR bid loot-shelter — §10.4-clean loot-avoidance, self-limiting, the prior
+  AUCTION-audit F3 sign-off lever).
+- **Referral/growth (aa56):** no CRIT/HIGH/MED, §10.4 clean — spark/qualify/tier-2/mission latches all
+  atomic once-ever, post-commit hooks wrapped, agents excluded at every tier-2 level, tier-2 is
+  CASH/DEPTH-2/middle-link-qualified, push can't mint $OMR. LOW flags: tier-2 missed-fire no-retry
+  (payout-loss edge), social trust-mode faucet (founder sign-off, run `live`).
+- **Gang dissolution (manual):** no §10.4 orphan — treasury/omr_reserve/ammo_bank all burn `gang:dissolved`
+  (no gang `cb` bucket exists), territory/frontier/districts/wars/commission-votes/portfolio all
+  released/deleted, and a dissolved gang's live bounty-escrow contribution correctly BURNS (`death:bounty`
+  via refundPot's deleted-gang branch) when the pot resolves — the escrow check stays balanced meanwhile.
+- **Auth (a795):** verifyX default-off confused-deputy stopgap, Privy ES256+JWKS+aud(scalar|array)+exp
+  hardened, guest→provider UNIQUE-guarded, agent-flag DB-sourced, SIWE replay/uniqueness closed. LOW:
+  invite double-spend under concurrent first-login (budget waste, no boundary breach). INFO: Privy `iss`
+  conditional (mitigated by JWKS+aud).
+- **HTTP layer (adf4):** the reserve-before-execute concurrent core is sound (409 on the loser,
+  char-lock serialization); replay is 2xx-only + body-bound; agent throttle DB-sourced + GET-throttled;
+  swap/launder share the bucket; per-IP auth throttle trustProxy-off. LOW deploy notes: AGENT/SWAP rates
+  are import-time constants (fail-secure); in-memory buckets multiply across workers without REDIS_URL;
+  a crash between COMMIT and onSend leaves a status=0 row that 409s until the 24h prune (self-heals).
+
+**Round 4 verdict: 4 fixes + 1 hardening, all committed green (suite 33/33 + sim drift-0). The chain,
+escrow, loot, referral, and gang-dissolution cores are sound; residual items are LOW/deploy-config/
+founder-sign-off (drainQueue liveness, mod-trust claimed, invite budget, social trust-mode, auction
+loot-shelter, tier-2 missed-fire).**
