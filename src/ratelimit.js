@@ -8,7 +8,23 @@
 
 const buckets = new Map(); // key → {tokens, updatedAt}
 
+// (red-team R9 WS/DoS) The in-memory store grew one entry per distinct account key + source IP forever
+// (no eviction) → slow memory growth / DoS-over-time on the default (non-Redis) deploy. A bucket idle
+// past this TTL has provably refilled to its burst (the slowest rate, swaps 0.1/s, tops any burst within
+// ~1min), so deleting it is identical to it never existing — a fresh access recreates it at burst.
+const BUCKET_TTL_MS = 5 * 60_000;
+let sweeper = null;
+function ensureSweeper() {
+  if (sweeper || process.env.REDIS_URL) return;
+  sweeper = setInterval(() => {
+    const cutoff = Date.now() - BUCKET_TTL_MS;
+    for (const [k, b] of buckets) if (b.updatedAt < cutoff) buckets.delete(k);
+  }, BUCKET_TTL_MS);
+  sweeper.unref?.(); // never hold the process open (clean test/CLI exit)
+}
+
 function takeMemory(key, ratePerSec, burst, now = Date.now()) {
+  ensureSweeper();
   const b = buckets.get(key) || { tokens: burst, updatedAt: now };
   b.tokens = Math.min(burst, b.tokens + ((now - b.updatedAt) / 1000) * ratePerSec);
   b.updatedAt = now;
@@ -30,7 +46,9 @@ async function takeRedis(key, ratePerSec, burst) {
 
 export function rateLimitsEnabled() {
   if (process.env.RATE_LIMIT === 'off') return false;
-  return process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT === 'on';
+  // (red-team R9 config) engage on a real deployment even if NODE_ENV was forgotten — a real
+  // DATABASE_URL means real value at stake, so throttle Sybil/swap-manipulation floods regardless.
+  return process.env.NODE_ENV === 'production' || process.env.RATE_LIMIT === 'on' || !!process.env.DATABASE_URL;
 }
 
 export async function initRateLimiter() {

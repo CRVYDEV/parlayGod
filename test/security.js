@@ -282,6 +282,18 @@ const addsNoDrift = async (name, action, label) => {
   const liveClose = new Promise((res) => { lws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   await call('POST', '/v1/mod/ban', { body: { accountId: liveAcct }, headers: modH });
   assert.equal(await liveClose, 4003, 'a live socket is closed the moment the account is banned');
+
+  // red-team R9 WS: a member's gang: subscription is derived ONCE at connect, so a departed/kicked
+  // member's socket kept feeding the family's private war/contract/tribute chatter until they chose to
+  // disconnect. Leaving now closes their sockets (fresh, gangless subs on reconnect).
+  const founder = await mk('Family Man');
+  await seedCh(founder.id, 'respect = 5000000, cash = 50000000');
+  assert.equal((await call('POST', '/v1/gangs', { token: founder.token, body: { name: 'The Regression Family', tag: 'REG' } })).code, 200, 'gang founded');
+  const gws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(founder.token)}`);
+  await new Promise((res, rej) => { gws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; gws.onerror = rej; setTimeout(rej, 4000); });
+  const gClose = new Promise((res) => { gws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
+  assert.equal((await call('POST', '/v1/gangs/leave', { token: founder.token })).code, 200, 'left the family');
+  assert.equal(await gClose, 4009, 'leaving the family closes the live socket (ex-member drops the gang: feed)');
 }
 
 // ═══ FINDING (infra LOW-1): living-character names are unique ═══
@@ -334,5 +346,22 @@ const addsNoDrift = async (name, action, label) => {
   if (savedJwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = savedJwt;
 }
 
-console.log('✅ security regression suite passed — exchange escrow §10.4, sub-cent bank interest, swap-sell dust, bounty-funder self-pay, mission $OMR re-mint, wallet validation, idempotency (concurrency/release/body-bind), invite race, identity race, agent throttle, banned websocket, name uniqueness, JWT secret guard');
+// ═══ FINDING (red-team R9 config): the hardening posture no longer hinges SOLELY on NODE_ENV (which
+// `npm start` never sets). A real DATABASE_URL — the unforgeable "persistent value at stake" signal —
+// engages the same fail-closed guards even with NODE_ENV unset, so a real deploy that forgot NODE_ENV
+// can't silently boot on the forgeable dev secret. (A fake URL is fine: the guard throws BEFORE any DB
+// connect.) ═══
+{
+  const savedEnv = process.env.NODE_ENV, savedSecret = process.env.JWT_SECRET, savedDb = process.env.DATABASE_URL;
+  delete process.env.NODE_ENV; delete process.env.JWT_SECRET;
+  process.env.DATABASE_URL = 'postgres://unreachable-host-guard-fires-first/x';
+  let threw = false;
+  try { await buildServer(); } catch { threw = true; }
+  assert(threw, 'a real DATABASE_URL (no NODE_ENV) still refuses to boot on the dev JWT fallback');
+  if (savedEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedEnv;
+  if (savedSecret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = savedSecret;
+  if (savedDb === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = savedDb;
+}
+
+console.log('✅ security regression suite passed — exchange escrow §10.4, sub-cent bank interest, swap-sell dust, bounty-funder self-pay, mission $OMR re-mint, wallet validation, idempotency (concurrency/release/body-bind), invite race, identity race, agent throttle, banned websocket, gang-leave socket drop, name uniqueness, JWT/seed/DATABASE_URL boot guards');
 await app.close();
