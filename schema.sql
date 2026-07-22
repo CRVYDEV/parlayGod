@@ -866,6 +866,7 @@ CREATE TABLE IF NOT EXISTS track_bets (
   runner INT NOT NULL,              -- the field index they backed
   stake INT NOT NULL,
   odds NUMERIC,                     -- (step three) the fixed odds LOCKED at bet time (a bookmaker's board); null = pre-step-three, falls back to the field odds
+  bet_racer_id TEXT,                -- (audit HIGH) the identity of the runner backed: a player racerId, or NULL for an NPC. If a strong racer is ENTERED at the post AFTER the bet, the NPC you backed is SCRATCHED → the bet refunds (not paid the stale longshot price)
   PRIMARY KEY (character_id, day, race)
 );
 -- THE TRACK step three: a player enters a fit racer into the day's card, taking one of the last

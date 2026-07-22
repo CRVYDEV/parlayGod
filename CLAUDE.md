@@ -3763,3 +3763,33 @@ three type ops + the cooldown, the no-specialist gate, and unassign. Suite 32/32
 income + Bureau surfaces — the `TERRITORY_OP_FORT` free fortitude level is the one minor lever, bounded
 by the cooldown + `FORT_MAX`). The Territory pillar is now feature-complete (rackets → types + the Bureau
 → empire/leaderboard → fortify + rival raids + upkeep → specialists + special ops).
+
+**FULL-SYSTEM RED-TEAM v4 (`AUDIT-full-system-v4.md`)** — a max-effort whole-codebase audit over the
+session's racing/world drops (THE TRACK steps three–four incl. THE FUTURITY, THE STABLE, THE WORLD step
+six THE UPRISING) + the systems they touch, SIX independent lenses in parallel (§10.4, concurrency/
+locks/persist-clobber, death/estate/PvP, racing internals, world internals, cross-system exploits),
+every finding re-verified vs source, a regression per fix. **No CRITICAL. No §10.4 drift.** Fixed
+in-commit: **HIGH — THE TRACK "swap the runner under the bet" exploit** (`casino.js`): the Track pays
+FIXED odds LOCKED at bet time, but the winner is drawn from the MERGED field, and a ticket stored only
+the post INDEX — so you could bet an outside post at a weak NPC's LONGSHOT odds, then `enterTrackRace` a
+MAXED racer onto that post (it becomes the favorite), and collect the favorite's near-certain win at the
+locked longshot price (a large +EV skim off the den book). Now the bet SNAPSHOTS which runner it backed
+(`track_bets.bet_racer_id` — a player racerId or NULL for an NPC); `claimTrack` runs a SCRATCH check
+first — if the identity at the post changed, the ticket refunds 1:1 (`casino:win:track` +
+`bumpProfit(-refund)`, den book nets 0), never the stale price (regression: a swapped-post ticket
+REFUNDS not pays). **MED — the racer-legend AB-BA**: `sweepTrackEntries` + `resolveFuturity` locked a
+`racers` row then bumped the owner's `account_persistent` (racer→account), inverting the player-side
+account→racer order (withCharacter holds the account, then locks the racer) → an AB-BA masked by the
+40P01 retry; both now lock account BEFORE racer, and `nominateFuturity` locks `futurity_state` before the
+racer to match resolve. **LOW-MED — the racer-legend Sybil floor**: `matchRace` bumped the owner LEGEND
+(`racer_wins`, the survives-death leaderboard) on every PvP win with no loser level floor →
+`STABLE.LEGEND_MIN_LVL` (10, the `RACES.WHEEL_MIN_LVL`/npcHit-rookie-floor precedent; regression: a
+maxed dog beating a lvl-9 runt banks no legend). **LOW** — deleted the dead `wipeRacersAtDeath` (racers
+already in the runEstate wipe). Verified CLEAN: §10.4 across every racing/world reason (the scratch
+refund reconciles, escrow identities hold, sim drift-0), the Futurity/Uprising worker settles
+(single-writer, idempotent, NULL-char death rows), the two-party lock order (acyclic after the MED fix),
+and death/estate survival of the account-level legends + frozen-field snapshots. Flagged (NOT patched):
+the cosmetic LOWs (raceChallenge ternary, berth INT-arith — proven working, RPC-less assertChainId
+warning, claimPendingWire heir), the racing faucet magnitudes (BALANCE.md sign-off levers at parity), and
+the carried/accepted items (market bidListing AB-BA, VoucherClaim.sweep, Commission seasonal standing,
+dividend-pool allocation). `forge test` STILL not run (Foundry egress-blocked). Suite 33/33 + sim drift-0.

@@ -2000,6 +2000,7 @@ export const STABLE = {
   VARIANCE: 22,                       // rng added to each racer's form — enough for upsets
   INJURY_MS: 4 * 3600 * 1000,         // a lost race lays the animal up 4h
   CIRCUIT_CD_MS: 6 * 3600 * 1000,     // per-racer cooldown on the PvE circuit
+  LEGEND_MIN_LVL: 10,                 // a PvP match-race win only banks the owner LEGEND (racer_wins) vs a loser at/above this level (anti-Sybil — the RACES.WHEEL_MIN_LVL/npcHit-rookie-floor precedent; a status board can't be farmed against fresh alts). Sign-off lever.
   // the two kinds — a dog is the cheap early animal, a horse the prestige investment (pricier, rolls a
   // touch higher, races a richer circuit). statMin/statMax are the roll range at purchase.
   KINDS: {
