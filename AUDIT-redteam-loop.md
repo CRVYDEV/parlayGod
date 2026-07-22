@@ -1930,3 +1930,23 @@ item), MED-2 zero FKs, the `bust:reward` unguarded faucet, client `esc()` consis
 inference channels, two fail-safe vig backing seams, the agent-board prompt-injection surface, and the
 standing pre-mainnet gates (`forge test`, third-party contract+signer audit, legal counsel). §10.4 untouched
 throughout; suite 33/33 + sim drift-0 every round.
+
+---
+
+## MED-1 RESOLVED — the in-place-upgrade column migration (founder-directed, post-R30)
+
+The R30 schema lens flagged MED-1 (no migration path) as the top founder deploy item; the founder chose to
+clear it. **BUILT + tested (the 34th suite).** `src/db.js` now derives an idempotent
+`ALTER TABLE … ADD COLUMN IF NOT EXISTS` set directly FROM `schema.sql` (`columnMigrations(schemaText)` —
+a paren-depth table scan + depth-0-comma column split, stripping comments + column-level PK/UNIQUE/REFERENCES
+so every generated `ADD COLUMN` is safe) and runs it (`migrateColumns`, each statement isolated so one
+failure logs + skips rather than bricking boot) **immediately after `pool.query(SCHEMA)` in the real-Postgres
+branch only** — pg-mem/CI boots exactly as before (zero test-breakage risk), while a real in-place upgrade now
+back-fills every column a pre-existing table is missing. Deriving from the schema text keeps it drift-proof
+and auto-covers every FUTURE column addition with no extra work. `test/migrate.js` proves the derived set is
+well-formed (787 statements, no constraint/multi-column leakage, column-level PK stripped), a clean no-op on a
+fresh DB (0 failures), and — the actual fix — that dropping a later-added column (`track_bets.odds`,
+`characters.wire_tier`) to simulate an "old" DB and re-running the migration RE-ADDS it (idempotently). Suite
+34/34 + sim drift-0. **MED-2 (zero FKs) remains a flagged defense-in-depth item** (the wipe loop is still the
+sole referential-integrity mechanism — complete today); a proper migration tool / FK-cascade pass is the
+larger follow-up if desired, but the acute in-place-upgrade break is now closed.
