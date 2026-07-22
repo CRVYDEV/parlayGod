@@ -8,6 +8,7 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { SOCIAL_TASKS } from '../src/rules.js';
+import { socialRewardsLive } from '../src/growth.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -407,7 +408,13 @@ assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: shill.toke
 process.env.SOCIAL_VERIFY_MODE = 'off';
 const quiet = await mk('Quiet Guy');
 assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: quiet.token })).body.error, 'social_off', 'off mode pays nothing');
-process.env.SOCIAL_VERIFY_MODE = 'trust'; // restore for the rest of the suite
+// (red-team R20) 'trust' is an honor-system faucet that must FAIL CLOSED in production (mirror verify.js) —
+// a prod server that forgot SOCIAL_VERIFY_MODE=live pays nobody, not the whole base on zero proof. Direct
+// unit-check (no API call between the env flip + restore, so the running server is unaffected).
+process.env.SOCIAL_VERIFY_MODE = 'trust'; process.env.NODE_ENV = 'production';
+assert.equal(socialRewardsLive(), false, "'trust' is not live in production (fail-closed)");
+delete process.env.NODE_ENV;
+assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-production)");
 
 // ── telemetry (§12) ──
 for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified', 'referral_spark', 'social_task'])
