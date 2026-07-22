@@ -378,7 +378,13 @@ export async function withCharacter(pool, accountId, fn) {
       try { await maybeGrandReferral(pool, accountId); }
       catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
-    return { character: view(ch, acct, owned), events: h.events, ...result };
+    // (red-team R4 idempotency finding-2) the action has COMMITTED — a post-commit RENDER failure
+    // (view()/coachOf on a corrupt column) must NOT surface a non-2xx, or the idempotency hook releases
+    // the key → a retry re-executes the committed action (double-spend). Degrade the snapshot, never the
+    // success — same discipline as the referral post-commit hooks above.
+    let character = null;
+    try { character = view(ch, acct, owned); } catch (e) { console.error('view render (post-commit, non-fatal)', e?.code || e); }
+    return { character, events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
@@ -448,7 +454,11 @@ export async function withTwoCharacters(pool, accountId, targetCharacterId, fn) 
       try { await maybeQualifyReferral(pool, accountId); } catch (e) { console.error('referral qualification (post-commit, non-fatal)', e?.code || e); }
       try { await maybeGrandReferral(pool, accountId); } catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
-    return { character: view(ch, acct, owned), events: h.events, ...result };
+    // (red-team R4 idempotency finding-2) a post-commit render failure must never surface a non-2xx —
+    // the two-party action already COMMITTED; degrade the snapshot, not the success (see withCharacter).
+    let character = null;
+    try { character = view(ch, acct, owned); } catch (e) { console.error('view render (post-commit, non-fatal)', e?.code || e); }
+    return { character, events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
 }
