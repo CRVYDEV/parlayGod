@@ -1377,6 +1377,26 @@ transfer; fees/tunes are sinks). **The PvE purse is the ONLY new faucet — sim-
 All `RACES` numbers are founder sign-off levers (the exhibition-purse precedent). Sim the PvE purse net-EV
 (vs the boxing exhibition) + the PvP wager economy before production. Suite 31/31 + sim drift-0.
 
+### Step two — PINK SLIPS + NITROUS (2026-07-22; sim-measured)
+- **PINK SLIPS** (race for the car): a §10.4-NEUTRAL ownership transfer (no cash, no ledger — car
+  conservation by row count). **No new lever, no faucet.** A deliberate pink loss is a near-tax-free car
+  gift — accepted (the market already allows that via a min-bid listing).
+- **NITROUS** (`NOS_COST` $15k / `NOS_MAX` 3 / `NOS_POWER` +60): a per-car consumable cash SINK; burn one
+  for a one-race power bump. **Measured (P9.13 addendum):** the marginal EV of a charge is **−$11.3k best-
+  case** even on the tier where it most changes the odds (a $15k charge buys < $15k of extra P(win)×purse) →
+  NITROUS is a PURE SINK, **never +EV**. Healthy for the economy (drains cash, no faucet risk) but a
+  gameplay call: **FLAG — if NOS should be a viable comeback tool, buff `NOS_POWER` / cut `NOS_COST`; as-is
+  it's a rarely-worth-it cosmetic sink.** NOT retuned (ground rule #1). Sign-off.
+
+### Step three — THE GRAND PRIX (2026-07-22; sim-measured, a redistribution NOT a faucet)
+- A scheduled worker-resolved CASH parimutuel (the poker-tournament twin): N drivers escrow `GP.BUYIN`
+  ($25k), the top 3 (`PAYOUTS` 60/30/10) split the pool net of `GP.RAKE_BPS` (5%, half → street tax / half
+  BURNS). **Measured (P9.16): ZERO new emission** — the field funds the winners; the only §10.4 effect is a
+  net cash SINK of the burned half-rake (~$1.9k on a 3-driver pool, ~$5k on an 8-driver pool). House edge is
+  a flat 5% at any turnout (the renormalized-payout property); skill+gear decides (distinct from the poker
+  tournament's chance); alt-stuffing is −rake/N per head (−EV). **The ideal for a competitive mechanic — a
+  sink, no signed faucet touched.** `GP.*` are sign-off levers. Suite 31/31 + sim drift-0.
+
 ## THE PORT — maritime smuggling (2026-07-21; offshore contraband import by boat)
 
 The SEA counterpart to convoys. Boats are a buyable asset (like cars, `boats` table); runs source

@@ -3318,6 +3318,15 @@ races, idempotent status gate), the power SNAPSHOT sidesteps a "car gone at reso
 −EV (renormalized −rake/N), and a dead/estated entrant burns cleanly (the §10.4 death row is NULL-character,
 excluded from the per-character check). The Street Races pillar is now feature-complete (PvE circuit + PvP
 wager + tuning + THE WHEEL → pink slips + nitrous → the Grand Prix).
+**FAUCET MEASUREMENT (`tools/sim.js` P9.13 addendum + P9.16, this session's races drops; zero value seeded,
+§10.4 drift-0 — the P9.8/9.13 precedent):** **(1) NITROUS** — the marginal EV of a $15k charge is **−$11.3k
+best-case** (a charge buys < its cost in extra P(win)×purse) → a PURE cash SINK, never +EV; healthy for the
+economy but a gameplay FLAG (BALANCE.md): buff `NOS_POWER`/cut `NOS_COST` if it should be a viable comeback
+tool, else it's a rarely-worth-it cosmetic sink (NOT retuned, ground rule #1). **(2) THE GRAND PRIX** —
+**ZERO new emission** (a redistribution: the field funds the winners; the only §10.4 effect is the burned
+half of a flat 5% rake, ~$1.9k–$5k/race) — the ideal for a competitive mechanic, a net sink, no signed
+faucet touched. **(3) PINK SLIPS** add no faucet/lever (a §10.4-neutral car transfer). The sim prints all
+three every run so any retune is re-measured.
 
 **THE PORT — maritime smuggling (step one) — BUILT** (`src/port.js`, `test/port.js` — the 32nd suite;
 design `omerta-the-port-design.md`). The SEA counterpart to convoys — deliberately distinct: convoys move
