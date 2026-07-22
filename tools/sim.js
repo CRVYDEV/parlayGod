@@ -611,9 +611,15 @@ phase('P9.17 NPC trucking — the hijack goods faucet (bounded, base-wide)');
   const avgUnit = sum / n, avgManifest = avgQty * avgUnit;
   const injectedPerDay = perDay * avgManifest;                          // if EVERY truck were fully hijacked
   for (const [label, hit] of [['~50% hijacked (realistic)', 0.5], ['100% hijacked (ceiling)', 1.0]]) {
-    note('convoy', `NPC trucking faucet — ${label}`, `~$${fmt(Math.round(injectedPerDay * hit))}/day base-wide`,
-      `${CONVOY.NPC.TARGET} trucks on the road × ${(86400000/CONVOY.MS).toFixed(0)} turnovers/day = ${perDay.toFixed(0)} trucks · avg manifest ~$${fmt(Math.round(avgManifest))} (${avgQty} units × ~$${Math.round(avgUnit)}) · hijack ${(hit*100).toFixed(0)}% — a goods faucet realized at market sale, bounded by TARGET/lifetime/trunk cap; sign-off vs boxing/territory`);
+    note('convoy', `NPC trucking faucet — ${label}`, `~$${fmt(Math.round(injectedPerDay * hit))}/day base-wide ceiling`,
+      `${CONVOY.NPC.TARGET} trucks on the road × ${(86400000/CONVOY.MS).toFixed(0)} turnovers/day = ${perDay.toFixed(0)} trucks · avg manifest ~$${fmt(Math.round(avgManifest))} (${avgQty} units × ~$${Math.round(avgUnit)}) · hijack ${(hit*100).toFixed(0)}%`);
   }
+  // the REAL per-player bound is ENERGY: an ambush costs CONVOY.AMBUSH_ENERGY, so a solo grinder is capped
+  // by their daily energy regen (not the base-wide ceiling) — and a manifest is one-per-convoy (up to
+  // MAX_AMBUSHES raiders SPLIT it), so a contested road dilutes the take. The ceiling above is the whole
+  // road captured uncontested; a realistic dedicated raider nets far less after ammo + the energy throttle.
+  note('convoy', 'NPC trucking — the real per-player bound', `~${Math.round(500 / CONVOY.AMBUSH_ENERGY)} ambushes/day at ~500 energy`,
+    `energy ${CONVOY.AMBUSH_ENERGY}/ambush + ammo ${CONVOY.AMBUSH_AMMO}/ambush throttle a solo grinder well under the base-wide ceiling; MAX_AMBUSHES ${CONVOY.MAX_AMBUSHES} raiders split one manifest, so contention dilutes — sign-off vs boxing/territory (~$300-400k/day)`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

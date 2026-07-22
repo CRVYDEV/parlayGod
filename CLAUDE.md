@@ -883,6 +883,16 @@ arrived NPC convoy despawning with its cargo. Suite 31/31 + sim drift-0. All `CO
 SIM sign-off levers — the one new (bounded) faucet (BALANCE.md); `TARGET`/manifest size are the dials if
 the base-wide magnitude wants trimming. The Convoy pillar is now feature-complete (bulk shipping → tolls +
 multi-ambush + insurance → NPC trucking).
+A focused red-team (`AUDIT-convoy-npc-trucking.md`: §10.4/faucet, NULL-owner ambush, spawn/despawn
+concurrency, cross-system) returned **no CRITICAL/HIGH** — §10.4 invisible + bounded (no goods-conservation
+check, `goods:` already vocabularied; the faucet is one-manifest-per-convoy × TARGET/lifetime turnover ×
+trunk cap, the real per-player bound being ENERGY not the base-wide ceiling), the NULL-owner ambush path
+crash-free (every owner ref NULL-safe), and cross-system contained (an NPC convoy can't be collected/tolled/
+insured, doesn't count against the one-convoy cap, needs no estate handling, and the sweeps filter strictly
+on `is_npc`). Fixed one **LOW** (hardening): `despawnArrivedNpc` did three non-atomic deletes → now one txn
+per truck. Clarified the P9.17 measurement (the base-wide ceiling vs the real per-player ENERGY throttle;
+`MAX_AMBUSHES` raiders split one manifest so contention dilutes). Flagged (sign-off): the faucet magnitude +
+the single-worker spawn TOCTOU (self-correcting, the world-raid precedent).
 
 **The Commission (step one) — BUILT** (`src/commission.js`, `test/commission.js` — the 13th suite
 file; design `omerta-commission-design.md`). Server-wide player politics with ZERO money flows —

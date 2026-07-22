@@ -336,12 +336,18 @@ export async function spawnNpcConvoys(pool) {
 // hijacked goods already went to the raiders). Player convoys are never touched here.
 export async function despawnArrivedNpc(pool) {
   const due = (await pool.query("SELECT id FROM convoys WHERE is_npc AND status='transit' AND arrives_at <= now()")).rows;
+  let despawned = 0;
   for (const { id } of due) {
-    await pool.query('DELETE FROM convoy_cargo WHERE convoy_id=$1', [id]);
-    await pool.query('DELETE FROM convoy_ambushes WHERE convoy_id=$1', [id]);
-    await pool.query('DELETE FROM convoys WHERE id=$1', [id]);
+    const client = await pool.connect();
+    try { // one txn per truck: the three deletes land together (no orphan cargo on a mid-despawn crash) — RED-TEAM hardening
+      await client.query('BEGIN');
+      await client.query('DELETE FROM convoy_cargo WHERE convoy_id=$1', [id]);
+      await client.query('DELETE FROM convoy_ambushes WHERE convoy_id=$1', [id]);
+      await client.query('DELETE FROM convoys WHERE id=$1', [id]);
+      await client.query('COMMIT'); despawned++;
+    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
   }
-  return { despawned: due.length };
+  return { despawned };
 }
 
 export async function convoyBoard(pool, characterId) {
