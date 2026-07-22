@@ -522,19 +522,22 @@ for (const [label, cp] of [['a tuned contender (power 200)', 200], ['a premium m
   note('races', `PvE EV — ${label}`, `${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev))}/race best`,
     `best tier ${best.tier} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * racesPerDay))}/day at ${racesPerDay}/day cadence — bounded faucet, a lost race also dings the car (repair cost); sign-off vs boxing exhibition`);
 }
-// step 2 — NITROUS: burning a $NOS_COST charge adds NOS_POWER to the roll. It's +EV only when the extra
-// P(win) it buys × the purse beats the charge cost — a comeback tool on a marginal car, never free money
-// (a charge is gone win/lose; a car already winning gains nothing). Measured on the tier where the boost
-// most changes the odds, for a mid car whose base P(win) is < 1.
-{ const cp = 150; let bestGain = null;
+// step 2 — NITROUS: burning a $NOS_COST charge adds NOS_POWER to the roll — the COMEBACK tool. It's +EV
+// only when the extra P(win) it buys × the purse beats the charge cost, so it pays off for an UNDERDOG on a
+// decent-purse race (flip a likely loss to a likely win), stays −EV on the cheap races, and is WASTED on a
+// car already winning (ΔP≈0). Never free money (gone win/lose) → a sink on average. Modeled for an underdog
+// at each tier (power = field − 20, a slight dog within the variance) — the scenario NOS is FOR.
+for (const [who, delta] of [['an underdog (field − 20)', -20], ['a heavy favorite (field + 60)', 60]]) {
+  let best = null;
   for (const t of RACES.TIERS) {
+    const cp = t.fieldPower + delta;
     const p0 = pWinRace(cp, t.fieldPower, RACES.VARIANCE);
     const p1 = pWinRace(cp + RACES.NOS_POWER, t.fieldPower, RACES.VARIANCE);
-    const dEV = (p1 - p0) * t.purse - RACES.NOS_COST;            // marginal value of one charge on this tier
-    if (p1 > p0 && (!bestGain || dEV > bestGain.dEV)) bestGain = { tier: t.name, p0, p1, dEV };
+    const dEV = (p1 - p0) * t.purse - RACES.NOS_COST;
+    if (!best || dEV > best.dEV) best = { tier: t.name, p0, p1, dEV };
   }
-  if (bestGain) note('races', 'NITROUS — marginal EV of one charge (mid car, power 150)', `${bestGain.dEV >= 0 ? '+' : ''}$${fmt(Math.round(bestGain.dEV))}/charge best`,
-    `+${RACES.NOS_POWER} power for $${fmt(RACES.NOS_COST)}: on ${bestGain.tier} P(win) ${(bestGain.p0*100).toFixed(0)}%→${(bestGain.p1*100).toFixed(0)}% — a comeback sink on a marginal car (gone win/lose), NOT a faucet; a car already winning gains $0`);
+  note('races', `NITROUS — best EV of one charge, ${who}`, `${best.dEV >= 0 ? '+' : ''}$${fmt(Math.round(best.dEV))}/charge`,
+    `+${RACES.NOS_POWER} power for $${fmt(RACES.NOS_COST)}: best on ${best.tier}, P(win) ${(best.p0*100).toFixed(0)}%→${(best.p1*100).toFixed(0)}% — ${best.dEV >= 0 ? 'a viable comeback play (still a sink on average — gone win/lose)' : 'not worth it here; a favorite wastes it (ΔP≈0)'}`);
 }
 
 // ════════ P9.14 the Port — smuggling margin EV, cap-bounded (the new content faucet) ════════

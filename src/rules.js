@@ -1913,9 +1913,13 @@ export const RACES = {
   MIN_LEVEL: 3,                        // a wheelman's game, open early
   VARIANCE: 40,                        // the road is fickle — rand(0,VARIANCE) added to each side
   TUNE_POWER: 15, TUNE_MAX: 5, TUNE_COST: 25000,   // engine tune: +power per level, capped, a cash sink
-  // step 2 — NITROUS (NOS): a per-car consumable. Buy a charge (a cash SINK), spend ONE on a race for a
-  // one-race power bump (rng-audited). Tactical depth + a recurring cash sink; the charge is gone win/lose.
-  NOS_COST: 15000, NOS_MAX: 3, NOS_POWER: 60,
+  // step 2 — NITROUS (NOS): a per-car consumable, the COMEBACK tool. Buy a charge (a cash SINK), spend ONE
+  // on a race for a one-race power bump (rng-audited). Sim-tuned (P9.13): the cost is set so burning a
+  // charge is +EV for an UNDERDOG on a mid/high-purse race (flip a likely loss to a win) but WASTED on a
+  // car already winning (ΔP≈0) and not worth it on the cheap races — a viable comeback, still a sink on
+  // average (gone win/lose). NOS_COST $15k→$8k (founder-directed): at $15k it only paid on the top tier;
+  // $8k makes the Ghost comeback genuinely rewarding (+$7.6k absolute) + viable on Midnight.
+  NOS_COST: 8000, NOS_MAX: 3, NOS_POWER: 60,
   // step 2 — PINK SLIPS: race for the car itself (consent-by-listing via cars.pink_slip). The winner TAKES
   // the loser's raced car — a §10.4-NEUTRAL ownership transfer (cars conserve by ROW COUNT, no ledger — the
   // chop/market-seize precedent), can push the winner past GARAGE_CAP (the market-win precedent). No numeric
