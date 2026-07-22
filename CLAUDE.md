@@ -3272,6 +3272,20 @@ conservation holding, NO `race:pink` ledger row / no cash moved, the shark holdi
 walking home). Suite 31/31 + sim drift-0. All numbers (`NOS_*`) are founder sign-off levers; pink slips
 add no lever (they ride the audited race machinery). Deferred (step three): THE GRAND PRIX (a scheduled,
 worker-resolved cash parimutuel — the boxing-main-event/poker-tournament escrow twin).
+A focused three-lens red-team (`AUDIT-street-races-step-two.md`: §10.4/conservation, concurrency/locks,
+death/PvP/cross-system) returned **no CRITICAL/HIGH** and fixed one **MED consent-bypass** (a pre-existing
+step-one class, amplified by step two): the race flags SURVIVED an ownership change — `listCar` rejects
+only `listed`/`pledged` cars (not a `race_limit`/`pink_slip`-flagged one), and the four car-transfer sites
+(market buy-now + auction-settle, loan collateral collect + sweep-forfeit) cleared only `listed`/`pledged`,
+so a car flagged for a wager/pinks, then SOLD or SEIZED, arrived at the new owner still on the strip —
+raceable without their consent (and for a wager, exposing them to a cash loss up to a limit they never
+set). Fixed: every `UPDATE cars SET character_id=…` transfer site now also clears `race_limit=NULL,
+pink_slip=false` (mirroring `pinkSlipRace`'s own transfer); regression added (a flagged car bought on the
+market arrives with both flags cleared + off the strip). Verified CLEAN: §10.4 (pink transfer moves no
+currency, car-conservation-neutral; `race:nos` a character_id'd sink on the existing prefix), lock order
+(chars→accounts→cars, acyclic, TOCTOU-safe under the car lock), death (flags are row fields not pointers),
+and grief (both-consent, WHEEL floor, no warehouse). Accepted (flagged): a deliberate pink loss is a
+near-tax-free car gift — but the market already allows that (list at the min bid), §10.4-clean.
 
 **THE PORT — maritime smuggling (step one) — BUILT** (`src/port.js`, `test/port.js` — the 32nd suite;
 design `omerta-the-port-design.md`). The SEA counterpart to convoys — deliberately distinct: convoys move

@@ -273,7 +273,9 @@ export async function buyListing(ch, listingId, qty, client, h) {
     ch.cash = Number(ch.cash) - price;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'market:bid' });
     const { net } = await paySeller(client, h, l.seller_character, price);
-    await client.query('UPDATE cars SET character_id=$2, listed=false WHERE id=$1', [l.car_id, ch.id]);
+    // clear the seller's RACE flags on transfer — a bought car must not arrive still on the strip for a
+    // wager/pinks without the BUYER's consent (RED-TEAM: race_limit/pink_slip survived ownership change).
+    await client.query('UPDATE cars SET character_id=$2, listed=false, race_limit=NULL, pink_slip=false WHERE id=$1', [l.car_id, ch.id]);
     const row = (await client.query('SELECT * FROM cars WHERE id=$1', [l.car_id])).rows[0];
     if (row) h.owned.cars.push(row); // the buyer's view sees the new iron this response
     await client.query("UPDATE market_listings SET status='sold', bid=NULL, bidder=NULL WHERE id=$1", [listingId]);
@@ -434,7 +436,7 @@ export async function sweepMarket(pool) {
           if (seller && winner && car) {
             const bid = Number(l.bid);
             await paySeller(client, h, l.seller_character, bid);
-            await client.query('UPDATE cars SET character_id=$2, listed=false WHERE id=$1', [l.car_id, l.bidder]);
+            await client.query('UPDATE cars SET character_id=$2, listed=false, race_limit=NULL, pink_slip=false WHERE id=$1', [l.car_id, l.bidder]); // clear race flags on transfer (buyer consent)
             await client.query("UPDATE market_listings SET status='sold', bid=NULL, bidder=NULL WHERE id=$1", [l.id]);
             await notify(client, l.seller_character, 'market_sold', { listing: l.id, kind: 'car', net: bid - Math.ceil(bid * MARKET.TAKE_BPS / 10000) });
             await notify(client, l.bidder, 'market_won', { listing: l.id, carId: l.car_id, bid });
