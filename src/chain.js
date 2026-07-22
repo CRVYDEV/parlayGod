@@ -8,7 +8,7 @@
 // `wallet_challenges`, plus the ledger row for the $OMR debit. A compromised signer is
 // bounded on-chain by the tranche + daily cap (OMR) and the per-gearId cap (gear).
 import crypto from 'node:crypto';
-import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddress, verifyMessage } from 'viem';
+import { hashTypedData, recoverTypedDataAddress, parseUnits, isAddress, getAddress, verifyMessage, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { GameError, ledger } from './game.js';
 import { reconcileFees } from './fees.js';
@@ -528,4 +528,45 @@ export async function quoteBond(pool, accountId, principalEth) {
     };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}
+
+// OmertaBond.bond((address,uint256×6) q, bytes sig) — the minimal ABI to encode a submission.
+const BOND_ABI = [{
+  type: 'function', name: 'bond', stateMutability: 'payable',
+  inputs: [
+    { name: 'q', type: 'tuple', components: [
+      { name: 'payer', type: 'address' }, { name: 'principal', type: 'uint256' },
+      { name: 'priceOmrPerEth', type: 'uint256' }, { name: 'discountBps', type: 'uint256' },
+      { name: 'vestSeconds', type: 'uint256' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' },
+    ] },
+    { name: 'sig', type: 'bytes' },
+  ],
+  outputs: [{ type: 'uint256' }],
+}];
+
+// Server-encode a bond submission so the browser wallet (MetaMask / Robinhood Wallet / any injected wallet)
+// can send it with `eth_sendTransaction` WITHOUT the zero-dep client hand-rolling ABI — viem (the same lib
+// that SIGNED the quote) does the encoding here. Reads the player's OWN persisted quote by nonce and returns
+// { to, value, data } exactly matching the signed message, plus the chainId to switch the wallet to. The
+// wallet still shows the user the tx and they approve — the server custodies nothing.
+export async function bondCalldata(pool, accountId, nonce) {
+  const domain = bondChainConfig(); // ensures the bond chain is configured (verifyingContract + chainId)
+  const q = (await pool.query('SELECT * FROM bond_quotes WHERE nonce=$1 AND account_id=$2', [Number(nonce), accountId])).rows[0];
+  if (!q) throw new GameError('no_quote', 'No such quote of yours — request one first.');
+  // rebuild the EXACT tuple the quote was signed over (deterministic re-derivation of the wei values).
+  const tuple = {
+    payer: getAddress(q.payer_address),
+    principal: parseUnits(String(Number(q.principal_eth)), 18),
+    priceOmrPerEth: parseUnits(String(Number(q.price)), 18),
+    discountBps: BigInt(q.discount_bps),
+    vestSeconds: BigInt(q.vest_seconds),
+    nonce: BigInt(q.nonce),
+    deadline: BigInt(q.deadline),
+  };
+  const data = encodeFunctionData({ abi: BOND_ABI, functionName: 'bond', args: [tuple, q.signature] });
+  return {
+    to: domain.verifyingContract, value: '0x' + tuple.principal.toString(16), data,
+    chainId: domain.chainId, chainIdHex: '0x' + domain.chainId.toString(16),
+    deadline: Number(q.deadline), // the client can warn if the quote has expired
+  };
 }

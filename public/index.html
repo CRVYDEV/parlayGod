@@ -233,6 +233,14 @@
   <div style="margin-top:14px;text-align:right"><button class="act" id="welcome-go" style="font-size:14px;padding:10px 22px">STEP OUT →</button></div>
 </div></div>
 
+<!-- the wallet picker (EIP-6963 multi-wallet discovery: MetaMask, Robinhood Wallet, Coinbase, …) -->
+<div id="walletpick" class="modal-bg hidden"><div class="modal">
+  <h2>CHOOSE A WALLET</h2>
+  <p class="dim">Pick the wallet to connect. Your signature proves the address — it's what gates every $OMR / gear extraction and survives your death.</p>
+  <div id="walletpick-list" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"></div>
+  <div style="margin-top:14px;text-align:right"><button class="act" id="walletpick-cancel">cancel</button></div>
+</div></div>
+
 <!-- the glossary (? button) -->
 <div id="glossary" class="modal-bg hidden"><div class="modal">
   <h2>THE LAY OF THE LAND</h2>
@@ -495,20 +503,70 @@
     } finally { acting = false; document.body.style.cursor = ''; }
   }
 
-  // SIWE wallet link — the browser wallet signs a server challenge; the proven 0x address is what
-  // survives you and gates every $OMR / gear extraction. No wallet extension → a clean pointer.
+  // ── wallet integration: EIP-6963 multi-wallet discovery (MetaMask, Robinhood Wallet, Coinbase, Rabby, …) ──
+  // Modern injected wallets ANNOUNCE themselves; we collect them so the player can pick which one to connect
+  // instead of being stuck with whichever grabbed `window.ethereum`. Falls back to the legacy provider.
+  const wallets = new Map(); // rdns → { info:{name,icon,rdns}, provider }
+  let connectedProvider = null;
+  window.addEventListener('eip6963:announceProvider', (e) => {
+    if (e.detail?.info?.rdns) wallets.set(e.detail.info.rdns, e.detail);
+  });
+  try { window.dispatchEvent(new Event('eip6963:requestProvider')); } catch {}
+
+  // resolve a provider to use: the connected one, or a discovered one (a picker if >1), or legacy window.ethereum.
+  function pickProvider() {
+    if (connectedProvider) return Promise.resolve(connectedProvider);
+    const list = [...wallets.values()];
+    if (list.length === 0) return Promise.resolve(window.ethereum || null); // legacy single-provider fallback
+    if (list.length === 1) return Promise.resolve(list[0].provider);
+    // >1 wallet installed → let the player choose (MetaMask vs Robinhood Wallet vs …)
+    return new Promise((resolve) => {
+      const box = $('#walletpick-list');
+      box.innerHTML = list.map((w, i) => `<button class="act" data-wi="${i}" style="display:flex;align-items:center;gap:10px;justify-content:flex-start;text-align:left">
+        ${w.info.icon ? `<img src="${w.info.icon}" alt="" width="24" height="24" style="border-radius:5px">` : ''}<span>${esc(w.info.name)}</span></button>`).join('');
+      const done = (p) => { $('#walletpick').classList.add('hidden'); resolve(p); };
+      box.querySelectorAll('[data-wi]').forEach((b) => b.onclick = () => done(list[Number(b.dataset.wi)].provider));
+      $('#walletpick-cancel').onclick = () => done(null);
+      $('#walletpick').classList.remove('hidden');
+    });
+  }
+
+  // SIWE wallet link — the chosen wallet signs a server challenge; the proven 0x address is what survives
+  // you and gates every $OMR / gear extraction. No wallet extension → a clean pointer.
   async function linkWallet() {
-    if (!window.ethereum) { toast('no browser wallet found — install MetaMask or Rabby, then reload', true); return; }
+    const provider = await pickProvider();
+    if (!provider) { toast('no browser wallet found — install MetaMask or Robinhood Wallet, then reload', true); return; }
     try {
-      const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const [address] = await provider.request({ method: 'eth_requestAccounts' });
       if (!address) { toast('no wallet account selected', true); return; }
+      connectedProvider = provider; // remember it for on-chain actions (bond submit, …)
       const ch = await api('POST', '/v1/wallet/challenge', {});
       const message = ch.body?.message;
       if (!message) { toast(describe(ch.body, ch.code), true); return; }
-      const signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+      const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
       await act('POST', '/v1/wallet/verify', { address, signature });
       renderActive();
     } catch (e) { toast(e?.message ? 'wallet: ' + e.message : 'wallet link cancelled', true); }
+  }
+
+  // submit a signed bond quote on-chain with the connected wallet. The server ABI-encodes bond(quote, sig)
+  // (viem — the zero-dep client never hand-rolls ABI); the wallet switches to the right chain, shows the tx
+  // (to / value / data), and the player approves. Mainnet-dormant until the bond chain is configured.
+  async function submitBondOnChain(nonce) {
+    const provider = await pickProvider();
+    if (!provider) { toast('connect a wallet first — install MetaMask or Robinhood Wallet', true); return; }
+    try {
+      const cd = await api('POST', '/v1/bond/calldata', { nonce });
+      if (cd.code !== 200) { toast(describe(cd.body, cd.code), true); return; }
+      if (cd.body.deadline && cd.body.deadline * 1000 < Date.now()) { toast('that quote expired — request a fresh one', true); return; }
+      const [from] = await provider.request({ method: 'eth_requestAccounts' });
+      connectedProvider = provider;
+      try { await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cd.body.chainIdHex }] }); }
+      catch (sw) { if (sw?.code !== 4902) throw sw; toast('add the OMERTÀ chain to your wallet first', true); return; }
+      const txHash = await provider.request({ method: 'eth_sendTransaction',
+        params: [{ from, to: cd.body.to, value: cd.body.value, data: cd.body.data }] });
+      toast('bond submitted on-chain — tx ' + String(txHash).slice(0, 12) + '…');
+    } catch (e) { toast(e?.message ? 'bond: ' + e.message : 'bond submit cancelled', true); }
   }
 
   // ── screens ──
@@ -2450,7 +2508,7 @@
       <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:10px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
       <div class="card">${me.wallet
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
-        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge with your browser wallet to link it — nothing leaves your wallet, it just proves the address.</div>
+        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge with your browser wallet — MetaMask, Robinhood Wallet, or any injected wallet — to link it. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat)</span></h2>
@@ -2471,7 +2529,8 @@
         <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
         <div class="d" style="color:var(--dim);font-size:10px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
         <div style="margin-top:6px"><input id="bond-eth" placeholder="ETH" size="6"> <button class="act" id="bond-quote">request a signed quote</button>
-          <div class="d" style="font-size:10px;color:var(--dim)">signs an EIP-712 BondQuote bound to your linked wallet — submit it to the OmertaBond contract (mainnet, dormant)</div>
+          <button class="act" id="bond-submit" style="display:none;border-color:var(--neon)">submit on-chain with wallet</button>
+          <div class="d" style="font-size:10px;color:var(--dim)">signs an EIP-712 BondQuote bound to your linked wallet, then your wallet (MetaMask / Robinhood Wallet) submits it to the OmertaBond contract (mainnet, dormant)</div>
           <pre id="bond-quote-out" style="display:none;white-space:pre-wrap;font-size:10px;background:#111;padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto"></pre></div>
         ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>
 
@@ -2516,14 +2575,17 @@
     $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     $('#stake-out').onclick = () => act('POST', '/v1/unstake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     t.querySelectorAll('[data-bondclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/bonds/${b.dataset.bondclaim}/claim`, {}).then(() => renderPortfolio()));
-    { const bq = $('#bond-quote'); if (bq) bq.onclick = async () => {
-      const r = await api('POST', '/v1/bond/quote', { principalEth: Number($('#bond-eth').value) });
-      const out = $('#bond-quote-out');
-      if (r.code === 200) { out.style.display = 'block';
-        out.textContent = `${fmt(r.body.payoutOmr)} $OMR at ${r.body.discountBps / 100}% off · nonce ${r.body.nonce}\nsubmit bond(quote, signature) on-chain:\n` + JSON.stringify({ quote: r.body.quote, signature: r.body.signature }, null, 2);
-        toast('quote signed — submit it to the OmertaBond contract'); }
-      else { out.style.display = 'none'; toast(describe(r.body) || 'quote failed'); }
-    }; }
+    { const bq = $('#bond-quote'); if (bq) { let lastNonce = null;
+      bq.onclick = async () => {
+        const r = await api('POST', '/v1/bond/quote', { principalEth: Number($('#bond-eth').value) });
+        const out = $('#bond-quote-out'); const bs = $('#bond-submit');
+        if (r.code === 200) { lastNonce = r.body.nonce; out.style.display = 'block'; if (bs) bs.style.display = 'inline-block';
+          out.textContent = `${fmt(r.body.payoutOmr)} $OMR at ${r.body.discountBps / 100}% off · nonce ${r.body.nonce}\nsubmit bond(quote, signature) on-chain (or use the button):\n` + JSON.stringify({ quote: r.body.quote, signature: r.body.signature }, null, 2);
+          toast('quote signed — submit it with your wallet'); }
+        else { out.style.display = 'none'; if (bs) bs.style.display = 'none'; toast(describe(r.body) || 'quote failed'); }
+      };
+      const bs = $('#bond-submit'); if (bs) bs.onclick = () => { if (lastNonce != null) submitBondOnChain(lastNonce); else toast('request a quote first', true); };
+    } }
     $('#dyn-go').onclick = () =>
       act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
     t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>

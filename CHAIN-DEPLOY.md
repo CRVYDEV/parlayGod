@@ -116,8 +116,11 @@ The backend keeps its own reserve records; they must track the on-chain balances
   are set) and pre-checks the backend tranche (`bond_reserve.capacity_omr`) so a player never gets a quote whose
   `bond()` would revert `TrancheExhausted`. Quote-nonce space is `bond_reserve.next_nonce` (independent of the
   withdrawal `chain_reserve` nonce). `BOND_QUOTE_TTL_SEC` (default 1h) sets the quote deadline (< contract
-  `MAX_QUOTE_TTL`). Still deferred: the client "request a bond quote → submit on-chain" wallet flow (the SIWE
-  widget precedent) and, for a live board, the DEX-TWAP oracle below.
+  `MAX_QUOTE_TTL`). **The in-browser wallet flow is BUILT**: the console (EIP-6963 multi-wallet discovery —
+  MetaMask / Robinhood Wallet / any injected wallet, with a picker) requests a quote, then `POST /v1/bond/calldata`
+  server-encodes `bond(quote, sig)` (viem) and the connected wallet `eth_sendTransaction`s it after switching to
+  the quote's chain. It is DORMANT until this rail is configured. Still deferred: the DEX-TWAP oracle below (for a
+  live quote board) — today the oracle is the latest manual Vig-buyback print.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven

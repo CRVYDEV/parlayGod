@@ -325,10 +325,29 @@ delete process.env.DAILY_CAP_OMR;
   assert.equal(qm.payer.toLowerCase(), player.address.toLowerCase(), 'the quote is bound to the linked wallet');
   assert.equal(BigInt(qm.principal), parseUnits('1', 18), 'principal is 1 ETH in wei');
   assert.equal(BigInt(qm.priceOmrPerEth), parseUnits('2000', 18), 'priceOmrPerEth is OMR-wei per 1 ETH');
+  const bondNonce = Number(qm.nonce);
+
+  // the wallet-submit calldata: the server ABI-encodes bond(quote, sig) so an injected browser wallet
+  // (MetaMask / Robinhood Wallet / …) can eth_sendTransaction it — the zero-dep client never hand-rolls ABI.
+  const { decodeFunctionData } = await import('viem');
+  const BOND_ABI = [{ type: 'function', name: 'bond', stateMutability: 'payable', inputs: [
+    { name: 'q', type: 'tuple', components: [{ name: 'payer', type: 'address' }, { name: 'principal', type: 'uint256' },
+      { name: 'priceOmrPerEth', type: 'uint256' }, { name: 'discountBps', type: 'uint256' }, { name: 'vestSeconds', type: 'uint256' },
+      { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }] }, { name: 'sig', type: 'bytes' }], outputs: [{ type: 'uint256' }] }];
+  const cd = await call('POST', '/v1/bond/calldata', { token, body: { nonce: bondNonce } });
+  assert.equal(cd.code, 200, 'calldata encoded');
+  assert.equal(cd.body.to.toLowerCase(), process.env.OMERTA_BOND_ADDRESS, 'the tx targets the OmertaBond contract');
+  assert.equal(BigInt(cd.body.value), parseUnits('1', 18), 'the tx value is the principal in wei');
+  assert.equal(cd.body.chainIdHex, '0x' + (46630).toString(16), 'the wallet is told which chain to switch to');
+  const decoded = decodeFunctionData({ abi: BOND_ABI, data: cd.body.data });
+  assert.equal(decoded.functionName, 'bond', 'the calldata is a bond() call');
+  assert.equal(decoded.args[0].nonce, BigInt(bondNonce), 'the encoded quote carries the right nonce');
+  assert.equal(decoded.args[0].payer.toLowerCase(), player.address.toLowerCase(), 'the encoded quote is bound to the wallet');
+  assert.equal(decoded.args[1], q.body.signature, 'the encoded sig is the server-signed quote signature');
+  assert.equal((await call('POST', '/v1/bond/calldata', { token: noWallet, body: { nonce: bondNonce } })).body.error, 'no_quote', "another account can't fetch your quote's calldata");
 
   // the Bonded watcher enriches the record from the persisted quote: the event omits price/discount, so
   // recordBond recovers the TRUE terms (2000 / 800 bps) — NOT the effective payout/eth rate (≈2173.9) or disc 0.
-  const bondNonce = Number(qm.nonce);
   const rb = await recordBond(pool, { nonce: bondNonce, payer: player.address, principalEth: 1,
     onchainPayout: expectedPayout, onchainPol: 0.6, onchainVig: 0.4, txHash: '0xbondtx' });
   assert.equal(rb.recorded, true, 'the Bonded event books the bond');
@@ -345,5 +364,5 @@ delete process.env.DAILY_CAP_OMR;
   process.env.OMERTA_BOND_ADDRESS = savedBond;
 }
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment');
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet)');
 await app.close();

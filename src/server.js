@@ -1628,6 +1628,9 @@ export async function buildServer() {
   // then submits bond(quote, signature) to the on-chain OmertaBond contract; the Bonded watcher books it.
   // Chain-dormant: 400s chain_unconfigured unless the bond chain (CHAIN_ID + OMERTA_BOND_ADDRESS + signer) is set.
   app.post('/v1/bond/quote', { preHandler: auth }, async (req) => Chain.quoteBond(pool, req.user.sub, req.body?.principalEth));
+  // server-encode the bond() submission so an injected browser wallet (MetaMask / Robinhood Wallet / etc.)
+  // can `eth_sendTransaction` it without the zero-dep client hand-rolling ABI (viem does it server-side).
+  app.post('/v1/bond/calldata', { preHandler: auth }, async (req) => Chain.bondCalldata(pool, req.user.sub, req.body?.nonce));
   app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
   app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
   app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
