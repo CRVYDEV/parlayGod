@@ -173,7 +173,11 @@ async function resolveBust(client, h, ch, { forced = false } = {}) {
   ch.heat_exposure = 0;             // the sheet is spent (they can be built up and busted again)
   ch.jail_until = new Date(Date.now() + LAW.BUST_JAIL_S * 1000);
   await notify(client, ch.id, 'busted', { forfeited: total, jailSeconds: LAW.BUST_JAIL_S });
-  bus.emit('streets', { type: 'busted', who: ch.name, forfeited: total });
+  // (red-team R17) the streets feed carries only THAT a bust happened — NOT the seized amount. FORFEIT_RATE
+  // is a public constant, so a broadcast `forfeited` invert to the victim's EXACT cash+bank for free,
+  // undercutting the paid Wire dossier (which bands wealth) + the anti-precise-kill-EV rule. The exact
+  // figure stays on the victim's own me: notify above (their feed) + the return/telemetry (private/mod).
+  bus.emit('streets', { type: 'busted', who: ch.name });
   await track(client, ch.account_id, 'rico', { convicted: true, forfeited: total, forced });
   return { convicted: true, forfeited: total, roll, p, jailSeconds: LAW.BUST_JAIL_S };
 }
