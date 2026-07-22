@@ -72,8 +72,9 @@ export async function runLedgerInvariants(pool) {
   // territory:income); invading a held outpost is a treasury SINK (like a turf seize). Both counterparty=gang.
   const worldTributeIn = await sum(pool, "currency='cash' AND reason='world:tribute'");
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
+  const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.

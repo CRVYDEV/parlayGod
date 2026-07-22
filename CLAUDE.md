@@ -1594,6 +1594,38 @@ to liberate its APEX core district — neon/canal/foundry — for the $30k floor
 < fixture.minLvl` throws `level`, mirroring `invadeOutpost`. Flagged for founder sign-off (NOT patched):
 the on-ramp shift (5/6 core districts start NPC-held), the carried garrison-ratchet (frontier B2), and
 the carried apex-solo-raid floor (the 0.1 clamp). Suite 30/30 + sim drift-0.
+**Step six — THE UPRISING (the world PUSHES BACK, its first proactive threat) — BUILT** (`src/world.js`,
+`src/rules.js` `WORLD.UPRISING`, `schema.sql` `world_uprisings`, `test/world.js`; the deepen-a-thin-system
+drop — the World only ever REACTED before, so conquered frontier turf was grab-and-forget). A seed-drawn,
+FORECAST-able event (`cartelUprisingOf(day)` off the §7.11 hash — `CHANCE` 28% of days, unpredictable
+without the seed, verifiable after; surfaced on `cityForecast`, `GET /v1/city`, `GET /v1/world`): on some
+days ONE outfit RISES UP. While rising it defends `+UPRISING.DEF` (50 — can't be farmed during its own
+revolt, the ENRAGE precedent, folded into `raidChance`) and its frontier TRIBUTE is SUSPENDED (a rebelling
+vassal pays nothing — `collectFrontier` skips it). **The reckoning** (the worker, once the uprising's day
+has passed — `sweepUprisings`→`resolveUprising`, the materialize-then-resolve-when-the-window-passes
+pattern; `world_uprisings` PK-on-day for idempotency): a rising outfit HELD by a family attempts to BREAK
+FREE — if the outpost garrison is below `outfit.max × THRESHOLD_BPS/10000 (3%) × its LIVE strength
+fraction`, it RECLAIMS its turf (`held_by_gang`→NULL, garrison reset, uncollected tribute forfeits — the
+`releaseFrontierHolds`/seizure precedent, a §10.4-NEUTRAL ownership move); a REINFORCED outpost REPELS it
+(the family keeps it). **The interlock**: the threshold scales with the outfit's live strength, so keeping
+it BEATEN DOWN via the raid loop (low strength → low threshold) means even a thin garrison holds — the raid
+loop and the frontier now defend each other. **The defense** — `reinforceOutpost` (`POST /v1/world/:npcId/
+reinforce {amount}`, boss/underboss) pays the TREASURY to stiffen a held outpost's garrison (a §10.4
+treasury cash SINK `world:reinforce`, character_id NULL/counterparty=gang — the territory-fortify twin);
+the garrison defends against BOTH the uprising's reckoning AND a rival family's `invadeOutpost` (which
+outbids it), so it's never wasted. §10.4: NO new faucet — `world:reinforce` joined the gang-treasuries
+check's OUT terms (`world:` already vocabularied); the reclaim moves no value. `WORLD_UPRISING` (test-only
+override — `'none'`/an outfit id, the SEARCH_MS knob precedent). `worldBoard` surfaces the day's `uprising`,
+a per-outfit `rising` flag + suspended tribute + `upriseNeed`/`reinforceMin` on your held outpost; the
+console City tab gained an UPRISING banner + a RISING chip + a reinforce-garrison button; `describe()`
+humanizes the reinforce; the worker logs resolutions. `test/world.js` proves the forecast track, the board
+surfacing + tribute-suspend (driven by the override), the reinforce sink + gates (`not_held`/`amount`), the
+reckoning BREAK (garrison 0 < need → reclaimed) + REPEL (reinforced → held) + idempotency, and the
+gang-treasuries §10.4 reconcile with `world:reinforce`. Suite 33/33 + sim drift-0. The World pillar's
+antagonist is now two-way (you raid the cartels; the cartels raid you back). All `UPRISING.*` numbers are
+founder sign-off levers (pacing + a sink — no emission surface). Deferred (step seven): the uprising also
+reclaiming an occupied CORE district (step five) if undefended; a repel paying a bounded morale/war-effort
+bonus; a cross-outfit cartel war.
 
 **Session red-team (`AUDIT-session-drops.md`)** — a four-lens max-effort audit (§10.4, concurrency/locks,
 death/estate/PvP, exploit/grief) over everything shipped this session (Boxing 3–5, Skills 2, Wire 2, World

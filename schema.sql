@@ -1089,6 +1089,15 @@ CREATE TABLE IF NOT EXISTS world_npcs (
   garrison NUMERIC NOT NULL DEFAULT 0, -- (step four) the holding family's defense budget on the outpost — a rival INVADES by outbidding it
   tribute_at TIMESTAMPTZ      -- (step four) last frontier-tribute collection (lazy accrual anchor; the held outfit pays its overlord a bounded, capped tribute)
 );
+-- (step six) THE UPRISING: a seed-drawn day where an outfit rises up. Materialized when the worker first
+-- sees the day (idempotent, PK on day); RESOLVED once the day has passed (the reckoning — a held-but-
+-- undefended outpost is reclaimed by the rebelling outfit). A tiny audit/idempotency ledger, not a money
+-- surface. status: 'active' (rising / awaiting the reckoning) → 'resolved'.
+CREATE TABLE IF NOT EXISTS world_uprisings (
+  day INT PRIMARY KEY,
+  npc_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+);
 
 -- THE FRONTIER — co-op crew raids on the apex outfits (step three). The crew-heist pattern applied
 -- to a WORLD raid: a leader opens the op, made raiders join off the board, the leader calls the go

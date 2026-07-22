@@ -135,8 +135,12 @@ const SECTIONS = [
       <tr><td>Canal Row</td><td>+10% crime pay · wash district</td></tr>
       <tr><td>Cathedral Hill</td><td>double nerve regen</td></tr></table>
       <p><b>NPC rival families</b> — shared server-wide cash reservoirs the whole base grinds down together (Zappa L8,
-      Kryl L20, Moreau L40). A raid costs energy + ammo + heat and pays a rout bonus if you drain one below its floor.</p>
-      ${R(`GET /v1/city [public] · /v1/world · POST /v1/world/:npcId/raid · GET /v1/market/prices [public]`)}` },
+      Kryl L20, Moreau L40). A raid costs energy + ammo + heat and pays a rout bonus if you drain one below its floor.
+      Rout one and your family holds its outpost (tribute to the treasury; a rival can invade by outbidding your garrison).</p>
+      <p><b>The uprising</b> — the cartels push back. On seed-drawn, forecast-able days an outfit rises up (harder to raid,
+      no tribute) and at the reckoning breaks free of a held outpost whose garrison is too thin — <b>reinforce</b> it from
+      the treasury (also stiffens it vs rival invasions) or lose the turf. Keep an outfit beaten down and a small garrison holds.</p>
+      ${R(`GET /v1/city [public] · /v1/world · POST /v1/world/:npcId/raid · /v1/world/:npcId/reinforce · GET /v1/market/prices [public]`)}` },
 
   { id: 'economy', group: 'Money', title: 'The Economy — $OMR, Laundering & Staking', tag: 'the money flywheel',
     html: `<p><b>Currencies:</b> cash (pocket + bank), <b>$OMR</b> (premium, launderable, extractable, account-level →

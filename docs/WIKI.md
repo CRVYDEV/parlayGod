@@ -134,7 +134,14 @@ success), **Canal Row** (+10% crime pay, a wash district), **Cathedral Hill** (d
 **NPC rival families** (`GET /v1/world`, `POST /v1/world/:npcId/raid`) — shared server-wide cash reservoirs
 the whole player base grinds down together (positive-sum co-op): Zappa Crew (L8), Kryl Syndicate (L20),
 Moreau Cartel (L40). A raid costs energy + ammo + heat, grabs a bounded slice, and pays a one-time bonus if
-you drain one below its floor. Repelled → hospitalized.
+you drain one below its floor. Repelled → hospitalized. Rout an outfit and your **family holds its outpost**
+(a conquered vassal that pays tribute to the treasury); a rival can invade by outbidding your garrison.
+
+**The uprising** (`POST /v1/world/:npcId/reinforce`) — the cartels push back. On some days (seed-drawn,
+shown a week out on the forecast) one outfit **rises up**: it digs in (harder to raid) and stops paying
+tribute, and at the reckoning it will **break free of your outpost if the garrison is too thin** —
+`reinforce` it from the treasury (which also stiffens it against rival invasions) or lose the turf. Keep an
+outfit beaten down via raids and even a small garrison holds the line.
 
 ---
 

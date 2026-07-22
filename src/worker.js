@@ -17,7 +17,7 @@ import { sweepUncreditedStore } from './store.js';
 import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
 import { sweepStaleBreaks } from './pen.js';
-import { sweepStaleRaids } from './world.js';
+import { sweepStaleRaids, sweepUprisings } from './world.js';
 import { sweepWire, sweepWireAlerts } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
@@ -204,6 +204,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE FRONTIER co-op raids: stale raid plans cleared off the board (no stake — nothing to refund)
     const wrd = await safe('world raid sweep', () => sweepStaleRaids(pool));
     if (wrd?.swept > 0) console.log(`🗡  world: swept ${wrd.swept} stale co-op raid plan(s)`);
+    // THE UPRISING (step six): materialize today's cartel uprising + resolve any past-day reckoning
+    const upr = await safe('world uprising sweep', () => sweepUprisings(pool));
+    if (upr?.resolved > 0) console.log(`🔥 world: resolved ${upr.resolved} cartel uprising(s)`);
     const mk = await safe('market sweep', () => sweepMarket(pool));
     if (mk && (mk.settled > 0 || mk.lapsed > 0)) console.log(`🔨 market: hammered ${mk.settled} auction(s), lapsed ${mk.lapsed}`);
     // CONVOY step three: NPC TRUCKING — despawn arrived NPC trucks, then top the road back up to TARGET

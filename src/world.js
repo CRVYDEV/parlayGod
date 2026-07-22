@@ -8,10 +8,11 @@
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr } from './rules.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const enragedNow = (enragedUntil, now = new Date()) => enragedUntil && new Date(enragedUntil) > now;
+const risingNow = (fixture, day = dayOf()) => cartelUprisingOf(day)?.id === fixture.id; // step six: is this outfit rising today
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 // step four: a held outfit's accrued tribute to its overlord family (lazy §7.1, capped at TRIBUTE_CAP_MS).
 // Only a gang-held outfit with a running clock owes tribute; an unheld/gangless outfit owes nothing.
@@ -66,6 +67,8 @@ export async function outfitStrengthFrac(client, fixture) {
 // Uses a fresh connection so a read doesn't lock; strength is the regened (effective) value.
 export async function worldBoard(pool, ch = null, h = null) {
   const now = new Date();
+  const today = dayOf();
+  const rising = cartelUprisingOf(today); // step six: the outfit rising up today (or null)
   const patrol = cityHourOf(now.getTime()).patrol;
   const rows = Object.fromEntries((await pool.query('SELECT npc_id, strength, strength_at, enraged_until, held_by_gang, held_since, garrison, tribute_at FROM world_npcs')).rows
     .map((r) => [r.npc_id, r]));
@@ -105,6 +108,7 @@ export async function worldBoard(pool, ch = null, h = null) {
         : f.max;
       const routed = strength <= f.max * WORLD.ROUT_FLOOR_BPS / 10000;
       const enraged = enragedNow(row?.enraged_until, now); // a routed cartel on high alert defends harder
+      const isRising = rising?.id === f.id;               // step six: this outfit is in revolt today
       const holder = row?.held_by_gang && gangNames[row.held_by_gang];
       const mine = !!(h?.owned?.gangId && h.owned.gangId === row?.held_by_gang);
       // step four — the outpost economics: a held outfit pays TRIBUTE + carries a garrison a rival outbids
@@ -113,22 +117,27 @@ export async function worldBoard(pool, ch = null, h = null) {
         id: f.id, name: f.name, minLvl: f.minLvl, coop: !!f.coop,
         // never the exact reservoir (like the convoy value band) — a status read
         strengthPct: Math.round(strength / f.max * 100),
-        routed, enraged,
+        routed, enraged, rising: isRising,               // step six: RISING flag (heightened defense + tribute suspended)
         heldBy: holder ? { name: holder.name, tag: holder.tag, mine } : null,
         tributePerHr,
-        tributePending: mine ? frontierTribute(f, row.tribute_at, now.getTime()) : null, // your accrued tribute on this outpost
+        tributePending: mine ? (isRising ? 0 : frontierTribute(f, row.tribute_at, now.getTime())) : null, // a rebelling vassal pays no tribute
         garrison: holder ? Math.floor(Number(row.garrison || 0)) : null,
+        // step six: what a HELD outpost needs on its garrison to hold the line against the uprising's reckoning
+        upriseNeed: mine && isRising ? Math.floor(f.max * WORLD.UPRISING.THRESHOLD_BPS / 10000 * (strength / f.max)) : null,
+        reinforceMin: mine ? WORLD.UPRISING.REINFORCE_MIN : null, // the floor to stiffen your garrison
         invadeCost: holder && !mine ? invadeCost(row.garrison) : null, // what it'd cost your family to take it
         canRaid: !!ch && lvl >= f.minLvl && !f.coop, // SIGN-OFF (1.3): apex (coop) outfits need a crew, not a solo hit
-        odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged) * 100) : null,
+        odds: ch && lvl >= f.minLvl ? Math.round(raidChance(f, power, patrol, enraged, isRising) * 100) : null,
       };
     }),
     // step four: your family's total collectable tribute across every outpost it holds (a treasury faucet)
     frontier: h?.owned?.gangId ? (() => {
       let pending = 0, held = 0;
-      for (const f of WORLD_NPCS) { const row = rows[f.id]; if (row?.held_by_gang === h.owned.gangId) { held++; pending += frontierTribute(f, row.tribute_at, now.getTime()); } }
+      for (const f of WORLD_NPCS) { const row = rows[f.id]; if (row?.held_by_gang === h.owned.gangId) { held++; if (rising?.id !== f.id) pending += frontierTribute(f, row.tribute_at, now.getTime()); } }
       return { held, tributePending: pending, canCommand: canCommand({ owned: { gangRole: h.owned.gangRole } }) };
     })() : null,
+    // step six: the day's cartel uprising (forecast-able; the reckoning hits an undefended held outpost)
+    uprising: rising ? { npc: rising.id, name: rising.name } : null,
   };
 }
 
@@ -191,9 +200,10 @@ function raiderPower(ch, h) {
   return effStat(Number(ch.muscle), 'muscle', assets, gear) + effStat(Number(ch.speed), 'speed', assets, gear) / 2;
 }
 // success chance — the fixture's base + the raider's edge over its defense; night eases the defense,
-// an ENRAGED cartel (recently routed) defends harder (step two — emission-safe: lower odds).
-function raidChance(fixture, power, patrol, enraged = false) {
-  const def = fixture.def * (patrol ? 1 : LIVING.NIGHT_RAID_MULT) + (enraged ? WORLD.ENRAGE_DEF : 0);
+// an ENRAGED cartel (recently routed) defends harder (step two), and an outfit mid-UPRISING defends
+// harder still (step six — both emission-safe: lower odds, can't be farmed during its own revolt).
+function raidChance(fixture, power, patrol, enraged = false, rising = false) {
+  const def = fixture.def * (patrol ? 1 : LIVING.NIGHT_RAID_MULT) + (enraged ? WORLD.ENRAGE_DEF : 0) + (rising ? WORLD.UPRISING.DEF : 0);
   return Math.max(0.1, Math.min(0.9, fixture.base + (power - def) / 400));
 }
 
@@ -218,6 +228,7 @@ export async function raidNpc(ch, npcId, client, h) {
   const patrol = cityHourOf(now.getTime()).patrol;
   const { strength, enragedUntil } = await currentStrength(client, fixture, now); // regened + row-locked
   const enraged = enragedNow(enragedUntil, now); // a recently-routed cartel defends harder
+  const rising = risingNow(fixture); // step six: an outfit mid-uprising defends harder
 
   // pay the price up front (energy + ammo + heat + cooldown), win or lose
   ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY;
@@ -229,7 +240,7 @@ export async function raidNpc(ch, npcId, client, h) {
   const power = raiderPower(ch, h);
   // WORLD_RAID_P is a TEST-ONLY knob (the LAW_BUST_P / GEAR_LOOT_CHANCE precedent) that pins the raid
   // outcome so loot/rout/repel are deterministic in tests — never set in production.
-  const p = process.env.WORLD_RAID_P != null ? Number(process.env.WORLD_RAID_P) : raidChance(fixture, power, patrol, enraged);
+  const p = process.env.WORLD_RAID_P != null ? Number(process.env.WORLD_RAID_P) : raidChance(fixture, power, patrol, enraged, rising);
   const roll = Math.random();
   await h.rngLog(client, ch.id, `world:${fixture.id}`, roll, roll < p ? 'raid' : 'repelled');
 
@@ -505,6 +516,7 @@ export async function collectFrontier(ch, client, h) {
   for (const r of held) {
     const fixture = worldNpcOf(r.npc_id);
     if (!fixture) continue;
+    if (risingNow(fixture)) continue; // step six: a rebelling vassal pays no tribute — wait out the uprising (the clock keeps running, capped)
     const owed = frontierTribute(fixture, r.tribute_at, now.getTime());
     if (owed > 0) {
       total += owed;
@@ -547,6 +559,86 @@ export async function invadeOutpost(ch, npcId, client, h) {
   if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - cost;
   bus.emit('streets', { type: 'frontier_seized', gang: h.owned.gang?.name, npc: fixture.name });
   return { ok: true, npc: npcId, name: fixture.name, cost, garrison: cost };
+}
+
+// ── STEP SIX — THE UPRISING (the world pushes back) ──
+// POST /v1/world/:npcId/reinforce {amount} — a boss/underboss pays the TREASURY to stiffen a held
+// outpost's garrison (a §10.4 treasury cash SINK `world:reinforce` — the territory-fortify twin). The
+// garrison defends against BOTH the cartel uprising's reckoning AND a rival family's invasion (invadeCost
+// outbids it), so it's never wasted. Lock: own gang → world_npcs (the invadeOutpost order).
+export async function reinforceOutpost(ch, npcId, amount, client, h) {
+  if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss funds the garrison.');
+  const fixture = worldNpcOf(npcId);
+  if (!fixture) throw new GameError('bad_npc', 'No outfit by that name.');
+  const amt = Math.floor(Number(amount));
+  if (!(Number.isFinite(amt) && amt >= WORLD.UPRISING.REINFORCE_MIN)) throw new GameError('amount', `Reinforcing the garrison takes at least $${WORLD.UPRISING.REINFORCE_MIN}.`);
+  const g = (await client.query('SELECT treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const row = (await client.query('SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
+  if (!row || row.held_by_gang !== h.owned.gangId) throw new GameError('not_held', "Your family doesn't hold that outpost.");
+  if (Number(g.treasury) < amt) throw new GameError('treasury', `That's more than the treasury holds.`);
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, amt]);
+  const garrison = Math.floor(Number(row.garrison || 0)) + amt;
+  await client.query('UPDATE world_npcs SET garrison=$2 WHERE npc_id=$1', [npcId, garrison]);
+  await h.ledger(client, { currency: 'cash', amount: -amt, reason: 'world:reinforce', counterparty: h.owned.gangId });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - amt;
+  return { ok: true, npc: npcId, name: fixture.name, spent: amt, garrison };
+}
+
+// THE RECKONING — resolve one PAST-DAY uprising (idempotent, status-latched). A rising outfit HELD by a
+// family attempts to BREAK FREE: if the outpost garrison is below `outfit.max × THRESHOLD_BPS/10000 × its
+// live strength fraction`, it RECLAIMS its turf (§10.4-NEUTRAL — held_by_gang→NULL, garrison reset,
+// uncollected tribute forfeits, the releaseFrontierHolds/seizure precedent). A REINFORCED outpost repels
+// it (the family keeps it). No holder → quiet. Lock: world_uprisings row → world_npcs row (no char lock,
+// no cycle). WORLD_UPRISING_FORCE (test-only) pins the outcome for a deterministic test.
+export async function resolveUprising(client, day, npcId) {
+  const u = (await client.query("SELECT status FROM world_uprisings WHERE day=$1 FOR UPDATE", [day])).rows[0];
+  if (!u || u.status !== 'active') return null; // already resolved (idempotent)
+  const fixture = worldNpcOf(npcId);
+  let outcome = 'quiet';
+  if (fixture) {
+    const row = (await client.query('SELECT held_by_gang, garrison, strength, strength_at FROM world_npcs WHERE npc_id=$1 FOR UPDATE', [npcId])).rows[0];
+    if (row?.held_by_gang) {
+      const hrs = Math.max(0, (Date.now() - new Date(row.strength_at).getTime()) / 3600000);
+      const strength = Math.min(fixture.max, Number(row.strength) + fixture.regenPerHr * hrs);
+      const frac = Math.max(0, Math.min(1, strength / fixture.max));
+      const need = Math.floor(fixture.max * WORLD.UPRISING.THRESHOLD_BPS / 10000 * frac);
+      const broke = process.env.WORLD_UPRISING_FORCE != null
+        ? process.env.WORLD_UPRISING_FORCE === 'break'
+        : Number(row.garrison || 0) < need;
+      if (broke) {
+        // BREAK FREE — reclaim the outpost; uncollected tribute forfeits (the release/seize precedent)
+        await client.query('UPDATE world_npcs SET held_by_gang=NULL, held_since=NULL, garrison=0, tribute_at=NULL WHERE npc_id=$1', [npcId]);
+        outcome = 'broke_free';
+        bus.emit('streets', { type: 'uprising_broke_free', npc: fixture.name });
+      } else {
+        outcome = 'repelled';
+        bus.emit('streets', { type: 'uprising_repelled', npc: fixture.name });
+      }
+    }
+  }
+  await client.query("UPDATE world_uprisings SET status='resolved' WHERE day=$1", [day]);
+  return { day, npc: npcId, outcome };
+}
+
+// worker: materialize TODAY's uprising (idempotent — PK on day) so the reckoning is scheduled, then
+// resolve any PAST-day active uprising (its window has ended). The "materialize → resolve when the window
+// passes" pattern (futurity/stakes). Per-uprising txn; a poison row can't starve the rest.
+export async function sweepUprisings(pool) {
+  const today = dayOf();
+  const up = cartelUprisingOf(today);
+  if (up) {
+    try { await pool.query("INSERT INTO world_uprisings (day, npc_id, status) VALUES ($1,$2,'active')", [today, up.id]); }
+    catch (e) { if (e?.code !== '23505') throw e; } // already materialized this day
+  }
+  const due = (await pool.query("SELECT day, npc_id FROM world_uprisings WHERE day < $1 AND status='active' ORDER BY day", [today])).rows;
+  let resolved = 0;
+  for (const u of due) {
+    const client = await pool.connect();
+    try { await client.query('BEGIN'); await resolveUprising(client, Number(u.day), u.npc_id); await client.query('COMMIT'); resolved++; }
+    catch (e) { await client.query('ROLLBACK'); } // transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved, active: up ? up.id : null };
 }
 
 // runEstate: a dead co-op raid leader's plan is abandoned (the crew_heists precedent) so its crew can

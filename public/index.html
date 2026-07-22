@@ -368,6 +368,7 @@
     if (body.racer && body.post !== undefined && body.fee !== undefined && body.race) bits.push(`${body.racer} is in today's ${body.race} — post ${body.post} at ${body.odds}:1 (the town's betting on your animal now)`);
     if (body.futurity && body.racer && body.fee !== undefined && body.form !== undefined) bits.push(`${body.racer} (form ${body.form}) is nominated to the futurity — the whole town's betting on the field`);
     if (body.futurity && body.on && body.amount !== undefined) bits.push(`$${fmt(body.amount)} on ${body.on} in the futurity`);
+    if (body.spent !== undefined && body.garrison !== undefined && body.name && body.npc) bits.push(`reinforced ${body.name}'s garrison to $${fmt(body.garrison)} (−$${fmt(body.spent)} from the treasury)`);
     if (body.settled !== undefined && Array.isArray(body.results) && body.results[0]?.winner !== undefined && body.results[0]?.race) bits.push(
       body.won > 0 ? `it came in — +$${fmt(body.won)} at the window` : `the tickets tore up — better luck at the next post`);
     if (body.game === 'tourney') bits.push(`seated at the big table — $${fmt(body.buyin)} in, pool $${fmt(body.pool)} (${body.entrants} runner${body.entrants === 1 ? '' : 's'})`);
@@ -1160,15 +1161,18 @@
         `<div class="card"><span class="t">day ${f.day - c.day > 0 ? '+' + (f.day - c.day) : f.day}</span><div class="d">${f.city || ''} · law: ${f.law || ''}</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">Rival Families <span class="d" style="font-size:10px">(NPC crews the whole city grinds down — raid for cash + ammo${w.phase === 'night' ? ' · night: their guard is down' : ''})</span></h2>
       ${w.warEffort ? `<div class="card" style="border-color:var(--neon)"><span class="t">⚔️ War Effort: ${w.warEffort.rank}</span> <span class="d">$${fmt(w.warEffort.damage)} lifetime cartel damage — <a href="#" id="w-lb">the leaderboard →</a> · <a href="#" id="w-flb">the frontier →</a></span></div>` : ''}
+      ${w.uprising ? `<div class="card" style="border-color:var(--blood)"><span class="t">🔥 UPRISING — ${w.uprising.name} is in revolt</span> <span class="d">they've dug in (raiding them is harder today) and pay no tribute. If a family holds their outpost and hasn't reinforced the garrison, they'll break free at the reckoning — <b>reinforce or lose the turf.</b></span></div>` : ''}
       ${w.frontier && w.frontier.held ? `<div class="card"><span class="t">🏴 The Frontier — your family holds ${w.frontier.held} outpost${w.frontier.held === 1 ? '' : 's'}</span>
         <div class="d">a held outfit pays TRIBUTE to the treasury (a conquered vassal) · pending: <b>$${fmt(w.frontier.tributePending)}</b></div>
         ${w.frontier.tributePending > 0 ? '<button class="act" id="w-collect">collect the tribute → treasury</button>' : '<span class="d" style="color:var(--dim)">nothing to collect yet — it accrues while you hold the turf</span>'}</div>` : ''}
       <div class="grid">${(w.npcs || []).map((n) => `
-        <div class="card"><span class="t">${n.name}</span>${n.coop ? '<span class="chip">apex</span>' : ''}${n.routed ? '<span class="chip good">ROUTED</span>' : ''}${n.enraged ? '<span class="chip bad">ON ALERT</span>' : ''}
+        <div class="card"><span class="t">${n.name}</span>${n.coop ? '<span class="chip">apex</span>' : ''}${n.routed ? '<span class="chip good">ROUTED</span>' : ''}${n.enraged ? '<span class="chip bad">ON ALERT</span>' : ''}${n.rising ? '<span class="chip bad">🔥 RISING</span>' : ''}
           ${n.heldBy ? `<div class="d">frontier held by <b>${n.heldBy.name}</b> [${n.heldBy.tag}]${n.heldBy.mine ? ' <span class="chip good">yours</span>' : ''}${n.heldBy.mine && n.tributePending != null ? ` · tribute $${fmt(n.tributePending)} pending ($${fmt(n.tributePerHr)}/hr)` : ''}${!n.heldBy.mine ? ` · garrison $${fmt(n.garrison)}` : ''}</div>` : (n.coop ? '<div class="d" style="color:var(--dim)">frontier: open — rout it to claim its tribute</div>' : `<div class="d" style="color:var(--dim)">frontier: open — rout it ($${fmt(n.tributePerHr)}/hr tribute)</div>`)}
           <div class="d">strength ${n.strengthPct}% · lvl ${n.minLvl}+${n.odds != null ? ` · your solo odds ${n.odds}%` : ''}${n.enraged ? ' · <span style="color:var(--bad)">enraged — dug in</span>' : ''}</div>
           ${n.canRaid ? `<button class="act" data-raid="${n.id}">raid (energy + ammo)</button>` : `<span class="chip">need lvl ${n.minLvl}</span>`}
           ${n.coop && n.canRaid && !w.myRaid ? `<button class="act" data-plan="${n.id}">plan a crew raid</button>` : ''}
+          ${n.heldBy?.mine && n.rising ? `<div class="d" style="color:var(--bad)">⚠ garrison $${fmt(n.garrison)} — needs ~$${fmt(n.upriseNeed || 0)} to hold the line at the reckoning</div>` : ''}
+          ${n.heldBy?.mine && w.frontier?.canCommand ? `<button class="act" data-reinforce="${n.id}" style="border-color:var(--gold)">reinforce garrison (min $${fmt(n.reinforceMin)})</button>` : ''}
           ${n.invadeCost != null && w.frontier?.canCommand ? `<button class="act" data-invade="${n.id}" style="border-color:var(--blood)">invade ($${fmt(n.invadeCost)} from treasury)</button>` : ''}</div>`).join('') || '<span class="d" style="color:var(--dim)">the streets are quiet</span>'}</div>
       <h2 style="margin-top:12px">Crew Raids <span class="d" style="font-size:10px">(the apex outfits take a crew of ${w.coop?.min || 2}–${w.coop?.max || 4} — combined firepower cracks their defense; rout one to seize its frontier)</span></h2>
       ${w.myRaid ? `<div class="card" style="border-color:var(--neon)"><span class="t">your raid on ${w.myRaid.npc}</span> <span class="chip">crew ${w.myRaid.crew}</span>${w.myRaid.leader ? ' <span class="chip good">you lead</span>' : ''}
@@ -1186,6 +1190,7 @@
     t.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.go}/go`, {}).then(() => renderCity()));
     const wcol = $('#w-collect'); if (wcol) wcol.onclick = () => act('POST', '/v1/world/collect', {}).then(() => renderCity());
     t.querySelectorAll('[data-invade]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.invade}/invade`, {}).then(() => renderCity()));
+    t.querySelectorAll('[data-reinforce]').forEach((b) => b.onclick = () => { const a = Number(prompt('How much to add to the garrison (from the treasury)?')); if (a > 0) act('POST', `/v1/world/${b.dataset.reinforce}/reinforce`, { amount: a }).then(() => renderCity()); });
     const wlb = $('#w-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/world')).body || {};
       alert('THE WAR EFFORT — most feared cartel-hunters\\n\\n' + ((d.hunters || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} ($${fmt(x.damage)})`).join('\\n') || 'no cartel damage logged yet')); };

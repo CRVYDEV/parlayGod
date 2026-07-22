@@ -1571,6 +1571,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.collectFrontier(ch, client, h)));
   app.post('/v1/world/:npcId/invade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.invadeOutpost(ch, req.params.npcId, client, h)));
+  // step six — THE UPRISING: reinforce a held outpost's garrison (vs the cartel uprising AND rival invasions)
+  app.post('/v1/world/:npcId/reinforce', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.reinforceOutpost(ch, req.params.npcId, req.body?.amount, client, h)));
   return app;
 }
 
