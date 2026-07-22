@@ -29,20 +29,28 @@ async function oraclePrice(db) {
 // ── ingest one bond (the recordFeePayment / Store recordStorePurchase twin; chain-dormant, mod/test-driven).
 // Idempotent on nonce. Prices the payout, ENFORCES the tranche cap (committed + payout ≤ capacity), splits
 // the ETH (POL + the Vig buyback), and books the vesting bond. account_id null parks it for reconcile-at-link.
-export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps, txHash = null }) {
+export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps, txHash = null, onchainPayout = null, onchainPol = null, onchainVig = null }) {
   const n = Number(nonce);
   if (!Number.isInteger(n) || n < 0) throw new GameError('bad_nonce', 'Bad bond nonce.');
   // the on-chain path supplies the depositing wallet; store it (normalized) so a pre-link bond can be
   // reconciled at wallet-link (the Store precedent). The mod/test path supplies accountId directly.
   const addr = payer == null ? null : norm(payer);
   if (payer != null && !addr) throw new GameError('bad_payer', 'Payer is not a valid EVM address.');
-  const eth = num(principalEth), price = num(priceOmrPerEth);
+  const eth = num(principalEth);
   if (!(eth >= BONDS.MIN_PRINCIPAL_ETH)) throw new GameError('min', `A bond takes at least ${BONDS.MIN_PRINCIPAL_ETH} ETH.`);
-  if (!(price > 0)) throw new GameError('price', 'A bond needs a live OMR-ETH price.');
-  const disc = discountBps == null ? BONDS.DISCOUNT_BPS : Number(discountBps);
+  // THE ON-CHAIN (WATCHER) PATH vs THE MOD/SIMULATE PATH. The `Bonded` event carries the AUTHORITATIVE
+  // payout + POL/Vig split the contract already computed from the signed quote — but it does NOT re-emit
+  // the quote's price/discount. So when `onchainPayout` is set (the watcher), BOOK the event's values
+  // directly (the chain is the source of truth); store the effective rate (payout/eth) as oracle_price for
+  // the record. The mod/simulate path (no onchainPayout) re-derives payout from an explicit price+discount.
+  const onchain = onchainPayout != null;
+  const price = onchain ? (eth > 0 ? round6(num(onchainPayout) / eth) : 0) : num(priceOmrPerEth);
+  if (!onchain && !(price > 0)) throw new GameError('price', 'A bond needs a live OMR-ETH price.');
+  const disc = discountBps == null ? (onchain ? 0 : BONDS.DISCOUNT_BPS) : Number(discountBps);
   if (!(Number.isFinite(disc) && disc >= 0 && disc <= BONDS.MAX_DISCOUNT_BPS))
     throw new GameError('discount', `The discount runs 0–${BONDS.MAX_DISCOUNT_BPS} bps.`);
-  const payout = bondPayout(eth, price, disc);
+  const payout = onchain ? round6(num(onchainPayout)) : bondPayout(eth, price, disc);
+  if (!(payout > 0)) throw new GameError('payout', 'A bond payout must be positive.');
   const vestMs = BONDS.VEST_HOURS * 3600000;
   const client = await pool.connect();
   try {
@@ -55,8 +63,11 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     }
     const res = (await client.query('SELECT capacity_omr, committed_omr, pol_eth FROM bond_reserve WHERE id=1')).rows[0];
     // THE ANTI-PONZI CAP: the treasury can never promise more OMR than it budgeted (the full-reserve-queue
-    // discipline). Over the tranche → reject; the treasury must top up (mod/bond/fund) first.
-    if (Number(res.committed_omr) + payout > Number(res.capacity_omr) + 1e-6) {
+    // discipline). Over the tranche → reject; the treasury must top up (mod/bond/fund) first. This is a
+    // PRE-FLIGHT guard for the off-chain/mod request path ONLY: a REAL on-chain Bonded event already
+    // happened (the contract enforced its OWN identical cap against its funded balance), so it must ALWAYS
+    // be recorded — never rejected — or the watcher would stall the cursor forever on a legitimate bond.
+    if (!onchain && Number(res.committed_omr) + payout > Number(res.capacity_omr) + 1e-6) {
       await client.query('ROLLBACK');
       throw new GameError('over_capacity', 'The bond tranche is exhausted — the treasury must top it up.');
     }
@@ -71,8 +82,13 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     // Else a comp with no real ETH behind it would fabricate Vig revenue that runVigBuyback (which sums
     // vig_revenue with no source filter) would spend → unbacking the withdrawal reserve, invisible to
     // runVigInvariants. Real ETH only ever comes with a tx.
+    // the on-chain path books the EVENT's actual toPol/toVig split (mirrors the contract's polBps exactly,
+    // so the backend can't drift from the contract even if BONDS.POL_BPS ever diverges); the mod/simulate
+    // path derives it from BONDS.POL_BPS, and books ZERO real-ETH accounting without a txHash (the audit
+    // MED — a comp with no real ETH must not fabricate Vig revenue runVigBuyback would spend unbacked).
     const real = !!txHash;
-    const polEth = real ? round6(eth * BONDS.POL_BPS / 10000) : 0, vigEth = real ? round6(eth - round6(eth * BONDS.POL_BPS / 10000)) : 0;
+    const polEth = onchain ? round6(num(onchainPol)) : (real ? round6(eth * BONDS.POL_BPS / 10000) : 0);
+    const vigEth = onchain ? round6(num(onchainVig)) : (real ? round6(eth - round6(eth * BONDS.POL_BPS / 10000)) : 0);
     await client.query(
       'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms, tx_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
       [uid(), n, acct, addr, round6(eth), payout, round6(price), disc, vestMs, txHash]);

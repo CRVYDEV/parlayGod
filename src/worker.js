@@ -31,7 +31,7 @@ import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
 import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
-import { syncFeeEvents, syncClaimedEvents, syncTradeFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
+import { syncFeeEvents, syncClaimedEvents, syncTradeFees, syncBondEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
 
@@ -346,6 +346,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
           if (process.env.TRADE_FEE_HOOK_ADDRESS) {
             const t = await syncTradeFees(pool, source, { startBlock });
             if (t.processed) console.log(`💱 trade-fee sync: booked ${t.processed} swap fee(s) to the Vig (blocks ${t.from}–${t.to})`);
+          }
+          // THE RESERVE BOND (OmertaBond): Bonded → recordBond (POL + the Vig buyback basis). Dormant
+          // unless OMERTA_BOND_ADDRESS is set; the on-chain event is authoritative + idempotent on nonce.
+          if (process.env.OMERTA_BOND_ADDRESS) {
+            const b = await syncBondEvents(pool, source, { startBlock });
+            if (b.processed) console.log(`🏦 bond sync: booked ${b.processed} bond(s) → reserve/POL/Vig (blocks ${b.from}–${b.to})`);
           }
         } catch (e) { console.error('chain sync error', e.message); }
       };

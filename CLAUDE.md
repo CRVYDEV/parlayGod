@@ -3031,8 +3031,22 @@ deadline backstop (+ exact-boundary accept), the ETH sweep (+ owner-gate), a ree
 re-entry (guard blocks → forward fails → the bond rolls back), and a **fuzz** of the anti-Ponzi
 invariant (`committedOMR ≤ balanceOf` after any bond). Still deferred (mainnet milestone, legal + audit
 gated): **`forge test` must run** (Foundry egress-blocked here — the established suite residual), the
-`Bonded` watcher wiring (→ `recordBond`), the POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
+POL-pairing bot, and **liquidity bonds** (LP-token deposits). NOTE (Sensitive design): a bond is a financial
 primitive — no APY/appreciation marketing until counsel signs off, same wall as R2/R3/mainnet.
+**CHAIN GO-LIVE (2026-07-22): the `Bonded` → `recordBond` watcher wiring is now BUILT** (`src/watcher.js`
+`syncBondEvents` + `bondLogs` in `makeViemSource`; wired into the worker's chain-sync tick; dormant unless
+`OMERTA_BOND_ADDRESS` is set). The event is AUTHORITATIVE: `recordBond` gained an on-chain path
+(`onchainPayout`/`onchainPol`/`onchainVig`) that books the event's actual payout + POL/Vig split (wei→units via
+viem `formatUnits`, so 1 in-game $OMR = 1e18 on-chain, matching `chain.js` `parseUnits(_,18)`) rather than
+re-deriving from a price+discount the event doesn't carry, and BYPASSES the backend tranche cap (the contract
+enforced its own — so a real bond always records and can't stall the sync cursor; keep `bond_reserve.capacity`
+funded to match, `runBondInvariants` flags a gap). Idempotent on nonce; zero `transactions` rows (§10.4
+untouched); real-ETH accounting (`vig_revenue` source='bond') only from a real Bonded tx. `test/watcher.js`
+covers the reserve-bond stream (confirmation gating, event-authoritative booking, cap-bypass, idempotency).
+The mainnet go-live sequence is in **`CHAIN-DEPLOY.md`** (the on-chain counterpart to DEPLOY.md — the three
+hard gates: `forge test` green, third-party contract+signer audit, legal counsel). STILL deferred before real
+bonds flow: the EIP-712 **bond QUOTE SIGNER** (no on-chain bond can be created until it ships — the watcher is
+wired but idle), the POL-pairing + DEX buyback bots, the on-chain Store paywall.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,

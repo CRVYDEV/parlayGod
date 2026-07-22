@@ -166,3 +166,51 @@ either already mitigated, trivially small, or a fair "ship-and-watch."
 
 Tell me which rows to **CHANGE** and I'll apply the dial + re-run the sim; the rest I'll mark SIGNED in
 `BALANCE.md`.
+
+---
+
+## 📌 SESSION ADDENDUM (red-team loop R32–R43 + chain go-live wiring, 2026-07-22)
+
+Since the 2026-07-21 resolution, an automated max-effort red-team loop (12 rounds, `AUDIT-redteam-loop.md`)
+and the start of the chain go-live work ran. **No founder decision is needed for the fixes below — they're
+correctness (a state gate, a lock order, a snapshot, a bounded param), not balance levers.** Suite 34/34 +
+sim drift-0 throughout.
+
+### Shipped this session — FYI, no decision (correctness fixes)
+| # | What | Fix |
+|---|---|---|
+| R34 | **HIGH** — the boxing main-event parimutuel was riggable (the "frozen form" thawed 30 min before the hourly worker settled, and resolution read *live* fighter stats → a manager could train up in the gap) | snapshot each fighter's form at booking; resolve from the snapshot (the Grand-Prix/stakes/futurity precedent) |
+| R34 | belt lock-order inversion (`wipeFighterAtDeath` title→fighter) → AB-BA vs `acceptCallout` | reordered to fighter→title |
+| R32 | a departed/kicked territory **specialist** kept buffing the racket (only death cleared it) | `removeMember` now mirrors the death-path clear |
+| R35 | season-rollover gang reset locked in scan order → AB-BA vs a war op at the boundary | per-gang sorted-id reset (holds ≤1 lock — can't be a cycle party) |
+| R40 | `fire`/`jump`/`npcHit` were missing the `hospitalized(ch)` **actor** gate every offense sibling has (and `heal` doesn't clear `hosp_until`, so jump's health gate was bypassable) | added the symmetric action-lock |
+| R41 | `mod/vig/buyback` accepted an **unbounded** `priceOmrPerEth` → a leaked mod key could mint $OMR past inflow, invisible to both monitors | a price-continuity bound (see the one lever below) |
+| R42 | a dead co-op-raid leader didn't notify the orphaned crew (heist/break paths do) | aligned |
+
+Everything else the loop touched (two-party + co-op PvP, accrual/timing precision, worker-sweep concurrency,
+snapshot integrity across all worker-resolved events, chain reserve, the Solidity contracts, auth/token/session,
+the mod-tools surface, WebSocket/realtime, death/estate + dissolution over all 66 tables, the gate matrix,
+client XSS, and the kitchen economy) came back **clean** — no reachable bug.
+
+### New rows that DO want a verdict
+| # | What | Recommendation |
+|---|---|---|
+| **S1** | **R43 — kitchen crew-sale Bureau-raid probability reads UNCLAMPED heat.** Over a long offline window a very hot stash faces a higher raid chance than the heat-100 ceiling implies (the sibling Law-exposure path deliberately uses the *clamped* value). It is **player-UNFAVORABLE** (raids more likely — no gain, no §10.4 drift) and touches the sim-audited heat/raid surface, so I flagged rather than patched. | **WATCH** (or **CHANGE**: clamp the raid-probability heat feed to `min(100, heat)` for parity — a tiny player-favorable nudge on neglected hot stashes; a one-line dial) |
+| **S2** | **`VIG_MAX_PRICE_JUMP` (default 10×)** — the new fraud/fat-finger bound R41 added to the manual `mod/vig/buyback` price (once a first buyback sets a reference, a subsequent manual price must be within 10× of the last, up or down). A real DEX TWAP never moves 10× between 12h buybacks; a 200× typo/attack is refused. Env-configurable ops lever, not a game number. | **SHIP** — confirm 10× is comfortable, or set `VIG_MAX_PRICE_JUMP` to your preferred factor |
+
+### Chain go-live — engineering-ready, still legal/audit-gated
+The `Bonded` → `recordBond` **watcher wiring is now complete** (`src/watcher.js:syncBondEvents` + the worker
+tick, dormant unless `OMERTA_BOND_ADDRESS` is set; test/watcher.js covers it). A new **`CHAIN-DEPLOY.md`**
+runbook sequences the whole on-chain go-live. **The three Tier-6 hard gates are unchanged and remain the only
+blockers to mainnet — they are NOT signed here (legal/audit track, not a founder tuning call):**
+1. **`forge test`** green on a real Foundry toolchain (`omerta-contracts/run-forge-test.sh` — the suite compiles
+   clean here but the Foundry VM is egress-blocked; this is the hard pre-audit gate).
+2. **Third-party audit of the contracts AND the off-chain EIP-712 signer** (`src/chain.js`).
+3. **Legal counsel** on the Risk-to-Earn / RWA line (jurisdiction/KYC/geofence).
+
+Still deferred engineering (not blockers, but needed before real bonds flow): the bond **quote signer** (no
+on-chain bond can be created until it ships — the watcher is wired but idle), the POL-pairing + DEX buyback
+bots, and the on-chain Store paywall. See `CHAIN-DEPLOY.md` §7.
+
+**Fastest path:** reply *"ship S1/S2"* (or name a CHANGE), and confirm the three chain gates are owned by the
+legal/audit track. The correctness fixes above need nothing from you.
