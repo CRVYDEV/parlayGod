@@ -1447,9 +1447,9 @@
     t.innerHTML = `
       <h2>The Contract Board</h2>
       ${board.length ? `<div class="grid">${board.map((c) => `
-        <div class="card"><span class="t">${c.target.name}</span>
+        <div class="card"><span class="t">${esc(c.target.name)}</span>
           <span class="chip ${c.kind === 'kill' ? 'bad' : ''}">${c.kind.toUpperCase()}</span>
-          <div class="d">pot <b style="color:var(--neon)">$${fmt(c.pot)}</b> · by ${c.poster ? (c.family ? c.poster + ' (family)' : c.poster) : 'somebody'}${c.reason ? ` · “${c.reason}”` : ''}</div>
+          <div class="d">pot <b style="color:var(--neon)">$${fmt(c.pot)}</b> · by ${c.poster ? esc(c.family ? c.poster + ' (family)' : c.poster) : 'somebody'}${c.reason ? ` · “${esc(c.reason)}”` : ''}</div>
           <div class="d">${c.directedTo ? `EXCLUSIVE: ${c.directedTo} for ${mins(c.opensInSeconds)} · ` : ''}${c.expiresInSeconds != null ? mins(c.expiresInSeconds) + ' left' : 'open-ended'}</div>
           <button class="act" data-pullstake="${c.target.id}:${c.kind}">pull my stake</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no open contracts — the city is at peace. fix that.</span>'}
@@ -1491,11 +1491,11 @@
 
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
-        <div class="card"><span class="t">${s.name}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
+        <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-jump="${s.id}">jump</button>
-          <button class="act" data-search="${s.id}" data-name="${s.name}">search</button>
+          <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
           <select data-npctier="${s.id}" style="font-size:10px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
           <button class="act" data-npchit="${s.id}">NPC hit</button>
           ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
@@ -2746,6 +2746,10 @@
     while (f.childElementCount > 120) f.lastElementChild.remove();
   }
   const escapeHtml = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  // (red-team R6) complete HTML escaper for player-controlled strings rendered into innerHTML —
+  // defense-in-depth over the server-side cleanText() strip (covers & and the attribute quotes too).
+  // The lone `esc(...)` call site (the Wire-watch render) previously referenced this undefined → threw.
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function summarize(ev) {
     const { type, channel, ...rest } = ev;
     const s = JSON.stringify(rest);
