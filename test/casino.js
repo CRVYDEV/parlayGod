@@ -301,6 +301,7 @@ const omrAfterBJ = (await meOf(token)).omr;
 
 // red-team regression: a LIVE blackjack hand's pending payout is RESERVED (openLiability), so the
 // street can't be tipped against an unresolved hand — parity with the numbers/fight reservation
+await seed('cash = cash + 60000000'); seededCash += 60000000; // fund up to 25× HIGH_MAX ($2M) probes on any losing streak (TRACKED bump — the §10.4 identity stays exact)
 let bigLive = null;
 for (let i = 0; i < 25 && !bigLive; i++) { await seed('nerve=50');
   const d = await call('POST', '/v1/casino/blackjack', { token, body: { amount: CASINO.HIGH_MAX } });

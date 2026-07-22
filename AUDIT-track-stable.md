@@ -131,3 +131,76 @@ entries share a post).
   test the proof).
 
 Suite 33/33 + sim drift-0 (18 checks).
+
+---
+
+# AUDIT — The Track step four (THE FUTURITY)
+
+A three-lens red-team over the step-four drop (THE FUTURITY — owners nominate player-owned racers into a
+scheduled card, the whole town bets CASH parimutuel, a worker races the field and pays out; the
+boxing-main-event twin on the racing side). Three parallel adversarial agents, each tracing every finding
+against source before reporting.
+
+Scope: `nominateFuturity` / `betFuturity` / `resolveFuturity` / `sweepFuturity` / `futurityInfo`
+(`src/casino.js`), the `futurity escrow` §10.4 check (`src/invariants.js`), the four new tables
+(`schema.sql`), the estate-wipe exclusion (`src/social.js`), and `CASINO.FUTURITY` (`src/rules.js`) —
+compared byte-for-byte against the audited twins (`resolveMainEvent`, `resolveStakes`, `resolveGrandPrix`,
+`resolveTournament`).
+
+## Verdict: no CRITICAL / HIGH / MED across any lens. Two LOW hardenings applied.
+
+**Lens A (§10.4 / escrow / faucet) — CLEAN.** The `futurity escrow` identity (`pool == posted − wins −
+refunds − purse − take − death`) holds on EVERY terminal path (normal resolve with the last-winner
+remainder mop-up, scrapped `<MIN_RUNNERS` card, one-sided book, scratched-runner refund, dead-bettor
+burn, mid-window). The nomination fee (`casino:futurity:nom` → the buyback) is correctly OUTSIDE the
+escrow yet reconciled by the per-character cash check via its `character_id`. No accidental den-book LIKE
+match (`casino:futurity:bet` ≠ `casino:bet:%`, `casino:futurity:take` ≠ exact `casino:take`), so the
+`den profit`/`den distributions` identities are untouched. A true redistribution: `purse + houseCut ==
+rake`, `distributable == totalLose − rake`, winner payouts + purse + take == the live pool — no mint, no
+new faucet.
+
+**Lens B (concurrency / locks) — CLEAN** (no C/H/M). Faithful to the audited GP/tournament/stakes
+discipline: nominate `char → account → racer → futurity_state → card` (the whole materialize→COUNT→INSERT
+critical section serialized by `futurity_state FOR UPDATE`, so the track-post-collision class is
+unreachable and FIELD_MAX can't be breached); resolve `sorted chars → futurity_state → card`
+(state-before-card, no AB-BA vs a concurrent nominate); the `racer_wins` legend is an atomic in-DB `+1`
+excluded from `persistAccount` (no clobber); `sweepFuturity` is per-card + idempotent behind the
+`status='open' FOR UPDATE` re-select. `futurities.pool` is NUMERIC (pg-mem-quirk-exempt) and payouts
+recompute from the re-read bet rows, never from `pool`.
+
+**Lens C (death / estate / exploit / grief) — CLEAN** (no C/H/M). Server-authoritative outcome (frozen
+`form` snapshot + rng-audited server RNG — re-training after nomination can't move the snapshot; the
+client picks only racer ids). The estate-wipe exclusion of `futurity_runners`/`futurity_bets` is correct
+and load-bearing (the snapshots must survive so a dead owner's runner scratches + a dead bettor's escrow
+burns — no stranded pool). Death vs resolve serialize on the char lock (locked before `alive` is read).
+The scratch refund is a safe make-whole, never larger than the bet, and NOT an exploitable option (the
+outcome is decided by server RNG *inside* resolve, after betting closes — no oracle to selectively
+suicide on). Idempotent single-writer resolution; every gate server-side.
+
+## Hardenings applied (the two LOWs — regression-covered by the existing futurity test + parity with the twins)
+
+- **Lens B LOW — `betFuturity` now locks `futurity_state FOR UPDATE`** (not just the card), so a bet
+  fences against resolve exactly like the audited Grand-Prix/Stakes ENTRY paths: once `resolveFuturity`
+  holds `futurity_state`, a late bet blocks until resolve commits, then re-reads `status<>'open'` →
+  `no_futurity`. Closes the only interlock the Futurity had narrower than its twins (the prior gap was
+  value-safe — atomic-increment cash writes + a 40P01 retry — but this restores full parity). Lock order
+  `char → state → card` stays acyclic (matches nominate + resolve).
+- **Lens C LOW (forward-looking) — a tripwire comment** at `nominateFuturity` documenting the load-bearing
+  invariant that `racer_id` is UNIQUE within a card (resolve keys place-updates + bet buckets on it). It
+  holds today because racers are non-transferable + one runner per owner; the comment gates a future
+  racer-TRADE feature so it can't silently collide two successive owners' entries into one card.
+
+## Flagged (accepted, no action — the casino posture)
+- **own_event-via-alt** (an owner betting their own card through a second account): pure parimutuel
+  redistribution, form is public (no information asymmetry), nothing minted — the accepted
+  consent-by-betting posture.
+- **FIELD_MAX flood / forced scrap**: needs 8 Sybil accounts each with a fit racer + a burned $5k fee,
+  and a scrap refunds every live bet (bettors unharmed) while burning only the griefer's own fees —
+  symmetric-cost + self-defeating.
+- **Resolved-row growth**: `futurities`/`futurity_runners`/`futurity_bets` rows accumulate (like every
+  other escrow table — `poker_tournaments`/`grand_prix`/`stakes_races`/`boxing_bouts`); an ops/table-bloat
+  note, not a correctness issue (each card resolves once).
+- The `ownerAlive ? purse : 0` guard at the winner-purse site is defensively dead (the winner is always
+  drawn from the live set) — both Lens A and C noted it; harmless, left as a safety guard.
+
+Suite 33/33 + sim drift-0 (19 checks, incl. `futurity escrow`).
