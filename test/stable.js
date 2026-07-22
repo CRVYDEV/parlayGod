@@ -185,6 +185,41 @@ assert.equal(skPosted - skWins - skTake - skRef, 0, 'the stakes escrow closes (b
 const invSk = await runLedgerInvariants(pool);
 assert(invSk.checks.find((c) => c.name === 'stakes escrow').ok, 'the stakes-escrow §10.4 check holds after settle');
 
+// ── red-team regressions: a DEAD entrant's stake BURNS (not refunds), and a BRED-AWAY entered parent
+// still settles on its snapshot (stakes_entries is self-contained — no racer_id) ──
+// four enter so that after one dies, three live remain (a full field still resolves)
+const s4 = await mk('Burned Bill'); const s5 = await mk('Dead Dan'); const s6 = await mk('Live Larry'); const s7 = await mk('Field Filler');
+for (const s of [s4, s5, s6, s7]) { await seed(s.id, `respect=${lvlRespect(10)}`); await grantCash(s.id, 500000); }
+// s4 buys TWO dogs so it can breed away the one it enters
+const s4a = await stRacer(s4, 'dog', 'Enter-Me', 20); const s4b = await stRacer(s4, 'dog', 'Spare', 20);
+const rr5 = await stRacer(s5, 'dog', 'Doomed', 10); const rr6 = await stRacer(s6, 'horse', 'Survivor', 25); const rr7 = await stRacer(s7, 'dog', 'Filler', 12);
+const de1 = await call('POST', `/v1/stable/stakes/${s4a}`, { token: s4.token });
+assert.equal(de1.code, 200, 's4 enters the racer it will breed away'); const race2 = de1.body.stakes;
+await call('POST', `/v1/stable/stakes/${rr5}`, { token: s5.token });
+await call('POST', `/v1/stable/stakes/${rr6}`, { token: s6.token });
+await call('POST', `/v1/stable/stakes/${rr7}`, { token: s7.token });
+// s4 BREEDS its entered racer away (deletes s4a + s4b → a foal); the stakes entry (form snapshot) survives
+const bred = await call('POST', '/v1/stable/breed', { token: s4.token, body: { sire: s4a, dam: s4b, name: 'Bred Mid-Race' } });
+assert.equal(bred.code, 200, 'the entered parent can be bred away (its stakes entry is a self-contained snapshot)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM stakes_entries WHERE race_id='${race2}' AND character_id='${s4.id}'`)).rows[0].n), 1, 'the entry survives the racer deletion');
+// s5's street dies before the race runs → their buy-in must BURN, not refund to a corpse
+const deathPre = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:death'")).rows[0].s));
+await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: s5.id }, headers: { 'x-mod-key': 'test-mod-key' } });
+await pool.query(`UPDATE stakes_races SET resolves_at = now() - interval '1 minute' WHERE id='${race2}'`);
+await sweepStakes(pool);
+assert.equal((await pool.query(`SELECT status FROM stakes_races WHERE id='${race2}'`)).rows[0].status, 'resolved', 'the race settled with a dead + a bred-away entrant');
+const deathPost = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:death'")).rows[0].s));
+assert.equal(deathPost - deathPre, STABLE.STAKES.BUYIN, "the dead entrant's stake burned (stable:stakes:death), never refunded");
+assert(Number((await pool.query(`SELECT place FROM stakes_entries WHERE race_id='${race2}' AND character_id='${s4.id}'`)).rows[0].place) > 0, 'the bred-away entrant still placed on its snapshot form (no crash)');
+// the all-time stakes escrow closes with the death term in the mix
+const skDeathAll = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:death'")).rows[0].s));
+const skPost2 = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:buyin'")).rows[0].s));
+const skWin2 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:win'")).rows[0].s);
+const skTake2 = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:take'")).rows[0].s));
+const skRef2 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:refund'")).rows[0].s);
+assert.equal(skPost2 - skWin2 - skTake2 - skRef2 - skDeathAll, 0, 'escrow closes with the dead-entrant burn in the mix');
+assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'stakes escrow').ok, 'the §10.4 stakes-escrow check holds after a death-in-field settle');
+
 // ── DEATH: a dead owner's whole stable is done (survives-death is the LEGEND, not the animals) ──
 const before = Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE character_id='${aa.id}'`)).rows[0].n);
 assert(before > 0, 'the owner had racers');

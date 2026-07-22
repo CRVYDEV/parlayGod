@@ -639,6 +639,9 @@ export const CASINO = {
   // lazily the next day (the numbers/fight pattern), CASH ONLY, small-capped → a bounded faucet
   // that's a NET SINK in expectation (like every den game). Fixed-odds + solo-playable + always
   // available: the classic day at the track, distinct from the parimutuel poker tournament.
+  // FIELD must stay ≥ 4: the per-runner house edge is guaranteed only while the top runner's p can't
+  // approach the odds floor — at FIELD 6 the max p is ~0.67 (edge safe by a wide margin); a field of ≤3
+  // would push the favorite's p toward the 1.1 clamp/rounding zone and the edge would need re-deriving.
   TRACK: { MIN_BET: 50, MAX_BET: 10000, FIELD: 6, EDGE: 0.15, MAX_ODDS: 25 },
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
