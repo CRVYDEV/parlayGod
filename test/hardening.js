@@ -130,6 +130,16 @@ assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='i
 await seedCh(boss.id, 'cash = cash - 12345');
 assert((await runLedgerInvariants(pool)).ok, 'clean again after revert');
 
+// (red-team R21) prove drift detection for the $OMR bucket too — the extraction-backing currency, not just
+// cash. An unledgered $OMR mint (bucket up, no `mint` ledger row) MUST trip the $OMR conservation check; this
+// validates the omrBuckets reconstruction actually detects a leak (else a miscoded RHS could pass forever).
+const bossAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${boss.id}'`)).rows[0].a;
+await pool.query(`UPDATE account_persistent SET omr = omr + 777 WHERE account_id='${bossAcct}'`);
+inv = await runLedgerInvariants(pool);
+assert(!inv.ok && inv.checks.find((c) => c.name === '$OMR conservation' && !c.ok), 'an unledgered $OMR mint trips the $OMR conservation check');
+await pool.query(`UPDATE account_persistent SET omr = omr - 777 WHERE account_id='${bossAcct}'`);
+assert((await runLedgerInvariants(pool)).ok, '$OMR clean again after revert');
+
 // ═══════ idempotency keys (§5) ═══════
 const idemKey = { 'idempotency-key': 'dep-001' };
 const r1 = await call('POST', '/v1/bank/deposit', { token: boss.token, body: { amount: 100 }, headers: idemKey });

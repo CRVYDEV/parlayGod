@@ -1285,3 +1285,41 @@ fortify bounded). Two findings, both founder calls (NOT patched, ground rule #1)
 clickjacking) fixed; all three lenses (agent/MCP, supply-chain/secrets, malicious-player attack-chain)
 confirmed CLEAN of CRITICAL/HIGH; the port fence-timing emission (now MED, two-finder-confirmed) + the MCP
 prompt-injection design surface flagged for founder sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 21 — foundational/oldest-modules drift · test-quality/coverage gaps
+Two fresh META-lenses (the surface is heavily saturated; these hunt latent drift + safety-net holes rather
+than a new attack class). **No CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **Port collectRun gate-rejection regression (test-quality LOW-MED — ADDED).** The signed R18 D2
+  "shield, not bunker" safehouse gate on `collectRun` (+ the R18 jailed/hospitalized gates) had NO
+  regression — `test/port.js` covered only the collect SUCCESS path, so a refactor dropping any gate would
+  keep the suite green while reopening the safehoused-landlord hole. Added three rejection asserts
+  (jailed/hosp/safe) + a clean-collect-after. `test/port.js`.
+- **$OMR-conservation drift-detection proof (test-quality MED — ADDED).** Only 1 of ~26 §10.4 checks (the
+  character-cash check) was ever proven to CATCH a drift — every other (incl. the $OMR conservation check
+  that backs the whole extraction rail) was asserted `ok:true` on correct data but never shown to FIRE on a
+  leak, so a miscoded bucket/RHS reconstruction could pass forever. Added a leak-injection negative test:
+  an unledgered $OMR mint (bucket up, no `mint` row) MUST trip the `$OMR conservation` check, then reverts
+  clean. Validates the omrBuckets reconstruction actually detects a leak. `test/hardening.js`.
+
+**FLAGGED for follow-up test coverage (the test-quality lens's ranked recommendations — additive test-net
+work, no src bug; noted for the founder / a future coverage pass):**
+- **Per-escrow-check leak-injection negatives:** the ~10 escrow-identity checks (bounty/market/loan/casino/
+  boxing/auction/GP/futurity/stakes/convoy-insurance) + the vig/bond `extraction≤inflow`/anti-Ponzi
+  invariants are only ever asserted `ok:true` — none is driven to a failure state to prove it FIRES. One
+  leak-injection test per check would close the "a latent RHS sign-error passes forever" class (the highest-
+  value remaining coverage add; the $OMR one above is the template).
+- **Sim escrow cross-load + vig/bond hard-gate:** `tools/sim.js` never opens a contract/loan/market/auction/
+  tournament/GP/futurity/stakes/main-event/convoy-insurance, so ~10 escrow checks are trivially `0==0` in
+  its sweep, and it `note()`s but never `exit(1)`s on a vig/bond drift. Drive one lot through each escrow +
+  hard-gate the real-value invariants so cross-load drift can't ship green.
+- **Faucet AMOUNT-correctness:** conservation is asserted strongly but payout MAGNITUDE weakly (a faucet
+  paying 10× would conserve + ship green); a few value-asserts on the richest faucets (kitchen deal, racket/
+  crew income) + driving (not analytically computing) the sim's EV probes would close it.
+
+**Round 21 verdict (test-quality lens): 2 test-net gaps closed (port collect gate regression, $OMR
+drift-detection proof); the broader per-escrow-check negatives + sim escrow cross-load flagged as the
+highest-value follow-up coverage. §10.4 untouched. Suite 33/33 + sim drift-0. (Foundational-drift lens
+pending — addendum next.)**
