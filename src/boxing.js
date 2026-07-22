@@ -157,9 +157,9 @@ export async function acceptCallout(ch, client, h) {
   const id = crypto.randomUUID();
   const resolvesAt = new Date(Date.now() + mainEventMs());
   await client.query(
-    `INSERT INTO boxing_bouts (id, a_char, a_fighter, a_name, b_char, b_fighter, b_name, resolves_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [id, ch.id, champF.id, champF.name, title.callout_char, chalF.id, chalF.name, resolvesAt]);
+    `INSERT INTO boxing_bouts (id, a_char, a_fighter, a_name, b_char, b_fighter, b_name, a_form, b_form, resolves_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, ch.id, champF.id, champF.name, title.callout_char, chalF.id, chalF.name, form(champF), form(chalF), resolvesAt]);
   await client.query('UPDATE fighters SET booked_until=$2 WHERE id IN ($1,$3)', [champF.id, resolvesAt, chalF.id]);
   await client.query('UPDATE boxing_title SET callout_fighter=NULL, callout_char=NULL, callout_deadline=NULL WHERE id=1'); // consumed into the booked title card
   await h.notify(client, title.callout_char, 'boxing_callout_accepted', { champion: champF.name, challenger: chalF.name });
@@ -356,9 +356,9 @@ export async function announceMainEvent(ch, opponent, body, client, h) {
   const id = crypto.randomUUID();
   const resolvesAt = new Date(Date.now() + mainEventMs());
   await client.query(
-    `INSERT INTO boxing_bouts (id, a_char, a_fighter, a_name, b_char, b_fighter, b_name, resolves_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [id, ch.id, f.id, f.name, opponent.id, of.id, of.name, resolvesAt]);
+    `INSERT INTO boxing_bouts (id, a_char, a_fighter, a_name, b_char, b_fighter, b_name, a_form, b_form, resolves_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, ch.id, f.id, f.name, opponent.id, of.id, of.name, form(f), form(of), resolvesAt]);
   await client.query('UPDATE fighters SET booked_until=$2 WHERE id IN ($1,$3)', [f.id, resolvesAt, of.id]);
   await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'announce' }); // booking a card is the corner's business
   await h.notify(client, opponent.id, 'boxing_main_event', { from: ch.name, yours: of.name, mine: f.name });
@@ -443,8 +443,13 @@ export async function resolveMainEvent(client, boutId) {
   const fa = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [bout.a_fighter])).rows[0];
   const fb = (await client.query('SELECT * FROM fighters WHERE id=$1 FOR UPDATE', [bout.b_fighter])).rows[0];
   if (!fa || !fb) { await cancelBout(client, bout); return { bout: boutId, cancelled: true }; } // a fighter went missing (dead manager)
+  // (R34) resolve from the form SNAPSHOTTED at booking — NOT the live stats — so a manager can't train a
+  // booked fighter up in the gap between betting-close (resolves_at) and the worker settle to rig the
+  // parimutuel (the Grand-Prix/stakes/futurity precedent). Fall back to live form for a pre-migration bout.
+  const baseA = bout.a_form != null ? Number(bout.a_form) : form(fa);
+  const baseB = bout.b_form != null ? Number(bout.b_form) : form(fb);
   let sa, sb;
-  do { sa = form(fa) + rand(0, BOXING.VARIANCE); sb = form(fb) + rand(0, BOXING.VARIANCE); } while (sa === sb);
+  do { sa = baseA + rand(0, BOXING.VARIANCE); sb = baseB + rand(0, BOXING.VARIANCE); } while (sa === sb);
   const aWon = sa > sb;
   const winF = aWon ? fa : fb, loseF = aWon ? fb : fa, winnerChar = aWon ? bout.a_char : bout.b_char;
   await client.query('UPDATE fighters SET wins=$2, booked_until=NULL WHERE id=$1', [winF.id, Number(winF.wins) + 1]);
@@ -623,10 +628,14 @@ export async function boxingLeaderboard(pool, characterId) {
 
 // estate hook — a dead manager's whole stable is done (character-level). Vacate the belt if they held it.
 export async function wipeFighterAtDeath(client, characterId) {
+  // (R34) DELETE the fighters FIRST (acquiring the fighter row-locks) THEN lock the title singleton — the
+  // canonical fighter→title order, so this can't AB-BA with acceptCallout (which locks a fighter it doesn't
+  // char-own, then the title). The belt/callout vacate keys on the dead CHARACTER, so it's unaffected by the
+  // fighter rows already being gone.
+  await client.query('DELETE FROM fighters WHERE character_id=$1', [characterId]);
   const title = (await client.query('SELECT holder_char, callout_char FROM boxing_title WHERE id=1 FOR UPDATE')).rows[0];
   if (title && title.holder_char === characterId) // the champion is dead — vacate the belt + any callout
     await client.query('UPDATE boxing_title SET holder_fighter=NULL, holder_char=NULL, holder_name=NULL, since=NULL, defenses=0, last_defense=NULL, callout_fighter=NULL, callout_char=NULL, callout_deadline=NULL WHERE id=1');
   else if (title && title.callout_char === characterId) // the challenger is dead — the callout is void
     await client.query('UPDATE boxing_title SET callout_fighter=NULL, callout_char=NULL, callout_deadline=NULL WHERE id=1');
-  await client.query('DELETE FROM fighters WHERE character_id=$1', [characterId]);
 }
