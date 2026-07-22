@@ -357,33 +357,50 @@ export async function buildServer() {
     // character name IS the referral code + broadcast identity, so a Cyrillic-homoglyph / zero-width /
     // bidi name that renders identically to another player's = impersonation across every social surface.
     if (!/^[\w .,'&-]+$/.test(name)) throw new G.GameError('name', "Letters, numbers and simple punctuation only (no look-alike unicode).");
-    const existing = await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub]);
-    if (existing.rows.length) throw new G.GameError('exists', 'One living character per account.');
-    // names must be unique among the living (referral codes resolve by name, §7.13);
-    // the partial unique index ux_char_name_alive is the race backstop
-    const nameClash = await pool.query('SELECT 1 FROM characters WHERE name=$1 AND alive', [name]);
-    if (nameClash.rows.length) throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.');
     const season = Math.floor(dayOf() / 28);
     const id = uid();
     // every fresh character rolls a UNIQUE build — same fixed budget (no power creep), different
     // shape (no two the same). Server-authoritative randomness, logged to rng_audit (§ ground rule #3).
     const st = rollStats();
-    await pool.query('INSERT INTO characters (id, account_id, name, season, muscle, cunning, speed) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [id, req.user.sub, name, season, st.muscle, st.cunning, st.speed]);
-    await pool.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
-      [uid(), id, 'roll_stats', Math.random(), `${st.muscle}/${st.cunning}/${st.speed}`]);
-    // apply any Store Street-Wire window parked while the account had no living character (audit)
-    await Store.claimPendingWire(pool, req.user.sub, id);
-    if (req.body?.referralCode) {
-      // §7.13 — the referral code is the recruiter's character name
-      const rec = await pool.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [String(req.body.referralCode), req.user.sub]);
-      if (rec.rows.length) {
-        await pool.query('UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL', [rec.rows[0].account_id, req.user.sub]);
-        const existing = await pool.query('SELECT 1 FROM referrals WHERE recruit_account=$1', [req.user.sub]);
-        if (!existing.rows.length)
-          await pool.query('INSERT INTO referrals (recruit_account, recruiter_account) VALUES ($1,$2)', [req.user.sub, rec.rows[0].account_id]);
+    // (red-team R13 data-integrity) the account-existence check was a RACED check-then-insert (raw
+    // pool.query, no lock) — two concurrent creates with DIFFERENT names both passed it and both INSERTed
+    // → two living characters on one account (an uncontrollable "ghost", since every load reads rows[0]).
+    // Serialize the whole create on the account_persistent row FOR UPDATE (the withCharacter idiom): a
+    // concurrent second create blocks, then sees the first's committed character → clean `exists`. (A
+    // partial UNIQUE(account_id) index would be a DB-level backstop but trips pg-mem's ANY() planner in
+    // the referral path.) runEstate flips the dead row alive=false before the heir, so succession is fine.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT 1 FROM account_persistent WHERE account_id=$1 FOR UPDATE', [req.user.sub]);
+      const existing = await client.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub]);
+      if (existing.rows.length) throw new G.GameError('exists', 'One living character per account.');
+      // names must be unique among the living (referral codes resolve by name, §7.13);
+      // ux_char_name_alive is the race backstop (a 23505 below → name_taken)
+      const nameClash = await client.query('SELECT 1 FROM characters WHERE name=$1 AND alive', [name]);
+      if (nameClash.rows.length) throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.');
+      await client.query('INSERT INTO characters (id, account_id, name, season, muscle, cunning, speed) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [id, req.user.sub, name, season, st.muscle, st.cunning, st.speed]);
+      await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), id, 'roll_stats', Math.random(), `${st.muscle}/${st.cunning}/${st.speed}`]);
+      // apply any Store Street-Wire window parked while the account had no living character (audit)
+      await Store.claimPendingWire(client, req.user.sub, id);
+      if (req.body?.referralCode) {
+        // §7.13 — the referral code is the recruiter's character name
+        const rec = await client.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [String(req.body.referralCode), req.user.sub]);
+        if (rec.rows.length) {
+          await client.query('UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL', [rec.rows[0].account_id, req.user.sub]);
+          const already = await client.query('SELECT 1 FROM referrals WHERE recruit_account=$1', [req.user.sub]);
+          if (!already.rows.length)
+            await client.query('INSERT INTO referrals (recruit_account, recruiter_account) VALUES ($1,$2)', [req.user.sub, rec.rows[0].account_id]);
+        }
       }
-    }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (e?.code === '23505') throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.'); // name-index race backstop
+      throw e;
+    } finally { client.release(); }
     return { ok: true, id };
   });
 

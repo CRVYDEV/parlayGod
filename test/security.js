@@ -304,6 +304,22 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal(r.code, 400, 'a second living character cannot take the same name');
 }
 
+// ═══ FINDING (red-team R13 data-integrity): ONE living character per account — no "ghost" dupe ═══
+// The create serializes concurrent requests on the account_persistent row FOR UPDATE (the real-Postgres
+// race backstop; pg-mem doesn't enforce FOR UPDATE blocking so the concurrent case can't be asserted
+// here). This checks the invariant the fix upholds — the everyday double-submit / a second create on a
+// live account is refused, leaving exactly one living character.
+{
+  const g = await call('POST', '/v1/auth/guest', {});
+  const t = g.body.token;
+  assert.equal((await call('POST', '/v1/character', { token: t, body: { name: 'Ghost Buster Uno' } })).code, 200, 'first character created');
+  const second = await call('POST', '/v1/character', { token: t, body: { name: 'Ghost Buster Dos' } });
+  assert.equal(second.code, 400, 'a second living character on the same account is refused');
+  assert.equal(second.body.error, 'exists', 'the refusal is the clean `exists`, not a 500');
+  const live = Number((await pool.query("SELECT COUNT(*) n FROM characters WHERE name IN ('Ghost Buster Uno','Ghost Buster Dos') AND alive")).rows[0].n);
+  assert.equal(live, 1, 'exactly one living character exists on the account — no ghost dupe');
+}
+
 // ═══ FINDING (red-team R6 HIGH stored-XSS + R8 MED homoglyph impersonation): the identity name fields
 // (character name = referral code = broadcast identity) are ASCII-charset restricted — markup (XSS),
 // Cyrillic homoglyphs, and zero-width/bidi chars (impersonation across every social surface) are all

@@ -1528,6 +1528,10 @@ CREATE TABLE IF NOT EXISTS rng_audit (
 -- ── Indexes & integrity (audit hardening) — after all tables exist ──
 -- No two LIVING characters may share a name (referral codes resolve by name, §7.13).
 CREATE UNIQUE INDEX IF NOT EXISTS ux_char_name_alive ON characters (name) WHERE alive;
+-- (red-team R13) One LIVING character per account is serialized in the POST /v1/character handler by an
+-- account-row FOR UPDATE lock (a partial UNIQUE(account_id) WHERE alive would be the DB-level backstop,
+-- but it trips pg-mem's `account_id = ANY(...)` query planner in the referral path — the lock is the
+-- pg-mem-compatible + codebase-idiomatic fix, the withCharacter pattern).
 -- (red-team R7 DoS) the keyless broadcast routes (GET /card, /u, /v1/u) resolve a name
 -- case-insensitively via lower(c.name)=lower($1); the unique index above is case-sensitive so it
 -- couldn't serve them → a seq-scan of characters on every unauthenticated card/profile/unfurl hit.
