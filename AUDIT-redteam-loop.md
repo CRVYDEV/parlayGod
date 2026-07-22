@@ -1657,3 +1657,49 @@ guest→provider upgrade correctly scoped.
 **Round 26 verdict: 1 HIGH WS info-leak fix (kill routes now drop the dead street's gang: feed) + regression;
 the §10.4 invariant math verified airtight; WS/bus authz otherwise sound. §10.4 untouched. Suite 33/33 + sim
 drift-0.**
+
+---
+
+## Round 27 — Solidity contracts + client XSS/DOM-injection
+
+Two fresh high-value lenses (the on-chain money settlement + the JWT-in-localStorage attack surface).
+**No CRITICAL/HIGH/MED. No reachable bug — no code change this round.**
+
+**Solidity contracts (all 6) — VERIFIED SOUND.** The highest-value question (cross-contract EIP-712
+signature replay with a shared server signer) is airtight: VoucherClaim (`"OmertaVoucherClaim"`) and
+OmertaBond (`"OmertaBond"`) use DISTINCT domain names + verifyingContract + typehashes, so the two EIP-712
+digest spaces are disjoint — a `Voucher` signature can never satisfy `recover(hashQuote)==signer` and
+vice-versa, and per-contract nonce mappings keep nonce spaces independent regardless of backend key reuse.
+OmertaBond's tranche cap (`committedOMR ≤ omr.balanceOf(this)`) holds under EVERY interleave (bond books
+after the ≤ check + rolls back on a bad forward; claim drops committed and balance by the same amount; sweep
+pulls only `balance − committed`) — no ordering strands a claim or mints; relies on OMR being inert
+fixed-supply (confirmed). Linear vesting can't over/under/double-claim (truncates protocol-favorable,
+`claimed` monotonic, `vestSeconds ≥ 1`); ETH splits (Bond POL+Vig, Fees→dev) sum to `msg.value` exactly
+(counterpart = remainder), nonReentrant + CEI; all admin `onlyOwner`, no re-callable init, no unit confusion,
+no `unchecked`. Accepted-as-designed (Safe = root of trust, not re-reported): VoucherClaim.sweep has no
+committed-guard (no on-chain commitment notion — Safe-managed), recipient-revert DoS (Safe rotates). Residual
+unchanged: **`forge test` still never executed here (Foundry egress-blocked)** — the pre-mainnet gate.
+
+**Client XSS/DOM-injection — NO reachable XSS.** The safety is entirely SERVER-SIDE and holds: `cleanText`
+(game.js:25) strips `<>"`+control chars from every free-text field (character/gang name, title, bounty/
+contract reason, estate name, social proof), and strict allow-lists cover gang tag `[A-Z0-9]{2,4}`, plate
+`[A-Z0-9 -]{2,8}`, crest `#rrggbb`, and dynasty/speakeasy/fighter/racer names (`[\w .,'&-]`) — so NO stored
+string can carry `<`, `>`, or `"`. The client's 95 unescaped `${name}` innerHTML renders are all text-context
+or double-quoted-attribute → neutralized by the server strip; the two single-quoted `data-body='...'` attrs
+carry only a server enum id / numeric tier; the WS feed's raw `ev.type` is always a code-literal; admin.html
++ cards.js `esc()` (covers `<>&"'`) player names + telemetry props; wiki.html assembles only a static
+in-file array. Verified sound across index.html / admin.html / wiki.html / cards.js.
+
+**FLAGGED for the founder (defense-in-depth, NOT patched — ground rule #1):** the client's escaping is
+ad-hoc and inconsistent — 95 unescaped name renders vs 3 `esc()`'d, plus a second incomplete `escapeHtml`
+(missing `"'`) beside the complete `esc`. The client treats server-side `cleanText` as its SOLE XSS defense.
+It's not currently reachable (the server strip blocks the break-out chars), but it's one regression away from
+critical: any NEW free-text field that skips `cleanText`/an allow-list, or a `cleanText` regex regression,
+becomes an instant stored XSS → localStorage JWT theft → account takeover (withdraw/wallet). The correct
+hardening is to route ALL player-string renders through the single `esc()` helper — a 95-site client refactor
+with zero CURRENT security benefit and real regression risk, so it's a founder-prioritizable hardening task,
+not an autonomous-loop patch. The 95:3 escaping ratio is the fragility to raise.
+
+**Round 27 verdict: both fresh high-value lenses (on-chain contracts + client XSS) returned NO reachable bug;
+the contract signature/tranche/vesting invariants + the server-side XSS strip verified sound. 1 defense-in-
+depth fragility flagged (client esc() consistency). No code change. Suite 33/33 + sim drift-0 (unchanged).**
