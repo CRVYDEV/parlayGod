@@ -3065,8 +3065,23 @@ rows; the new `bond_quotes` table + `next_nonce` column are chain-only). `test/c
 PARITY (`recoverTypedDataAddress` == the server signer), the payout math, the wallet/min gates, the watcher
 enrichment (the recorded bond's `oracle_price`/`discount_bps` come from the quote, not the effective rate/0),
 and `bondChainConfig` failing closed. `POST /v1/bond/quote` + a "request a signed quote" control on the console
-Going Legit tab; the deck's Chain group gained it. STILL deferred before real bonds flow: the client
-wallet-submit flow (the SIWE-widget precedent), the POL-pairing + DEX buyback bots, the on-chain Store paywall.
+Going Legit tab; the deck's Chain group gained it.
+
+**WALLET INTEGRATION (MetaMask & Robinhood Wallet & any injected wallet) — BUILT** (`public/index.html`,
+`src/chain.js:bondCalldata` + `POST /v1/bond/calldata`). The console's wallet layer moved from the legacy
+single-`window.ethereum` provider to **EIP-6963 multi-wallet discovery**: it collects every announced injected
+wallet (MetaMask `io.metamask`, Robinhood Wallet, Coinbase, Rabby, …), and `linkWallet()` shows a **picker**
+when >1 is installed (auto-uses the single one; falls back to `window.ethereum` legacy). The chosen provider is
+remembered (`connectedProvider`) and reused for on-chain actions. **The bond flow is now completable in-browser**:
+after signing a quote, `submitBondOnChain(nonce)` fetches server-encoded `bond(quote, sig)` calldata
+(`bondCalldata` uses viem's `encodeFunctionData` — the zero-dep client never hand-rolls ABI), switches the wallet
+to the quote's chain (`wallet_switchEthereumChain`), and `eth_sendTransaction`s it (the wallet shows the tx +
+value; the server custodies nothing). `bondCalldata` reads the player's OWN persisted quote by nonce (a stranger
+gets `no_quote`), rebuilds the exact signed tuple, and returns `{to, value, data, chainIdHex}`; selector
+`0x606262a5` (`bond((address,uint256×6),bytes)`) verified against viem. Chain-dormant (the submit only works once
+the bond chain is configured — mainnet-gated). `test/chain.js` decodes the calldata and asserts it's a `bond()`
+call carrying the right nonce/payer/sig, targets OmertaBond with the principal as `value`, and is account-scoped.
+STILL deferred before real bonds flow: the POL-pairing + DEX buyback bots, the on-chain Store paywall.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,
