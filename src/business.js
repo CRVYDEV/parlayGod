@@ -201,6 +201,10 @@ export async function payBusinessUpkeep(ch, client, h) {
 // Upgrade a front to the next tier — collects the pending income at the OLD rate first (so an
 // upgrade never wipes uncollected earnings), then pays the next tier's cost and resets the clock.
 export async function upgradeBusiness(ch, businessId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', "You can't run the books from a cell.");
+  // (red-team R3, D2 parity) upgrading BANKS the pending income at line ~217 — the same income-realizing
+  // act collectBusiness gates. A safehoused (untargetable) player must not run their economy from the bunker.
+  if (safeHoused(ch)) throw new GameError('safe', "Nobody hands the take to a ghost — the books wait until you surface.");
   const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
   if (!r) throw new GameError('not_yours', "That's not your business.");
   const cat = businessOf(r.kind);
