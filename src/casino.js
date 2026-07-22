@@ -407,6 +407,11 @@ export async function enterTrackRace(ch, racerId, client, h) {
   const day = dayOf();
   if ((await client.query('SELECT 1 FROM track_entries WHERE day=$1 AND race=$2 AND character_id=$3', [day, race, ch.id])).rows[0])
     throw new GameError('entered', "You've already got a runner in today's card.");
+  // Serialize concurrent entries to the same card: without this, two owners can both read n=0 before either
+  // INSERTs → both take post 5 (the (day,race,character_id) PK doesn't catch a post collision), silently
+  // overwriting one runner in trackFieldOf's byPost map + double-crediting in the sweep. Lock the street_tax
+  // singleton (which we credit anyway) BEFORE the COUNT — singletons-last order preserved (char→racer→singleton).
+  await client.query('SELECT 1 FROM street_tax WHERE id=1 FOR UPDATE');
   const n = Number((await client.query('SELECT COUNT(*) n FROM track_entries WHERE day=$1 AND race=$2', [day, race])).rows[0].n);
   if (n >= CASINO.TRACK.PLAYER_SLOTS) throw new GameError('full', `The card's full — ${CASINO.TRACK.PLAYER_SLOTS} owner post${CASINO.TRACK.PLAYER_SLOTS === 1 ? '' : 's'} a race.`);
   if (Number(ch.cash) < CASINO.TRACK.ENTRY_FEE) throw new GameError('cash', `The nomination fee is $${CASINO.TRACK.ENTRY_FEE}.`);
@@ -439,7 +444,7 @@ export async function sweepTrackEntries(pool) {
       for (const e of entries) {
         const wonIt = Number(e.post) === winner;
         if (wonIt) {
-          const rr = (await client.query('SELECT wins FROM racers WHERE id=$1', [e.racer_id])).rows[0]; // may be gone (bred/sold/dead) — the win still counts for the owner legend
+          const rr = (await client.query('SELECT wins FROM racers WHERE id=$1 FOR UPDATE', [e.racer_id])).rows[0]; // may be gone (bred/sold/dead) — the win still counts for the owner legend; FOR UPDATE serializes vs a concurrent circuit/match win on the same racer (absolute INT write, no lost update)
           if (rr) await client.query('UPDATE racers SET wins=$2 WHERE id=$1', [e.racer_id, Number(rr.wins) + 1]); // absolute (pg-mem INT-arith)
           await client.query('UPDATE account_persistent SET racer_wins = racer_wins + 1 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)', [e.character_id]);
         }

@@ -498,6 +498,31 @@ assert.equal((await pool.query(`SELECT settled FROM track_entries WHERE characte
 await sweepTrackEntries(pool); // idempotent — a second sweep banks nothing
 assert.equal(Number((await pool.query(`SELECT wins FROM racers WHERE id='${rocket}'`)).rows[0].wins), winsPre + 1, 'a second sweep is a no-op');
 
+// ── regression (red-team step three): distinct posts + the slot cap. Two owners entering the same card
+// must get DISTINCT posts (5, then 4 — the count→post→insert window is now serialized on street_tax),
+// and a third → 'full' (PLAYER_SLOTS=2). (pg-mem is single-threaded, so this asserts the correctness the
+// street_tax lock guarantees under real concurrency: no two entries share a post.)
+const owners = [];
+for (const nm of ['Post A', 'Post B', 'Post C']) {
+  const { body: { token: t } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: t, body: { name: nm } });
+  const id = (await meOf(t)).id;
+  await pool.query(`UPDATE characters SET respect=400, cash=200000, loc='neon' WHERE id='${id}'`);
+  const b = await call('POST', '/v1/stable/buy', { token: t, body: { kind: 'dog', name: `${nm} Dog` } });
+  owners.push({ t, id, racer: b.body.id });
+}
+const e1 = await call('POST', `/v1/casino/track/enter/${owners[0].racer}`, { token: owners[0].t });
+const e2 = await call('POST', `/v1/casino/track/enter/${owners[1].racer}`, { token: owners[1].t });
+assert.equal(e1.code, 200, 'first owner enters the fresh card');
+assert.equal(e2.code, 200, 'second owner enters the same card');
+assert.equal(e1.body.post, CASINO.TRACK.FIELD, 'first owner takes the outside post');
+assert.equal(e2.body.post, CASINO.TRACK.FIELD - 1, 'second owner takes a DISTINCT inner post (no collision)');
+assert.notEqual(e1.body.post, e2.body.post, 'the two owners never share a post');
+const e3 = await call('POST', `/v1/casino/track/enter/${owners[2].racer}`, { token: owners[2].t });
+assert.equal(e3.body.error, 'full', `the card is full at PLAYER_SLOTS=${CASINO.TRACK.PLAYER_SLOTS}`);
+// clear these fresh entries so they don't disturb the §10.4 sweep below
+await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].id}','${owners[1].id}')`);
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
