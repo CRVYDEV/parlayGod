@@ -1381,12 +1381,16 @@ All `RACES` numbers are founder sign-off levers (the exhibition-purse precedent)
 - **PINK SLIPS** (race for the car): a §10.4-NEUTRAL ownership transfer (no cash, no ledger — car
   conservation by row count). **No new lever, no faucet.** A deliberate pink loss is a near-tax-free car
   gift — accepted (the market already allows that via a min-bid listing).
-- **NITROUS** (`NOS_COST` $15k / `NOS_MAX` 3 / `NOS_POWER` +60): a per-car consumable cash SINK; burn one
-  for a one-race power bump. **Measured (P9.13 addendum):** the marginal EV of a charge is **−$11.3k best-
-  case** even on the tier where it most changes the odds (a $15k charge buys < $15k of extra P(win)×purse) →
-  NITROUS is a PURE SINK, **never +EV**. Healthy for the economy (drains cash, no faucet risk) but a
-  gameplay call: **FLAG — if NOS should be a viable comeback tool, buff `NOS_POWER` / cut `NOS_COST`; as-is
-  it's a rarely-worth-it cosmetic sink.** NOT retuned (ground rule #1). Sign-off.
+- **NITROUS** (`NOS_COST` **$8k** (was $15k) / `NOS_MAX` 3 / `NOS_POWER` +60): a per-car consumable cash
+  SINK — the COMEBACK tool; burn one for a one-race power bump. **Measured (P9.13 addendum) + TUNED
+  (founder-directed 2026-07-22):** NOS is a tool FOR AN UNDERDOG, not a favorite — the first flag ("never
+  +EV, −$11.3k") was a probe artifact (it modeled a car that was already a mid-tier FAVORITE, whom NOS
+  can't help). The corrected probe models an underdog (power = field − 20): NOS is strongly **+EV as a
+  comeback** (flip a likely loss to a win on a mid/high-purse race) and correctly **−EV/wasted for a
+  favorite** (ΔP≈0) and on the cheap races. Cutting `NOS_COST` $15k→$8k makes the Ghost-Circuit comeback
+  genuinely rewarding (an underdog-with-NOS goes from +$600 absolute at $15k to **+$7.6k** at $8k) and
+  viable on Midnight, while staying a sink for favorites/cheap races. Still a sink on average (gone
+  win/lose) → no faucet, no farm; a monster car already tops the PvE purse ceiling without NOS. Sign-off.
 
 ### Step three — THE GRAND PRIX (2026-07-22; sim-measured, a redistribution NOT a faucet)
 - A scheduled worker-resolved CASH parimutuel (the poker-tournament twin): N drivers escrow `GP.BUYIN`
