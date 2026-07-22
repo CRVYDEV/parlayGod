@@ -1440,7 +1440,13 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query('DELETE FROM npc_hits WHERE payer=$1 OR target=$1', [victim.id]);
   // World step three: a dead co-op raid leader's plan is abandoned so the crew can recrew (the
   // crew_heists precedent — the member rows above are already wiped; this frees the leadership).
+  // (R42) notify the stranded crew like the heist/break paths do — capture them BEFORE the abandon
+  // deletes their rows, so a dead leader's raiders hear about it instead of finding an empty board.
+  const raidOrphans = (await client.query(
+    `SELECT m.character_id FROM world_raids wr JOIN world_raid_members m ON m.raid_id = wr.id
+      WHERE wr.leader_character=$1 AND wr.status='planning' AND m.character_id != $1`, [victim.id])).rows;
   await abandonRaidsAtDeath(client, victim.id);
+  for (const o of raidOrphans) await h.notify(client, o.character_id, 'raid_abandoned', { reason: 'leader_dead' });
   // a dead leader's planned job is abandoned (the stake is sunk — no corpse refunds); the
   // stranded crew hear about it instead of finding an empty board (audit L5)
   const orphaned = (await client.query(
