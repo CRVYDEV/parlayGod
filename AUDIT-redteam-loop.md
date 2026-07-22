@@ -1703,3 +1703,59 @@ not an autonomous-loop patch. The 95:3 escaping ratio is the fragility to raise.
 **Round 27 verdict: both fresh high-value lenses (on-chain contracts + client XSS) returned NO reachable bug;
 the contract signature/tranche/vesting invariants + the server-side XSS strip verified sound. 1 defense-in-
 depth fragility flagged (client esc() consistency). No code change. Suite 33/33 + sim drift-0 (unchanged).**
+
+---
+
+## Round 28 — Cross-system economic exploit chains + referral/social Sybil anti-abuse
+
+Two money-adjacent lenses single-system audits can't reach. **No CRITICAL/HIGH.** One MED anti-abuse fix
+(that uncovered a real pg-mem-portability bug); one balance/design faucet flagged for founder sign-off.
+
+**CONFIRMED + FIXED — the referral SPARK lacked the same-IP review flag the qualify path has (MED,
+anti-abuse), AND both flags were silently untestable (pg-mem `ANY`-of-array bug).** `maybeSparkReferral`
+(game.js) is the CHEAPEST referral cash faucet ($4k/alt, ~10 min, no check-in/net-worth floor) yet — unlike
+`maybeQualifyReferral` (game.js:864) — emitted NO `referral_same_ip_flag` telemetry, so a same-machine ring
+produced zero mod-review signal on the fastest faucet. Added the parity flag (telemetry-only, no payout/
+mechanic change). **In fixing it I found a genuine portability bug:** both the existing qualify flag AND my
+new spark flag used `SELECT … WHERE id = ANY($1)` with a JS-array param — which node-postgres serializes fine
+in production, but **pg-mem returns ZERO rows for**, so the qualify same-IP flag has NEVER fired in any test
+(unexercised since it was written) and my spark flag couldn't be regression-tested. Rewrote BOTH queries to
+`IN ($1,$2)` — functionally identical in production, pg-mem-portable, and the self-referral guard above
+guarantees the two ids differ. Regression: test/growth.js now asserts a same-IP spark pair emits
+`referral_same_ip_flag {spark:true}` (both test accounts share 127.0.0.1) — which also finally exercises the
+same-IP-flag mechanism for the first time. It's MED not HIGH because the spark is cash-only (laundering-cap +
+0.01-ETH mint-fee gated, not directly extractable), agent-excluded, and per-IP auth-throttled.
+
+**FLAGGED for founder sign-off (balance/design — NOT patched, ground rule #1): `bust:reward` is the one
+house cash faucet with no anti-Sybil structure.** `social.js` `bust()` pays `500 + remaining_seconds×15` as
+a `bust:reward` cash faucet (house-minted, NULL counterparty) with no family requirement, no per-buster/
+per-target cooldown, and no daily cap — only the global 1/s bucket. A 2-alt ring could manufacture jailed
+targets (fail-a-bust self-jails, or crime-fail jails) and bust them for ~$1,775–$3,200 each. **NOT currently
+exploitable:** the chance formula subtracts `remaining/400`, so a long sentence (big reward) collapses to the
+0.10 floor while short sentences cap the reward low — per-action yield is DOMINATED by direct crime income at
+any comparable level (dominated, not additive), and the cash is non-extractable until laundered → the
+reserve-bound. But it's the lone cash faucet whose safety rests entirely on crime yields staying above it +
+jail durations staying short; a future "harsher sentences"/crime-nerf retune would silently make it the
+cheapest farm. Recommended dial (founder call, changes §7.8 semantics + adds a cap): a family-member-only
+gate (the intended "break out your own people") + a per-buster daily cap, to parity with npcHit's per-target
+cooldown / the `WANTED_MIN_LVL` floor.
+
+**Verified CLEAN — the composition layer is sound (the core confirmation):** the EXTRACTION BOUNDARY is
+airtight — `requestWithdraw`/gear-withdraw are minted-gated AND bounded by `chain_reserve.funded_omr` (FIFO
+full-reserve queue), and the reserve's ONLY funders are mod `fundReserve` + the backed `prize:omr` (vig/pass),
+every one txHash-gated real-ETH revenue; NO player-callable path funds the reserve or mints $OMR beyond the
+once-per-account latched `mission:%` + the backed `prize:omr`. So extraction ≤ real inflow holds BY
+CONSTRUCTION — funnelling in-game $OMR to a minted alt (via `whack:loot`, the only account→account $OMR
+transfer) only chooses WHO draws the same bounded reserve, never raises the total. All 8 chain classes traced
+closed: taxed-PvP collusion (nets −rake burn), parimutuel farming (−5% rake, purse ⊆ rake), free-RWA→dividend
+(dividend yields on invested `cost_omr` not book → free grants earn 0; reserve-neutral), gang-reserve-$OMR→
+personal (no reserve→account path exists), port-piracy vs the supply cap (40% haircut > interdiction premium
+→ emission only falls), kill faucet-stacking (transfers of the victim's own assets minus the death-burn →
+net-negative for a ring), minted-gate confederate bypass (reserve-bounded regardless), growth faucets
+(agent-excluded/once-per/verify-gated). Previously-flagged/accepted: family-contract cash cashout (§10.4-
+clean, cash not $OMR, reserve-bounded), the untaxed `jump` cash-consolidation channel (consolidation ≠
+extraction).
+
+**Round 28 verdict: 1 MED anti-abuse fix (spark same-IP flag + the ANY→IN portability bug that unexercised
+both flags) + regression; 1 balance faucet (`bust:reward`) flagged for founder sign-off; the cross-system
+composition + extraction boundary verified sound. §10.4 untouched. Suite 33/33 + sim drift-0.**

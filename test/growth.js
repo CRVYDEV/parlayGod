@@ -293,6 +293,13 @@ assert.equal(spSponsor.cash, sponsorBefore + 2500, 'the sponsor gets the early s
 assert.equal(spSponsor.omr, 0, 'the spark is cash only (no $OMR until the full gate)');
 assert.equal(spSponsor.recruits, 0, 'the spark does not advance the recruiter ladder (that is full qualification)');
 assert.equal((await pool.query(`SELECT ref_spark FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${rookie.id}')`)).rows[0].ref_spark, true, 'ref_spark latched');
+// red-team R28: the spark (the cheapest referral cash faucet) must flag a same-IP pair for mod review,
+// at parity with the qualify path — both test accounts share 127.0.0.1, so the flag must have fired.
+{
+  const sf = (await pool.query(`SELECT props FROM telemetry WHERE event='referral_same_ip_flag' AND account_id=(SELECT account_id FROM characters WHERE id='${rookie.id}')`)).rows[0];
+  const sp = sf && (typeof sf.props === 'string' ? JSON.parse(sf.props) : sf.props);
+  assert(sp && sp.spark === true, 'a same-IP spark pair is flagged for review (parity with qualify)');
+}
 await call('POST', '/v1/crimes/pick', { token: rookie.token }); // once ever
 assert.equal((await meOf(sponsor.token)).cash, sponsorBefore + 2500, 'the spark fires once, not per-action');
 

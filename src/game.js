@@ -862,7 +862,10 @@ export async function maybeQualifyReferral(pool, recruitAccountId) {
     if (rGang?.gang_id) await bumpFamilyTask(client, { owned: { gangId: rGang.gang_id } }, 'recruit', 1);
 
     // §10.3 — same-IP recruiter/recruit pairs auto-flag for review
-    const ips = (await client.query('SELECT id, created_ip FROM accounts WHERE id = ANY($1)', [[recruitAccountId, acct.referred_by]])).rows;
+    // IN ($1,$2) not ANY($1)-of-array: node-postgres serializes a JS array for ANY, but pg-mem returns
+    // ZERO rows for it — so the ANY form made this flag silently untestable (and never exercised). IN is
+    // identical in production and pg-mem-portable. The self-referral guard above ensures the two ids differ.
+    const ips = (await client.query('SELECT id, created_ip FROM accounts WHERE id IN ($1,$2)', [recruitAccountId, acct.referred_by])).rows;
     if (ips.length === 2 && ips[0].created_ip && ips[0].created_ip === ips[1].created_ip)
       await track(client, recruitAccountId, 'referral_same_ip_flag', { recruiter: acct.referred_by });
 
@@ -907,6 +910,12 @@ export async function maybeSparkReferral(pool, recruitAccountId) {
     if (acct.referred_by !== recruiterAccountId || acct.ref_spark || acct.ref_paid || acct.agent_flag || recruiterAcct.agent_flag) { await client.query('ROLLBACK'); return null; }
     // the early gate — real playtime, well short of full qualification (keeps it Sybil-bounded)
     if (!(levelOf(Number(recruit.respect)) >= M4.REF_SPARK.level && Number(recruit.lc_crime) >= M4.REF_SPARK.jobs)) { await client.query('ROLLBACK'); return null; }
+    // §10.3 — same-IP recruiter/recruit pairs auto-flag for review (parity with maybeQualifyReferral).
+    // The spark is the CHEAPEST referral cash faucet (no check-in/net-worth floor), so a same-machine ring
+    // must produce the same mod-review signal the expensive qualify path already emits (red-team R28 MED).
+    const sparkIps = (await client.query('SELECT id, created_ip FROM accounts WHERE id IN ($1,$2)', [recruitAccountId, recruiterAccountId])).rows;
+    if (sparkIps.length === 2 && sparkIps[0].created_ip && sparkIps[0].created_ip === sparkIps[1].created_ip)
+      await track(client, recruitAccountId, 'referral_same_ip_flag', { recruiter: recruiterAccountId, spark: true });
     const mult = await referralPushMult(client); // recruitment-drive CASH multiplier (1 when no push)
     const recruitCash = Math.round(M4.REF_SPARK.recruitCash * mult), recruiterCash = Math.round(M4.REF_SPARK.recruiterCash * mult);
     recruit.cash = Number(recruit.cash) + recruitCash;
