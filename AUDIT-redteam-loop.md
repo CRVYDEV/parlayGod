@@ -2039,3 +2039,56 @@ specialist, KICK them, assert the racket's `specialist` goes null.
 clear) + regression; the three highest-value newest surfaces (autonomous $OMR-burning worker, the Port
 warehouse/fence/loot faucets, the Grand Prix cash escrow) and the keyless public surface all confirmed CLEAN.
 Suite 34/34 + sim drift-0.
+
+## Round 33 — two dedicated two-party-PvP lenses + a systematic persist-clobber cross-check
+
+The highest-risk class in the newest code is the two-party PvP path (lock order + persist-clobber + double-realize
+under `withTwoCharacters`). R33 pointed two fresh lenses there — (1) THE PORT step-two PvP (`interceptRun` piracy +
+`rendezvous` handoff + naval `hull`/`engine` upgrades); (2) THE SPEAKEASY two-party/PvP family (`standoverSpeakeasy`
+forced sale, `buySpeakeasy`/`listSpeakeasy` buyout, `visitSpeakeasy` round, `playTable` back-room wheel, the
+notoriety/`resolveRaid` prohibition raid, `resetClubToNewOwner`, the 20% `UPKEEP_BPS` drip) — plus a manual
+systematic persist-clobber cross-check of every character-row column this session's newest modules write by direct
+SQL against the `persistCharacter` positional list.
+
+**No reachable bug — all three lenses CLEAN (no CRITICAL/HIGH/MED).** Verified at source:
+
+- **THE PORT piracy/rendezvous** — `port:piracy` is exactly 60% of the owner's would-be `port:sale` and VOIDS the
+  run (emission strictly falls; a ledgered cash faucet + ammo sink under the `port:` vocab); `interceptRun` locks the
+  target BOAT `FOR UPDATE` before mutating and never locks the owner char (convoy-manifest discipline) so a concurrent
+  owner `collectRun` serializes on the boat row (no double-realize; the second actor hits `landed`/`not_out`), and the
+  `(boat_id,character_id)` PK blocks a same-pirate retry; two pirates can't both win (the first voids the run);
+  `rendezvous` requires the partner's consent flag, rejects a busy/too-slow/self partner, locks both boats sorted, and
+  moves the run atomically (no two-boat double-count); `contraband`/`berths`/`port_used`/`port_at` are direct-SQL,
+  disjoint from the persist positional list; boat run/hull/engine live on the `boats` table (no persist path, absolute
+  writes); a dead runner's `port_intercepts` are swept before the boats delete so a concurrent intercept reads
+  `no_target`, no crash.
+- **THE SPEAKEASY two-party/PvP** — every `speakeasy:*` cash reason is in the `speakeasy:` prefix vocab (bottle/naming
+  ride `vanity:`); round/buyout/standover carve the 2% take FROM the price (payer −cost / receiver +net / street_tax
+  +tax / 1% dev off-ledger — the audited `bodyguard:hire` mechanism, no mint-on-top), the table is the audited casino
+  book (ledgered win faucet / bet sink, EV a small sink), upkeep + raid fine are clamped character_id'd sinks, seized
+  pending is never ledgered; `withTwoCharacters` locks both chars sorted → both accounts → the club row → `street_tax`
+  LAST on EVERY path (the v2 street_tax-before-X inversion stays fixed; no AB-BA vs a single-party collect/upgrade);
+  `resetClubToNewOwner` banks the seller's pending (and resolves a WON standover's pending raid first so a friendly
+  standover can't launder a fine) then transfers with the guest list reset + decor→stock + `income_at=shut_until` for a
+  shut club, and the credited owner/seller is the re-locked, re-validated char (no stale-owner credit); the
+  `chargeNotoriety` per-(patron,club) token bucket caps one account's heat below `RAID_THRESHOLD` (no single-account
+  raid-forcing; only the accepted multi-alt residual), and `upgradeSpeakeasy` resolves a pending raid first + refuses
+  while shut (the MED fix holds); all mutated columns are club-row (`FOR UPDATE`-locked), none character direct-SQL;
+  `wipeSpeakeasyAtDeath` + the `alive` filter degrade a standover/buyout on a just-died owner to a clean
+  `gone`/`no_target`.
+- **manual persist-clobber cross-check** — the newest direct-SQL character columns (`port_used`, `contraband`,
+  `berths`, `disinfo_until`, `wire_tier`, `race_at`, `pen_faction`, `active_at`) are ALL disjoint from the
+  `persistCharacter` positional set ($2–$61, `game.js:476-498`); the only positional column (`cash`) written by direct
+  SQL in the newest code is the Grand Prix worker resolve (`races.js:348,379`), which uses relative `cash = cash + $2`
+  under explicit `FOR UPDATE` entrant locks — the audited worker-settle pattern (no concurrent persist), no clobber.
+
+**Design-consistent LOW notes (flagged, NOT patched per ground rule #1 — no value/exploit):** `rendezvous` gates only
+`jailed` (not hospitalized/safehoused) — consistent with P1.3 since it moves no value and targets the boat not a char;
+`bottleService` doesn't gate `isShut` — a pure deflationary $OMR burn / status bump at a dark club, no owner
+interaction; standover/buyout don't gate the OWNER's jailed/safehoused state — the owner is PAID (a compensated
+transfer, not a lethal attack), consistent with a safehoused player staying jumpable + a jailed seller's listing being
+honorable.
+
+**Round 33 verdict:** the two newest two-party-PvP surfaces (Port piracy, the Speakeasy standover/buyout/table family)
+and the systematic persist-clobber cross-check all confirmed CLEAN; three design-consistent LOW notes recorded, none
+patched. Suite 34/34 + sim drift-0 (unchanged — docs-only round).
