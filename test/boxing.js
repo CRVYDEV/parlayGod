@@ -156,6 +156,15 @@ assert.equal(inv2.checks.find((c) => c.name === 'character cash').drift, cashDri
 // close the window (SQL clock warp — the worker-sweep test pattern), then resolve via the worker
 await pool.query(`UPDATE boxing_bouts SET resolves_at = now() - interval '1 hour' WHERE id='${boutId}'`);
 assert.equal((await call('POST', `/v1/boxing/bout/${boutId}/bet`, { token: late.token, body: { fighter: goliath, amount: 10000 } })).body.error, 'closed', 'betting closes at the bell');
+// (R34 regression) resolution reads the form SNAPSHOTTED at booking, NOT live stats — so a manager can't
+// train a booked fighter up in the betting-close→worker-settle gap to rig the parimutuel. Confirm the
+// snapshot was stored, then make weak David a live MONSTER: if resolve read live form he'd crush Goliath
+// and every payout assertion below would flip; the snapshot keeps Goliath (75) the winner. Restore after.
+const snap = (await pool.query(`SELECT a_form, b_form FROM boxing_bouts WHERE id='${boutId}'`)).rows[0];
+assert.equal(Number(snap.a_form), 75, 'Goliath form snapshotted at booking');
+assert.equal(Number(snap.b_form), 18, 'David form snapshotted at booking');
+const davidLive = (await pool.query(`SELECT power, chin, speed FROM fighters WHERE id='${david}'`)).rows[0];
+await pool.query(`UPDATE fighters SET power=900, chin=900, speed=900 WHERE id='${david}'`); // "trains up" AFTER the bell
 const ccPre = (await meOf(cc.token)).cash, taxPre = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 const swept = await sweepMainEvents(pool);
 assert.equal(swept.resolved, 1, 'the worker resolved the card');
@@ -171,6 +180,8 @@ assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1'))
 assert.equal(Number((await pool.query(`SELECT wins FROM fighters WHERE id='${goliath}'`)).rows[0].wins), 1, 'Goliath banked the win');
 assert.equal(await boxingWins(cc.aid), 1, 'the manager legend banked the main-event win');
 assert.equal((await pool.query(`SELECT booked_until FROM fighters WHERE id='${goliath}'`)).rows[0].booked_until, null, 'the fighters are unbooked after the bell');
+// (R34) Goliath still won despite David's post-bell live stats being maxed — the snapshot defeated the rig. Restore David.
+await pool.query(`UPDATE fighters SET power=${davidLive.power}, chin=${davidLive.chin}, speed=${davidLive.speed} WHERE id='${david}'`);
 let inv3 = await runLedgerInvariants(pool);
 assert(esc(inv3).ok && esc(inv3).lhs === 0, 'the escrow empties after resolution');
 assert.equal(inv3.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles after payout (bets/wins/purse are transfers)');

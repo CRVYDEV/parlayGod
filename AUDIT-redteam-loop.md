@@ -2092,3 +2092,72 @@ honorable.
 **Round 33 verdict:** the two newest two-party-PvP surfaces (Port piracy, the Speakeasy standover/buyout/table family)
 and the systematic persist-clobber cross-check all confirmed CLEAN; three design-consistent LOW notes recorded, none
 patched. Suite 34/34 + sim drift-0 (unchanged — docs-only round).
+
+## Round 34 — the boxing title-belt/main-event concurrency + a cross-system passive-accrual §10.4 hunt
+
+Two fresh lenses over surfaces no dedicated loop lens had hit: (1) THE FIGHT CIRCUIT title-belt singleton +
+main-event escrow + the step-five callout (belt result shared across `fightBout`/`resolveMainEvent`/
+`acceptCallout`/`callOutChamp`/`enforceBeltDefense`/`wipeFighterAtDeath`); (2) a cross-system passive-income
+accrual + §10.4 + double-accrue hunt over every newest lazy-income collect path (port/speakeasy/territory/
+world-frontier/business + the §7.1 accrual engine); plus a manual lens on the chain reserve accounting
+(`cancelQueuedWithdraw` vs drainQueue/markClaimed/reclaim).
+
+**Two confirmed defects FIXED (one HIGH, one MED), regression added for the HIGH:**
+
+**HIGH — the main-event parimutuel was riggable ("frozen form" thawed before settlement).** The whole
+spectator-betting design rests on a booked fighter's form being frozen so the crowd bets on a fixed matchup.
+But the freeze key `booked_until` was set == `resolves_at` (= now + `MAIN_EVENT_MS` 30 min), while settlement
+is deferred to the worker sweep which runs HOURLY (`worker.js:308`, `3600*1000`). So in the ≥30-min gap
+between betting-close and the next hourly sweep, `booked(f)` returns false (`boxing.js:16`) — `trainFighter`/
+`fightBout`/`exhibitionBout` no longer throw `booked` — and `resolveMainEvent` re-read the fighters' LIVE
+form (`boxing.js:443-447`). A manager (or an accomplice betting on their fighter) could train the booked
+fighter up toward `STAT_CAP` in the gap, flip the result, and siphon the honest bettors' opposing pool.
+§10.4-clean (a redistribution — the `boxing bet escrow` check still reconciles) but it defeats the feature's
+core fairness premise on every card during ordinary operation (the 1h worker interval ≫ the 30-min window
+guarantees the mutable gap). **Fix (the Grand-Prix/stakes/futurity snapshot precedent):** each fighter's base
+form is now SNAPSHOTTED into the bout row at booking (`boxing_bouts.a_form`/`b_form`, set in BOTH
+`announceMainEvent` and `acceptCallout`) and `resolveMainEvent` rolls from the snapshot, not live stats
+(`bout.a_form ?? form(fa)` — a fallback keeps any pre-migration bout resolvable). Worker latency is now
+irrelevant. The two new columns are auto-added on an in-place upgrade by the R30 MED-1 column migration.
+**Regression** (`test/boxing.js`): the bout stores the snapshot at booking; then David's LIVE stats are
+maxed post-bell — a live read would flip every payout, but the snapshot keeps Goliath the winner (all the
+existing payout assertions hold).
+
+**MED — `wipeFighterAtDeath` inverted the belt lock order (title→fighter) → AB-BA vs `acceptCallout`.**
+`wipeFighterAtDeath` locked `boxing_title FOR UPDATE` (`boxing.js:631`) then `DELETE FROM fighters` (`:636`,
+which row-locks the victim's fighters) — title→fighter, the inverse of the canonical fighter→title order that
+`acceptCallout` uses (it locks the champ's fighter + the challenger's `callout_fighter` it does NOT char-own,
+then the title). A fire-kill of the challenger (holding their char → runEstate → wipeFighterAtDeath) racing
+the champ's `acceptCallout` was a circular wait (40P01, masked by the `contention` retry). **Fix:**
+`wipeFighterAtDeath` now DELETEs the fighters FIRST (acquiring the fighter row-locks) then locks the title —
+fighter→title, matching every other belt path; the belt/callout vacate keys on the dead CHARACTER so it's
+unaffected by the fighter rows already being gone.
+
+**Verified CLEAN (each traced to source):**
+- **boxing bet escrow §10.4** reconciles on every terminal state (resolved / one-sided-book refund / all-dead
+  burn / cancelBout); the vig is the audited `casino:pvp` NULL-take mechanism (burned from the pot, never
+  minted on top); the F1 (fighter→title→street_tax in fightBout) and F2 (acceptCallout sorted fighter locks +
+  TOCTOU re-verify) fixes hold; a vacant belt can be claimed by only one concurrent winner (`applyBeltResult`
+  serializes on the title lock); the exhibition purse always burns the fee before the roll + pays once under
+  the `exhib_at` cooldown; `boxing_wins` is a direct-SQL account-level legend (no persistAccount clobber);
+  fighter records use absolute-INT writes; the legend is loser-level-gated on both PvP + main-event paths.
+- **passive-accrual §10.4** — all six newest collect paths (port collectRun/fence/harborToll, speakeasy
+  collect+upkeep, territory collect+raid+muscle+fortify, world collectFrontier+raidNpc, business collect+
+  upkeep+launder, and the §7.1 accrual engine) ledger exactly what they credit, reset the clock under a row
+  lock (only when income > 0), cap the window (continuous token buckets, no boundary-2× bug), and never
+  ledger seized income; staking's uncapped `rewards` accrual is safe (outside `omrBuckets`, pool-gated
+  `stake:reward` transfer — inflates only a claim number, never mints). One deviation confirmed still present
+  — `upgradeRacket` doesn't resolve the Bureau raid before banking pending (unlike upgradeBusiness/
+  upgradeSpeakeasy) — but it's NOT a §10.4 break (the income is correctly ledgered; only a sink+seize is
+  dodged) and is already an explicitly-documented founder-sign-off item (the `upgradeSpeakeasy` parity dial in
+  AUDIT-session-drops-2.md); NOT patched (ground rule #1 — a balance change, founder's call).
+- **chain `cancelQueuedWithdraw`** locks `account_persistent` then `chain_reserve FOR UPDATE` (serializing
+  with `drainQueue`) and guards `status='queued'` inside that critical section — so cancel and drainQueue
+  can't both act on the same voucher (the first flips the status; the other no-ops); the refund is a net-0
+  `+withdraw:omr` credit; no double-refund, no signed-voucher refund, no AB-BA (drainQueue locks only the
+  reserve).
+
+**Round 34 verdict:** one HIGH riggable-parimutuel (booked form now snapshotted at booking — worker latency
+can't rig it) + one MED belt lock-order inversion (wipeFighterAtDeath now fighter→title) FIXED, HIGH
+regression added; the passive-accrual §10.4 sweep + the chain reserve accounting confirmed CLEAN. Suite 34/34
++ sim drift-0.

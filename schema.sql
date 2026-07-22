@@ -828,6 +828,9 @@ CREATE TABLE IF NOT EXISTS boxing_bouts (
   b_char TEXT NOT NULL, b_fighter TEXT NOT NULL, b_name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'booked',   -- booked → resolved / cancelled
   winner_fighter TEXT,                     -- set at resolution
+  a_form INT, b_form INT,                  -- (R34) form SNAPSHOTTED at booking — resolve reads these, NOT live
+                                           -- stats, so a manager can't train up in the betting-close→worker-settle
+                                           -- gap and rig the parimutuel (the Grand-Prix/stakes/futurity precedent).
   opens_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolves_at TIMESTAMPTZ NOT NULL,        -- betting closes + the worker resolves after this
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
