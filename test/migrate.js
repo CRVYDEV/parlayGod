@@ -60,5 +60,64 @@ assert.equal(await has('characters', 'wire_tier'), true, 'wire_tier is restored 
 // idempotent: running again is still a clean no-op
 assert.equal((await migrateColumns(pool, SCHEMA)).failed, 0, 're-running the migration is idempotent');
 
-console.log(`✅ Column-migration test passed — ${stmts.length} idempotent ADD COLUMN IF NOT EXISTS statements derived from schema.sql (no constraint/multi-column leakage), a clean no-op on a fresh DB, and a missing later-added column (odds/wire_tier) is RE-ADDED on an "old" DB — the R30 MED-1 in-place-upgrade fix.`);
+// ── 4. MED-2 completeness guard: every `character_id` table has a KNOWN death disposition ──
+// The schema has zero FKs — referential integrity on death is 100% the runEstate wipe loop (+ custom
+// wipers + the escrow-resolve `*:death` burns). That's complete today, but a FUTURE character_id table a
+// developer forgets to wipe orphans SILENTLY — invisible to Postgres AND pg-mem (this is exactly how the
+// historical port_intercepts / npc_hits / convoy_ambushes orphans slipped in). An FK ON DELETE CASCADE is
+// the WRONG tool here: on death the character row is KEPT (`alive=false`), never DELETE'd, so a cascade
+// never fires — and FKs risk breaking the pg-mem test path. Instead, fail CI CLOSED when a new
+// character_id table isn't classified. Categories: wiped (runEstate loop / a death-path DELETE), special
+// (a custom *AtDeath wiper in another module), escrow (self-contained snapshot settled at the worker
+// resolve with a `*:death` burn — deliberately NOT wiped so the frozen field resolves), ledger/log
+// (immutable §10.4/audit/historical rows — intentionally never wiped; a dead id is a valid historical ref).
+const DISPOSITION = {
+  batches: 'wiped', blackjack_hands: 'wiped', boats: 'wiped', businesses: 'wiped', cars: 'wiped',
+  character_assets: 'wiped', character_cargo: 'wiped', character_guns: 'wiped', character_items: 'wiped',
+  character_rackets: 'wiped', character_skills: 'wiped', convoy_ambushes: 'wiped', crew_heist_members: 'wiped',
+  daily_progress: 'wiped', fight_bets: 'wiped', makings: 'wiped', missions_done: 'wiped', npc_errands: 'wiped',
+  npc_favors: 'wiped', npc_gain: 'wiped', npc_grudges: 'wiped', npc_leads: 'wiped', npc_standing: 'wiped',
+  numbers_tickets: 'wiped', pen_break_members: 'wiped', pen_contraband: 'wiped', port_intercepts: 'wiped',
+  racers: 'wiped', stash: 'wiped', track_bets: 'wiped', world_raid_members: 'wiped',
+  fighters: 'special', gang_members: 'special', speakeasy_patrons: 'special',
+  futurity_runners: 'escrow', grand_prix_entries: 'escrow', poker_entries: 'escrow', stakes_entries: 'escrow', track_entries: 'escrow',
+  transactions: 'ledger', rng_audit: 'ledger', notifications: 'log',
+};
+// SCOPE: this guard covers the literal `character_id` column convention (42 tables). Tables that
+// reference a character via a DIFFERENTLY-NAMED column (npc_hits payer/target, searches hunter/target,
+// wiretaps/wire_informants/wire_watches watcher/target, informants, kill_log, vendettas, feud_peace_offers,
+// loans lender/borrower_character, market_listings, bounties/bounty_contributors, convoys owner_character…)
+// are outside the parser's scope here — they were verified complete by the R30 schema audit + are cleaned
+// by NAMED death handlers (voidLoansAtDeath / voidListingsAtDeath / the runEstate special DELETEs). The
+// value of this guard is the common case: a NEW `character_id` table added without a wipe fails CI closed.
+// parse schema.sql for every table whose body declares a `character_id` column
+const charTables = new Set();
+{
+  const head = /CREATE TABLE(?:\s+IF NOT EXISTS)?\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+  let mm;
+  const clean = SCHEMA.replace(/--[^\n]*/g, '');
+  while ((mm = head.exec(clean))) {
+    let depth = 1, body = '', i = head.lastIndex;
+    for (; i < clean.length && depth > 0; i++) { const ch = clean[i]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } body += ch; }
+    head.lastIndex = i;
+    if (/^\s*character_id\b/m.test(body)) charTables.add(mm[1]);
+  }
+}
+// (a) every character_id table is classified; no stale classifications
+const unclassified = [...charTables].filter((t) => !DISPOSITION[t]);
+assert.equal(unclassified.length, 0, `unclassified character_id table(s) — a dead street would ORPHAN them: ${unclassified.join(', ')}. Wipe in runEstate (add to DISPOSITION 'wiped'/'special') or document as 'escrow'/'ledger'.`);
+const stale = Object.keys(DISPOSITION).filter((t) => !charTables.has(t));
+assert.equal(stale.length, 0, `stale DISPOSITION entr(y/ies) no longer a character_id table: ${stale.join(', ')}`);
+// (b) every 'wiped'/'special' table actually has a DELETE FROM somewhere in src/ (classification ⇒ code)
+const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
+const allSrc = fs.readdirSync(srcDir).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(srcDir, f), 'utf8')).join('\n');
+for (const [t, kind] of Object.entries(DISPOSITION)) {
+  // a table is "cleaned on death" if it's DELETE'd by name (custom wipers: DELETE FROM fighters) OR it
+  // appears as a quoted name in the runEstate wipe-loop array (`for (const t of ['businesses', …])` →
+  // `DELETE FROM ${t}`). Either proves the death path references it; a NEW wiped table someone forgets to
+  // wire in matches neither → this fails.
+  if (kind === 'wiped' || kind === 'special') assert(new RegExp(`DELETE FROM ${t}\\b|['"]${t}['"]`).test(allSrc), `${t} is classified '${kind}' but is not referenced by any death-cleanup DELETE in src/ — the estate wipe is missing`);
+}
+
+console.log(`✅ Schema-integrity test passed — MED-1: ${stmts.length} idempotent ADD COLUMN IF NOT EXISTS statements derived from schema.sql (no leakage, clean no-op on a fresh DB, a dropped later-added column is RE-ADDED). MED-2: all ${charTables.size} character_id tables have a documented death disposition (${Object.values(DISPOSITION).filter((v) => v === 'wiped').length} wiped / ${Object.values(DISPOSITION).filter((v) => v === 'special').length} special / ${Object.values(DISPOSITION).filter((v) => v === 'escrow').length} escrow / ${Object.values(DISPOSITION).filter((v) => v === 'ledger' || v === 'log').length} ledger — a new unclassified table fails CI closed, and every wiped/special table has a DELETE FROM in src).`);
 process.exit(0);

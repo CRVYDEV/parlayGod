@@ -1950,3 +1950,26 @@ fresh DB (0 failures), and — the actual fix — that dropping a later-added co
 34/34 + sim drift-0. **MED-2 (zero FKs) remains a flagged defense-in-depth item** (the wipe loop is still the
 sole referential-integrity mechanism — complete today); a proper migration tool / FK-cascade pass is the
 larger follow-up if desired, but the acute in-place-upgrade break is now closed.
+
+## MED-2 GUARDED + go-live checklist (founder-directed follow-up)
+
+**MED-2 (zero FKs → a forgotten wipe orphans silently) — closed with a completeness GUARD, not FKs.** An
+FK `ON DELETE CASCADE` is the wrong tool: on death the character row is KEPT (`alive=false`), never
+`DELETE`d, so a cascade never fires — and adding FKs to schema.sql risks breaking the pg-mem test path. The
+actual risk is a FUTURE `character_id` table a dev forgets to wipe. `test/migrate.js` now also parses
+schema.sql for every literal-`character_id` table (42) and asserts each has a documented death disposition
+in a `DISPOSITION` map — **31 wiped** (runEstate loop) / **3 special** (fighters→boxing.js, gang_members→
+removeMember, speakeasy_patrons→speakeasy.js) / **5 escrow** (futurity/gp/poker/stakes/track entries —
+settled at the worker resolve with a `*:death` burn, deliberately not wiped) / **3 ledger** (`transactions`
+the §10.4 record, `rng_audit`, `notifications` — immutable/historical, a dead id is a valid ref). A NEW
+unclassified `character_id` table now **fails CI closed**, and every wiped/special table is asserted to have
+a death-cleanup DELETE in src (classification ⇒ code). Scope note in-test: tables using a differently-named
+character-ref column (npc_hits payer/target, searches hunter/target, wiretaps watcher/target, loans, …) are
+outside the parser but were verified complete by the R30 audit + are cleaned by named `*AtDeath` handlers.
+
+**`DEPLOY.md` — off-chain alpha go-live checklist.** Pre-flight (34/34 + sim), the 4 production boot-refusal
+requireds (NODE_ENV/DATABASE_URL/JWT_SECRET/MARKET_SEED), recommended config (`SOCIAL_VERIFY_MODE=live`,
+MOD_KEY, RATE_LIMIT, TRUST_PROXY-if-proxied, INVARIANT_WEBHOOK_URL), the chain-vars-stay-unset note, the
+test-only knobs the boot guard already rejects, the two processes (API + worker), the automatic first-boot
+schema+column-migration, a post-deploy smoke check, and the still-gated mainnet items. Suite 34/34 + sim
+drift-0.
