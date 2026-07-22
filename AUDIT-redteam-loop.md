@@ -1443,3 +1443,59 @@ mint). Not a new defect.
 **Round 22 verdict: 2 structural fixes (refundPot tier-ordering — the higher-frequency AB-BA; season-rollover
 per-row isolation — the total-stall robustness gap). Escrow/settle/idempotency layer confirmed SOUND. §10.4
 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 23 — Two-party lock discipline + Value-creation in the newest faucet modules
+
+Two lenses continuing the productive lock-order vein + a fresh mint-hunt on the newest modules
+(port/races/stable/boxing/speakeasy/casino racing). **No CRITICAL/HIGH.** One confirmed lock-order fix +
+two defense-in-depth consistency guards.
+
+**CONFIRMED + FIXED — `jump` locks the war-gangs BEFORE the bounty pot, inverting `characters → pots →
+gangs` (MED, retry-masked AB-BA).** `src/social.js` `jump` ran the war-kill score `UPDATE gangs …
+WHERE id IN (G,G2)` (line 348) BEFORE `claimBounty` (line 353, which locks the victim's `bounties` rows) —
+i.e. gangs → pot. Every other path takes pot → gangs: `fire` (claimBounty then the identical war-score
+update), `postFamilyContract` (pot then gang), `cancelFamilyContract`, `refundPot`, and the expiry sweep.
+Two real AB-BA cycles on a warring victim V with a pot: **(1)** `jump(V)` (holds gangs, wants pot) vs
+`fire(V)` (holds pot, wants gangs); **(2, more reachable)** `jump(V)` vs `postFamilyContract(target=V)` by
+the boss (holds pot, wants gang G). Both fire only under an active `gang:war` with a bounty pot on the
+contested victim + genuinely concurrent jump + fire/family-contract on V. Retry-masked (both under
+`withTwoCharacters`/`withCharacter` → `deadlockToRetry` → `contention`), no §10.4 effect — but a real
+out-of-order acquisition NOT covered by the prior jump/fire fixes (those addressed only the two-gang
+UNSORTED score update, now a single `WHERE id IN` statement; they never touched the pot-vs-gang cross-
+order). **Fix:** moved `jump`'s `claimBounty` to run BEFORE the war-score gang UPDATE, matching `fire`'s
+pot → gangs order exactly. Behavior-preserving (bounty payout + war scoring are independent); covered by
+existing jump/war tests (test/social.js green).
+
+**FIXED — `pvpDice`/`playPoker` missing the explicit self-match guard (defense-in-depth, no value impact).**
+Every other two-party function (boxing/stable/races/speakeasy) has an explicit `opponent.id === ch.id`
+throw; the casino back-room dice + heads-up poker relied solely on `withTwoCharacters` throwing `self`.
+Not exploitable today (one alive character per account → the two transfer rows can never be the same, and a
+same-account match nets only `−rake` anyway), but added the explicit `self` guard to both for consistency +
+clearer error semantics. Zero behavioral change; test/casino.js green.
+
+**Verified CLEAN (both lenses):**
+- **Value creation (mint hunt):** every taxed transfer (`casino:pvp`/`boxing:bout`/`race:wager`/`stable:race`)
+  nets EXACTLY to `−rake` — winner-credit + loser-debit + floor(rake/2)→street_tax + ceil(rake/2)-burn sum
+  to zero, no dust minted to a player; the winner's own stake never double-credits. Every escrow settlement
+  (Grand Prix/Stakes/Tournament/main-event/Futurity) closes the identity `Σbuyin = Σwin + refund + take +
+  death` to zero across full-field / short-field-refund / one-sided-book, with the parimutuel last-winner
+  mop-up making `Σpayouts == totalWin + distributable` exactly and `own_event` blocking principal-bets-own-
+  card double-credits. Every PvE purse (exhibition/circuit/npc-race/port-sale/speakeasy-table/track/GP) is a
+  bounded catalog constant or a supply-capped faucet, never an unbounded multiplier. The mint-hunt core:
+  rakes/fees/tolls/fines use `Math.ceil` (house-favorable), payouts/shares/purses use `Math.floor` — NO
+  ceil-credit-vs-floor-debit dust-mint mismatch exists in any of the six modules.
+- **Two-party locks:** every `withTwoCharacters` handler verified — bodyguard (atomic conditional claim, no
+  lost-update), tributeOmr, loans repay/collect/buyPaper (WANTED-pot before street_tax), speakeasy visit/
+  table/buyout/standover (state → street_tax last), business shakedown, races match/pinks (cars leaf,
+  chars-before-cars acyclic), heists inside-job (mark's char never locked), pen shank (pot before estate),
+  port intercept/rendezvous (owner char never locked), market bid/buy/fill (outbid bidder locked before
+  refund), boxing fightBout/announce/acceptCallout (the F1/F2 fixes intact). Known retry-masked classes
+  (leader-first co-op vs pairwise PvP, market actor-vs-prevBidder, runEstate third-party funder locks) re-
+  confirmed accepted (all → `contention`); territory establish/seize-vs-dissolution re-analyzed as NOT a
+  cycle (dissolution only writes for a memberless gang).
+
+**Round 23 verdict: 1 lock-order fix (jump pot→gangs — the last two-party inversion), 2 defense-in-depth
+self-guards; value-creation across all six newest faucet modules confirmed net-zero/bounded. §10.4
+untouched. Suite 33/33 + sim drift-0.**

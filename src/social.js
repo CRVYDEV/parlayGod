@@ -341,6 +341,11 @@ export async function jump(ch, victim, client, h) {
       await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: crates, reason: 'jump:steal', counterparty: victim.id });
       await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -crates, reason: 'jump:stolen', counterparty: ch.id });
     }
+    // R22/R23 lock order: claim the victim's bounty pot BEFORE the war-score gang UPDATE — the
+    // canonical characters → pots → gangs order that fire (claimBounty then war-score) and
+    // postFamilyContract/refundPot all follow. Doing the gang UPDATE first inverted it (gangs → pot)
+    // and AB-BA'd vs a concurrent fire/postFamilyContract on the same warring victim (retry-masked).
+    const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
     if (war) {
       // both score updates in ONE statement (the fire-kill pattern) — two separate "my gang first"
       // UPDATEs acquire the rows unsorted, so simultaneous cross-jumps between the two warring
@@ -350,7 +355,6 @@ export async function jump(ch, victim, client, h) {
                           war_score_them = war_score_them + CASE WHEN id=$2 THEN 1 ELSE 0 END
           WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
-    const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize']); // a jump only fulfils hospitalize contracts
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
