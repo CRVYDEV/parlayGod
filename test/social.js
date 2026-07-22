@@ -145,6 +145,14 @@ let roccoMe = await meOf(rocco.token);
 assert.equal(roccoMe.cash, roccoCashBefore - r.body.stolen, 'victim pocket emptied by exactly the steal');
 assert(roccoMe.hospSeconds > 0, 'victim hospitalized');
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).code, 400, 'hospitalized target protected');
+// (R40 gate-matrix) a HOSPITALIZED ATTACKER can't launch offense either — the symmetric action-lock every
+// offense sibling enforces (shakedown/standover/convoy/piracy/rival-raid/world-raid + consensual PvP). heal
+// restores health without clearing hosp_until, so this gate (not the JUMP_MIN_HEALTH check) is the backstop.
+// The actor gate fires BEFORE any victim/energy check, so the error is hosp_self regardless of Rocco's state.
+await seedCh(don.id, `hosp_until='${new Date(Date.now() + 3600000).toISOString()}'`);
+assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).body.error, 'hosp_self', 'a hospitalized attacker cannot jump');
+assert.equal((await call('POST', `/v1/streets/${rocco.id}/npchit`, { token: don.token, body: { tier: 'legbreaker' } })).body.error, 'hosp_self', 'a hospitalized attacker cannot arrange an NPC hit');
+await seedCh(don.id, 'hosp_until=NULL'); // heal the boss up for the rest of the suite
 // full-system v3 (death lens): a JAILED target is out of reach — jump must gate it like fire/npcHit/shank
 // (jail can't be strictly more dangerous than the street). Restore Rocco's health, jail him, confirm the gate.
 await seedCh(rocco.id, `health=100, hosp_until=NULL, jail_until='${new Date(Date.now() + 3600000).toISOString()}'`);

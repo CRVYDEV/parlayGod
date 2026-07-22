@@ -2427,3 +2427,58 @@ all 66 tables; accrual/timing precision) returned NO reachable bug — every lif
 survived/transferred with correct shield+loot ordering, and the timing surface is clamp-safe + floor-exact +
 bucket-continuous. Suite 34/34 + sim drift-0 (docs-only round). The loop is 5-of-6 recent rounds CLEAN; the
 remaining risk is operational + founder-balance, not reachable code defects.
+
+## Round 40 — the cross-module gate/permission-consistency MATRIX + a client XSS/logic pass over the newest tabs
+
+Two lenses: (1) a systematic gate/permission-consistency MATRIX across every player action (offense jailed/
+hospitalized/safehouse gates, extraction D2 blocks, victim shield gates, level/rank/cooldown floors — the fresh
+angle being CROSS-MODULE consistency: the action that forgot a gate its siblings all have); (2) a fresh client
+XSS/logic/trust pass over every tab added AFTER the R27 client audit (Port/Wire/Races/Boxing/Store/Speakeasy/
+Stable/Going-Legit + the broadcast/`?ref` flow).
+
+**One confirmed cross-module gate inconsistency FIXED (MED for jump / LOW-MED for fire+npcHit), regression added:**
+`fire` (`social.js:903`), `jump` (`:292`), and `npcHit` (`:1216`) — the three highest-impact street-PvP actions
+— gated `jailed(ch)` + `safeHoused(ch)` + `witproActive(ch)` but were the ONLY offense actions MISSING the
+`hospitalized(ch)` ACTOR gate that their entire offense-sibling family enforces (shakedownBusiness/
+standoverSpeakeasy/ambushConvoy/interceptRun-piracy/raidRivalRacket/raidNpc/collectLoan + even the consensual
+physical PvP raceChallenge/fightBout/matchRace/pinkSlipRace all throw `hosp_self`). The omission was uncommented
+(every DELIBERATE gate omission elsewhere carries a justifying comment) and reachable: `heal` (`game.js:718`)
+restores `health=100` but never clears `hosp_until` (hospitalization is a timed action-lock — the coach frames
+it "heal and wait"), so `jump`'s own `health < JUMP_MIN_HEALTH` gate is DEFEATED by healing, and a player
+hospitalized after losing a fight could heal and immediately mug/assassinate/hire-a-hit — while itself
+untargetable (the victim gate) and while the strictly-lesser muscle actions all block them. This is a
+gate-COVERAGE correctness defect (a state-machine invariant), not a sim-audited number. **Fix:** added
+`if (hospitalized(ch)) throw 'hosp_self'` to all three, restoring the SYMMETRIC action-lock (a hospitalized
+player is already untargetable by these same actions — the actor-side omission was the anomaly), clearly
+commented as the offense action-lock so a founder who wants hospitalized retaliation reverts one line each.
+**Regression** (`test/social.js`): a hospitalized attacker's jump + npcHit both return `hosp_self`. The full
+suite stays green — no test flow relied on hospitalized-offense.
+
+**Verified CLEAN (each traced to source):**
+- **The rest of the gate matrix is CONSISTENT** — victim shields now cover the full set on every attack
+  (`hospitalized`/`jailed`/`witpro`/`penSafe`/`inHole` + `safeHoused` where lethal), extraction/collection is
+  uniformly D2 safehouse-blocked (bank deposit, business/territory/frontier/port/speakeasy collect, all launder
+  paths, buy-order post, loan offer, big invest — pure treasury SPENDS correctly omit it since they realize no
+  income; `upgradeRacket` gates it precisely because it banks pending), consensual PvP uniformly gates actor-
+  jailed + opponent-jailed/hospitalized + self + family, the level/rank floors are present (npcHit<5,
+  WANTED_MIN_LVL, world-raid/invade/liberate level gates, `canCommand` rank gates), the per-actor/target/racket
+  cooldowns are all present, and jail is the universal gate (the shank is the sole intended in-cell path;
+  npcHit waives jailed ONLY via a burner). All deliberate omissions elsewhere are commented (safehouse
+  jumpable non-lethally, the venue is a street address not the man).
+- **Client (newest tabs)** — no reachable XSS: every player free-text field (name/gang/tag/vanity/estate/
+  bounty-reason/fighter/racer/dynasty/speakeasy) is SOURCE-stripped by `cleanText()`/a `[\w .,'&-]` whitelist so
+  `<>"` can never be stored → the tag-injection vector is closed even where the client renders unescaped; no
+  player string lands in a single-quoted attr/JS context; `describe()`→`toast()` uses `textContent`; the WS feed
+  JSON.stringify+escapes; share/broadcast carry only the player's OWN name via `encodeURIComponent`. Every
+  newest money button routes through `act()` (in-flight lock + fresh Idempotency-Key — no direct `fetch`
+  bypass); no client-authority (handlers send only choices + user amounts the server re-validates+re-prices);
+  JWT header-only + WS-subprotocol (never a URL), mod key sessionStorage+header, `?ref` clamped-40 + POST-only
+  (no DOM-clobber); no request-body field mismatches in any newest tab. One LOW recorded (defense-in-depth, NOT
+  patched): only ~6 `esc()` sink-sites exist, so the client's XSS posture is load-bearing on the server-side
+  source-strip — a future free-text field shipped without that strip would become stored XSS; the recommendation
+  is to escape at the render sink, but it's not exploitable today (a large client-wide change deferred).
+
+**Round 40 verdict:** one MED/LOW-MED cross-module gate inconsistency FIXED (`fire`/`jump`/`npcHit` now carry the
+`hospitalized(ch)` actor gate their whole offense-sibling family enforces — closing the heal-defeats-the-health-
+gate bypass) + regression; the rest of the gate matrix and the newest client code confirmed CLEAN (one deferred
+client-hardening LOW recorded). Suite 34/34 + sim drift-0.

@@ -292,6 +292,13 @@ export async function jump(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "Can't throw hands while you're to ground — a safehouse is a shield, not a bunker.");
   if (witproActive(ch)) throw new GameError('witpro', "You're in protective custody — the marshals didn't relocate you to work rivals. (witpro is a shield, not a free-kill window.)");
+  // (R40 gate-matrix) a HOSPITALIZED actor can't launch offense — the symmetric action-lock every offense
+  // sibling enforces (shakedownBusiness/standoverSpeakeasy/ambushConvoy/interceptRun/raidRivalRacket/raidNpc/
+  // collectLoan + consensual PvP raceChallenge/fightBout/matchRace all gate `hosp_self`). Without it, `heal`
+  // restores health=100 without clearing hosp_until, so the JUMP_MIN_HEALTH gate below is bypassable and a
+  // laid-up player mugs/kills while still under the Doc's care — yet is itself untargetable (the victim gate).
+  // A founder who wants hospitalized retaliation reverts this one line.
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're in no shape for a fight — laid up under the Doc's care.");
   if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape for a fight.");
   if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
@@ -903,6 +910,7 @@ export async function fire(ch, victim, client, h, rounds) {
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
   if (witproActive(ch)) throw new GameError('witpro', "No wet work from witness protection — untargetable is a shield, not a licence to kill.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're laid up under the Doc's care — no wet work from a hospital bed. (R40: the offense action-lock every sibling enforces.)");
   if (ch.shoot_cd_until && new Date(ch.shoot_cd_until) > new Date())
     throw new GameError('cooldown', "Your trigger's still hot.");
   const gun = gunObjOf(ch.gun);
@@ -1216,6 +1224,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   if (!opts.fromBurner && jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
   if (witproActive(ch)) throw new GameError('witpro', "You can't run contractors from witness protection — untargetable is a shield, not a licence to kill.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're laid up under the Doc's care — no arranging wet work from a hospital bed. (R40: the offense action-lock, symmetric with the victim gate.)");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà."); // a rat OR a WANTED welsher forfeits family protection
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
