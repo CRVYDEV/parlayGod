@@ -12,6 +12,7 @@
 // so the cursor / confirmation / idempotency logic here is unit-testable with a mock source.
 import { recordFeePayment } from './fees.js';
 import { recordTradeFee } from './vig.js';
+import { recordBond } from './bonds.js';
 import { markClaimed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
@@ -22,7 +23,7 @@ export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5
 // would be permanently stuck (a DoS on the whole fee pipeline). Skip a poison log (it can never
 // succeed) but RE-THROW a transient error (a DB timeout / serialization failure) so the cursor
 // does NOT advance and the block window re-scans idempotently next tick — never losing a real fee.
-const POISON = new Set(['bad_fee_kind', 'bad_payer', 'bad_nonce']);
+const POISON = new Set(['bad_fee_kind', 'bad_payer', 'bad_nonce', 'min', 'discount', 'payout']);
 async function isolate(label, apply) {
   try { await apply(); return true; }
   catch (e) {
@@ -102,21 +103,51 @@ export async function syncTradeFees(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
+// Sync Bonded(bondId, payer, nonce, principal, payout, toPol, toVig) → recordBond (idempotent on nonce),
+// booking the on-chain-AUTHORITATIVE payout + POL/Vig split (the event carries no price/discount, so the
+// watcher books what the contract actually did — the `onchainPayout` path in recordBond). Same cursor +
+// confirmation-depth + per-log isolation discipline as the fee stream. Dormant unless OMERTA_BOND_ADDRESS
+// is set. `source.bondLogs(from,to)` → [{ nonce, payer, principalEth, payoutOmr, polEth, vigEth, txHash }].
+export async function syncBondEvents(pool, source, opts = {}) {
+  const confirmations = opts.confirmations ?? DEFAULT_CONFIRMATIONS;
+  const w = await windowFor(pool, source, 'bonds', confirmations, opts.startBlock);
+  if (!w) return { processed: 0 };
+  const logs = await source.bondLogs(w.from, w.to);
+  let processed = 0;
+  // (red-team R19 F3) per-log isolation symmetry with syncFeeEvents — a deterministic-poison bond log
+  // (bad_payer/bad_nonce/min/discount/payout) is skipped; a transient error re-throws so the cursor
+  // doesn't advance past a good log. recordBond's tranche cap is BYPASSED on the on-chain path (the
+  // chain already enforced it), so a real bond is never rejected here — the cursor can't stall on it.
+  for (const l of logs) {
+    if (await isolate('bond', () => recordBond(pool, {
+      nonce: l.nonce, payer: l.payer, principalEth: l.principalEth,
+      onchainPayout: l.payoutOmr, onchainPol: l.polEth, onchainVig: l.vigEth, txHash: l.txHash,
+    }))) processed++;
+  }
+  await setCursor(pool, 'bonds', w.to);
+  return { processed, from: w.from, to: w.to };
+}
+
 // Build the viem-backed source adapter used in production (kept thin: the tested logic is above).
 // Returns null unless a real RPC + the relevant contract addresses are configured.
 export async function makeViemSource() {
   if (!process.env.CHAIN_RPC_URL) return null;
-  const { createPublicClient, http, parseAbiItem } = await import('viem');
+  const { createPublicClient, http, parseAbiItem, formatUnits } = await import('viem');
   const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
   const feesAddr = process.env.OMERTA_FEES_ADDRESS;
   const claimAddr = process.env.VOUCHER_CLAIM_ADDRESS;
   const hookAddr = process.env.TRADE_FEE_HOOK_ADDRESS; // the OMR/ETH pool's afterSwap→Vig hook
+  const bondAddr = process.env.OMERTA_BOND_ADDRESS;    // the OmertaBond contract (Bonded events)
   const mintEv = parseAbiItem('event MintFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const respawnEv = parseAbiItem('event RespawnFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
   const tradeEv = parseAbiItem('event TradeFeePaid(uint256 indexed nonce, uint256 amountWei)');
+  const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toVig)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
+  // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
+  // on a >2^53 wei bigint loses low-order digits; formatUnits keeps full precision, then recordBond round6's).
+  const w18 = (v) => Number(formatUnits(v, 18));
   return {
     head: () => client.getBlockNumber(),
     feeLogs: async (from, to) => {
@@ -139,6 +170,15 @@ export async function makeViemSource() {
       if (!hookAddr) return [];
       const logs = await client.getLogs({ address: hookAddr, event: tradeEv, ...range(from, to) });
       return logs.map((l) => ({ nonce: Number(l.args.nonce), amount: l.args.amountWei?.toString(), txHash: l.transactionHash }));
+    },
+    bondLogs: async (from, to) => {
+      if (!bondAddr) return [];
+      const logs = await client.getLogs({ address: bondAddr, event: bondEv, ...range(from, to) });
+      return logs.map((l) => ({
+        nonce: Number(l.args.nonce), payer: l.args.payer,
+        principalEth: w18(l.args.principal), payoutOmr: w18(l.args.payout),
+        polEth: w18(l.args.toPol), vigEth: w18(l.args.toVig), txHash: l.transactionHash,
+      }));
     },
   };
 }

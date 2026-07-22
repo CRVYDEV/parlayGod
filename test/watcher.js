@@ -122,5 +122,46 @@ r = await syncTradeFees(pool, source, { startBlock: 27 });
 assert.equal(r.processed, 2, 'backfilled both trade fees missed during downtime');
 assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE source='trade'`)).rows[0].c, 3, 'three trade revenue rows total');
 
-console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + trade-fee streams');
+// ── Tier C: the RESERVE BOND stream (OmertaBond `Bonded`) — the on-chain event is AUTHORITATIVE. The
+// watcher books the event's ACTUAL payout + POL/Vig split (recordBond's onchain path), NOT a re-derivation
+// (the event carries no price/discount), and BYPASSES the off-chain tranche cap (the contract already
+// enforced its own), so a real bond can never stall the cursor. Idempotent on nonce; real-ETH accounting. ──
+const { syncBondEvents } = await import('../src/watcher.js');
+const bondLog = []; // { block, nonce, payer, principalEth, payoutOmr, polEth, vigEth }
+source.bondLogs = async (from, to) => bondLog.filter((l) => l.block >= from && l.block <= to)
+  .map((l) => ({ nonce: l.nonce, payer: l.payer, principalEth: l.principalEth, payoutOmr: l.payoutOmr,
+    polEth: l.polEth, vigEth: l.vigEth, txHash: '0xbond' + l.nonce }));
+const bondRow = async (n) => (await pool.query(`SELECT * FROM bonds WHERE nonce=${n}`)).rows[0];
+const reserveOf = async (col) => Number((await pool.query(`SELECT ${col} FROM bond_reserve WHERE id=1`)).rows[0][col]);
+
+// a bond lands at block 43; head 44 → inside the 3-conf window, not yet booked (reorg-safe)
+bondLog.push({ block: 43, nonce: 700, payer: wallet, principalEth: 1.0, payoutOmr: 2200, polEth: 0.6, vigEth: 0.4 });
+head = 44;
+r = await syncBondEvents(pool, source, { startBlock: 40 });
+assert.equal(r.processed, 0, 'bond not booked inside the confirmation window (reorg-safe)');
+assert.equal(await bondRow(700), undefined, 'no premature bond');
+
+// head clears confirmations → the bond is booked with the EVENT'S authoritative values (the tranche is
+// UNFUNDED here — capacity 0 — yet the real bond books, proving the on-chain cap-bypass: the watcher can
+// never stall on a legit bond; the treasury keeps capacity funded to match, runBondInvariants flags a gap).
+head = 47; // safeHead 44 ≥ 43
+r = await syncBondEvents(pool, source, { startBlock: 40 });
+assert.equal(r.processed, 1, 'bond booked once head clears confirmations');
+const b = await bondRow(700);
+assert.equal(Number(b.payout_omr), 2200, 'payout booked from the on-chain event (NOT re-derived from a price)');
+assert.equal(Number(b.principal_eth), 1.0, 'principal recorded');
+assert.equal(Number(b.oracle_price), 2200, 'oracle_price stored as the effective rate payout/eth');
+assert.equal(b.account_id, accId, 'attributed to the linked wallet');
+assert(b.tx_hash, 'a real on-chain bond carries the tx hash');
+assert.equal(await reserveOf('committed_omr'), 2200, 'committed advanced by the on-chain payout (tranche cap bypassed on the real-event path)');
+assert.equal(await reserveOf('pol_eth'), 0.6, "the event's toPol deepened POL");
+assert.equal(Number((await pool.query(`SELECT vig_eth FROM vig_revenue WHERE source='bond' AND ref='700'`)).rows[0].vig_eth), 0.4, "the event's toVig fed the Vig buyback basis (real-ETH accounting)");
+assert.equal(await getCursor(pool, 'bonds'), 44, 'bonds cursor advanced to safeHead (independent of the other streams)');
+
+// idempotent re-scan (a reorg-replay of the same nonce) does not double-book
+r = await syncBondEvents(pool, source, { startBlock: 40 });
+assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM bonds WHERE nonce=700`)).rows[0].c, 1, 'exactly one bond row (nonce UNIQUE idempotent)');
+assert.equal(await reserveOf('committed_omr'), 2200, 'committed unchanged on the idempotent re-scan');
+
+console.log('✅ watcher test passed — confirmation-depth gating (reorg-safe), downtime backfill (no lost fee credits), cursor advance, and idempotent reprocessing for the fee + Claimed + trade-fee + reserve-bond streams');
 await app.close();
