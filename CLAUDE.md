@@ -3827,3 +3827,29 @@ burn while a live tap isn't re-burned, a broke watcher pausing, and cancel), and
 drift-0. All `WIRE.SUB_TIERS`/watch numbers are founder sign-off levers (status/access/pacing — no faucet).
 The Wire pillar is now feature-complete (tap/sweep/subscribe → trace/dossier/spymaster → disinfo/informant
 → tradecraft/watchdog → the tiered ladder + the standing watch).
+
+**THE PORT — step five: the Coast Guard feeds the LAW meter + warehoused contraband is a LOOT surface —
+BUILT** (`src/port.js`, `src/rules.js` `PORT.STEP5`, `src/social.js`, `test/port.js`, `test/social.js`;
+the deferred step-five items). **(1) THE COAST GUARD BUILDS A FEDERAL CASE** — a Port interdiction (bust)
+now also adds `PORT.STEP5.BUST_EXPOSURE` (25) to the RICO investigation meter (`heat_exposure`), not just
+the volatile `heat` number — so repeat smuggling draws the Bureau, tying the Port's PvE antagonist into
+the Law/RICO system. `ch.heat_exposure` is bumped in memory (persisted positionally by persistCharacter,
+param $47 — the existing `ch.heat` bust bump precedent; no direct SQL). A NEW Law lever (off the signed
+heat curve), founder sign-off. **(2) WAREHOUSED CONTRABAND IS LOOTABLE** (the P1.1 loot-surface twin) — a
+player FIRE-kill now loots `PORT.STEP5.CONTRA_LOOT_RATE` (0.5) of the victim's warehoused `contraband`
+(the step-four commodity awaiting fence) to the killer's warehouse. A **pure ownership move** — contraband
+is a cash-book-value COMMODITY, NOT a §10.4 currency (the gear-loot precedent: `UPDATE … contraband -/+`,
+no ledger row, §10.4-untouched), bounded by what was legitimately sourced under the supply cap; the
+remainder dies with the victim. So warehousing to fence-high is now a RISK for a marked man (fence promptly
+or hold and gamble). Placed in `fire`'s loot block right after the gear loot (absolute NUMERIC reads,
+arith-safe); the killer's contraband is direct-SQL (outside the persist positional UPDATE — clobber-safe,
+the step-four discipline); `contraLoot` on the kill response. §10.4: **ZERO change** — the bust
+`heat_exposure` bump moves no value; the contraband loot is a non-currency ownership transfer (the sim +
+per-character cash check stay drift-0). Console: the kill toast reports the seized contraband; the Port
+warehouse card warns "at risk — a killer loots half your stash". `test/port.js` proves the bust feeds the
+Law meter (`heat_exposure += BUST_EXPOSURE`); `test/social.js` proves a fire-kill seizes half the victim's
+warehoused contraband to the killer (a pure ownership move, no ledger, the victim loses exactly the looted
+share). Suite 33/33 + sim drift-0. `BUST_EXPOSURE`/`CONTRA_LOOT_RATE` are founder sign-off levers (the loot
+is a bounded transfer of already-capped commodity, the P1.1 argument — flagged in BALANCE.md). The Port
+pillar is now feature-complete (buy/run/collect → upgrades/piracy/rendezvous → legend/harbormaster →
+warehouse/berths → the Coast-Guard Law tie-in + the contraband loot surface).

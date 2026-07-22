@@ -329,7 +329,7 @@
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
-    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
@@ -2214,7 +2214,7 @@
       ${b.legend ? `<div class="card" style="border-color:var(--gold)"><span class="t">The Smuggler's Legend</span><div class="d"><b style="color:var(--gold)">${b.legend.rank}</b> — $${fmt(b.legend.smuggled)} landed for life <span class="chip">survives death</span> · <a href="#" id="pt-lb">the leaderboard →</a></div></div>` : ''}
       <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.
         ${(b.harbormaster && b.harbormaster.tolled) ? `<br><span class="chip" style="color:var(--bad)">the ${b.harbormaster.holder.name} [${b.harbormaster.holder.tag}] hold the docks — a ${(b.harbormaster.tollBps/100)}% toll on every clean landing</span>` : ''}</div></div>
-      ${b.contraband ? `<div class="card"><span class="t">The Warehouse & Fence</span><div class="d">Warehoused contraband: <b>$${fmt(b.contraband.book)}</b> book value · today's fence rate <b>${b.contraband.fenceRate}×</b> → ~$${fmt(b.contraband.estimate)} <span class="chip">time the market — warehouse a landing, fence high</span>
+      ${b.contraband ? `<div class="card"><span class="t">The Warehouse & Fence</span><div class="d">Warehoused contraband: <b>$${fmt(b.contraband.book)}</b> book value · today's fence rate <b>${b.contraband.fenceRate}×</b> → ~$${fmt(b.contraband.estimate)} <span class="chip">time the market — warehouse a landing, fence high</span>${b.contraband.book > 0 ? ' <span class="chip bad">at risk — a killer loots half your stash, so don\'t sit on it marked</span>' : ''}
         ${b.contraband.book > 0 ? `<button class="act" data-fence="1"${b.atDocks ? '' : ' disabled'}>fence it all</button>` : ''}</div></div>` : ''}
       <div class="grid">
         <div class="card"><span class="t">Your Fleet <span class="chip">${fleet.length}/${b.fleetMax || 5}</span></span>
