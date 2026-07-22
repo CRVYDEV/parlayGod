@@ -2161,3 +2161,54 @@ unaffected by the fighter rows already being gone.
 can't rig it) + one MED belt lock-order inversion (wipeFighterAtDeath now fighter→title) FIXED, HIGH
 regression added; the passive-accrual §10.4 sweep + the chain reserve accounting confirmed CLEAN. Suite 34/34
 + sim drift-0.
+
+## Round 35 — snapshot-integrity across ALL worker-resolved events + a worker-sweep concurrency lens
+
+The R34 boxing HIGH's root cause — a worker-resolved competitive event reading a MUTABLE player-controlled
+input LIVE at settle instead of a value FROZEN at entry — is a pattern, so R35 generalized it: (1) a lens
+verifying EVERY other worker-resolved / deferred-settle competitive event snapshots its resolution inputs at
+entry; (2) a worker-sweep concurrency lens over every value-moving sweep + the shared singletons (street_tax,
+the backed pools, den_volume, world_npcs reservoir, season markers); plus a manual lens on the chain reserve
+accounting.
+
+**One confirmed LOW-impact lock-order inconsistency FIXED (a clean elimination, not retry-masking):**
+The season-rollover gang reset (`worker.js:181`) was a single set-based `UPDATE gangs SET season_tribute=0,
+season_wars=0, season=$1 WHERE season < $1`, which acquires gang row-locks in SCAN (ctid) order. A war op
+(`declareWar`/`resolveWar`) locks two gang rows in sorted-id order; at a season boundary — when every active
+gang matches the reset's predicate — a scan order that inverts the id order of the two gangs a war op holds
+is a theoretical AB-BA (40P01). Impact was LOW + self-healing (the reset is `safe()`-wrapped → retries next
+hourly tick, idempotent via `season < current`; the war op's 40P01 maps to the retryable `contention`; no
+§10.4 drift, no double-spend). **Fix:** reset each gang in SORTED id order via one autocommit UPDATE apiece
+(`SELECT id … WHERE season < $1 ORDER BY id`, then per-id UPDATE) — so the reset now holds AT MOST ONE gang
+lock at a time and therefore can't be a party to any lock cycle at all (a strict improvement, not merely a
+reorder; unlike the accepted market-bidListing case there's no downside). Behavior-preserving (same end
+state, idempotent per gang); the season-rollover tests (commission chamber reset, portfolio season prizes)
+stay green.
+
+**Verified CLEAN (each traced to source):**
+- **Snapshot integrity — ALL competitive worker-resolved events already freeze their inputs at entry** (the
+  boxing bug was a LONE omission): Stable STAKES (`stakes_entries.form` snapshotted at entry, resolve reads
+  it), the FUTURITY (`futurity_runners.form`), TRACK player entries (`track_entries.form`), the GRAND PRIX
+  (`grand_prix_entries.power`), the POKER TOURNAMENT (server-dealt hands, no entrant-mutable input), the
+  AUCTION house (the escrowed standing bid). The two live-read settles are correctly live-read, NOT rig
+  vectors: the world UPRISING reckoning (PvE — a rival can only LOWER the shared reservoir strength → lowers
+  the holder's need → helps the holder; the board surfaces the full-strength worst-case need) and war
+  resolution (the `war_score` tally IS the frozen-at-close accumulated value). Every settle is idempotent (a
+  `status='open'/'live'/'active'` gate re-checked under `FOR UPDATE`) and §10.4-exact (each escrow
+  reconciles; dead entrants burn to a NULL-character `*:death` row).
+- **Worker-sweep concurrency** — `safe()` isolates every job (a poison row is logged+skipped, never rolls
+  back the batch); the 12h buyback holds `street_tax FOR UPDATE` across its pool read→zero write (no lost
+  take / no over-spend) with a consistent `amm_pool→gangs(sorted)→street_tax→stake_pool` order; extraction ≤
+  inflow holds — every `funded_omr` mutation + signing decision serializes on `chain_reserve FOR UPDATE`
+  (requestWithdraw/drainQueue/cancelQueuedWithdraw/fundReserve), and payPrizes/settlePassStipend/
+  runVigBuyback lock `vig_prize_pool` first; markClaimed (atomic `WHERE nonce AND status='signed'`) vs
+  reclaimExpiredVouchers (fails-closed without a reader, re-checks status under `FOR UPDATE`) can't
+  double-free; season rollover is per-char idempotent under the winner's char lock (char→portfolios).
+- **chain `cancelQueuedWithdraw`** (manual) — locks account then `chain_reserve FOR UPDATE`, guards
+  `status='queued'` in that critical section (serializes with drainQueue: the first flips the status, the
+  other no-ops), net-0 `+withdraw:omr` refund; no double-refund, no signed-voucher refund, no AB-BA.
+
+**Round 35 verdict:** one LOW season-rollover lock-order inconsistency FIXED by eliminating the multi-lock
+(the reset now holds ≤1 gang lock); the snapshot-integrity generalization confirmed the R34 boxing HIGH was a
+lone omission (every other worker-resolved event already snapshots correctly), and the worker-sweep
+concurrency + chain reserve surfaces confirmed CLEAN. Suite 34/34 + sim drift-0.

@@ -178,7 +178,15 @@ export async function runSeasonRollover(pool, opts = {}) {
   // and a fresh gang (season 0) is stamped current on its first sweep. Own txn (isolated from the loop).
   const sg = await pool.connect();
   try {
-    await sg.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE season < $1', [current]);
+    // (R35 concurrency lens) reset each gang in SORTED id order via one autocommit UPDATE apiece, NOT a
+    // single set-based statement. The set-based `UPDATE … WHERE season < $1` acquires gang row-locks in
+    // scan order (ctid), which at a season boundary — when every active gang matches — could AB-BA with a
+    // war op that locks two gangs in sorted id order (declareWar/resolveWar, social.js). Per-gang autocommit
+    // UPDATEs hold at most ONE gang lock at a time, so the reset can't be a party to any lock cycle; and
+    // `season < $1` keeps each idempotent (a re-run after a crash skips the already-stamped gangs).
+    const gs = (await sg.query('SELECT id FROM gangs WHERE season < $1 ORDER BY id', [current])).rows;
+    for (const { id } of gs)
+      await sg.query('UPDATE gangs SET season_tribute=0, season_wars=0, season=$1 WHERE id=$2 AND season < $1', [current, id]);
   } finally { sg.release(); }
   return { season: current, converted };
 }
