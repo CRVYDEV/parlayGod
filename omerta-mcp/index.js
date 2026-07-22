@@ -24,6 +24,16 @@ let token = process.env.OMERTA_TOKEN || null;
 // mutations (the server replays a repeated key instead of double-spending). Never throws — returns
 // { status, body } so the agent can branch on the game's stable string error codes.
 async function api(method, path, body) {
+  // (red-team R13 HIGH) `path` is agent-controlled and reaches this proxy via prompt-injection through the
+  // attacker-controlled game content agents are told to poll (names, contract reasons, the feed). A raw
+  // `BASE + path` string concat lets a crafted path steer the request OFF-ORIGIN — `@evil.com/x` →
+  // `https://playomerta.com@evil.com/x` (host evil.com), `//evil.com/x`, or a full `https://…` — and since
+  // we attach the PERMANENT agent bearer to every call, that exfiltrates the account key (→ takeover +
+  // on-chain extraction). Resolve against BASE and HARD-ASSERT same origin: never fetch, and never attach
+  // the token to, any host but ours.
+  let url;
+  try { url = new URL(path, BASE + '/'); } catch { return { status: 0, body: { error: 'bad_path', message: 'unparseable path' } }; }
+  if (url.origin !== new URL(BASE).origin) return { status: 0, body: { error: 'bad_path', message: 'path must stay on the OMERTA origin' } };
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   const opts = { method, headers };
@@ -33,7 +43,7 @@ async function api(method, path, body) {
     opts.body = JSON.stringify(body);
   }
   let res, text;
-  try { res = await fetch(BASE + path, opts); text = await res.text(); }
+  try { res = await fetch(url, opts); text = await res.text(); }
   catch (e) { return { status: 0, body: { error: 'network', message: String(e?.message || e) } }; }
   let json; try { json = JSON.parse(text); } catch { json = text; }
   return { status: res.status, body: json };

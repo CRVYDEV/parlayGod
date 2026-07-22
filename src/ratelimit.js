@@ -89,6 +89,18 @@ export async function checkReadLimit({ accountId }) {
   return r.ok ? null : { retryAfter: r.retryAfter };
 }
 
+// (red-team R13 F1/F2) The keyless public render routes (/card, /u, /v1/u) do real work per hit (an
+// SVG→PNG raster + a DB dossier) and sit OUTSIDE the /v1 read-limiter, so an unauthenticated flood from
+// one origin could pin the server. A per-IP bucket, generous enough for legit OG-crawler unfurls (a share
+// is crawled a handful of times) but bounding a single-origin flood. Returns null when allowed.
+export async function checkPublicRateLimit({ ip }) {
+  const take = redis ? takeRedis : takeMemory;
+  const rate = Number(process.env.RATE_PUBLIC_PER_SEC || 5);
+  const burst = Number(process.env.RATE_PUBLIC_BURST || 30);
+  const r = await take(`pub:${ip || 'unknown'}`, rate, burst);
+  return r.ok ? null : { retryAfter: r.retryAfter };
+}
+
 // Returns null when allowed, else {retryAfter} seconds.
 export async function checkRateLimit({ accountId, agent, path }) {
   const take = redis ? takeRedis : takeMemory;
