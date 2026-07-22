@@ -1983,6 +1983,20 @@ export const STABLE = {
     { min: 0, name: 'Railbird' }, { min: 10, name: 'Owner' }, { min: 25, name: 'The Silks' },
     { min: 60, name: 'Racing Baron' }, { min: 120, name: 'Lord of the Turf' },
   ],
+  // ── STEP TWO ──
+  // BREEDING: retire two same-kind racers into stud → a FOAL that inherits a fraction of the parents'
+  // average stat (a head start, NOT a cap-skip: floor(avg × INHERIT) + rand(0,VARIANCE), clamped to the
+  // kind's floor..STAT_CAP). A cash SINK; the two parents are CONSUMED (2 racers + cash → 1 foal). So a
+  // veteran can consolidate two trained runners into a promising foal — a genuine build lever, bounded.
+  BREED_COST: 60000, BREED_INHERIT: 0.6, BREED_VARIANCE: 5,
+  // THE STAKES: a scheduled marquee race owners ENTER their racer into (the Grand-Prix/poker-tournament
+  // escrow twin, on the animal side). A CASH buy-in ESCROWS into a purse; the worker races every live
+  // entrant's SNAPSHOTTED form (form + rand(VARIANCE)) and pays the top places a share net of RAKE_BPS
+  // (half → the buyback, half burns). A pure competitive REDISTRIBUTION — NO new faucet. One open stakes
+  // at a time; a new one materializes on the next entry after the last settles. `STAKES_MS` env is
+  // TEST-ONLY (the SEARCH_MS pattern). The racer isn't escrowed (only the cash) — you race the form you
+  // entered, and the animal is free to run/breed after. The best animal in town wins, dog or horse.
+  STAKES: { BUYIN: 20000, REGISTER_MS: 30 * 60 * 1000, MIN_ENTRANTS: 3, RAKE_BPS: 500, PAYOUTS: [0.6, 0.3, 0.1] },
 };
 export const stableKindOf = (kind) => STABLE.KINDS[kind] || null;
 export const stableMeetOf = (kind, id) => (STABLE.MEETS[kind] || []).find((m) => m.id === id) || null;

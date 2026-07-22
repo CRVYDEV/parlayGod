@@ -376,6 +376,8 @@
     if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
     if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
     if ((body.opponent !== undefined || body.yourFighter !== undefined) && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourFighter; bits.push(body.win ? `${body.you.name} WINS — took $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}` : `${body.you.name} dropped it — lost $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
+    if (body.sire && body.dam && body.speed !== undefined) bits.push(`🐎 ${body.name} is born — out of ${body.dam} by ${body.sire} (speed ${body.speed} / stamina ${body.stamina} / heart ${body.heart})`);
+    if (body.stakes && body.form !== undefined && body.racer) bits.push(`${body.racer} is in the stakes (form ${body.form}) — $${fmt(body.buyin)} in, purse $${fmt(body.pool)} (${body.entrants} entered)`);
     if ((body.game === 'circuit' || body.game === 'race') && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourRacer;
       bits.push(body.win ? `${body.you.name} WINS at the wire${body.game === 'circuit' ? ` — +$${fmt(Math.abs(body.net))} purse` : ` — took $${fmt(Math.abs(body.net))}`}${rec ? ` (${rec})` : ''}` : `${body.you.name} got beat — −$${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
@@ -2052,6 +2054,18 @@
         <div class="d">level ${b.minLevel}+.</div>
         <select id="st-kind">${Object.entries(kinds).map(([k, v]) => `<option value="${k}">${v.name} ($${fmt(v.cost)})</option>`).join('')}</select>
         <input id="st-name" placeholder="racer name" size="16" maxlength="24"> <button class="act" id="st-buy" style="border-color:var(--neon)">buy</button></div>` : ''}
+      ${stable.length >= 2 ? `<div class="card" style="margin-top:6px"><span class="t">Breed a foal <span class="d" style="font-size:10px">($${fmt(b.breedCost || 60000)} — retires both parents into a foal that inherits their form)</span></span>
+        <div class="d" style="margin-top:4px">sire: <select id="st-sire">${stable.map((y) => `<option value="${y.id}" data-kind="${y.kind}">${y.name} (${y.kindName})</option>`).join('')}</select>
+          dam: <select id="st-dam">${stable.map((y) => `<option value="${y.id}" data-kind="${y.kind}">${y.name} (${y.kindName})</option>`).join('')}</select>
+          <input id="st-foal" placeholder="foal name" size="14" maxlength="24"> <button class="act" id="st-breed">breed (same kind)</button></div></div>` : ''}
+
+      <h2 style="margin-top:12px">The Stakes <span class="d" style="font-size:10px">(the marquee — enter your racer, the town's best animal takes the purse)</span></h2>
+      ${(() => { const sk = b.stakes || {};
+        if (!sk.open) return `<div class="d" style="color:var(--dim);font-size:11px">No stakes running. Enter a racer ($${fmt(sk.buyin)} buy-in) to open one — the top ${(sk.payouts || []).length} split the purse (min ${sk.minEntrants} runners or it refunds).</div>
+          ${ready.length ? `<div style="margin-top:4px"><select id="st-enter">${ready.map((m) => `<option value="${m.id}">${m.name} (form ${m.form})</option>`).join('')}</select> <button class="act" id="st-stake" style="border-color:var(--gold)">enter the stakes ($${fmt(sk.buyin)})</button></div>` : '<div class="d" style="color:var(--dim)">no fit racer to enter</div>'}`;
+        return `<div class="card"><span class="t">purse $${fmt(sk.pool)}</span> <span class="chip">${sk.entrants} in</span> <span class="chip">closes ${mins(sk.closesSeconds)}</span>${sk.mine ? ' <span class="chip good">you\'re in</span>' : ''}
+          <div class="d">field: ${(sk.field || []).map((f) => `${f.kind === 'horse' ? '🐎' : '🐕'} ${f.racer} (${f.form})`).join(' · ') || '—'}</div>
+          ${!sk.mine && ready.length ? `<div style="margin-top:4px"><select id="st-enter">${ready.map((m) => `<option value="${m.id}">${m.name} (form ${m.form})</option>`).join('')}</select> <button class="act" id="st-stake" style="border-color:var(--gold)">enter ($${fmt(sk.buyin)})</button></div>` : ''}</div>`; })()}
 
       <h2 style="margin-top:12px">The Field <span class="d" style="font-size:10px">(other owners' racers — match your own kind for a cash wager)</span></h2>
       <div class="grid">${(b.field || []).filter((r) => !r.mine).map((r) => `
@@ -2064,6 +2078,8 @@
       <div style="margin-top:8px"><a href="#" id="st-lb">the field board + the owner legend →</a></div>`;
 
     const sb = $('#st-buy'); if (sb) sb.onclick = () => act('POST', '/v1/stable/buy', { kind: $('#st-kind').value, name: $('#st-name').value.trim() }).then(() => renderStable());
+    const sbr = $('#st-breed'); if (sbr) sbr.onclick = () => act('POST', '/v1/stable/breed', { sire: $('#st-sire').value, dam: $('#st-dam').value, name: $('#st-foal').value.trim() }).then(() => renderStable());
+    const ss = $('#st-stake'); if (ss) ss.onclick = () => act('POST', `/v1/stable/stakes/${$('#st-enter').value}`, null).then(() => renderStable());
     t.querySelectorAll('[data-train]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/train/${x.dataset.rid}`, { stat: x.dataset.train }).then(() => renderStable()));
     t.querySelectorAll('[data-list]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/list/${x.dataset.list}`, { limit: Number(($(`#st-stake-${x.dataset.list}`) || {}).value || 0) }).then(() => renderStable()));
     t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/list/${x.dataset.unlist}`, { limit: 0 }).then(() => renderStable()));

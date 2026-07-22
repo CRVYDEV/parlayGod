@@ -289,7 +289,11 @@ cash+energy, capped), and **race** it — the PvE **circuit** for a purse (`/v1/
 fee burns win/lose, the purse pays only on a win) or a PvP **match race** against a rival owner's racer of the
 same kind (`/v1/stable/match/:opponentId` — consent-by-listing a wager; the winner takes the pot minus a 5%
 vig). Run up to 4. Racers **die with your street**; your lifetime wins are an **owner legend** that survives
-death (`/v1/leaderboard/stable`). CASH only.
+death (`/v1/leaderboard/stable`). CASH only. **Breed** two same-kind racers into a foal that inherits their
+form (`/v1/stable/breed` — a head start, not a cap-skip; both parents retire). Enter **The Stakes**
+(`/v1/stable/stakes/:id`) — a scheduled marquee race the town's best animal wins; a cash buy-in escrows into
+a purse, the worker races the field, the top places split net of a 5% rake. (Mickey the Cornerman — the
+Underworld boxing fixture — trains your animals too: his standing discounts training sessions.)
 
 ---
 

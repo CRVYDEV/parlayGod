@@ -119,6 +119,72 @@ let inv = await runLedgerInvariants(pool);
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, `the only cash drift is the test grants (${cashDrift}) — stable: (buy/train/fee/purse/race) all reconcile`);
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'stable: rides the §10.4 vocabulary');
 
+// ══════════ STEP TWO: BREEDING + THE STAKES ══════════
+import { sweepStakes } from '../src/stable.js';
+
+// ── BREEDING: retire two same-kind racers into a foal (a head start, not a cap-skip); a cash SINK ──
+// pin two of aa's dogs to known stats so the foal's inherited range is deterministic
+const aaDogs = (await pool.query(`SELECT id FROM racers WHERE character_id='${aa.id}' AND kind='dog' ORDER BY id`)).rows.map((r) => r.id);
+assert(aaDogs.length >= 2, 'the owner has two dogs to breed');
+const [sire, dam] = aaDogs;
+await pool.query(`UPDATE racers SET speed=20, stamina=20, heart=20 WHERE id IN ('${sire}','${dam}')`);
+// gates: same racer / kind mismatch (a dog + the horse)
+assert.equal((await call('POST', '/v1/stable/breed', { token: aa.token, body: { sire, dam: sire, name: 'Clone' } })).body.error, 'same', 'breeding takes two different racers');
+assert.equal((await call('POST', '/v1/stable/breed', { token: aa.token, body: { sire, dam: pony, name: 'Chimera' } })).body.error, 'kind', "a dog and a horse can't be bred");
+const dogCountPre = Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE character_id='${aa.id}'`)).rows[0].n);
+const breedCashPre = (await meOf(aa.token)).cash;
+const breed = await call('POST', '/v1/stable/breed', { token: aa.token, body: { sire, dam, name: 'Young Pretender' } });
+assert.equal(breed.code, 200, 'the foal is born'); assert.equal(breed.body.name, 'Young Pretender', 'named');
+assert.equal((await meOf(aa.token)).cash, breedCashPre - STABLE.BREED_COST, 'the stud fee left the pocket (ledgered stable:breed)');
+// foal inherits floor(avg(20,20)×0.6)=12 + rand(0,5) → [12,17], clamped ≥ dog statMin
+assert(breed.body.speed >= 12 && breed.body.speed <= 17, `the foal inherits a head start, not a cap-skip (speed ${breed.body.speed})`);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE id IN ('${sire}','${dam}')`)).rows[0].n), 0, 'both parents retired to stud (consumed)');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE character_id='${aa.id}'`)).rows[0].n), dogCountPre - 1, 'two parents in, one foal out (a net −1)');
+
+// ── THE STAKES: a scheduled marquee race; enter your racer (cash escrows), the worker settles ──
+const st1 = await mk('Stakes Sam'); const st2 = await mk('Feature Fred'); const st3 = await mk('Purse Pete');
+for (const s of [st1, st2, st3]) { await seed(s.id, `respect=${lvlRespect(10)}`); await grantCash(s.id, 500000); }
+const stRacer = async (s, kind, name, stats) => { const b = await call('POST', '/v1/stable/buy', { token: s.token, body: { kind, name } });
+  await pool.query(`UPDATE racers SET speed=${stats},stamina=${stats},heart=${stats} WHERE id='${b.body.id}'`); return b.body.id; };
+const r1 = await stRacer(st1, 'horse', 'Secretariat', 25);  // form 75 — the class of the field
+const r2 = await stRacer(st2, 'dog', 'Also-Ran', 8);
+const r3 = await stRacer(st3, 'horse', 'Longshot', 10);
+// short-field gate first: one entry, force-resolve → refunded (min entrants is 3)
+assert.equal((await call('POST', `/v1/stable/stakes/${r1}`, { token: st1.token })).code, 200, 'st1 enters the stakes');
+const soloRace = (await pool.query("SELECT id FROM stakes_races WHERE status='open'")).rows[0].id;
+await pool.query(`UPDATE stakes_races SET resolves_at = now() - interval '1 minute' WHERE id='${soloRace}'`);
+const solCashPre = (await meOf(st1.token)).cash;
+await sweepStakes(pool);
+assert.equal((await pool.query(`SELECT status FROM stakes_races WHERE id='${soloRace}'`)).rows[0].status, 'refunded', 'a short field is refunded');
+assert.equal((await meOf(st1.token)).cash, solCashPre + STABLE.STAKES.BUYIN, 'the lone entrant got their buy-in back');
+// now a FULL field: three enter, escrow holds, §10.4 stakes-escrow reconciles, the worker pays the top places
+const e1 = await call('POST', `/v1/stable/stakes/${r1}`, { token: st1.token });
+assert.equal(e1.code, 200, 'st1 re-enters the fresh stakes'); const raceId = e1.body.stakes;
+assert.equal((await call('POST', `/v1/stable/stakes/${r1}`, { token: st1.token })).body.error, 'entered', 'one runner per owner per race');
+await call('POST', `/v1/stable/stakes/${r2}`, { token: st2.token });
+await call('POST', `/v1/stable/stakes/${r3}`, { token: st3.token });
+const poolAmt = Number((await pool.query(`SELECT pool FROM stakes_races WHERE id='${raceId}'`)).rows[0].pool);
+assert.equal(poolAmt, 3 * STABLE.STAKES.BUYIN, 'the purse holds all three buy-ins');
+// mid-open §10.4: the stakes-escrow check reconciles (pool == Σ buyin)
+const invMid = await runLedgerInvariants(pool);
+const skMid = invMid.checks.find((c) => c.name === 'stakes escrow');
+assert(skMid?.ok, `stakes escrow reconciles mid-open (drift ${skMid?.drift})`);
+// resolve: Secretariat (form 75) tops a field of 75+rand vs ~24/30 — a lock; the top places split net of rake
+await pool.query(`UPDATE stakes_races SET resolves_at = now() - interval '1 minute' WHERE id='${raceId}'`);
+const winPreCash = (await meOf(st1.token)).cash;
+await sweepStakes(pool);
+assert.equal((await pool.query(`SELECT status FROM stakes_races WHERE id='${raceId}'`)).rows[0].status, 'resolved', 'the stakes settled');
+const winPlace = Number((await pool.query(`SELECT place FROM stakes_entries WHERE race_id='${raceId}' AND character_id='${st1.id}'`)).rows[0].place);
+assert.equal(winPlace, 1, 'the class of the field won'); assert((await meOf(st1.token)).cash > winPreCash, 'the winner banked a share of the purse');
+// escrow closes: buyins == wins + take + refund + death (a full field, no death, no refund this race)
+const skPosted = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:buyin'")).rows[0].s));
+const skWins = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:win'")).rows[0].s);
+const skTake = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:take'")).rows[0].s));
+const skRef = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:refund'")).rows[0].s);
+assert.equal(skPosted - skWins - skTake - skRef, 0, 'the stakes escrow closes (buyins == wins + take + refunds, both races)');
+const invSk = await runLedgerInvariants(pool);
+assert(invSk.checks.find((c) => c.name === 'stakes escrow').ok, 'the stakes-escrow §10.4 check holds after settle');
+
 // ── DEATH: a dead owner's whole stable is done (survives-death is the LEGEND, not the animals) ──
 const before = Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE character_id='${aa.id}'`)).rows[0].n);
 assert(before > 0, 'the owner had racers');
@@ -130,5 +196,5 @@ assert.equal(await racerWins(aa.aid), 2, 'but the OWNER legend survives death (a
 inv = await runLedgerInvariants(pool);
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'the vocabulary still closes');
 
-console.log('✅ The Stable test passed — own the dogs & the ponies: buy (level/kind/name/cash/full gates + the ledgered sink), train (bad-stat/energy/cap/ownership + sink), the PvE circuit (bad-meet/cooldown gates, a win\'s purse faucet + a loss\'s fee-only burn + injury, the owner legend), the PvP match race (self/kind/limit gates, the casino:pvp taxed transfer + the rake split half-to-the-street, injury-on-loss, the legend), the board + leaderboard, DEATH (the stable wiped, the legend survives), and the §10.4 per-character cash reconcile + vocabulary');
+console.log('✅ The Stable test passed — own the dogs & the ponies: buy (level/kind/name/cash/full gates + the ledgered sink), train (bad-stat/energy/cap/ownership + sink), the PvE circuit (bad-meet/cooldown gates, a win\'s purse faucet + a loss\'s fee-only burn + injury, the owner legend), the PvP match race (self/kind/limit gates, the casino:pvp taxed transfer + the rake split half-to-the-street, injury-on-loss, the legend), the board + leaderboard, STEP TWO — BREEDING (same/kind gates, a foal inheriting a head-start-not-a-cap-skip, the two parents consumed, the ledgered stud-fee sink) + THE STAKES (buy-in escrow, a short-field refund, one-runner-per-owner gate, the worker settling a full field to the top places net of rake, and the stakes-escrow §10.4 check reconciling), DEATH (the stable wiped, the legend survives), and the §10.4 per-character cash reconcile + vocabulary');
 await app.close();

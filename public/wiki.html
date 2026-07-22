@@ -208,8 +208,10 @@ const SECTIONS = [
       <b>train</b> its speed/stamina/heart (cash+energy, capped), and <b>race</b> it. Run up to 4. CASH only. Racers die
       with your street; your lifetime wins are an owner legend that survives death.</p>
       <ul><li><b>The circuit</b> (PvE) — enter a meet; the fee burns win/lose, the purse pays only on a win.</li>
-      <li><b>Match race</b> (PvP) — challenge a rival owner's racer of the same kind for a cash wager; the winner takes the pot − 5% vig.</li></ul>
-      ${R(`GET /v1/stable [+ /v1/leaderboard/stable] · POST /v1/stable/buy · /train/:id · /list/:id · /circuit/:id · /match/:opponentId`)}` },
+      <li><b>Match race</b> (PvP) — challenge a rival owner's racer of the same kind for a cash wager; the winner takes the pot − 5% vig.</li>
+      <li><b>Breed</b> two same-kind racers into a foal that inherits their form (a head start, not a cap-skip; both parents retire).</li>
+      <li><b>The Stakes</b> — a scheduled marquee race; enter your racer (cash buy-in escrows), the worker races the field, the top places split net of a 5% rake. Mickey the Cornerman (the boxing fixture) trains your animals too.</li></ul>
+      ${R(`GET /v1/stable [+ /v1/leaderboard/stable] · POST /v1/stable/buy · /train/:id · /list/:id · /circuit/:id · /match/:opponentId · /breed · /stakes/:id`)}` },
 
   { id: 'speakeasy', group: 'Money', title: 'The Speakeasy', tag: 'the social hub',
     html: `<p>One prestige nightclub per district (open at L15, $750k) — front + casino + social. Dies with the owner's street.</p>

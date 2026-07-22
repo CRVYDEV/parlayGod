@@ -772,6 +772,30 @@ CREATE TABLE IF NOT EXISTS racers (
 );
 CREATE INDEX IF NOT EXISTS ix_racers_char ON racers (character_id);
 CREATE INDEX IF NOT EXISTS ix_racers_wins ON racers (wins DESC);
+-- THE STAKES (Stable step two): a scheduled marquee race owners enter their racer into — the Grand-Prix/
+-- poker-tournament escrow twin on the animal side. A CASH buy-in escrows into a purse; the worker races
+-- every live entrant's SNAPSHOTTED form and pays the top places net of rake (a pure redistribution). One
+-- OPEN stakes at a time (stakes_state.current); a new one materializes on the next entry after the last
+-- settles. §10.4: a `stakes escrow` check (pool == Σ buyin − win − refund − take − death).
+CREATE TABLE IF NOT EXISTS stakes_races (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'open',    -- open → resolved | refunded
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolves_at TIMESTAMPTZ NOT NULL,       -- registration closes here; the worker settles after
+  pool INT NOT NULL DEFAULT 0             -- Σ escrowed buy-ins
+);
+CREATE TABLE IF NOT EXISTS stakes_entries (
+  race_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,
+  buyin INT NOT NULL,
+  racer_name TEXT NOT NULL,               -- the entered racer's name (for display; the racer isn't escrowed)
+  kind TEXT NOT NULL,
+  form INT NOT NULL,                      -- the racer's form snapshotted at entry (the race is form + rand(VARIANCE))
+  place INT,                             -- final placing, filled at settle
+  PRIMARY KEY (race_id, character_id)
+);
+CREATE TABLE IF NOT EXISTS stakes_state ( id INT PRIMARY KEY, current TEXT );
+INSERT INTO stakes_state (id, current) SELECT 1, NULL WHERE NOT EXISTS (SELECT 1 FROM stakes_state);
 -- the world TITLE BELT (step two): one champion, taken by beating the holder in a PvP bout. Pure status.
 CREATE TABLE IF NOT EXISTS boxing_title (
   id INT PRIMARY KEY,
