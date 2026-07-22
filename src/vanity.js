@@ -31,7 +31,8 @@ export async function spendOmr(client, h, cost, reason) {
 // backstop). persistCharacter never writes `name`, so the direct UPDATE cannot be clobbered.
 export async function changeName(ch, name, client, h) {
   name = cleanText(name).trim().slice(0, 24); // strip HTML-injection chars (stored-XSS fix, R6)
-  if (name.length < 2) throw new GameError('name', 'Pick a name (2–24 chars, no < > " markup).');
+  if (name.length < 2) throw new GameError('name', 'Pick a name (2–24 chars).');
+  if (!/^[\w .,'&-]+$/.test(name)) throw new GameError('name', 'Letters, numbers and simple punctuation only (no look-alike unicode).'); // R8: no homoglyph impersonation
   if (name === ch.name) throw new GameError('name', "That's already what they call you.");
   const clash = await client.query('SELECT 1 FROM characters WHERE name=$1 AND alive AND id<>$2', [name, ch.id]);
   if (clash.rows.length) throw new GameError('name_taken', 'Someone on the streets already goes by that name.');
@@ -140,6 +141,7 @@ export async function renameGang(ch, name, tag, client, h) {
   const newTag = tag != null ? String(tag).trim().toUpperCase() : null;
   if (newName == null && newTag == null) throw new GameError('nothing', 'Give the engraver a name or a tag.');
   if (newName != null && (newName.length < 3 || newName.length > 24)) throw new GameError('name', 'Family name must be 3–24 characters.');
+  if (newName != null && !/^[\w .,'&-]+$/.test(newName)) throw new GameError('name', 'Family name: letters, numbers and simple punctuation only (no look-alike unicode).'); // R8
   if (newTag != null && !/^[A-Z0-9]{2,4}$/.test(newTag)) throw new GameError('tag', 'Tag must be 2–4 letters or numbers.');
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const finalName = newName ?? g.name, finalTag = newTag ?? g.tag;

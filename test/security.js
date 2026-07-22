@@ -292,19 +292,18 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal(r.code, 400, 'a second living character cannot take the same name');
 }
 
-// ═══ FINDING (red-team R6 HIGH): player display strings are stripped of HTML-injection chars server-side
-// — names/gang-names/titles/contract-reasons render into the console's innerHTML with the bearer token in
-// localStorage, so unescaped markup would be STORED XSS → cross-user token theft → account takeover ═══
+// ═══ FINDING (red-team R6 HIGH stored-XSS + R8 MED homoglyph impersonation): the identity name fields
+// (character name = referral code = broadcast identity) are ASCII-charset restricted — markup (XSS),
+// Cyrillic homoglyphs, and zero-width/bidi chars (impersonation across every social surface) are all
+// REJECTED, matching the guard the cosmetic name fields already use ═══
 {
-  const g = await call('POST', '/v1/auth/guest', {});
-  const cr = await call('POST', '/v1/character', { token: g.body.token, body: { name: 'Vito<img onerror=x>"z' } });
-  assert.equal(cr.code, 200, 'a name carrying markup still creates (dangerous chars stripped, not rejected)');
-  const nm = (await meOf(g.body.token)).name;
-  assert(!/[<>"]/.test(nm), `the stored name is stripped of < > " (got ${JSON.stringify(nm)})`);
-  assert(nm.includes('Vito') && nm.includes('z'), 'the safe characters of the name survive the strip');
-  const g2 = await call('POST', '/v1/auth/guest', {});
-  const r2 = await call('POST', '/v1/character', { token: g2.body.token, body: { name: '<><>' } });
-  assert.equal(r2.code, 400, 'an all-markup name strips to empty and is rejected by the length gate');
+  const g = await call('POST', '/v1/auth/guest', {}); // rejects don't consume the one-character slot, so reuse the token
+  assert.equal((await call('POST', '/v1/character', { token: g.body.token, body: { name: 'Vito<img onerror=x>' } })).code, 400, 'a name carrying HTML markup is rejected (stored-XSS)');
+  assert.equal((await call('POST', '/v1/character', { token: g.body.token, body: { name: 'Vitо' } })).code, 400, 'a Cyrillic-homoglyph name (Vitо) is rejected — no impersonation'); // U+043E Cyrillic о
+  assert.equal((await call('POST', '/v1/character', { token: g.body.token, body: { name: 'Vito​' } })).code, 400, 'a zero-width-space name is rejected (survives trim otherwise)');
+  const ok = await call('POST', '/v1/character', { token: g.body.token, body: { name: "Vito D'Angelo" } });
+  assert.equal(ok.code, 200, 'a clean ASCII name with legit punctuation creates');
+  assert.equal((await meOf(g.body.token)).name, "Vito D'Angelo", 'the clean name is stored verbatim');
 }
 
 // ═══ FINDING (infra CRIT-1): production refuses to boot on the dev JWT secret ═══
