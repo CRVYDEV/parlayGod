@@ -1446,9 +1446,28 @@ CREATE TABLE IF NOT EXISTS bond_reserve (
   id INT PRIMARY KEY,
   capacity_omr NUMERIC NOT NULL DEFAULT 0,   -- the budgeted OMR the treasury will bond out (set via mod/bond/fund)
   committed_omr NUMERIC NOT NULL DEFAULT 0,  -- Σ payout_omr of all bonds (invariant: ≤ capacity_omr)
-  pol_eth NUMERIC NOT NULL DEFAULT 0          -- Σ POL share of bonded ETH (deepens the OMR-ETH pool on mainnet)
+  pol_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ POL share of bonded ETH (deepens the OMR-ETH pool on mainnet)
+  next_nonce BIGINT NOT NULL DEFAULT 1        -- monotonic quote-nonce allocator (OmertaBond's usedNonce space; independent of chain_reserve)
 );
 INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);
+-- the bond QUOTE SIGNER's ledger: each server-signed EIP-712 BondQuote (the piece the on-chain OmertaBond
+-- contract's bond() accepts). Persisting the quote lets the Bonded watcher recover the EXACT price/discount
+-- the event omits (it emits only the resolved payout + POL/Vig split). nonce is the on-chain replay key.
+CREATE TABLE IF NOT EXISTS bond_quotes (
+  nonce BIGINT PRIMARY KEY,            -- the OmertaBond usedNonce key (allocated from bond_reserve.next_nonce)
+  account_id TEXT,                     -- the requester (for the record; the payer wallet is the on-chain identity)
+  payer_address TEXT NOT NULL,         -- the quote is bound to this wallet (contract enforces msg.sender == payer)
+  principal_eth NUMERIC NOT NULL,      -- ETH the bonder deposits (== msg.value on-chain)
+  price NUMERIC NOT NULL,              -- OMR-per-ETH at quote time (the oracle TWAP)
+  discount_bps INT NOT NULL,           -- the bonder's incentive (≤ MAX_DISCOUNT_BPS)
+  payout_omr NUMERIC NOT NULL,         -- the discounted OMR the quote pays out (for display/pre-check)
+  vest_seconds BIGINT NOT NULL,        -- linear vesting window (≤ MAX_VEST)
+  deadline BIGINT NOT NULL,            -- unix seconds the quote is valid until (≤ MAX_QUOTE_TTL)
+  signature TEXT NOT NULL,             -- the server's EIP-712 signature over the quote
+  status TEXT NOT NULL DEFAULT 'quoted', -- 'quoted' | 'bonded' (set when the Bonded watcher records it)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_bond_quotes_account ON bond_quotes (account_id);
 
 -- ── M2 economy singletons (spec §3.4, §7.12) ──
 -- Constant-product AMM, single row, row-locked on every swap.

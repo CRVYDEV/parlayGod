@@ -3044,9 +3044,29 @@ funded to match, `runBondInvariants` flags a gap). Idempotent on nonce; zero `tr
 untouched); real-ETH accounting (`vig_revenue` source='bond') only from a real Bonded tx. `test/watcher.js`
 covers the reserve-bond stream (confirmation gating, event-authoritative booking, cap-bypass, idempotency).
 The mainnet go-live sequence is in **`CHAIN-DEPLOY.md`** (the on-chain counterpart to DEPLOY.md — the three
-hard gates: `forge test` green, third-party contract+signer audit, legal counsel). STILL deferred before real
-bonds flow: the EIP-712 **bond QUOTE SIGNER** (no on-chain bond can be created until it ships — the watcher is
-wired but idle), the POL-pairing + DEX buyback bots, the on-chain Store paywall.
+hard gates: `forge test` green, third-party contract+signer audit, legal counsel).
+**The EIP-712 bond QUOTE SIGNER is now BUILT** (`src/chain.js:quoteBond` + `POST /v1/bond/quote`; the piece
+`OmertaBond.bond()` needs, so real bonds can flow once mainnet clears): a player requests a signed `BondQuote`
+BOUND to their linked wallet (`Chain.BOND_QUOTE_TYPES`/`bondChainConfig()` in exact parity with
+`OmertaBond.QUOTE_TYPEHASH` — fields `payer,principal,priceOmrPerEth,discountBps,vestSeconds,nonce,deadline`;
+domain `OmertaBond`/`1`; `verifyingContract` = `OMERTA_BOND_ADDRESS`), submits `bond(quote, sig)` on-chain, and
+the wired `Bonded` watcher recovers the quote's EXACT price/discount from the persisted `bond_quotes` row (the
+event omits them — the watcher previously stored only the effective payout/eth rate; `recordBond` now enriches
+`oracle_price`/`discount_bps` from the quote and marks it `bonded`). Signed by the SAME crown-jewel
+`VOUCHER_SIGNER_PK` (`signTypedData` via `signerAccount()` — parity with `signVoucher`), priced at the live
+oracle (latest Vig-buyback TWAP) × `BONDS.DISCOUNT_BPS`, nonce'd from a NEW `bond_reserve.next_nonce`
+(independent of the withdrawal `chain_reserve` nonce space), and PRE-CHECKED against the backend tranche
+(`bond_reserve.capacity_omr`) so a player never gets a quote whose `bond()` would revert `TrancheExhausted`.
+`price` uses `parseUnits(price,18)` (OMR-wei per ETH) + `principal` `parseUnits(eth,18)` — exact parity with
+the contract's `principal × priceOmrPerEth / 1e18` payout math. Deadline `now + BOND_QUOTE_TTL_SEC` (1h,
+< contract `MAX_QUOTE_TTL`). **Chain-dormant** (400s `chain_unconfigured` unless `CHAIN_ID` + `OMERTA_BOND_ADDRESS`
++ `VOUCHER_SIGNER_PK` are set). §10.4 untouched (quotes are out-of-band real-value plumbing — zero `transactions`
+rows; the new `bond_quotes` table + `next_nonce` column are chain-only). `test/chain.js` proves the signing
+PARITY (`recoverTypedDataAddress` == the server signer), the payout math, the wallet/min gates, the watcher
+enrichment (the recorded bond's `oracle_price`/`discount_bps` come from the quote, not the effective rate/0),
+and `bondChainConfig` failing closed. `POST /v1/bond/quote` + a "request a signed quote" control on the console
+Going Legit tab; the deck's Chain group gained it. STILL deferred before real bonds flow: the client
+wallet-submit flow (the SIWE-widget precedent), the POL-pairing + DEX buyback bots, the on-chain Store paywall.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,

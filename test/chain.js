@@ -11,11 +11,13 @@ const SIGNER_PK = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f
 const PLAYER_PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 process.env.VOUCHER_SIGNER_PK = SIGNER_PK;
 process.env.VOUCHER_CLAIM_ADDRESS = '0x1111111111111111111111111111111111111111';
+process.env.OMERTA_BOND_ADDRESS = '0x2222222222222222222222222222222222222222'; // the bond-quote verifyingContract
 process.env.CHAIN_ID = '46630';
 process.env.MOD_KEY = 'test-mod-key';
 
 const { buildServer } = await import('../src/server.js');
-const { chainConfig, VOUCHER_TYPES, markClaimed } = await import('../src/chain.js');
+const { chainConfig, VOUCHER_TYPES, markClaimed, bondChainConfig, BOND_QUOTE_TYPES } = await import('../src/chain.js');
+const { recordBond } = await import('../src/bonds.js');
 const { reconcileFees } = await import('../src/fees.js');
 const { runLedgerInvariants } = await import('../src/invariants.js');
 
@@ -288,5 +290,60 @@ assert.equal(r.body.error, 'daily_cap', 'a withdrawal exceeding the daily cap is
 assert.equal((await meOf(token)).omr, omrPreCap, 'no $OMR was burned on the rejected over-cap request');
 delete process.env.DAILY_CAP_OMR;
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety');
+// ══ THE RESERVE BOND — the EIP-712 quote signer (the piece OmertaBond.bond() accepts) ══
+// The `token`/`player` account already linked player.address (SIWE) above. Seed a live oracle price and
+// fund the bond tranche, then sign a quote and prove PARITY (the on-chain OmertaBond recovers our signer).
+{
+  const { BONDS } = await import('../src/rules.js');
+  await pool.query(
+    "INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-bondtest', 1, 2000, 2000, 0, 0)");
+  await call('POST', '/v1/mod/bond/fund', { headers: modH, body: { omr: 100000 } });
+
+  // a fresh, wallet-LESS guest can't quote — a bond quote is bound to the payer wallet
+  const { body: { token: noWallet } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: noWallet, body: { name: 'No Wallet Nick' } });
+  assert.equal((await call('POST', '/v1/bond/quote', { token: noWallet, body: { principalEth: 1 } })).body.error, 'wallet', 'no linked wallet → no bond quote');
+
+  // below the floor is refused
+  assert.equal((await call('POST', '/v1/bond/quote', { token, body: { principalEth: 0.001 } })).body.error, 'min', 'sub-minimum principal refused');
+
+  // sign a real quote for 1 ETH
+  const q = await call('POST', '/v1/bond/quote', { token, body: { principalEth: 1 } });
+  assert.equal(q.code, 200, 'quote signed');
+  const expectedPayout = Math.round((1 * 2000 / (1 - 800 / 10000)) * 1e6) / 1e6; // bondPayout(1, 2000, 800)
+  assert.equal(q.body.payoutOmr, expectedPayout, 'payout = principal × price / (1 − discount)');
+  assert.equal(q.body.discountBps, BONDS.DISCOUNT_BPS, 'quotes at the offering discount');
+  assert.equal(q.body.contract.toLowerCase(), process.env.OMERTA_BOND_ADDRESS, 'the verifyingContract is OmertaBond');
+
+  // PARITY: the on-chain OmertaBond will recover exactly our server signer from this quote+sig
+  const qm = q.body.quote;
+  const bondMsg = { payer: qm.payer, principal: BigInt(qm.principal), priceOmrPerEth: BigInt(qm.priceOmrPerEth),
+    discountBps: BigInt(qm.discountBps), vestSeconds: BigInt(qm.vestSeconds), nonce: BigInt(qm.nonce), deadline: BigInt(qm.deadline) };
+  const bondRecovered = await recoverTypedDataAddress({ domain: bondChainConfig(), types: BOND_QUOTE_TYPES,
+    primaryType: 'BondQuote', message: bondMsg, signature: q.body.signature });
+  assert.equal(bondRecovered.toLowerCase(), signerAddr.toLowerCase(), 'the bond quote recovers to the server signer — OmertaBond.bond() will accept it');
+  assert.equal(qm.payer.toLowerCase(), player.address.toLowerCase(), 'the quote is bound to the linked wallet');
+  assert.equal(BigInt(qm.principal), parseUnits('1', 18), 'principal is 1 ETH in wei');
+  assert.equal(BigInt(qm.priceOmrPerEth), parseUnits('2000', 18), 'priceOmrPerEth is OMR-wei per 1 ETH');
+
+  // the Bonded watcher enriches the record from the persisted quote: the event omits price/discount, so
+  // recordBond recovers the TRUE terms (2000 / 800 bps) — NOT the effective payout/eth rate (≈2173.9) or disc 0.
+  const bondNonce = Number(qm.nonce);
+  const rb = await recordBond(pool, { nonce: bondNonce, payer: player.address, principalEth: 1,
+    onchainPayout: expectedPayout, onchainPol: 0.6, onchainVig: 0.4, txHash: '0xbondtx' });
+  assert.equal(rb.recorded, true, 'the Bonded event books the bond');
+  const bondRow = (await pool.query('SELECT oracle_price, discount_bps, payout_omr FROM bonds WHERE nonce=$1', [bondNonce])).rows[0];
+  assert.equal(Number(bondRow.oracle_price), 2000, 'oracle_price recovered from the quote (not the effective rate)');
+  assert.equal(Number(bondRow.discount_bps), 800, 'discount recovered from the quote (not 0)');
+  assert.equal(Number(bondRow.payout_omr), expectedPayout, 'payout is the on-chain-authoritative amount');
+  assert.equal((await pool.query('SELECT status FROM bond_quotes WHERE nonce=$1', [bondNonce])).rows[0].status, 'bonded', 'the quote is marked consumed');
+
+  // bondChainConfig fails CLOSED without the bond address (never signs a wrong domain)
+  const savedBond = process.env.OMERTA_BOND_ADDRESS;
+  delete process.env.OMERTA_BOND_ADDRESS;
+  assert.throws(() => bondChainConfig(), /chain_unconfigured|missing/i, 'bondChainConfig throws when the bond chain is unconfigured');
+  process.env.OMERTA_BOND_ADDRESS = savedBond;
+}
+
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment');
 await app.close();

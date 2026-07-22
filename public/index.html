@@ -1392,6 +1392,7 @@
       ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', { address: '' }],
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['POST', '/v1/character/reroll', {}], ['GET', '/v1/fees/status'],
+      ['GET', '/v1/bonds'], ['POST', '/v1/bond/quote', { principalEth: 1 }],
       ['GET', '/v1/store'], ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
       ['GET', '/v1/pass'], ['POST', '/v1/pass/claim', {}],
     ],
@@ -2469,6 +2470,9 @@
       <div class="card">
         <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
         <div class="d" style="color:var(--dim);font-size:10px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
+        <div style="margin-top:6px"><input id="bond-eth" placeholder="ETH" size="6"> <button class="act" id="bond-quote">request a signed quote</button>
+          <div class="d" style="font-size:10px;color:var(--dim)">signs an EIP-712 BondQuote bound to your linked wallet — submit it to the OmertaBond contract (mainnet, dormant)</div>
+          <pre id="bond-quote-out" style="display:none;white-space:pre-wrap;font-size:10px;background:#111;padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto"></pre></div>
         ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>
 
       <h2 style="margin-top:12px">The Board <span class="d" style="font-size:10px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
@@ -2512,6 +2516,14 @@
     $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     $('#stake-out').onclick = () => act('POST', '/v1/unstake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     t.querySelectorAll('[data-bondclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/bonds/${b.dataset.bondclaim}/claim`, {}).then(() => renderPortfolio()));
+    { const bq = $('#bond-quote'); if (bq) bq.onclick = async () => {
+      const r = await api('POST', '/v1/bond/quote', { principalEth: Number($('#bond-eth').value) });
+      const out = $('#bond-quote-out');
+      if (r.code === 200) { out.style.display = 'block';
+        out.textContent = `${fmt(r.body.payoutOmr)} $OMR at ${r.body.discountBps / 100}% off · nonce ${r.body.nonce}\nsubmit bond(quote, signature) on-chain:\n` + JSON.stringify({ quote: r.body.quote, signature: r.body.signature }, null, 2);
+        toast('quote signed — submit it to the OmertaBond contract'); }
+      else { out.style.display = 'none'; toast(describe(r.body) || 'quote failed'); }
+    }; }
     $('#dyn-go').onclick = () =>
       act('POST', '/v1/dynasty/name', { name: $('#dyn-name').value.trim() }).then(() => renderPortfolio());
     t.querySelectorAll('[data-rwabuy]').forEach((b) => b.onclick = () =>

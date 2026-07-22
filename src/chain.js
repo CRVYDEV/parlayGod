@@ -16,6 +16,7 @@ import { reconcileStore } from './store.js';
 import { reconcileBonds } from './bonds.js';
 
 const uid = () => crypto.randomUUID();
+const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
 
 // EIP-712 shape — MUST stay in exact parity with VoucherClaim.VOUCHER_TYPEHASH and its
 // domain ("OmertaVoucherClaim","1"). Field order matches the Solidity struct.
@@ -112,7 +113,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET } from './rules.js';
+import { MARKET, BONDS, bondPayout } from './rules.js';
 export function gearNumId(gearId) {
   const i = MARKET.findIndex((m) => m.id === gearId);
   if (i < 0) throw new GameError('bad_gear', 'No such gear class.');
@@ -429,4 +430,102 @@ export async function walletVerify(pool, accountId, address, signature) {
   const { granted } = await reconcileStore(pool, accountId, addr);
   const { attributed } = await reconcileBonds(pool, accountId, addr); // attribute pre-link bonds (LOW-1)
   return { ok: true, wallet: addr, verified: true, feesCredited: credited, storeGranted: granted, bondsAttributed: attributed };
+}
+
+// ── THE RESERVE BOND — the EIP-712 quote signer (the piece OmertaBond.bond() needs). ──
+// A player asks for a quote; the server prices it (oracle × discount), allocates a replay nonce, signs it
+// EIP-712, and PERSISTS it. The player submits bond(quote, sig) on-chain; the (wired) Bonded watcher then
+// calls recordBond, which recovers the exact price/discount from the persisted quote (the event omits them,
+// carrying only the resolved payout + POL/Vig split). Same crown-jewel signer as the voucher path; the
+// quote is bounded on-chain by MAX_DISCOUNT_BPS + MAX_VEST + MAX_QUOTE_TTL + the tranche/daily caps, and a
+// compromised signer is revoked by the Safe. Chain-dormant: throws chain_unconfigured unless configured.
+
+// MUST stay in exact parity with OmertaBond.QUOTE_TYPEHASH and its domain ("OmertaBond","1"). Field order
+// matches the Solidity struct: payer, principal, priceOmrPerEth, discountBps, vestSeconds, nonce, deadline.
+export const BOND_QUOTE_TYPES = {
+  BondQuote: [
+    { name: 'payer', type: 'address' },
+    { name: 'principal', type: 'uint256' },
+    { name: 'priceOmrPerEth', type: 'uint256' },
+    { name: 'discountBps', type: 'uint256' },
+    { name: 'vestSeconds', type: 'uint256' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
+// a short validity window — minute/hour-scale, well under the contract's MAX_QUOTE_TTL (30d) backstop.
+const BOND_QUOTE_TTL_SEC = Number(process.env.BOND_QUOTE_TTL_SEC || 3600);
+
+// The OmertaBond EIP-712 domain (its own contract → its own verifyingContract). No defaults (the
+// chainConfig fail-closed discipline): a wrong/zero chainId or verifyingContract signs a quote under the
+// WRONG domain → every on-chain bond() reverts BadSignature. Fail hard instead of signing dead quotes.
+export function bondChainConfig() {
+  const chainId = Number(process.env.CHAIN_ID);
+  const verifyingContract = process.env.OMERTA_BOND_ADDRESS;
+  if (!chainId || !verifyingContract || !isAddress(verifyingContract))
+    throw new GameError('chain_unconfigured', 'Bonding is not enabled on this server yet (chain config missing).');
+  return { name: 'OmertaBond', version: '1', chainId, verifyingContract: getAddress(verifyingContract) };
+}
+
+// Sign a bond quote for `principalEth` ETH from this account's linked wallet. The quote is bound to the
+// wallet (the contract enforces msg.sender == payer), priced at the live oracle with BONDS.DISCOUNT_BPS,
+// nonce'd from the bond tranche's own allocator, and PRE-CHECKED against the backend tranche budget so a
+// player never gets a quote whose bond() would revert TrancheExhausted. Locks account → bond_reserve.
+export async function quoteBond(pool, accountId, principalEth) {
+  const eth = round6(Number(principalEth));
+  if (!(eth >= BONDS.MIN_PRINCIPAL_ETH)) throw new GameError('min', `A bond takes at least ${BONDS.MIN_PRINCIPAL_ETH} ETH.`);
+  const domain = bondChainConfig();  // throws chain_unconfigured if the bond chain isn't configured
+  const signer = signerAccount();    // throws chain_unconfigured if the signer PK is missing
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const acct = (await client.query('SELECT wallet_address FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+    if (!acct) throw new GameError('no_account', 'No such account.');
+    const payer = acct.wallet_address;
+    if (!payer || !isAddress(payer)) throw new GameError('wallet', 'Link a wallet (SIWE) first — a bond quote is bound to your wallet.');
+    // the live OMR-per-ETH oracle (the latest Vig buyback TWAP off-chain; the DEX TWAP on mainnet).
+    const last = (await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
+    const price = last ? round6(Number(last.price_omr_per_eth)) : null;
+    if (!(price != null && Number.isFinite(price) && price > 0))
+      throw new GameError('price', 'No live OMR-ETH price yet — bonding opens once the buyback prints one.');
+    const disc = BONDS.DISCOUNT_BPS;
+    const vestSeconds = Math.floor(BONDS.VEST_HOURS * 3600);
+    const payout = bondPayout(eth, price, disc);
+    if (!(payout > 0)) throw new GameError('payout', 'A bond payout must be positive.');
+    // THE ANTI-PONZI PRE-CHECK (mirrors the contract's tranche cap against the backend budget). The contract
+    // enforces its OWN cap on-chain against its funded balance; refusing here means a player never receives
+    // a quote the treasury can't back. Keep bond_reserve.capacity_omr funded to match the on-chain balance.
+    const res = (await client.query('SELECT capacity_omr, committed_omr, next_nonce FROM bond_reserve WHERE id=1 FOR UPDATE')).rows[0];
+    if (Number(res.committed_omr) + payout > Number(res.capacity_omr) + 1e-6)
+      throw new GameError('over_capacity', 'The bond tranche is exhausted — the treasury must top it up.');
+    const nonce = Number(res.next_nonce);
+    await client.query('UPDATE bond_reserve SET next_nonce = next_nonce + 1 WHERE id=1');
+    const deadline = Math.floor(Date.now() / 1000) + BOND_QUOTE_TTL_SEC;
+    // the on-chain tuple: principal + priceOmrPerEth in wei (1e18). priceOmrPerEth = OMR wei per 1 ETH, so
+    // the contract's `principal * priceOmrPerEth / 1e18` yields plain OMR wei (parity with bondPayout here).
+    const message = {
+      payer: getAddress(payer),
+      principal: parseUnits(String(eth), 18),
+      priceOmrPerEth: parseUnits(String(price), 18),
+      discountBps: BigInt(disc),
+      vestSeconds: BigInt(vestSeconds),
+      nonce: BigInt(nonce),
+      deadline: BigInt(deadline),
+    };
+    const signature = await signer.signTypedData({ domain, types: BOND_QUOTE_TYPES, primaryType: 'BondQuote', message });
+    await client.query(
+      `INSERT INTO bond_quotes (nonce, account_id, payer_address, principal_eth, price, discount_bps, payout_omr, vest_seconds, deadline, signature)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [nonce, accountId, getAddress(payer), eth, price, disc, payout, vestSeconds, deadline, signature]);
+    await client.query('COMMIT');
+    // serialize the bigints for transport; the client submits { quote, signature } to OmertaBond.bond().
+    const quote = Object.fromEntries(Object.entries(message).map(([k, v]) => [k, typeof v === 'bigint' ? v.toString() : v]));
+    return {
+      quote, signature,
+      payoutOmr: payout, priceOmrPerEth: price, discountBps: disc, vestSeconds, nonce, deadline,
+      contract: domain.verifyingContract, chainId: domain.chainId,
+      note: 'Submit bond(quote, signature) to the OmertaBond contract (mainnet, dormant). The Bonded event books it to your reserve automatically.',
+    };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
 }

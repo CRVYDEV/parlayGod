@@ -68,7 +68,8 @@ Each rail is OFF until its address/config is present. Set on BOTH processes.
 | `CHAIN_START_BLOCK` | first-scan seed | set to the contracts' deploy block (don't scan from genesis) |
 | `CHAIN_POLL_MS` | sync cadence | optional |
 | `VOUCHER_CLAIM_ADDRESS` | `Claimed` sync (frees reserve) + it's the voucher `verifyingContract` | — |
-| `VOUCHER_SIGNER_PK` | EIP-712 voucher signing (`POST /v1/withdraw`, gear) | **the crown jewel — HSM/KMS in prod, audited (Gate 0.2)** |
+| `VOUCHER_SIGNER_PK` | EIP-712 signing — vouchers (`POST /v1/withdraw`, gear) AND bond quotes (`POST /v1/bond/quote`) | **the crown jewel — HSM/KMS in prod, audited (Gate 0.2)**; the same signer must be set as OmertaBond's `signer` |
+| `BOND_QUOTE_TTL_SEC` | bond-quote validity window (default 3600s) | must stay under the contract's `MAX_QUOTE_TTL` (30d) |
 | `VOUCHER_RECLAIM_GRACE_SEC` | expired-voucher reclaim grace | optional (worker sweep) |
 | `DAILY_CAP_OMR` | per-day withdrawal cap (wei) | mirrors the contract's `dailyCapOMR` |
 | `OMERTA_FEES_ADDRESS` | fee sync (`MintFeePaid`/`RespawnFeePaid`/`RerollFeePaid` → credits) | — |
@@ -106,12 +107,17 @@ The backend keeps its own reserve records; they must track the on-chain balances
       (SIWE) → `POST /v1/withdraw` → `claim()` the voucher → 25 real OMR in the wallet.
 
 ## 7. NOT part of the first mainnet cut (still deferred / gated)
-- **The bond QUOTE SIGNER.** `OmertaBond.bond()` needs a server-signed `BondQuote` (EIP-712). That signer +
-  the player-facing "request a bond quote" endpoint are **not built yet** — so no on-chain bond can be created
-  until they are. The `Bonded` → `recordBond` watcher is wired and ready, but idle until the signer ships. (Build
-  it in `src/chain.js` in exact parity with `OmertaBond`'s `QUOTE_TYPEHASH`: `payer, principal, priceOmrPerEth,
-  discountBps, vestSeconds, nonce, deadline`; domain `OmertaBond`/`1`; then persist the signed quote so the
-  price/discount are recoverable — the watcher currently books the event's effective values.)
+- **The bond QUOTE SIGNER is BUILT** (`src/chain.js:quoteBond` + `POST /v1/bond/quote`) — a player requests a
+  signed `BondQuote` bound to their linked wallet (`Chain.BOND_QUOTE_TYPES` / `bondChainConfig()`, exact parity
+  with `OmertaBond.QUOTE_TYPEHASH`: `payer, principal, priceOmrPerEth, discountBps, vestSeconds, nonce, deadline`;
+  domain `OmertaBond`/`1`; verifyingContract = `OMERTA_BOND_ADDRESS`), submits `bond(quote, signature)` on-chain,
+  and the `Bonded` watcher recovers the quote's exact price/discount from the persisted `bond_quotes` row. It is
+  **chain-dormant** (400s `chain_unconfigured` unless `CHAIN_ID` + `OMERTA_BOND_ADDRESS` + `VOUCHER_SIGNER_PK`
+  are set) and pre-checks the backend tranche (`bond_reserve.capacity_omr`) so a player never gets a quote whose
+  `bond()` would revert `TrancheExhausted`. Quote-nonce space is `bond_reserve.next_nonce` (independent of the
+  withdrawal `chain_reserve` nonce). `BOND_QUOTE_TTL_SEC` (default 1h) sets the quote deadline (< contract
+  `MAX_QUOTE_TTL`). Still deferred: the client "request a bond quote → submit on-chain" wallet flow (the SIWE
+  widget precedent) and, for a live board, the DEX-TWAP oracle below.
 - **The POL-pairing bot** (pairs the bonded ETH into the OMR-ETH pool) and **the DEX buyback bot** (the real
   TWAP source that replaces the manual `mod/vig/buyback` price).
 - **The on-chain Store** — `OmertaFees.payForPackage` + a `StorePaid` watcher. The Store is off-chain/mod-driven
