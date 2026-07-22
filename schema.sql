@@ -884,6 +884,42 @@ CREATE TABLE IF NOT EXISTS track_entries (
   PRIMARY KEY (day, race, character_id)
 );
 CREATE INDEX IF NOT EXISTS ix_track_entries_open ON track_entries (day, race);
+-- THE FUTURITY (Track step four): a scheduled marquee race where owners NOMINATE player-owned racers
+-- and the WHOLE TOWN bets parimutuel on the field (the boxing-main-event twin, on the racing side —
+-- distinct from THE STAKES where owners buy in and compete for the pooled buy-ins). At most one OPEN
+-- futurity at a time (futurity_state.current); a new one materializes on the next nomination after the
+-- last settles. Each runner's FORM is snapshotted (not escrowed); the worker races the field at window
+-- close and pays the parimutuel pool. futurity_runners/futurity_bets are self-contained snapshots →
+-- EXCLUDED from the estate wipe (a dead nominator's runner is scratched-refunded at resolve; a dead
+-- bettor's escrow burns).
+CREATE TABLE IF NOT EXISTS futurities (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'open',   -- open | resolved | scrapped
+  resolves_at TIMESTAMPTZ NOT NULL,
+  pool NUMERIC DEFAULT 0,                 -- the parimutuel BET escrow (nomination fees are NOT here — they burn to buyback)
+  winner_racer TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS futurity_runners (
+  futurity_id TEXT NOT NULL,
+  racer_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,             -- the owner (for the purse + legend + notify)
+  racer_name TEXT NOT NULL,
+  kind TEXT NOT NULL,                     -- 'dog' | 'horse'
+  form INT NOT NULL,                      -- snapshotted at nomination (drives its finishing chance)
+  place INT,
+  PRIMARY KEY (futurity_id, character_id) -- one nomination per owner per card (no field-stuffing)
+);
+CREATE INDEX IF NOT EXISTS ix_futurity_runners ON futurity_runners (futurity_id);
+CREATE TABLE IF NOT EXISTS futurity_bets (
+  futurity_id TEXT NOT NULL,
+  bettor_char TEXT NOT NULL,
+  racer_id TEXT NOT NULL,                 -- the runner backed
+  amount NUMERIC NOT NULL,
+  PRIMARY KEY (futurity_id, bettor_char)  -- one bet per bettor per card
+);
+CREATE TABLE IF NOT EXISTS futurity_state ( id INT PRIMARY KEY, current TEXT );
+INSERT INTO futurity_state (id, current) SELECT 1, NULL WHERE NOT EXISTS (SELECT 1 FROM futurity_state);
 -- Den step two: lifetime den stake volume (a COUNTER, not a money bucket — no §10.4 impact).
 -- Casino-business owners earn rakeback against the volume that flowed since their cursor.
 CREATE TABLE IF NOT EXISTS den_volume (

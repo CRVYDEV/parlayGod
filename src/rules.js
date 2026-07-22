@@ -650,6 +650,15 @@ export const CASINO = {
   // runners enter, so a bettor is paid at the price they took. The worker banks the racer's win the next
   // day (status: its record + the owner legend — no owner purse in step three; that's a sim-gated option).
   TRACK: { MIN_BET: 50, MAX_BET: 10000, FIELD: 6, EDGE: 0.15, MAX_ODDS: 25, PLAYER_SLOTS: 2, ENTRY_FEE: 5000 },
+  // THE FUTURITY (Track step four): a scheduled marquee race where owners NOMINATE their player-owned
+  // racers and the WHOLE TOWN bets parimutuel on the field (the boxing-main-event twin — spectator
+  // betting — distinct from THE STAKES, where owners buy in and compete for the pooled buy-ins). A
+  // NOMINATE_FEE burns to the buyback (the track-entry precedent, non-refundable); bets ESCROW into a
+  // parimutuel pool; the worker races the field (form + rand(VARIANCE)) and pays winners the losing pool
+  // net of RAKE_BPS (half → buyback, half burns — the boxing vig). A card with < MIN_RUNNERS live at
+  // post is scrapped (every bet refunded). All sign-off levers.
+  FUTURITY: { NOMINATE_FEE: 5000, FIELD_MAX: 8, MIN_RUNNERS: 3, REGISTER_MS: 30 * 60 * 1000,
+    MIN_BET: 100, MAX_BET: 25000, RAKE_BPS: 500, VARIANCE: 22 },
 };
 // the day's winning number, drawn from the server-secret market seed (§7.11 machinery —
 // unpredictable without the seed, verifiable after the fact)

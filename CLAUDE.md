@@ -843,9 +843,41 @@ player runners + a run-in-the-card control; `describe()` + `/v1/rules` + a defen
 `test/casino.js` covers the district/one-per-card gates + the ledgered entry sink, the merged card (the maxed
 racer as the flagged favorite), a bet paid at the LOCKED odds, and the worker banking the win (record + legend,
 idempotent). Suite 33/33 + sim drift-0 (18 checks). All `TRACK.PLAYER_SLOTS`/`ENTRY_FEE` numbers are founder
-sign-off levers. The Stable + Track racing pillar is now feature-complete (own → train → circuit/match →
-breed/stakes → run in the town's card). Deferred (sim-gated): an owner PURSE for a card win (a den-book-capped
-faucet, the rakeback discipline).
+sign-off levers. Deferred (sim-gated): an owner PURSE for a card win (a den-book-capped
+faucet, the rakeback discipline). **Step four — THE FUTURITY — BUILT** (`src/casino.js`, `test/casino.js`;
+the marquee where the Stable and The Track finally MEET — the boxing-main-event twin on the racing side,
+DISTINCT from THE STAKES: The Stakes is the poker-tournament twin (owners buy in, compete for the pooled
+buy-ins); the Futurity is spectator PARIMUTUEL — owners NOMINATE player-owned racers and the WHOLE TOWN
+bets on the field). `nominateFuturity` (`POST /v1/casino/futurity/nominate/:racerId`) enters a fit racer
+into the open futurity (`CASINO.FUTURITY.FIELD_MAX` 8), form snapshotted; a burned `NOMINATE_FEE` ($5k)
+cash SINK (`casino:futurity:nom` → the buyback, the track-entry precedent — NON-refundable, NOT escrow).
+Spectators `betFuturity` (`POST /v1/casino/futurity/bet`) escrow CASH on one runner (one bet/bettor;
+an owner with a runner can't bet — `own_event`; `[MIN_BET,MAX_BET]`); the worker `sweepFuturity`
+(`resolveFuturity`) races the field (`form + rand(VARIANCE)`, ranked DESC — the resolveStakes draw) at
+window close and pays PARIMUTUEL: the winner's backers get their stake back + a pro-rata cut of the LOSING
+pool net of `RAKE_BPS` (5% — half → buyback, half burns, the boxing vig), the winning OWNER a promoter
+purse (from the rake, only if alive), the winner's racer a record win + the account `racer_wins` legend
+(status, survives death). A dead owner's runner SCRATCHES (its backers refunded); a dead bettor's escrow
+BURNS (`casino:futurity:death`); a card with < `MIN_RUNNERS` (3) live is SCRAPPED (every bet refunded); a
+one-sided book (no action on the winner) refunds every live bet. **One open futurity at a time**
+(`futurity_state.current`; a new one materializes on the next nomination after the last settles — the
+Stakes/Grand-Prix pattern; `FUTURITY_MS` env is TEST-ONLY). §10.4: every `casino:futurity:*` reason rides
+the existing `casino:` cash vocabulary (**ZERO invariants.js reason change**) + a NEW **`futurity escrow`**
+check (the boxing-bet-escrow twin: open pool == posted − wins − refunds − purse − take − death); the
+exact-reason matches sit UNDER the den-book `casino:bet:%`/`casino:win:%` LIKE patterns, so a futurity
+never touches the PvE house book (a pure competitive REDISTRIBUTION — no new faucet). **Lock order** = the
+tournament posture: nominate locks char → racer → `futurity_state` → the card row; `resolveFuturity` locks
+runner-owner + bettor chars sorted → `futurity_state` → the card row (state BEFORE the row, so a concurrent
+nomination can't AB-BA). New `futurities`/`futurity_runners`/`futurity_bets`/`futurity_state` tables
+(runners/bets EXCLUDED from the estate wipe — self-contained snapshots). `denInfo` surfaces the open card
+(field + live per-runner pools + your bet); the console Den tab gained a Futurity section (nominate + bet-
+the-field); `describe()` + `/v1/rules`. `test/casino.js` covers the district/own_event/bad_runner/
+already_bet gates, the ledgered nomination sink, a 3-runner card with a maxed favorite winning, the
+parimutuel payout (winner's backer +net, loser's stake gone, the owner's promoter purse, the NULL house
+take), and the `futurity escrow` §10.4 check mid-window ($2000) + closing to 0. Suite 33/33 + sim drift-0
+(19 checks). All `CASINO.FUTURITY.*` numbers are founder sign-off levers (a redistribution, no signed faucet
+touched). The Stable + Track racing pillar is now feature-complete (own → train → circuit/match →
+breed/stakes → run in the town's card → the crowd-bet Futurity).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,
