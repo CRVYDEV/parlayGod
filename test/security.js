@@ -272,6 +272,16 @@ const addsNoDrift = async (name, action, label) => {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(banned.token)}`);
   const closed = await new Promise((res) => { ws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   assert.equal(closed, 4003, 'banned socket closed with 4003');
+
+  // red-team R4 auth F1: a LIVE socket opened BEFORE the ban must be cut when the ban lands — not
+  // just refused at connect. Open a socket for a good account, get the hello, then ban → it closes.
+  const live = await mk('Snitch Sammy');
+  const liveAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${live.id}'`)).rows[0].account_id;
+  const lws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(live.token)}`);
+  await new Promise((res, rej) => { lws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; lws.onerror = rej; setTimeout(rej, 4000); });
+  const liveClose = new Promise((res) => { lws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
+  await call('POST', '/v1/mod/ban', { body: { accountId: liveAcct }, headers: modH });
+  assert.equal(await liveClose, 4003, 'a live socket is closed the moment the account is banned');
 }
 
 // ═══ FINDING (infra LOW-1): living-character names are unique ═══
