@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   hitman_rep BIGINT NOT NULL DEFAULT 0,
   kills INT NOT NULL DEFAULT 0,
   boxing_wins INT NOT NULL DEFAULT 0,   -- lifetime fighter wins across the stable (a career legend that SURVIVES DEATH — the hitman-rep precedent)
+  racer_wins INT NOT NULL DEFAULT 0,    -- lifetime racing-animal wins across the stable (a career legend that SURVIVES DEATH — the boxing-legend precedent)
   cartel_damage NUMERIC NOT NULL DEFAULT 0,   -- (World step two) lifetime cash looted from NPC rival families — THE WAR EFFORT (status, survives death)
   intel_ops INT NOT NULL DEFAULT 0,   -- (Wire step two) lifetime intel actions run — THE SPYMASTER (status, survives death)
   race_wins INT NOT NULL DEFAULT 0,   -- STREET RACES: lifetime race wins — THE WHEEL legend (status, survives death — the boxing-legend precedent)
@@ -751,6 +752,26 @@ CREATE TABLE IF NOT EXISTS fighters (
 );
 CREATE INDEX IF NOT EXISTS ix_fighters_char ON fighters (character_id);
 CREATE INDEX IF NOT EXISTS ix_fighters_wins ON fighters (wins DESC);
+-- THE STABLE: player-owned racing animals (dogs & horses) — the boxing-stable pattern under The Track's
+-- betting card. Own many per owner; each has speed/stamina/heart, a record, an injury clock, a consent
+-- listing (race_limit) + a per-racer circuit cooldown. Racers DIE WITH THE STREET (the fighters precedent).
+CREATE TABLE IF NOT EXISTS racers (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL,        -- the owner (a stable = many racers per owner)
+  kind TEXT NOT NULL,               -- 'dog' (greyhound) | 'horse' (racehorse)
+  name TEXT NOT NULL,
+  speed INT NOT NULL,
+  stamina INT NOT NULL,
+  heart INT NOT NULL,
+  wins INT NOT NULL DEFAULT 0,
+  losses INT NOT NULL DEFAULT 0,
+  injured_until TIMESTAMPTZ,        -- a lost race lays the animal up (no spam)
+  race_limit NUMERIC,               -- the wager this racer will take in a PvP match race (null = not listed)
+  circuit_at TIMESTAMPTZ,           -- per-racer cooldown on the PvE circuit
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_racers_char ON racers (character_id);
+CREATE INDEX IF NOT EXISTS ix_racers_wins ON racers (wins DESC);
 -- the world TITLE BELT (step two): one champion, taken by beating the holder in a PvP bout. Pure status.
 CREATE TABLE IF NOT EXISTS boxing_title (
   id INT PRIMARY KEY,

@@ -1932,6 +1932,65 @@ export const boxerLegendOf = (wins) =>
   [...BOXING.LEGEND_RANKS].reverse().find((r) => Number(wins) >= r.min) || BOXING.LEGEND_RANKS[0];
 export const npcBoxerOf = (id) => BOXING.NPC_TIERS.find((t) => t.id === id) || null;
 
+// ── THE STABLE (own the dogs & the ponies) — the ownership layer under The Track's betting card.
+// The boxing-stable pattern applied to racing animals: buy a young racer (a cash SINK), train up its
+// speed/stamina/heart (a cash+energy SINK, capped), and RACE it — the PvE circuit (a fee BURNS win or
+// lose, a purse pays only on a win; the ONE new faucet, the boxing-exhibition twin) or a PvP MATCH RACE
+// (the audited casino:pvp taxed transfer, never a new faucet, never an escrow). A racer's SPEED FORM =
+// speed + stamina + heart + rand(VARIANCE) — fast animals win, but variance leaves room for an upset.
+// Dogs race dogs, horses race horses. Racers DIE WITH THE STREET (the racers rows join the runEstate
+// wipe — the fighters precedent); the owner's lifetime wins are an account-level LEGEND (survives death,
+// the boxing-legend/hitman-rep precedent). CASH ONLY (the Den's rule). All numbers are founder sign-off
+// levers — the stable:purse circuit faucet is the one new emission surface (sim + sign-off, BALANCE.md).
+export const STABLE = {
+  MIN_LEVEL: 6,                       // a track owner's game, opens after the early loop
+  STAT_CAP: 25,                       // training ceiling per stat
+  TRAIN_COST: 15000, TRAIN_ENERGY: 12, TRAIN_GAIN: 1,   // a session: +1 to the chosen stat
+  STATS: ['speed', 'stamina', 'heart'],
+  STABLE_MAX: 4,                      // racers you can run at once
+  MIN_STAKE: 5000, MAX_STAKE: 500000, // PvP match-race wager bounds
+  RAKE_BPS: 500,                      // 5% vig off the match pot (half → buyback, half burns — casino:pvp)
+  VARIANCE: 22,                       // rng added to each racer's form — enough for upsets
+  INJURY_MS: 4 * 3600 * 1000,         // a lost race lays the animal up 4h
+  CIRCUIT_CD_MS: 6 * 3600 * 1000,     // per-racer cooldown on the PvE circuit
+  // the two kinds — a dog is the cheap early animal, a horse the prestige investment (pricier, rolls a
+  // touch higher, races a richer circuit). statMin/statMax are the roll range at purchase.
+  KINDS: {
+    dog:   { name: 'Greyhound', cost: 30000,  statMin: 5, statMax: 12 },
+    horse: { name: 'Racehorse', cost: 120000, statMin: 7, statMax: 15 },
+  },
+  // the PvE circuit per kind — a bounded purse (fee BURNS win/lose; purse a FAUCET only on a win → net
+  // positive only vs a beatable field). Bounded by the cooldown + the fee + needing the FORM to win.
+  MEETS: {
+    dog: [
+      { id: 'maiden', name: 'Maiden Sprint',  form: 24, fee: 2000,  purse: 6000 },
+      { id: 'graded', name: 'Graded Stakes',  form: 40, fee: 12000, purse: 22000 },
+      { id: 'derby',  name: 'The City Derby',  form: 60, fee: 40000, purse: 70000 },
+    ],
+    horse: [
+      { id: 'maiden',    name: 'Maiden Special', form: 28, fee: 5000,  purse: 15000 },
+      { id: 'allowance', name: 'Allowance',      form: 46, fee: 22000, purse: 42000 },
+      { id: 'goldcup',   name: 'The Gold Cup',   form: 68, fee: 65000, purse: 115000 },
+    ],
+  },
+  // the record ladder (a single racer's wins) — pure status
+  RANKS: [
+    { min: 0, name: 'Unraced' }, { min: 3, name: 'Winner' }, { min: 8, name: 'Stakes Winner' },
+    { min: 15, name: 'Champion' }, { min: 30, name: 'Triple Crown' },
+  ],
+  // the OWNER's lifetime wins across the whole stable (account-level, SURVIVES DEATH) — status
+  LEGEND_RANKS: [
+    { min: 0, name: 'Railbird' }, { min: 10, name: 'Owner' }, { min: 25, name: 'The Silks' },
+    { min: 60, name: 'Racing Baron' }, { min: 120, name: 'Lord of the Turf' },
+  ],
+};
+export const stableKindOf = (kind) => STABLE.KINDS[kind] || null;
+export const stableMeetOf = (kind, id) => (STABLE.MEETS[kind] || []).find((m) => m.id === id) || null;
+export const racerRankOf = (wins) =>
+  [...STABLE.RANKS].reverse().find((r) => Number(wins) >= r.min) || STABLE.RANKS[0];
+export const racerLegendOf = (wins) =>
+  [...STABLE.LEGEND_RANKS].reverse().find((r) => Number(wins) >= r.min) || STABLE.LEGEND_RANKS[0];
+
 // ── STREET RACES (omerta-street-races-design) — the deep 60-car catalog becomes a competitive loop ──
 // A car's RACE POWER = sqrt(book value) + tune×TUNE_POWER + driver speed/SPEED_DIV − damage. Fast/valuable
 // iron wins, but tuning + the wheelman's speed decide close races. PvE circuit (fee BURNS win/lose, purse

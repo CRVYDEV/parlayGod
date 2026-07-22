@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -620,6 +620,22 @@ phase('P9.17 NPC trucking — the hijack goods faucet (bounded, base-wide)');
   // road captured uncontested; a realistic dedicated raider nets far less after ammo + the energy throttle.
   note('convoy', 'NPC trucking — the real per-player bound', `~${Math.round(500 / CONVOY.AMBUSH_ENERGY)} ambushes/day at ~500 energy`,
     `energy ${CONVOY.AMBUSH_ENERGY}/ambush + ammo ${CONVOY.AMBUSH_AMMO}/ambush throttle a solo grinder well under the base-wide ceiling; MAX_AMBUSHES ${CONVOY.MAX_AMBUSHES} raiders split one manifest, so contention dilutes — sign-off vs boxing/territory (~$300-400k/day)`);
+}
+
+// ════════ P9.18 the Stable — PvE circuit purse EV by racer form (the new faucet, boxing-exhibition twin) ════════
+// EV = −fee + P(win)×purse over the exact form model (the boxing pWinBox model reused). A racer's max form is
+// 3×STAT_CAP; a fresh purchase averages 3×(statMin+statMax)/2. Per-racer cadence = 24/CIRCUIT_CD hrs.
+phase('P9.18 the Stable — PvE circuit purse EV by racer form + kind (the new faucet)');
+{ const perDay = 24 / (STABLE.CIRCUIT_CD_MS / 3600000); // 6h cd → 4/day/racer
+  for (const kind of Object.keys(STABLE.KINDS)) {
+    const k = STABLE.KINDS[kind];
+    for (const [label, myForm] of [['fresh', 3 * Math.round((k.statMin + k.statMax) / 2)], ['trained', 3 * STABLE.STAT_CAP]]) {
+      let best = null;
+      for (const m of STABLE.MEETS[kind]) { const p = pWinBox(myForm, m.form, STABLE.VARIANCE); const ev = -m.fee + p * m.purse; if (!best || ev > best.ev) best = { meet: m.name, p, ev }; }
+      note('stable', `circuit EV — ${k.name} ${label} (form ${myForm})`, `${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev))}/race best`,
+        `best meet ${best.meet} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * perDay))}/day/racer · ×${STABLE.STABLE_MAX} stable ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * perDay * STABLE.STABLE_MAX))}/day — bounded faucet (fee burns win/lose, cooldown + injury-on-loss); sign-off vs boxing exhibition`);
+    }
+  }
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

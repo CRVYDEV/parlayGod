@@ -376,6 +376,8 @@
     if (body.toSeller !== undefined) bits.push(`took over the ${body.name || 'club'} — $${fmt(body.paid)} paid ($${fmt(body.toSeller)} to the old owner)`);
     if (body.won !== undefined && body.feePaid !== undefined) bits.push(body.won ? `STOOD OVER the ${body.name || 'club'} — forced the sale, it's yours ($${fmt(body.paid)})` : `the standover was repelled — the $${fmt(body.feePaid)} fee's gone`);
     if ((body.opponent !== undefined || body.yourFighter !== undefined) && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourFighter; bits.push(body.win ? `${body.you.name} WINS — took $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}` : `${body.you.name} dropped it — lost $${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
+    if ((body.game === 'circuit' || body.game === 'race') && body.you && typeof body.win === 'boolean') { const rec = body.record || body.yourRacer;
+      bits.push(body.win ? `${body.you.name} WINS at the wire${body.game === 'circuit' ? ` — +$${fmt(Math.abs(body.net))} purse` : ` — took $${fmt(Math.abs(body.net))}`}${rec ? ` (${rec})` : ''}` : `${body.you.name} got beat — −$${fmt(Math.abs(body.net))}${rec ? ` (${rec})` : ''}`); }
     if (body.decor !== undefined && body.district) bits.push(body.decor ? `re-decorated in ${body.decorName}` : 'stripped the club back to stock');
     if (body.salePrice !== undefined && body.district) bits.push(`listed the club for $${fmt(body.salePrice)}`);
     if (body.rwaCut) bits.push(`legit cut: +${body.rwaCut.shares} ${body.rwaCut.ticker}`);
@@ -626,7 +628,7 @@
 
   // ── tabs ──
   const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
-    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', races: 'Street Races', scores: 'Big Scores',
+    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', races: 'Street Races', stable: 'The Stable', scores: 'Big Scores',
     loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
     wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', port: 'The Port', deck: 'Everything Else' };
   // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
@@ -634,7 +636,7 @@
     ['', ['start']],
     ['Streets', ['streets', 'garage', 'life', 'city']],
     ['Earners', ['kitchen', 'empire', 'scores', 'market', 'port']],
-    ['Vice', ['den', 'speakeasy', 'boxing', 'races']],
+    ['Vice', ['den', 'speakeasy', 'boxing', 'races', 'stable']],
     ['Blood', ['pvp', 'loans', 'law', 'pen', 'wire']],
     ['Family', ['family']],
     ['Legit', ['portfolio', 'estate', 'store']],
@@ -663,7 +665,7 @@
     kitchen: renderKitchen, family: renderFamily, market: renderMarket, pvp: renderPvp, law: renderLaw,
     garage: renderGarage, empire: renderEmpire, speakeasy: renderSpeakeasy, boxing: renderBoxing,
     scores: renderScores, loans: renderLoans, portfolio: renderPortfolio, estate: renderEstate,
-    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces, port: renderPort };
+    life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces, port: renderPort, stable: renderStable };
   let currentTab = 'streets';
   function setTab(id) {
     currentTab = id;
@@ -2023,6 +2025,58 @@
       const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');
       const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\\n');
       alert('TOP FIGHTERS\\n\\n' + (f || 'none') + '\\n\\nMANAGER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
+  }
+
+  // ── THE STABLE: own the dogs & the ponies (buy/train/list/circuit(PvE)/match(PvP) + the legend) ──
+  async function renderStable() {
+    const t = $('#tab-stable');
+    await refresh();
+    const b = (await api('GET', '/v1/stable')).body || {};
+    const stable = b.stable || [], max = b.stableMax || 4;
+    const ready = stable.filter((r) => !r.injuredSeconds); // your racers available for a match
+    const kinds = b.kinds || {}, meets = b.meets || {};
+    const kindName = (k) => (kinds[k] || {}).name || k;
+    t.innerHTML = `
+      ${!stable.length ? coachCard('Buy a racer', 'Own the dogs &amp; the ponies. Buy a greyhound ($' + fmt((kinds.dog || {}).cost || 30000) + ') or a racehorse ($' + fmt((kinds.horse || {}).cost || 120000) + ', level ' + (b.minLevel || 6) + '+), train up its speed/stamina/heart, and race it — the PvE circuit for a purse, or match it against a rival owner\'s racer for a cash wager. Run a stable of up to ' + max + '. They die with your street; your lifetime wins are a legend that survives.') : ''}
+      <h2>The Stable <span class="d" style="font-size:10px">(${stable.length}/${max})</span> ${b.legend ? `<span class="chip good" style="font-size:10px">${b.legend.title} — ${b.legend.wins} career win${b.legend.wins === 1 ? '' : 's'}</span>` : ''}</h2>
+      <div class="grid">${stable.map((y) => `
+        <div class="card"><span class="t">${y.kind === 'horse' ? '🐎' : '🐕'} ${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
+          ${y.injuredSeconds ? `<span class="chip bad">LAID UP — ${mins(y.injuredSeconds)}</span>` : ''}${y.cooldownSeconds ? `<span class="chip">resting ${mins(y.cooldownSeconds)}</span>` : ''}
+          <div class="d">${kindName(y.kind)} · speed ${y.speed} · stamina ${y.stamina} · heart ${y.heart} · form ${y.form}</div>
+          <div style="margin-top:6px" class="d">Train ($${fmt(b.trainCost)} + energy, cap ${b.statCap}): ${(b.stats || []).map((s) => `<button class="act" data-train="${s}" data-rid="${y.id}">${s}</button>`).join(' ')}</div>
+          <div style="margin-top:4px" class="d">${y.raceLimit ? `Taking matches up to $${fmt(y.raceLimit)} — <button class="act" data-unlist="${y.id}">stop</button>` : 'Take matches:'}
+            <input id="st-stake-${y.id}" placeholder="wager $" size="7"> <button class="act" data-list="${y.id}">list</button></div>
+          ${!y.injuredSeconds && !y.cooldownSeconds ? `<div style="margin-top:4px" class="d">Run the circuit: ${(meets[y.kind] || []).map((m) => `<button class="act" data-circuit="${y.id}" data-meet="${m.id}" title="entry $${fmt(m.fee)} → win $${fmt(m.purse)}">${m.name}</button>`).join(' ')}</div>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no racers yet</span>'}</div>
+      ${stable.length < max ? `<div class="card" style="margin-top:6px"><span class="t">Buy a racer</span>
+        <div class="d">level ${b.minLevel}+.</div>
+        <select id="st-kind">${Object.entries(kinds).map(([k, v]) => `<option value="${k}">${v.name} ($${fmt(v.cost)})</option>`).join('')}</select>
+        <input id="st-name" placeholder="racer name" size="16" maxlength="24"> <button class="act" id="st-buy" style="border-color:var(--neon)">buy</button></div>` : ''}
+
+      <h2 style="margin-top:12px">The Field <span class="d" style="font-size:10px">(other owners' racers — match your own kind for a cash wager)</span></h2>
+      <div class="grid">${(b.field || []).filter((r) => !r.mine).map((r) => `
+        <div class="card"><span class="t">${r.kind === 'horse' ? '🐎' : '🐕'} ${r.name}</span><span class="chip">${r.rank}</span>
+          <div class="d">${r.owner} · ${r.record} · form ${r.form}${r.injured ? ' · <span style="color:var(--bad)">laid up</span>' : ''}${r.raceLimit ? ' · takes $' + fmt(r.raceLimit) : ''}</div>
+          ${r.taking && ready.some((m) => m.kind === r.kind) ? `<div style="margin-top:4px" class="d">
+            <select id="st-my-${r.racerId}">${ready.filter((m) => m.kind === r.kind).map((m) => `<option value="${m.id}">${m.name} (${m.form})</option>`).join('')}</select>
+            <input id="st-wager-${r.racerId}" placeholder="wager $" size="7"> <button class="act" data-match="${r.ownerId}" data-oppr="${r.racerId}" style="border-color:var(--bad)">race them</button></div>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no other racers on the card yet</span>'}</div>
+      <div style="margin-top:8px"><a href="#" id="st-lb">the field board + the owner legend →</a></div>`;
+
+    const sb = $('#st-buy'); if (sb) sb.onclick = () => act('POST', '/v1/stable/buy', { kind: $('#st-kind').value, name: $('#st-name').value.trim() }).then(() => renderStable());
+    t.querySelectorAll('[data-train]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/train/${x.dataset.rid}`, { stat: x.dataset.train }).then(() => renderStable()));
+    t.querySelectorAll('[data-list]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/list/${x.dataset.list}`, { limit: Number(($(`#st-stake-${x.dataset.list}`) || {}).value || 0) }).then(() => renderStable()));
+    t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/list/${x.dataset.unlist}`, { limit: 0 }).then(() => renderStable()));
+    t.querySelectorAll('[data-circuit]').forEach((x) => x.onclick = () => act('POST', `/v1/stable/circuit/${x.dataset.circuit}`, { meet: x.dataset.meet }).then(() => renderStable()));
+    t.querySelectorAll('[data-match]').forEach((x) => x.onclick = () => {
+      const oppR = x.dataset.oppr, myR = ($(`#st-my-${oppR}`) || {}).value, stake = Number(($(`#st-wager-${oppR}`) || {}).value || 0);
+      act('POST', `/v1/stable/match/${x.dataset.match}`, { myRacer: myR, theirRacer: oppR, stake }).then(() => renderStable());
+    });
+    const lb = $('#st-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
+      const d = (await api('GET', '/v1/leaderboard/stable')).body || {};
+      const f = (d.racers || []).map((x, i) => `${i + 1}. ${x.kind === 'horse' ? '🐎' : '🐕'} ${x.racer} (${x.owner}) — ${x.rank} ${x.record}`).join('\\n');
+      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.owner} — ${x.title} (${x.wins} wins)`).join('\\n');
+      alert('TOP RACERS\\n\\n' + (f || 'none') + '\\n\\nOWNER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
   }
 
   // ── STREET RACES: the car catalog as a competitive loop (PvE circuit + tuning + PvP wagers) ──
