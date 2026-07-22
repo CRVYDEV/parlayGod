@@ -488,6 +488,10 @@ export async function nominateFuturity(ch, racerId, client, h) {
   }
   if ((await client.query('SELECT 1 FROM futurity_runners WHERE futurity_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
     throw new GameError('entered', "You've already got a runner in this futurity.");
+  // INVARIANT: racer_id is unique within a card — resolveFuturity keys place-updates + bet buckets on it.
+  // This holds because racers are non-transferable (no player-to-player racer sale exists) + one runner
+  // per owner (above). If a racer-TRADE feature is ever added, this card's racer_id could collide across
+  // two successive owners — gate that path (or rekey on (futurity_id, character_id)) before shipping it.
   const n = Number((await client.query('SELECT COUNT(*) n FROM futurity_runners WHERE futurity_id=$1', [g.id])).rows[0].n);
   if (n >= CASINO.FUTURITY.FIELD_MAX) throw new GameError('full', `The card's full — ${CASINO.FUTURITY.FIELD_MAX} runners.`);
   const f = Number(r.speed) + Number(r.stamina) + Number(r.heart);
@@ -506,7 +510,10 @@ export async function nominateFuturity(ch, racerId, client, h) {
 // a runner in the field can't bet (inside stake — the boxing own_event rule). Escrows into the pool. ──
 export async function betFuturity(ch, racerId, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No action from a cell.');
-  const st = (await client.query('SELECT current FROM futurity_state WHERE id=1')).rows[0];
+  // Lock futurity_state (not just the card) so a bet fences against resolve exactly like the audited
+  // Grand-Prix/Stakes ENTRY paths: once resolveFuturity holds futurity_state, a late bet blocks here
+  // until resolve commits, then re-reads status<>'open' → 'no_futurity'. LOCK ORDER: char → state → card.
+  const st = (await client.query('SELECT current FROM futurity_state WHERE id=1 FOR UPDATE')).rows[0];
   const g = st?.current ? (await client.query("SELECT * FROM futurities WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
   if (!g) throw new GameError('no_futurity', "There's no futurity taking bets right now.");
   if (new Date(g.resolves_at) <= new Date()) throw new GameError('closed', 'Betting on the futurity is closed.');
