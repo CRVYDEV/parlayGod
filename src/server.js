@@ -242,21 +242,30 @@ export async function buildServer() {
       const key = String(idem);
       const bodyHash = crypto.createHash('sha256')
         .update(req.method + '\n' + req.url + '\n' + JSON.stringify(req.body ?? null)).digest('hex');
-      let reserved = false;
-      try {
-        await pool.query('INSERT INTO idempotency (account_id, key, status, body_hash, response) VALUES ($1,$2,0,$3,$4)',
-          [req.user.sub, key, bodyHash, '']);
-        reserved = true;
-      } catch { /* PK conflict → the key already exists */ }
-      if (reserved) { req._idem = { key, bodyHash }; return; }
-      const row = (await pool.query('SELECT status, body_hash, response FROM idempotency WHERE account_id=$1 AND key=$2',
-        [req.user.sub, key])).rows[0];
-      if (!row) { req._idem = { key, bodyHash }; return; } // released between insert and read — proceed
-      if (row.body_hash !== bodyHash)
-        return reply.code(422).send({ error: 'idempotency_key_reuse', message: 'This Idempotency-Key was used with a different request.' });
-      if (row.status === 0)
-        return reply.code(409).header('retry-after', 1).send({ error: 'in_progress', message: 'A request with this key is still processing.' });
-      return reply.code(row.status).header('x-idempotent-replay', 'true').type('application/json').send(row.response);
+      // (red-team R4 idempotency MED) Reserve-or-replay, and NEVER proceed unreserved. If our INSERT
+      // PK-conflicts but the SELECT then finds no row (the holder released it — a 4xx/5xx that DELETEs
+      // its reservation between our conflict and our read, e.g. the `contention` error we tell clients
+      // to retry), the old code ran the action WITHOUT a reservation → onSend stored nothing → a
+      // further retry re-executed = double bank/spend. Loop and re-INSERT so every proceeding request
+      // holds a reservation; on a pathological insert/delete storm, refuse (409) rather than run unprotected.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        let reserved = false;
+        try {
+          await pool.query('INSERT INTO idempotency (account_id, key, status, body_hash, response) VALUES ($1,$2,0,$3,$4)',
+            [req.user.sub, key, bodyHash, '']);
+          reserved = true;
+        } catch { /* PK conflict → the key already exists */ }
+        if (reserved) { req._idem = { key, bodyHash }; return; }
+        const row = (await pool.query('SELECT status, body_hash, response FROM idempotency WHERE account_id=$1 AND key=$2',
+          [req.user.sub, key])).rows[0];
+        if (!row) continue; // released between our INSERT and this SELECT — loop and re-reserve, never proceed unreserved
+        if (row.body_hash !== bodyHash)
+          return reply.code(422).send({ error: 'idempotency_key_reuse', message: 'This Idempotency-Key was used with a different request.' });
+        if (row.status === 0)
+          return reply.code(409).header('retry-after', 1).send({ error: 'in_progress', message: 'A request with this key is still processing.' });
+        return reply.code(row.status).header('x-idempotent-replay', 'true').type('application/json').send(row.response);
+      }
+      return reply.code(409).header('retry-after', 1).send({ error: 'in_progress', message: 'Key contention — retry.' });
     }
   });
   app.addHook('onSend', async (req, reply, payload) => {
