@@ -152,6 +152,7 @@ export function setFadeLimit(ch, limit) {
 export async function pvpDice(ch, fader, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No dice in lockup — yet.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The back room is on the ${CASINO.DISTRICT}.`);
+  if (fader.id === ch.id) throw new GameError('self', "You can't fade your own action."); // defense-in-depth: withTwoCharacters already throws self (one alive char/account) — explicit like every sibling
   const limit = fader.fade_limit != null ? Math.floor(Number(fader.fade_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_fading', "They're not taking action.");
   if (jailed(fader) || hospitalized(fader) || fader.loc !== CASINO.DISTRICT)
@@ -921,6 +922,7 @@ export function setPokerLimit(ch, limit) {
 export async function playPoker(ch, dealer, amount, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The table is on the ${CASINO.DISTRICT}.`);
+  if (dealer.id === ch.id) throw new GameError('self', "You can't play your own table."); // defense-in-depth: withTwoCharacters already throws self — explicit like every sibling
   const limit = dealer.poker_limit != null ? Math.floor(Number(dealer.poker_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_dealing', "They're not dealing a hand.");
   if (jailed(dealer) || hospitalized(dealer) || dealer.loc !== CASINO.DISTRICT)
