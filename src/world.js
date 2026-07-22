@@ -490,7 +490,7 @@ export async function sweepStaleRaids(pool) {
         swept++;
       }
       await client.query('COMMIT');
-    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('[sweepStaleRaids]', id, e?.code || e?.message || e); } finally { client.release(); }
   }
   return { swept };
 }

@@ -328,7 +328,7 @@ export async function spawnNpcConvoys(pool) {
         [id, origin, destination, def, now, arrives]);
       await client.query('INSERT INTO convoy_cargo (convoy_id, good_id, qty) VALUES ($1,$2,$3)', [id, good, qty]);
       await client.query('COMMIT'); spawned++;
-    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('[spawnNpcConvoys]', e?.code || e?.message || e); } finally { client.release(); }
   }
   return { spawned };
 }
@@ -345,7 +345,7 @@ export async function despawnArrivedNpc(pool) {
       await client.query('DELETE FROM convoy_ambushes WHERE convoy_id=$1', [id]);
       await client.query('DELETE FROM convoys WHERE id=$1', [id]);
       await client.query('COMMIT'); despawned++;
-    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
+    } catch (e) { await client.query('ROLLBACK'); console.error('[despawnArrivedNpc]', id, e?.code || e?.message || e); } finally { client.release(); }
   }
   return { despawned };
 }

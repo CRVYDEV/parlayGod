@@ -402,7 +402,7 @@ export async function sweepGrandPrix(pool) {
   for (const { id } of due) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); await resolveGrandPrix(client, id); await client.query('COMMIT'); resolved++; }
-    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    catch (e) { await client.query('ROLLBACK'); console.error('[sweepGrandPrix]', id, e?.code || e?.message || e); } // 40P01 / transient → next tick retries; a PERSISTENT throw freezes this pot's escrow → log it (the sweepAuctions poison-row precedent) so it surfaces, not silent
     finally { client.release(); }
   }
   return { resolved };

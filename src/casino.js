@@ -476,7 +476,7 @@ export async function sweepTrackEntries(pool) {
       }
       await client.query('UPDATE track_entries SET settled=true WHERE day=$1 AND race=$2', [g.day, g.race]);
       await client.query('COMMIT'); settled += entries.length;
-    } catch (e) { await client.query('ROLLBACK'); } // transient → next tick retries (idempotent)
+    } catch (e) { await client.query('ROLLBACK'); console.error('[sweepTrackEntries]', g.day, g.race, e?.code || e?.message || e); } // transient → next tick retries; a PERSISTENT throw freezes this card's payouts → log it (the sweepAuctions poison-row precedent)
     finally { client.release(); }
   }
   return { settled };
@@ -658,7 +658,7 @@ export async function sweepFuturity(pool) {
   for (const { id } of due) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); await resolveFuturity(client, id); await client.query('COMMIT'); resolved++; }
-    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    catch (e) { await client.query('ROLLBACK'); console.error('[sweepFuturity]', id, e?.code || e?.message || e); } // 40P01 / transient → next tick retries; a PERSISTENT throw freezes this futurity's escrow → log it (the sweepAuctions poison-row precedent)
     finally { client.release(); }
   }
   return { resolved };
@@ -1083,7 +1083,7 @@ export async function sweepTournaments(pool) {
   for (const { id } of due) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); await resolveTournament(client, id); await client.query('COMMIT'); resolved++; }
-    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    catch (e) { await client.query('ROLLBACK'); console.error('[sweepTournaments]', id, e?.code || e?.message || e); } // 40P01 / transient → next tick retries; a PERSISTENT throw freezes this tournament's escrow → log it (the sweepAuctions poison-row precedent)
     finally { client.release(); }
   }
   return { resolved };
