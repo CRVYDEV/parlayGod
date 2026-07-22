@@ -16,6 +16,14 @@ import { fightersOf } from './boxing.js';
 const uid = () => crypto.randomUUID();
 export class GameError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
+// (red-team R6 — stored-XSS fix) Player-controlled display strings (character/gang names, custom
+// titles, contract reasons) render into the console's innerHTML, and the bearer token lives in the
+// browser's localStorage — so unescaped markup here is STORED XSS → cross-user token theft → account
+// takeover. Strip the HTML-injection set (< > " ` and control chars) at the DATA LAYER so no malicious
+// markup ever enters the DB for any rendered field; the client also escapes on output (defense-in-depth).
+// `'` and `&` are kept (legitimate in names — "D'Angelo", "Smith & Sons" — and the client escapes them).
+export const cleanText = (s) => String(s == null ? '' : s).replace(/[<>"\x60\x00-\x1F\x7F]/g, '');
+
 // Postgres resolves a rare lock-order cycle (e.g. a crew execute racing a member's own PvP
 // action) by aborting one transaction with SQLSTATE 40P01. Nothing committed — surface it as a
 // clean retryable error instead of a raw 500. pg-mem never deadlocks, so tests can't hit this.

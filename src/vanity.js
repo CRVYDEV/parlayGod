@@ -9,7 +9,7 @@
 // estate time (the bloodline follows the rename); the one real consequence is that a referral
 // code IS the recruiter's living character name (§7.13), so renaming rotates your code — the
 // old one simply stops resolving, which mints nothing and strands nobody already qualified.
-import { GameError } from './game.js';
+import { GameError, cleanText } from './game.js';
 import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf } from './rules.js';
 
 // The one till: gate on the account's $OMR, debit in-memory (persistAccount commits it),
@@ -30,8 +30,8 @@ export async function spendOmr(client, h, cost, reason) {
 // codes resolve by name, §7.13; the partial unique index ux_char_name_alive is the race
 // backstop). persistCharacter never writes `name`, so the direct UPDATE cannot be clobbered.
 export async function changeName(ch, name, client, h) {
-  name = String(name || '').trim().slice(0, 24);
-  if (name.length < 2) throw new GameError('name', 'Pick a name (2–24 chars).');
+  name = cleanText(name).trim().slice(0, 24); // strip HTML-injection chars (stored-XSS fix, R6)
+  if (name.length < 2) throw new GameError('name', 'Pick a name (2–24 chars, no < > " markup).');
   if (name === ch.name) throw new GameError('name', "That's already what they call you.");
   const clash = await client.query('SELECT 1 FROM characters WHERE name=$1 AND alive AND id<>$2', [name, ch.id]);
   if (clash.rows.length) throw new GameError('name_taken', 'Someone on the streets already goes by that name.');
@@ -47,7 +47,7 @@ export async function changeName(ch, name, client, h) {
 // and buying one overwrites what's there: your identity, your call. Clearing it back to nothing
 // is free (we sell ink, not ransom).
 export async function setTitle(ch, title, client, h) {
-  const t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, VANITY.TITLE_MAX);
+  const t = cleanText(title).replace(/\s+/g, ' ').trim().slice(0, VANITY.TITLE_MAX); // stored-XSS fix (R6)
   if (!t) { ch.title = null; return { ok: true, title: null }; }
   await spendOmr(client, h, VANITY.TITLE_OMR, 'vanity:title');
   ch.title = t;
@@ -136,7 +136,7 @@ export async function foundationLeaderboard(pool) {
 // uniqueness check, excluding ourselves. Pass either field or both; omitted = unchanged.
 export async function renameGang(ch, name, tag, client, h) {
   if (h.owned.gangRole !== 'boss') throw new GameError('rank', 'Only the boss renames the family.');
-  const newName = name != null ? String(name).trim() : null;
+  const newName = name != null ? cleanText(name).trim() : null; // stored-XSS fix (R6)
   const newTag = tag != null ? String(tag).trim().toUpperCase() : null;
   if (newName == null && newTag == null) throw new GameError('nothing', 'Give the engraver a name or a tag.');
   if (newName != null && (newName.length < 3 || newName.length > 24)) throw new GameError('name', 'Family name must be 3–24 characters.');

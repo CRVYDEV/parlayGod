@@ -292,6 +292,21 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal(r.code, 400, 'a second living character cannot take the same name');
 }
 
+// ═══ FINDING (red-team R6 HIGH): player display strings are stripped of HTML-injection chars server-side
+// — names/gang-names/titles/contract-reasons render into the console's innerHTML with the bearer token in
+// localStorage, so unescaped markup would be STORED XSS → cross-user token theft → account takeover ═══
+{
+  const g = await call('POST', '/v1/auth/guest', {});
+  const cr = await call('POST', '/v1/character', { token: g.body.token, body: { name: 'Vito<img onerror=x>"z' } });
+  assert.equal(cr.code, 200, 'a name carrying markup still creates (dangerous chars stripped, not rejected)');
+  const nm = (await meOf(g.body.token)).name;
+  assert(!/[<>"]/.test(nm), `the stored name is stripped of < > " (got ${JSON.stringify(nm)})`);
+  assert(nm.includes('Vito') && nm.includes('z'), 'the safe characters of the name survive the strip');
+  const g2 = await call('POST', '/v1/auth/guest', {});
+  const r2 = await call('POST', '/v1/character', { token: g2.body.token, body: { name: '<><>' } });
+  assert.equal(r2.code, 400, 'an all-markup name strips to empty and is rejected by the length gate');
+}
+
 // ═══ FINDING (infra CRIT-1): production refuses to boot on the dev JWT secret ═══
 {
   const savedEnv = process.env.NODE_ENV, savedSecret = process.env.JWT_SECRET;
