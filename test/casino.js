@@ -418,6 +418,9 @@ assert(denT.horses.length === CASINO.TRACK.FIELD && denT.dogs.every((r) => r.odd
 assert(denT.dogs.every((r) => r.name && !('p' in r)), 'the field shows names + odds, never the true probability');
 // gates: bad race / min / max / bad runner
 assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'cats', runner: 0, amount: 100 } })).body.error, 'race', "bet the 'dogs' or the 'horses'");
+// R24 input-validation: a prototype key (constructor/__proto__) must NOT slip the dogs|horses allow-list
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'constructor', runner: 0, amount: 100 } })).body.error, 'race', 'a prototype key is rejected, not a phantom race');
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: '__proto__', runner: 0, amount: 100 } })).body.error, 'race', '__proto__ is rejected too');
 assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 0, amount: 10 } })).body.error, 'min', 'track minimum $50');
 assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 0, amount: 999999 } })).body.error, 'max', 'the window caps the bet');
 assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 99, amount: 100 } })).body.error, 'runner', 'a runner must be in the field');

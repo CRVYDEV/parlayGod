@@ -301,6 +301,9 @@ const GREYHOUNDS = ['Grey Ghost', 'Blue Streak', 'Ol’ Rocket', 'Ash-Can Annie'
 const RACEHORSES = ['War Admiral', 'Sea Biscuit', 'Man o’ Sand', 'Dark Star', 'Native Dancer',
   'Whirlaway', 'Gallant Fox', 'Citation', 'Northern Bell', 'Silky Sullivan'];
 const TRACK_RACES = { dogs: GREYHOUNDS, horses: RACEHORSES };
+// own-property guard (the stableKindOf/landmarkOf/ART_CATALOGS precedent): a raw TRACK_RACES[race]
+// lets a prototype key (__proto__/constructor/…) resolve truthy and slip the 'dogs'|'horses' allow-list.
+const trackPoolOf = (race) => (Object.prototype.hasOwnProperty.call(TRACK_RACES, race) ? TRACK_RACES[race] : null);
 
 // a player racer's win weight from its form (the NPC weight band [0.2, 2.0] — a maxed form 75 → 2.0,
 // so a trained animal is the favorite; a weak one a longshot). Step three.
@@ -309,7 +312,7 @@ const trackWeight = (form) => 0.2 + Math.min(1, Math.max(0, Number(form)) / 75) 
 // `entries` (0-based post + snapshotted form/name) come from track_entries; empty → the pure NPC card
 // (backward-compatible with the pre-step-three callers + the test).
 export function trackFieldOf(race, day = dayOf(), entries = []) {
-  const pool = TRACK_RACES[race];
+  const pool = trackPoolOf(race);
   if (!pool) return null;
   const { FIELD, EDGE, MAX_ODDS } = CASINO.TRACK;
   const start = Math.floor(hash01(`track:${race}:${day}:${MARKET_SEED}`) * pool.length);
@@ -350,7 +353,7 @@ async function trackCard(reader, day = dayOf()) {
 }
 
 export async function betTrack(ch, race, runner, amount, client, h) {
-  if (!TRACK_RACES[race]) throw new GameError('race', "Bet the 'dogs' or the 'horses'.");
+  if (!trackPoolOf(race)) throw new GameError('race', "Bet the 'dogs' or the 'horses'.");
   const amt = gateBet(ch, amount, CASINO.TRACK.MIN_BET, CASINO.TRACK.MAX_BET);
   const idx = Math.floor(Number(runner));
   const day = dayOf();
