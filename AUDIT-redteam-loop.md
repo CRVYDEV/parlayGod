@@ -1045,3 +1045,25 @@ CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
 accrual/timing, and websocket lenses confirmed CLEAN; faucet-stacking + port-timing + crew-bucket +
 upgradeRacket flagged for founder calibration. §10.4 untouched. Suite 33/33 + sim drift-0. (Authorization-
 matrix lens pending — addendum next.)**
+
+### Round 17 addendum — authorization matrix (aafa021b)
+**CLEAN — no CRITICAL/HIGH/MED authorization bypass.** Every mutating action re-derives the actor from
+the JWT (`req.user.sub` → account → *alive* character under `FOR UPDATE`) and re-verifies ownership/rank/
+membership server-side against THAT actor; URL `:id` params are always asset/target references, never
+trusted as the actor or as proof of ownership. Verified: the mod perimeter (all 27 `/v1/mod/*` routes carry
+`preHandler: modAuth`; `modKeyOk` is a length-guarded `crypto.timingSafeEqual`; `ALLOW_MOD_REAL_REVENUE`
+double-gates fabricated reserve); every asset-ownership gate (garage/business/boats/fighters/racers/market/
+loans/speakeasy/guns/blackjack all `WHERE …=actor` or `h.owned.*.find`); gang rank gates (`canCommand` from
+the actor's locked role, boss-ONLY commission veto vs boss/underboss powers matching spec, every command on
+`h.owned.gangId` never a URL gang id); self/other + two-party self-guards (`withTwoCharacters` `self`,
+postBounty self-target + self-hitman, heist own-front, crew leader re-verify, wire self-gates); status gates
+(banned refused at the door, agent throttle, referral/social/leaderboard agent exclusions where payouts
+exist). Two LOW/informational, both documented-accepted non-findings: inconsistent agent exclusion on the
+PAYOUT-FREE status leaderboards (wire/world/frontier/territory/portfolio/feud/foundation — accepted, matches
+the recorded design), and the bounded/non-escalating `gang_members` role-read TOCTOU (a demote overlapping a
+loadOwned permits at most one stale-privileged command, treasury can't go negative — accepted across prior
+audits). No files modified.
+
+**Round 17 FINAL: 1 MED (busted streets exact-wealth leak) fixed; all four lenses (cross-system value
+chains, accrual/timing, websocket/bus, authorization matrix) confirmed CLEAN of CRITICAL/HIGH; calibration
+items flagged for founder. §10.4 untouched. Suite 33/33 + sim drift-0.**
