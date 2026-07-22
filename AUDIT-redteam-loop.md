@@ -1067,3 +1067,56 @@ audits). No files modified.
 **Round 17 FINAL: 1 MED (busted streets exact-wealth leak) fixed; all four lenses (cross-system value
 chains, accrual/timing, websocket/bus, authorization matrix) confirmed CLEAN of CRITICAL/HIGH; calibration
 items flagged for founder. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 18 — client-side security · runEstate death-path · newest-modules kitchen-sink
+Three focused lenses on the freshest/highest-complexity surfaces. Every finding re-verified vs source; a
+regression on the one behavioural gate. **No CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **Boxing manager-legend Sybil floor (kitchen-sink LOW/MED — FIXED).** `fightBout` + `resolveMainEvent`
+  bumped the account-level `boxing_wins` legend (the survives-death leaderboard) with NO loser-level floor,
+  unlike its two twins — races (`WHEEL_MIN_LVL` 10) and stable (`LEGEND_MIN_LVL` 10) both gate their legend
+  bumps as the documented anti-Sybil fix (WANTED_MIN_LVL/npcHit-rookie-floor precedent). A ring of fresh-alt
+  managers could feed a main account `boxing_wins` by losing bouts. Added `BOXING.LEGEND_MIN_LVL` (10) and
+  gated both bumps on `levelOf(loser.respect)` (fightBout has the loser in scope; resolveMainEvent fetches
+  the loser char's respect — both chars already locked). Pure STATUS, no §10.4/gameplay power. Regression:
+  a win over a level-9 loser banks NO legend. `src/rules.js` + `src/boxing.js` + `test/boxing.js`.
+- **Port collect/fence jail-hosp gate parity (kitchen-sink LOW — FIXED).** `collectRun` gated only
+  safehouse+district (not jailed/hospitalized) while `launchRun` + every other port verb gate all three;
+  `fenceContraband` gated jail but not hospitalized. A captain in lockup/hospital could work a dockside
+  landing. Added the missing gates for parity (not §10.4 — the faucet is bounded regardless). `src/port.js`.
+- **Port `berths` absolute INT write (kitchen-sink INFO — FIXED).** `berths = berths + 1` is the pg-mem
+  INT-arithmetic quirk (production-safe on real Postgres, but pg-mem mis-evaluates a second rent); switched
+  to an absolute JS-computed write (the racer/fighter-record convention). `src/port.js`.
+- **Estate cb/ammo escrow lock + missions_done wipe (death-path INFO — HARDENED).** The Exchange cb/ammo
+  `death:escrow` burn did `SUM(qty) FROM listings … then DELETE` WITHOUT an explicit `FOR UPDATE`, the lone
+  estate escrow-read without a row lock (currently safe — incidental to the seller char lock the estate
+  holds — but the bounty-pot FOR-UPDATE-before-SUM precedent makes it robust to any future listings path);
+  added the lock. Also added `missions_done` to the estate wipe loop (the one character-scoped table that
+  orphaned — harmless, but closes the wipe-every-character-table hygiene exception). `src/social.js`.
+
+**Lenses that came back CLEAN (confirmed):**
+- **Client-side security** (`public/*.html`) — NO live stored/DOM XSS. Every `innerHTML` sink traced: each
+  player field is neutralized server-side (`cleanText` strips `<>"`, the ASCII name whitelist blocks tag/
+  attribute breakout, crest color is `#rrggbb`, plate is alnum), `describe()`/`bragText()` output only
+  reaches `textContent` sinks, the admin dashboard `esc()`s player data + telemetry, and credentials are
+  handled right (WS bearer off-URL via subprotocol, mod-key header-only, ref capture length-clamped +
+  URL-encoded). Two LOW/INFO defense-in-depth residuals (client XSS safety is INHERITED from server
+  validation not enforced at the sink; JWT-in-localStorage) — flagged for a founder architectural call, NOT
+  a ~150-sink client refactor churned autonomously for a non-bug.
+- **runEstate death-path** — exceptionally clean. The wipe/survive split is correct (den forfeitures
+  §10.4-clean via the den-profit identity; peer-money escrows — boxing/poker/GP/stakes/futurity/track
+  entries+bets — correctly KEPT so the worker resolver burns dead participants via `*:death`; account
+  legends + portfolios/estates/auctions/landmarks survive); every escrow refunds XOR burns exactly once
+  with the killer threaded in-memory (refundPot/killerCh, no persist-clobber); loot-vs-burn is conserved
+  (loot subtracted from the victim before the estate burns the remainder, three disjoint money sources);
+  heir freshness holds (`alive=false` before the heir INSERT, sheds street marks, inherits account marks);
+  killer semantics correct per path (fire loots+rep, npcHit/shank no loot, mod-kill/hunt killer-less); and
+  the estate-vs-sweep double-resolution is closed (FOR-UPDATE-before-SUM on bounties + now the cb/ammo
+  listings). INFO-2 (missions_done orphan) fixed above.
+
+**Round 18 verdict: 1 LOW/MED (boxing legend Sybil floor) + 2 LOW (port gate parity, berths INT write) +
+2 INFO hardening (estate cb/ammo escrow lock, missions_done wipe) fixed; client-side security + the
+runEstate death-path confirmed CLEAN of live vulnerabilities. Client XSS-at-sink hardening + JWT-storage
+flagged for a founder architectural call. §10.4 untouched. Suite 33/33 + sim drift-0.**

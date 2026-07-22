@@ -1949,6 +1949,7 @@ export const BOXING = {
   VARIANCE: 22,              // rng added to each fighter's score — enough for upsets, form still tells
   INJURY_MS: 14400000,      // 4h — a lost bout lays the fighter up
   STATS: ['power', 'chin', 'speed'],
+  LEGEND_MIN_LVL: 10,        // (red-team R18) a PvP bout/main-event win only banks the manager LEGEND (boxing_wins, survives death) vs a loser at/above this level — anti-Sybil, the STABLE.LEGEND_MIN_LVL / RACES.WHEEL_MIN_LVL / npcHit-rookie-floor precedent (a status board can't be farmed against fresh alts). Sign-off lever.
   // ── STEP TWO ──
   STABLE_MAX: 3,             // fighters a manager can run at once (the stable)
   EXHIBITION_CD_MS: 6*3600*1000, // 6h per-fighter cooldown on NPC exhibition bouts

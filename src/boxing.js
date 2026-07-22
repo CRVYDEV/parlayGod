@@ -308,7 +308,9 @@ export async function fightBout(ch, opponent, body, client, h) {
   // records + injury — absolute INT writes (pg-mem arithmetic-UPDATE quirk)
   await client.query('UPDATE fighters SET wins=$2 WHERE id=$1', [winnerF.id, Number(winnerF.wins) + 1]);
   await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [loserF.id, Number(loserF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
-  await bumpLegend(client, winner.account_id);
+  // (red-team R18) the manager LEGEND only banks vs a loser at/above the anti-Sybil floor — the wager/rake
+  // still move (a taxed transfer); only the cosmetic boxing_wins credit is gated (the races/stable precedent)
+  if (levelOf(Number(loser.respect)) >= BOXING.LEGEND_MIN_LVL) await bumpLegend(client, winner.account_id);
   // the world TITLE BELT — win it, or DEFEND it if you're the champ (step four: the reign + clock)
   // (audit F1: lock boxing_title BEFORE street_tax — resolveMainEvent locks them in that order, so
   // crediting the pool before applyBeltResult inverted the two singletons → an AB-BA vs the resolver)
@@ -449,7 +451,11 @@ export async function resolveMainEvent(client, boutId) {
   await client.query('UPDATE fighters SET losses=$2, booked_until=NULL, injured_until=$3 WHERE id=$1',
     [loseF.id, Number(loseF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   const winnerAcct = (await client.query('SELECT account_id FROM characters WHERE id=$1', [winnerChar])).rows[0]?.account_id;
-  if (winnerAcct) await client.query('UPDATE account_persistent SET boxing_wins = boxing_wins + 1 WHERE account_id=$1', [winnerAcct]);
+  // (red-team R18) gate the manager LEGEND on the LOSER's level, like fightBout / the races/stable twins —
+  // else a ring of fresh-alt managers feeds boxing_wins by losing booked main events. Status only, no §10.4.
+  const loserChar = aWon ? bout.b_char : bout.a_char;
+  const loserResp = Number((await client.query('SELECT respect FROM characters WHERE id=$1', [loserChar])).rows[0]?.respect || 0);
+  if (winnerAcct && levelOf(loserResp) >= BOXING.LEGEND_MIN_LVL) await client.query('UPDATE account_persistent SET boxing_wins = boxing_wins + 1 WHERE account_id=$1', [winnerAcct]);
   // the TITLE BELT — win it, or DEFEND it if the champ headlined (step four: the reign + clock)
   const { belt } = await applyBeltResult(client, winF, winnerChar, loseF);
   // ── the SPECTATOR pot (a CASH parimutuel) ──

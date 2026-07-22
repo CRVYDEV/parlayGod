@@ -1392,7 +1392,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
@@ -1501,6 +1501,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // stays; only the exclusivity pointer clears — kill pots already pay any killer, this fixes hospitalize).
   await client.query('UPDATE bounties SET hitman=NULL, opens_at=NULL WHERE hitman=$1', [victim.id]);
   // Exchange escrow forfeits with the man (v24 rule) — bucket rows keep cb/ammo conservation exact
+  // (red-team R18) lock the seller's listing rows BEFORE the SUM — the bounty-pot FOR-UPDATE-before-SUM
+  // precedent. Today this is incidentally safe (every listings mutation holds the seller char lock the
+  // estate already holds), but an explicit lock makes the cb/ammo death:escrow burn robust to any future
+  // path that touches a listings row without that char lock (else SUM-then-DELETE could strand/double it).
+  await client.query("SELECT 1 FROM listings WHERE seller_character=$1 AND item_kind IN ('cb','ammo') FOR UPDATE", [victim.id]);
   const escrowed = (await client.query("SELECT item_kind, SUM(qty) q FROM listings WHERE seller_character=$1 AND item_kind IN ('cb','ammo') GROUP BY item_kind", [victim.id])).rows;
   for (const e of escrowed)
     await h.ledger(client, { currency: e.item_kind, amount: -Number(e.q), reason: 'death:escrow', counterparty: victim.id });
