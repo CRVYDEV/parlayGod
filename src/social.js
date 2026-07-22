@@ -1388,6 +1388,8 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query('DELETE FROM wiretaps WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // step three: a dead party's informant retainers die too (disinfo_until rides the character row → gone with it)
   await client.query('DELETE FROM wire_informants WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
+  // step five: a dead party's standing watches die too (the wiretap precedent — a dead watcher stops watching, a dead target frees the slot)
+  await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);
   // (boxing step three) a dead manager's booked MAIN EVENTS are cancelled — the crowd is refunded (dead

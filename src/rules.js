@@ -1689,7 +1689,19 @@ export const dynastyTierOf = (invested = 0) => {
 export const WIRE = {
   TAP_OMR: 8, TAP_MS: 12 * 3600 * 1000, TAP_MAX: 5, // place a wire: cost, window, concurrent cap
   SWEEP_OMR: 5,                                     // sweep your lines clean of bugs
-  SUB_OMR: 12, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window
+  SUB_OMR: 12, SUB_MS: 7 * 24 * 3600 * 1000,        // the Street Wire premium feed: cost, window (== SUB_TIERS[0], kept for back-compat)
+  // ── STEP FIVE — the TIERED SUBSCRIPTION ladder + the STANDING WATCH automation (all $OMR sinks via the
+  // intel: vocabulary — ZERO invariant changes). The flat Street Wire becomes a ladder: a higher tier
+  // costs more $OMR (a bigger intel:wire burn), unlocks more of the premium feed (the war room), and —
+  // the headline — grants STANDING-WATCH slots: the worker AUTO-RENEWS a tap on an enrolled mark (burning
+  // intel:watch from your $OMR each cycle, bounded by your balance + the tier's slots), so surveillance
+  // runs while you're offline without manual re-tapping. The watch pauses if the sub lapses or you go
+  // broke (the taps lapse naturally). All access/status/pacing — no new bucket, no faucet. Sign-off levers.
+  SUB_TIERS: [
+    { tier: 1, name: 'Street Wire',    omr: 12, ms: 7 * 24 * 3600 * 1000, watchSlots: 0, warRoom: false }, // the feed: forecast + threats + tape
+    { tier: 2, name: 'The Wire Room',  omr: 30, ms: 7 * 24 * 3600 * 1000, watchSlots: 2, warRoom: true },  // + the war room + 2 standing watches
+    { tier: 3, name: 'The Switchboard',omr: 60, ms: 7 * 24 * 3600 * 1000, watchSlots: 5, warRoom: true },  // + 5 standing watches
+  ],
   // ── STEP TWO (all $OMR sinks through the intel: vocabulary — ZERO invariant changes; + a status axis) ──
   TRACE_OMR: 15,                                    // THE BUG TRACE — sweep NAMES the watchers (counter-intel); free when clean
   DOSSIER_OMR: 20,                                  // THE DOSSIER — a one-shot deep read (kills/flags/role/who-they-tap; NO exact cash — banding holds)
@@ -1720,6 +1732,9 @@ export const spyPerksOf = (ops) => { const r = spyRankOf(ops); return { tapBonus
 // the discounted cost of an intel read at your rank (the discounted amount is what's ledgered)
 export const intelCost = (base, ops) => Math.max(1, Math.floor(Number(base) * (1 - (spyPerksOf(ops).discountBps / 10000))));
 export const wireActive = (ch, now = Date.now()) => !!ch.wire_until && new Date(ch.wire_until).getTime() > now;
+// STEP FIVE — your active subscription TIER (0 = lapsed/none), and the tier config lookup
+export const wireTierOf = (ch, now = Date.now()) => (wireActive(ch, now) ? Math.max(1, Number(ch.wire_tier) || 1) : 0);
+export const wireSubTier = (tier) => WIRE.SUB_TIERS.find((t) => t.tier === Number(tier)) || WIRE.SUB_TIERS[0];
 
 // ── THE STORE (ETH revenue packages) — real-money purchases that grant ONLY non-§10.4 things
 // (entitlements / access windows / status), so §10.4 is untouched by construction (design

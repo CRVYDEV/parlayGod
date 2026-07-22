@@ -576,9 +576,18 @@ Information as a spendable $OMR resource. `GET /v1/wire`.
 - **Wiretap** (`/v1/wire/tap/:targetId`, 8 $OMR, 12h, up to 5 at once) — reveals a rival's Law stage + heat
   band, wealth band, operations, WANTED status, and **whether they're hunting you** (pierces the peek space).
 - **Sweep** (`/wire/sweep`, 5 $OMR) — clears every tap on you (free when clean).
-- **The Street Wire subscription** (`/wire/subscribe`, 12 $OMR, 7 days) — a ticker tape, Law forecasts, and
-  threat chatter (a *count* of hunters/contracts on your head — a count, never a name; the layered intel
-  economy: the sub warns, a tap IDs a rival, the $OMR peek names funders).
+- **The Street Wire subscription** (`/wire/subscribe {tier}`) — a **tiered ladder**: Street Wire (12 $OMR /
+  7d — ticker tape, Law forecasts, threat chatter: a *count* of hunters/contracts on your head, never a
+  name; the layered intel economy: the sub warns, a tap IDs a rival, the $OMR peek names funders), The Wire
+  Room (30 — + your family's war room + 2 standing watches), The Switchboard (60 — + 5 standing watches).
+- **The Standing Watch** (`/wire/watch/:targetId`, tier 2+) — enroll a mark and the wire **auto-renews itself
+  from your $OMR** each cycle (`intel:watch`), so the surveillance runs while you're offline (bounded by
+  your balance + the tier's slots). It pauses if you run dry or the sub lapses. `DELETE` to drop it.
+- **Tradecraft & the Spymaster board** — lifetime intel ops rank you (Eavesdropper → The Oracle), granting
+  extra wire slots + a discount on intel reads; the **watchdog** pushes you a live alert the moment a tapped
+  mark turns hot (hunts you / goes wanted / gets indicted). Also: **bug trace** (name your watchers),
+  **dossier** (a deep read), **disinformation** (feed your tappers lies), **informant** (a human source that
+  pierces disinfo).
 
 ---
 

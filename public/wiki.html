@@ -341,9 +341,13 @@ const SECTIONS = [
   { id: 'wire', group: 'The Underworld', title: 'The Wire', tag: 'information you buy',
     html: `<p><b>Wiretap</b> (8 $OMR, 12h, up to 5) — reveals a rival's Law stage + heat, wealth band, operations, WANTED
       status, and <b>whether they're hunting you</b>. <b>Sweep</b> (5 $OMR) clears taps on you (free when clean). The
-      <b>Street Wire subscription</b> (12 $OMR, 7d) gives a ticker tape, Law forecasts, and threat chatter (a count of
-      hunters on your head — a count, never a name).</p>
-      ${R(`GET /v1/wire · POST /v1/wire/tap/:targetId · /wire/sweep · /wire/subscribe`)}` },
+      <b>Street Wire subscription</b> is a <b>tiered ladder</b> — Street Wire (12 $OMR/7d: ticker tape, Law forecasts,
+      threat chatter — a count of hunters on your head, never a name), The Wire Room (30: + war room + 2 standing watches),
+      The Switchboard (60: + 5 standing watches). A <b>standing watch</b> (tier 2+) auto-renews a tap from your $OMR so the
+      surveillance runs while you're offline. Plus <b>tradecraft</b> ranks (more slots + a read discount), the
+      <b>watchdog</b> (a live alert when a tapped mark turns hot), the <b>bug trace</b>, the <b>dossier</b>,
+      <b>disinformation</b> and the <b>informant</b> (a human source that sees through disinfo).</p>
+      ${R(`GET /v1/wire · POST /v1/wire/tap/:targetId · /wire/sweep · /wire/subscribe {tier} · /wire/watch/:targetId`)}` },
 
   { id: 'store', group: 'Endgame & Going Legit', title: 'The Store, PLEX & the Ledger', tag: 'real-money packages',
     html: `<p><b>The Store</b> sells ETH packages that grant <b>only non-currency things</b> (anti-pay-to-win: entitlements,

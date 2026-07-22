@@ -7,8 +7,8 @@
 // action) — no lock complexity; reads filter expires_at and JOIN to `alive`, so a dead party's wire
 // goes silent, and the worker sweeps expired rows. The layered intel economy: the SUB warns you (a
 // hunter COUNT), a TAP identifies whether a SPECIFIC rival is hunting you, the peek names funders.
-import { GameError, notify } from './game.js';
-import { WIRE, wireActive, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
+import { GameError, notify, ledger } from './game.js';
+import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01 } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 // STEP FOUR — the account's lifetime intel-ops (the SPYMASTER rank basis) → its TRADECRAFT perks
@@ -200,15 +200,56 @@ export async function pullDossier(ch, targetId, client, h) {
     } };
 }
 
-// POST /v1/wire/subscribe — the Street Wire premium feed (a recurring $OMR subscription). Extends from
-// the later of now / the current end (the retainer/envelope precedent).
-export async function subscribeWire(ch, client, h) {
-  await spendOmr(client, h, WIRE.SUB_OMR, 'intel:wire');
+// POST /v1/wire/subscribe {tier} — the Street Wire premium feed (a recurring $OMR subscription). STEP
+// FIVE: a TIERED ladder — a higher tier costs more $OMR, unlocks the war room, and grants STANDING-WATCH
+// slots (the auto-tap automation). Extends the window from the later of now / the current end (the
+// retainer/envelope precedent); buying a tier SETS that tier (wire_tier by direct SQL — off the persist
+// positional UPDATE, the disinfo_until pattern). A lower tier bought while a higher one is live downgrades
+// the tier but still extends the window (the player's call).
+export async function subscribeWire(ch, tier, client, h) {
+  const t = wireSubTier(tier == null ? 1 : tier);
+  await spendOmr(client, h, t.omr, 'intel:wire');
   const base = wireActive(ch) ? new Date(ch.wire_until).getTime() : Date.now();
-  ch.wire_until = new Date(base + WIRE.SUB_MS);
+  ch.wire_until = new Date(base + t.ms);
+  await client.query('UPDATE characters SET wire_tier=$2 WHERE id=$1', [ch.id, t.tier]);
+  ch.wire_tier = t.tier;
   await bumpIntelOps(client, ch.account_id);
-  await h.track(client, ch.account_id, 'wire_sub', {});
-  return { ok: true, spent: WIRE.SUB_OMR, wireSeconds: Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000) };
+  await h.track(client, ch.account_id, 'wire_sub', { tier: t.tier });
+  return { ok: true, spent: t.omr, tier: t.tier, tierName: t.name, watchSlots: t.watchSlots,
+    wireSeconds: Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000) };
+}
+
+// POST /v1/wire/watch/:targetId — STEP FIVE, THE STANDING WATCH: enroll a mark so the worker AUTO-RENEWS
+// the wiretap on them (the surveillance runs while you're offline — no manual re-tapping). Requires an
+// active subscription; capped at the sub TIER's watchSlots. Places the tap NOW (charged through the
+// normal placeTap sink) and records the enrollment; the worker keeps it live (burning intel:watch each
+// cycle, bounded by your $OMR). A pure automation over the existing tap — no new value flow at enroll.
+export async function enrollWatch(ch, targetId, client, h) {
+  if (targetId === ch.id) throw new GameError('self', "You don't stand a watch on your own line.");
+  const tierN = wireTierOf(ch);
+  if (!tierN) throw new GameError('no_sub', 'A standing watch needs an active Street Wire subscription.');
+  const slots = wireSubTier(tierN).watchSlots;
+  if (slots <= 0) throw new GameError('tier', 'Upgrade the Wire (tier 2+) to run standing watches.');
+  const t = (await client.query('SELECT id FROM characters WHERE id=$1 AND alive', [targetId])).rows[0];
+  if (!t) throw new GameError('gone', 'No such mark on the street.');
+  const already = !!(await client.query('SELECT 1 FROM wire_watches WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId])).rows[0];
+  if (!already) {
+    const n = Number((await client.query('SELECT COUNT(*) n FROM wire_watches WHERE watcher_character=$1', [ch.id])).rows[0].n);
+    if (n >= slots) throw new GameError('watch_full', `Your Wire runs ${slots} standing watch${slots === 1 ? '' : 'es'} — drop one first.`);
+  }
+  await placeTap(ch, targetId, client, h);   // place/refresh the tap now (the normal intel:wiretap sink)
+  if (!already) await client.query('INSERT INTO wire_watches (watcher_character, target_character) VALUES ($1,$2)', [ch.id, targetId]);
+  await h.track(client, ch.account_id, 'wire_watch', { target: targetId });
+  return { ok: true, target: targetId, standing: true, watchSlots: slots };
+}
+
+// DELETE /v1/wire/watch/:targetId — drop a standing watch (the tap lapses on its own; you keep the wire
+// until it expires, it just won't auto-renew).
+export async function cancelWatch(ch, targetId, client, h) {
+  const r = await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId]);
+  if (!r.rowCount) throw new GameError('no_watch', "You've no standing watch on that mark.");
+  await h.track(client, ch.account_id, 'wire_watch_cancel', { target: targetId });
+  return { ok: true, target: targetId, standing: false };
 }
 
 // GET /v1/wire — the terminal: your live taps + intel, the ticker tape, and (if subscribed) the
@@ -250,8 +291,19 @@ export async function wireBoard(ch, client, h) {
   const ops = Number((await client.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.intel_ops || 0);
   const perks = spyPerksOf(ops);
   const disinfo = disinfoActive(ch);
+  // STEP FIVE — the subscription TIER + the STANDING WATCHES (auto-renewed taps)
+  const tierN = wireTierOf(ch);
+  const tierCfg = tierN ? wireSubTier(tierN) : null;
+  const liveTapSet = new Set(intel.map((i) => i.target));
+  const watchRows = (await client.query(
+    `SELECT c.id, c.name FROM wire_watches wa JOIN characters c ON c.id = wa.target_character AND c.alive
+       WHERE wa.watcher_character=$1 ORDER BY wa.created_at`, [ch.id])).rows;
+  const watches = watchRows.map((w) => ({ target: w.id, name: w.name, live: liveTapSet.has(w.id) }));
   const board = {
     subscribed: sub, subSeconds: sub ? Math.max(0, Math.ceil((new Date(ch.wire_until) - Date.now()) / 1000)) : 0,
+    subTier: tierN, subTierName: tierCfg ? tierCfg.name : null,
+    subTiers: WIRE.SUB_TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, watchSlots: t.watchSlots, warRoom: t.warRoom })),
+    watchSlots: tierCfg ? tierCfg.watchSlots : 0, watches,
     // step four: intel-read costs are the DISCOUNTED (rank-adjusted) prices; defensive/sub costs are flat
     costs: { tap: intelCost(WIRE.TAP_OMR, ops), sweep: WIRE.SWEEP_OMR, sub: WIRE.SUB_OMR, trace: WIRE.TRACE_OMR, dossier: intelCost(WIRE.DOSSIER_OMR, ops), disinfo: WIRE.DISINFO_OMR, informant: intelCost(WIRE.INFORMANT_OMR, ops) },
     tapMax: WIRE.TAP_MAX + perks.tapBonus, informantMax: WIRE.INFORMANT_MAX,
@@ -273,7 +325,8 @@ export async function wireBoard(ch, client, h) {
     board.premium = {
       forecast: cityForecast(),
       threats: { huntersCount, contracts },
-      warRoom: h.owned.gang
+      // the war room is a TIER-2+ perk (the Wire Room / Switchboard) — tier 1 gets forecast + threats + tape
+      warRoom: (tierCfg && tierCfg.warRoom && h.owned.gang)
         ? { name: h.owned.gang.name, held: h.owned.held || [],
             war: h.owned.gang.war_with ? { with: h.owned.gang.war_with, us: h.owned.gang.war_score_us, them: h.owned.gang.war_score_them } : null }
         : null,
@@ -296,6 +349,52 @@ export async function sweepWire(pool) {
   const r = await pool.query('DELETE FROM wiretaps WHERE expires_at <= now()');
   const i = await pool.query('DELETE FROM wire_informants WHERE paid_until <= now()');
   return { swept: (r.rowCount || 0) + (i.rowCount || 0) };
+}
+
+// STEP FIVE — THE STANDING WATCH: the worker keeps enrolled taps LIVE by auto-renewing them from the
+// watcher's $OMR. For each subscribed, alive watcher, take their first `watchSlots` enrollments (the sub
+// tier's cap — so letting the sub drop to a lower tier renews fewer) and, if a watch's tap is at/near
+// lapse, burn the (rank-discounted) tap cost and (re)place/EXTEND the tap — WITHOUT resetting the
+// watchdog alert flags (an auto-renew keeps the wire live but doesn't re-arm spent alerts, so no spam).
+// Bounded by the watcher's $OMR: broke → the watch pauses (the tap lapses; a re-fund/re-sub resumes it).
+// §10.4-clean: intel:watch is a $OMR BURN under the existing intel: vocabulary (no new bucket/faucet).
+// LOCK ORDER: account_persistent[watcher] FOR UPDATE (serializes vs withCharacter/persistAccount so the
+// omr decrement can't be clobbered), then the leaf tap row — no character rows locked, so no cycle.
+export async function sweepStandingWatches(pool, renewWithinMs = 30 * 60 * 1000) {
+  // subscribed, alive watchers who hold at least one standing watch
+  const watchers = (await pool.query(
+    `SELECT DISTINCT wc.id, wc.account_id, wc.wire_tier
+       FROM wire_watches wa
+       JOIN characters wc ON wc.id = wa.watcher_character AND wc.alive AND wc.wire_until > now()`)).rows;
+  let renewed = 0, paused = 0;
+  for (const w of watchers) {
+    const cfg = wireSubTier(w.wire_tier || 1);
+    if (cfg.watchSlots <= 0) continue;                     // tier 1 (or a bad tier) runs no standing watches
+    // the enrollments this sub tier actually covers (oldest first), only against LIVE targets
+    const rows = (await pool.query(
+      `SELECT wa.target_character AS target, t.name
+         FROM wire_watches wa JOIN characters t ON t.id = wa.target_character AND t.alive
+        WHERE wa.watcher_character=$1 ORDER BY wa.created_at LIMIT $2`, [w.id, cfg.watchSlots])).rows;
+    if (!rows.length) continue;
+    const ops = Number((await pool.query('SELECT intel_ops FROM account_persistent WHERE account_id=$1', [w.account_id])).rows[0]?.intel_ops || 0);
+    const cost = intelCost(WIRE.TAP_OMR, ops);
+    for (const r of rows) {
+      // is the tap missing or lapsing within the renew window? (only renew when it needs it — not every tick)
+      const tap = (await pool.query('SELECT expires_at FROM wiretaps WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target])).rows[0];
+      if (tap && new Date(tap.expires_at).getTime() - Date.now() > renewWithinMs) continue; // still comfortably live
+      // affordability + burn under the account lock (serializes vs persistAccount — no clobber)
+      const bal = (await pool.query('SELECT omr FROM account_persistent WHERE account_id=$1 FOR UPDATE', [w.account_id])).rows[0];
+      if (!bal || Number(bal.omr) < cost) { paused++; continue; }  // broke — the watch pauses (tap lapses)
+      await pool.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [w.account_id, cost]);
+      await ledger(pool, { accountId: w.account_id, currency: 'omr', amount: -cost, reason: 'intel:watch' });
+      const exp = new Date(Date.now() + WIRE.TAP_MS);
+      const upd = await pool.query('UPDATE wiretaps SET expires_at=$3 WHERE watcher_character=$1 AND target_character=$2', [w.id, r.target, exp]);
+      if (!upd.rowCount) await pool.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [w.id, r.target, exp]);
+      await pool.query('UPDATE account_persistent SET intel_ops = intel_ops + 1 WHERE account_id=$1', [w.account_id]);
+      renewed++;
+    }
+  }
+  return { renewed, paused };
 }
 
 // STEP FOUR — THE WATCHDOG: the push layer the pull-only intel service lacked. A SUBSCRIBED watcher

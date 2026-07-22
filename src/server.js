@@ -514,7 +514,8 @@ export async function buildServer() {
       traceOmr: WIRE.TRACE_OMR, dossierOmr: WIRE.DOSSIER_OMR,
       disinfoOmr: WIRE.DISINFO_OMR, disinfoHours: Math.round(WIRE.DISINFO_MS / 3600000),
       informantOmr: WIRE.INFORMANT_OMR, informantDays: Math.round(WIRE.INFORMANT_MS / 86400000), informantMax: WIRE.INFORMANT_MAX,
-      spyRanks: WIRE.SPY_RANKS.map((r) => ({ min: r.min, name: r.name, tapBonus: r.tapBonus || 0, discountBps: r.discountBps || 0 })) }, // step four tradecraft
+      spyRanks: WIRE.SPY_RANKS.map((r) => ({ min: r.min, name: r.name, tapBonus: r.tapBonus || 0, discountBps: r.discountBps || 0 })), // step four tradecraft
+      subTiers: WIRE.SUB_TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, days: Math.round(t.ms / 86400000), watchSlots: t.watchSlots, warRoom: t.warRoom })) }, // step five ladder + standing watch
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
     pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })) },
     casino: { district: CASINO.DISTRICT, minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET,
@@ -906,7 +907,12 @@ export async function buildServer() {
   app.post('/v1/wire/sweep', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.sweepBugs(ch, client, h)));
   app.post('/v1/wire/subscribe', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.subscribeWire(ch, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.subscribeWire(ch, req.body?.tier, client, h)));
+  // Wire step five: THE STANDING WATCH — auto-renewed taps (enroll/cancel; the worker keeps them live)
+  app.post('/v1/wire/watch/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.enrollWatch(ch, req.params.targetId, client, h)));
+  app.delete('/v1/wire/watch/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.cancelWatch(ch, req.params.targetId, client, h)));
   // Wire step two: THE BUG TRACE (name your watchers), THE DOSSIER (a deep read), THE SPYMASTER board
   app.post('/v1/wire/trace', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.traceBugs(ch, client, h)));
