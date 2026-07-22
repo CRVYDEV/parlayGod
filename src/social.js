@@ -3,7 +3,7 @@
 // Every formula cites spec §7 / prototype v24. Two-party actions run under
 // withTwoCharacters (game.js) which locks both rows in stable order (§10.1).
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding } from './game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, cleanText } from './game.js';
 import { rememberedSkills } from './skills.js';
 import {
   DISTRICTS, CONSUMABLES, M3, M8, CONSTANTS, LOAN,
@@ -37,8 +37,8 @@ async function takeHouse(client, tax) {
 export async function createGang(ch, name, tag, client, h) {
   if (h.owned.gangId) throw new GameError('in_gang', 'You already have a family.');
   if (levelOf(Number(ch.respect)) < M3.GANG_FOUND_LEVEL) throw new GameError('level', `Level ${M3.GANG_FOUND_LEVEL} to found a family.`);
-  name = String(name || '').trim(); tag = String(tag || '').trim().toUpperCase();
-  if (name.length < 3 || name.length > 24) throw new GameError('name', 'Family name must be 3–24 characters.');
+  name = cleanText(name).trim(); tag = String(tag || '').trim().toUpperCase(); // strip HTML-injection chars (stored-XSS fix, R6)
+  if (name.length < 3 || name.length > 24) throw new GameError('name', 'Family name must be 3–24 characters (no < > " markup).');
   if (!/^[A-Z0-9]{2,4}$/.test(tag)) throw new GameError('tag', 'Tag must be 2–4 letters or numbers.');
   if (Number(ch.cash) < M3.GANG_FOUND_COST) throw new GameError('cash', `Founding a family costs $${M3.GANG_FOUND_COST}.`);
   const clash = await client.query('SELECT id FROM gangs WHERE name=$1 OR tag=$2', [name, tag]);
@@ -364,7 +364,7 @@ export async function jump(ch, victim, client, h) {
 // or a kill; a premium 'kill' pot pays ONLY on a completed hit. Contracts carry a reason +
 // expiry; a funder can cancel their own share, and expired pots refund every funder.
 const BKINDS = new Set(['hospitalize', 'kill']);
-const bountyReason = (r) => (r ? String(r).replace(/\s+/g, ' ').trim().slice(0, 140) || null : null);
+const bountyReason = (r) => (r ? cleanText(r).replace(/\s+/g, ' ').trim().slice(0, 140) || null : null); // strip HTML-injection chars (stored-XSS fix, R6)
 
 export async function postBounty(ch, targetCharacterId, amount, client, h, opts = {}) {
   if (targetCharacterId === ch.id) throw new GameError('self', 'A price on your own head? See the Doc.');
