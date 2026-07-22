@@ -61,6 +61,20 @@ assert.equal(r.body.landed, sale, 'the contraband fenced for the route rate (por
 assert.equal(r.body.net, sale - runCost, 'net = landed − cost (the smuggling margin)');
 assert.equal(await cashOf(cap.token), preCollect + sale, 'the landing hit the pocket');
 
+// ── (red-team R21) collectRun GATE-REJECTIONS — the signed R18 D2 safehouse gate + the jail/hosp gates
+// had no regression; a refactor dropping any would silently reopen the safehoused-landlord hole. The boat
+// stays at sea across attempts (collect throws BEFORE mutating), so each gated try can retry. ──
+await pool.query(`UPDATE characters SET port_used = 0, port_at = now() WHERE id='${cap.id}'`); // clear the daily supply bucket
+await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
+await pool.query(`UPDATE characters SET jail_until = now() + interval '1 hour' WHERE id='${cap.id}'`);
+assert.equal((await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token })).body.error, 'jailed', 'no collecting a run from lockup');
+await pool.query(`UPDATE characters SET jail_until = NULL, hosp_until = now() + interval '1 hour' WHERE id='${cap.id}'`);
+assert.equal((await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token })).body.error, 'hosp', 'no working the dock from the hospital');
+await pool.query(`UPDATE characters SET hosp_until = NULL, safe_until = now() + interval '1 hour' WHERE id='${cap.id}'`);
+assert.equal((await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token })).body.error, 'safe', 'the signed D2 shield-not-bunker gate holds on collect');
+await pool.query(`UPDATE characters SET safe_until = NULL WHERE id='${cap.id}'`);
+assert.equal((await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token })).code, 200, 'once the gates clear, the run collects');
+
 // ── an INTERDICTED run: seize + the fine sink + heat, boat survives (PORT_SINK=0) ──
 process.env.PORT_INTERDICT_P = '1'; process.env.PORT_SINK = '0';
 await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
