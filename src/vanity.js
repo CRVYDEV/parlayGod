@@ -17,6 +17,10 @@ import { VANITY, GANG_SEALS, sealOf, FOUNDATION, foundationOf } from './rules.js
 // enumerated reason. Exported — the M8 sinks outside this shop (board anonymity, intel peek,
 // respec) pay through the same till so the burn discipline lives in exactly one place.
 export async function spendOmr(client, h, cost, reason) {
+  // defense-in-depth (red-team R3): this is the single $OMR burn primitive — a negative/NaN cost would pass
+  // the `omr < cost` check and then ADD $OMR (a §10.4 mint). Every caller passes a positive constant/validated
+  // amount today, but guard the primitive so a future caller can never invert it.
+  if (!(Number.isFinite(cost) && cost > 0)) throw new GameError('amount', 'Invalid amount.');
   if (Number(h.acct.omr) < cost) throw new GameError('omr', `That costs ${cost} $OMR. Come back flush.`);
   h.acct.omr = Number(h.acct.omr) - cost;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -cost, reason });
