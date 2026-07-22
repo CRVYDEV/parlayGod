@@ -175,6 +175,19 @@ let inv3 = await runLedgerInvariants(pool);
 assert(esc(inv3).ok && esc(inv3).lhs === 0, 'the escrow empties after resolution');
 assert.equal(inv3.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles after payout (bets/wins/purse are transfers)');
 
+// ── (red-team R18) the manager LEGEND is anti-Sybil: a win over a SUB-LEVEL-10 loser banks NO boxing_wins ──
+const sybW = await mk('Legit Champ'); await seed(sybW.id, `respect=${lvlRespect(12)}`); await grantCash(sybW.id, 2000000);
+const sybL = await mk('Alt Bum'); await seed(sybL.id, `respect=${lvlRespect(9)}`); await grantCash(sybL.id, 2000000); // level 9 < LEGEND_MIN_LVL (10)
+const sybWF = (await call('POST', '/v1/boxing/recruit', { token: sybW.token, body: { name: 'Real McCoy' } })).body.id;
+const sybLF = (await call('POST', '/v1/boxing/recruit', { token: sybL.token, body: { name: 'The Stiff' } })).body.id;
+await pool.query(`UPDATE fighters SET power=14,chin=14,speed=14 WHERE id='${sybWF}'`);
+await pool.query(`UPDATE fighters SET power=6,chin=6,speed=6 WHERE id='${sybLF}'`);
+await call('POST', '/v1/boxing/list', { token: sybL.token, body: { fighter: sybLF, stake: 5000 } });
+assert.equal(await boxingWins(sybW.aid), 0, 'the legit champ has no career wins yet');
+const sybBout = await call('POST', `/v1/boxing/fight/${sybL.id}`, { token: sybW.token, body: { myFighter: sybWF, theirFighter: sybLF, stake: 5000 } });
+assert.equal(sybBout.body.win, true, 'the leveled fighter wins the bout (form 42 vs 18)');
+assert.equal(await boxingWins(sybW.aid), 0, 'a win over a SUB-LEVEL-10 loser banks NO manager legend (the races/stable anti-Sybil floor)');
+
 // ── DEATH CANCELS a booked card + refunds the crowd (dead principal) ──
 const ee = await mk('Doomed Don'); await seed(ee.id, `respect=${lvlRespect(12)}`); await grantCash(ee.id, 2000000);
 const chump = (await call('POST', '/v1/boxing/recruit', { token: ee.token, body: { name: 'Chump' } })).body.id;

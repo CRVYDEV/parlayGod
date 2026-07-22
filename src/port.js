@@ -143,6 +143,10 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
 // or eat the bust. Step four: on a clean landing, WAREHOUSE the contraband (hold it as a commodity to fence
 // later at a drifting price) instead of fencing it to cash now — a market-timing play (the default fences now).
 export async function collectRun(ch, boatId, warehouse, client, h) {
+  // (red-team R18) parity with launchRun / every other port verb — a captain in lockup or the hospital
+  // can't be on the dock working a landing (collecting is a physical dockside act, like launching).
+  if (jailed(ch)) throw new GameError('jailed', 'No collecting a run from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to work the dock.");
   if (safeHoused(ch)) throw new GameError('safe', 'The take waits for a captain on the dock, not a ghost.'); // D2 collect
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `Collect at the ${PORT.DISTRICT}.`);
   const boat = (await client.query('SELECT * FROM boats WHERE id=$1 AND character_id=$2 FOR UPDATE', [boatId, ch.id])).rows[0];
@@ -206,6 +210,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
 // is the risk. The harbormaster toll + the legend bump fire here (the cash is realized at the docks now).
 export async function fenceContraband(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No fencing from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to meet the fence."); // (red-team R18) parity
   if (safeHoused(ch)) throw new GameError('safe', 'The fence deals face to face, not with a ghost.'); // D2 extraction-ish
   if (ch.loc !== PORT.DISTRICT) throw new GameError('district', `The fence works out of the ${PORT.DISTRICT}.`);
   const book = Number((await client.query('SELECT contraband FROM characters WHERE id=$1', [ch.id])).rows[0]?.contraband || 0);
@@ -231,7 +236,9 @@ export async function rentBerth(ch, client, h) {
   if (Number(ch.cash) < PORT.STEP4.BERTH_COST) throw new GameError('cash', `A slip runs $${PORT.STEP4.BERTH_COST}.`);
   ch.cash = Number(ch.cash) - PORT.STEP4.BERTH_COST;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -PORT.STEP4.BERTH_COST, reason: 'port:berth' });
-  await client.query('UPDATE characters SET berths = berths + 1 WHERE id=$1', [ch.id]);
+  // (red-team R18) absolute INT write — `berths = berths + 1` is the pg-mem arithmetic-UPDATE quirk (mis-evaluates
+  // to 0−n on a second rent); NUMERIC cols are arith-safe but berths is INT, so compute the new value in JS.
+  await client.query('UPDATE characters SET berths = $2 WHERE id=$1', [ch.id, berths + 1]);
   await h.track(client, ch.account_id, 'port', { act: 'berth', berths: berths + 1 });
   return { ok: true, berths: berths + 1, fleetMax: PORT.FLEET_MAX + berths + 1, spent: PORT.STEP4.BERTH_COST };
 }
