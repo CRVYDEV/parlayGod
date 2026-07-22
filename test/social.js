@@ -879,6 +879,18 @@ assert.equal((await call('POST', `/v1/streets/${jmember.id}/jump`, { token: jbos
 await seedCh(jmember.id, "wanted_until = now() + interval '1 day'");
 assert.equal((await call('POST', `/v1/streets/${jmember.id}/jump`, { token: jboss.token })).code, 200, 'a WANTED family member forfeits omertà on the jump path too (audit LOW-1)');
 
+// ── red-team R1: startSearch honors the RAT exception to family omertà (parity with fire/jump/npcHit/
+// postBounty). Previously startSearch omitted the rat flag, so a same-family hunter was blocked at the
+// search — making the fire rat-waiver unreachable for them. ──
+await seedCh(jmember.id, 'wanted_until = NULL'); // clear the wanted mark from the jump test above
+await pool.query(`DELETE FROM searches WHERE hunter='${jboss.id}'`);
+assert.equal((await call('POST', `/v1/streets/${jmember.id}/search`, { token: jboss.token })).body.error, 'family', 'startSearch: a loyal family member has omertà — no search placed');
+const jmAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${jmember.id}'`)).rows[0].a;
+await pool.query(`UPDATE account_persistent SET rat=true WHERE account_id='${jmAcct}'`);
+assert.equal((await call('POST', `/v1/streets/${jmember.id}/search`, { token: jboss.token })).code, 200, 'startSearch: a RAT in your own family forfeits omertà — the search IS placed (the fire rat-waiver is now reachable to same-family hunters)');
+await pool.query(`DELETE FROM searches WHERE hunter='${jboss.id}'`); // clean up so it doesn't leak into later tests
+await pool.query(`UPDATE account_persistent SET rat=false WHERE account_id='${jmAcct}'`);
+
 
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
 process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)

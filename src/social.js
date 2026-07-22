@@ -825,10 +825,14 @@ export async function hitmanLeaderboard(pool, limit = 20) {
 // ═══════════════════ HIT CONTRACTS (§7.7) ═══════════════════
 export async function startSearch(ch, targetCharacterId, client, h) {
   if (targetCharacterId === ch.id) throw new GameError('self', 'You know where you are.');
-  const t = (await client.query('SELECT id, name, wanted_until FROM characters WHERE id=$1 AND alive', [targetCharacterId])).rows[0];
+  const t = (await client.query(
+    `SELECT c.id, c.name, c.wanted_until, a.rat FROM characters c JOIN account_persistent a ON a.account_id=c.account_id
+      WHERE c.id=$1 AND c.alive`, [targetCharacterId])).rows[0];
   if (!t) throw new GameError('no_target', 'Nobody by that name on the streets.');
   const tg = (await client.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [targetCharacterId])).rows[0];
-  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !isWanted(t)) throw new GameError('family', "They're family. Omertà."); // a WANTED welsher is fair game even to family
+  // a rat OR a WANTED welsher forfeits family omertà — same exception fire/jump/npcHit/postBounty carry
+  // (red-team R1: startSearch had omitted the rat flag, so the fire rat-waiver was unreachable to same-family hunters)
+  if (tg?.gang_id && tg.gang_id === h.owned.gangId && !t.rat && !isWanted(t)) throw new GameError('family', "They're family. Omertà.");
   const cur = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (cur) throw new GameError('searching', 'Your people are already out looking. Call them off first.');
   await client.query('INSERT INTO searches (hunter, target) VALUES ($1,$2)', [ch.id, targetCharacterId]);

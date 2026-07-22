@@ -1,0 +1,72 @@
+# AUDIT-redteam-loop.md — autonomous overnight red-team (rounds)
+
+A founder-directed max-effort adversarial loop over the ENTIRE project (game modules + Solidity
+contracts). Each round fans out finder agents across the codebase + independent skeptics that default to
+REFUTING; survivors are triaged by the main loop, code bugs fixed with a regression each (§10.4 kept
+exact), balance/design calls flagged not retuned (ground rule #1), `npm test` + `node tools/sim.js` kept
+green, then committed.
+
+---
+
+## Round 1 — whole-project sweep (42 agents, 15 raw → 8 survived)
+
+**No CRITICAL. No §10.4 drift.** 5 code fixes (regression each) + 1 balance flag; 2 accepted/known.
+
+### Fixed in-commit
+
+- **`chain.js:makeChainReader` — wrong-chain reclaim guard (was HIGH-claimed, MED).** `reclaimExpiredVouchers`
+  runs OUTSIDE the worker's `assertChainId` gate, and `makeChainReader` built a `usedNonce` reader from
+  `CHAIN_RPC_URL`+`VOUCHER_CLAIM_ADDRESS` with no chain-id assertion. On a CHAIN_ID/RPC drift to a chain Y
+  with a same-address (colliding-deploy) VoucherClaim that answers `usedNonce=false` for a nonce genuinely
+  claimed on chain X, reclaim would refund the burned $OMR (`+withdraw:omr`) — a chain-boundary
+  double-spend the in-game ledger can't see (it nets to zero). **Fix:** `makeChainReader` now asserts
+  `getChainId()===CHAIN_ID` before returning a reader; a mismatch (or an un-answerable getChainId) returns
+  **null**, routing into reclaim's existing "no reader → skip, never refund blind" fail-safe. Dormant-safe
+  (no CHAIN_ID in tests → guard skipped, reader null as before). Deploy-misconfig-triggered, not
+  attacker-reachable, but a real value-safety gap matching the codebase's own "never refund blind" pattern.
+
+- **`wire.js:sweepStandingWatches` — non-transactional $OMR burn (my step-five code; MED).** The standing-
+  watch worker ran on bare `pool.query` autocommits, so its `SELECT omr … FOR UPDATE` lock was inert
+  (dropped at statement end). Two gaps: (A) a §10.4 omr-bucket drift if the process died between the
+  `omr = omr - cost` decrement and its `intel:watch` ledger row; (B) a same-account TOCTOU where a
+  concurrent `withCharacter` $OMR spend commits between the affordability read and the decrement, driving
+  omr negative. **Fix:** each renewal now runs in its own `pool.connect()+BEGIN/COMMIT` (the `sweepLoans`/
+  `settlePassStipend` convention) — the `FOR UPDATE` lock persists across the affordability check and the
+  decrement+ledger+tap-update commit/rollback together; a cheap unlocked pre-filter avoids opening a
+  connection for comfortably-live taps, with the authoritative re-check inside the txn. Existing wire tests
+  confirm behavior preserved.
+
+- **`social.js:startSearch` — missing rat exception (LOW).** `fire`/`jump`/`npcHit`/`postBounty` all void
+  family omertà for a rat, but `startSearch` didn't (it never fetched the rat flag), so a same-family
+  hunter was blocked at the search — making the documented fire rat-waiver unreachable for them. **Fix:**
+  `startSearch` now joins `account_persistent` for `rat` and excepts it, matching the siblings. Regression
+  in `test/social.js` (a same-family rat is searchable; a loyal member isn't).
+
+- **`economy.js:swap` (buy) + `business.js:launderAtBusiness` — missing jail gate (LOW).** Laundering
+  (cash→$OMR, an extraction-prep act) was safehouse-gated but not jail-gated, unlike `deal`/`cook`/
+  `boostCar`. A jailed (indicted/marked) player could keep washing toward extraction from a cell. §10.4
+  unaffected (bounded by the wash caps). **Fix:** both now `throw 'jailed'`. Regression in `test/economy.js`.
+
+- **`server.js:auth` — the §10.2 agent throttle skipped authed GETs (LOW).** The global limiter gated only
+  POST/DELETE (`guarded`), so an agent could poll GET /v1/me — a `withCharacter` accrual + ledger-write
+  path — at unlimited rate, defeating the 1/3s agent cadence. **Fix:** the route-level `auth` preHandler
+  (which already queries the account for the ban check) now also fetches `agent_flag` (LEFT JOIN, no extra
+  round-trip) and enforces the agent bucket on authed GETs; **humans are left unthrottled on GETs** so
+  multi-tab console loads never 429. Regression in `test/security.js`.
+
+### Flagged (not patched — ground rule #1)
+
+- **`territory.js:raidRivalRacket` — over-cap emission (balance).** The clock-advance is emission-neutral
+  only while the owner is below the 24h income cap; a raid on a NEGLECTED (over-cap) racket hands the owner
+  fresh re-accruable headroom on top of the raider's cut, so total ledgered emission can reach ~1.3× the
+  per-collect ceiling. §10.4 stays exact (all moves ledgered, gang-treasuries reconciles). Recorded in
+  BALANCE.md; the dial is clamping `remainMs` to real elapsed-since-collect, or accept as intended.
+
+### Accepted / known (no action)
+
+- **`market.js:bidListing` AB-BA** — the previously-accepted, retry-masked cross-actor char-lock inversion
+  (40P01 → clean `contention`, pre-commit abort, no §10.4 drift). One skeptic refuted it outright.
+
+**Suite 33/33 + sim drift-0 after the batch.** `forge test` remains egress-blocked (the standing
+pre-mainnet contract gate); the Solidity finder surfaced no reachable mint / replay / reentrancy / access
+gap this round.

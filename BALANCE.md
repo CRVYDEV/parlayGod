@@ -1556,3 +1556,16 @@ how fast one op can be ground down; a level-8 floor + energy cost + a failed-rai
 block bound the raider. All `TERRITORY_FORT_*` / `TERRITORY_RIVAL_*` numbers (cut %, cooldown, contest
 scaling, fortitude defense per level) are sign-off levers — sim the contested-income realized $/day and the
 fortify sink drain before production.
+
+## Red-team R1 flag (2026-07-22) — rival-raid over-cap emission (territory:muscle)
+`territory.js:raidRivalRacket` advances the owner's income clock to `now − (pending−cut)/rate`, leaving
+them exactly `pending−cut`. This is emission-neutral ONLY while the owner is BELOW the 24h income cap. If
+the owner neglected collection so `elapsed > TERRITORY_CAP_MS`, `pending` is pinned at `rate×CAP` but the
+clock reset hands them ~0.7×CAP of fresh re-accruable headroom (forgiving the over-cap excess time) while
+the raider also banked `cut ≈ 0.3×rate×CAP` — so total ledgered emission for that racket can reach ~1.3×
+the per-collect ceiling. **§10.4 is NOT broken** — every move (`territory:muscle` raider / `territory:income`
+owner) is ledgered and the gang-treasuries check reconciles exactly; this is a faucet-MAGNITUDE lever,
+bounded by `TERRITORY_RIVAL_CUT_BPS` + the 8h per-racket cooldown, and only realizable when the owner sits
+over-cap (already losing income to the cap). **Recommendation:** accept as a sign-off lever (a raid on a
+neglected racket refunding some cap-forfeited time is arguably intended), OR clamp `remainMs` to the real
+elapsed-since-collect so a raid can't hand fresh headroom. Not patched per ground rule #1 — founder call.

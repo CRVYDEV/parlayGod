@@ -131,6 +131,10 @@ assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', 
 await seed("loc='docks', heat=0, safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'safe', "can't wash cash from a safehouse");
 await seed("loc='docks', heat=0, safe_until=NULL");
+// red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar (was only safehouse-gated)
+await seed("jail_until = now() + interval '1 hour'");
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'jailed', "can't wash cash from a cell");
+await seed('jail_until=NULL');
 assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 100 } })).code, 400, 'min swap $500 enforced');
 r = await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } });
 assert.equal(r.code, 200, 'swap buy'); assert(r.body.gotOmr > 0, 'received $OMR');

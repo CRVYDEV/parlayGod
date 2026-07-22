@@ -227,6 +227,7 @@ export async function upgradeBusiness(ch, businessId, client, h) {
 // own books are safer than the street. Still an extraction act: blocked from a safehouse (P1.3).
 export async function launderAtBusiness(ch, businessId, amount, client, h) {
   if (ch.safe_until && new Date(ch.safe_until) > new Date()) throw new GameError('safe', "You can't move money while you're to ground.");
+  if (jailed(ch)) throw new GameError('jailed', "You can't wash cash from a cell."); // red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar
   const amt = Math.floor(Number(amount));
   if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
   if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum wash is $${CONSTANTS.SWAP_MIN}.`);

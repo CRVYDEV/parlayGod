@@ -291,6 +291,7 @@ export async function swap(ch, direction, amount, client, h) {
     // You can't wash cash from a safehouse (P1.3 — hiding, not extracting). The reverse (sell,
     // $OMR → cash, bringing money back in-game) is ungated — only extraction prep carries risk.
     if (ch.safe_until && new Date(ch.safe_until) > new Date()) throw new GameError('safe', "You can't move money while you're to ground.");
+    if (jailed(ch)) throw new GameError('jailed', "You can't wash cash from a cell."); // red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar
     const onTurf = (h.owned?.held || []).includes(ch.loc);
     if (!CONSTANTS.LAUNDER_DISTRICTS.includes(ch.loc) && !onTurf)
       throw new GameError('district', `Cash is washed at a wash house (${CONSTANTS.LAUNDER_DISTRICTS.join(', ')}) or on your family's turf — not here.`);
