@@ -522,6 +522,20 @@ for (const [label, cp] of [['a tuned contender (power 200)', 200], ['a premium m
   note('races', `PvE EV — ${label}`, `${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev))}/race best`,
     `best tier ${best.tier} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * racesPerDay))}/day at ${racesPerDay}/day cadence — bounded faucet, a lost race also dings the car (repair cost); sign-off vs boxing exhibition`);
 }
+// step 2 — NITROUS: burning a $NOS_COST charge adds NOS_POWER to the roll. It's +EV only when the extra
+// P(win) it buys × the purse beats the charge cost — a comeback tool on a marginal car, never free money
+// (a charge is gone win/lose; a car already winning gains nothing). Measured on the tier where the boost
+// most changes the odds, for a mid car whose base P(win) is < 1.
+{ const cp = 150; let bestGain = null;
+  for (const t of RACES.TIERS) {
+    const p0 = pWinRace(cp, t.fieldPower, RACES.VARIANCE);
+    const p1 = pWinRace(cp + RACES.NOS_POWER, t.fieldPower, RACES.VARIANCE);
+    const dEV = (p1 - p0) * t.purse - RACES.NOS_COST;            // marginal value of one charge on this tier
+    if (p1 > p0 && (!bestGain || dEV > bestGain.dEV)) bestGain = { tier: t.name, p0, p1, dEV };
+  }
+  if (bestGain) note('races', 'NITROUS — marginal EV of one charge (mid car, power 150)', `${bestGain.dEV >= 0 ? '+' : ''}$${fmt(Math.round(bestGain.dEV))}/charge best`,
+    `+${RACES.NOS_POWER} power for $${fmt(RACES.NOS_COST)}: on ${bestGain.tier} P(win) ${(bestGain.p0*100).toFixed(0)}%→${(bestGain.p1*100).toFixed(0)}% — a comeback sink on a marginal car (gone win/lose), NOT a faucet; a car already winning gains $0`);
+}
 
 // ════════ P9.14 the Port — smuggling margin EV, cap-bounded (the new content faucet) ════════
 // port:sale is the drop's one faucet. Per $1 of contraband bought, net = P(clean)×(sell/buy) − 1 −
@@ -561,6 +575,23 @@ for (const volEth of [10, 100, 1000]) {                              // daily ET
     `skim ${HOOK_FEE_BPS}bps → ${skimEth.toFixed(3)} ETH · Vig ${(VIG_BPS/100)}% → ${toReserveEth.toFixed(3)} ETH/day underwrites withdrawal reserve (rest → prize pool); real vol = the DEX at mainnet`);
 }
 note('vig', 'flywheel §10.4 posture', 'out-of-band, zero ledger rows', 'the fees.js precedent — trade fees never seed value, so the sweep is untouched; extraction ≤ inflow only STRENGTHENS');
+
+// ════════ P9.16 THE GRAND PRIX — a redistribution, NET SINK via the rake (NOT a faucet) ════════
+// A parimutuel: N drivers escrow BUYIN, the top places split the pool net of RAKE_BPS (half → street tax,
+// half burns). So player-side emission is ZERO minus the rake — the field pays the winners, the house
+// keeps the rake. Unlike the PvE purse (a faucet), the GP MOVES no new money into the economy; it's a
+// competitive redistribution + a small cash SINK (the burned half of the rake). Analytic — the house edge
+// is the rake regardless of the field or who wins (the renormalized-payout property).
+phase('P9.16 grand prix — house edge + net sink (a redistribution, not a faucet)');
+{ const rake = RACES.GP.RAKE_BPS / 10000;
+  for (const field of [RACES.GP.MIN_ENTRANTS, 8]) {
+    const pool = field * RACES.GP.BUYIN;
+    const houseTake = Math.round(pool * rake);            // rake off the whole pool
+    const burned = Math.round(houseTake / 2);             // half burns (a §10.4 cash sink), half → street tax
+    note('races', `Grand Prix — ${field}-driver pool $${fmt(pool)}`, `house edge ${(rake*100).toFixed(1)}% · burns $${fmt(burned)}`,
+      `winners split $${fmt(pool - houseTake)} (${RACES.GP.PAYOUTS.map((p)=>Math.round(p*100)+'%').join('/')}); the field funds the winners — ZERO new emission, net cash SINK $${fmt(burned)}/race (the burned half-rake). Skill+gear decides, alt-stuffing is −rake/N per head (−EV)`);
+  }
+}
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
