@@ -8,8 +8,8 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { WIRE, intelCost } from '../src/rules.js';
-import { sweepWire, sweepWireAlerts } from '../src/wire.js';
+import { WIRE, intelCost, wireSubTier } from '../src/rules.js';
+import { sweepWire, sweepWireAlerts, sweepStandingWatches } from '../src/wire.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -289,6 +289,74 @@ await call('POST', `/v1/wire/tap/${wdMark.id}`, { token: wd.token });
 assert((await sweepWireAlerts(pool)).fired >= 1, 'a re-tap resets the flags — the watchdog can alert again');
 assert.equal(await alertCount(wd.id), 2, 'Wanda got a second alert on the fresh tap');
 
+// ══════════ STEP FIVE — THE TIERED SUBSCRIPTION LADDER + THE STANDING WATCH ══════════
+const T2 = wireSubTier(2), T3 = wireSubTier(3);
+// (A) the tiered ladder: subscribe at a TIER (a bigger intel:wire burn) — the board surfaces the tier + slots
+const ss = await mk('Switchboard Steve'); await acctOmr(ss.id, 500); grantDrift += 500;
+const ssOmrBefore = (await meOf(ss.token)).omr;
+r = await call('POST', '/v1/wire/subscribe', { token: ss.token, body: { tier: 2 } });
+assert.equal(r.code, 200, 'subscribe at tier 2 (the Wire Room)');
+assert.equal(r.body.tier, 2, 'the tier is set'); assert.equal(r.body.spent, T2.omr, 'the tier-2 price burned');
+assert.equal((await meOf(ss.token)).omr, ssOmrBefore - T2.omr, 'exactly the tier-2 sub price burned');
+let ssBoard = (await call('GET', '/v1/wire', { token: ss.token })).body;
+assert.equal(ssBoard.subTier, 2, 'the board shows the active tier'); assert.equal(ssBoard.subTierName, T2.name, 'and its name');
+assert.equal(ssBoard.watchSlots, T2.watchSlots, 'and the tier-2 standing-watch slots (2)');
+assert(Array.isArray(ssBoard.subTiers) && ssBoard.subTiers.length === WIRE.SUB_TIERS.length, 'the ladder catalog is surfaced');
+
+// (B) the STANDING WATCH: enroll a mark → places the tap now + records the auto-renew enrollment
+const w1 = await mk('Watched One'); const w2 = await mk('Watched Two'); const w3 = await mk('Watched Three');
+r = await call('POST', `/v1/wire/watch/${w1.id}`, { token: ss.token });
+assert.equal(r.code, 200, 'enroll a standing watch'); assert.equal(r.body.standing, true, 'it is a standing watch');
+ssBoard = (await call('GET', '/v1/wire', { token: ss.token })).body;
+assert.equal(ssBoard.watches.length, 1, 'the enrollment shows on the terminal');
+assert(ssBoard.watches[0].target === w1.id && ssBoard.watches[0].live === true, 'the watched mark + a live tap');
+assert.equal(ssBoard.taps.filter((t) => t.target === w1.id).length, 1, 'enrolling placed the tap (the intel:wiretap sink)');
+// gates: self, and the tier-2 watch cap (2 slots)
+assert.equal((await call('POST', `/v1/wire/watch/${ss.id}`, { token: ss.token })).body.error, 'self', "no watch on your own line");
+await call('POST', `/v1/wire/watch/${w2.id}`, { token: ss.token }); // 2nd (cap = 2)
+assert.equal((await call('POST', `/v1/wire/watch/${w3.id}`, { token: ss.token })).body.error, 'watch_full', 'the tier-2 cap is 2 standing watches');
+
+// (C) the no_sub + tier gates: a non-subscriber and a tier-1 subscriber can't run standing watches
+const nn = await mk('No-Wire Nate');
+assert.equal((await call('POST', `/v1/wire/watch/${w1.id}`, { token: nn.token })).body.error, 'no_sub', 'a standing watch needs a subscription');
+await acctOmr(nn.id, 50); grantDrift += 50;
+await call('POST', '/v1/wire/subscribe', { token: nn.token, body: { tier: 1 } }); // tier 1 = feed only, 0 watch slots
+assert.equal((await call('POST', `/v1/wire/watch/${w1.id}`, { token: nn.token })).body.error, 'tier', 'tier 1 (Street Wire) runs no standing watches — upgrade');
+
+// (D) the worker AUTO-RENEWS a lapsing watched tap by burning intel:watch from the watcher's $OMR.
+// w1 is pushed near lapse; w2's tap is comfortably live (12h from enroll) so it is NOT re-burned.
+await pool.query(`UPDATE wiretaps SET expires_at = now() + interval '5 minutes' WHERE watcher_character='${ss.id}' AND target_character='${w1.id}'`); // near lapse
+const preRenewOmr = (await meOf(ss.token)).omr;
+const preRenewExp = new Date((await pool.query(`SELECT expires_at e FROM wiretaps WHERE watcher_character='${ss.id}' AND target_character='${w1.id}'`)).rows[0].e);
+const ren = await sweepStandingWatches(pool);
+assert.equal(ren.renewed, 1, 'the worker renewed ONLY the near-lapse watched tap (w1) — w2 is comfortably live');
+const postRenewExp = new Date((await pool.query(`SELECT expires_at e FROM wiretaps WHERE watcher_character='${ss.id}' AND target_character='${w1.id}'`)).rows[0].e);
+assert(postRenewExp > preRenewExp, 'the tap window was extended');
+assert.equal((await meOf(ss.token)).omr, preRenewOmr - intelCost(WIRE.TAP_OMR, 0), 'the renew burned the tap cost from the watcher $OMR (intel:watch)');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='intel:watch' AND account_id=(SELECT account_id FROM characters WHERE id='${ss.id}')`)).rows[0].s) < 0, 'the renew is a ledgered intel:watch burn');
+// a comfortably-live tap is NOT renewed again (only renews within the window)
+await sweepStandingWatches(pool);
+const w1Renews = Number((await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='intel:watch' AND account_id=(SELECT account_id FROM characters WHERE id='${ss.id}')`)).rows[0].n);
+assert.equal(w1Renews, 1, 'only the near-lapse tap renewed once — a still-live tap is not re-burned');
+
+// (E) a BROKE watcher's watch PAUSES (the tap lapses, no renew). Fund BROKY exactly the tier-2 sub + one
+// tap (so after enrolling they're at $OMR 0), then a near-lapse tick can't auto-renew. No raw-SQL zeroing
+// (that would be an unledgered burn — every $OMR move here is a tracked grant or a ledgered spend).
+const broky = await mk('Broke Betty'); const bmark = await mk('Betty Mark');
+await acctOmr(broky.id, T2.omr + WIRE.TAP_OMR); grantDrift += (T2.omr + WIRE.TAP_OMR);
+await call('POST', '/v1/wire/subscribe', { token: broky.token, body: { tier: 2 } });
+await call('POST', `/v1/wire/watch/${bmark.id}`, { token: broky.token }); // enroll spends the last tap cost → balance 0
+assert.equal((await meOf(broky.token)).omr, 0, 'Betty is tapped out after the sub + one watch');
+await pool.query(`UPDATE wiretaps SET expires_at = now() + interval '5 minutes' WHERE watcher_character='${broky.id}' AND target_character='${bmark.id}'`);
+const paused = await sweepStandingWatches(pool);
+assert(paused.paused >= 1, 'a broke watcher pauses the watch (no funds to auto-renew)');
+assert.equal((await meOf(broky.token)).omr, 0, "and nothing was burned — a broke watch just pauses");
+
+// (F) cancelWatch drops the enrollment (the tap lapses on its own)
+r = await call('DELETE', `/v1/wire/watch/${w1.id}`, { token: ss.token });
+assert.equal(r.code, 200, 'the standing watch is dropped'); assert.equal(r.body.standing, false, 'no longer standing');
+assert.equal((await call('DELETE', `/v1/wire/watch/${w1.id}`, { token: ss.token })).body.error, 'no_watch', 'a second cancel has nothing to drop');
+
 // ── §10.4: intel:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -296,5 +364,5 @@ assert(vocab.ok, `intel: rides the omr vocabulary (${JSON.stringify(vocab.unknow
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, grantDrift, `the only $OMR drift is the test grant (${grantDrift}) — every wire spend reconciles as an intel:* burn`);
 
-console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), STEP THREE — the counter-intel triad: DISINFORMATION (an intel:disinfo sink that cooks a wiretap’s private signals — the hunt hidden, the indictment flag false) and THE INFORMANT (an intel:informant retainer that PIERCES the disinfo — the true read + who they’re hunting — self/gone/cap gates + worker sweep of lapsed retainers), STEP FOUR — THE SPYMASTER’S TRADECRAFT (the earned rank grants +wire-slots + an intel-read discount — the discounted amount is what’s ledgered) and THE WATCHDOG (a SUBSCRIBED watcher is pushed a wire_alert when a tapped mark turns hot — once per event per tap, reset on a re-tap, un-subscribers get nothing), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
+console.log('✅ The Wire test passed — the terminal (costs, ticker tape, empty state), the wiretap sink (self/gone/cap gates + exact intel:wiretap burn), tap INTEL (law stage, wealth band, ops counts, the huntingYou money-signal), bugs-on-you + SWEEP (free when clean, charged + clears when bugged), the Street Wire subscription (intel:wire burn + the premium feed: forecast, threat-chatter COUNT, open contracts), the worker sweep of expired taps, STEP TWO — THE BUG TRACE (names your watchers without clearing, free when clean), THE DOSSIER (a deep read: kill record / flags / family role / who they tap — banded wealth, never exact), THE SPYMASTER (lifetime intel ops + rank + the leaderboard, account-level), STEP THREE — the counter-intel triad: DISINFORMATION (an intel:disinfo sink that cooks a wiretap’s private signals — the hunt hidden, the indictment flag false) and THE INFORMANT (an intel:informant retainer that PIERCES the disinfo — the true read + who they’re hunting — self/gone/cap gates + worker sweep of lapsed retainers), STEP FOUR — THE SPYMASTER’S TRADECRAFT (the earned rank grants +wire-slots + an intel-read discount — the discounted amount is what’s ledgered) and THE WATCHDOG (a SUBSCRIBED watcher is pushed a wire_alert when a tapped mark turns hot — once per event per tap, reset on a re-tap, un-subscribers get nothing), STEP FIVE — THE TIERED SUBSCRIPTION LADDER (subscribe at a tier — a bigger intel:wire burn — surfacing the tier/slots/catalog) and THE STANDING WATCH (enroll a mark so the worker auto-renews the tap from your $OMR — self/no_sub/tier/watch_full gates, the worker renewing ONLY a near-lapse tap as a ledgered intel:watch burn, a broke watcher pausing, and cancel), and §10.4 (intel:* vocabulary + $OMR conservation — drift == the test grant only)');
 await app.close();

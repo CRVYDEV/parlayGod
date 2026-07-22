@@ -398,7 +398,9 @@
     if (body.gainMult !== undefined && body.envelopeSeconds) bits.push("the envelope's current — the cops will look the other way");
     if (body.expiresSeconds && body.target) bits.push("wire's live — you'll hear everything");
     if (body.bugsFound !== undefined) bits.push(body.bugsFound ? `swept ${body.bugsFound} bug(s) off your line` : 'lines are clean — nothing to sweep');
-    if (body.wireSeconds) bits.push('subscribed to the Street Wire — the intelligence is flowing');
+    if (body.wireSeconds) bits.push(`subscribed to ${body.tierName || 'the Street Wire'} — the intelligence is flowing${body.watchSlots ? ` (${body.watchSlots} standing watch slot${body.watchSlots > 1 ? 's' : ''})` : ''}`);
+    if (body.standing === true) bits.push("standing watch set — the wire renews itself while you're away");
+    if (body.standing === false && body.target) bits.push('standing watch dropped');
     if (body.reward !== undefined && body.tier) bits.push(`Ledger tier ${body.tier} claimed — ${body.reward}${body.stipendPaid ? ` (${body.stipendPaid} $OMR paid)` : ''}`);
     if (body.verified && body.wallet) bits.push(`wallet linked — ${body.wallet.slice(0, 6)}…${body.wallet.slice(-4)}${body.feesCredited ? ` · ${body.feesCredited} fee credit(s) applied` : ''}`);
     // two-party handoffs that otherwise fell through to a bare "done."
@@ -1375,6 +1377,7 @@
       ['GET', '/v1/wire'], ['POST', '/v1/wire/tap/:targetId', {}], ['POST', '/v1/wire/sweep', {}],
       ['POST', '/v1/wire/subscribe', {}], ['POST', '/v1/wire/trace', {}], ['POST', '/v1/wire/dossier/:targetId', {}],
       ['POST', '/v1/wire/disinfo', {}], ['POST', '/v1/wire/informant/:targetId', {}],
+      ['POST', '/v1/wire/watch/:targetId', {}], ['DELETE', '/v1/wire/watch/:targetId', {}],
     ],
     'World & Growth': [
       ['GET', '/v1/world'], ['POST', '/v1/world/:npcId/raid', {}],
@@ -1656,11 +1659,20 @@
       ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run${W.spymaster.tapBonus ? ` · tradecraft: +${W.spymaster.tapBonus} wire slot${W.spymaster.tapBonus > 1 ? 's' : ''}` : ''}${W.spymaster.discountBps ? `, −${(W.spymaster.discountBps / 100)}% on intel reads` : ''} — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>${W.watchdog ? '<div class="d" style="color:var(--neon);font-size:11px">🐕 THE WATCHDOG is live — you\'ll be alerted the moment a tapped mark turns hot (hunts you / goes wanted / gets indicted).</div>' : ''}` : ''}
       <h2>The Street Wire</h2>
       <div class="card" style="${W.subscribed ? 'border-color:var(--neon)' : ''}">
-        <span class="t">${W.subscribed ? 'SUBSCRIBED' : 'The Premium Feed'}</span>
+        <span class="t">${W.subscribed ? `SUBSCRIBED · ${W.subTierName || 'Street Wire'}` : 'The Premium Feed'}</span>
         ${W.subscribed ? `<span class="chip cold">${mins(W.subSeconds)} left</span>` : ''}
-        <div class="d">${W.subscribed ? 'the intelligence service is live — forecasts, threat chatter, the war room below.' : `Law forecasts, threat chatter (who's asking about you), the ticker tape, and your family's war room — for ${W.costs.sub} $OMR / week.`}</div>
-        <button class="act" data-do="POST /v1/wire/subscribe">${W.subscribed ? `renew (${W.costs.sub} $OMR)` : `subscribe (${W.costs.sub} $OMR)`}</button>
+        <div class="d">${W.subscribed ? 'the intelligence service is live — forecasts, threat chatter, and (tier 2+) the war room + standing watches below.' : 'Law forecasts, threat chatter, the ticker tape — and higher tiers unlock the war room + STANDING WATCHES (auto-renewed taps). Pick a tier:'}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${(W.subTiers || []).map((t) => `<button class="act" data-do="POST /v1/wire/subscribe" data-body='${JSON.stringify({ tier: t.tier })}'>${W.subTier === t.tier ? 'renew ' : ''}${t.name} · ${t.omr} $OMR${t.watchSlots ? ` · ${t.watchSlots} watch${t.watchSlots > 1 ? 'es' : ''}` : ''}${t.warRoom ? ' · war room' : ''}</button>`).join('')}</div>
       </div>
+
+      ${W.subscribed && W.watchSlots > 0 ? `
+      <h2 style="margin-top:12px">Standing Watches (${(W.watches || []).length}/${W.watchSlots})</h2>
+      <div class="card" style="border-color:var(--neon)">
+        <div class="d">enroll a mark on a STANDING WATCH — the wire auto-renews itself from your $OMR (${W.costs.tap} $OMR each cycle), so the surveillance runs while you're offline. It pauses if you run dry or the sub lapses.</div>
+        <select id="wire-watch-target"></select>
+        <button class="act" id="wire-watch-go">stand a watch</button>
+        ${(W.watches || []).length ? `<div class="grid" style="margin-top:8px">${(W.watches || []).map((w) => `<div class="card"><span class="t">${esc(w.name)}</span> <span class="chip ${w.live ? 'good' : 'cold'}">${w.live ? 'wire live' : 'lapsed'}</span><button class="act" data-do="DELETE /v1/wire/watch/${w.target}">drop the watch</button></div>`).join('')}</div>` : ''}
+      </div>` : ''}
 
       <h2 style="margin-top:12px">The Ticker Tape</h2>
       <div class="card"><div style="display:flex;flex-wrap:wrap;gap:4px">${tape || '<span class="d">quiet market.</span>'}</div></div>
@@ -1720,9 +1732,14 @@
     $('#wire-target').innerHTML = opts;
     $('#wire-dossier-target').innerHTML = opts;
     $('#wire-informant-target').innerHTML = opts;
+    const watchSel = $('#wire-watch-target'); if (watchSel) watchSel.innerHTML = opts;
     $('#wire-tap-go').onclick = () => {
       const tgt = $('#wire-target').value;
       if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
+    };
+    const watchGo = $('#wire-watch-go'); if (watchGo) watchGo.onclick = () => {
+      const tgt = $('#wire-watch-target').value;
+      if (tgt) act('POST', `/v1/wire/watch/${tgt}`, {}).then(() => renderWire());
     };
     $('#wire-informant-go').onclick = () => {
       const tgt = $('#wire-informant-target').value;

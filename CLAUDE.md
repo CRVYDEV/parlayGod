@@ -3793,3 +3793,37 @@ the cosmetic LOWs (raceChallenge ternary, berth INT-arith — proven working, RP
 warning, claimPendingWire heir), the racing faucet magnitudes (BALANCE.md sign-off levers at parity), and
 the carried/accepted items (market bidListing AB-BA, VoucherClaim.sweep, Commission seasonal standing,
 dividend-pool allocation). `forge test` STILL not run (Foundry egress-blocked). Suite 33/33 + sim drift-0.
+
+**THE WIRE — step five: THE TIERED SUBSCRIPTION LADDER + THE STANDING WATCH — BUILT** (`src/wire.js`,
+`src/rules.js` `WIRE.SUB_TIERS`, `schema.sql`, `src/worker.js`, `test/wire.js`; the deferred step-five
+items — automation + a subscription ladder for the flat pull-only terminal). All $OMR sinks through the
+EXISTING `intel:` vocabulary, so **ZERO invariant changes**. **(1) THE TIERED LADDER** — the flat Street
+Wire becomes `WIRE.SUB_TIERS` (Street Wire 12 → The Wire Room 30 → The Switchboard 60 $OMR/7d); a higher
+tier is a bigger `intel:wire` burn and unlocks the WAR ROOM (tier 2+) + STANDING-WATCH slots (0/2/5).
+`subscribeWire(ch, tier)` sets `characters.wire_tier` (a new col, written by DIRECT SQL — the
+`disinfo_until` pattern, off the persist positional UPDATE) + extends `wire_until` from later-of-now/end;
+`wireTierOf`/`wireSubTier` helpers; the board surfaces `subTier`/`subTiers`/`watchSlots`, and the war room
+now gates on `tierCfg.warRoom`. **(2) THE STANDING WATCH** (the auto-tap automation) — `enrollWatch`
+(`POST /v1/wire/watch/:targetId`) places the tap NOW (the normal `intel:wiretap` sink) and records a
+`wire_watches (watcher,target)` enrollment; the worker `sweepStandingWatches` (wired in worker.js)
+AUTO-RENEWS an enrolled mark's lapsing tap by burning the rank-discounted tap cost from the watcher's
+$OMR (`intel:watch` — a burn under the existing `intel:` term, ZERO new bucket/faucet), **bounded by
+balance + the sub tier's watchSlots** (oldest enrollments first, so dropping to a lower tier renews
+fewer) — so surveillance runs while you're OFFLINE without manual re-tapping. Renews only within 30min of
+lapse (a comfortably-live tap isn't re-burned) and does NOT reset the watchdog alert flags (no re-alert
+spam). Broke → the watch PAUSES (the tap lapses; a re-fund/re-sub resumes); `cancelWatch`
+(`DELETE /v1/wire/watch/:targetId`) drops it. Gates: `self`/`no_sub`/`tier` (tier 1 runs no watches)/
+`watch_full`. §10.4: `intel:watch` is a $OMR BURN under the existing `intel:%` KNOWN_REASONS + `omrBurns`
+term — the test proves the ONLY $OMR drift is the SQL grant (every wire spend, incl. the worker's
+auto-renew, reconciles as an `intel:*` burn). **Lock order** (worker): `account_persistent[watcher] FOR
+UPDATE` (serializes vs withCharacter/persistAccount so the omr decrement can't be clobbered) → the leaf
+tap row (no character rows locked → no cycle). `wire_watches` dies with either party (the wiretap
+precedent in runEstate). Console: the Wire tab's Street Wire card became a tier-picker (subscribe at a
+tier) + a Standing Watches section (enroll/drop, live/lapsed chips); `/v1/rules` gained
+`wire.subTiers`; `describe()` humanizes the tier + the standing watch. `test/wire.js` covers the tiered
+ladder (tier set + surfaced + catalog), the standing watch (enroll places the tap + records it, the
+self/no_sub/tier/watch_full gates, the worker renewing ONLY a near-lapse tap as a ledgered `intel:watch`
+burn while a live tap isn't re-burned, a broke watcher pausing, and cancel), and §10.4. Suite 33/33 + sim
+drift-0. All `WIRE.SUB_TIERS`/watch numbers are founder sign-off levers (status/access/pacing — no faucet).
+The Wire pillar is now feature-complete (tap/sweep/subscribe → trace/dossier/spymaster → disinfo/informant
+→ tradecraft/watchdog → the tiered ladder + the standing watch).
