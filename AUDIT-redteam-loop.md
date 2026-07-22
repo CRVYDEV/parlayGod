@@ -849,3 +849,67 @@ Every finding re-verified vs source; behavioural fixes carry a regression or a b
 **Round 14 verdict: 3 MED (worker tick re-entrancy, watcher poison-log DoS, WS query-token credential) +
 3 LOW (backup perms, mixed-clock fire gate, weak-seed floor) fixed/hardened; FNV→HMAC + pg-detail redaction
 flagged for sign-off. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 15 — idempotency/replay · wallet/SIWE/auth · numeric precision · two-party lock order
+Four fresh high-yield lenses. Every finding re-verified vs source before any fix; a regression or a
+consistency guard per behavioural change. **No CRITICAL/HIGH. No §10.4 drift.** Suite 33/33 + sim drift-0.
+
+- **Boxing estate-cancel escrow race (lock-order MED — FIXED).** `cancelBout` (via the estate hook
+  `cancelMainEventsAtDeath`) READ the bet set and refunded it, then only locked the bout row at the very
+  end (`UPDATE … status='cancelled'`). The escrow funders are UNLOCKED third-party spectators the estate
+  never locks, so a `placeBoutBet` landing between the bet-read and the status flip was MISSED by the
+  refund loop yet the bout was then cancelled → that bet's `boxing:bet` escrow is never refunded (resolve
+  never runs on a cancelled bout) and never paid = `boxing bet escrow` §10.4 drift + burned spectator
+  cash. Invisible on pg-mem (no FOR UPDATE blocking), real on Postgres. Fix: lock the bout row `FOR UPDATE`
+  + re-read status at the TOP of `cancelBout` (re-entrant/no-op on the resolve path that already holds it;
+  idempotent — bail if no longer `'booked'`). The existing death-cancel test covers behavior-preservation.
+  Contrast that proved the gap specific: every other estate escrow hook (`voidListingsAtDeath`,
+  `burnBidsAtDeath`, `voidLoansAtDeath`) already locks its rows first; boxing was unique in that the funder
+  is an unlocked third party. `src/boxing.js`.
+- **Idempotency committed-but-unstored double-execute (idempotency LOW — FIXED).** The worker's 24h prune
+  deleted `status=0` reservations — but a status=0 row is ambiguous between "handler never committed"
+  (safe) and "handler COMMITTED value but the onSend store `UPDATE` never landed" (a crash, or the
+  swallowed `.catch(()=>{})` on the store). Reclaiming the LATTER at 24h let a >24h same-key retry
+  re-execute the committed action = double-spend (not attacker-triggerable — needs a crash/DB-blip between
+  COMMIT and store AND a client retrying the same key >24h later). Fix: two prune horizons — completed rows
+  (status<>0, the replay window) at 24h; orphan reservations (status=0) at 7 DAYS, so that key keeps
+  409'ing long past any real retry while a genuinely-dead reservation is still eventually reclaimed. Also
+  surfaced the swallowed store-UPDATE failure (log instead of silent) so the committed-but-unstored seam is
+  observable. Regression: the two-horizon prune SQL keeps completed<24h + orphan<7d, prunes the rest.
+  `src/worker.js` + `src/server.js` + `test/security.js`.
+- **Mod fund-route finite guard (numeric L1 — HARDENED).** `fundReserve`/`fundBondTranche` guarded `>0`
+  but not `Number.isFinite`, so `Infinity` set `funded_omr`/`capacity_omr` to Infinity. Mod-gated +
+  out-of-band chain bucket (not §10.4), but parity with the player-facing finite guards (vanity/swap/bank)
+  is a one-liner. `src/chain.js` (+ the `bonds.js` twin flagged; same trivial guard).
+
+**Lenses that came back CLEAN (confirmed, no new action):**
+- **Wallet / SIWE / auth** — the SIWE nonce is single-use + account-bound (a victim never signs an
+  attacker's accountId → no cross-account binding), Privy enforces aud/iss/alg-ES256/exp/kid (no
+  keys[0] fallback), guest-upgrade + identity-uniqueness races converge, pay-before-link reconcile is
+  exactly-once + case-insensitive, withdraw only ever moves the caller's own $OMR. The one residual —
+  `X_TRUST_USER_TOKEN` confused-deputy — is already gated default-off + documented (the known
+  AUDIT-full-system-v2 E-H1). SIWE-challenge-not-consumed-on-failed-verify is non-exploitable hygiene.
+- **Numeric precision / sign / overflow** — no value-creation/destruction bug. Rake/PvP splits reconcile
+  (`winner+rake` exact, the burned half leaves the tracked set), parimutuel uses last-gets-remainder,
+  the AMM preserves k exactly, loot spans cash+bank as one balanced pair, bank-interest ledgers the exact
+  written float, and sign/finite guards are present at every client boundary (swap/bank/portfolio/vanity/
+  auction/market/loans/casino gateBet/withdraw/stake, mod:confiscate clamped).
+- **Idempotency core** — reserve-before-execute is atomic, only 2xx is stored, the response is body-bound
+  (422 on key-reuse-different-body), and EVERY post-commit hook (maybeSpark/Qualify/GrandReferral,
+  view render, gangs-leave/kick socket close, pass-claim stipend) is try/caught non-fatal on BOTH
+  wrappers — no post-commit throw can release a key and re-run a committed action. Casino book, chain
+  withdraw, fees mint/reroll, and the WS gateway (no message handler) all confirmed guarded.
+
+**FLAGGED (not patched — ground rule #1 / accepted / cosmetic):** the FNV-mod-1000 money-draw hash + weak
+seed (R14 F1b, HMAC swap is a mechanic surface — the seed-entropy floor closes the practical risk); the
+`port.js` two-boat `IN(...)` lock relying on scan-order not param-sort (safe today, single-statement over
+the same two rows — a future two-boat sequential-lock path would need the sorted-`FOR UPDATE` idiom); the
+accepted/wrapped 40P01s (bounty repost-vs-sweep B-H2, auction cross-lot cross-refund, co-op leader-vs-PvP);
+territory/business emission-neutrality being an approximate (not identity) economic bound (§10.4-exact
+regardless); the speakeasy back-room table variance faucet (§10.4-clean).
+
+**Round 15 verdict: 1 MED (boxing estate-cancel escrow race) + 1 LOW (idempotency committed-but-unstored
+double-execute) fixed + 1 finite-guard hardening; wallet/auth, numeric, and idempotency-core lenses
+confirmed CLEAN. §10.4 untouched. Suite 33/33 + sim drift-0.**

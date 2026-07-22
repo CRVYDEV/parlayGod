@@ -319,8 +319,12 @@ export async function buildServer() {
     // reservation so the key isn't poisoned — a transient "jailed" or a 429 must not
     // permanently lock the key out.
     if (reply.statusCode >= 200 && reply.statusCode < 300) {
+      // (red-team R15 F1) A swallowed store failure leaves a COMMITTED action's key at status=0 — the
+      // orphan the long-horizon worker prune protects. Surface it so an operator sees the (rare)
+      // committed-but-unstored seam rather than it vanishing silently.
       await pool.query('UPDATE idempotency SET status=$3, response=$4 WHERE account_id=$1 AND key=$2',
-        [req.user.sub, key, reply.statusCode, String(payload)]).catch(() => {});
+        [req.user.sub, key, reply.statusCode, String(payload)])
+        .catch((e) => console.error('idempotency: store UPDATE failed — key left in-progress, value may have committed', e?.message));
     } else {
       await pool.query('DELETE FROM idempotency WHERE account_id=$1 AND key=$2 AND status=0',
         [req.user.sub, key]).catch(() => {});

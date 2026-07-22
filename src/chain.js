@@ -277,7 +277,10 @@ export async function drainQueue(pool) {
 // Mod/ops mirror an on-chain tranche funding into the reserve, then drain the queue.
 export async function fundReserve(pool, amount) {
   const amt = Number(amount);
-  if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
+  // (red-team R15 L1) reject Infinity/NaN too, not just <=0 — `Number(Infinity) > 0` would otherwise set
+  // funded_omr to Infinity. Mod-gated + out-of-band chain bucket, but parity with the player-facing
+  // finite-guards (vanity spendOmr / swap / bank) is cheap and closes the footgun.
+  if (!Number.isFinite(amt) || !(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
   await pool.query('UPDATE chain_reserve SET funded_omr = funded_omr + $1, last_funded_at = now() WHERE id=1', [amt]);
   return drainQueue(pool);
 }
