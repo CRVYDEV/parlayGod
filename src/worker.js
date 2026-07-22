@@ -10,7 +10,9 @@ import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { levelOf, dayOf, CONSTANTS, PORTFOLIO } from './rules.js';
 import { grantShares } from './portfolio.js';
-import { runLedgerInvariants } from './invariants.js';
+import { runLedgerInvariants, alertDrift } from './invariants.js';
+import { runVigInvariants } from './vig.js';
+import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { sweepUncreditedStore } from './store.js';
@@ -266,6 +268,14 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       await safe('idempotency prune', () => pool.query("DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'"));
       const inv = await safe('§10.4 invariants', () => runLedgerInvariants(pool));
       if (inv) console.log(inv.ok ? '✅ §10.4 ledger invariants hold' : '🚨 §10.4 DRIFT — see alert above');
+      // (red-team R6 A) also run the real-VALUE invariants nightly and route drift through the SAME
+      // founder alarm — they self-alert nowhere and were only reachable behind mod routes, so a live
+      // unbacked withdrawal reserve or over-committed bond tranche would drift SILENTLY until poked.
+      const vinv = await safe('vig invariants', () => runVigInvariants(pool));
+      if (vinv && !vinv.ok) await safe('vig alert', () => alertDrift(pool, vinv.checks.filter((c) => !c.ok), 'vig'));
+      const binv = await safe('bond invariants', () => runBondInvariants(pool));
+      if (binv && !binv.ok) await safe('bond alert', () => alertDrift(pool, binv.checks.filter((c) => !c.ok), 'bond'));
+      if (vinv && binv) console.log((vinv.ok && binv.ok) ? '✅ vig + bond (real-value) invariants hold' : '🚨 VIG/BOND DRIFT — see alert above');
     }
   };
   await tick();

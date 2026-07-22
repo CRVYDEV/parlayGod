@@ -25,7 +25,30 @@ const sum = async (pool, where) =>
   Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE ${where}`)).rows[0].s);
 const one = async (pool, q) => Number((await pool.query(q)).rows[0].s);
 
+// (red-team R6 B) Consistent-snapshot wrapper: the ~40 aggregate-vs-ledger reads must see ONE point
+// in time. Without it, a player action committing between the two halves of a check (e.g. charWealth
+// SUM then charLedger SUM) tears the read into a FALSE drift → a false webhook alarm at the founder.
+// Run every read inside a single REPEATABLE READ, READ ONLY transaction; alert AFTER, on the pool.
 export async function runLedgerInvariants(pool) {
+  let client = pool.connect ? await pool.connect() : null;
+  if (client) {
+    // best-effort snapshot — real Postgres runs every read in one MVCC snapshot; pg-mem (single-
+    // threaded, no concurrency to tear a read) can't parse the isolation syntax, so fall back cleanly.
+    try { await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY'); }
+    catch { try { client.release(); } catch { /* gone */ } client = null; }
+  }
+  try {
+    const res = await collectLedgerChecks(client || pool);
+    if (client) await client.query('COMMIT');
+    if (!res.ok) await alertDrift(pool, res.checks.filter((c) => !c.ok));
+    return res;
+  } catch (e) {
+    if (client) { try { await client.query('ROLLBACK'); } catch { /* already gone */ } }
+    throw e;
+  } finally { if (client) client.release(); }
+}
+
+async function collectLedgerChecks(pool) {
   const checks = [];
   const push = (name, lhs, rhs, tolerance = 1, extra = {}) =>
     checks.push({ name, lhs: Math.round(lhs * 1e6) / 1e6, rhs: Math.round(rhs * 1e6) / 1e6,
@@ -301,20 +324,23 @@ export async function runLedgerInvariants(pool) {
   push('reason vocabulary', unknown.length, 0, 0, { unknown });
 
   const ok = checks.every((c) => c.ok);
-  if (!ok) await alertDrift(pool, checks.filter((c) => !c.ok));
-  return { ok, checks };
+  return { ok, checks }; // alerting is done by the runLedgerInvariants snapshot wrapper (on the pool)
 }
 
-// Alerting: a telemetry row always; a webhook when INVARIANT_WEBHOOK_URL is set.
-async function alertDrift(pool, failed) {
+// Alerting: a telemetry row always; a webhook when INVARIANT_WEBHOOK_URL is set. Exported + `kind`-tagged
+// (red-team R6 A) so the worker can route the real-VALUE invariants (Vig extraction≤reserve, Bond
+// anti-Ponzi) through the SAME founder alarm as the in-game §10.4 sweep — they had no automated alert.
+export async function alertDrift(pool, failed, kind = 'ledger') {
+  // preserve the original ledger telemetry event name (dashboards/ops key on it); tag vig/bond distinctly
+  const event = kind === 'ledger' ? 'invariant_drift' : `${kind}_invariant_drift`;
   await pool.query('INSERT INTO telemetry (id, event, props) VALUES ($1,$2,$3)',
-    [crypto.randomUUID(), 'invariant_drift', JSON.stringify(failed)]);
-  console.error('🚨 §10.4 LEDGER INVARIANT DRIFT:', JSON.stringify(failed));
+    [crypto.randomUUID(), event, JSON.stringify(failed)]);
+  console.error(`🚨 ${kind === 'ledger' ? '§10.4 LEDGER' : kind.toUpperCase()} INVARIANT DRIFT:`, JSON.stringify(failed));
   if (process.env.INVARIANT_WEBHOOK_URL) {
     try {
       await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ alert: 'ledger_invariant_drift', failed }) });
+        body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed }) });
     } catch (e) { console.error('invariant webhook failed', e.message); }
   }
 }
