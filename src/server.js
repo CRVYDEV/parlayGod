@@ -60,21 +60,30 @@ import { dirname, join } from 'node:path';
 const uid = () => crypto.randomUUID();
 
 export async function buildServer() {
-  // Never boot production on the public dev fallback secret — anyone could forge a
+  // (red-team R9 config) The whole hardening posture below used to hinge SOLELY on
+  // NODE_ENV==='production' — but `npm start` / a bare `node src/server.js` never sets it, so a
+  // real deploy that forgot the one variable most likely to be forgotten silently reverted EVERY
+  // guard (forgeable JWT, public MARKET_SEED, live test-knobs, rate limits off) at once. A real
+  // DATABASE_URL is the unforgeable "there is persistent value at stake here" signal — dev/CI use
+  // pg-mem (no DATABASE_URL) and stay on the convenient fallbacks; anything pointed at a real
+  // Postgres hardens regardless of NODE_ENV. (Tests set neither, so they are unaffected; the
+  // security suite still sets NODE_ENV=production explicitly to exercise the guards.)
+  const hardened = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
+  // Never boot a real deployment on the public dev fallback secret — anyone could forge a
   // token for any account. Dev/test may use the fallback (in-memory db, no real value).
-  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET)
-    throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
+  if (hardened && !process.env.JWT_SECRET)
+    throw new Error('JWT_SECRET must be set for a real deployment (NODE_ENV=production or DATABASE_URL set) — refusing to boot on the dev fallback.');
   // (red-team R3) The §7.11 determinism model rests on MARKET_SEED being a server SECRET — every seeded
   // money draw (the Numbers 600:1, the Track/Fight winners, goods prices) is client-PREDICTABLE if the seed
   // is the known public default. Unlike JWT this fails OPEN (forget the env → silently vulnerable), so refuse
-  // to boot production on the unset/default seed — same fail-closed posture as the JWT guard above.
-  if (process.env.NODE_ENV === 'production' && (!process.env.MARKET_SEED || process.env.MARKET_SEED === 'omerta-server-seed'))
-    throw new Error('MARKET_SEED must be set to a secret value in production — the default is public and makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
+  // to boot on the unset/default seed — same fail-closed posture as the JWT guard above.
+  if (hardened && (!process.env.MARKET_SEED || process.env.MARKET_SEED === 'omerta-server-seed'))
+    throw new Error('MARKET_SEED must be set to a secret value for a real deployment — the default is public and makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
   // (red-team R3) Test-only roll/timer overrides turn a money-affecting roll into an always-win switch or
   // collapse a §9/convoy/port timer, server-wide. They are safe-by-default (require an active misconfig) but
-  // must never reach production — refuse to boot if any leaked into the prod env (the fail-closed JWT pattern;
+  // must never reach a real deployment — refuse to boot if any leaked into the env (the fail-closed JWT pattern;
   // CHAIN_POLL_MS is a legitimate production knob and is deliberately excluded).
-  if (process.env.NODE_ENV === 'production') {
+  if (hardened) {
     const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
     const leaked = TEST_ONLY_ENV.filter((k) => process.env[k] != null);
     if (leaked.length) throw new Error(`Test-only roll/timer overrides must not be set in production (they turn money rolls into always-win switches): ${leaked.join(', ')}`);
@@ -455,10 +464,26 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.createGang(ch, req.body?.name, req.body?.tag, client, h)));
   app.post('/v1/gangs/:id/join', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.joinGang(ch, req.params.id, client, h)));
-  app.post('/v1/gangs/leave', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.leaveGang(ch, client, h)));
-  app.post('/v1/gangs/kick', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => S.kickMember(ch, req.body?.characterId, client, h)));
+  app.post('/v1/gangs/leave', { preHandler: auth }, async (req) => {
+    const r = await G.withCharacter(pool, req.user.sub, (ch, client, h) => S.leaveGang(ch, client, h));
+    // (red-team R9 WS) A member's gang: subscription is derived ONCE at connect. On leave/kick the socket
+    // kept feeding the family's private war/contract/tribute chatter until the ex-member chose to
+    // disconnect (a deliberate spy just holds it open). Close their sockets post-COMMIT (committed state
+    // is now gangless) so the client reconnects and re-derives the correct — now empty — subscription.
+    closeAccountSockets(req.user.sub, 4009, 'gang_changed');
+    return r;
+  });
+  app.post('/v1/gangs/kick', { preHandler: auth }, async (req) => {
+    const r = await G.withCharacter(pool, req.user.sub, (ch, client, h) => S.kickMember(ch, req.body?.characterId, client, h));
+    // cut the KICKED member's live gang: feed (look the account up server-side — never expose the
+    // account UUID to the client; the JWT blast-radius analysis relies on UUIDs never reaching clients).
+    const tid = req.body?.characterId;
+    if (tid) {
+      const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [tid])).rows[0];
+      if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
+    }
+    return r;
+  });
   app.post('/v1/gangs/promote', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.promoteMember(ch, req.body?.characterId, req.body?.role, client, h)));
   app.post('/v1/gangs/tribute', { preHandler: auth }, async (req) =>
@@ -1284,31 +1309,58 @@ export async function buildServer() {
   // feeding streets/gang chatter until the client chose to disconnect, falsifying the documented
   // "banned-WS close" guarantee. The ban handler closes every open socket for the banned account.
   const wsClients = new Map(); // accountId -> Set<socket>
+  const wsReserving = new Map(); // accountId -> in-flight connection count (TOCTOU-safe cap)
   const WS_MAX_PER_ACCOUNT = 8; // (red-team R7 DoS) one token can't open unlimited sockets — each adds a
   // 'streets' bus listener, so N sockets make every streets emit O(N) server-wide; 8 covers legit multi-tab.
+  const WS_PING_MS = Number(process.env.WS_PING_MS || 30_000); // heartbeat: reap half-open/dead sockets
   app.get('/v1/ws', { websocket: true }, async (socket, req) => {
     let accountId;
     try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
     catch { socket.close(4001, 'auth'); return; }
-    // banned accounts must not keep a live intel feed (REST re-checks per request;
-    // the socket is long-lived, so check status at connect)
-    const existing = wsClients.get(accountId); // (red-team R7 DoS) bound sockets-per-account before the DB work
-    if (existing && existing.size >= WS_MAX_PER_ACCOUNT) { socket.close(4008, 'too_many'); return; }
-    const acct = (await pool.query('SELECT status FROM accounts WHERE id=$1', [accountId])).rows[0];
-    if (!acct || acct.status === 'banned') { socket.close(4003, 'banned'); return; }
-    const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
-    if (!me) { socket.close(4004, 'no_character'); return; }
-    const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
-    const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
-    const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')]];
-    if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
-    for (const [ev, fn] of subs) G.bus.on(ev, fn);
-    let set = wsClients.get(accountId); if (!set) wsClients.set(accountId, set = new Set()); set.add(socket);
-    socket.on('close', () => {
-      for (const [ev, fn] of subs) G.bus.off(ev, fn);
-      const s = wsClients.get(accountId); if (s) { s.delete(socket); if (!s.size) wsClients.delete(accountId); }
-    });
-    socket.send(JSON.stringify({ channel: 'hello', characterId: me.id }));
+    // (red-team R9 WS) The per-account cap was a TOCTOU: it read the Set size but only ADDED the socket
+    // after three awaited queries, so concurrent connects for one token all observed size<MAX and all
+    // registered — blowing past the cap (→ server-wide 'streets' fan-out amplification + fd/memory DoS).
+    // Reserve a slot SYNCHRONOUSLY (no await between read and increment, single-threaded turn) and count
+    // in-flight reservations alongside registered sockets. Released in `finally` once the socket is either
+    // registered (now counted in the Set) or rejected — no gap, no double-count.
+    const live = wsClients.get(accountId)?.size || 0;
+    const reserving = wsReserving.get(accountId) || 0;
+    if (live + reserving >= WS_MAX_PER_ACCOUNT) { socket.close(4008, 'too_many'); return; }
+    wsReserving.set(accountId, reserving + 1);
+    const releaseReservation = () => { const n = (wsReserving.get(accountId) || 1) - 1; if (n > 0) wsReserving.set(accountId, n); else wsReserving.delete(accountId); };
+    try {
+      // banned accounts must not keep a live intel feed (REST re-checks per request;
+      // the socket is long-lived, so check status at connect)
+      const acct = (await pool.query('SELECT status FROM accounts WHERE id=$1', [accountId])).rows[0];
+      if (!acct || acct.status === 'banned') { socket.close(4003, 'banned'); return; }
+      const me = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+      if (!me) { socket.close(4004, 'no_character'); return; }
+      const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
+      const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
+      const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')]];
+      if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
+      for (const [ev, fn] of subs) G.bus.on(ev, fn);
+      let set = wsClients.get(accountId); if (!set) wsClients.set(accountId, set = new Set()); set.add(socket);
+      // (red-team R9 WS) `app.register(websocket)` sets no keepalive, so half-open/dead sockets never get
+      // reaped and their bus listeners accumulate forever. Standard heartbeat: ping every WS_PING_MS; a
+      // browser auto-pongs (so legit idle viewers stay connected), a dead/half-open socket misses two
+      // cycles and is terminated. unref()'d so the timer never holds the process open (clean test exit).
+      let alive = true;
+      socket.on('pong', () => { alive = true; });
+      const hb = setInterval(() => {
+        if (!alive) { try { socket.terminate(); } catch { /* gone */ } return; }
+        alive = false; try { socket.ping(); } catch { /* gone */ }
+      }, WS_PING_MS);
+      hb.unref?.();
+      socket.on('close', () => {
+        clearInterval(hb);
+        for (const [ev, fn] of subs) G.bus.off(ev, fn);
+        const s = wsClients.get(accountId); if (s) { s.delete(socket); if (!s.size) wsClients.delete(accountId); }
+      });
+      socket.send(JSON.stringify({ channel: 'hello', characterId: me.id }));
+    } finally {
+      releaseReservation();
+    }
   });
   // close every live socket for an account (its own 'close' handler tears down the bus subs + registry)
   const closeAccountSockets = (accountId, code, reason) => {

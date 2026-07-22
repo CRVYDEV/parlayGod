@@ -14,6 +14,11 @@ export async function makeDb() {
     await pool.query(SCHEMA);
     return pool;
   }
+  // (red-team R9 config F2) A production deploy that forgot DATABASE_URL would SILENTLY boot the whole
+  // game on an in-memory pg-mem DB — every account/dollar/$OMR/voucher lives only in RAM, lost on restart,
+  // with subtly different SQL semantics. Refuse rather than fail open (the JWT/MARKET_SEED posture).
+  if (process.env.NODE_ENV === 'production')
+    throw new Error('DATABASE_URL must be set in production — refusing to boot on the in-memory pg-mem database (all state would be lost on restart).');
   const { newDb } = await import('pg-mem');
   const mem = newDb();
   const { Pool } = mem.adapters.createPg();

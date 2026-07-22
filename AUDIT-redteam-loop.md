@@ -445,3 +445,69 @@ it is now closed. The economic core was already sound and stayed sound.**
   can ambiguously resolve the public profile card (banded status only) — folded into the charset flag.
 
 **Round 8 verdict: 1 MED fix (homoglyph). Contracts, timing, and parsing sound. Suite green + sim drift-0.**
+
+---
+
+## Round 9 — Sybil economics · WS/notification-bus · config/env misconfig · estate/death (2nd pass)
+
+Four fresh lenses (background finders + manual source verification). Two HIGH deploy-fail-open + two
+WS/DoS defects FIXED; the economic/estate cores verified sound again.
+
+### Fixed (regression each — `test/security.js`)
+- **Config F1 (HIGH, deploy fail-open) — the whole hardening posture hinged SOLELY on
+  `NODE_ENV==='production'`, which `npm start`/`node src/server.js` never sets.** A real deploy that
+  forgot the one variable most likely to be forgotten silently reverted EVERY guard at once (forgeable
+  dev JWT secret, public MARKET_SEED → predictable seeded draws, rate limits off, test-only roll knobs
+  live). Fix: a `hardened = NODE_ENV==='production' || !!DATABASE_URL` predicate — a real DATABASE_URL is
+  the unforgeable "persistent value at stake" signal, so anything pointed at a real Postgres hardens
+  regardless of NODE_ENV (dev/CI use pg-mem, no DATABASE_URL, and keep the convenient fallbacks). Applied
+  to the JWT/MARKET_SEED/test-knob boot guards (`server.js`) + `rateLimitsEnabled()` (`ratelimit.js`).
+- **Config F2 (HIGH) — silent in-memory DB in production.** A prod deploy that forgot `DATABASE_URL`
+  booted the whole game on pg-mem (all state in RAM, lost on restart, different SQL semantics) with only
+  a console line. `db.js` now refuses to boot pg-mem when `NODE_ENV==='production'` (the JWT/seed posture).
+- **WS Finding 1 (MED-HIGH DoS) — the per-account socket cap was a TOCTOU.** It read the registry size
+  but only ADDED the socket after three awaited queries, so concurrent connects for one token all saw
+  size<MAX and all registered — blowing past the 8-cap → server-wide `streets` fan-out amplification +
+  fd/memory DoS. Fix: reserve a slot SYNCHRONOUSLY (no await between read and increment) and count
+  in-flight reservations alongside registered sockets, released in `finally`. Also added a standard
+  ping/pong heartbeat (`app.register(websocket)` set no keepalive) so half-open/dead sockets are reaped
+  (a browser auto-pongs, so legit idle viewers stay connected); interval `unref()`'d for clean exit.
+- **WS Finding 2 (MED, confidentiality) — a kicked/departed member kept the family's `gang:` feed.** The
+  subscription is derived ONCE at connect; on leave/kick the socket kept feeding private war/contract/
+  tribute chatter until the ex-member chose to disconnect (a deliberate spy just holds it open). Fix: the
+  leave/kick routes call the proven `closeAccountSockets` POST-COMMIT (committed state is now gangless);
+  the client reconnects and re-derives the correct — empty — subscription. Kick looks the kicked
+  member's account up server-side (never exposing the account UUID to the client — the JWT blast-radius
+  analysis relies on UUIDs never reaching clients).
+- **WS Finding 4 (LOW) — unbounded in-memory rate-limit `buckets` Map.** Grew one entry per account key +
+  source IP forever (memory-growth DoS on the non-Redis deploy). Fix: a state-preserving eviction sweep
+  (a bucket idle past a 5-min TTL has provably refilled to burst, so deleting it is identical to it never
+  existing); `unref()`'d.
+
+### Verified CLEAN (not patched)
+- **Sybil economics (ae3e) — no CRIT/HIGH, no §10.4 breach.** Every cross-account transfer path is taxed
+  or contribution-bounded (bodyguard/casino:pvp/boxing/stable/races −rake; convoy insurance capped at the
+  per-account underwriting limit → net pool extraction ≤ 0 by construction; casino rakeback bounded by
+  realized house edge). Referral once-ever latches + agent exclusion + middle-link-qualified + depth-2 cap
+  all airtight. Three MED items are enumerated-faucet FARMING (referral-spark 10-crime threshold magnitude,
+  same-IP pairs recorded-not-enforced, `claimSocial` pays unverified in `live` mode) — all documented
+  founder sign-off / trust-faucet postures, NOT code bugs (ground rule #1 — flagged, not retuned).
+- **Estate/death 2nd pass (ad23) — no new CRIT/HIGH, no §10.4 drift, no double-resolution, no
+  orphan-with-consequence table, no inflated heir carry.** Every per-character table is wiped OR
+  worker-resolved-with-dead-stake-burn OR intentionally account-level; loot legs carve the victim before
+  the estate burn; shield ordering (bodyguard→respawn, witpro/penSafe/inHole/jailed as top gates) is
+  exclusive; the bounty SUM is under `FOR UPDATE` (serialized vs the sweep); `priorPrestige` captured
+  before the +legacy bump. One LOW: dead-character `missions_done`/`notifications`/stranded abandoned-crew
+  rows are never reaped — PURE storage bloat, zero §10.4/gameplay impact (heir gets a fresh id, never
+  re-reads them). Flagged, not patched — extending the most cross-cutting txn for a zero-consequence
+  storage item isn't worth the surface; a periodic reaper is the clean home if it ever bites.
+- **WS Finding 3 (LOW, cosmetic) — `notify()` `bus.emit`s the live push INSIDE the txn, pre-COMMIT.** On
+  a rollback (incl. a `contention`/40P01 retry) the DB row rolls back but the live push already went out,
+  and the retry fires it again. Committed state + the `/v1/notifications` backfill are correct (§10.4
+  untouched, no data leak); the only impact is a phantom/duplicated LIVE-feed line. Flagged, not patched
+  — a comprehensive buffer-all-emits-until-commit refactor on the hot `withCharacter`/`withTwoCharacters`
+  path is disproportionate to a cosmetic feed glitch (the ~70 direct `bus.emit('streets',…)` sites share
+  the same property).
+
+**Round 9 verdict: 2 HIGH (deploy fail-open) + 2 WS/DoS fixes + 1 confidentiality fix. Sybil economics
+and the estate/death path verified sound (no §10.4 breach). Suite 33/33 + sim drift-0.**
