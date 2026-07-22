@@ -50,9 +50,9 @@ for (let i = 0; i < 60; i++) {
   else assert(last === 7 || last === r.body.point, 'a point round ends on the point or a seven');
   staked += 1000;
   denProfit += 1000;                                                // the stake enters the book…
-  const take = Math.min(10, Math.max(0, denProfit - denDist));      // …the tip is profit-capped
-  denDist += take;
-  if (r.body.win) { wins++; paidOut += 2000; denProfit -= 2000; } else losses++;
+  if (r.body.win) { wins++; paidOut += 2000; denProfit -= 2000; } else losses++; // …THIS round's payout is booked…
+  const take = Math.min(10, Math.max(0, denProfit - denDist));      // …and ONLY THEN the tip is profit-capped
+  denDist += take;                                                  // (red-team R4 casino F1: dice tips post-payout)
 }
 assert(wins > 0 && losses > 0, `both outcomes over 60 rounds (${wins}W/${losses}L)`);
 // every roll is in the audit log

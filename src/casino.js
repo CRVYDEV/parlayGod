@@ -116,13 +116,16 @@ export async function playDice(ch, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:dice' });
   await bumpProfit(client, amt);        // the stake enters the house's book…
-  await takeHouse(client, h, tax);      // …and the street is tipped only from realized profit
   if (win) {
     const payout = amt * 2; // stake back + 1:1
     ch.cash = Number(ch.cash) + payout;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: payout, reason: 'casino:win:dice' });
-    await bumpProfit(client, -payout);
+    await bumpProfit(client, -payout); // …the round's payout is booked…
   }
+  // (red-team R4 casino F1) …and ONLY THEN is the street tipped — dice resolves in one call with no
+  // openLiability row, so tipping before the win payout was booked let a winning round over-report
+  // this round's profit by the payout and mint a bounded tip into street_tax the house hadn't won.
+  await takeHouse(client, h, tax);      // the street is tipped only from realized (post-payout) profit
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // action on her floor is business
   await h.rngLog(client, ch.id, 'casino:dice', rolls[0], `${win ? 'win' : 'loss'} $${amt} [${rolls.join(',')}]`);
@@ -780,7 +783,6 @@ export async function blackjackDeal(ch, amount, client, h) {
   ch.cash = Number(ch.cash) - amt;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'casino:bet:blackjack' });
   await bumpProfit(client, amt);
-  await takeHouse(client, h, Math.ceil(amt * 0.01));
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // a table on her floor is business
 
@@ -789,18 +791,24 @@ export async function blackjackDeal(ch, amount, client, h) {
   await h.rngLog(client, ch.id, 'casino:blackjack:deal', player[0], `deal p[${player}] up ${dealer[0]}`);
   const pv = handValue(player), dv = handValue(dealer);
   const pBJ = pv.total === 21, dBJ = dv.total === 21;
+  // (red-team R4 casino F1) tip the street only AFTER the round's liability is booked — a natural's
+  // payout (payBlackjack) or the live hand's INSERT (which openLiability then reserves at bet×2) — so
+  // the deal can't over-report profit and mint a bounded tip into street_tax the house hasn't won.
+  const tax = Math.ceil(amt * 0.01);
   if (pBJ || dBJ) { // a natural on either side ends it at the deal
     let payout = 0, outcome;
     if (pBJ && dBJ) { payout = amt; outcome = 'push'; }
     else if (pBJ) { payout = amt + Math.floor(amt * CASINO.BJ_PAYS_BPS / 10000); outcome = 'blackjack'; }
     else outcome = 'dealer_blackjack';
     await payBlackjack(ch, client, h, payout);
+    await takeHouse(client, h, tax);
     await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', outcome });
     return { ok: true, game: 'blackjack', done: true, outcome, bet: amt, player, dealer,
       playerTotal: pv.total, dealerTotal: dv.total, payout, net: payout - amt };
   }
   await client.query('INSERT INTO blackjack_hands (character_id, bet, player, dealer) VALUES ($1,$2,$3,$4)',
     [ch.id, amt, player.join(','), dealer.join(',')]);
+  await takeHouse(client, h, tax);
   await h.track(client, ch.account_id, 'casino', { game: 'blackjack', action: 'deal', amt });
   return { ok: true, game: 'blackjack', done: false, bet: amt, player, dealerUp: dealer[0],
     playerTotal: pv.total, canDouble: true };
