@@ -269,7 +269,7 @@ const addsNoDrift = async (name, action, label) => {
   await call('POST', '/v1/mod/ban', { body: { accountId: acctId }, headers: modH });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const port = app.server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(banned.token)}`);
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', banned.token]);
   const closed = await new Promise((res) => { ws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   assert.equal(closed, 4003, 'banned socket closed with 4003');
 
@@ -277,7 +277,7 @@ const addsNoDrift = async (name, action, label) => {
   // just refused at connect. Open a socket for a good account, get the hello, then ban → it closes.
   const live = await mk('Snitch Sammy');
   const liveAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${live.id}'`)).rows[0].account_id;
-  const lws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(live.token)}`);
+  const lws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', live.token]);
   await new Promise((res, rej) => { lws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; lws.onerror = rej; setTimeout(rej, 4000); });
   const liveClose = new Promise((res) => { lws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   await call('POST', '/v1/mod/ban', { body: { accountId: liveAcct }, headers: modH });
@@ -289,7 +289,7 @@ const addsNoDrift = async (name, action, label) => {
   const founder = await mk('Family Man');
   await seedCh(founder.id, 'respect = 5000000, cash = 50000000');
   assert.equal((await call('POST', '/v1/gangs', { token: founder.token, body: { name: 'The Regression Family', tag: 'REG' } })).code, 200, 'gang founded');
-  const gws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(founder.token)}`);
+  const gws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', founder.token]);
   await new Promise((res, rej) => { gws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; gws.onerror = rej; setTimeout(rej, 4000); });
   const gClose = new Promise((res) => { gws.onclose = (e) => res(e.code); setTimeout(() => res(0), 4000); });
   assert.equal((await call('POST', '/v1/gangs/leave', { token: founder.token })).code, 200, 'left the family');

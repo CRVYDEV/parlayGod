@@ -335,7 +335,7 @@ assert(gA.omrReserve > 0, 'top family reserve funded');
 await app.listen({ port: 0, host: '127.0.0.1' });
 const port = app.server.address().port;
 const heirToken = rocco.token; // same account — resolves to the living heir
-const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws?token=${encodeURIComponent(heirToken)}`);
+const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', heirToken]);
 const wsMessages = [];
 const wsReady = new Promise((res, rej) => {
   const to = setTimeout(() => rej(new Error('ws timeout')), 5000);

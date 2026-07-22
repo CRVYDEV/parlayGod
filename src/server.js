@@ -79,6 +79,19 @@ export async function buildServer() {
   // to boot on the unset/default seed — same fail-closed posture as the JWT guard above.
   if (hardened && (!process.env.MARKET_SEED || process.env.MARKET_SEED === 'omerta-server-seed'))
     throw new Error('MARKET_SEED must be set to a secret value for a real deployment — the default is public and makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
+  // (red-team R14 F1) The seeded draws use FNV-1a truncated to mod 1000, and the public prices board
+  // publishes goodPriceOf(good,district,block) — leaking many (known-prefix → mod-1000) pairs. FNV is
+  // brute-forceable, so a SHORT/low-entropy operator seed is recoverable offline from that surface, after
+  // which numbersDrawOf/trackWinnerOf/boutOf are all computable (guaranteed 600:1 hits). A long random
+  // seed is NOT recoverable, so this reduces to seed hygiene — enforce a floor (length + distinct chars),
+  // matching the fail-closed posture above. (The hash itself staying FNV is a founder call — swapping it
+  // to a keyed HMAC changes every deterministic draw/price output, a mechanic surface; flagged, not changed.)
+  if (hardened) {
+    const seed = String(process.env.MARKET_SEED || '');
+    const distinct = new Set(seed).size;
+    if (seed.length < 24 || distinct < 8)
+      throw new Error('MARKET_SEED is too weak — use a long, high-entropy random secret (≥24 chars, ≥8 distinct). A short seed is offline-recoverable from the public prices board, making every money draw predictable.');
+  }
   // (red-team R3) Test-only roll/timer overrides turn a money-affecting roll into an always-win switch or
   // collapse a §9/convoy/port timer, server-wide. They are safe-by-default (require an active misconfig) but
   // must never reach a real deployment — refuse to boot if any leaked into the env (the fail-closed JWT pattern;
@@ -1364,11 +1377,17 @@ export async function buildServer() {
     // (red-team R12 F2) The session JWT is the same full bearer used on every REST call. Passing it in
     // the WS URL query (`?token=`) leaks it into web-server/proxy/CDN access logs + browser history →
     // token theft → account takeover. Read it from the Sec-WebSocket-Protocol header instead (the client
-    // offers it as a subprotocol value: "bearer, <token>"), which is NOT logged. Keep the query as a
-    // backward-compat fallback (older clients/tools + the WS tests) — our own client no longer uses it.
+    // offers it as a subprotocol value: "bearer, <token>"), which is NOT logged. Our own console uses
+    // the header path (R12).
+    // (red-team R14 F1) The `?token=` fallback is now GATED (default OFF) behind WS_ALLOW_QUERY_TOKEN —
+    // a live query-string credential path is a standing account-takeover surface the header path retired,
+    // so it's off unless an operator explicitly re-enables it for a legacy client (the fail-closed
+    // INVITE_MODE/SOCIAL_VERIFY_MODE posture). The WS tests set it on.
     const sub = String(req.headers['sec-websocket-protocol'] || '').split(',').map((s) => s.trim());
-    const bearer = sub[0] === 'bearer' ? sub[1] : null;
-    try { accountId = app.jwt.verify(String(bearer || req.query?.token || '')).sub; }
+    const headerBearer = sub[0] === 'bearer' ? sub[1] : null;
+    const allowQuery = process.env.WS_ALLOW_QUERY_TOKEN === 'on';
+    const bearer = headerBearer || (allowQuery ? req.query?.token : null);
+    try { accountId = app.jwt.verify(String(bearer || '')).sub; }
     catch { socket.close(4001, 'auth'); return; }
     // (red-team R9 WS) The per-account cap was a TOCTOU: it read the Set size but only ADDED the socket
     // after three awaited queries, so concurrent connects for one token all observed size<MAX and all

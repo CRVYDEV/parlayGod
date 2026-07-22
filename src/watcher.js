@@ -16,6 +16,21 @@ import { markClaimed } from './chain.js';
 
 export const DEFAULT_CONFIRMATIONS = Number(process.env.CHAIN_CONFIRMATIONS || 5);
 
+// (red-team R14 F2) Per-log isolation. recordFeePayment throws on a DETERMINISTIC data fault
+// (bad_fee_kind / bad_payer / bad_nonce) BEFORE its idempotency txn — a single malformed log
+// would then throw every tick, the cursor would never advance, and every legit fee behind it
+// would be permanently stuck (a DoS on the whole fee pipeline). Skip a poison log (it can never
+// succeed) but RE-THROW a transient error (a DB timeout / serialization failure) so the cursor
+// does NOT advance and the block window re-scans idempotently next tick — never losing a real fee.
+const POISON = new Set(['bad_fee_kind', 'bad_payer', 'bad_nonce']);
+async function isolate(label, apply) {
+  try { await apply(); return true; }
+  catch (e) {
+    if (POISON.has(e?.code)) { console.error(`watcher: skipping poison ${label} log (${e.code})`, e.message); return false; }
+    throw e; // transient — stop the tick, do NOT advance the cursor
+  }
+}
+
 export async function getCursor(pool, stream, initIfMissing) {
   const row = (await pool.query('SELECT last_block FROM chain_cursor WHERE stream=$1', [stream])).rows[0];
   if (row) return Number(row.last_block);
@@ -50,8 +65,7 @@ export async function syncFeeEvents(pool, source, opts = {}) {
   const logs = await source.feeLogs(w.from, w.to);
   let processed = 0;
   for (const l of logs) {
-    await recordFeePayment(pool, { nonce: l.nonce, kind: l.kind, payer: l.payer, amountWei: l.amount, txHash: l.txHash });
-    processed++;
+    if (await isolate('fee', () => recordFeePayment(pool, { nonce: l.nonce, kind: l.kind, payer: l.payer, amountWei: l.amount, txHash: l.txHash }))) processed++;
   }
   await setCursor(pool, 'fees', w.to);
   return { processed, from: w.from, to: w.to };
