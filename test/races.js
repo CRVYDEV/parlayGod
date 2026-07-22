@@ -175,6 +175,28 @@ assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM tra
 assert.equal(Number((await pool.query(`SELECT COUNT(*) s FROM cars WHERE character_id='${shark.id}'`)).rows[0].s), 2, 'the shark holds both cars');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) s FROM cars WHERE character_id='${mark.id}'`)).rows[0].s), 0, 'the mark walks home');
 
+// ── RED-TEAM (step-two consent bypass): a car listed for a wager/pinks, then SOLD on the market, must
+// arrive at the BUYER with the race flags CLEARED — else it's on the strip (raceable / cash-exposed)
+// without the new owner's consent. The four ownership-transfer sites now reset race_limit + pink_slip. ──
+const seller = await mk('Flag Seller'); const buyer = await mk('Clean Buyer');
+await pool.query(`UPDATE characters SET respect=3600 WHERE id='${seller.id}'`);
+await pool.query(`UPDATE characters SET respect=3600 WHERE id='${buyer.id}'`);
+await seedCash(seller.id, 200000); await seedCash(buyer.id, 200000);
+const flagCar = await mkCar(seller.id, 'pigeon', 'stock', 0);
+// the seller flags it for a $50k wager AND for pinks, THEN lists it on the Black Market with a buy-now
+await call('POST', `/v1/races/list/${flagCar}`, { token: seller.token, body: { limit: 50000 } });
+await call('POST', `/v1/races/pinkslip/${flagCar}`, { token: seller.token, body: { on: true } });
+assert.equal((await pool.query(`SELECT race_limit, pink_slip FROM cars WHERE id='${flagCar}'`)).rows[0].pink_slip, true, 'the car is flagged for pinks pre-sale');
+const ml = await call('POST', '/v1/market', { token: seller.token, body: { carId: flagCar, minBid: 5000, buyNow: 20000 } });
+assert.equal(ml.code, 200, 'the flagged car lists on the market'); const listingId = ml.body.id;
+r = await call('POST', `/v1/market/${listingId}/buy`, { token: buyer.token });
+assert.equal(r.code, 200, 'the buyer buys it now');
+const bought = (await pool.query(`SELECT character_id, race_limit, pink_slip FROM cars WHERE id='${flagCar}'`)).rows[0];
+assert.equal(bought.character_id, buyer.id, 'the car changed hands');
+assert.equal(bought.race_limit, null, 'the wager listing was CLEARED on transfer (no unconsented cash exposure)');
+assert.equal(bought.pink_slip, false, 'the pink-slip flag was CLEARED on transfer (no unconsented car loss)');
+assert(!(await call('GET', '/v1/races', { token: seller.token })).body.strip.find((s) => s.carId === flagCar), "the sold car is off the strip — the buyer must opt in themselves");
+
 // ── the leaderboard: THE WHEEL ranks the winningest drivers ──
 const lb = (await call('GET', '/v1/leaderboard/races', { token: racer.token })).body;
 assert(lb.drivers.find((d) => d.name === 'Speed Demon' && d.wins >= 2), 'the racer ranks on THE WHEEL');
