@@ -262,6 +262,17 @@ export async function runLedgerInvariants(pool) {
   const gpDeath = -(await sum(pool, "currency='cash' AND reason='race:gp:death'"));
   push('grand prix escrow', gpEscrow, gpPosted - gpWins - gpRefunds - gpTake - gpDeath);
 
+  // (f8) THE STAKES escrow (the grand-prix twin, Stable step two): the pool held on OPEN stakes races ==
+  // buy-ins posted − prizes won − refunds − the house take (NULL 'stable:stakes:take') − dead-entrant
+  // burns (NULL 'stable:stakes:death'). All ride the 'stable:' cash vocabulary; a pure REDISTRIBUTION.
+  const skEscrow = await one(pool, "SELECT COALESCE(SUM(pool),0) s FROM stakes_races WHERE status='open'");
+  const skPosted = -(await sum(pool, "currency='cash' AND reason='stable:stakes:buyin'"));
+  const skWins = await sum(pool, "currency='cash' AND reason='stable:stakes:win'");
+  const skRefunds = await sum(pool, "currency='cash' AND reason='stable:stakes:refund'");
+  const skTake = -(await sum(pool, "currency='cash' AND reason='stable:stakes:take'"));
+  const skDeath = -(await sum(pool, "currency='cash' AND reason='stable:stakes:death'"));
+  push('stakes escrow', skEscrow, skPosted - skWins - skRefunds - skTake - skDeath);
+
   // (g) UNKNOWN REASONS — any row outside the vocabulary is an unenumerated faucet/sink
   const unknown = [];
   for (const [cur, prefixes] of Object.entries(KNOWN_REASONS)) {

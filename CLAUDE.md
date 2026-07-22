@@ -793,9 +793,37 @@ legend), the match (self/kind/limit gates, the casino:pvp taxed transfer + the r
 legend), the board + leaderboard, DEATH (the stable wiped, the legend survives), and the §10.4 per-character
 reconcile + vocabulary. Suite 33/33 + sim drift-0. All `STABLE` numbers are founder sign-off levers — the
 `stable:purse` circuit faucet is the one new emission surface (sim + sign-off, BALANCE.md, the boxing-
-exhibition precedent). Deferred (step two): breeding (offspring inherit stats), stable staff/trainers (the
-Underworld tie-in), and entering your OWN racer into The Track's daily seed-drawn betting card (the direct
-Track tie-in).
+exhibition precedent).
+**Step two — BREEDING + THE CORNERMAN + THE STAKES — BUILT** (`src/stable.js`, `test/stable.js`; the three
+"build off that" items). **(1) BREEDING** (`breedRacers`, `POST /v1/stable/breed`): retire TWO same-kind
+racers into a FOAL that inherits a fraction of the parents' average stat — `floor(avg × BREED_INHERIT 0.6) +
+rand(0,BREED_VARIANCE 5)`, clamped to the kind's `[statMin, STAT_CAP]`: a HEAD START, deliberately NOT a
+cap-skip (two maxed parents → a ~15-20 foal, saving grind but well under the 25 ceiling). A `stable:breed`
+cash SINK; both parents are CONSUMED (2 racers + cash → 1 foal — a build-consolidation lever, bounded). Locks
+both parents sorted, same-kind + ownership gated. **(2) THE CORNERMAN** (the Underworld tie-in — no new
+fixture): Mickey the Corner trains your ANIMALS too — his T1 training discount (×0.9 cash) + T3 build bonus
+apply to `trainRacer` exactly as to a boxer (status axis, the discounted number ledgered; the build bonus
+never lifts `STAT_CAP` → the circuit faucet EV is unchanged), and stable buy/train/circuit/stakes bump his
+standing (train is his daily lead). **(3) THE STAKES** (`enterStakes`/`resolveStakes`/`sweepStakes`,
+`POST /v1/stable/stakes/:racerId`): the marquee — enter your racer into a scheduled race the town's best
+animal wins (the Grand-Prix/poker-tournament escrow twin on the animal side). A CASH buy-in ESCROWS into a
+purse (`stable:stakes:buyin`); the worker races every LIVE entrant's SNAPSHOTTED form + rand(VARIANCE), ranks,
+and pays the top `PAYOUTS` places a share net of `RAKE_BPS` (half → buyback, half burns) — a pure competitive
+REDISTRIBUTION, **no new faucet**. The racer isn't escrowed (only the cash) → race the form you entered, then
+run/breed/sell it. One open stakes at a time (`stakes_state.current`); a short field (< MIN_ENTRANTS 3) refunds;
+a dead entrant's stake burns (`stable:stakes:death`). §10.4: all `stable:stakes:*` ride the `stable:` cash
+vocabulary + a NEW **`stakes escrow`** check (pool == Σ buyin − win − refund − take − death — the grand-prix-
+escrow twin). LOCK ORDER = the Grand-Prix posture exactly (enter: char → stakes_state → race; resolve: entrant
+chars sorted → stakes_state → race, state before the row so a concurrent entry can't AB-BA). New `stakes_races`/
+`stakes_entries`/`stakes_state` tables; the worker wires `sweepStakes`; the board surfaces the open stakes;
+console gained a Breed-a-foal card + a Stakes card; `describe()` + `/v1/rules` catalog + a P9.18 sim probe (the
+circuit faucet, boxing-exhibition parity). `test/stable.js` covers breeding (same/kind gates, the foal's
+head-start range, parents consumed, the ledgered sink) + the stakes (buy-in escrow, a short-field refund,
+one-per-owner gate, a full-field worker settle to the top places net of rake, and the `stakes escrow` §10.4
+check). Suite 33/33 + sim drift-0 (18 checks). All `BREED_*`/`STAKES.*` numbers are founder sign-off levers
+(the stakes is a redistribution — no signed faucet touched). Deferred (step three): entering your racer into
+The Track's DAILY seed-drawn betting card so the town bets on player-owned animals (the daily-card rewire,
+deferred for the cleaner worker-resolved Stakes).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

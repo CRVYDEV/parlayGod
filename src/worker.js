@@ -28,6 +28,7 @@ import { sweepAuctions } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
 import { sweepTournaments } from './casino.js';
 import { sweepGrandPrix } from './races.js';
+import { sweepStakes } from './stable.js';
 import { syncFeeEvents, syncClaimedEvents, syncTradeFees, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
 
 const BUYBACK_PERIOD_MS = 12 * 3600 * 1000;
@@ -221,6 +222,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // STREET RACES (step three): settle any GRAND PRIX past its window — race the grid + pay the top places
     const gp = await safe('grand prix sweep', () => sweepGrandPrix(pool));
     if (gp && gp.resolved > 0) console.log(`🏁 races: settled ${gp.resolved} grand prix`);
+    // THE STABLE (step two): settle any STAKES race past its window — race the field + pay the top places
+    const stk = await safe('stakes sweep', () => sweepStakes(pool));
+    if (stk && stk.resolved > 0) console.log(`🐎 stable: settled ${stk.resolved} stakes race(s)`);
     // THE FIGHT CIRCUIT (step four): strip an inactive champion who hasn't defended the belt in time
     const bd = await safe('belt defense', () => enforceBeltDefense(pool));
     if (bd && bd.stripped) console.log(`🥊 boxing: stripped an inactive champion (${bd.fighter})`);

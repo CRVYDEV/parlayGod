@@ -504,7 +504,8 @@ export async function buildServer() {
       betMin: BOXING.BET_MIN, betMax: BOXING.BET_MAX, betRakeBps: BOXING.BET_RAKE_BPS, defenseMs: BOXING.DEFENSE_MS, calloutMs: BOXING.CALLOUT_MS },
     stable: { minLevel: STABLE.MIN_LEVEL, kinds: STABLE.KINDS, meets: STABLE.MEETS, trainCost: STABLE.TRAIN_COST,
       trainEnergy: STABLE.TRAIN_ENERGY, statCap: STABLE.STAT_CAP, stats: STABLE.STATS, stableMax: STABLE.STABLE_MAX,
-      minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE, ranks: STABLE.RANKS, legendRanks: STABLE.LEGEND_RANKS, rakeBps: STABLE.RAKE_BPS },
+      minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE, ranks: STABLE.RANKS, legendRanks: STABLE.LEGEND_RANKS, rakeBps: STABLE.RAKE_BPS,
+      breedCost: STABLE.BREED_COST, stakes: { buyin: STABLE.STAKES.BUYIN, minEntrants: STABLE.STAKES.MIN_ENTRANTS, payouts: STABLE.STAKES.PAYOUTS, rakeBps: STABLE.STAKES.RAKE_BPS } },
     auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
@@ -655,6 +656,11 @@ export async function buildServer() {
   app.post('/v1/stable/match/:opponentId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
       Stable.matchRace(ch, opponent, req.body, client, h)));
+  // step two: breeding (two racers → a foal) + THE STAKES (a scheduled marquee race, worker-resolved)
+  app.post('/v1/stable/breed', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.breedRacers(ch, req.body?.sire, req.body?.dam, req.body?.name, client, h)));
+  app.post('/v1/stable/stakes/:racerId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.enterStakes(ch, req.params.racerId, client, h)));
   app.get('/v1/leaderboard/stable', { preHandler: auth }, async () => Stable.stableLeaderboard(pool));
 
   // ── STREET RACES — the deep car catalog as a competitive loop (PvE circuit + PvP wagers + tuning) ──

@@ -7,8 +7,10 @@
 // racers rows join the runEstate wipe — the fighters precedent); the owner's lifetime wins are an
 // account-level LEGEND (survives death, the boxing-legend/hitman-rep precedent). CASH ONLY (the Den's rule).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog } from './game.js';
-import { STABLE, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf } from './rules.js';
+import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
+import { STABLE, UNDERWORLD, stableKindOf, stableMeetOf, racerRankOf, racerLegendOf, levelOf } from './rules.js';
+
+const stakesMs = () => Number(process.env.STAKES_MS) || STABLE.STAKES.REGISTER_MS; // TEST-ONLY env (SEARCH_MS pattern)
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -52,6 +54,7 @@ export async function buyRacer(ch, kind, name, client, h) {
   await client.query('INSERT INTO racers (id, character_id, kind, name, speed, stamina, heart) VALUES ($1,$2,$3,$4,$5,$6,$7)',
     [id, ch.id, kind, n, speed, stamina, heart]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -k.cost, reason: 'stable:buy' });
+  await bumpStanding(client, h, ch, 'cornerman', 3, { action: 'sign' }); // Mickey trains your animals too (the Underworld tie-in)
   await h.track(client, ch.account_id, 'stable_buy', { kind });
   return { ok: true, id, kind, name: n, speed, stamina, heart, stable: count + 1 };
 }
@@ -72,12 +75,18 @@ export async function trainRacer(ch, racerId, stat, client, h) {
   if (injured(r)) throw new GameError('injured', 'That racer is laid up — let them heal.');
   if (Number(r[s]) >= STABLE.STAT_CAP) throw new GameError('maxed', `Their ${s} is already maxed (${STABLE.STAT_CAP}).`);
   if (Number(ch.energy) < STABLE.TRAIN_ENERGY) throw new GameError('energy', `Need ${STABLE.TRAIN_ENERGY} energy to work them.`);
-  if (Number(ch.cash) < STABLE.TRAIN_COST) throw new GameError('cash', `A session runs $${STABLE.TRAIN_COST}.`);
-  ch.cash = Number(ch.cash) - STABLE.TRAIN_COST;
+  // THE CORNERMAN (Underworld tie-in): Mickey trains your animals too — his T1 discount + T3 build bonus
+  // apply exactly as they do to a boxer (status axis, the discounted number is what's ledgered; the build
+  // bonus never lifts the STAT_CAP ceiling → the circuit faucet EV is unchanged).
+  const cost = Math.round(STABLE.TRAIN_COST * npcMult(h, 'cornerman', 1, UNDERWORLD.FX.CORNER_TRAIN_MULT));
+  const gain = STABLE.TRAIN_GAIN + (npcTier(h, 'cornerman') >= 3 ? UNDERWORLD.FX.CORNER_GAIN : 0);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `A session runs $${cost}.`);
+  ch.cash = Number(ch.cash) - cost;
   ch.energy = Number(ch.energy) - STABLE.TRAIN_ENERGY;
-  const nv = Math.min(STABLE.STAT_CAP, Number(r[s]) + STABLE.TRAIN_GAIN); // absolute write (pg-mem INT-arith quirk)
+  const nv = Math.min(STABLE.STAT_CAP, Number(r[s]) + gain); // absolute write (pg-mem INT-arith quirk)
   await client.query(`UPDATE racers SET ${s}=$2 WHERE id=$1`, [r.id, nv]);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -STABLE.TRAIN_COST, reason: 'stable:train' });
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'stable:train' });
+  await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'train' }); // working the animals is the corner's business (his daily lead)
   await h.track(client, ch.account_id, 'stable_train', { stat: s });
   return { ok: true, id: r.id, stat: s, value: nv };
 }
@@ -119,6 +128,7 @@ export async function raceCircuit(ch, racerId, meetId, client, h) {
   } else {
     await client.query('UPDATE racers SET losses=$2, injured_until=$3 WHERE id=$1', [r.id, Number(r.losses) + 1, new Date(Date.now() + STABLE.INJURY_MS)]);
   }
+  await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'race' }); // race day is the corner's business
   await h.rngLog(client, ch.id, `stable:circuit:${meet.id}`, mine, `${win ? 'win' : 'loss'} vs ${meet.name} (${mine} vs ${theirs})`);
   await h.track(client, ch.account_id, 'stable_circuit', { kind: r.kind, meet: meet.id, win });
   return { ok: true, game: 'circuit', win, meet: meet.name, fee: meet.fee, purse: win ? meet.purse : 0,
@@ -178,6 +188,174 @@ export async function matchRace(ch, opponent, body, client, h) {
     yourRacer: win ? `${Number(r.wins) + 1}-${r.losses}` : `${r.wins}-${Number(r.losses) + 1}` };
 }
 
+// ── BREEDING (step two) — retire two same-kind racers into stud → a FOAL that inherits a fraction of
+// the parents' average stat (a head start, NOT a cap-skip). A cash SINK; both parents are CONSUMED. ──
+export async function breedRacers(ch, sireId, damId, name, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No stud farm business from a cell.');
+  if (String(sireId) === String(damId)) throw new GameError('same', 'Breeding takes two different racers.');
+  const n = String(name || '').trim();
+  if (n.length < 3 || n.length > 24) throw new GameError('name', "A foal's name runs 3–24 characters.");
+  if (!/^[\w .,'&-]+$/.test(n)) throw new GameError('name', 'Letters, numbers and simple punctuation only.');
+  // lock both parents (sorted) — leaf ordering; the char row is already held by withCharacter
+  const [first, second] = [String(sireId), String(damId)].sort();
+  await client.query('SELECT 1 FROM racers WHERE id=$1 FOR UPDATE', [first]);
+  await client.query('SELECT 1 FROM racers WHERE id=$1 FOR UPDATE', [second]);
+  const sire = (await client.query('SELECT * FROM racers WHERE id=$1', [sireId])).rows[0];
+  const dam = (await client.query('SELECT * FROM racers WHERE id=$1', [damId])).rows[0];
+  if (!sire || sire.character_id !== ch.id || !dam || dam.character_id !== ch.id)
+    throw new GameError('no_racer', 'Both parents must be your own racers.');
+  if (sire.kind !== dam.kind) throw new GameError('kind', 'A dog and a horse cannot be bred — match the kind.');
+  if (Number(ch.cash) < STABLE.BREED_COST) throw new GameError('cash', `The stud fee runs $${STABLE.BREED_COST}.`);
+  const k = stableKindOf(sire.kind);
+  const foal = (stat) => Math.max(k.statMin, Math.min(STABLE.STAT_CAP,
+    Math.floor((Number(sire[stat]) + Number(dam[stat])) / 2 * STABLE.BREED_INHERIT) + rand(0, STABLE.BREED_VARIANCE)));
+  const speed = foal('speed'), stamina = foal('stamina'), heart = foal('heart');
+  ch.cash = Number(ch.cash) - STABLE.BREED_COST;
+  await client.query('DELETE FROM racers WHERE id IN ($1,$2)', [sireId, damId]); // the parents retire to stud
+  const id = crypto.randomUUID();
+  await client.query('INSERT INTO racers (id, character_id, kind, name, speed, stamina, heart) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [id, ch.id, sire.kind, n, speed, stamina, heart]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -STABLE.BREED_COST, reason: 'stable:breed' });
+  await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'sign' });
+  await h.track(client, ch.account_id, 'stable_breed', { kind: sire.kind });
+  return { ok: true, id, kind: sire.kind, name: n, speed, stamina, heart, sire: sire.name, dam: dam.name };
+}
+
+// ── THE STAKES (step two) — a scheduled marquee race; enter your racer (CASH escrows, form snapshotted).
+// The Grand-Prix twin on the animal side; the worker resolves it. §10.4-neutral (a redistribution). ──
+export async function enterStakes(ch, racerId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No racing from lockup.');
+  if (hospitalized(ch)) throw new GameError('hosp', "You're in no shape to saddle up.");
+  const r = await myRacer(client, ch, racerId);
+  if (injured(r)) throw new GameError('injured', 'That racer is laid up — let them heal.');
+  const buyin = STABLE.STAKES.BUYIN;
+  if (Number(ch.cash) < buyin) throw new GameError('cash', `The stakes buy-in is $${buyin}.`);
+  const f = form(r); // SNAPSHOT the form at entry (the racer isn't escrowed — race it, breed it, sell it after)
+  // materialize/find the open stakes under the state singleton lock (LOCK ORDER: char → stakes_state → race)
+  const st = (await client.query('SELECT current FROM stakes_state WHERE id=1 FOR UPDATE')).rows[0];
+  let g = st.current ? (await client.query("SELECT * FROM stakes_races WHERE id=$1 AND status='open' FOR UPDATE", [st.current])).rows[0] : null;
+  if (!g) {
+    const id = crypto.randomUUID();
+    const resolvesAt = new Date(Date.now() + stakesMs());
+    await client.query('INSERT INTO stakes_races (id, status, resolves_at, pool) VALUES ($1,$2,$3,0)', [id, 'open', resolvesAt]);
+    await client.query('UPDATE stakes_state SET current=$1 WHERE id=1', [id]);
+    g = { id, status: 'open', resolves_at: resolvesAt, pool: 0 };
+  } else if (new Date(g.resolves_at) <= new Date()) {
+    throw new GameError('closed', 'The gate is set — this race is about to run. Try again after it settles.');
+  }
+  if ((await client.query('SELECT 1 FROM stakes_entries WHERE race_id=$1 AND character_id=$2', [g.id, ch.id])).rows[0])
+    throw new GameError('entered', "You've already got a runner in this stakes.");
+  ch.cash = Number(ch.cash) - buyin;
+  await client.query('INSERT INTO stakes_entries (race_id, character_id, buyin, racer_name, kind, form) VALUES ($1,$2,$3,$4,$5,$6)',
+    [g.id, ch.id, buyin, r.name, r.kind, f]);
+  await client.query('UPDATE stakes_races SET pool = pool + $2 WHERE id=$1', [g.id, buyin]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -buyin, reason: 'stable:stakes:buyin', counterparty: g.id });
+  const entrants = Number((await client.query('SELECT COUNT(*) n FROM stakes_entries WHERE race_id=$1', [g.id])).rows[0].n);
+  await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'race' });
+  await h.track(client, ch.account_id, 'stable_stakes', { buyin });
+  bus.emit('streets', { type: 'stakes_entry', who: ch.name, racer: r.name, entrants });
+  return { ok: true, stakes: g.id, racer: r.name, form: f, buyin, pool: Number(g.pool) + buyin, entrants,
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
+// Worker settle: race every LIVE entrant (snapshotted form + rand(VARIANCE)), rank, pay the top places a
+// share of the pool net of the rake. Single-writer (no player-lock races), idempotent (status gate). The
+// byte-faithful port of resolveGrandPrix — the same escrow accounting and lock order.
+export async function resolveStakes(client, raceId) {
+  const g0 = (await client.query('SELECT * FROM stakes_races WHERE id=$1', [raceId])).rows[0];
+  if (!g0 || g0.status !== 'open') return null;
+  // LOCK ORDER: entrant chars sorted → stakes_state → race row (state BEFORE the row — enterStakes locks
+  // state → race, so locking the race first would AB-BA a concurrent entry; the resolveGrandPrix posture).
+  const entChars = (await client.query('SELECT character_id FROM stakes_entries WHERE race_id=$1', [raceId])).rows.map((r) => r.character_id).sort();
+  for (const cid of entChars) await client.query('SELECT 1 FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+  await client.query('SELECT current FROM stakes_state WHERE id=1 FOR UPDATE');
+  const g = (await client.query("SELECT * FROM stakes_races WHERE id=$1 AND status='open' FOR UPDATE", [raceId])).rows[0];
+  if (!g) return null;
+  const pool = Number(g.pool);
+  const entries = (await client.query(
+    'SELECT e.character_id, e.buyin, e.form, e.racer_name, c.alive, c.name FROM stakes_entries e LEFT JOIN characters c ON c.id=e.character_id WHERE e.race_id=$1', [raceId])).rows;
+  let deadBurn = 0;
+  const live = [];
+  for (const e of entries) {
+    if (e.alive) live.push(e);
+    else { deadBurn += Number(e.buyin); await ledger(client, { currency: 'cash', amount: -Number(e.buyin), reason: 'stable:stakes:death', counterparty: raceId }); }
+  }
+  const clearCurrent = async () => { await client.query('UPDATE stakes_state SET current=NULL WHERE id=1 AND current=$1', [raceId]); };
+  if (live.length < STABLE.STAKES.MIN_ENTRANTS) { // not a full field — refund the field, burn the dead
+    for (const e of live) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, Number(e.buyin)]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: Number(e.buyin), reason: 'stable:stakes:refund', counterparty: raceId });
+      await notify(client, e.character_id, 'stakes_refund', { buyin: Number(e.buyin) });
+    }
+    await client.query("UPDATE stakes_races SET status='refunded' WHERE id=$1", [raceId]);
+    await clearCurrent();
+    return { stakes: raceId, refunded: live.length };
+  }
+  // race: snapshotted form + rand(0,VARIANCE) each; rank DESC (the best animal wins, the going is fickle)
+  const ranked = live.map((e) => ({ ...e, score: Number(e.form) + rand(0, STABLE.VARIANCE) })).sort((a, b) => b.score - a.score);
+  const livePool = pool - deadBurn;
+  const rake = Math.floor(livePool * STABLE.STAKES.RAKE_BPS / 10000);
+  const net = livePool - rake;
+  const frac = STABLE.STAKES.PAYOUTS.slice(0, ranked.length);
+  const denom = frac.reduce((a, b) => a + b, 0) || 1;
+  const placeShare = frac.map((f) => Math.floor(net * f / denom));
+  const payouts = new Array(ranked.length).fill(0);
+  for (let i = 0; i < ranked.length;) { // group ties (equal final score) — split the covered places' shares
+    let j = i; while (j + 1 < ranked.length && ranked[j + 1].score === ranked[i].score) j++;
+    let sum = 0; for (let p = i; p <= j; p++) sum += placeShare[p] || 0;
+    const each = Math.floor(sum / (j - i + 1));
+    for (let p = i; p <= j; p++) payouts[p] = each;
+    i = j + 1;
+  }
+  let handedOut = 0;
+  for (let i = 0; i < ranked.length; i++) {
+    const e = ranked[i], payout = payouts[i];
+    if (payout > 0) {
+      handedOut += payout;
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, payout]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: payout, reason: 'stable:stakes:win', counterparty: raceId });
+    }
+    await client.query('UPDATE stakes_entries SET place=$3 WHERE race_id=$1 AND character_id=$2', [raceId, e.character_id, i + 1]);
+    await notify(client, e.character_id, 'stakes_result', { place: i + 1, of: ranked.length, payout, racer: e.racer_name });
+  }
+  const totalTake = rake + (net - handedOut); // the rake + any rounding/unpaid remainder = the house cut
+  if (totalTake > 0) {
+    await ledger(client, { currency: 'cash', amount: -totalTake, reason: 'stable:stakes:take', counterparty: raceId });
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(totalTake / 2)]); // half → the buyback, half burns
+  }
+  await client.query("UPDATE stakes_races SET status='resolved' WHERE id=$1", [raceId]);
+  await clearCurrent();
+  await rngLog(client, ranked[0].character_id, `stable:stakes:${raceId}`, ranked[0].score, `winner ${ranked[0].racer_name} · ${ranked.length} runners · pool $${pool}`);
+  bus.emit('streets', { type: 'stakes_result', winner: ranked[0].racer_name, pool, runners: ranked.length });
+  return { stakes: raceId, runners: ranked.length, pool, winner: ranked[0].racer_name, take: totalTake };
+}
+
+// worker sweep — settle every open stakes race past its window (per-race txn, idempotent).
+export async function sweepStakes(pool) {
+  const due = (await pool.query("SELECT id FROM stakes_races WHERE status='open' AND resolves_at <= now() ORDER BY resolves_at")).rows;
+  let resolved = 0;
+  for (const { id } of due) {
+    const client = await pool.connect();
+    try { await client.query('BEGIN'); await resolveStakes(client, id); await client.query('COMMIT'); resolved++; }
+    catch (e) { await client.query('ROLLBACK'); } // 40P01 / transient → next tick retries (idempotent)
+    finally { client.release(); }
+  }
+  return { resolved };
+}
+
+// the open stakes race (if one's registering) — surfaced on the board.
+async function stakesInfo(pool, characterId) {
+  const st = (await pool.query('SELECT current FROM stakes_state WHERE id=1')).rows[0];
+  const g = st?.current ? (await pool.query("SELECT * FROM stakes_races WHERE id=$1 AND status='open'", [st.current])).rows[0] : null;
+  const base = { buyin: STABLE.STAKES.BUYIN, minEntrants: STABLE.STAKES.MIN_ENTRANTS, payouts: STABLE.STAKES.PAYOUTS };
+  if (!g) return { ...base, open: false };
+  const ent = (await pool.query('SELECT racer_name, kind, form, character_id FROM stakes_entries WHERE race_id=$1 ORDER BY form DESC', [g.id])).rows;
+  return { ...base, open: true, id: g.id, pool: Number(g.pool),
+    entrants: ent.length, mine: ent.some((e) => e.character_id === characterId),
+    field: ent.map((e) => ({ racer: e.racer_name, kind: e.kind, form: Number(e.form) })),
+    closesSeconds: Math.max(0, Math.ceil((new Date(g.resolves_at) - Date.now()) / 1000)) };
+}
+
 // GET /v1/stable — your stable + the field of listed racers (by kind) + the meets + your legend.
 export async function stableBoard(pool, characterId) {
   const rows = (await pool.query(
@@ -197,8 +375,9 @@ export async function stableBoard(pool, characterId) {
     meets: STABLE.MEETS, kinds: STABLE.KINDS,
     minLevel: STABLE.MIN_LEVEL, trainCost: STABLE.TRAIN_COST, trainEnergy: STABLE.TRAIN_ENERGY,
     statCap: STABLE.STAT_CAP, stats: STABLE.STATS, stableMax: STABLE.STABLE_MAX,
-    minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE,
+    minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE, breedCost: STABLE.BREED_COST,
     legend: { wins: lw, title: racerLegendOf(lw).name },
+    stakes: await stakesInfo(pool, characterId),
   };
 }
 
