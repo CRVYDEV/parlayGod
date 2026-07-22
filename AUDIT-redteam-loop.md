@@ -110,3 +110,51 @@ gap this round.
 
 **Round 2 verdict: no CRITICAL/HIGH/MED §10.4, lock, auth, or contract defect. 2 small correctness/hygiene
 fixes (estate `daily_progress` wipe, worker poison-row logging). Suite 33/33 + sim drift-0.**
+
+## Round 3 — rotated lenses (input-validation, status→power, RNG/determinism, accrual, gameplay-logic, cross-system)
+
+- **Input-validation / type-coercion — CLEAN (1 defense-in-depth).** No route accepts a client-set price/
+  amount into a ledger row unchecked; `Number.isFinite` guards front the money-moving numeric bodies
+  (swap, bank, bids). **Hardened:** `vanity.js:spendOmr` — the single $OMR burn primitive — gained a
+  `Number.isFinite(cost) && cost>0` guard so a future caller can never invert the burn into a mint (every
+  caller passes a positive constant today; defense-in-depth on the chokepoint).
+- **Status-axis → gameplay-power leakage — CLEAN (1 design note).** Hitman-rep / renown / notoriety /
+  smuggler-legend / war-effort / boxing-legend / recruit-count are all read-only display axes; none feed a
+  roll, price, or cap. Design note (intended, not patched): the Pen shot-caller is the most-feared inmate
+  by `season_kills` — a status axis that grants a small cover bonus — but it's bounded (`FACTION_COVER_CAP`),
+  a mark stays killable (`SHANK_MIN` floor), and it's the documented design.
+- **RNG / determinism — 2 deploy-hardening fixes.** Every money roll is server-side + `rng_audit`'d; the
+  §7.11 seed is the one secret. **Fixed:** production now refuses to boot on the unset/default `MARKET_SEED`
+  (the seeded draws — Numbers 600:1, Track/Fight winners, goods prices — are client-predictable on the
+  public default) and refuses if any test-only roll/timer override (`SHANK_P`, `LAW_BUST_P`, `SEARCH_MS`,
+  `PORT_*`, `WORLD_*`, …) leaked into the prod env (both fail-OPEN misconfigs → the fail-closed JWT-guard
+  posture). Regression in test/security.js.
+- **Lazy accrual — SOUND (2 balance flags, not patched per ground rule #1).** The accrual engine clamps
+  offline windows (income/exposure capped at the offline gap; heat/scrutiny bleed uncapped) and the heat
+  meter clamps to 100 post-accrual. Flags for founder sign-off: (a) business/territory/crew "upkeep
+  forgiveness" — a front unpaid past COLD stops earning but the arrears cap at 7d, so a long-absent owner's
+  worst case is bounded (intended, documented); (b) speakeasy bar-take is collect-only income with the D2
+  gate now enforced on upgrade too (see cross-system fix).
+- **Gameplay-logic — 1 LOW fixed, 1 design note.** **Fixed:** five on-demand heat-add sites
+  (fire/npcHit/world-raid×2/launder) added to `ch.heat` unclamped while their accrual siblings clamp at
+  `Math.min(100,…)` — player-unfavorable + self-correcting, clamped for parity. Design note (intended):
+  `jump` has no co-location gate (unlike fire's search-then-shoot) — jumping is a lighter, location-free
+  mug by design.
+- **Cross-system (background finder) — 1 MED fixed.** **D2 "shield, not bunker" bypass via the upgrade
+  paths:** `collectBusiness`/`collectTerritory`/`collectSpeakeasy` all gate `safeHoused`, but the sibling
+  `upgradeBusiness`/`upgradeRacket`/`upgradeSpeakeasy` bank the SAME pending income (business:income/
+  territory:income/speakeasy:income) with no gate — a safehoused, untargetable player could realize
+  operating income (the exact act D2 forbids) through the upgrade route, systemically across three systems.
+  §10.4 stays exact (normal income faucet, 24h-capped → ~0 new value) but it cracks a SIGNED anti-abuse
+  rule. Added `safeHoused` (throws `safe`) + jail parity to all three upgrades; regression in
+  test/economy.js. Verified SAFE by the same finder: port contraband-loot × persist (no clobber, non-
+  currency), GP/Stakes/Futurity/boxing-bet escrow × loot × death (debit-before-loot, all identities
+  reconcile, resolve-snapshot tables excluded from the wipe), port piracy/rendezvous/collect concurrency
+  (boat row FOR UPDATE serializes; piracy take is a <100% redirect → emission only falls), racer/car
+  snapshots (never escrowed → move/consume can't dup), speakeasy standover/buyout (raid-first, no double-
+  collect), and every account-level legend bump (direct-SQL, absent from persistAccount → no clobber,
+  survives death).
+
+**Round 3 verdict: no CRITICAL/HIGH. 1 MED (D2 upgrade-gate, signed-rule consistency), 1 LOW (heat clamp),
+2 deploy-hardening (MARKET_SEED + test-knob boot guards), 1 defense-in-depth (spendOmr guard). 3 design
+notes + 2 balance flags for founder sign-off. Suite 33/33 + sim drift-0.**
