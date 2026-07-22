@@ -645,3 +645,71 @@ lock/accrual cores re-verified sound.
 **Round 11 verdict: 1 MED (witpro actor gate) + 1 LOW (bodyguard double-absorb) fixed + 1 INFO comment.
 Input-validation, PvP-locks, kitchen/accrual, and the state matrix re-verified sound. Suite 33/33 + sim
 drift-0.**
+
+---
+
+## Round 12 — Solidity contracts · cross-system exploit chains · auth token deep-dive · client-side security
+
+Four crown-jewel/real-money lenses. One MED (JWT-in-WS-URL) + two LOW auth-hardening fixed; the
+contracts, cross-system §10.4 seams, and auth perimeter re-verified sound; the client XSS finding is
+server-mitigated (flagged for a dedicated escaping pass).
+
+### Fixed
+- **Client Finding 2 (MED) — the session JWT rode in the WebSocket URL (`?token=`).** The same full
+  bearer token used on every REST call was in the WS URL, which lands in web-server/proxy/CDN access logs
+  + browser history → token theft → account takeover. Fix: the client now passes it as a
+  `Sec-WebSocket-Protocol` subprotocol value (`['bearer', token]`), NOT in the URL; the server reads it
+  from that header first, keeping the query as a backward-compat fallback (the WS tests + external tools).
+  Verified end-to-end (a subprotocol-token WS gets `hello`; a bad token → clean 4001) + the WS security
+  regressions still pass on the query fallback.
+- **Auth LOW-2 — a malformed Privy token threw a raw SyntaxError → 500.** The two `JSON.parse` calls on
+  the token's header/payload now decode defensively → a clean 400 `auth_failed` (matching the SIWE path's
+  malformed-sig handling); no behavior change for valid tokens.
+- **Auth LOW-1 — Privy `iss` was only validated when present** (`claims.iss && …` → fail-open on an
+  absent claim). Now validated unconditionally (`iss !== 'privy.io'` throws) — textbook JWT hardening;
+  Privy always sets it, so no valid-token impact.
+
+### Verified CLEAN / flagged (not patched)
+- **Solidity contracts (ae95) — no CRIT/HIGH.** All six re-read: NO mint path (OMR has no owner-mint;
+  every payout is `safeTransfer` from a pre-funded balance), the anti-Ponzi tranche cap enforced BEFORE
+  the state write, EIP-712 domains/typehashes match the off-chain signer + replay nonce-latched + deadline
+  bounded (MAX_TTL), CEI + `nonReentrant` on every external call, all privileged fns `onlyOwner` (no
+  hot-deployer window, Safe-from-birth), payout math rounds toward the contract, staking principal
+  conserved separately from the reward pool. Residuals all accepted-design (L1 VoucherClaim.sweep = the
+  Safe-trust assumption; L2 all-or-nothing claim = liveness) or `forge test` gaps for the pre-mainnet
+  checklist (L4: add a gear-mint reentrant-receiver test + a reverted-daily-cap-nonce-survives test).
+  `forge test` remains THE pre-mainnet gate (Foundry egress-blocked here — adding un-runnable tests would
+  violate "tests must prove things work").
+- **Cross-system exploit chains (a06a) — no provable CRIT/HIGH §10.4 leak.** Every chain resolved to an
+  existing mitigation: fire-loot × market/loan escrow (distinct NULL-char `*:loot`/`*:death` reasons per
+  pool, both accounts persisted), gear-loot × on-chain withdraw (both serialize on the victim
+  `account_persistent FOR UPDATE`), loan-heir-reassign × sweep-forfeit (re-verify catches it), dividend
+  pools (separate, principal-based, pool-bounded), shared escrow reasons (different currencies/subsets —
+  no double-count), estate escrow-snapshot handling (escrow tables excluded from the wipe → worker burns
+  the dead stake). Two LOW documentation/regression-gap notes flagged (gear-dup lock coupling across
+  modules; contraband-must-stay-out-of-persist) — not live bugs.
+- **Auth token deep-dive (a9f0) — no CRIT/HIGH.** JWT alg-pinned HS256 + dev-fallback unreachable with
+  real data (`hardened ⟺ DATABASE_URL ⟺ JWT_SECRET required`), Privy ES256/aud-scalar-or-array/exp/JWKS-
+  kid-matched (no keys[0] fallback, header jku/x5u ignored), X confused-deputy gated off by default,
+  guest→provider upgrade can't take over an existing account (UNIQUE + verified-token), agent-flag DB-read
+  every gate, invite consume atomic, SIWE EIP-55 + nonce-single-use + uniqueness. LOW-3 flagged (SIWE
+  plain-text message vs full EIP-4361 — safe today via server-supplied accountId + single-use nonce;
+  the EIP-4361 upgrade touches the client SIWE flow, a hardening enhancement not a bug).
+- **Client-side security (a4cc) — Finding 1 (HIGH-stakes but SERVER-MITIGATED, flagged).** The console
+  stores the JWT in localStorage and renders player strings into innerHTML with only 6 `esc()` sites — BUT
+  the server strips `<>"`backtick from EVERY player-string write path (the R8 charset regex on names/tags,
+  `cleanText` on free-text — verified by the input-validation lens), so on current/fresh data there is NO
+  live injection vector. The residual is (a) legacy pre-sanitization alpha-DB rows (a one-time deploy
+  migration) and (b) single-layer fragility. The correct fix is a COMPLETE client-side escaping pass, but
+  it needs per-sink context analysis (a blind wrap corrupts the many TEXT-context strings — describe/toast/
+  feud popups — by HTML-escaping them) + a browser XSS test — a dedicated hardening task, not a safe
+  autonomous mass-edit, and a 2-sink partial is security-theater. FLAGGED as the top client follow-up
+  (universal `esc()` at innerHTML sinks + a legacy-row sanitize migration + a browser XSS test). Finding 3
+  (raw `ev.type`/`channel` — server enums today) folds into it. Verified CLEAN: the server SVG cards + /u
+  profile (fully XML-escaped, banded status only — no exact-wealth leak, parameterized name lookup, no
+  huge-name DoS), admin.html (esc'd, mod-key in sessionStorage + only the x-mod-key header), /openapi.json
+  (excludes /v1/mod), no CSRF (bearer not cookies), no postMessage/opener leak.
+
+**Round 12 verdict: 1 MED (JWT-in-WS-URL) + 2 LOW (Privy hardening) fixed. Contracts, cross-system §10.4,
+and the auth perimeter re-verified sound; the client XSS is server-mitigated + flagged for a dedicated
+escaping pass. Suite 33/33 + sim drift-0.**

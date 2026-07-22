@@ -1334,7 +1334,14 @@ export async function buildServer() {
   const WS_PING_MS = Number(process.env.WS_PING_MS || 30_000); // heartbeat: reap half-open/dead sockets
   app.get('/v1/ws', { websocket: true }, async (socket, req) => {
     let accountId;
-    try { accountId = app.jwt.verify(String(req.query?.token || '')).sub; }
+    // (red-team R12 F2) The session JWT is the same full bearer used on every REST call. Passing it in
+    // the WS URL query (`?token=`) leaks it into web-server/proxy/CDN access logs + browser history →
+    // token theft → account takeover. Read it from the Sec-WebSocket-Protocol header instead (the client
+    // offers it as a subprotocol value: "bearer, <token>"), which is NOT logged. Keep the query as a
+    // backward-compat fallback (older clients/tools + the WS tests) — our own client no longer uses it.
+    const sub = String(req.headers['sec-websocket-protocol'] || '').split(',').map((s) => s.trim());
+    const bearer = sub[0] === 'bearer' ? sub[1] : null;
+    try { accountId = app.jwt.verify(String(bearer || req.query?.token || '')).sub; }
     catch { socket.close(4001, 'auth'); return; }
     // (red-team R9 WS) The per-account cap was a TOCTOU: it read the Set size but only ADDED the socket
     // after three awaited queries, so concurrent connects for one token all observed size<MAX and all

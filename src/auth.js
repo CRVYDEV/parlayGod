@@ -42,7 +42,10 @@ export async function verifyPrivy(token) {
   if (!token) throw new GameError('token', 'Missing Privy token.');
   const [h, p, sig] = String(token).split('.');
   if (!h || !p || !sig) throw new GameError('auth_failed', 'Malformed Privy token.');
-  const header = JSON.parse(Buffer.from(h, 'base64url').toString());
+  // (red-team R12 LOW-2) a non-base64url / non-JSON segment threw a raw SyntaxError → 500 for hostile
+  // input (the SIWE path already returns a clean 400 for a malformed sig). Decode defensively → clean 400.
+  const dec = (seg) => { try { return JSON.parse(Buffer.from(seg, 'base64url').toString()); } catch { throw new GameError('auth_failed', 'Malformed Privy token.'); } };
+  const header = dec(h);
   // pin the algorithm: only ES256 is accepted (defense-in-depth against alg confusion)
   if (header.alg !== 'ES256') throw new GameError('auth_failed', 'Unexpected Privy token algorithm.');
   const findKey = async () => {
@@ -57,12 +60,12 @@ export async function verifyPrivy(token) {
   const okSig = crypto.verify('sha256', Buffer.from(`${h}.${p}`),
     { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url'));
   if (!okSig) throw new GameError('auth_failed', 'Privy signature check failed.');
-  const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
+  const claims = dec(p);
   // `aud` may be a scalar or an array (OIDC allows both; some Privy app configs emit `[appId]`) — accept
   // either as long as our appId is present. Still fail-closed: an absent/mismatched audience is rejected.
   const audOk = Array.isArray(claims.aud) ? claims.aud.includes(appId) : claims.aud === appId;
   if (!audOk) throw new GameError('auth_failed', 'Privy token is for another app.');
-  if (claims.iss && claims.iss !== 'privy.io') throw new GameError('auth_failed', 'Unexpected Privy issuer.');
+  if (claims.iss !== 'privy.io') throw new GameError('auth_failed', 'Unexpected or missing Privy issuer.'); // (red-team R12 LOW-1) mandatory iss — was fail-open on an absent claim (Privy always sets 'privy.io')
   if (!claims.exp || claims.exp * 1000 < Date.now()) throw new GameError('auth_failed', 'Privy token expired or non-expiring.');
   if (!claims.sub) throw new GameError('auth_failed', 'Privy token has no subject.');
   return { provider: 'privy', subject: String(claims.sub) };
