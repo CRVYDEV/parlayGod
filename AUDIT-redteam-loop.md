@@ -2212,3 +2212,51 @@ stay green.
 (the reset now holds ≤1 gang lock); the snapshot-integrity generalization confirmed the R34 boxing HIGH was a
 lone omission (every other worker-resolved event already snapshots correctly), and the worker-sweep
 concurrency + chain reserve surfaces confirmed CLEAN. Suite 34/34 + sim drift-0.
+
+## Round 36 — two fresh attack-CLASS lenses: RNG/seed predictability + input-validation/coercion
+
+With the feature surfaces saturated, R36 pivoted from per-module lenses to two classic whole-codebase attack
+CLASSES not yet dedicated this window: (1) can a player PREDICT or BIAS a money-drawing roll, or re-roll/replay
+a random outcome; (2) systematic input-validation — a client-supplied NaN/Infinity/negative/fractional/overflow
+amount slipping past a `>0`/`<=balance` guard into a mint, escrow drain, or §10.4 drift. Plus a manual lens on
+the idempotency replay backbone.
+
+**No reachable bug — both lenses CLEAN (no CRITICAL/HIGH/MED).** Verified at source:
+
+- **RNG / seed predictability — SOUND.** All 68 `Math.random()` money rolls are server-side (the client supplies
+  only a CHOICE — pick/bet/side — never a seed/nonce), resolve INSIDE the same withCharacter txn that debits the
+  stake (no observe-then-abort), and log to `rng_audit`. Every deterministic §7.11 money draw (Numbers, Fight,
+  Track field+winner, goods prices, region shock, fence, RWA, auction, yard/uprising) mixes `MARKET_SEED`; the
+  only seedless `hash01` is the disinfo bluff (not a cash outcome). The two seed-recovery risks fail CLOSED at
+  boot (server.js:80-93): the committed default seed AND a weak seed (<24 chars / <8 distinct — offline-
+  recoverable from the public prices board) both REFUSE to boot in production. The 29 test-only always-win
+  roll/timer knobs (LAW_BUST_P/SHANK_P/PORT_SINK/…) are refused at prod boot and each is `!= null ? override :
+  Math.random()` (absent → a real roll). No endpoint leaks the current period's winner before betting closes
+  (the board strips the true probability `p`, exposing only odds; claim/settle read the ticket's OWN period's
+  seed draw). Residual (already-known/guarded, NOT a new bug): seed secrecy is a single point of failure with no
+  rotation/commit-reveal — flagged in DEPLOY.md, the FNV→HMAC swap a deferred founder call.
+- **Idempotency replay backbone (manual) — SOUND.** Reserve-before-execute (a status=0 row INSERTed before the
+  action; a concurrent same-key request → 409 `in_progress`), body-hash-bound (a key reused for a different
+  request → 422), 2xx-only storage (a resolved bet — win OR loss — is a 2xx, stored and REPLAYED on a same-key
+  retry, never re-rolled; a loss can't be "retried away"), 4xx/5xx releases the reservation (no key-poisoning).
+  A fresh-key retry is just a new paid bet, not a free re-roll. Closes retry-until-win + replay-away-a-loss.
+- **Input-validation / numeric-coercion — COMPREHENSIVELY GUARDED.** Every client numeric field
+  (amount/qty/price/stake/bet/rate/term/seconds/shares/tier) reaching a ledger/transfer/escrow is protected by
+  Idiom A (explicit `Number.isFinite` at the coercion site — swap/bank/spendOmr/portfolio/auction/boxing/stable/
+  races/speakeasy/world/bonds/chain/landmarks/respec/pen/bodyguard/store) or Idiom B (`Math.floor(Number(x)||0)`
+  → NaN→0 rejected by the `<min` floor, + a downstream finite `balance < amt` comparison that rejects Infinity
+  since `finite < Infinity` is true → throws before any value moves — casino gateBet/pvp, market, loans, social
+  tribute/bounty/contract, business launder, kitchen, convoy, economy). All hunts confirmed closed: `"1e999"`→
+  Infinity throws at the balance check before the debit/credit; `"abc"`/array/object→NaN killed by `||0`/isFinite;
+  negative rejected by the `<min` floors; fractional truncated by `Math.floor`; bps fields are server constants
+  (no client-settable percent reaches a take); two-party credits are bounded by BOTH parties' balance checks.
+  Non-exploitable watch-item (NOT a finding): Idiom-B paths reject Infinity IMPLICITLY via the downstream finite
+  balance check — robust in every current path (no credit-before-check ordering exists), but a future handler
+  that credits/escrows a client amount BEFORE a finite comparison would be the class to watch (the codebase's own
+  comments already flag this and proactively add `isFinite` for parity).
+
+**Round 36 verdict:** both fresh attack-class lenses (RNG/seed predictability, input-validation/coercion) and the
+manual idempotency-replay check returned NO reachable bug — the randomness surface is server-side/atomic/audited/
+boot-guarded and the numeric-input surface is comprehensively guarded against mint/drain/drift. Two already-known/
+guarded residuals recorded (seed rotation; the Idiom-B implicit-Infinity-rejection watch-item), neither patched.
+Suite 34/34 + sim drift-0 (docs-only round).
