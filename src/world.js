@@ -237,7 +237,7 @@ export async function raidNpc(ch, npcId, client, h) {
   // pay the price up front (energy + ammo + heat + cooldown), win or lose
   ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY;
   ch.ammo = Number(ch.ammo) - WORLD.RAID_AMMO;
-  ch.heat = Number(ch.heat || 0) + WORLD.RAID_HEAT;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + WORLD.RAID_HEAT);
   ch.world_raid_at = new Date(now.getTime() + WORLD.RAID_CD_MS);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -WORLD.RAID_AMMO, reason: 'world:raid' });
 
@@ -406,9 +406,9 @@ export async function executeRaid(ch, raidId, client, h) {
   const cd = new Date(now.getTime() + WORLD.RAID_CD_MS);
   const setMember = async (id, cols, params) => client.query(`UPDATE characters SET ${cols} WHERE id=$1`, [id, ...params]);
   for (const m of crewRows) {
-    if (m.id === ch.id) { ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY; ch.ammo = Number(ch.ammo) - WORLD.RAID_AMMO; ch.heat = Number(ch.heat || 0) + WORLD.RAID_HEAT; ch.world_raid_at = cd; }
+    if (m.id === ch.id) { ch.energy = Number(ch.energy) - WORLD.RAID_ENERGY; ch.ammo = Number(ch.ammo) - WORLD.RAID_AMMO; ch.heat = Math.min(100, Number(ch.heat || 0) + WORLD.RAID_HEAT); ch.world_raid_at = cd; }
     else await setMember(m.id, 'energy=$2, ammo=$3, heat=$4, world_raid_at=$5',
-      [Number(m.energy) - WORLD.RAID_ENERGY, Number(m.ammo) - WORLD.RAID_AMMO, Number(m.heat || 0) + WORLD.RAID_HEAT, cd]);
+      [Number(m.energy) - WORLD.RAID_ENERGY, Number(m.ammo) - WORLD.RAID_AMMO, Math.min(100, Number(m.heat || 0) + WORLD.RAID_HEAT), cd]);
     await h.ledger(client, { characterId: m.id, currency: 'ammo', amount: -WORLD.RAID_AMMO, reason: 'world:raid' });
   }
 

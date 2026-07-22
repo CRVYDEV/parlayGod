@@ -891,7 +891,7 @@ export async function fire(ch, victim, client, h, rounds) {
 
   ch.energy = Number(ch.energy) - M3.FIRE_ENERGY;
   ch.ammo = Number(ch.ammo) - fired;
-  ch.heat = Number(ch.heat || 0) + M3.FIRE_HEAT; // §7 interlock: wet work draws law heat, like a deal
+  ch.heat = Math.min(100, Number(ch.heat || 0) + M3.FIRE_HEAT); // §7 interlock: wet work draws law heat, like a deal
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -fired, reason: 'fire' });
 
   const vicLvl = levelOf(Number(victim.respect));
@@ -1197,7 +1197,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   await bumpStanding(client, h, ch, 'fixer', 4, { action: 'hire' }); // arranged work is business with the Match
   // RIVALRY (step two): the Doc hears who sent the man with the bag
   await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
-  ch.heat = Number(ch.heat || 0) + M3.NPC_HIT_HEAT;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + M3.NPC_HIT_HEAT);
   ch.npchit_at = new Date(Date.now() + M3.NPC_HIT_CD_MS);
   if (pair) await client.query('UPDATE npc_hits SET last_at=now() WHERE payer=$1 AND target=$2', [ch.id, victim.id]);
   else await client.query('INSERT INTO npc_hits (payer, target) VALUES ($1,$2)', [ch.id, victim.id]);

@@ -311,7 +311,7 @@ export async function swap(ch, direction, amount, client, h) {
     if (!(out > 0)) throw new GameError('pool', "The pool couldn't fill that.");
     await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + netIn, o - out]);
     ch.cash = Number(ch.cash) - amt;
-    ch.heat = Number(ch.heat || 0) + CONSTANTS.LAUNDER_HEAT; // washing cash draws the law
+    ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.LAUNDER_HEAT); // washing cash draws the law
     h.acct.omr = Number(h.acct.omr) + out;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
     await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });
