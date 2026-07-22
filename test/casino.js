@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { sweepTournaments } from '../src/casino.js';
+import { sweepTournaments, trackFieldOf } from '../src/casino.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -400,6 +400,52 @@ const invT = await runLedgerInvariants(pool);
 const trEsc = invT.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trEsc?.ok, `poker tourney escrow reconciles (drift ${trEsc?.drift})`);
 
+// ══════════ THE TRACK: the dogs & the ponies (daily card, seed-drawn field + winner) ══════════
+// the day's winner index (the seed draw weighted by the runners' TRUE p — mirrors trackWinnerOf)
+const trackWinner = (race, day) => {
+  const rs = trackFieldOf(race, day);
+  const r = hash01(`trackwin:${race}:${day}:${MARKET_SEED}`);
+  let acc = 0;
+  for (let k = 0; k < rs.length; k++) { acc += rs[k].p; if (r < acc) return k; }
+  return rs.length - 1;
+};
+await seed("loc='neon'");
+// the card is public + priced with a uniform ~15% takeout (posted odds = (1/p)×(1−EDGE))
+const denT = (await call('GET', '/v1/casino', { token })).body.track;
+assert(denT && Array.isArray(denT.dogs) && denT.dogs.length === CASINO.TRACK.FIELD, 'the dog card shows the full field');
+assert(denT.horses.length === CASINO.TRACK.FIELD && denT.dogs.every((r) => r.odds >= 1.1 && r.odds <= CASINO.TRACK.MAX_ODDS), 'horses too, odds in range');
+assert(denT.dogs.every((r) => r.name && !('p' in r)), 'the field shows names + odds, never the true probability');
+// gates: bad race / min / max / bad runner
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'cats', runner: 0, amount: 100 } })).body.error, 'race', "bet the 'dogs' or the 'horses'");
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 0, amount: 10 } })).body.error, 'min', 'track minimum $50');
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 0, amount: 999999 } })).body.error, 'max', 'the window caps the bet');
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 99, amount: 100 } })).body.error, 'runner', 'a runner must be in the field');
+// back the WINNING dog, backdate to yesterday, claim at the posted odds
+const tDay = dayOf();
+const dogWin = trackWinner('dogs', tDay - 1);
+const dogOdds = trackFieldOf('dogs', tDay - 1)[dogWin].odds;
+let tr2 = await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: dogWin, amount: 2000 } });
+assert.equal(tr2.code, 200, 'a bet on the dogs'); assert(tr2.body.horse && tr2.body.odds, 'the ticket names the runner + odds');
+assert.equal((await call('POST', '/v1/casino/track', { token, body: { race: 'dogs', runner: 0, amount: 100 } })).body.error, 'bet', 'one ticket a race');
+assert.equal((await call('POST', '/v1/casino/track/claim', { token })).body.settled, 0, "today's race hasn't run — nothing to settle");
+await pool.query(`UPDATE track_bets SET day=${tDay - 1} WHERE character_id='${cid}' AND race='dogs'`);
+const cashPreTrack = (await meOf(token)).cash;
+tr2 = await call('POST', '/v1/casino/track/claim', { token });
+assert.equal(tr2.body.settled, 1, 'the race settled'); assert.equal(tr2.body.results[0].hit, true, 'the pick won');
+const dogPayout = Math.floor(2000 * dogOdds);
+assert.equal(tr2.body.won, dogPayout, 'paid the posted odds on the stake');
+assert.equal((await meOf(token)).cash, cashPreTrack + dogPayout, 'the payout landed in pocket');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:win:track' AND character_id='${cid}'`)).rows[0].s), dogPayout, 'the win is a ledgered casino:win:track faucet');
+// a LOSING ticket (back a non-winner on the horses) settles to nothing — the stake was a ledgered sink
+const horseWin = trackWinner('horses', tDay - 1);
+const horseLoser = (horseWin + 1) % CASINO.TRACK.FIELD;
+tr2 = await call('POST', '/v1/casino/track', { token, body: { race: 'horses', runner: horseLoser, amount: 1500 } });
+assert.equal(tr2.code, 200, 'a horse ticket — a second race the same day (dogs slot was separate)');
+await pool.query(`UPDATE track_bets SET day=${tDay - 1} WHERE character_id='${cid}' AND race='horses'`);
+tr2 = await call('POST', '/v1/casino/track/claim', { token });
+assert.equal(tr2.body.settled, 1, 'the horse race settled'); assert.equal(tr2.body.won, 0, 'the loser paid nothing');
+assert.equal(-(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:bet:track' AND character_id='${cid}'`)).rows[0].s)), 3500, 'both stakes ($2000 + $1500) are ledgered casino:bet:track sinks');
+
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
 // (cash was SQL-seeded once at the top — everything after that has a row, so we check the DELTA
 // from the seed against the ledger sum, and the vocabulary must know every casino reason)
@@ -419,5 +465,5 @@ assert(denD?.ok, `den tip-outs are all ledgered (drift ${denD?.drift})`);
 const trFinal = inv.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trFinal?.ok, `poker tourney escrow holds at the end (drift ${trFinal?.drift})`);
 
-console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), §10.4 identity + vocabulary + treasury + den + tourney-escrow checks hold`);
+console.log(`✅ Gambling Den test passed — neon-located tables, limits, ${wins}W/${losses}L craps session fully ledgered (stakes/payouts/profit-capped street cut exact — the mint-on-top fix), $OMR untouched, Numbers ticket lifecycle (one/day, lazy 600:1 claim, idempotent settle), step two: back-room PvP dice (${pvpW}W/${pvpL}L, exact transfer + 5% rake, half to the street), the weekly fight (capped book, neon-family fix from the treasury — and the Madame docks the buying boss 5, Underworld rivalry #3 — fixed + seed-drawn settlements), casino-front rakeback (cursor-exact, no history claims), step three: BLACKJACK (${bjWins}W/${bjLosses}L, ${bjBusts} bust, ${bjDoubles} doubled, ${bjNaturals} naturals — deal/hit/stand/double, cash-delta==net, every hand ledgered casino:*blackjack, book identity holds) + heads-up HOLD'EM (${pkW}W/${pkL}L/${pkPush} split — 5-of-7 showdown, raked pot, tie splits), step four: the POKER TOURNAMENT (buy-in escrow, short-field refund, closed-window gate, double-entry gate, a 3-handed settle with a dead entrant's stake burned + the top places splitting net of rake, and the new poker-tourney-escrow §10.4 check), THE TRACK (the dogs & the ponies — a daily seed-drawn card, uniform ~15% takeout, one WIN bet per race per day, lazy claim at the posted odds, winning + losing tickets ledgered casino:*:track), §10.4 identity + vocabulary + treasury + den + tourney-escrow checks hold`);
 await app.close();

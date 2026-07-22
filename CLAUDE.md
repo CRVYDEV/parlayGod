@@ -744,6 +744,27 @@ the materialization/settle serialization + idempotency + no-persist-clobber + po
 the estate wipe, and alt-stuffing being −EV (renormalized `−rake/N` for every entrant, no dilution).
 Design note (flagged, not a defect): the tournament is a chance-based pooled lottery (server-dealt
 random hands), not skill poker — matches the den's other games.
+**THE TRACK — the dogs & the ponies — BUILT** (`src/casino.js`, `test/casino.js`; the weekly-FIGHT twin,
+the classic day at the track). A DAILY race card (greyhounds + horses), each race a `TRACK.FIELD` (6)
+of runners drawn off the §7.11 seed (`trackFieldOf(race, day)`) — each runner gets a true win
+probability `p` (seeded weights, normalized) and POSTED decimal odds = `(1/p)×(1−EDGE)`, so the book
+takes a UNIFORM `TRACK.EDGE` (15%) takeout on every runner (the historically accurate track vig). The
+winner is drawn from the seed weighted by the TRUE `p` (`trackWinnerOf` — the odds carry the vig, the
+draw does not → fair + verifiable; `p` never leaks — `trackCardOf` strips it). One WIN bet per race per
+street per day (up to 2/day — dogs + horses; `track_bets` PK `(character_id, day, race)`), settled
+lazily the next day (`betTrack`/`claimTrack`, the numbers/fight pattern). CASH ONLY (the Den's rule) —
+`casino:bet:track` sink / `casino:win:track` faucet ride the EXISTING `casino:bet:%`/`casino:win:%`
+den-book LIKE patterns (bumpProfit + profit-capped takeHouse 1% + bumpVolume; the open ticket's
+`stake × TRACK.MAX_ODDS` exposure joins `openLiability`), so **ZERO invariants.js change** — the
+per-character cash check + `den profit`/`den distributions` identities reconcile it automatically. A
+bounded faucet that's a NET SINK in expectation (every den game is), small-capped (`MIN_BET` $50 /
+`MAX_BET` $10k). Joined the runEstate wipe (`track_bets`). Routes `POST /v1/casino/track|/track/claim`;
+surfaced on `denInfo` (`GET /v1/casino` — the card + your open tickets), `/v1/rules`, the console Den
+tab (the two race cards with posted odds + a bet-the-race form + claim), and `describe()`. `test/casino.js`
+covers the field/odds board (no `p` leak), the bad-race/min/max/runner gates, a WINNING dog backdated +
+claimed at the posted odds, a LOSING horse settling to nothing, the one-bet-per-race-per-day gate, and
+the §10.4 per-character reconcile ($OMR untouched). Suite 32/32 + sim drift-0 (17 checks). All `TRACK`
+numbers are founder sign-off levers — a net-sink book, no signed faucet touched (BALANCE.md).
 
 **Balance sign-off pass — `BALANCE.md` is the single source of truth for every economy lever.**
 The sim was extended (mid-deposit kill EV probe, safehouse wealth-tier quotes, realized den edge,

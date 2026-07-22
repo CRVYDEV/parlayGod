@@ -117,6 +117,7 @@ Measurements: `tools/sim.js` (honest-money simulation, §10.4 drift-0 on every r
 | `PVP_RAKE_BPS` | 5% | Half to street tax, half burns; consent-by-listing. | **KEEP** |
 | `FIGHT_MAX` / fix $50k | $5k cap | The cap is the fix's abuse bound: a fixed bout mints ≤ stake×payout per conspirator; 20-member family ≈ $160k/week net of the fix — a bounded turf perk. | **KEEP** |
 | `RAKEBACK_BPS` | 1% of den volume | Split across casino-front owners, cursor-exact. | **KEEP** |
+| The Track `EDGE` / `FIELD` / caps | 15% / 6 / $50–$10k | The dogs & the ponies (the weekly-fight twin). A UNIFORM 15% takeout on every runner (posted odds = (1/p)×(1−EDGE); the seed-drawn winner uses the true p — the odds carry the vig, the draw doesn't). One win bet per race/day, small-capped → a NET SINK in expectation like every den game, no signed faucet touched (rides the `casino:bet:%`/`casino:win:%` den book — zero invariant change). | **KEEP** |
 
 ## 10. Sinks & vanity (all PROPOSED, status-only)
 
