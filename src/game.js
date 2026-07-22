@@ -566,9 +566,18 @@ export function view(ch, acct = {}, owned = {}) {
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
     maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
-    cargoCap: cargoCapacity(assets) + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0),
+    // (red-team R5) mirror the canonical trunkCap() exactly — the display had omitted the road_boss
+    // capstone's +trunk, showing a maxed Wheelman a smaller trunk than the enforcement actually gives.
+    cargoCap: cargoCapacity(assets)
+      + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
+      + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0),
     skills: [...(owned.skills || [])],
-    skillPoints: (() => { const total = Math.floor(lvl / SKILLS.LVL_PER_POINT);
+    // (red-team R5) mirror pointsOf() — total = level-derived + the prestige bonus the learn-gate grants;
+    // the display had omitted the prestige points, under-reporting a prestiged bloodline's real budget.
+    skillPoints: (() => {
+      const fromLevel = Math.floor(lvl / SKILLS.LVL_PER_POINT);
+      const prestigeBonus = Math.min(SKILLS.PRESTIGE_POINT_MAX, Math.floor(Number(acct?.prestige || 0) / SKILLS.PRESTIGE_PER_POINT));
+      const total = fromLevel + prestigeBonus;
       const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
       return { total, spent, available: Math.max(0, total - spent) }; })(),
     rackets: owned.rackets || [], assets, businesses: owned.businesses || [], speakeasy: owned.speakeasy || null, fighters: owned.fighters || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
