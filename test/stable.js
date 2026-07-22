@@ -36,6 +36,8 @@ const lowbie = await mk('Stable Boy');  // the level gate
 assert.equal((await call('POST', '/v1/stable/buy', { token: lowbie.token, body: { kind: 'dog', name: 'Rex' } })).body.error, 'level', 'a nobody cannot own a racer');
 await seed(aa.id, `respect=${lvlRespect(10)}`); await seed(bb.id, `respect=${lvlRespect(10)}`);
 assert.equal((await call('POST', '/v1/stable/buy', { token: aa.token, body: { kind: 'cat', name: 'Whiskers' } })).body.error, 'kind', "a dog or a horse, not a cat");
+// (red-team R16) a prototype-key kind must hit the enum gate cleanly, not slip to Object.prototype → NaN stats → a 500
+for (const k of ['__proto__', 'constructor', 'hasOwnProperty']) assert.equal((await call('POST', '/v1/stable/buy', { token: aa.token, body: { kind: k, name: 'Proto Pete' } })).body.error, 'kind', `prototype-key kind '${k}' is rejected, not a 500`);
 assert.equal((await call('POST', '/v1/stable/buy', { token: aa.token, body: { kind: 'dog', name: 'x' } })).body.error, 'name', 'a racer needs a real name');
 assert.equal((await call('POST', '/v1/stable/buy', { token: aa.token, body: { kind: 'dog', name: 'Grey Ghost' } })).body.error, 'cash', "can't buy a racer broke");
 await grantCash(aa.id, 8000000); await grantCash(bb.id, 4000000);

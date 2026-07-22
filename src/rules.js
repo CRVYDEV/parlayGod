@@ -2061,7 +2061,9 @@ export const STABLE = {
   // entered, and the animal is free to run/breed after. The best animal in town wins, dog or horse.
   STAKES: { BUYIN: 20000, REGISTER_MS: 30 * 60 * 1000, MIN_ENTRANTS: 3, RAKE_BPS: 500, PAYOUTS: [0.6, 0.3, 0.1] },
 };
-export const stableKindOf = (kind) => STABLE.KINDS[kind] || null;
+// own-property lookup only (the decorStyleOf/landmarkOf precedent — else '__proto__'/'constructor' return
+// Object.prototype (truthy), slip the enum gate, and reach NaN stats → a 500 on the INT INSERT)
+export const stableKindOf = (kind) => (Object.prototype.hasOwnProperty.call(STABLE.KINDS, kind) ? STABLE.KINDS[kind] : null);
 export const stableMeetOf = (kind, id) => (STABLE.MEETS[kind] || []).find((m) => m.id === id) || null;
 export const racerRankOf = (wins) =>
   [...STABLE.RANKS].reverse().find((r) => Number(wins) >= r.min) || STABLE.RANKS[0];

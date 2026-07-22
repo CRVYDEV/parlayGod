@@ -141,7 +141,9 @@ export async function buildServer() {
   // market. Unknown kind/id falls back to a neutral emblem, so a broken <img src> never 500s. ──
   const ART_CATALOGS = { car: CARS, boat: PORT.BOATS, drug: DRUGS, gun: GUNS, vest: VESTS, good: GOODS };
   app.get('/v1/art/:kind/:id', async (req, reply) => {
-    const list = ART_CATALOGS[req.params.kind];
+    // (red-team R16) own-property lookup — a '__proto__'/'constructor' :kind on this KEYLESS public route
+    // otherwise returns Object.prototype (truthy) → `.find` is undefined → an uncaught TypeError 500.
+    const list = Object.prototype.hasOwnProperty.call(ART_CATALOGS, req.params.kind) ? ART_CATALOGS[req.params.kind] : null;
     const item = list && list.find((x) => x.id === req.params.id);
     reply.type('image/svg+xml; charset=utf-8').header('cache-control', 'public, max-age=604800, immutable');
     return reply.send(itemArt(req.params.kind, item));
