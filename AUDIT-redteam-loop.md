@@ -70,3 +70,19 @@ green, then committed.
 **Suite 33/33 + sim drift-0 after the batch.** `forge test` remains egress-blocked (the standing
 pre-mainnet contract gate); the Solidity finder surfaced no reachable mint / replay / reentrancy / access
 gap this round.
+
+## Round 2 (in progress) — attack-class + per-contract deep dives (background finders)
+
+- **Solidity contracts (all 6) — NO REAL FINDINGS.** VoucherClaim/OMR/GearVault/OMRStaking/OmertaFees/
+  OmertaBond each hold no-mint / bounded-tranche / CEI-nonce-before-transfer / reentrancy-guard / access-
+  control / staking pool-vs-principal separation. Two informational notes (not bugs, not patched):
+  VoucherClaim.sweep lacks OmertaBond's on-chain over-sweep guard (owner-only; the off-chain full-reserve
+  queue already bounds it — the accepted "Safe = root of trust" tranche model), and GearVault.minter is
+  settable-by-design (the G-MED-1 fix relies on it; the "immutable" docstring is imprecise). `forge test`
+  remains the pre-mainnet gate (egress-blocked here).
+- **Estate/death completeness — COMPLETE, no value/ownership/escrow leak.** Every currency crossing death is
+  ledgered; every dead-funded escrow (bounty/market/loan/boxing-bet/tourney/grand-prix/stakes/futurity)
+  refunds/burns/carries and reconciles its §10.4 check; account-level survivors are account-keyed;
+  resolve-snapshot tables correctly excluded. **Fixed (hygiene):** `daily_progress` (character-keyed,
+  value-less daily-contract counters/claimed flags) was neither wiped nor account-level → orphan rows on
+  death; added to the runEstate wipe list. No §10.4 surface (holds no value; heir gets a fresh id).
