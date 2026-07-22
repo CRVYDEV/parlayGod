@@ -325,6 +325,11 @@ r = await call('POST', `/v1/business/${bizId}/upgrade`, { token });
 assert.equal(r.code, 200, 'upgraded'); assert.equal(r.body.tier, 2, 'now tier 2'); const colUp = r.body.collected;
 assert(Math.abs(colUp - 12000) <= 60, `pending banked at the OLD rate before the upgrade (got $${colUp})`);
 assert(Math.abs(((await meOf(token)).cash - bizCashPre) - (colUp - 600000)) <= 60, 'net cash = +pending − the $600k tier-2 cost');
+// red-team R3 (D2 parity): upgrading BANKS pending income, so a safehoused (untargetable) owner
+// must be blocked from it exactly like collect — a shield is not a bunker to run the books from.
+await seed("cash=2000000, safe_until = now() + interval '1 hour'");
+assert.equal((await call('POST', `/v1/business/${bizId}/upgrade`, { token })).body.error, 'safe', "can't upgrade (bank income) from a safehouse");
+await seed("cash=2000000, safe_until=NULL");
 // private laundering — NOT district-gated (works from neon, a non-wash-house), LOWER heat than the street
 await seed("cash=2000000, heat=0, safe_until=NULL, loc='neon'");
 r = await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 40000 } });

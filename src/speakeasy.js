@@ -124,6 +124,10 @@ export async function collectSpeakeasy(ch, client, h) {
 // Redo the decor to the next tier — banks the pending base take at the OLD rate first (never wiped),
 // then pays. Raises income + the prestige floor. Pocket cash pays.
 export async function upgradeSpeakeasy(ch, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', "You can't renovate from a cell.");
+  // (red-team R3, D2 parity) upgrading BANKS the pending bar take at line ~143 — the income-realizing act
+  // collectSpeakeasy gates. A safehoused (untargetable) owner must not run the club from the bunker.
+  if (safeHoused(ch)) throw new GameError('safe', 'The take waits for a man on the floor, not a ghost.');
   const row = (await client.query('SELECT * FROM speakeasies WHERE owner_character=$1 FOR UPDATE', [ch.id])).rows[0];
   if (!row) throw new GameError('no_club', "You don't run a house.");
   const next = speakeasyTierOf(Number(row.tier) + 1);

@@ -127,6 +127,10 @@ export async function establishRacket(ch, districtId, kind, client, h) {
 // the OLD rate first (so an upgrade never wipes uncollected earnings), then resets the clock.
 export async function upgradeRacket(ch, districtId, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss runs the rackets.');
+  if (jailed(ch)) throw new GameError('jailed', 'Not from lockup.');
+  // (red-team R3, D2 parity) upgrading BANKS the pending income at line ~144 — the income-realizing act
+  // collectTerritory gates. A safehoused (untargetable) boss must not run the family's economy from cover.
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run the rackets from a safehouse — the take waits.");
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const r = (await client.query('SELECT * FROM territory_rackets WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!r) throw new GameError('no_racket', 'No operation there to upgrade.');
