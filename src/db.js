@@ -10,7 +10,12 @@ const SCHEMA = fs.readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
 export async function makeDb() {
   if (process.env.DATABASE_URL) {
     const { Pool } = await import('pg');
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // (red-team R10 F1) node-pg defaults to max=10 connections. Every withCharacter-backed request
+    // (incl. read GETs, which accrue+persist under `SELECT … FOR UPDATE` on the caller's own row) holds
+    // a pooled connection while it runs — so a burst of concurrent requests from one account can pin the
+    // whole pool and starve every other account. Raise the headroom (env-tunable); paired with the
+    // per-account read throttle in the server preHandler, this bounds the connection-flood.
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 20) });
     await pool.query(SCHEMA);
     return pool;
   }

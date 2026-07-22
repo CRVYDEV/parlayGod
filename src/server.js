@@ -45,7 +45,7 @@ import * as Cards from './cards.js';
 import { renderPng } from './cardpng.js';
 import { buildOpenApi, llmsTxt } from './agentgateway.js';
 import { opportunityBoard } from './opportunities.js';
-import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit } from './ratelimit.js';
+import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit, checkReadLimit } from './ratelimit.js';
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
@@ -226,6 +226,18 @@ export async function buildServer() {
     // so throttle them per-IP — bounds guest-mint Sybil floods + X/Privy auth-fetch amplification.
     if (rateLimitsEnabled() && req.method === 'POST' && req.url.startsWith('/v1/auth')) {
       const limited = await checkAuthRateLimit({ ip: req.ip });
+      if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
+        .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
+    }
+    // (red-team R10 F1) authed READ GETs were unthrottled for humans, yet a withCharacter GET holds a
+    // pooled connection while it accrues+persists under a FOR UPDATE on the caller's own row — a
+    // concurrent-GET flood from one account can pin the pool and starve everyone. Throttle authed /v1
+    // GETs per-account with a GENEROUS bucket (never bites the console's debounced polling/re-render).
+    // jwtVerify is cheap + no DB; a keyless/public GET (no token) falls through unthrottled.
+    if (rateLimitsEnabled() && req.method === 'GET'
+      && req.url.startsWith('/v1') && !req.url.startsWith('/v1/mod')) {
+      try { await req.jwtVerify(); } catch { return; }
+      const limited = await checkReadLimit({ accountId: req.user.sub });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
     }
@@ -477,11 +489,18 @@ export async function buildServer() {
     const r = await G.withCharacter(pool, req.user.sub, (ch, client, h) => S.kickMember(ch, req.body?.characterId, client, h));
     // cut the KICKED member's live gang: feed (look the account up server-side — never expose the
     // account UUID to the client; the JWT blast-radius analysis relies on UUIDs never reaching clients).
-    const tid = req.body?.characterId;
-    if (tid) {
-      const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [tid])).rows[0];
-      if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
-    }
+    // (red-team R10 F2) This runs POST-COMMIT — a throw here (a pool blip on the lookup) would surface a
+    // 5xx AFTER the kick committed, and the onSend hook would release the idempotency key → a retry
+    // re-executes kickMember. So it must NEVER throw (the leave route is safe because closeAccountSockets
+    // is internally try-caught; this lookup isn't, so wrap it). A missed socket-close is self-healing
+    // (the client reconnects), a released key is a double-execute.
+    try {
+      const tid = req.body?.characterId;
+      if (tid) {
+        const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [tid])).rows[0];
+        if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
+      }
+    } catch (e) { console.error('kick socket-close (post-commit, non-fatal)', e?.code || e); }
     return r;
   });
   app.post('/v1/gangs/promote', { preHandler: auth }, async (req) =>

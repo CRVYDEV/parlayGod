@@ -296,19 +296,24 @@ export async function reserveStatus(pool) {
 
 // The Claimed(nonce,…) watcher marks a voucher claimed. NB: a claim does NOT free signing room
 // (committed-ever ≤ funded is the honest model — the tokens physically left the tranche); it only
-// records that the withdrawal completed. `status <> 'expired'` guards the impossible race where a
-// voucher was reclaimed AND then a stale Claimed event arrives (grace window makes it impossible in
-// practice; the guard keeps the reclaimed refund as the record of truth). Unit-testable core.
+// records that the withdrawal completed. The `status` exclusions guard the impossible race where a
+// voucher was already refunded — 'expired' (reclaim-and-refund) OR 'cancelled' (queued-then-cancel,
+// its burn reversed) — and a stale/mistaken Claimed mark then arrives (grace window makes it
+// impossible for a real signed voucher; the exclusion keeps the refund as the record of truth so a
+// refunded amount can never re-enter committedOutstanding). `NOT claimed_onchain` already covers a
+// double 'claimed'. (red-team R10 L1: 'cancelled' added — a cancelled voucher was never signed, so
+// the watcher can't reach it, but the mod /reserve/claimed route could, and marking it would shrink
+// `available` by re-committing a refunded amount.) Unit-testable core.
 export async function markClaimed(pool, nonce) {
-  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain AND status<>'expired' RETURNING id", [nonce]);
-  // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY expired-and-refunded
-  // is the exact double-resolution the reserve model forbids (the player would hold the tokens AND the
-  // refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever fires it
-  // is a §10.4 breach at the chain boundary that the ledger sweep is blind to — so alarm LOUDLY.
+  const r = await pool.query("UPDATE vouchers SET claimed_onchain=true, status='claimed' WHERE nonce=$1 AND NOT claimed_onchain AND status<>'expired' AND status<>'cancelled' RETURNING id", [nonce]);
+  // AUDIT detector (reserve lens F4): a real Claimed event for a voucher we ALREADY refunded (expired or
+  // cancelled) is the exact double-resolution the reserve model forbids (the player would hold the tokens
+  // AND the refunded $OMR). With the reclaim on-chain check below this should be impossible; if it ever
+  // fires it is a §10.4 breach at the chain boundary that the ledger sweep is blind to — so alarm LOUDLY.
   if (r.rowCount === 0) {
     const ex = (await pool.query('SELECT status FROM vouchers WHERE nonce=$1', [nonce])).rows[0];
-    if (ex && ex.status === 'expired')
-      console.error(`🚨 §10.4 CHAIN-BOUNDARY ALARM: Claimed(${nonce}) arrived for an already-EXPIRED (refunded) voucher — double-resolution`);
+    if (ex && (ex.status === 'expired' || ex.status === 'cancelled'))
+      console.error(`🚨 §10.4 CHAIN-BOUNDARY ALARM: Claimed(${nonce}) arrived for an already-${ex.status.toUpperCase()} (refunded) voucher — double-resolution`);
   }
   return { claimed: r.rowCount };
 }
@@ -326,9 +331,10 @@ export async function reclaimExpiredVouchers(pool, reader = undefined) {
   // AUDIT CRITICAL: the wall-clock `deadline + grace` is NOT proof the watcher saw a claim — if the
   // watcher/RPC stalled past the grace while a real claim landed, refunding here double-spends (tokens
   // on-chain AND $OMR back), and §10.4 is blind to it (both rows net to zero). So consult the chain
-  // DIRECTLY: `usedNonce(nonce)` is the on-chain truth. reader===undefined → build from env; null → the
-  // chain is dormant (no real vouchers) → keep the legacy time-grace path. An RPC error → SKIP this
-  // voucher (fail safe: a delayed refund is recoverable, a double-spend is not).
+  // DIRECTLY: `usedNonce(nonce)` is the on-chain truth. reader===undefined → build from env; null (RPC
+  // unset/down/wrong-chain) → FAIL CLOSED: skip every expired voucher, never refund on the wall clock
+  // (see the F1 note below — no reader is NOT proof the chain is dormant). An RPC error → likewise SKIP
+  // this voucher (fail safe: a delayed refund is recoverable, a double-spend is not).
   const chain = reader !== undefined ? reader : await makeChainReader();
   const client = await pool.connect();
   let omrReclaimed = 0, gearRestored = 0, reconciled = 0, skipped = 0;
