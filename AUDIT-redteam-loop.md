@@ -2319,3 +2319,63 @@ rather than FK-failing the estate txn. Zero behavior change (loans test still pa
 returned NO reachable bug — the §10.4 backstop + the per-escrow checks + the txHash revenue gate close the
 interaction surface, and the auth chain is comprehensively hardened. One latent FK-ordering footgun documented
 in-code (doc-only). Suite 34/34 + sim drift-0.
+
+## Round 38 — the Solidity contracts + the WebSocket/bus/realtime surface (the two highest-stakes un-lensed-this-window surfaces)
+
+Two lenses over the remaining highest-stakes surfaces: (1) all six Solidity contracts (real on-chain money —
+with focus on the NEWEST additions: the OmertaBond per-UTC-day cap, the reroll/store fees); (2) the real-time
+WebSocket/bus/notification pub-sub surface.
+
+**No reachable bug — both lenses CLEAN (no CRITICAL/HIGH/MED).** Verified at source:
+
+- **Solidity contracts** — all seven central invariants HOLD: (1) nothing mints beyond OMR's fixed supply —
+  VoucherClaim + OmertaBond pay from a pre-funded tranche via `safeTransfer` (never mint), the anti-Ponzi cap
+  `committedOMR + payout ≤ balanceOf(this)` is enforced BEFORE the commit and preserved by claim + the guarded
+  sweep (fuzz-tested), gear is doubly fail-closed (VoucherClaim pre-flight + the authoritative GearVault
+  per-gearId cap that survives a minter swap); (2) EIP-712 replay/forgery — nonce consumed atomically before
+  effects, deadline future-bound + MAX_TTL-backstopped, chainId from `block.chainid` (not hardcoded),
+  `verifyingContract=address(this)`, distinct domains+typehashes (no cross-contract replay on a shared signer),
+  signer never zero, rotation instantly revokes; (3) reentrancy/CEI — OmertaFees `_forward` + OmertaBond `bond`
+  set ALL state before the ETH forward, whole-contract `nonReentrant`, the reentrant-recipient case fully
+  unwinds (tests assert nonce/committedOMR roll back); (4) access control — every mutator `onlyOwner`,
+  Safe-owned from deploy (no hot-deployer window), no owner-mint, sweep pulls only the uncommitted tranche;
+  (5) the daily cap (VoucherClaim + the new OmertaBond `dailyCapOMR`/`bondedOnDay`) accumulates per UTC day,
+  un-bypassable by splitting, resets at the boundary; (6) the ETH split sums to exactly `msg.value`/`amount`
+  (immutable bps, a failed forward reverts the whole tx); (7) fee exactness — exact-value required, zero-fee
+  floor. Backend signing PARITY confirmed (`chain.js` field order `to,amount,kind,gearId,nonce,deadline` +
+  domain + the `BONDS.*` 2000/6000/4000 constants mirror the contracts, sum to 10000). No `unchecked` blocks;
+  staking reward pool fully backed (principal always withdrawable). Two LOW/accepted items: VoucherClaim.sweep
+  has no committed-tranche guard (structurally unavoidable — commitments are signed OFF-chain; the backend
+  full-reserve queue tracks `signedOutstanding`; Safe = root of trust) and setFees has no ceiling (a reversible
+  self-griefing owner power). The only outstanding gate is OPERATIONAL: `forge test` must run in a
+  Foundry-capable env (egress-blocked here) before the third-party audit — a standing CLAUDE.md item, not a
+  code defect.
+- **WebSocket/bus/realtime** — every channel subscription is DERIVED server-side (`me:${id}` from the
+  authenticated account's alive character, `gang:` from that character's membership, `streets` public — the
+  client supplies NO channel string, so no cross-player `me`/arbitrary-`gang` eavesdrop); the WS upgrade reads
+  the token from `Sec-WebSocket-Protocol`, verifies it (bad/absent/expired → clean 4001 close), ban-checks at
+  connect, and is per-IP connect-throttled; `closeAccountSockets`/`closeSocketsOnKill` fire on leave/kick/
+  fire/jump/hit/mod-kill/ban (dissolution only at 0 members, so no stale sub survives); `streets` broadcasts
+  carry only public bands (convoy `{from,to,band}`, anon posters never named, casino/boxing pots are voluntary
+  theater — no manifest/guard-tier/funder/exact-wealth/precise-location); DoS bounded (per-account cap 8 with a
+  TOCTOU-safe reservation + heartbeat reaping + full listener teardown on close); `notify()` is server-derived
+  and `GET /v1/notifications` is caller-scoped (no client-supplied target); the socket is strictly server→
+  client (only `pong`/`close` listeners, no `message` handler → no HTTP-auth/rate-limit bypass).
+
+**Round 38 verdict:** the two highest-stakes remaining surfaces (the on-chain contracts, the real-time WS/bus)
+returned NO reachable bug — the contract invariants hold with backend signing parity, and the real-time surface
+is server-authoritative + leak-free + DoS-bounded. Two accepted contract trust-boundary LOWs + the standing
+`forge test` operational gate recorded. Suite 34/34 + sim drift-0 (docs-only round).
+
+## Loop status after R38 — SATURATED
+Seven rounds this window (R32–R38) found 4 real defects — R34's HIGH riggable main-event parimutuel (the
+standout: a worker-resolved event read live fighter form 30 min after the freeze expired but before the hourly
+settle → snapshot-at-booking fix), R34's MED belt lock-order inversion, R32's LOW-MED stale territory
+specialist on leave/kick, and R35's LOW season-rollover gang-reset lock order — plus the R37 latent-FK doc
+note. The last four rounds are 4-of-5 CLEAN (R33/R36/R37/R38), and the coverage is now comprehensive across
+every software attack class: newest feature surfaces, two-party PvP, passive accrual, worker-sweep concurrency,
+snapshot integrity, chain reserve, keyless public routes, persist-clobber, RNG/seed predictability,
+input-validation/coercion, idempotency replay, cross-system economic exploit-chains, auth/token/session, the
+Solidity contracts, and the WebSocket/bus realtime surface. Remaining risk is operational (`forge test`, seed
+secrecy/rotation, the config-gated auth flags) and the founder balance/sign-off backlog — not reachable code
+defects. Suite 34/34 + sim drift-0 throughout.
