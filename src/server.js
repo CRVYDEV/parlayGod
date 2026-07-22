@@ -64,6 +64,21 @@ export async function buildServer() {
   // token for any account. Dev/test may use the fallback (in-memory db, no real value).
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET)
     throw new Error('JWT_SECRET must be set in production — refusing to boot on the dev fallback.');
+  // (red-team R3) The §7.11 determinism model rests on MARKET_SEED being a server SECRET — every seeded
+  // money draw (the Numbers 600:1, the Track/Fight winners, goods prices) is client-PREDICTABLE if the seed
+  // is the known public default. Unlike JWT this fails OPEN (forget the env → silently vulnerable), so refuse
+  // to boot production on the unset/default seed — same fail-closed posture as the JWT guard above.
+  if (process.env.NODE_ENV === 'production' && (!process.env.MARKET_SEED || process.env.MARKET_SEED === 'omerta-server-seed'))
+    throw new Error('MARKET_SEED must be set to a secret value in production — the default is public and makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
+  // (red-team R3) Test-only roll/timer overrides turn a money-affecting roll into an always-win switch or
+  // collapse a §9/convoy/port timer, server-wide. They are safe-by-default (require an active misconfig) but
+  // must never reach production — refuse to boot if any leaked into the prod env (the fail-closed JWT pattern;
+  // CHAIN_POLL_MS is a legitimate production knob and is deliberately excluded).
+  if (process.env.NODE_ENV === 'production') {
+    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
+    const leaked = TEST_ONLY_ENV.filter((k) => process.env[k] != null);
+    if (leaked.length) throw new Error(`Test-only roll/timer overrides must not be set in production (they turn money rolls into always-win switches): ${leaked.join(', ')}`);
+  }
   // trustProxy (AUDIT-full-system-v2 H): OFF by default (raw socket IP — X-Forwarded-For is spoofable
   // when NOT behind a trusted proxy). An operator deploying behind a load balancer sets TRUST_PROXY=on
   // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global

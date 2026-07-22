@@ -292,5 +292,23 @@ const addsNoDrift = async (name, action, label) => {
   process.env.NODE_ENV = savedEnv; if (savedSecret !== undefined) process.env.JWT_SECRET = savedSecret;
 }
 
+// ═══ FINDING (red-team R3): production refuses to boot on the default/unset MARKET_SEED (the seeded money
+// draws would be client-predictable), and refuses if a test-only roll/timer override leaked into prod ═══
+{
+  const savedEnv = process.env.NODE_ENV, savedSeed = process.env.MARKET_SEED, savedJwt = process.env.JWT_SECRET;
+  process.env.NODE_ENV = 'production'; process.env.JWT_SECRET = 'x'; // JWT set so we reach the seed/knob guards
+  delete process.env.MARKET_SEED;
+  let a = false; try { await buildServer(); } catch { a = true; }
+  assert(a, 'production boot refused on the default/unset MARKET_SEED');
+  process.env.MARKET_SEED = 'a-real-secret-seed'; // now the seed guard passes; a leaked roll knob must still refuse
+  process.env.SHANK_P = '1';
+  let b = false; try { await buildServer(); } catch { b = true; }
+  assert(b, 'production boot refused when a test-only roll knob (SHANK_P) is set');
+  delete process.env.SHANK_P;
+  process.env.NODE_ENV = savedEnv;
+  if (savedSeed === undefined) delete process.env.MARKET_SEED; else process.env.MARKET_SEED = savedSeed;
+  if (savedJwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = savedJwt;
+}
+
 console.log('✅ security regression suite passed — exchange escrow §10.4, sub-cent bank interest, swap-sell dust, bounty-funder self-pay, mission $OMR re-mint, wallet validation, idempotency (concurrency/release/body-bind), invite race, identity race, agent throttle, banned websocket, name uniqueness, JWT secret guard');
 await app.close();
