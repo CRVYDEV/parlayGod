@@ -321,7 +321,11 @@ export async function buildServer() {
   // ── character ──
   app.post('/v1/character', { preHandler: auth }, async (req) => {
     const name = G.cleanText(req.body?.name).trim().slice(0, 24); // strip HTML-injection chars (stored-XSS fix)
-    if (name.length < 2) throw new G.GameError('name', 'Pick a name (2–24 chars, no < > " markup).');
+    if (name.length < 2) throw new G.GameError('name', 'Pick a name (2–24 chars).');
+    // (red-team R8) ASCII-only charset — the SAME guard the cosmetic name fields already use. The
+    // character name IS the referral code + broadcast identity, so a Cyrillic-homoglyph / zero-width /
+    // bidi name that renders identically to another player's = impersonation across every social surface.
+    if (!/^[\w .,'&-]+$/.test(name)) throw new G.GameError('name', "Letters, numbers and simple punctuation only (no look-alike unicode).");
     const existing = await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub]);
     if (existing.rows.length) throw new G.GameError('exists', 'One living character per account.');
     // names must be unique among the living (referral codes resolve by name, §7.13);

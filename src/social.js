@@ -38,7 +38,10 @@ export async function createGang(ch, name, tag, client, h) {
   if (h.owned.gangId) throw new GameError('in_gang', 'You already have a family.');
   if (levelOf(Number(ch.respect)) < M3.GANG_FOUND_LEVEL) throw new GameError('level', `Level ${M3.GANG_FOUND_LEVEL} to found a family.`);
   name = cleanText(name).trim(); tag = String(tag || '').trim().toUpperCase(); // strip HTML-injection chars (stored-XSS fix, R6)
-  if (name.length < 3 || name.length > 24) throw new GameError('name', 'Family name must be 3–24 characters (no < > " markup).');
+  if (name.length < 3 || name.length > 24) throw new GameError('name', 'Family name must be 3–24 characters.');
+  // (red-team R8) ASCII-only charset (the cosmetic-field guard) — a homoglyph/zero-width family name
+  // that renders like another's impersonates it across the streets feed, leaderboards, and gang board.
+  if (!/^[\w .,'&-]+$/.test(name)) throw new GameError('name', 'Family name: letters, numbers and simple punctuation only (no look-alike unicode).');
   if (!/^[A-Z0-9]{2,4}$/.test(tag)) throw new GameError('tag', 'Tag must be 2–4 letters or numbers.');
   if (Number(ch.cash) < M3.GANG_FOUND_COST) throw new GameError('cash', `Founding a family costs $${M3.GANG_FOUND_COST}.`);
   const clash = await client.query('SELECT id FROM gangs WHERE name=$1 OR tag=$2', [name, tag]);
