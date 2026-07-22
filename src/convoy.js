@@ -210,7 +210,7 @@ export async function ambushConvoy(ch, convoyId, client, h) {
     // own transaction; an ambush never touches the owner's character row). No money moves here.
     if (c.insured && lossValue > 0)
       await client.query('UPDATE convoys SET insured_loss=$2 WHERE id=$1', [convoyId, Number(c.insured_loss || 0) + lossValue]);
-    await h.notify(client, c.owner_character, 'convoy_hit', { from: c.origin, to: c.destination, taken });
+    if (c.owner_character) await h.notify(client, c.owner_character, 'convoy_hit', { from: c.origin, to: c.destination, taken }); // NPC convoys have no owner to notify (step three)
     bus.emit('streets', { type: 'convoy_hijacked', by: ch.name, from: c.origin, to: c.destination });
     await h.track(client, ch.account_id, 'convoy_ambush', { win: true, taken });
     return { ok: true, win: true, taken, trunkFull: space <= 0 };
@@ -218,7 +218,7 @@ export async function ambushConvoy(ch, convoyId, client, h) {
   // the guards earn their fee
   ch.health = Math.max(1, Number(ch.health) - (20 + Math.floor(rand(20))));
   ch.hosp_until = new Date(Date.now() + CONVOY.FAIL_HOSP_MS);
-  await h.notify(client, c.owner_character, 'convoy_defended', { from: c.origin, to: c.destination });
+  if (c.owner_character) await h.notify(client, c.owner_character, 'convoy_defended', { from: c.origin, to: c.destination }); // NPC convoys have no owner (step three)
   await h.track(client, ch.account_id, 'convoy_ambush', { win: false });
   return { ok: true, win: false, hospSeconds: Math.ceil(CONVOY.FAIL_HOSP_MS / 1000) };
 }
@@ -303,18 +303,64 @@ export async function collectConvoy(ch, convoyId, client, h) {
 
 // The road board: everything in transit (value BAND only — scouting the tier is the gamble),
 // plus my active shipment in full.
+// ── step three: NPC TRUCKING — the worker keeps CONVOY.NPC.TARGET unmarked trucks on the road so the
+// ambush loop is live even when no players are shipping. An NPC convoy carries real goods (a modest
+// manifest); a hijack transfers them to the raider's trunk via the SAME ambushConvoy (the goods are the
+// one new faucet — sold via the market — bounded by TARGET × manifest × hijack success × the trunk cap,
+// sim-measured, the World-raid precedent). An unhijacked NPC convoy simply despawns on arrival. ──
+export async function spawnNpcConvoys(pool) {
+  const live = Number((await pool.query("SELECT COUNT(*) n FROM convoys WHERE is_npc AND status='transit'")).rows[0].n);
+  let spawned = 0;
+  for (let i = live; i < CONVOY.NPC.TARGET; i++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ds = [...DISTRICTS];
+      const origin = ds[Math.floor(Math.random() * ds.length)].id;
+      let destination = origin; while (destination === origin) destination = ds[Math.floor(Math.random() * ds.length)].id;
+      const good = CONVOY.NPC.GOODS[Math.floor(Math.random() * CONVOY.NPC.GOODS.length)];
+      const qty = CONVOY.NPC.MIN_QTY + Math.floor(Math.random() * (CONVOY.NPC.MAX_QTY - CONVOY.NPC.MIN_QTY + 1));
+      const tierId = CONVOY.NPC.GUARDS[Math.floor(Math.random() * CONVOY.NPC.GUARDS.length)];
+      const def = (guardTierOf(tierId) || CONVOY.GUARD_TIERS[0]).def;
+      const id = uid(); const now = new Date(); const arrives = new Date(now.getTime() + convoyMs());
+      await client.query(
+        "INSERT INTO convoys (id, owner_character, is_npc, owner_gang, origin, destination, status, guards, departed_at, arrives_at) VALUES ($1,NULL,true,NULL,$2,$3,'transit',$4,$5,$6)",
+        [id, origin, destination, def, now, arrives]);
+      await client.query('INSERT INTO convoy_cargo (convoy_id, good_id, qty) VALUES ($1,$2,$3)', [id, good, qty]);
+      await client.query('COMMIT'); spawned++;
+    } catch (e) { await client.query('ROLLBACK'); } finally { client.release(); }
+  }
+  return { spawned };
+}
+// remove NPC convoys that reached the docks (the driver delivered — the remaining freight leaves the world;
+// hijacked goods already went to the raiders). Player convoys are never touched here.
+export async function despawnArrivedNpc(pool) {
+  const due = (await pool.query("SELECT id FROM convoys WHERE is_npc AND status='transit' AND arrives_at <= now()")).rows;
+  for (const { id } of due) {
+    await pool.query('DELETE FROM convoy_cargo WHERE convoy_id=$1', [id]);
+    await pool.query('DELETE FROM convoy_ambushes WHERE convoy_id=$1', [id]);
+    await pool.query('DELETE FROM convoys WHERE id=$1', [id]);
+  }
+  return { despawned: due.length };
+}
+
 export async function convoyBoard(pool, characterId) {
   const rows = (await pool.query(
     `SELECT c.*, ch.name AS owner FROM convoys c JOIN characters ch ON ch.id = c.owner_character
-      WHERE c.status='transit' ORDER BY c.arrives_at ASC LIMIT 30`)).rows;
+      WHERE c.status='transit' AND NOT c.is_npc ORDER BY c.arrives_at ASC LIMIT 30`)).rows;
+  // NPC trucks — no owner to JOIN; surfaced as ambush targets alongside the player convoys (step three)
+  const npc = (await pool.query(
+    "SELECT * FROM convoys WHERE is_npc AND status='transit' ORDER BY arrives_at ASC LIMIT 30")).rows;
   const cargo = (await pool.query(
     'SELECT convoy_id, good_id, qty FROM convoy_cargo WHERE qty > 0')).rows;
   const byConvoy = {};
   for (const r of cargo) (byConvoy[r.convoy_id] = byConvoy[r.convoy_id] || []).push(r);
-  const inTransit = rows.map((c) => ({ id: c.id, owner: c.owner, from: c.origin, to: c.destination,
+  const mapConvoy = (c, owner) => ({ id: c.id, owner, npc: !!c.is_npc, from: c.origin, to: c.destination,
     band: valueBand(manifestValue(byConvoy[c.id] || [], c.destination)),
     ambushed: c.ambushed, ambushes: Number(c.ambushes || 0), ambushesLeft: Math.max(0, CONVOY.MAX_AMBUSHES - Number(c.ambushes || 0)),
-    arrivesSeconds: Math.max(0, Math.ceil((new Date(c.arrives_at) - Date.now()) / 1000)) }));
+    arrivesSeconds: Math.max(0, Math.ceil((new Date(c.arrives_at) - Date.now()) / 1000)) });
+  const inTransit = [...rows.map((c) => mapConvoy(c, c.owner)),
+    ...npc.map((c) => mapConvoy(c, 'an unmarked truck'))];
   const mine = (await pool.query(
     "SELECT * FROM convoys WHERE owner_character=$1 AND status IN ('loading','transit')", [characterId])).rows[0] || null;
   let my = null;

@@ -860,6 +860,29 @@ The toll reaches pocket THEN bank (banking doesn't dodge it), exempts by the DEP
 and is charged only if the treasury credit lands (dissolution race). Jail gates
 load/depart/collect; D2 blocks collect from a safehouse. Lock order: characters → convoys →
 gangs → singletons. Deferred: NPC trucking. Step-two numbers are sign-off levers.
+**Step three — NPC TRUCKING — BUILT** (`src/convoy.js`, `src/rules.js` `CONVOY.NPC`, `schema.sql`,
+`src/worker.js`, `tools/sim.js` P9.17, `test/convoy.js`; the deferred item — gives the ambush loop a PvE
+target so it's LIVE even when no players are shipping). The worker keeps `CONVOY.NPC.TARGET` (2) unmarked
+NPC trucks on the road: `spawnNpcConvoys` tops the road up (a random route + a modest goods manifest
+`NPC.MIN_QTY`..`MAX_QTY` of a `NPC.GOODS` line + a random guard tier), `despawnArrivedNpc` removes an
+arrived NPC truck (the driver delivered — its remaining freight leaves the world, no faucet on a delivered
+truck; both wired into worker.js). An NPC convoy is an `owner_character=NULL, is_npc=true` `convoys` row —
+players hijack it through the SAME **`ambushConvoy`** (the NULL owner already passes the own/family gates;
+only the two owner-`notify` calls needed a NULL guard). A hijack transfers the goods to the raider's trunk
+(the existing ambush transfer) — **the goods are the one new faucet** (sold via the market), bounded by
+`TARGET × lifetime × the manifest × hijack-success × the trunk cap`, **measured (P9.17): ~$216k/day
+base-wide realistic (50% hijacked) / ~$433k ceiling** — at boxing/territory parity, the World-raid
+precedent (a bounded shared PvE faucet). §10.4: NO new reason — NPC goods ride the existing goods economy
+(goods aren't a §10.4 currency; the sale is the existing market faucet; the sweep stays drift-0). Schema:
+`convoys.owner_character` is now NULLable + `is_npc BOOLEAN`. The board (`GET /v1/convoys`) surfaces NPC
+trucks as ambush targets (`npc:true`, owner "an unmarked truck") alongside player convoys; the console
+Big Scores tab renders them (a 🚚 unmarked-truck card with the NPC chip). `test/convoy.js` covers the
+worker topping the road to TARGET (no over-spawn), an NPC truck on the public board, a deterministic hijack
+landing goods in the raider's trunk with no owner to notify (the NULL-owner path never crashes), and an
+arrived NPC convoy despawning with its cargo. Suite 31/31 + sim drift-0. All `CONVOY.NPC.*` are founder
+SIM sign-off levers — the one new (bounded) faucet (BALANCE.md); `TARGET`/manifest size are the dials if
+the base-wide magnitude wants trimming. The Convoy pillar is now feature-complete (bulk shipping → tolls +
+multi-ambush + insurance → NPC trucking).
 
 **The Commission (step one) — BUILT** (`src/commission.js`, `test/commission.js` — the 13th suite
 file; design `omerta-commission-design.md`). Server-wide player politics with ZERO money flows —

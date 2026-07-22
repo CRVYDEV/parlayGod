@@ -1240,6 +1240,16 @@ export const CONVOY = {
   GUARD_WEAR_BPS: 2500,     // each prior fight strips 25% off the GUARD tier's defense (turf/lockdown never wear)
   INSURE_BPS: 1000,         // premium at depart: 10% of the manifest's base value (convoy:insure → the pool)
   INSURE_PAYOUT_BPS: 5000,  // claim at collect: 50% of the base value LOST to hijacks, CAPPED at the pool
+  // ── step three: NPC TRUCKING (worker-run convoys players can hijack — the ambush loop's PvE target
+  // so it's live even when no players are shipping). Goods hijacked from an NPC convoy are the one new
+  // faucet (sold via the market) — bounded by TARGET × the manifest × hijack success × the trunk cap,
+  // sim-measured (the World-raid precedent). All founder sign-off levers. ──
+  NPC: {
+    TARGET: 2,                                 // keep this many NPC convoys on the road at once
+    GOODS: ['gin', 'silk', 'cigars', 'coffee'], // the loot table (a subset of the trade catalog)
+    MIN_QTY: 6, MAX_QTY: 16,                    // units of one good on an NPC truck (a modest manifest)
+    GUARDS: ['none', 'crew', 'heavy'],         // guard tier drawn uniformly (the run's defense)
+  },
 };
 export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) || null;
 // THE COMMISSION — the top-SEATS families vote weekly on a city decree (majority of last week's

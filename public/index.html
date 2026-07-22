@@ -2172,7 +2172,7 @@
         <button class="act" id="cv-open">open a shipment</button>
         ${Object.values(me.cargo || {}).every((q) => !q) ? '<span class="d" style="color:var(--dim);font-size:11px"> (trunk empty — buy goods on the Streets first)</span>' : ''}`}
       ${(cb.inTransit || []).length ? `<div class="grid" style="margin-top:6px">${cb.inTransit.map((c) => `
-        <div class="card"><span class="t">${c.owner}'s convoy</span>
+        <div class="card"><span class="t">${c.npc ? '🚚 An unmarked truck' : `${c.owner}'s convoy`}${c.npc ? ' <span class="chip">NPC</span>' : ''}</span>
           <div class="d">${c.from} → ${c.to} · value ${c.band} · arrives ${mins(c.arrivesSeconds)} · ${c.ambushesLeft} ambush${c.ambushesLeft === 1 ? '' : 'es'} left</div>
           <button class="act" data-ambush="${c.id}">AMBUSH (energy + ammo + heat)</button></div>`).join('')}</div>`
         : '<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">no freight on the roads</div>'}`;
