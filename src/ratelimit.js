@@ -75,6 +75,20 @@ export async function checkAuthRateLimit({ ip }) {
   return r.ok ? null : { retryAfter: r.retryAfter };
 }
 
+// (red-team R10 F1) Authed READ GETs were entirely unthrottled for humans, yet a withCharacter GET
+// holds a pooled connection while it accrues+persists under a FOR UPDATE on the caller's own row — so a
+// concurrent-GET flood from ONE account can pin the whole connection pool and starve everyone else. A
+// GENEROUS per-account read bucket: sized far above any real client's polling / WS-driven re-render
+// (which the console debounces), so it never bites legit use, but caps a sustained flood. Returns null
+// when allowed, else {retryAfter}.
+export async function checkReadLimit({ accountId }) {
+  const take = redis ? takeRedis : takeMemory;
+  const rate = Number(process.env.RATE_READ_PER_SEC || 15);
+  const burst = Number(process.env.RATE_READ_BURST || 60);
+  const r = await take(`rd:${accountId}`, rate, burst);
+  return r.ok ? null : { retryAfter: r.retryAfter };
+}
+
 // Returns null when allowed, else {retryAfter} seconds.
 export async function checkRateLimit({ accountId, agent, path }) {
   const take = redis ? takeRedis : takeMemory;

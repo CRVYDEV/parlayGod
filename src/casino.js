@@ -462,7 +462,7 @@ export async function sweepTrackEntries(pool) {
     try {
       await client.query('BEGIN');
       const entries = (await client.query('SELECT * FROM track_entries WHERE day=$1 AND race=$2 AND NOT settled FOR UPDATE', [g.day, g.race])).rows;
-      if (!entries.length) { await client.query('ROLLBACK'); client.release(); continue; }
+      if (!entries.length) { await client.query('ROLLBACK'); continue; } // (red-team R10) the `finally` releases — an explicit release here + `continue` double-releases (throws "already released", aborting the rest of the tick's settles)
       const winner = trackWinnerOf(g.race, Number(g.day), entries);
       for (const e of entries) {
         const wonIt = Number(e.post) === winner;

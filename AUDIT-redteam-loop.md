@@ -511,3 +511,76 @@ WS/DoS defects FIXED; the economic/estate cores verified sound again.
 
 **Round 9 verdict: 2 HIGH (deploy fail-open) + 2 WS/DoS fixes + 1 confidentiality fix. Sybil economics
 and the estate/death path verified sound (no §10.4 breach). Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 10 — worker/cron sweeps · request lifecycle · chain reserve/voucher · AMM/buyback (2nd chain+econ pass)
+
+Four infrastructure/lifecycle lenses. Small correctness/availability fixes; the economic + chain cores
+re-verified conservation-tight (no §10.4 breach, no over-extraction, no mint).
+
+### Fixed
+- **Worker (a221, LOW) — `sweepTrackEntries` double-releases its pool client.** On the empty-entries
+  `continue` path it called `client.release()` explicitly, then the per-iteration `finally` released
+  AGAIN → pg's "already released" throw, aborting the rest of that tick's track-card settlements
+  (reachable only under overlapping worker executions / a concurrent-settle race; no value/§10.4 impact,
+  no connection leak). Fix: drop the explicit release, let the `finally` handle it (every other sweep's
+  pattern). No bespoke regression — the trigger needs real concurrency pg-mem can't reproduce.
+- **Request lifecycle (a268, F2 LOW) — my R9 `/v1/gangs/kick` route's post-commit `pool.query` could
+  release a committed action's idempotency key.** The account-lookup+socket-close runs AFTER commit; a
+  throw there → 5xx → the onSend hook releases the key → a retry re-executes `kickMember` (bounded — a
+  re-kick is a clean no-op — but a fragile pattern). Wrapped the post-commit work in a swallowing
+  try/catch (a missed socket-close self-heals on reconnect; a released key is a double-execute). The
+  leave route was already safe (closeAccountSockets is internally try-caught).
+- **Request lifecycle (a268, F1 MED, availability) — authed READ GETs were entirely unthrottled for
+  humans.** A `withCharacter` GET holds a pooled connection while it accrues+persists under a
+  `SELECT … FOR UPDATE` on the caller's own row, and the pool defaulted to max=10 — so a concurrent-GET
+  flood from ONE account could pin the whole pool and starve every other account (rate limits covered
+  only POST/DELETE + agent GETs). Two mitigations: raise the pool `max` (env `PG_POOL_MAX`, default 20)
+  for headroom, and a GENEROUS per-account read bucket (`checkReadLimit`, env `RATE_READ_*`, default
+  15/s burst 60) on authed `/v1` GETs in the preHandler — sized far above the console's debounced
+  polling/WS re-render so it never bites legit use, but caps a sustained connection-flood. (jwtVerify is
+  cheap + no DB; a keyless public GET falls through unthrottled.)
+- **Chain (a431, L1 LOW, defense-in-depth) — `markClaimed` didn't exclude `status='cancelled'`.** Not
+  watcher-reachable (a cancelled voucher was never signed → no Claimed event), but the mod
+  `/v1/mod/reserve/claimed` route could mark a cancelled (already-refunded) nonce → re-committing a
+  refunded amount, shrinking `available` (liveness dent, never over-extraction/mint). Added
+  `AND status<>'cancelled'` (`NOT claimed_onchain` already covers `'claimed'`) + extended the loud
+  double-resolution alarm to fire on a cancelled hit too. Also fixed the stale L3 comment in
+  `reclaimExpiredVouchers` (it still described the retired "null reader → time-grace" path; the code
+  fails CLOSED — skips, never refunds — without a reader).
+
+### Verified CLEAN / flagged (not patched)
+- **Worker sweeps (a221) — remarkably well-hardened.** Every escrow resolver (tournament/futurity/
+  grand-prix/stakes/main-event/auction) has a `status … FOR UPDATE` latch (exactly-once terminal
+  transition) + per-row txn isolation + the documented state-singleton-before-row lock order (acyclic
+  vs the player `enter*` paths); sweepLaw/loans/market/bounty/huntWanted/standing-watches/wire-alerts/
+  pass-stipends/buyback/season-rollover all correct; poison-row isolation via `safe()`; chain-sync
+  fail-closed on a bad chain without crashing the §10.4 monitor. The only accepted item is the known
+  single-worker `spawnNpcConvoys` TOCTOU (self-correcting, §10.4-invisible).
+- **Chain reserve/voucher (a431) — no CRIT/HIGH.** The full-reserve queue is fully serialized on the
+  `chain_reserve FOR UPDATE` singleton (no over-extraction), nonce allocation atomic, cancel can't refund
+  a signed voucher, reclaim consults on-chain `usedNonce` and FAILS CLOSED without a reader/on a wrong
+  chain (no blind double-spend), markClaimed triple-guarded, EIP-712 parity exact, gear double-withdraw
+  blocked, fees/store/bond idempotent + txHash-gated revenue, assertChainId in both signing processes.
+  Residuals L2 (daily-cap withdrawal liveness — deploy/ops) + L4 (explicit finite guard on withdraw
+  amount — cosmetic, already safe via the balance check) flagged. `forge test` remains the pre-mainnet gate.
+- **Request lifecycle (a268) — machinery sound.** Idempotency reserve-before-execute (no double-execute),
+  cross-account/different-body replay blocked, committed-action→non-2xx→key-release closed on both
+  wrappers, two-party lock order sorted + self-deal blocked, agent throttle DB-derived, ban enforced at
+  every layer. F3 (`23505→contention` mapping) flagged informational — no exploit today (23505 aborts the
+  txn, nothing commits); left as-is (the world_npcs/auction first-touch materialize retries rely on it).
+- **AMM/swap/buyback/staking/vig (a9ae) — no §10.4 mint or pool-drain.** k preserved exactly on both swap
+  directions, all rounding house-favorable, reserves stay strictly positive, NUMERIC precision exact, the
+  buyback's four slices sum to exactly `bought` (LP a true bucket transfer), staking/vig pool-gated
+  transfers with no double-claim/double-return, wash-cap a correct continuous bucket. Three §10.4-SAFE
+  economic/fairness items FLAGGED for founder sign-off (ground rule #1 — not code bugs): (1) the 12h
+  buyback has no slippage/impact guard → sandwichable (value leakage from PoL + reduced beneficiary yield,
+  bounded by pool depth, extraction still vig-capped — a `minBoughtOmr`/split-across-ticks is the dial);
+  (2) staking liability accrues unbounded at APY (pool throttles payment timing not total — §10.4-safe,
+  design-acknowledged); (3) first-claimer drains the shared stake/dividend pool (fairness, already flagged
+  in AUDIT-portfolio). All bounded, none breach conservation.
+
+**Round 10 verdict: 1 MED (unthrottled-GET pool-exhaustion) + 3 LOW correctness/defense-in-depth fixes.
+The worker, chain-reserve, request-lifecycle, and AMM/buyback cores re-verified sound (no §10.4 breach,
+no over-extraction, no mint). Suite 33/33 + sim drift-0.**
