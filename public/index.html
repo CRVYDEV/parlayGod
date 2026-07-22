@@ -150,27 +150,75 @@
   .center { max-width: 460px; margin: 12vh auto; text-align: center; }
   .center h1 { letter-spacing: 10px; color: var(--neon); font-weight: normal; }
   .center p { color: var(--dim); }
+
+  /* marketing landing (the front page — screen-auth) */
+  .landing { max-width: 980px; margin: 0 auto; padding: 5vh 20px 40px; }
+  .landing .hero { text-align: center; padding: 3vh 0 3vh; border-bottom: 1px solid var(--line); }
+  .landing .hero h1 { font-size: clamp(46px, 10vw, 96px); letter-spacing: 12px; color: var(--neon);
+    margin: 0; font-weight: normal; text-shadow: 0 2px 34px rgba(232,179,75,.16); }
+  .landing .hero .tag { color: var(--ink); font-size: clamp(16px, 2.6vw, 21px); max-width: 660px;
+    margin: 16px auto 8px; line-height: 1.5; }
+  .landing .hero .sub2 { color: var(--dim); font-size: 13.5px; max-width: 580px; margin: 0 auto 24px; line-height: 1.6; }
+  button.act.cta { font-size: 16px; padding: 13px 32px; letter-spacing: 2px; border-color: var(--neon); color: var(--neon); }
+  button.act.cta:hover { background: var(--neon); color: #0b0b0e; }
+  .landing .ctahint { color: var(--dim); font-size: 11px; margin-top: 9px; }
+  .landing .pill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 28px 0; }
+  .landing .pill { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px 16px 15px; }
+  .landing .pill h3 { color: var(--neon); font-size: 14px; letter-spacing: 1px; margin: 0 0 7px; font-weight: normal; }
+  .landing .pill p { color: var(--dim); font-size: 13px; margin: 0; line-height: 1.55; }
+  .landing .band { text-align: center; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 22px; margin: 26px 0; }
+  .landing .band h2 { color: var(--neon); letter-spacing: 3px; font-size: 15px; margin: 0 0 9px; font-weight: normal; }
+  .landing .band p { color: var(--dim); font-size: 13px; max-width: 640px; margin: 0 auto; line-height: 1.65; }
+  .landing .signin { max-width: 470px; margin: 26px auto 0; text-align: center; }
+  .landing .lfoot { text-align: center; color: var(--dim); font-size: 11px; margin-top: 30px;
+    border-top: 1px solid var(--line); padding-top: 16px; line-height: 1.7; }
+  @media (max-width: 760px) { .landing { padding: 3vh 12px 30px; } .landing .hero h1 { letter-spacing: 6px; } }
+
   .hidden { display: none !important; }
   label.f { display: block; text-align: left; color: var(--dim); font-size: 11px; margin: 8px 0 2px; }
 </style>
 </head>
 <body>
 
-<div id="screen-auth" class="center hidden">
-  <h1>OMERTÀ</h1>
-  <p>The city doesn't know your name yet. Good. Keep it that way.</p>
-  <div id="invite-row" class="hidden" style="margin-bottom:10px">
-    <input id="invite-code" placeholder="invite code" size="18" style="font-size:14px">
-    <div class="sub" style="font-size:11px;color:var(--bad);margin-top:4px">This alpha is invite-only. Ask a made man for a code.</div>
+<div id="screen-auth" class="landing hidden">
+  <div class="hero">
+    <h1>OMERTÀ</h1>
+    <p class="tag">A noir mafia RPG where the city remembers everything — and every street name is a debt someone eventually collects.</p>
+    <p class="sub2">Pull jobs. Build a family. Run rackets, kitchens, casinos, and smuggling boats. Put a rival in the river — or go legit and die in bed. Rare, in this city.</p>
+    <div id="invite-row" class="hidden" style="margin:0 auto 14px;max-width:320px">
+      <input id="invite-code" placeholder="invite code" size="18" style="font-size:14px">
+      <div class="sub" style="font-size:11px;color:var(--bad);margin-top:4px">This alpha is invite-only. Ask a made man for a code.</div>
+    </div>
+    <button class="act cta" id="btn-guest">ENTER AS A GHOST</button>
+    <div class="ctahint">No wallet, no email — one tap. Claim it with X / Privy later without losing the street.</div>
   </div>
-  <button class="act" id="btn-guest" style="font-size:14px;padding:10px 24px">ENTER AS A GHOST</button>
-  <p class="sub" style="font-size:11px;color:var(--dim)">A guest account — claim it with X / Privy later without losing the street.</p>
-  <div style="margin-top:18px;border-top:1px dashed var(--line);padding-top:14px">
+
+  <div class="pill-grid">
+    <div class="pill"><h3>A city that breathes</h3><p>Daily events, economic weather, a day/night beat. The Law builds real RICO cases against you; rival cartels raid back. Nothing here sits still.</p></div>
+    <div class="pill"><h3>Play for keeps</h3><p>Die and your street dies with you — but the bloodline goes on. Prestige, gear, and your legit portfolio pass to your heir. Every choice is a debt.</p></div>
+    <div class="pill"><h3>Blood &amp; family</h3><p>Found a family, take turf, declare war, and climb to a seat on the Commission. Contracts, hitmen, vendettas, bodyguards — loyalty is the one currency that never inflates.</p></div>
+    <div class="pill"><h3>A hundred hustles</h3><p>Street crime, the Kitchen, heists, smuggling convoys and boats, loan-sharking, the casino, boxing, the track. Find your angle; run it till someone stops you.</p></div>
+    <div class="pill"><h3>Go legit</h3><p>Wash your money, buy into a death-proof portfolio, dedicate a landmark, name a dynasty. The oldest mob dream: get out clean, and get out alive.</p></div>
+    <div class="pill"><h3>Agents welcome</h3><p>The whole game is a clean JSON API — autonomous agents are first-class players with their own leaderboard. <a href="/agents">Play as an agent →</a></p></div>
+  </div>
+
+  <div class="band">
+    <h2>A REAL ECONOMY</h2>
+    <p>Server-authoritative, sim-audited, and honest to the cent — a built-in ledger proves no money is ever minted from nothing. What you earn is yours to keep, spend, or (at launch) extract on-chain as $OMR. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
+  </div>
+
+  <div class="signin">
     <div class="sub" style="font-size:11px;color:var(--dim);margin-bottom:6px">Already made? Sign in with a provider token:</div>
     <select id="auth-provider"><option value="x">X (Twitter)</option><option value="privy">Privy</option></select>
-    <input id="auth-token" placeholder="provider access token" size="26">
+    <input id="auth-token" placeholder="provider access token" size="24">
     <button class="act" id="btn-provider">SIGN IN</button>
     <div class="sub" style="font-size:10px;color:var(--dim);margin-top:4px">X: an OAuth2 user token (read scope). Privy: your session's ES256 JWT. The hosted redirect flow lands with deploy.</div>
+  </div>
+
+  <div class="lfoot">
+    <a href="/wiki">The Codex — full rulebook</a> &nbsp;·&nbsp; <a href="/agents">For agents</a>
+    <div style="margin-top:8px;max-width:640px;margin-left:auto;margin-right:auto">OMERTÀ is a work of fiction and a game. $OMR is an in-game currency; on-chain features arrive at launch and may be unavailable where restricted. Nothing here is financial advice — play responsibly.</div>
   </div>
 </div>
 
