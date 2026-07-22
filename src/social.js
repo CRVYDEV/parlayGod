@@ -285,6 +285,7 @@ export async function seizeDistrict(ch, districtId, client, h) {
 export async function jump(ch, victim, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "Can't throw hands while you're to ground — a safehouse is a shield, not a bunker.");
+  if (witproActive(ch)) throw new GameError('witpro', "You're in protective custody — the marshals didn't relocate you to work rivals. (witpro is a shield, not a free-kill window.)");
   if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape for a fight.");
   if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
@@ -866,6 +867,7 @@ export async function fire(ch, victim, client, h, rounds) {
     throw new GameError('searching', "They haven't been placed yet. Patience is a caliber.");
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
+  if (witproActive(ch)) throw new GameError('witpro', "No wet work from witness protection — untargetable is a shield, not a licence to kill.");
   if (ch.shoot_cd_until && new Date(ch.shoot_cd_until) > new Date())
     throw new GameError('cooldown', "Your trigger's still hot.");
   const gun = gunObjOf(ch.gun);
@@ -1143,11 +1145,21 @@ export async function hireBodyguard(ch, guard, client, h) {
 async function bodyguardAbsorbs(client, h, attacker, victim) {
   if (!victim.guarded_by || !victim.guarded_until || new Date(victim.guarded_until) <= new Date()) return null;
   if (victim.guarded_by === attacker.id) return null; // the betrayal
-  const g = (await client.query('SELECT id, name, jail_until, hosp_until FROM characters WHERE id=$1 AND alive', [victim.guarded_by])).rows[0];
-  if (!g || jailed(g) || hospitalized(g)) return null; // nobody between you and the bullet right now
+  // (red-team R11) The guard is a THIRD character (never a locked party — not the attacker by the
+  // betrayal check, not the victim who can't self-guard), and it was READ here UNLOCKED then written —
+  // so a guard shared across principals could absorb N simultaneous cross-victim hits for a SINGLE
+  // hospitalization (both concurrent hits saw them un-hospitalized before either committed). Claim the
+  // guard ATOMICALLY instead: the conditional UPDATE takes the guard row lock (the same lock the final
+  // write already took — no NEW lock/cycle) and its WHERE lets exactly ONE concurrent absorb win (the
+  // second blocks on the row, re-reads hosp_until in the future → no match → no absorb). Clobber-safe:
+  // no in-memory copy of the guard exists, so direct SQL is the record of truth (the refundPot rule).
+  const g = (await client.query(
+    `UPDATE characters SET health=10, hosp_until=$2 WHERE id=$1 AND alive
+       AND (hosp_until IS NULL OR hosp_until <= now()) AND (jail_until IS NULL OR jail_until <= now())
+     RETURNING id, name`,
+    [victim.guarded_by, new Date(Date.now() + M3.BODYGUARD_HOSP_MS)])).rows[0];
+  if (!g) return null; // guard gone/jailed/or already took a bullet this instant — nobody between you and it
   victim.guarded_by = null; victim.guarded_until = null; // one bullet per contract
-  await client.query('UPDATE characters SET health=$2, hosp_until=$3 WHERE id=$1',
-    [g.id, 10, new Date(Date.now() + M3.BODYGUARD_HOSP_MS)]);
   await h.notify(client, g.id, 'took_bullet', { for: victim.name });
   await h.notify(client, victim.id, 'guard_saved_you', { guard: g.name });
   await h.track(client, victim.account_id, 'bodyguard_absorb', { guard: g.id });
@@ -1168,6 +1180,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   // cell — pen.js consumes the burner first, then calls in with the jail gate waived.
   if (!opts.fromBurner && jailed(ch)) throw new GameError('jailed', 'No arranging wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "You can't reach your contacts from a safehouse.");
+  if (witproActive(ch)) throw new GameError('witpro', "You can't run contractors from witness protection — untargetable is a shield, not a licence to kill.");
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà."); // a rat OR a WANTED welsher forfeits family protection
   const vicLvl = levelOf(Number(victim.respect));
   if (vicLvl < M3.NPC_MIN_TARGET_LVL) throw new GameError('newbie', "The Commission doesn't sanction hits on nobodies.");
