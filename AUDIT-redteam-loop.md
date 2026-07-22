@@ -2482,3 +2482,48 @@ suite stays green — no test flow relied on hospitalized-offense.
 `hospitalized(ch)` actor gate their whole offense-sibling family enforces — closing the heal-defeats-the-health-
 gate bypass) + regression; the rest of the gate matrix and the newest client code confirmed CLEAN (one deferred
 client-hardening LOW recorded). Suite 34/34 + sim drift-0.
+
+## Round 41 — the mod-tools / privileged-operation surface (the highest-privilege attack surface) + a residual sweep
+
+A dedicated lens over every `/v1/mod/*` route (the `x-mod-key`/`modAuth` surface), threat model = a VALID but
+leaked/abused key abusing PARAMETERS to mint, drift §10.4, over-confiscate, or break the reserve invariant —
+plus a manual residual-surface sweep (dev markers, un-lensed modules).
+
+**One confirmed MED FIXED (an unbounded mod value-minting parameter), regression added:**
+`POST /v1/mod/vig/buyback` (`server.js:1692` → `runVigBuyback` `vig.js:96`) accepted a caller-supplied
+`priceOmrPerEth` validated only `> 0`. `omrBought = ethToSpend × price` mints in-game $OMR into the prize pool
++ withdrawal reserve — and a leaked/abused mod key passing a wildly inflated price (say 200×) mints 200× the
+$OMR past real inflow, INVISIBLE to BOTH monitors: the §10.4 `$OMR conservation` check passes because
+`prize:omr` is an enumerated mint (buckets grow with mints), and `runVigInvariants` only checks INTERNAL
+consistency (`ethSpent ≤ revenueIn`, split-exact, `funded ≤ toReserve+prizePaid`) — it never sanity-checks
+`omrBought` against a real market price. Consequence: breaks the system's core "extraction ≤ inflow" promise —
+the reserve/prize $OMR inflates with no real tokens behind it. This is the same UNBOUNDED-mod-parameter class
+the loop already closed for `mod/confiscate` (clamped `[0,pocket]`) and the revenue routes (txHash-stripped).
+**Fix (a structural continuity bound, not a game-balance number):** on mainnet the DEX bot supplies a real
+TWAP, and a real price has CONTINUITY between 12h buybacks — so once a first buyback establishes a reference,
+each subsequent manual price is bounded to a generous env-configurable factor (`VIG_MAX_PRICE_JUMP`, default
+10×) of the last recorded price, up OR down; a 200× fat-finger/attack is refused (`price_sanity`), a real TWAP
+never trips 10×, and the very first buyback is the unavoidable bootstrap (Safe = root of trust). Also hardened
+the `> 0` check to `Number.isFinite && > 0` (rejects Infinity). **Regression** (`test/vig.js`): after a
+reference buyback at 2000, a 200× price (400000) is refused with `price_sanity`; every real test/sim price
+(constant 2000/1000, single-price runs) is unaffected.
+
+**Verified PARAMETER-SAFE (every other mod route, traced to source):** `mod/confiscate` (clamp `[0,pocket]`
+holds, ledger matches, live-char-only), `mod/ban` (status flip + socket cut, no §10.4, no API unban),
+`mod-kill` (runs the estate with NO killerCh → no loot/chop/rep, single-txn `alive FOR UPDATE`, 40P01→
+contention), `mod/invites` (`count` clamped `[1,100]`, `uses` `≥1`), `mod/reserve/fund` (finite-guarded,
+out-of-band `funded_omr` NOT in omrBuckets, over-funding CAUGHT by the vig "reserve fully backed" invariant —
+the documented flag), `mod/emission/fund` (positive-only, bounded by `street_tax.fund`, a pure fund→stake_pool
+transfer both inside omrBuckets → conservation-neutral), `mod/store/grant`+`mod/fees/record`+`mod/bond/simulate`
+(the D-MED2 txHash strip holds — zero fabricated `vig_revenue`/`pol_eth` unless `ALLOW_MOD_REAL_REVENUE=on`;
+grants are FIXED entitlements not scaled by `amountWei`; nonce-idempotent; bonds tranche-capped), `mod/referral/
+push` (`mult` `[1,5]`, `hours` `[1,336]`, still bounded by real qualified recruits, $OMR untouched),
+`mod/vig/prizes` (bounded by the prize-pool balance, NaN/Infinity rejected — its only inflation source was the
+price bug now fixed), and all the READ routes (aggregates only, `opsActivity` limit clamped, no key echo / no
+raw account dump / no wallet-secret leak). **Residual sweep:** no `TODO`/`FIXME`/`insecure` markers in src
+(only false-positive "whacked"/"hacksaw" content matches); every module has been touched by a lens this window.
+
+**Round 41 verdict:** one MED unbounded-mod-parameter (`mod/vig/buyback` arbitrary `priceOmrPerEth` → a
+monitor-invisible $OMR mint past inflow) FIXED with a structural price-continuity bound + regression; every
+other mod route + all reads confirmed parameter-safe, and the residual surface is clean. Suite 34/34 + sim
+drift-0.

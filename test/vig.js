@@ -54,6 +54,11 @@ assert.equal(r.code, 200, 'buyback ran');
 assert(near(r.body.ethSpent, 0.066), 'spent exactly the Vig revenue');
 assert(near(r.body.omrBought, 132), 'bought 132 $OMR (0.066 ETH × 2000)');
 assert(near(r.body.toReserve, 66) && near(r.body.toPrize, 66), 'split 50/50 to reserve + prize pool');
+// (R41 regression) once a reference buyback exists (2000), a wildly inflated manual price (a fat-finger or
+// a leaked mod key) is REFUSED — 200× (400000) would mint 200× the $OMR into the reserve/prize pool past
+// real ETH inflow, invisible to BOTH the §10.4 sweep and runVigInvariants (neither price-checks omrBought).
+r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 400000 } });
+assert.equal(r.body.error, 'price_sanity', 'a 200x price jump off the last buyback is refused (the leaked-key mint guard)');
 // the anti-death-spiral cap: a second buyback with no new revenue spends NOTHING
 r = await call('POST', '/v1/mod/vig/buyback', { headers: modH, body: { priceOmrPerEth: 2000 } });
 assert(near((await vigOf()).status.omrBought, 132), 'the bot never spends more ETH than came in (no-op when nothing unspent)');
