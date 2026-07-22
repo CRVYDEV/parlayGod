@@ -614,6 +614,12 @@ export async function buildServer() {
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
     share: { gameUrl: SOCIAL_GAME_URL, xHandle: SOCIAL_X_HANDLE }, // brag-on-X: prefilled intents carry the player's name as a referral code
+    // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
+    // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
+    // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.
+    walletConnect: process.env.WALLETCONNECT_PROJECT_ID
+      ? { projectId: process.env.WALLETCONNECT_PROJECT_ID, chainId: Number(process.env.CHAIN_ID) || 1 }
+      : null,
 
     rackets: RACKETS.map((r) => ({ id: r.id, name: r.name, lvl: r.lvl, cost: r.cost, income: r.income, desc: r.desc })),
     assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),
