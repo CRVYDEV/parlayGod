@@ -11,8 +11,9 @@
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { LIVING, WORLD, WORLD_NPCS, worldNpcOf, worldRankOf, cityHourOf, cityForecast, regionShockOf, cityLawEventOf,
-         cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED } from '../src/rules.js';
+         cityEventOf, goodPriceOf, bustProbOf, priceBlock, dayOf, GOODS, DISTRICTS, hash01, MARKET_SEED, cartelUprisingOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
+import { sweepUprisings } from '../src/world.js';
 
 process.env.MOD_KEY = 'test-mod-key';   // for the co-op raid death regression (audit LOW-1)
 const app = await buildServer();
@@ -266,6 +267,7 @@ assert.equal((await call('POST', '/v1/world/kryl/plan', { token: stranded.token 
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP FOUR — THE FRONTIER MADE REAL (productive + contestable outposts)
 // ─────────────────────────────────────────────────────────────────────────────
+process.env.WORLD_UPRISING = 'none'; // step-four frontier/tribute tests run uprising-free (deterministic); step six drives it explicitly
 // the step-three rout left the Frontier Mob (FRM, gangId) holding Kryl — now it's REAL turf.
 const kf = worldNpcOf('kryl');
 const kTributePerHr = Math.floor(kf.regenPerHr * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
@@ -344,6 +346,67 @@ const gt = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang
 assert.equal(gt.lhs - gt.rhs, RIVAL_SEED, 'gang treasuries reconcile world:tribute/world:invade — drift == the rival seed only');
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STEP SIX — THE UPRISING (the cartels push back)
+// ─────────────────────────────────────────────────────────────────────────────
+// the Usurpers (rivalGang) now hold Kryl (garrison = expectCost). Kryl's full strength for a determinate reckoning.
+await pool.query(`UPDATE world_npcs SET strength=${worldNpcOf('kryl').max}, strength_at=now() WHERE npc_id='kryl'`);
+// (1) the forecast is knowable — the uprising is a pure function of the day (default schedule, no override)
+delete process.env.WORLD_UPRISING;
+assert('uprising' in cityForecast()[0], 'the forecast carries the uprising track');
+let upDay = null; for (let d = dayOf(); d < dayOf() + 90 && upDay === null; d++) if (cartelUprisingOf(d)) upDay = d;
+assert(upDay !== null, 'a cartel uprising falls within the forecast horizon');
+assert(WORLD_NPCS.some((f) => f.id === cartelUprisingOf(upDay).id), 'the rising outfit is a real fixture');
+// now DRIVE the uprising: force Kryl to rise → the board flags it + its tribute is SUSPENDED (a rebelling
+// vassal pays nothing) + the raid odds drop (heightened defense)
+process.env.WORLD_UPRISING = 'kryl';
+board = (await call('GET', '/v1/world', { token: rboss.token })).body;
+assert.equal(board.uprising.npc, 'kryl', 'the board shows Kryl rising up');
+const upn = board.npcs.find((n) => n.id === 'kryl');
+assert.equal(upn.rising, true, 'Kryl is flagged rising on the board');
+assert.equal(upn.tributePending, 0, 'a rebelling vassal pays no tribute (suspended while rising)');
+// collectFrontier skips a rising outfit — warp the clock, collect returns nothing while Kryl is in revolt
+await pool.query(`UPDATE world_npcs SET tribute_at = now() - interval '5 hours' WHERE npc_id='kryl'`);
+assert.equal((await call('POST', '/v1/world/collect', { token: rboss.token })).body.collected, 0, 'no tribute collected from a rebelling outpost');
+
+// (2) REINFORCE the garrison — a boss/underboss pays the treasury (a §10.4 world:reinforce SINK)
+assert.equal((await call('POST', '/v1/world/kryl/reinforce', { token: boss.token, body: { amount: 20000 } })).body.error, 'not_held', 'you can only reinforce an outpost YOUR family holds');
+assert.equal((await call('POST', '/v1/world/kryl/reinforce', { token: rboss.token, body: { amount: 5000 } })).body.error, 'amount', `reinforcing takes at least $${WORLD.UPRISING.REINFORCE_MIN}`);
+const rtreas0 = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${rivalGang}'`)).rows[0].treasury);
+const garrison0 = Number((await pool.query(`SELECT garrison FROM world_npcs WHERE npc_id='kryl'`)).rows[0].garrison);
+const rf = await call('POST', '/v1/world/kryl/reinforce', { token: rboss.token, body: { amount: 20000 } });
+assert.equal(rf.code, 200, 'the Usurpers reinforce Kryl');
+assert.equal(Number((await pool.query(`SELECT garrison FROM world_npcs WHERE npc_id='kryl'`)).rows[0].garrison), garrison0 + 20000, 'the garrison rose by the stake');
+assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${rivalGang}'`)).rows[0].treasury), rtreas0 - 20000, 'the treasury paid');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='world:reinforce'`)).rows[0].s), -20000, 'a ledgered world:reinforce treasury SINK (character_id NULL)');
+
+// (3) THE RECKONING — BREAK FREE: garrison below the threshold (max × 3% × full strength = 45000) → reclaim
+const need = Math.floor(worldNpcOf('kryl').max * WORLD.UPRISING.THRESHOLD_BPS / 10000); // × 1.0 at full strength
+await pool.query(`UPDATE world_npcs SET garrison=0, strength=${worldNpcOf('kryl').max}, strength_at=now() WHERE npc_id='kryl'`);
+await pool.query(`INSERT INTO world_uprisings (day, npc_id, status) VALUES (${dayOf() - 1}, 'kryl', 'active')`);
+let swept = await sweepUprisings(pool);
+assert(swept.resolved >= 1, 'the worker resolved the past-day uprising');
+let kr = (await pool.query(`SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id='kryl'`)).rows[0];
+assert.equal(kr.held_by_gang, null, `an UNDEFENDED outpost (garrison 0 < need ${need}) is RECLAIMED by the rising outfit`);
+assert.equal(Number(kr.garrison), 0, 'the garrison is reset on the reclaim');
+assert.equal((await pool.query(`SELECT status FROM world_uprisings WHERE day=${dayOf() - 1}`)).rows[0].status, 'resolved', 'the uprising is latched resolved');
+// idempotent — a second sweep changes nothing
+await sweepUprisings(pool);
+assert.equal((await pool.query(`SELECT held_by_gang FROM world_npcs WHERE npc_id='kryl'`)).rows[0].held_by_gang, null, 'a second sweep is a no-op');
+
+// (4) THE RECKONING — REPEL: a REINFORCED outpost (garrison ≥ need) holds the line
+await pool.query(`UPDATE world_npcs SET held_by_gang='${rivalGang}', held_since=now(), garrison=${need + 50000}, strength=${worldNpcOf('kryl').max}, strength_at=now() WHERE npc_id='kryl'`);
+await pool.query(`INSERT INTO world_uprisings (day, npc_id, status) VALUES (${dayOf() - 2}, 'kryl', 'active')`);
+await sweepUprisings(pool);
+kr = (await pool.query(`SELECT held_by_gang, garrison FROM world_npcs WHERE npc_id='kryl'`)).rows[0];
+assert.equal(kr.held_by_gang, rivalGang, 'a REINFORCED outpost REPELS the uprising — the family keeps it');
+assert.equal(Number(kr.garrison), need + 50000, 'the garrison is untouched on a repel');
+
+// (5) §10.4 — the gang-treasuries check still reconciles with world:reinforce as a treasury SINK
+const gt2 = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert.equal(gt2.lhs - gt2.rhs, RIVAL_SEED, 'gang treasuries reconcile world:reinforce (a sink) — drift == the rival seed only');
+delete process.env.WORLD_UPRISING; // clear the test knob
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 4 — the day/night clock
 // ─────────────────────────────────────────────────────────────────────────────
 const noonUTC = Date.UTC(2026, 0, 1, 15, 0, 0);  // 15:00 UTC — inside the patrol window
@@ -361,5 +424,5 @@ assert.equal(Math.round(bustProbOf(indicted, noonUTC) / bustProbOf(indicted, nig
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `world:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
-console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family) + STEP FOUR — THE FRONTIER MADE REAL (a rout installs a garrison + tribute clock; a member collects the outpost’s TRIBUTE to the treasury — a ledgered world:tribute faucet capped at 24h; a rival INVADES by outbidding the garrison — a ledgered world:invade sink transferring the flag/garrison/clock; rank/unheld/held gates; the gang-treasuries §10.4 check reconciles both)');
+console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family) + STEP FOUR — THE FRONTIER MADE REAL (a rout installs a garrison + tribute clock; a member collects the outpost’s TRIBUTE to the treasury — a ledgered world:tribute faucet capped at 24h; a rival INVADES by outbidding the garrison — a ledgered world:invade sink transferring the flag/garrison/clock; rank/unheld/held gates; the gang-treasuries §10.4 check reconciles both) + STEP SIX — THE UPRISING (the cartels push back: a seed-drawn forecast-able uprising raises an outfit’s defense + suspends its tribute; REINFORCE the garrison — a ledgered world:reinforce treasury SINK, not_held/amount gates; THE RECKONING — an undefended held outpost is RECLAIMED by the rising outfit (§10.4-neutral), a reinforced one REPELS it; idempotent worker sweep; the gang-treasuries §10.4 check reconciles the reinforce sink)');
 process.exit(0);

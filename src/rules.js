@@ -1014,7 +1014,8 @@ export const regionShockOf = (districtId, day = dayOf()) =>
   LIVING.REGION_SHOCK_LO + hash01('region:' + districtId + ':' + day + ':' + MARKET_SEED) * (LIVING.REGION_SHOCK_HI - LIVING.REGION_SHOCK_LO);
 // the 7-day forecast — both tracks, pure functions of the day (knowable, so players can plan)
 export const cityForecast = (day = dayOf()) => Array.from({ length: LIVING.FORECAST_DAYS }, (_, i) => ({
-  day: day + i, city: cityEventOf(day + i).id, law: cityLawEventOf(day + i).id }));
+  day: day + i, city: cityEventOf(day + i).id, law: cityLawEventOf(day + i).id,
+  uprising: cartelUprisingOf(day + i)?.id || null })); // step six: the cartel uprising is forecast-able
 
 // NPC RIVAL FAMILIES (Phase 2) — a server-wide common enemy (positive-sum co-op). `strength` is a
 // shared CASH RESERVOIR (dollars) that regenerates lazily toward its max; a raid loots a bounded
@@ -1082,11 +1083,38 @@ export const WORLD = {
     INVADE_BASE: 50000,               // the floor treasury cost to invade a held outpost…
     INVADE_OUTBID: 1.5,               // …or 1.5× the incumbent's garrison, whichever is higher (the SEIZE_OUTBID twin)
   },
+  // ── STEP SIX — THE UPRISING (the cartels PUSH BACK — the world's first proactive threat) ──
+  // A seed-drawn, forecast-able event: on some days ONE outfit RISES UP. While rising it defends
+  // +UPRISING.DEF (can't be farmed during its own revolt — the ENRAGE precedent) and its frontier
+  // tribute is SUSPENDED (a rebelling vassal doesn't pay). At the reckoning (the worker, once the
+  // uprising's day has passed) a rising outfit that a family HOLDS attempts to BREAK FREE: if the
+  // outpost's garrison is below `outfit.max × THRESHOLD_BPS/10000 × its live strength fraction`, it
+  // RECLAIMS its turf (held_by_gang→NULL, garrison reset, uncollected tribute forfeits — the
+  // releaseFrontierHolds/seizure precedent, §10.4-NEUTRAL ownership move). A REINFORCED outpost repels
+  // it. The interlock: keep the outfit BEATEN DOWN (low strength → low threshold) and even a thin
+  // garrison holds — so the raid loop and the frontier defend each other. §10.4: `world:reinforce` is a
+  // treasury cash SINK (no new faucet); the reclaim moves no value. All numbers are founder sign-off
+  // levers (pacing + a sink — no emission surface).
+  UPRISING: {
+    CHANCE: 0.28,           // ~28% of days one outfit rises (seed-drawn: unpredictable without the seed, verifiable after)
+    DEF: 50,                // +defense while rising (the ENRAGE_DEF twin — no farming its own revolt)
+    THRESHOLD_BPS: 300,     // breaks a held outpost free if garrison < outfit.max × 3% × live strength fraction
+    REINFORCE_MIN: 10000,   // the floor a boss/underboss pays the treasury to stiffen a garrison (vs the uprising AND rival invasions)
+  },
 };
 export const worldRankOf = (dmg) =>
   [...WORLD.WAR_RANKS].reverse().find((r) => Number(dmg) >= r.min) || WORLD.WAR_RANKS[0];
 // step four: a held outfit's tribute-per-hour to its overlord family (a bounded slice of the outfit's regen).
 export const frontierTributePerHr = (fixture) => Math.floor((fixture?.regenPerHr || 0) * WORLD.FRONTIER.TRIBUTE_BPS / 10000);
+// step six: the seed-drawn UPRISING for a given day — which outfit (if any) rises up. Pure function of the
+// day (forecast-able, verifiable after; unpredictable without the server seed — the §7.11 machinery).
+export const cartelUprisingOf = (day = dayOf()) => {
+  // TEST-ONLY override (the SEARCH_MS/LAW_BUST_P knob precedent): 'none' forces no uprising, an outfit
+  // id forces that outfit to rise. Never set in production — the real schedule is the seed draw below.
+  if (process.env.WORLD_UPRISING) return process.env.WORLD_UPRISING === 'none' ? null : (worldNpcOf(process.env.WORLD_UPRISING) || null);
+  if (hash01(`uprising:${day}:${MARKET_SEED}`) >= WORLD.UPRISING.CHANCE) return null;
+  return WORLD_NPCS[Math.floor(hash01(`uprisingpick:${day}:${MARKET_SEED}`) * WORLD_NPCS.length)] || null;
+};
 // ── STEP FIVE — THE OCCUPATION: apex outfits garrison the CORE player-map districts ──
 // An occupied district can't be freely seized — a family LIBERATES it (seizeDistrict's npc branch), and
 // the cost SCALES WITH THE OUTFIT'S LIVE STRENGTH, so the World raid loop is the path to core turf (beat

@@ -1253,6 +1253,24 @@ Design intent: the frontier is now income + contestable (rout to claim → colle
 invasion) rather than a leaderboard flag, WITHOUT touching the signed 6-district turf-perk map. Deferred:
 literal NPC occupation of the core districts (the fullest turf rewire).
 
+## Addendum — World step six: THE UPRISING (a treasury SINK + a status/pacing threat — NO new faucet)
+
+The world's first PROACTIVE threat: a seed-drawn, forecast-able day (`WORLD.UPRISING.CHANCE` 28%) on which
+one outfit RISES UP — heightened raid defense (`DEF` 50, the ENRAGE precedent) + suspended tribute while
+rising, and at the reckoning it BREAKS FREE of a HELD-but-undefended outpost (garrison < `outfit.max ×
+THRESHOLD_BPS/10000 (3%) × live strength fraction`), reclaiming its turf (§10.4-NEUTRAL — the
+`releaseFrontierHolds`/seizure ownership move; uncollected tribute forfeits). The defense is
+`reinforceOutpost` (`world:reinforce`, `REINFORCE_MIN` $10k floor) — a treasury cash **SINK** (helps
+extraction-≤-inflow) that also stiffens the outpost vs a rival's `invadeOutpost` (dual-purpose). **No new
+emission surface** — the tribute faucet is UNCHANGED (a suspension only DEFERS it, still 24h-capped) and
+the reclaim/reinforce move no faucet value; `world:reinforce` joined the gang-treasuries §10.4 OUT terms
+(sim drift-0). Levers `UPRISING.CHANCE`/`DEF`/`THRESHOLD_BPS`/`REINFORCE_MIN` set how often/how punishing
+the world pushes back and how much garrison holds the line — **KEEP** unless the reckoning feels too
+frequent (lower CHANCE) or the garrison too cheap/expensive to hold (tune THRESHOLD_BPS vs REINFORCE_MIN).
+The interlock (threshold scales with the outfit's LIVE strength) means the raid loop and the frontier
+defend each other — a beaten-down outfit can't break free even undefended. Founder sign-off levers (pacing
++ a sink; no signed faucet touched).
+
 ### World step four — red-team flags (AUDIT-world-frontier.md; founder sign-off)
 
 The three-lens red-team was §10.4/concurrency CLEAN and fixed one LOW (F1: `collectFrontier` now honors
