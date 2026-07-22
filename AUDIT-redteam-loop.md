@@ -1759,3 +1759,56 @@ extraction).
 **Round 28 verdict: 1 MED anti-abuse fix (spark same-IP flag + the ANY→IN portability bug that unexercised
 both flags) + regression; 1 balance faucet (`bust:reward`) flagged for founder sign-off; the cross-system
 composition + extraction boundary verified sound. §10.4 untouched. Suite 33/33 + sim drift-0.**
+
+---
+
+## Round 29 — Error-handling / info-disclosure + Vig/Bond real-value concurrency (extraction ≤ backing)
+
+Two lenses over the security perimeter + the money-backing layer under concurrency. **No CRITICAL/HIGH. No
+reachable bug — no code change this round.** The extraction-backing layer verified sound under concurrency
+(the strongest confirmation for the money layer).
+
+**Error-handling / info-disclosure — VERIFIED SOUND.** The single Fastify error handler (server.js:196) maps
+`GameError`→400 static-string codes / JWT→401 `{error:'auth'}` / everything else→server-side-log + generic
+500 `{error:'internal'}` — no pg message, constraint/column name, SQL fragment, or stack EVER reaches a
+client; non-retry pg codes (22P02/23503) fall through to the clean 500 (only 40P01/23505→contention,
+23505-on-character→name_taken). Account UUIDs never reach clients (view/dossier/opportunities/leaderboards
+all use character ids + names; the agent leaderboard strips `account_id` + bands wealth; the kick socket-close
+resolves the account server-side). Auth is GameError-only (atomic invite consume, alg-pinned Privy, X probe
+default-off, crypto wallet verify). No secrets in any `console.*` (500s log server-side only). Timing:
+`timingSafeEqual` on MOD_KEY, no other secret compared with `===`. **Two LOW wealth-inference residuals, both
+BY-DESIGN (flagged, NOT patched — ground rule #1):** `jump` returns the exact `stolen` amount (attacker-
+knowable `stealPct` → inverts to the victim's exact POCKET cash ±$7) and `collectLoan` shortfall reveals the
+borrower's pocket+in-transit — both bounded to the deliberately-exposed pocket store (bank + cleared-in-transit
++ staked $OMR unexposed), gated behind a committed PAID action (a robbery / an overdue collect), not a free
+probe. The finder recommends accepting both as designed; the aggregate cheap-jump→exact-pocket→kill-EV effect
+is a founder glance for the alpha, consistent with the documented "pocket is exposed, bank is the safe harbour."
+
+**Vig/Bond real-value backing under concurrency — VERIFIED SOUND (extraction ≤ inflow holds BY CONSTRUCTION).**
+Every read-then-write on the four backing singletons is serialized behind a `FOR UPDATE` lock acquired BEFORE
+its spend-basis read: `vig_prize_pool` (runVigBuyback / payPrizes / settlePassStipend, pool→account order),
+`chain_reserve` (requestWithdraw / gearWithdraw / drainQueue / cancelQueued, account→reserve order),
+`bond_reserve` (recordBond). Traced every writer — no unlocked writer exists that an absolute `SET balance=$1`
+could clobber. **(1)** buyback double-spend: two buybacks block on the pool lock before reading
+`revenue−alreadySpent`; T2 re-reads T1's committed spend → correct (`vig_buyback` the sole recorder). **(2)**
+reserve over-draw: `committedOutstanding` + nonce alloc + voucher insert all under the reserve lock;
+`drainQueue` holds it across the whole FIFO sign loop; uses committed-EVER (a claim never re-opens signing
+room) → `committed+amt ≤ funded` at every commit. **(3)** claim/reclaim double-free: `markClaimed` keeps the
+voucher in `committedOutstanding` (frees NO room — the honest full-reserve model); `reclaimExpiredVouchers`
+consults on-chain `usedNonce` fail-closed + re-checks `status='signed' FOR UPDATE`. **(4)** prize-vs-stipend:
+both lock the pool first, check `pay ≤ balance` under it; the route-settle + worker-sweep re-read
+`pass_owed FOR UPDATE`. **(5)** txHash/nonce idempotency: `fee_payments`/`store_payments`/`bonds.nonce` PKs +
+`vig_revenue PRIMARY KEY(source,ref)` reject concurrent duplicates with 23505 (rolled back + rethrown so the
+watcher cursor never advances past an unrecorded payment) — even the outer-guardless `recordTradeFee` path
+can't double-count. **(6)** the invariant read-across-statements asymmetry can only produce a transient false
+ALARM, never a false OK (live enforcement under the reserve lock guarantees no persistent over-draw to miss).
+**Two LOW residuals, both fail-SAFE + not currently reachable (flagged, NOT patched):** a post-commit
+`fundReserve`-then-throw + a MANUAL whole-call retry could double-fund (the dangerous direction) — but
+`payPrizes` is mod-route-only (no auto-retry) + the buyback worker doesn't retry within a tick, and invariant
+(3) flags it; a `fundReserve`-throws-after-commit under-funds the reserve (the SAFE direction — the credited
+$OMR just queues, never over-extracts). Both would only warrant an idempotency guard IF prize distribution is
+ever wired into automated season rollover (the CLAUDE.md-deferred item).
+
+**Round 29 verdict: both lenses (error-disclosure + vig/bond concurrency) returned NO reachable bug; the
+error perimeter + the extraction-backing layer under concurrency verified sound. 2 by-design wealth-inference
++ 2 fail-safe backing seams flagged. No code change. Suite 33/33 + sim drift-0 (unchanged).**
