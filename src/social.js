@@ -26,6 +26,7 @@ import { bumpHonor, isMadDog } from './honor.js';
 import { pactActive, coalitionDiscountActive, dissolveDiplomacy } from './diplomacy.js';
 import { sovGarrisonBonus, razeSov, dissolveSov } from './sov.js';
 import { recordDeath } from './bloodline.js';
+import { checkScandal } from './dynasty.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -1439,6 +1440,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // written BEFORE the wipe, idempotent per generation — the ancestral hall + dynasty score read it).
   await recordDeath(client, victim, {
     cause: killerName, level: lvl, kills: Number(victim.season_kills || 0), honor: Number(victim.honor || 0) });
+  // THE SCANDAL (dynastic marriage) — a direct player kill on your IN-LAW: the marriage dissolves and
+  // the killer eats MARRIAGE.SCANDAL honor. Runs under the killer's held char lock (fire/shank/npc-hit
+  // all pass killerCh); mod-kills and NPC hunters carry no killer → no scandal. Never a kill-BLOCK.
+  const scandal = opts.killerCh ? await checkScandal(client, opts.killerCh, victim) : null;
+  if (scandal) report.scandal = scandal;
 
   // §10.4: the estate burns street value — every currency leaves through a ledgered sink
   if (exactCash > 0) await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -exactCash, reason: 'death:estate' });
@@ -1470,7 +1476,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id

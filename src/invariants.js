@@ -18,7 +18,11 @@ const KNOWN_REASONS = {
     // FIVE PILLARS: `sov:` — pure treasury sinks (build/upgrade/upkeep/siege, gang-level, no faucet);
     // `campaign:` — the authored-chain reward, a once-per-street-per-chain character_id'd faucet
     // (the missions precedent — check (a) reconciles it per character).
-    'sov:', 'campaign:'],
+    'sov:', 'campaign:',
+    // MARRIAGES & SOLDIERS: dynasty ceremony/consigliere fees + the soldier hire — all
+    // character_id'd cash SINKS (check (a) reconciles); the soldier's 5% crime cut is a
+    // pre-ledger shave (the faucet shrinks — no reason of its own)
+    'dynasty:', 'soldier:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:'],

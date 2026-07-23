@@ -18,6 +18,8 @@ import * as Diplomacy from './diplomacy.js';
 import * as Sov from './sov.js';
 import * as Campaigns from './campaigns.js';
 import * as Bloodline from './bloodline.js';
+import * as Dynasty from './dynasty.js';
+import * as Soldiers from './soldiers.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
@@ -59,7 +61,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -679,6 +681,10 @@ export async function buildServer() {
       overextBps: SOV.OVEREXT_BPS },
     campaigns: CAMPAIGNS.map((c) => ({ id: c.id, npc: c.npc, name: c.name, blurb: c.blurb,
       steps: c.steps.length, minStanding: CAMPAIGN_MIN_STANDING, reward: c.reward })),
+    marriage: { proposeCost: MARRIAGE.PROPOSE_COST, acceptCost: MARRIAGE.ACCEPT_COST,
+      consigliereCost: MARRIAGE.CONSIGLIERE_COST, scandal: MARRIAGE.SCANDAL, divorce: MARRIAGE.DIVORCE },
+    soldiers: { max: SOLDIERS.MAX, hireCost: SOLDIERS.HIRE_COST, cutBps: SOLDIERS.CUT_BPS,
+      deathP: SOLDIERS.DEATH_P, traits: Object.entries(SOLDIERS.TRAITS).map(([id, t]) => ({ id, name: t.name, desc: t.desc })) },
     // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
     // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
     // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.
@@ -1750,6 +1756,32 @@ export async function buildServer() {
   app.get('/v1/bloodline', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
   app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
+  // DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3 — account-level ties on the Bloodline)
+  app.get('/v1/dynasty', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.dynastyBoard(ch, client)));
+  app.post('/v1/dynasty/propose/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.proposeMarriage(ch, req.params.characterId, client, h)));
+  app.post('/v1/dynasty/accept/:accountId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.acceptMarriage(ch, req.params.accountId, client, h)));
+  app.post('/v1/dynasty/divorce', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.divorceMarriage(ch, client, h)));
+  app.post('/v1/dynasty/consigliere/:characterId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.nameConsigliere(ch, req.params.characterId, client, h)));
+  app.post('/v1/dynasty/consigliere/accept/:accountId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.acceptConsigliere(ch, req.params.accountId, client, h)));
+  app.delete('/v1/dynasty/consigliere', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.endConsigliere(ch, client)));
+  // NAMED SOLDIERS (XCOM — recruit / assign / dismiss; the assists live inside crime/heist/raids)
+  app.get('/v1/soldiers', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.soldierBoard(ch, client)));
+  app.post('/v1/soldiers/hire', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.hireSoldier(ch, client, h)));
+  app.post('/v1/soldiers/:id/assign', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.assignSoldier(ch, req.params.id, client)));
+  app.post('/v1/soldiers/unassign', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.unassignSoldier(ch, client)));
+  app.delete('/v1/soldiers/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.dismissSoldier(ch, req.params.id, client)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet

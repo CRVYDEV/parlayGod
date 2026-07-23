@@ -1,6 +1,7 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
-import { GameError, cleanText } from './game.js';
+import { GameError, cleanText, assignedSoldier, soldierResult } from './game.js';
+import { soldierFxOf } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
@@ -67,10 +68,16 @@ export async function heist(ch, client, h) {
   const rep = 8 * lvl;
   ch.cash = Number(ch.cash) + take;
   ch.respect = Number(ch.respect) + rep;
-  ch.heist_at = new Date(Date.now() + M4.HEIST_CD_MS);
+  // SOLDIERS: a SAFECRACKER second lines the next Score up sooner — pacing only, never the pot
+  // (the skills-modifier posture; SOLDIERS sign-off lever)
+  const second = await assignedSoldier(client, ch.id);
+  const cdMs = Math.round(M4.HEIST_CD_MS
+    * (second?.trait === 'safecracker' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
+  ch.heist_at = new Date(Date.now() + cdMs);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'heist' });
   await h.bumpDaily(client, ch.id, 'heist');
-  return { ok: true, take, rep };
+  const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
+  return { ok: true, take, rep, soldier };
 }
 
 // ── MISSIONS (§5.1): validate reqs (eff stats, fp, trade), pay once ──
