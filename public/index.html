@@ -586,6 +586,7 @@
     const pick = el(`<select class="langpick" title="Language / Idioma / 语言">${Object.entries(I18N)
       .map(([k, v]) => `<option value="${k}"${k === LANG ? ' selected' : ''}>${v.name}</option>`).join('')}</select>`);
     pick.onchange = () => { localStorage.setItem('omerta_lang', pick.value); location.reload(); };
+    host.appendChild(el('<span class="langglobe" title="Language" style="opacity:.65;margin-left:8px;font-size:14px">🌐</span>')); // (C15) a language affordance
     host.appendChild(pick);
   }
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
