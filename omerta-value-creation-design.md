@@ -165,6 +165,7 @@ or both. The complete map:
 | ETH Store purchases | 100% of the price | **40% dev / 40% buyback (Vig) / 20% RWA reserve** (`STORE.SPLIT_BPS`) |
 | ETH gameplay fees (mint / respawn / re-roll) | 100% of the fee | dev wallet in-tx; the Vig share routes to **buybacks** |
 | Bonds | the discount is the cost | **50% POL (liquidity) / 20% dev wallet / 30% Vig (buybacks)** — the three-way split is immutable in the contract |
+| **DEX sells (NEW — the on-chain sell tax)** | flat `OMR.sellTaxBps` (owner-armed, ≤10% hard cap) | taken IN the transfer into a registered pool, split 50% dev / 50% buyback wallets; buys + wallet transfers clean; age-based rates are impossible at the ERC-20 level (routers hide the seller), so the 48h decay stays at the game boundary and the two layers stack |
 | **Early exits (NEW — the anti-dump surcharge)** | $OMR younger than 48h | an extra toll at BOTH exits (AMM sell + withdrawal): **50% at age 0, linear to 0% at 48h, no exemptions**, split 50% dev / 50% buybacks |
 | **$OMR withdrawal (NEW — the Exit Toll)** | `WITHDRAW_TAX_BPS` 2% of the gross | **50% → the dev fund** (`tax:dev`, claimable by the founder) / **50% → the buyback/yield pool** (`tax:buyback` → stake_pool — the pool the 12h buyback funds) |
 

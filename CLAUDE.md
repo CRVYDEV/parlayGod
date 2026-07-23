@@ -3418,6 +3418,19 @@ on-chain wallet version was REJECTED (wallet-hop dodge / fee-on-transfer breaks 
 (clean account: ~50% at age 0, ~25% at 24h — chronology-real FIFO; conservation unmoved), emission
 (fresh wage sold on the AMM pays ~50%, split lands both buckets, conservation exact); legacy suites
 pin the rate 0 (chain/economy). Suite 35/35 + sim drift-0 (surcharge live at default).
+**THE ON-CHAIN DEX SELL TAX (founder-directed):** \`OMR.sol\` is no longer fully inert — it gained an
+owner-armed FLAT sell tax on transfers INTO registered \`ammPairs\` (a sell / non-exempt LP add),
+split 50/50 dev/buyback wallets IN-TRANSFER; buys, wallet→wallet, and every protocol flow stay 1:1.
+Guardrails: \`MAX_SELL_TAX_BPS\` 1000 (10%) compile-time hard cap, default 0 until armed, registered-
+pools-only, exempt list, everything evented, Ownable(Safe) (renounce = freeze forever). AGE-BASED
+rates are IMPOSSIBLE at the ERC-20 level (routers hide the seller → the token only sees router→pool),
+so the 48h decay stays at the game boundary — the layers stack. HARD deploy requirement (CHAIN-
+DEPLOY.md): canonical liquidity must be Uniswap V2-COMPATIBLE (V3 rejects fee-on-transfer; swaps use
+the *SupportingFeeOnTransferTokens router path) — verify Robinhood Chain's DEX before seeding.
+Constructor signature unchanged (\`OMR(treasurySafe)\`, now Ownable(treasurySafe)). Foundry tests:
+\`test/OMRTax.t.sol\` (off-by-default, taxed split exact, buy/wallet/unregistered clean, exempt,
+hard cap + recipients-required, onlyOwner, a conservation fuzz — redirected never minted). Compiles
+clean (solc 0.8.26, 0 warnings); \`forge test\` remains the pre-mainnet gate.
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

@@ -1591,3 +1591,4 @@ price and retune EPOCH_OMR/WAGE_CAP_OMR (counsel-gated messaging — see CLAUDE.
 | `BONDS.POL_BPS/DEV_BPS/VIG_BPS` | 5000/2000/3000 | the bond ETH three-way split (POL / dev wallet / Vig) — mirrored by the contract's immutables |
 | `EARLY_SELL_TAX_BPS` (env, per-call) | 5000 (50% at age 0) | the anti-dump surcharge on exits of fresh $OMR — linear decay to 0 over the window |
 | `FRESH_WINDOW_MS` (env, per-call) | 48h | the freshness window; no exemptions; split 50% dev / 50% buybacks |
+| `OMR.sellTaxBps` (on-chain, owner-armed) | 0 at deploy (arm ≤1000 = 10% cap) | the flat DEX sell tax — registered pools only, 50/50 dev/buyback, V2-compatible pool REQUIRED |
