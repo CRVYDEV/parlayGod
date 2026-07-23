@@ -3468,6 +3468,21 @@ consumed newest-first in later replays, so the aged remainder then exits free); 
 is genuinely holding a token 48h. In-game spends consuming fresh first is deliberate (spending
 fresh IN the economy is deflationary and earns a cheaper aged exit). Codices + design doc updated.
 
+**`forge test` — THE GATE IS GREEN (first execution ever, 2026-07-23): 73/73 PASS** incl. both
+512-run fuzzes (OMR sell-tax conservation, OmertaBond anti-Ponzi). The egress wall fell to the
+official npm distribution of forge (`@foundry-rs/forge` 1.7.1) + npm forge-std/OZ + a solc-js
+0.8.26 stdio shim (same compiler version+commit as native; forge talks --standard-json with all
+sources inlined, so the shim needs no fs; output must be fs.writeSync — async pipe writes truncate
+at 64 KiB). Reproducible: `omerta-contracts/run-forge-test-sandboxed.sh`. The first run failed 14
+OmertaBond tests + exposed one silently false-passing fuzz — ONE latent test-harness class, not a
+contract bug: an inline `_sign(q, pk)` argument makes a `bond.hashQuote()` STATICCALL that consumes
+the pending `vm.prank`/`vm.expectRevert`, so bond() ran as the test contract (`NotPayer`) and
+expected reverts landed on the innocent view call. Fixed by hoisting `bytes memory sig = _sign(…)`
+above the cheatcodes at every site (the pattern the passing tests already used); the fuzz now
+genuinely exercises `bond()`. Contracts themselves needed ZERO changes — consistent with the lens-D
+audit. Residual for mainnet: the third-party audit re-runs with NATIVE solc (CHAIN-DEPLOY.md gate 1
+updated; gates 2 legal + 3 audit stand).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

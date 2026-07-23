@@ -13,10 +13,15 @@ touches mainnet** until §0 is satisfied.
 
 ## 0. The three HARD GATES (no mainnet step proceeds until all three are green)
 
-1. **`forge test` passes on a real Foundry toolchain.** The build sandbox egress-blocks Foundry's hosts, so
-   the suite has only ever been *compiled* here (`tools/compile-contracts.js`, solc 0.8.26, 0 warnings) — never
-   run. On any machine with open internet: `cd omerta-contracts && ./run-forge-test.sh` (installs Foundry, pins
-   OZ v5.6.1 + forge-std v1.9.6, runs `forge test -vvv --fuzz-runs 512`). Every test must read `[PASS]`.
+1. **`forge test` passes on a real Foundry toolchain. ✅ EXECUTED 2026-07-23 — 73/73 PASS** (incl.
+   both 512-run fuzzes: OMR sell-tax conservation + the OmertaBond anti-Ponzi bound) via the official
+   npm-distributed forge 1.7.1 in the sandbox (`cd omerta-contracts && ./run-forge-test-sandboxed.sh`
+   — forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim: the emscripten build of the SAME
+   compiler version+commit as native). The run surfaced and fixed a latent test-harness class (inline
+   `_sign(...)` staticcalls consuming `vm.prank`/`vm.expectRevert` in OmertaBond.t.sol — 14 tests +
+   one silently false-passing fuzz, all now genuinely exercising the contract). BELT-AND-BRACES: the
+   third-party audit should re-run `./run-forge-test.sh` on an open-internet machine with NATIVE solc
+   as part of its own verification — but the Foundry-VM gate itself is now green.
 2. **A third-party audit of the CONTRACTS *and* the off-chain EIP-712 signer.** The signer (`src/chain.js`) is
    as security-critical as the contracts — it mints withdrawal authority. Audit both.
 3. **Legal counsel sign-off** on the Risk-to-Earn / RWA line (see the "Sensitive design notes" in `CLAUDE.md`

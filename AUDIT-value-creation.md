@@ -152,7 +152,13 @@ Make-Risk-Pay exposure); OMR.sol's owner-power to register an arbitrary address 
 burn in a non-canonical zero-vig deploy (unreachable in the production config) and the
 reverting-recipient DoS (pre-existing, owner-fixable, the OmertaFees posture).
 
-**Standing gate, restated:** `forge test` has still never executed (Foundry egress-blocked here;
-contracts compile clean via solc-js). With OMR.sol now carrying logic, running the Foundry suite —
-including `OMRTax.t.sol`'s conservation fuzz — in a Foundry-capable environment is the hard
-pre-audit, pre-mainnet gate.
+**Standing gate — CLEARED (2026-07-23, same session):** `forge test` has now EXECUTED for the
+first time — **73/73 PASS** including `OMRTax.t.sol`'s 512-run conservation fuzz and OmertaBond's
+anti-Ponzi fuzz — via the official npm-distributed forge 1.7.1 + a solc-js 0.8.26 stdio shim
+(`omerta-contracts/run-forge-test-sandboxed.sh`, reproducible in this sandbox). The first run
+failed 14 OmertaBond tests and exposed one silently false-passing fuzz — ALL a single latent
+test-harness class (an inline `_sign(...)` argument makes a `hashQuote` staticcall that consumes
+the pending `vm.prank`/`vm.expectRevert`), not a contract bug; every site was fixed by hoisting
+the signature above the cheatcodes, after which the whole suite (and the now-genuinely-exercised
+fuzzes) went green. The third-party audit should still re-run with native solc as belt-and-braces
+(CHAIN-DEPLOY.md gate 1).
