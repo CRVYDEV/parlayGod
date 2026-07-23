@@ -1693,6 +1693,15 @@ export const RWA_FLOAT = {
   CLAIM_DAILY_OMR: 500,          // per-account rolling-24h claim cap (the D3 wash-bucket pattern) — no float-sweeping
   CLAIM_WINDOW_MS: 24 * 3600 * 1000,
 };
+// AUDIT F5 — fail fast on a misconfigured fee split: the Vig slice (vig.js, env VIG_BPS default
+// 6000) + the RWA slice book each real fee into TWO independently-capped revenue buckets; if they
+// summed past 100%, combined ETH spend could exceed ETH received while BOTH per-bucket
+// `spend ≤ revenue` invariants stayed green (the BONDS/STORE load-time sum-validation precedent).
+{
+  const vig = Number(process.env.VIG_BPS || 6000), rwa = RWA_FLOAT.FEE_RWA_BPS();
+  if (vig + rwa > 10000)
+    throw new Error(`VIG_BPS (${vig}) + FEE_RWA_BPS (${rwa}) exceed 10000 — the fee split would book >100% of each real payment as spendable revenue.`);
+}
 // ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
 // Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
 // window — their Law heat, wealth/ops, and whether they're hunting you. SWEEP (intel:sweep) clears

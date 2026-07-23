@@ -39,10 +39,23 @@ export async function runRwaBuyback(pool, { ticker, eth, priceEth, txHash } = {}
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // AUDIT F2: the BUDGET is global but the row lock is per-ticker — two concurrent buys on
+    // DIFFERENT tickers could each read the full unspent budget and together overspend revenue.
+    // A txn-scoped advisory lock serializes the budget read across tickers (the runWageEpoch
+    // precedent; auto-released at COMMIT/ROLLBACK; real Postgres only — pg-mem is single-caller).
+    if (process.env.DATABASE_URL) await client.query('SELECT pg_advisory_xact_lock($1)', [0x52574146]); // 'RWAF'
     // serialize concurrent buybacks on the reserve row (materialize first — the world_npcs pattern)
     if (!(await client.query('SELECT 1 FROM rwa_reserve WHERE ticker=$1', [ticker])).rows[0])
       await client.query('INSERT INTO rwa_reserve (ticker) VALUES ($1)', [ticker]);
     const res = (await client.query('SELECT * FROM rwa_reserve WHERE ticker=$1 FOR UPDATE', [ticker])).rows[0];
+    // AUDIT F3: price CONTINUITY — a typo'd/dust buy would reprice the WHOLE existing float (claims
+    // read last_price_eth), so once a ticker has a reference price, bound each subsequent buy to a
+    // generous factor of it (the runVigBuyback VIG_MAX_PRICE_JUMP precedent — a fat-finger/fraud
+    // sanity bound on the mod/bot parameter, not a balance lever; a real TWAP never trips 10×).
+    const jump = Number(process.env.RWA_MAX_PRICE_JUMP) || 10;
+    const lastPrice = Number(res.last_price_eth || 0);
+    if (lastPrice > 0 && (price > lastPrice * jump || price < lastPrice / jump))
+      throw new GameError('price_sanity', `Buy price ${price} is more than ${jump}× off the last (${lastPrice}) — refusing (set RWA_MAX_PRICE_JUMP to override).`);
     const revenue = Number((await client.query('SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue')).rows[0].s);
     const spent = Number((await client.query('SELECT COALESCE(SUM(eth),0) s FROM rwa_buys')).rows[0].s);
     const budget = round6(revenue - spent);
@@ -57,7 +70,14 @@ export async function runRwaBuyback(pool, { ticker, eth, priceEth, txHash } = {}
       [ticker, round6(Number(res.units) + units), round6(Number(res.eth_spent) + spend), price]);
     await client.query('COMMIT');
     return { ok: true, ticker, units, eth: spend, priceEth: price, real: !!txHash, budgetLeft: round6(budget - spend) };
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  } catch (e) {
+    await client.query('ROLLBACK');
+    // a two-first-touch INSERT race on a fresh ticker (23505) / a lock cycle (40P01) surfaces as a
+    // clean retryable error, not a raw 500 (the world_npcs/auction F1 posture; mod/bot-seat only)
+    if (e?.code === '23505' || e?.code === '40P01')
+      throw new GameError('contention', 'The float was busy — try the buy again.');
+    throw e;
+  }
   finally { client.release(); }
 }
 
@@ -104,6 +124,10 @@ export async function claimVaulted(ch, ticker, omr, client, h) {
     throw new GameError('float_dry', 'The float holds none of that stock yet — the next buyback fills it.');
   const perEth = await omrPerEth(client);
   const omrPerUnit = round6(priceEth * perEth);
+  // AUDIT F3 (the omrPerUnit→0 edge): a degenerate price must NEVER reach the allocation math —
+  // wanted would go Infinite and the whole float could be swept for the Math.max(1,…) floor charge
+  if (!(omrPerUnit > 0))
+    throw new GameError('float_dry', 'The float has no sane price yet — the next buyback sets it.');
   const allocated = Number((await client.query(
     'SELECT COALESCE(SUM(units),0) s FROM rwa_vault WHERE ticker=$1', [ticker])).rows[0].s);
   const available = round6(Number(res.units) - allocated);
@@ -111,6 +135,11 @@ export async function claimVaulted(ch, ticker, omr, client, h) {
     throw new GameError('float_dry', 'The float is fully claimed — the next buyback restocks it.');
   const wanted = round6(amt / omrPerUnit);
   const units = Math.min(wanted, available);
+  // AUDIT B-F1 (the zero-unit burn): at an extreme unit price, round6 can floor `wanted` to 0 —
+  // then units == wanted == 0, the clamp branch doesn't fire, and the FULL amt would burn for
+  // nothing. A claim that yields no units is refused BEFORE any $OMR moves.
+  if (!(units > 0))
+    throw new GameError('amount', `A unit runs ${omrPerUnit} $OMR — that ask buys none of it.`);
   const charge = units < wanted ? Math.max(1, Math.floor(units * omrPerUnit)) : amt; // clamp → pay only for what you got
   await spendOmr(client, h, charge, 'rwa:vault'); // gates h.acct.omr, debits, ledgers the burn (rwa:% — audited vocabulary)
   const cur = (await client.query(

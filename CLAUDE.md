@@ -4286,3 +4286,47 @@ vs INDICT_AT 3000, real dirt required), the late-window quiet expiry, no actor g
 surveillance posture; payHush is defensive), and multi-holder demand stacking (the pressure is the point —
 `MAX_HELD`/`DIG_OMR` the dials). Suite 36/36 + sim drift-0. All `SECRETS.*` numbers are founder sign-off
 levers.
+
+**THE FLOAT — the full-reserve RWA rebuild (R2 redesigned, founder-directed 2026-07-23) — BUILT**
+(`omerta-rwa-float-design.md`; `src/rwa.js`; the FLOAT block in `test/portfolio.js`). The founder's
+diagnosis — "the OMR→tokenized-stocks conversion doesn't really work" — was CORRECT and is now the
+architecture: a burn funds nothing, the hash price vs real backing = arbitrage or an unfunded
+liability, and on-demand securities conversion collapses the legal containment. Rebuilt on the
+principle already load-bearing in the withdrawal queue + OmertaBond: **THE GAME ONLY EVER OWES STOCK
+IT ALREADY OWNS.** Flow: ETH tax slices → `rwa_revenue` (the Store's 20% earmark goes live; gameplay
+fees gained `FEE_RWA_BPS` 10% carved from the FOUNDER share — Vig 60% untouched, txHash-gated,
+idempotent, load-time `VIG_BPS+FEE_RWA_BPS ≤ 10000` assert) → the buy-bot seat (`runRwaBuyback`,
+`POST /v1/mod/rwa/buy` — mod-driven until the mainnet Uniswap bot, the runVigBuyback twin: spend ≤
+unspent revenue under a cross-ticker advisory lock, `RWA_MAX_PRICE_JUMP` 10× continuity bound,
+real-vs-simulated flagged via the `modRealTxHash` gate) → `rwa_reserve` (the float, per-ticker UNITS
++ cost basis) → the claim rail (`claimVaulted`, `POST /v1/vault/claim`): burn earned $OMR at the
+REAL oracle price (last buy price × the Vig OMR/ETH TWAP, PLEX floor pre-market) to claim units —
+**$OMR is the rationing ticket, ETH was the funding**. Clamps to available (never an IOU; zero-unit
+asks refused before the burn), per-account rolling-24h `CLAIM_DAILY_OMR` bucket
+(`account_persistent.vault_used/vault_at`, outside persistAccount — clobber-safe), the RICO
+graduation on the SHARED `rwa_used` window (structuring-proof across both books) + safehouse block +
+heat + jailed gate, reserve-row FOR UPDATE serializing same-ticker claims. **Two-tier book:** the
+legacy hash-priced holdings are the PAPER tier (status — dynasty/crest/landmarks/dividends
+unchanged, no retroactive liability); `rwa_vault` is the VAULTED tier (account-level, SURVIVES
+DEATH). §10.4: the only in-game flow is the `rwa:vault` burn riding the existing `rwa:%` vocabulary
+— ZERO invariants.js change; everything else is out-of-band real-value accounting (zero
+transactions rows). `runRwaInvariants` (`GET /v1/mod/rwa`) is the real-value invariant: spend ≤
+revenue, **allocated ≤ held per ticker (THE anti-Ponzi check)**, held == Σ buys, cost basis exact,
+real-vs-simulated units. Console: "The Float" card on Going Legit (claim + BACKED chip; the legacy
+board relabeled "The Paper Book"); `/v1/rules.vault`. A **two-lens red-team** (`AUDIT-rwa-float.md`)
+returned **no CRITICAL** — the legal wall verified airtight (NOTHING decrements
+`rwa_vault`/`reserve.units`, no transfer, no redeem affordance, zero RNG grants) — and fixed
+in-commit (regression each): the zero-unit burn (an ask under the round6 grid burned the full amt
+for 0 units), the unbounded `priceEth` (a dust/typo buy repriced the whole float; the degenerate
+`omrPerUnit→0` edge would have swept it for 1 $OMR — now a continuity bound + a claim guard), the
+`modRealTxHash` route-parity gap (a comp could stamp `real=true`), the cross-ticker budget race
+(advisory lock), the fee-split sum assert, the buyback 23505→contention mapping, and an end-to-end
+FEE_RWA_BPS fee-slice test. Flagged for founder sign-off (mainnet-gate items, NOT patched): the
+stale-oracle free option (refresh-at-claim / PREMIUM_BPS spread — **the #1 economics item before
+the real bot ships**), minted-only claims (the Wage D1 precedent + R3 dead-allocation), FCFS
+sniping (pro-rata/per-buyback caps), and the R3 precondition that simulated units reconcile to the
+Safe before any extraction. The chain layer (Uniswap bot + Safe custody + the KYC'd/geofenced R3)
+stays mainnet/legal-gated — this drop is the complete off-chain core with zero new regulatory
+surface. Deliberately NOT built: direct ETH→shares purchase (securities-dealer-at-point-of-sale —
+entry stays in-game). All `RWA_FLOAT.*` numbers are founder sign-off levers. Suite 38/38 + sim
+drift-0.
