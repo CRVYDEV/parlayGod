@@ -30,7 +30,8 @@ services:
     plan: starter                # always-on (~$7/mo). The free tier SLEEPS when idle — bad for a live game.
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /v1/session  # Render pings this; 200 = the server is healthy
+    healthCheckPath: /             # Render pings this; the homepage returns 200 when the server is healthy
+                                   # (NOT /v1/session — that requires a login and returns 401, failing the check)
     autoDeploy: true              # redeploys automatically when you push to the connected branch
     envVars:
       - fromGroup: omerta-secrets
