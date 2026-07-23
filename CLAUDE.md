@@ -4163,4 +4163,20 @@ gained honor/diplomacy/sov/campaigns blocks; routes after `/v1/wage`; `test/migr
 levers. `test/expansion.js` proves the honor axis+tiers+teeth+echo, pacts (propose/accept/block-war/
 oathbreak), coalitions (dominance gate + halved war chest), sovereignty (build/upgrade/siege-in-window +
 sov points), campaigns (gate/action-advance/choose/claim-once), the bloodline (record + heir echo + hall),
-and §10.4 (vocabulary closed + the sink/faucet ledger exactly — a before/after delta of 0).
+and §10.4 (vocabulary closed + the sink/faucet ledger exactly — a before/after delta of 0). A
+**three-lens red-team** (`AUDIT-five-pillars.md`: §10.4/economy, concurrency/locks, exploit/grief/death)
+returned **no CRITICAL**. Lens A (§10.4) CLEAN. Fixed in-commit (regression each): **HIGH** — the siege
+cooldown was per-STRUCTURE (shared across all attackers), so with a 2h window + 24h cooldown one
+family/alt could throw a losing siege at window-open for ~$50k/day and SHIELD a hold from every real
+attacker (and legit multi-attacker contests were broken) → a new `sov_siege_cooldowns(district_id,
+gang_id)` table scopes it PER (attacker, district) — each family throttled 24h, nobody denies the slot
+to all; cleared on raze/dissolution; **MED** — `siegeSov` lacked the jailed/hospitalized/safehoused
+actor gates its `raidRivalRacket` sibling enforces (P1.3), now added; **LOW** — the Mad Dog lockout
+gated propose/form but not accept/join (dodgeable), `isMadDog` added to both; **LOW** — `claimCampaign`'s
+branch-cash sweetener now keyed to the choice STEP not a global id scan; **LOW** — `buildSov` now locks
+the district row FOR UPDATE (build-vs-seize TOCTOU). Verified CLEAN: persist-clobber (honor is off the
+persistCharacter positional list), honor write-races (all under the row lock), two-gang sorted locks,
+sweep-vs-dissolution, the campaign advance, `recordDeath` idempotency, and estate/death completeness
+(campaign_progress wiped + in the DISPOSITION map, bloodline survives, dissolution cleans diplomacy+sov).
+Flagged (ground rule #1, Sybil posture): the honor-repay laylow farm + the dominant-alt coalition farm.
+Suite 36/36 + sim drift-0.
