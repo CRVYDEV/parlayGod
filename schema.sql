@@ -504,6 +504,13 @@ CREATE TABLE IF NOT EXISTS social_claims (
   account_id TEXT NOT NULL,
   day INT NOT NULL,
   task_id TEXT NOT NULL,
+  -- THE 4-HOUR STAND (founder-directed anti-abuse): a share is REGISTERED first (paid=false,
+  -- posted_at stamped, proof stored), and pays only when claimed again after SOCIAL_MATURE_MS
+  -- (4h) — in live verify mode the stored proof is re-checked against X (post deleted → no pay).
+  -- A registration unclaimed for 48h lapses (the pending window in growth.js).
+  posted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  paid BOOLEAN NOT NULL DEFAULT false,
+  proof TEXT,
   PRIMARY KEY (account_id, day, task_id)
 );
 CREATE TABLE IF NOT EXISTS telemetry (

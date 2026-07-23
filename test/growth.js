@@ -394,14 +394,32 @@ assert.equal(sw.code, 'Promoter Pete', "the share code is the player's living na
 assert(sw.tasks[0].share.includes('x.com'), 'each task carries a prefilled share intent');
 assert.equal(sw.tasks[0].claimed, false, 'nothing claimed yet');
 const swCashBefore = (await meOf(promoter.token)).cash;
+// THE 4-HOUR STAND: the first claim only REGISTERS the share — no cash until it matures
+r = await call('POST', '/v1/social/sw_post/claim', { token: promoter.token, body: { proof: 'https://x.com/pete/status/12345678901234' } });
+assert.equal(r.code, 200); assert.equal(r.body.pending, true, 'the first claim registers, it does not pay');
+assert(r.body.matureSeconds > 0, 'the clock is running');
+assert.equal((await meOf(promoter.token)).cash, swCashBefore, 'no cash before the post has stood');
+let swb = (await call('GET', '/v1/social', { token: promoter.token })).body;
+assert.equal(swb.tasks.find((t) => t.id === 'sw_post').state, 'pending', 'the board shows the stand clock');
 r = await call('POST', '/v1/social/sw_post/claim', { token: promoter.token });
-assert.equal(r.code, 200); assert.equal(r.body.cash, SOCIAL_TASKS.CASH, 'a task pays the petty cash');
+assert.equal(r.body.pending, true, 'claiming early just reports the clock — never pays');
+// mature the post (backdate the registration past SOCIAL_MATURE_MS) → the claim PAYS
+const matureSw = (id, task) => pool.query(
+  `UPDATE social_claims SET posted_at = $2 WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}') AND task_id=$1 AND NOT paid`,
+  [task, new Date(Date.now() - 5 * 3600000)]);
+await matureSw(promoter.id, 'sw_post');
+r = await call('POST', '/v1/social/sw_post/claim', { token: promoter.token });
+assert.equal(r.code, 200); assert.equal(r.body.cash, SOCIAL_TASKS.CASH, 'a matured share pays the petty cash');
 assert.equal((await meOf(promoter.token)).cash, swCashBefore + SOCIAL_TASKS.CASH, 'the cash landed');
 assert.equal((await call('GET', '/v1/social', { token: promoter.token })).body.tasks.find((t) => t.id === 'sw_post').claimed, true, 'the board marks it done today');
 assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: promoter.token })).body.error, 'claimed', 'once per day per task');
 await call('POST', '/v1/social/sw_invite/claim', { token: promoter.token });
+await matureSw(promoter.id, 'sw_invite');
+await call('POST', '/v1/social/sw_invite/claim', { token: promoter.token });
+await call('POST', '/v1/social/sw_boost/claim', { token: promoter.token });
+await matureSw(promoter.id, 'sw_boost');
 r = await call('POST', '/v1/social/sw_boost/claim', { token: promoter.token });
-assert.equal(r.body.allDone, true, 'the last task completes the day');
+assert.equal(r.body.allDone, true, 'the last matured task completes the day');
 assert.equal(r.body.cash, SOCIAL_TASKS.CASH + SOCIAL_TASKS.ALL_BONUS, 'and pays the all-done bonus, folded into the row');
 assert.equal((await call('POST', '/v1/social/sw_nope/claim', { token: promoter.token })).body.error, 'bad_task', 'unknown task rejected');
 const swPaid = SOCIAL_TASKS.CASH * 3 + SOCIAL_TASKS.ALL_BONUS;

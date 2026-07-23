@@ -756,7 +756,7 @@ conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recrui
 
 **Spread the Word** (`GET /v1/social`, `/v1/social/:taskId/claim`) — three daily social tasks (post about the
 game, share your code, follow or repost). Each pays a small amount of **cash** ($300; $500 for all three). Cash
-only, one time each day, agents excluded. The share links carry your name as a referral code, so real sharing
+only, one time each day, agents excluded. A share pays in two steps: first you REGISTER it (the claim button starts the clock), then it pays only after the post has STOOD for 4 hours — if the server runs live verification, a deleted post pays nothing. The share links carry your name as a referral code, so real sharing
 feeds the referral system. (This needs `SOCIAL_VERIFY_MODE` not equal to off; a wrong deploy shows the tab but
 pays nothing.)
 
