@@ -1792,16 +1792,17 @@ export const BONDS = {
   DISCOUNT_BPS: Number(process.env.BOND_DISCOUNT_BPS || 800),   // 8% bonus OMR (the incentive)
   MAX_DISCOUNT_BPS: 2000,                                       // 20% hard cap (a rogue-discount backstop)
   VEST_HOURS: Number(process.env.BOND_VEST_HOURS || 120),      // 5-day linear vest (the Olympus default)
-  POL_BPS: Number(process.env.BOND_POL_BPS || 6000),           // 60% of bonded ETH → Protocol-Owned Liquidity
-  VIG_BPS: Number(process.env.BOND_VIG_BPS || 4000),           // 40% → the Vig buyback (reserve + prizes). sum 10000
+  POL_BPS: Number(process.env.BOND_POL_BPS || 5000),           // 50% of bonded ETH → Protocol-Owned Liquidity
+  VIG_BPS: Number(process.env.BOND_VIG_BPS || 3000),           // 30% → the Vig buyback (reserve + prizes)
+  DEV_BPS: Number(process.env.BOND_DEV_BPS || 2000),           // 20% → the dev wallet (founder revenue). sum 10000
   MIN_PRINCIPAL_ETH: 0.01,
 };
 // the discounted OMR a bond pays: principal's market OMR value, scaled UP by the discount (cheaper OMR)
 export const bondPayout = (principalEth, price, discountBps) =>
   Math.round((Number(principalEth) * Number(price) / (1 - Number(discountBps) / 10000)) * 1e6) / 1e6;
 // validate the ETH split sums to 10000 at load (a misconfig would mis-route real revenue)
-(() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS;
-  if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS must sum to 10000 (got ${t})`); })();
+(() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS + BONDS.DEV_BPS;
+  if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS + DEV_BPS must sum to 10000 (got ${t})`); })();
 
 // ── THE LEDGER — the Season Pass reward track. A daily-claim track (the genre-standard "battle
 // pass"): while the pass is active, claim the NEXT tier once per CLAIM window, escalating rewards.

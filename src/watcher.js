@@ -103,7 +103,7 @@ export async function syncTradeFees(pool, source, opts = {}) {
   return { processed, from: w.from, to: w.to };
 }
 
-// Sync Bonded(bondId, payer, nonce, principal, payout, toPol, toVig) → recordBond (idempotent on nonce),
+// Sync Bonded(bondId, payer, nonce, principal, payout, toPol, toDev, toVig) → recordBond (idempotent on nonce),
 // booking the on-chain-AUTHORITATIVE payout + POL/Vig split (the event carries no price/discount, so the
 // watcher books what the contract actually did — the `onchainPayout` path in recordBond). Same cursor +
 // confirmation-depth + per-log isolation discipline as the fee stream. Dormant unless OMERTA_BOND_ADDRESS
@@ -121,7 +121,7 @@ export async function syncBondEvents(pool, source, opts = {}) {
   for (const l of logs) {
     if (await isolate('bond', () => recordBond(pool, {
       nonce: l.nonce, payer: l.payer, principalEth: l.principalEth,
-      onchainPayout: l.payoutOmr, onchainPol: l.polEth, onchainVig: l.vigEth, txHash: l.txHash,
+      onchainPayout: l.payoutOmr, onchainPol: l.polEth, onchainDev: l.devEth, onchainVig: l.vigEth, txHash: l.txHash,
     }))) processed++;
   }
   await setCursor(pool, 'bonds', w.to);
@@ -143,7 +143,7 @@ export async function makeViemSource() {
   const rerollEv = parseAbiItem('event RerollFeePaid(address indexed payer, uint256 indexed nonce, uint256 amount)');
   const claimedEv = parseAbiItem('event Claimed(uint256 indexed nonce, address indexed to, uint8 kind, uint256 amount, uint256 gearId)');
   const tradeEv = parseAbiItem('event TradeFeePaid(uint256 indexed nonce, uint256 amountWei)');
-  const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toVig)');
+  const bondEv = parseAbiItem('event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toVig)');
   const range = (from, to) => ({ fromBlock: BigInt(from), toBlock: BigInt(to) });
   // wei / 1e18-decimal-OMR → ETH / in-game $OMR units, via viem's decimal-exact formatter (Number() alone
   // on a >2^53 wei bigint loses low-order digits; formatUnits keeps full precision, then recordBond round6's).
@@ -177,7 +177,7 @@ export async function makeViemSource() {
       return logs.map((l) => ({
         nonce: Number(l.args.nonce), payer: l.args.payer,
         principalEth: w18(l.args.principal), payoutOmr: w18(l.args.payout),
-        polEth: w18(l.args.toPol), vigEth: w18(l.args.toVig), txHash: l.transactionHash,
+        polEth: w18(l.args.toPol), devEth: w18(l.args.toDev), vigEth: w18(l.args.toVig), txHash: l.transactionHash,
       }));
     },
   };

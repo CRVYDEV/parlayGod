@@ -164,7 +164,7 @@ or both. The complete map:
 | In-game P2P transfers (bodyguard, speakeasy, casino PvP, market, boxing, races, loans…) | ~2% takes | half → the street-tax pool → **the 12h buyback**; half burns (deflation) |
 | ETH Store purchases | 100% of the price | **40% dev / 40% buyback (Vig) / 20% RWA reserve** (`STORE.SPLIT_BPS`) |
 | ETH gameplay fees (mint / respawn / re-roll) | 100% of the fee | dev wallet in-tx; the Vig share routes to **buybacks** |
-| Bonds | the discount is the cost | **60% POL (liquidity) / 40% Vig (buybacks)** — no dev cut by design (bonds buy liquidity, the Store buys revenue) |
+| Bonds | the discount is the cost | **50% POL (liquidity) / 20% dev wallet / 30% Vig (buybacks)** — the three-way split is immutable in the contract |
 | **$OMR withdrawal (NEW — the Exit Toll)** | `WITHDRAW_TAX_BPS` 2% of the gross | **50% → the dev fund** (`tax:dev`, claimable by the founder) / **50% → the buyback/yield pool** (`tax:buyback` → stake_pool — the pool the 12h buyback funds) |
 
 Exit-toll mechanics: the player is debited the gross; the voucher signs the NET; both toll shares

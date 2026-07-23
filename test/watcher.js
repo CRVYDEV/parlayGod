@@ -127,15 +127,15 @@ assert.equal((await pool.query(`SELECT COUNT(*)::int c FROM vig_revenue WHERE so
 // (the event carries no price/discount), and BYPASSES the off-chain tranche cap (the contract already
 // enforced its own), so a real bond can never stall the cursor. Idempotent on nonce; real-ETH accounting. ──
 const { syncBondEvents } = await import('../src/watcher.js');
-const bondLog = []; // { block, nonce, payer, principalEth, payoutOmr, polEth, vigEth }
+const bondLog = []; // { block, nonce, payer, principalEth, payoutOmr, polEth, devEth, vigEth }
 source.bondLogs = async (from, to) => bondLog.filter((l) => l.block >= from && l.block <= to)
   .map((l) => ({ nonce: l.nonce, payer: l.payer, principalEth: l.principalEth, payoutOmr: l.payoutOmr,
-    polEth: l.polEth, vigEth: l.vigEth, txHash: '0xbond' + l.nonce }));
+    polEth: l.polEth, devEth: l.devEth, vigEth: l.vigEth, txHash: '0xbond' + l.nonce }));
 const bondRow = async (n) => (await pool.query(`SELECT * FROM bonds WHERE nonce=${n}`)).rows[0];
 const reserveOf = async (col) => Number((await pool.query(`SELECT ${col} FROM bond_reserve WHERE id=1`)).rows[0][col]);
 
 // a bond lands at block 43; head 44 → inside the 3-conf window, not yet booked (reorg-safe)
-bondLog.push({ block: 43, nonce: 700, payer: wallet, principalEth: 1.0, payoutOmr: 2200, polEth: 0.6, vigEth: 0.4 });
+bondLog.push({ block: 43, nonce: 700, payer: wallet, principalEth: 1.0, payoutOmr: 2200, polEth: 0.5, devEth: 0.2, vigEth: 0.3 });
 head = 44;
 r = await syncBondEvents(pool, source, { startBlock: 40 });
 assert.equal(r.processed, 0, 'bond not booked inside the confirmation window (reorg-safe)');
@@ -154,8 +154,9 @@ assert.equal(Number(b.oracle_price), 2200, 'oracle_price stored as the effective
 assert.equal(b.account_id, accId, 'attributed to the linked wallet');
 assert(b.tx_hash, 'a real on-chain bond carries the tx hash');
 assert.equal(await reserveOf('committed_omr'), 2200, 'committed advanced by the on-chain payout (tranche cap bypassed on the real-event path)');
-assert.equal(await reserveOf('pol_eth'), 0.6, "the event's toPol deepened POL");
-assert.equal(Number((await pool.query(`SELECT vig_eth FROM vig_revenue WHERE source='bond' AND ref='700'`)).rows[0].vig_eth), 0.4, "the event's toVig fed the Vig buyback basis (real-ETH accounting)");
+assert.equal(await reserveOf('pol_eth'), 0.5, "the event's toPol deepened POL");
+assert.equal(await reserveOf('dev_eth'), 0.2, "the event's toDev landed as founder revenue");
+assert.equal(Number((await pool.query(`SELECT vig_eth FROM vig_revenue WHERE source='bond' AND ref='700'`)).rows[0].vig_eth), 0.3, "the event's toVig fed the Vig buyback basis (real-ETH accounting)");
 assert.equal(await getCursor(pool, 'bonds'), 44, 'bonds cursor advanced to safeHead (independent of the other streams)');
 
 // idempotent re-scan (a reorg-replay of the same nonce) does not double-book
