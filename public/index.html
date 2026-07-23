@@ -722,6 +722,9 @@
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
+    if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
+      bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
+        : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
     if (body.credited !== undefined && body.monument) bits.push(body.completed
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
@@ -2367,6 +2370,10 @@
       ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
       ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
     ],
+    'The Dueling Circuit': [
+      ['GET', '/v1/duels'], ['POST', '/v1/duels/list', { limit: 5000 }],
+      ['POST', '/v1/duels/:targetId', { amount: 1000 }], ['GET', '/v1/leaderboard/duels'],
+    ],
     'The Megaproject': [
       ['GET', '/v1/megaproject'], ['POST', '/v1/megaproject/cash', { amount: 1000 }],
       ['POST', '/v1/megaproject/goods', { goodId: 'gin', qty: 1 }], ['POST', '/v1/megaproject/omr', { amount: 1 }],
@@ -2448,6 +2455,7 @@
     const huntReadyS = hunt ? Math.ceil((new Date(hunt.placedAt) - Date.now()) / 1000) : 0;
     const npcs = [['legbreaker', 'Leg-Breaker $50k'], ['journeyman', 'Journeyman $250k'], ['professional', 'The Professional $1M']];
 
+    const duels = (await api('GET', '/v1/duels')).body || null;
     t.innerHTML = `
       <h2>The Contract Board</h2>
       ${board.length ? `<div class="grid">${board.map((c) => `
@@ -2493,6 +2501,27 @@
           <button class="act" data-do="POST /v1/loans/square">pay it</button></div>` : ''}
       </div>
 
+      ${(() => { const d = duels; if (!d) return '';
+        return `<h2 style="margin-top:12px">⚔ The Dueling Circuit <span class="d" style="font-size:11px">— ranked. Seasonal. The number follows you.</span></h2>
+        <div class="grid">
+          <div class="card"><span class="t">YOUR RATING</span>
+            <div style="font-size:24px;color:var(--neon)">${d.you.elo} <span class="d" style="font-size:12px">${esc(d.you.rank)}</span></div>
+            <div class="d">${d.you.listed ? `on the circuit — taking duels up to $${fmt(d.you.limit)}` : 'not listed — nobody can challenge you'}</div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <input id="du-limit" type="number" placeholder="stake cap $" style="width:110px">
+              <button class="act" id="du-list">${d.you.listed ? 're-list' : 'enter the circuit'}</button>
+              ${d.you.listed ? '<button class="act" id="du-unlist">step off</button>' : ''}
+            </div>
+            <div class="d" style="font-size:11px;margin-top:4px">stakes $${fmt(d.stakeMin)}+ · 5% rake · win takes the stake · level ${d.minLevel}+ · elo resets each season</div>
+          </div>
+          ${d.duelists.filter((x) => !x.me).slice(0, 8).map((x) => `
+            <div class="card"><span class="t">${esc(x.name)}</span> <span class="d">lvl ${x.level}${x.tag ? ' · ' + esc(x.tag) : ''}</span>
+              <div class="d"><b>${x.elo}</b> ${esc(x.rank)} · takes up to $${fmt(x.limit)}</div>
+              <div style="display:flex;gap:6px;margin-top:6px">
+                <input data-duamt="${x.id}" type="number" placeholder="stake $" style="width:100px">
+                <button class="act" data-duel="${x.id}">DUEL</button>
+              </div></div>`).join('') || '<div class="card"><div class="d">the circuit is empty — list yourself and start the ladder</div></div>'}
+        </div>`; })()}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
@@ -2518,6 +2547,12 @@
         const ex = Number(t.querySelector('#ct-excl').value); if (ex) body.exclusiveHours = ex; }
       act('POST', `/v1/streets/${t.querySelector('#ct-target').value}/bounty`, body).then(() => renderPvp());
     };
+    { const dl = t.querySelector('#du-list');
+      if (dl) dl.onclick = () => act('POST', '/v1/duels/list', { limit: Number(t.querySelector('#du-limit').value) }).then(() => renderPvp());
+      const du = t.querySelector('#du-unlist');
+      if (du) du.onclick = () => act('POST', '/v1/duels/list', { limit: null }).then(() => renderPvp());
+      t.querySelectorAll('[data-duel]').forEach((b) => b.onclick = () =>
+        act('POST', `/v1/duels/${b.dataset.duel}`, { amount: Number(t.querySelector(`[data-duamt="${b.dataset.duel}"]`).value) }).then(() => renderPvp())); }
     t.querySelectorAll('[data-dm]').forEach((b) => b.onclick = () => {
       $('#phone').classList.remove('hidden'); openPhoneThread(b.dataset.dm);
     });
@@ -3974,6 +4009,7 @@
       vendetta_settled: () => `a vendetta was settled in blood`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
+      duel_result: () => `⚔ ${d.by} ${d.win ? 'lost to you' : 'beat you'} in a ranked duel — your elo is ${d.elo} (${d.delta > 0 ? '+' + d.delta : d.delta})`,
       megaproject_milestone: () => `🏗 ${d.monument} is ${d.pct}% raised — the scaffolding climbs`,
       megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,
       megaproject_architect: () => `🏛 you are THE ARCHITECT of ${d.monument} — your name leads the plaque forever`,

@@ -45,6 +45,7 @@ import * as Emission from './emission.js';
 import * as Rwa from './rwa.js';
 import * as Phone from './phone.js';
 import * as Mega from './megaproject.js';
+import * as Duels from './duels.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -1621,6 +1622,7 @@ export async function buildServer() {
     'POST /v1/boxing/exhibition': ['fights', 'put a fighter in the ring'],
     'POST /v1/boxing/fight/:opponentId': ['fights', 'staked a fighter in a bout'],
     'POST /v1/boxing/recruit': ['fights', 'signed a contender'],
+    'POST /v1/duels/:targetId': ['fights', 'fought a ranked duel'],
     'POST /v1/market': ['market', 'posted a Black Market listing'],
     'POST /v1/market/order': ['market', 'posted a buy order'],
     'POST /v1/auction/:lotId/bid': ['flex', 'bid on the Auction Block'],
@@ -2165,6 +2167,16 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveGoods(ch, req.body?.goodId, req.body?.qty, client, h)));
   app.post('/v1/megaproject/omr', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveOmr(ch, req.body?.amount, client, h)));
+
+  // ── THE DUELING LADDER (slate #5) — ranked ELO PvP on the audited casino:pvp transfer ──
+  app.get('/v1/duels', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch) => Duels.duelBoard(pool, ch)));
+  app.post('/v1/duels/list', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Duels.listDuel(ch, req.body?.limit, client)));
+  app.post('/v1/duels/:targetId', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId,
+      (ch, opponent, client, h) => Duels.challenge(ch, opponent, req.body?.amount, client, h)));
+  app.get('/v1/leaderboard/duels', { preHandler: auth }, async () => Duels.duelLeaderboard(pool));
   // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));

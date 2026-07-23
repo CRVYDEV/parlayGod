@@ -2634,3 +2634,22 @@ export const MEGAPROJECT = {
 };
 export const megaMonumentAt = (seq) => MEGAPROJECT.MONUMENTS[seq] || null;
 export const megaTierOf = (rank) => (MEGAPROJECT.TIERS.find((t) => rank <= t.rank) || MEGAPROJECT.TIERS.at(-1)).title;
+
+// ═══ THE DUELING LADDER (slate #5 — ranked ELO). ALL numbers are founder sign-off levers.
+// The money is the audited casino:pvp taxed transfer (zero new emission); the rating is pure
+// status, seasonal (reset to ELO_START at rollover), Sybil-damped by the per-pair daily K decay. ═══
+export const DUELS = {
+  ELO_START: 1000, ELO_K: 32, ELO_FLOOR: 100,
+  VARIANCE: 40,            // the roll on top of the eff-stat sum (build decides, dice flavor)
+  MIN_LVL: 5,              // both parties — the rating floor (anti-alt)
+  LEGEND_MIN_LVL: 10,      // lifetime duel_wins credit needs a real opponent (the WHEEL floor)
+  STAKE_MIN: 1000, RAKE_BPS: 500,
+  RANKS: [
+    { elo: 0,    title: 'Street Fighter' },
+    { elo: 1050, title: 'Contender' },
+    { elo: 1150, title: 'Enforcer' },
+    { elo: 1300, title: 'Duelist' },
+    { elo: 1450, title: 'Il Campione' },
+  ],
+};
+export const duelRankOf = (elo) => [...DUELS.RANKS].reverse().find((r) => Number(elo) >= r.elo) || DUELS.RANKS[0];

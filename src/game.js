@@ -643,6 +643,8 @@ export function view(ch, acct = {}, owned = {}) {
     guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
     fadeLimit: ch.fade_limit != null ? Math.floor(Number(ch.fade_limit)) : null,
     pokerLimit: ch.poker_limit != null ? Math.floor(Number(ch.poker_limit)) : null,
+    duelElo: Number(ch.duel_elo || 1000),
+    duelLimit: ch.duel_limit != null ? Math.floor(Number(ch.duel_limit)) : null,
     vendettas: (owned.vendettas || []).map((v) => ({ target: v.target_name || null, targetId: v.target_id || null,
       sworn: v.sworn, expiresSeconds: Math.max(0, Math.ceil((new Date(v.expires_at) - Date.now()) / 1000)) })),
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
