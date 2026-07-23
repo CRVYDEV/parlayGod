@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
 <meta charset="utf-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%8E%A9%3C/text%3E%3C/svg%3E">
 <title>OMERTÀ — the city</title>
@@ -572,13 +573,13 @@
     ja: { name: '日本語', t_start: 'ここから始める', t_streets: 'ストリート', t_garage: 'ガレージ', t_life: '人生', t_city: '街', t_kitchen: 'キッチン', t_empire: '帝国', t_scores: '大仕事', t_market: '闇市場', t_port: '港', t_den: 'カジノ', t_speakeasy: 'もぐり酒場', t_boxing: 'ボクシング', t_races: 'ストリートレース', t_stable: '厩舎', t_pvp: '汚れ仕事', t_loans: '闇金', t_law: '警察', t_pen: 'ムショ', t_wire: '盗聴', t_family: 'ファミリー', t_portfolio: '堅気になる', t_estate: '屋敷', t_store: 'ストア', t_deck: 'その他すべて', g_streets: '街', g_earners: 'シノギ', g_vice: '遊び', g_blood: '血', g_family: '一家', g_legit: '堅気', k_bank: '銀行', k_respect: '評判', k_energy: 'スタミナ', k_nerve: '度胸', k_health: '体力', k_heat: '警察の注目', k_stats: '腕力 / 悪知恵 / 速さ', k_gun: '銃', k_ammo: '弾薬 / 箱', k_cars: '車', k_liquid: '流動', k_staked: 'ステーク中', k_intransit: '送金中', b_heal: '治療', b_checkin: 'チェックイン', b_refresh: '更新', b_takeme: '連れて行け →', b_send: '送信', b_burn: '書類を燃やす', b_wholecity: '+ 街のすべて…', w_sheet: '身上書', w_lastword: '結果', w_panel: 'ストリート', w_feed: 'ライブ', w_city: '街のチャット', w_family: 'ファミリー', w_sayit: '街に言え…', w_famonly: '一家のみ — 仕事の話を…', w_incity: '人が街に', e_ghost: '幽霊として入る', e_bones: '名を上げろ →' },
     ko: { name: '한국어', t_start: '여기서 시작', t_streets: '거리', t_garage: '차고', t_life: '인생', t_city: '도시', t_kitchen: '주방', t_empire: '제국', t_scores: '큰 건수', t_market: '암시장', t_port: '항구', t_den: '카지노', t_speakeasy: '밀주점', t_boxing: '복싱', t_races: '거리 레이싱', t_stable: '마구간', t_pvp: '피의 일', t_loans: '사채업자', t_law: '법', t_pen: '감옥', t_wire: '도청', t_family: '패밀리', t_portfolio: '합법으로', t_estate: '저택', t_store: '상점', t_deck: '그 외 전부', g_streets: '거리', g_earners: '사업', g_vice: '유흥', g_blood: '피', g_family: '패밀리', g_legit: '합법', k_bank: '은행', k_respect: '명성', k_energy: '기력', k_nerve: '배짱', k_health: '체력', k_heat: '경찰의 주목', k_stats: '근육 / 꾀 / 속도', k_gun: '총', k_ammo: '탄약 / 상자', k_cars: '차량', k_liquid: '유동', k_staked: '스테이킹 중', k_intransit: '이체 중', b_heal: '치료', b_checkin: '출석', b_refresh: '새로고침', b_takeme: '데려다줘 →', b_send: '보내기', b_burn: '서류 태우기', b_wholecity: '+ 도시 전체…', w_sheet: '신상 기록', w_lastword: '결과', w_panel: '거리', w_feed: '라이브', w_city: '도시 채팅', w_family: '패밀리', w_sayit: '도시에 말해…', w_famonly: '패밀리 전용 — 사업 얘기…', w_incity: '접속 중', e_ghost: '유령으로 입장', e_bones: '이름을 떨쳐라 →' },
   };
+  // ENGLISH BY DEFAULT — no locale auto-detect (user feedback: the auto-switched chrome + the
+  // lang= stamp invited Chrome's Google Translate to machine-translate the English game prose,
+  // which mangles the noir jargon and breaks the live-updating DOM). A language is applied ONLY
+  // when the player explicitly picks one from the 🌐 menu; the choice is remembered.
   const LANG = (() => {
     const saved = localStorage.getItem('omerta_lang');
-    if (saved && I18N[saved]) return saved;
-    const nav = (navigator.language || 'en').toLowerCase();
-    if (nav.startsWith('fil')) return 'tl';
-    const two = nav.slice(0, 2);
-    return I18N[two] ? two : 'en';
+    return (saved && I18N[saved]) ? saved : 'en';
   })();
   const T = (k) => (I18N[LANG] && I18N[LANG][k]) || I18N.en[k] || k;
   if (I18N[LANG]?.rtl) document.documentElement.dir = 'rtl';
