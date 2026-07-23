@@ -7,8 +7,8 @@
 // to the floor) pays a one-time bonus + a streets event, then it rebuilds. The ONLY emission surface
 // in this pillar — numbers are founder SIM sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
-import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf } from './rules.js';
+import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
+import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const enragedNow = (enragedUntil, now = new Date()) => enragedUntil && new Date(enragedUntil) > now;
@@ -241,7 +241,11 @@ export async function raidNpc(ch, npcId, client, h) {
   ch.world_raid_at = new Date(now.getTime() + WORLD.RAID_CD_MS);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -WORLD.RAID_AMMO, reason: 'world:raid' });
 
-  const power = raiderPower(ch, h);
+  // SOLDIERS: a GUNNER second adds firepower (a modifier on the reservoir-BOUNDED faucet — sim +
+  // sign-off, the co-op-raid precedent); a repel is the risky outcome for whoever rides along
+  const second = await assignedSoldier(client, ch.id);
+  const power = raiderPower(ch, h)
+    + (second?.trait === 'gunner' ? soldierFxOf(second) : 0);
   // WORLD_RAID_P is a TEST-ONLY knob (the LAW_BUST_P / GEAR_LOOT_CHANCE precedent) that pins the raid
   // outcome so loot/rout/repel are deterministic in tests — never set in production.
   const p = process.env.WORLD_RAID_P != null ? Number(process.env.WORLD_RAID_P) : raidChance(fixture, power, patrol, enraged, rising);
@@ -253,7 +257,8 @@ export async function raidNpc(ch, npcId, client, h) {
     ch.hosp_until = new Date(now.getTime() + WORLD.FAIL_HOSP_MS);
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3 WHERE npc_id=$1', [fixture.id, strength, now]);
     await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: false });
-    return { ok: true, success: false, npc: fixture.id, enraged, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000) };
+    const soldier = second ? await soldierResult(client, h, ch, second, { success: false, cause: `repelled by ${fixture.name}` }) : null;
+    return { ok: true, success: false, npc: fixture.id, enraged, hospSeconds: Math.round(WORLD.FAIL_HOSP_MS / 1000), soldier };
   }
 
   // landed — loot a bounded slice of the reservoir (GRAB_BPS, capped), draining it by exactly the loot
@@ -293,7 +298,8 @@ export async function raidNpc(ch, npcId, client, h) {
     await client.query('UPDATE world_npcs SET strength=$2, strength_at=$3, enraged_until=$4 WHERE npc_id=$1', [fixture.id, after, now, newEnraged]);
   }
   await h.track(client, ch.account_id, 'world_raid', { npc: fixture.id, success: true, loot, routed });
-  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100) };
+  const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
+  return { ok: true, success: true, npc: fixture.id, loot, routed, routBonus, enraged, frontier: routed && !!h.owned.gangId, strengthPct: Math.round(Math.max(0, after) / fixture.max * 100), soldier };
 }
 
 // ── STEP THREE — CO-OP CREW RAIDS on the apex outfits (the crew-heist machinery) ──

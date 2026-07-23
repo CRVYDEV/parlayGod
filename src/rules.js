@@ -2500,3 +2500,47 @@ export const bloodlineEpithet = (g) => {
   if (Number(g.level) <= 3) return 'the Brief'
   return null
 }
+
+// ═══ MARRIAGES & SOLDIERS (founder picks #2+#3 — omerta-marriage-soldiers-design.md). Every
+// number is a founder sign-off lever. ═══
+// Drop A — DYNASTIC MARRIAGE (CK3): account×account ties on the Bloodline. Ceremony fees are
+// character_id'd `dynasty:` cash SINKS; the scandal/divorce honor deltas are status.
+export const MARRIAGE = {
+  PROPOSE_COST: 25000,        // the proposer's half of the ceremony (paid at propose, non-refundable)
+  ACCEPT_COST: 25000,         // the acceptor's half (paid at accept — completes the wedding)
+  CONSIGLIERE_COST: 10000,    // naming an adviser (the envoy fee, paid at propose)
+  SCANDAL: -30,               // killing your in-law — the honor hit; the marriage dissolves on the spot
+  DIVORCE: -10,               // walking out on your vows — the initiator's honor hit
+}
+// Drop B — NAMED SOLDIERS (XCOM): recruit named muscle with ONE trait; they assist jobs, take a
+// cut, get injured, and DIE for good. Traits are single-touchpoint modifiers (the skills/decree
+// precedent); the gunner world-raid bump is the one emission-adjacent lever (reservoir-bounded).
+export const SOLDIERS = {
+  MAX: 3,                     // roster cap
+  HIRE_COST: 25000,           // `soldier:hire` cash sink
+  CUT_BPS: 500,               // the soldier's 5% cut of assisted crime gross (pre-ledger shave — faucet shrinks)
+  INJURY_MS: 4 * 3600e3,      // a hurt soldier sits out 4h
+  DEATH_P: 0.12,              // death roll on a risky failure (SOLDIER_DEATH_P env is TEST-ONLY)
+  XP_PER_JOB: 1, LVL_XP: 10, LVL_CAP: 10,
+  SCALE_PER_LVL: 0.10,        // trait strength grows +10%/level above 1 (capped at LVL_CAP)
+  TRAITS: {                   // one rolled at hire (uniform), each fires at EXACTLY one site
+    wheelman:   { name: 'Wheelman',    fx: 0.15, desc: 'busted crime stints run 15% shorter' },
+    safecracker:{ name: 'Safecracker', fx: 0.15, desc: 'The Score lines up 15% sooner' },
+    gunner:     { name: 'Gunner',      fx: 20,   desc: '+20 power on cartel raids' },
+    lucky:      { name: 'Lucky',       fx: 0.5,  desc: 'half as likely to die when a job goes wrong' },
+    lookout:    { name: 'Lookout',     fx: 0.5,  desc: 'half as likely to get hurt when a job goes wrong' },
+  },
+  FIRST: ['Sal', 'Vinny', 'Rocco', 'Lefty', 'Knuckles', 'Ade', 'Paulie', 'Frankie', 'Mo', 'Curly',
+          'Big Tony', 'Little Tony', 'Jimmy', 'Sticks', 'Doc', 'Ice', 'Roxie', 'Vera', 'Dot', 'Mabel'],
+  LAST: ['the Hammer', 'Two-Fingers', 'from Canal', 'the Quiet', 'No-Neck', 'the Saint', 'Deuce',
+         'the Ghost', 'from the Docks', 'Butterbean', 'the Wrench', 'Half-Pint', 'the Undertow'],
+}
+export const soldierLevelOf = (xp) => Math.min(SOLDIERS.LVL_CAP, 1 + Math.floor(Number(xp || 0) / SOLDIERS.LVL_XP))
+// trait strength at a level — linear growth, capped; multiplicative fx (wheelman/safecracker/lucky/
+// lookout) scale the REDUCTION, additive fx (gunner) scale the bonus
+export const soldierFxOf = (s) => {
+  const t = SOLDIERS.TRAITS[s.trait]; if (!t) return 0
+  return t.fx * (1 + SOLDIERS.SCALE_PER_LVL * (soldierLevelOf(s.xp) - 1))
+}
+export const rollSoldierName = () =>
+  `${SOLDIERS.FIRST[Math.floor(Math.random() * SOLDIERS.FIRST.length)]} ${SOLDIERS.LAST[Math.floor(Math.random() * SOLDIERS.LAST.length)]}`

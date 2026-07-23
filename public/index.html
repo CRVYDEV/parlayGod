@@ -1746,6 +1746,7 @@
     const prices = (await api('GET', '/v1/market/prices')).body || {};
     const spot = prices.goods?.[me?.loc] || {};
     const daily = (await api('GET', '/v1/daily')).body || {};
+    const sq = (await api('GET', '/v1/soldiers')).body || {};
     const crimes = (rules?.crimes || []).map((c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
@@ -1799,7 +1800,24 @@
       <span class="d" style="color:var(--dim);font-size:12.5px"> deposits ride in transit (lootable) before they clear</span>
       <h2 style="margin-top:14px">Trade Goods <span class="d" style="color:var(--dim);font-size:12.5px">— buy low here, haul it, sell high (feeds the Black Market &amp; convoys)</span></h2>
       <div class="grid">${goodsCards}</div>
+      <h2 style="margin-top:14px">Your Second <span class="d" style="color:var(--dim);font-size:12.5px">— named muscle who rides along on jobs, takes ${(sq.cutBps || 500) / 100}% of the take… and can DIE for good</span></h2>
+      <div class="grid">
+        ${(sq.roster || []).map((s) => `
+        <div class="card"><span class="t">${s.name}</span> <span class="chip ${s.onJob ? 'good' : ''}">${s.injuredSeconds > 0 ? `laid up ${mins(s.injuredSeconds)}` : s.onJob ? 'ON THE JOB' : 'benched'}</span>
+          <div class="d">${s.traitName} — ${s.desc} · lvl ${s.level} (${s.xp} xp)</div>
+          ${s.onJob ? '<button class="act" data-do="POST /v1/soldiers/unassign">bench him</button>'
+            : s.injuredSeconds > 0 ? '' : `<button class="act" data-soldassign="${s.id}">take him along</button>`}
+          <button class="act" data-solddismiss="${s.id}" style="font-size:11px;padding:2px 6px">cut him loose</button></div>`).join('')}
+        ${(sq.roster || []).length < (sq.max || 3) ? `<div class="card"><span class="t">Hire muscle</span>
+          <div class="d">$${fmt(sq.hireCost || 25000)} — a name, one talent, no guarantees they come home</div>
+          <button class="act" data-do="POST /v1/soldiers/hire">put the word out</button></div>` : ''}
+      </div>
+      ${(sq.memorial || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim)">⚰ The wall: ${sq.memorial.map((m) => `<b>${m.name}</b> (${m.trait}, lvl ${m.level}) — ${m.cause}`).join(' · ')}</div>` : ''}
       <h2 style="margin-top:14px">Travel</h2>${travel}`;
+    t.querySelectorAll('[data-soldassign]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/soldiers/${b.dataset.soldassign}/assign`, {}).then(() => renderStreets()));
+    t.querySelectorAll('[data-solddismiss]').forEach((b) => b.onclick = () =>
+      act('DELETE', `/v1/soldiers/${b.dataset.solddismiss}`, {}).then(() => renderStreets()));
     t.querySelector('#bank-dep').onclick = () => act('POST', '/v1/bank/deposit', { amount: Number(t.querySelector('#bank-amt').value) });
     t.querySelector('#bank-wd').onclick = () => act('POST', '/v1/bank/withdraw', { amount: Number(t.querySelector('#bank-amt').value) });
     const gq = (id) => Number(t.querySelector(`[data-gd="${id}"]`)?.value) || 0;
@@ -3305,6 +3323,7 @@
     const uw = (await api('GET', '/v1/underworld')).body || {};
     const cam = (await api('GET', '/v1/campaigns')).body || {};
     const bl = (await api('GET', '/v1/bloodline')).body || {};
+    const dyn = (await api('GET', '/v1/dynasty')).body || {};
     const hon = me.honor || { value: 0, tier: 'Unproven' };
     const honClass = hon.value >= 60 ? 'good' : hon.value <= -60 ? 'bad' : '';
     const branches = {};
@@ -3371,6 +3390,24 @@
           : '<div class="d" style="color:var(--dim)">No ancestors yet — your line begins with you. When this street dies, the next one inherits a quarter of your name and reads your story here.</div>'}
       </div>
 
+      <h2 style="margin-top:12px">The Alliance <span class="d" style="font-size:11px">(marriages tie two dynasties for good — the heirs stay in-laws; killing your in-law is a SCANDAL)</span></h2>
+      <div class="card">
+        ${dyn.marriage ? `<div>💍 wed to <b>${dyn.marriage.dynasty || `the house of ${dyn.marriage.steward || '?'}`}</b>${dyn.marriage.steward ? ` <span class="d" style="color:var(--dim)">(steward: ${dyn.marriage.steward})</span>` : ''}
+            <button class="act" data-do="POST /v1/dynasty/divorce" style="border-color:var(--blood);margin-left:6px">divorce (honor ${rules?.marriage?.divorce ?? -10})</button></div>`
+          : `${(dyn.proposals || []).map((p) => p.mine
+              ? `<div class="d">💍 your proposal sits with <b>${p.steward || p.dynasty || '?'}</b> <button class="act" data-do="POST /v1/dynasty/divorce" style="font-size:11px;padding:2px 6px">withdraw</button></div>`
+              : `<div class="d">💍 <b>${p.steward || p.dynasty || '?'}</b> proposes an alliance <button class="act" data-dynaccept="${p.accountId}">accept ($${fmt(rules?.marriage?.acceptCost || 25000)})</button></div>`).join('')}
+            <div style="margin-top:4px"><select id="dyn-target"></select> <button class="act" id="dyn-propose">propose marriage ($${fmt(rules?.marriage?.proposeCost || 25000)})</button></div>`}
+        <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">
+          ${dyn.consigliere ? `<div class="d">🎩 consigliere: <b>${dyn.consigliere.steward || '?'}</b>${dyn.consigliere.accepted ? '' : ' <span class="chip">awaiting answer</span>'}
+              <button class="act" data-do="DELETE /v1/dynasty/consigliere" style="font-size:11px;padding:2px 6px">dismiss</button></div>`
+            : `<div class="d"><select id="cons-target"></select> <button class="act" id="cons-name">name a consigliere ($${fmt(rules?.marriage?.consigliereCost || 10000)})</button></div>`}
+          ${(dyn.consigliereOffers || []).map((o) => `<div class="d">🎩 <b>${o.steward || '?'}</b> asks for your counsel <button class="act" data-consaccept="${o.accountId}">take the chair</button></div>`).join('')}
+          ${(dyn.advising || []).length ? `<div class="d" style="color:var(--dim)">you counsel: ${dyn.advising.map((x) => x.dynasty || `the house of ${x.steward || '?'}`).join(' · ')}
+            <button class="act" data-do="DELETE /v1/dynasty/consigliere" style="font-size:11px;padding:2px 6px">walk away</button></div>` : ''}
+        </div>
+      </div>
+
       <h2 style="margin-top:12px">Vanity <span class="d" style="font-size:11px">(pure cosmetics — a $OMR flex · on hand: ${fmt(Math.floor(me.omr || 0))} $OMR)</span></h2>
       <div class="card">
         <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (5 $OMR)</button></div>
@@ -3389,6 +3426,19 @@
     for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
       t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
         act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));
+    // the Alliance (marriage + consigliere) — populate the pickers from the streets roster
+    {
+      const fillPicker = async (sel) => { if (!sel) return;
+        const streets = (await api('GET', '/v1/streets')).body?.streets || [];
+        sel.innerHTML = streets.filter((x) => x.id !== me.id).map((x) => `<option value="${x.id}">${x.name} (lvl ${x.level})</option>`).join(''); };
+      fillPicker($('#dyn-target')); fillPicker($('#cons-target'));
+      const dp = $('#dyn-propose'); if (dp) dp.onclick = () => { const v = $('#dyn-target')?.value; if (v) act('POST', `/v1/dynasty/propose/${v}`, {}).then(() => renderLife()); };
+      const cn = $('#cons-name'); if (cn) cn.onclick = () => { const v = $('#cons-target')?.value; if (v) act('POST', `/v1/dynasty/consigliere/${v}`, {}).then(() => renderLife()); };
+      t.querySelectorAll('[data-dynaccept]').forEach((btn) => btn.onclick = () =>
+        act('POST', `/v1/dynasty/accept/${btn.dataset.dynaccept}`, {}).then(() => renderLife()));
+      t.querySelectorAll('[data-consaccept]').forEach((btn) => btn.onclick = () =>
+        act('POST', `/v1/dynasty/consigliere/accept/${btn.dataset.consaccept}`, {}).then(() => renderLife()));
+    }
     t.querySelectorAll('[data-camstart]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/campaigns/${btn.dataset.camstart}/start`, {}).then(() => renderLife()));
     t.querySelectorAll('[data-camchoose]').forEach((btn) => btn.onclick = () =>

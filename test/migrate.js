@@ -79,6 +79,7 @@ const DISPOSITION = {
   npc_favors: 'wiped', npc_gain: 'wiped', npc_grudges: 'wiped', npc_leads: 'wiped', npc_standing: 'wiped',
   wage_snapshots: 'wiped', // the Street Wage baseline dies with the street — the heir enrolls fresh (no inherited gain window)
   campaign_progress: 'wiped', // FIVE PILLARS #4: a fresh street walks the stories again (the roguelike spine)
+  soldiers: 'wiped', // XCOM soldiers die with the street — a fresh street hires fresh muscle (memorial included)
   numbers_tickets: 'wiped', pen_break_members: 'wiped', pen_contraband: 'wiped', port_intercepts: 'wiped',
   racers: 'wiped', stash: 'wiped', track_bets: 'wiped', world_raid_members: 'wiped',
   fighters: 'special', gang_members: 'special', speakeasy_patrons: 'special',

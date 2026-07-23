@@ -7,7 +7,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf } from './rules.js';
+         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
+         SOLDIERS, soldierFxOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 import { speakeasyOwnedOf } from './speakeasy.js';
@@ -310,6 +311,42 @@ async function advanceCampaignsInline(client, ch, action) {
         [ch.id, p.campaign_id, done]);
     }
   }
+}
+
+// ═══ SOLDIERS (XCOM) — the assist touchpoints. Live here (not soldiers.js) to keep the import
+// graph acyclic (the advanceCampaignsInline pattern): soldiers.js imports game.js one-way; the
+// three assist sites (doCrime below, growth.js heist, world.js raidNpc) read these exports. ═══
+// the actor's assigned, FIT second (alive, on the job, not laid up) — a point-in-time read under
+// the caller's held char lock (soldier rows belong to the actor, so no extra locking)
+export async function assignedSoldier(client, chId) {
+  return (await client.query(
+    `SELECT * FROM soldiers WHERE character_id=$1 AND alive AND on_job
+       AND (injured_until IS NULL OR injured_until <= now()) LIMIT 1`, [chId])).rows[0] || null;
+}
+// resolve an assisted job. Success: +xp (the soldier learns). Risky failure: the soldier is
+// INJURED (lookout's roll can dodge it) and rolls DEATH (lucky halves it) — dead is DEAD, the
+// row stays as the memorial. Absolute writes (the pg-mem INT discipline); rng-audited.
+export async function soldierResult(client, h, ch, s, { success, cause = 'a job gone wrong' }) {
+  if (!s) return null;
+  if (success) {
+    await client.query('UPDATE soldiers SET xp=$2 WHERE id=$1', [s.id, Number(s.xp) + SOLDIERS.XP_PER_JOB]);
+    return { name: s.name, xp: SOLDIERS.XP_PER_JOB };
+  }
+  const roll = Math.random();
+  const deathP = (process.env.SOLDIER_DEATH_P != null ? Number(process.env.SOLDIER_DEATH_P) : SOLDIERS.DEATH_P)
+    * (s.trait === 'lucky' ? Math.max(0, 1 - soldierFxOf(s)) : 1);
+  if (roll < deathP) {
+    await client.query(`UPDATE soldiers SET alive=false, on_job=false, died_at=now(), cause=$2 WHERE id=$1`, [s.id, cause]);
+    await h.rngLog(client, ch.id, 'soldier:risk', roll, `${s.name} KILLED — ${cause} (P ${deathP.toFixed(3)})`);
+    await notify(client, ch.id, 'soldier_down', { name: s.name, cause });
+    return { name: s.name, died: true, cause };
+  }
+  const injuryP = s.trait === 'lookout' ? Math.max(0, 1 - soldierFxOf(s)) : 1;
+  const injured = Math.random() < injuryP;
+  if (injured) await client.query(
+    'UPDATE soldiers SET injured_until=$2 WHERE id=$1', [s.id, new Date(Date.now() + SOLDIERS.INJURY_MS)]);
+  await h.rngLog(client, ch.id, 'soldier:risk', roll, `${s.name} ${injured ? 'hurt' : 'walked away clean'} — ${cause}`);
+  return { name: s.name, injured };
 }
 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).
@@ -688,11 +725,17 @@ export function doCrime(ch, crimeId, client, h) {
     + gangLevel * 0.02 + (held.includes('brick') ? 0.02 : 0) + (rIdx >= 9 ? 0.02 : 0));
   const roll = Math.random();
   return (async () => {
+    // SOLDIERS: the assigned, fit second rides along (assists + takes a cut + carries the risk)
+    const second = await assignedSoldier(client, ch.id);
     if (roll < chance) {
       let take = Math.floor((c.cash[0] + Math.random() * (c.cash[1] - c.cash[0]))
         * (held.includes('canal') ? 1.1 : 1)                       // Canal Row turf +10%
         * (rIdx >= 1 ? 1.05 : 1) * (rIdx >= 8 ? 1.10 : 1)
         * roleMultOf(h.owned?.gangRole) * (ev.jobPay || 1));
+      // the second's cut comes OFF THE TOP before the books — the crime faucet only SHRINKS
+      // (ledgered amount == credited amount; strictly §10.4-safe, no new reason)
+      let soldierCut = 0;
+      if (second) { soldierCut = Math.floor(take * SOLDIERS.CUT_BPS / 10000); take -= soldierCut; }
       const rep = Math.round(c.respect * (ev.crimeRep || 1));
       ch.cash = Number(ch.cash) + take; ch.respect = Number(ch.respect) + rep; ch.lc_crime += 1;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: `crime:${c.id}` });
@@ -719,15 +762,21 @@ export function doCrime(ch, crimeId, client, h) {
       await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: true });
       await h.bumpDaily(client, ch.id, 'crime');
       await bumpFamilyTask(client, h, 'crime', 1);
-      return { ok: true, success: true, take, rep, crates, makingsDrop };
+      const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
+      return { ok: true, success: true, take, rep, crates, makingsDrop,
+        soldier: soldier ? { ...soldier, cut: soldierCut } : null };
     }
-    // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever
+    // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever.
+    // A WHEELMAN soldier stacks the same way (a second behind the wheel — SOLDIERS sign-off lever).
     const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1)
-      * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT));
+      * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT)
+      * (second?.trait === 'wheelman' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
     await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'fail');
     await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: false });
-    return { ok: true, success: false, jailSeconds: jailS };
+    // the bust is the RISKY outcome — the second can get hurt, or worse
+    const soldier = second ? await soldierResult(client, h, ch, second, { success: false, cause: 'busted on a job' }) : null;
+    return { ok: true, success: false, jailSeconds: jailS, soldier };
   })();
 }
 

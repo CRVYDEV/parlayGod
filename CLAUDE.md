@@ -4180,3 +4180,43 @@ sweep-vs-dissolution, the campaign advance, `recordDeath` idempotency, and estat
 (campaign_progress wiped + in the DISPOSITION map, bloodline survives, dissolution cleans diplomacy+sov).
 Flagged (ground rule #1, Sybil posture): the honor-repay laylow farm + the dominant-alt coalition farm.
 Suite 36/36 + sim drift-0.
+
+**MARRIAGES & SOLDIERS (founder picks #2+#3) — BUILT** (`omerta-marriage-soldiers-design.md`;
+`src/dynasty.js`, `src/soldiers.js`, assist helpers in `game.js`; `test/dynasty.js` — the 35th suite).
+**Drop A — DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3):** account×account ties on the Bloodline
+(the vendetta-pair pattern — SURVIVE DEATH, the heirs stay in-laws), monogamous, never self.
+Flow: `POST /v1/dynasty/propose/:characterId` (targets a LIVING street; proposer pays
+`MARRIAGE.PROPOSE_COST` $25k at propose, non-refundable) → `POST /v1/dynasty/accept/:accountId`
+(acceptor pays $25k) — both halves character_id'd `dynasty:ceremony` cash SINKS. **The wedding
+buries the feud** (vendettas + peace offers both ways clear — the acceptPeace machinery). Grants
+STATUS + the deterrent, never immunity: **THE SCANDAL** — a direct player kill on your in-law
+(`checkScandal` in runEstate wherever `killerCh` exists: fire/shank/npcHit payer; never mod/NPC
+kills) dissolves the marriage on the spot + brands the killer `MARRIAGE.SCANDAL` (−30 honor) +
+tells the streets. Divorce: either side walks (`POST /v1/dynasty/divorce`), the initiator eats
+`DIVORCE` (−10); withdrawing a pending offer is free. Mad Dog can't propose OR accept. **The
+Consigliere** — each dynasty names ONE adviser (another account, `dynasty:consigliere` $10k sink
+at propose; the named party accepts; either side ends it free) — pure status both ways (the
+appointer's hall shows their adviser; the adviser's hall shows every house they counsel).
+`GET /v1/dynasty` is the board; console: "The Alliance" card on the Life tab (Bloodline section).
+Schema: `dynasty_marriages` (sorted account pair PK), `consiglieri` (dynasty_account PK).
+**Drop B — NAMED SOLDIERS with PERMADEATH (XCOM):** recruited muscle with a rolled noir NAME +
+ONE trait (`SOLDIERS.TRAITS` — wheelman/safecracker/gunner/lucky/lookout; rng-audited at hire).
+`POST /v1/soldiers/hire` (`soldier:hire` $25k cash sink, roster cap `MAX` 3); ONE assigned
+"second" (`/:id/assign`, injured sits out) assists three loops via `assignedSoldier`/
+`soldierResult` in game.js (the advanceCampaignsInline one-way-import pattern): **§7.2 crime**
+(wheelman cuts busted stints; success = +1 xp AND the soldier takes `CUT_BPS` 5% of the gross —
+shaved BEFORE the ledger row, so the crime faucet strictly SHRINKS, zero new reason), **The Score**
+(safecracker shortens the cooldown — pacing, never the pot), **world raids** (gunner +power on the
+reservoir-BOUNDED faucet — sim flag). A busted crime / repelled raid is the RISKY outcome: the
+soldier is INJURED (`INJURY_MS` 4h; lookout halves the chance) and rolls `DEATH_P` (0.12;
+`SOLDIER_DEATH_P` TEST-ONLY env; lucky halves it) — dead is DEAD, the row stays on **the memorial**
+(`GET /v1/soldiers`). Levels: xp/job, trait strength scales `SCALE_PER_LVL` +10%/level (cap 10) —
+a veteran is genuinely better and genuinely painful to lose. Soldiers DIE WITH THE STREET
+(estate-wiped + migrate DISPOSITION). §10.4: `dynasty:`/`soldier:` joined the cash vocabulary
+(all sinks character_id'd — check (a) reconciles; the cut is a pre-ledger shave). Console: "Your
+Second" card on Streets (roster/hire/assign/memorial). `test/dynasty.js` proves the marriage flow
+(fees ledgered + gates + the buried feud + monogamy), the scandal (via a looped NPC hit — dissolve
++ brand), divorce honor + the Mad Dog lockout, the consigliere both ways, soldiers (hire sink +
+cap + assign + the crime cut/xp + pinned permadeath + the memorial + death-with-the-street), and
+§10.4 (vocabulary closed, sinks delta-0). ALL numbers (`MARRIAGE.*`, `SOLDIERS.*`) are founder
+sign-off levers; the gunner raid bump is the one emission-adjacent lever (sim before production).

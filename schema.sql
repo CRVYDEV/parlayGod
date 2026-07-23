@@ -1726,3 +1726,41 @@ CREATE TABLE IF NOT EXISTS bloodline (
 CREATE INDEX IF NOT EXISTS ix_relations_b ON gang_relations (gang_b);
 CREATE INDEX IF NOT EXISTS ix_coalition_target ON coalitions (target_gang);
 CREATE INDEX IF NOT EXISTS ix_sov_gang ON sov_structures (gang_id);
+
+-- ═══ MARRIAGES & SOLDIERS (founder picks #2+#3) ═══
+-- DYNASTIC MARRIAGE — account×account (the vendetta pair pattern), SURVIVES DEATH (the heirs stay
+-- in-laws). Monogamous: at most one accepted row per account (enforced in code under the char lock).
+CREATE TABLE IF NOT EXISTS dynasty_marriages (
+  account_a TEXT NOT NULL,                        -- sorted pair (a < b)
+  account_b TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  accepted BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_a, account_b)
+);
+-- THE CONSIGLIERE — each dynasty names ONE adviser (another account); pure status both ways.
+CREATE TABLE IF NOT EXISTS consiglieri (
+  dynasty_account TEXT PRIMARY KEY,               -- the house doing the naming
+  adviser_account TEXT NOT NULL,
+  accepted BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_consiglieri_adviser ON consiglieri (adviser_account);
+
+-- NAMED SOLDIERS (XCOM) — recruited muscle with one trait; assist jobs, take a cut, get injured,
+-- DIE for good (alive=false rows stay as the memorial). Death disposition: WIPED (they die with
+-- the street — a fresh street hires fresh muscle).
+CREATE TABLE IF NOT EXISTS soldiers (
+  id TEXT PRIMARY KEY,                            -- crypto.randomUUID() in code (the loans/convoys convention)
+  character_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  trait TEXT NOT NULL,
+  xp INT NOT NULL DEFAULT 0,
+  injured_until TIMESTAMPTZ,
+  on_job BOOLEAN NOT NULL DEFAULT false,          -- the assigned "second" (at most one per street)
+  alive BOOLEAN NOT NULL DEFAULT true,
+  died_at TIMESTAMPTZ,
+  cause TEXT,
+  hired_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_soldiers_char ON soldiers (character_id);
