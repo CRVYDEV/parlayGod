@@ -44,6 +44,7 @@ import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
 import * as Rwa from './rwa.js';
 import * as Phone from './phone.js';
+import * as Mega from './megaproject.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -60,7 +61,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
@@ -720,6 +721,9 @@ export async function buildServer() {
     vault: { claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
       note: 'the backed tier — claims allocate real treasury-held stock units; the paper book above is status' },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
+    megaproject: { monuments: MEGAPROJECT.MONUMENTS, minCash: MEGAPROJECT.MIN_CASH,
+      minOmr: MEGAPROJECT.MIN_OMR, omrRate: MEGAPROJECT.OMR_RATE,
+      note: 'the collective monument — every contribution is a burn; the plaque is forever' },
     speakeasy: { minLevel: SPEAKEASY.MIN_LEVEL, openCost: SPEAKEASY.OPEN_COST, nameOmr: SPEAKEASY.NAME_OMR,
       tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
       table: { minBet: SPEAKEASY.TABLE.MIN_BET, maxBet: SPEAKEASY.TABLE.MAX_BET, rakeBps: SPEAKEASY.TABLE.RAKE_BPS },
@@ -2141,8 +2145,26 @@ export async function buildServer() {
       forecast: cityForecast(day),
       // each district's current goods-shock (mean-neutral daily weather) — the arbitrage map
       weather: Object.fromEntries(DISTRICTS.map((d) => [d.id, Math.round(regionShockOf(d.id, Math.floor(block / 6)) * 1000) / 1000])),
+      // THE SKYLINE — every monument the city ever raised (permanent, public — the Megaproject).
+      // Cached 30s: /v1/city is a KEYLESS route and the skyline only changes on a completion.
+      skyline: await cachedSkyline(),
     };
   });
+  let skylineCache = { at: 0, v: [] };
+  const cachedSkyline = async () => {
+    if (Date.now() - skylineCache.at > 30_000)
+      skylineCache = { at: Date.now(), v: await Mega.skylineOf(pool) };
+    return skylineCache.v;
+  };
+  // ── THE MEGAPROJECT (founder pick #1) — the collective monument. Contributions are pure
+  // §10.4 SINKS (cash burn / $OMR burn / goods deleted); completion permanently changes the city. ──
+  app.get('/v1/megaproject', { preHandler: auth }, async (req) => Mega.megaBoard(pool, req.user.sub));
+  app.post('/v1/megaproject/cash', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveCash(ch, req.body?.amount, client, h)));
+  app.post('/v1/megaproject/goods', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveGoods(ch, req.body?.goodId, req.body?.qty, client, h)));
+  app.post('/v1/megaproject/omr', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveOmr(ch, req.body?.amount, client, h)));
   // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));

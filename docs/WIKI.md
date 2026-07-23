@@ -777,6 +777,18 @@ server (`omerta-mcp/`) shows the game as MCP tools, so any MCP-capable agent can
 
 ---
 
+## 30a. The Megaproject (the city builds a monument)
+
+The whole server pools value toward ONE announced monument (`GET /v1/megaproject`; the City tab).
+Contribute **cash** (`POST /v1/megaproject/cash`), **trade goods** from your trunk (credited at
+catalog base value), or **$OMR** (at a fixed $500 rate). Every contribution is a BURN — this buys
+glory, not power. Contributions clamp to what the wall still needs, and the whole city sees
+milestones at 25/50/75%. When it completes, the monument joins **the skyline** on the city board
+permanently, and the plaque records every contributor forever — tiered **The Architect** (top
+brick) → Foreman (top 3) → Patron (top 10) → Builder. The plaque is account-level: your dynasty
+keeps its glory through death. Monuments are raised in order (the Cathedral Restoration → the
+Grand Casino → the Founder's Bridge → the Colossus of the Docks).
+
 ## 30b. The Cellphone & the Troll Box (talking)
 
 **The Cellphone** (the 📱 up top; `GET /v1/phone`, `GET /v1/phone/thread/:characterId`,

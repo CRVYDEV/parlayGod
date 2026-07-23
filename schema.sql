@@ -1870,3 +1870,28 @@ CREATE TABLE IF NOT EXISTS dm_blocks (
   at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (blocker_account, blocked_account)
 );
+
+-- THE MEGAPROJECT (founder pick #1 — the WoW AQ-gate server event): the city announces a monument,
+-- the whole base pools cash/goods/$OMR toward a massive target. Every contribution is a SINK
+-- (§10.4-positive); completion permanently changes the city (the skyline) + an eternal plaque.
+-- One 'building' row at a time; the deterministic PK makes a concurrent materialize a clean 23505.
+CREATE TABLE IF NOT EXISTS megaprojects (
+  id TEXT PRIMARY KEY,                 -- '<monumentId>:<seq>'
+  monument TEXT NOT NULL,              -- MEGAPROJECT.MONUMENTS id
+  seq INT NOT NULL,                    -- build order (count of monuments completed before it)
+  target NUMERIC NOT NULL,
+  progress NUMERIC NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'building',   -- building | complete
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+-- the plaque: ACCOUNT-level (survives death — a DYNASTY raised this; the Portfolio precedent).
+-- No character_id column → outside the estate wipe + DISPOSITION guard by construction.
+CREATE TABLE IF NOT EXISTS megaproject_contributions (
+  project_id TEXT NOT NULL,
+  account_id UUID NOT NULL,
+  contributed NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (project_id, account_id)
+);
+-- (red-team B3) the plaque's hot reads: top-N by contribution + the rank count
+CREATE INDEX IF NOT EXISTS ix_megacontrib_top ON megaproject_contributions (project_id, contributed DESC);
