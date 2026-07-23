@@ -65,8 +65,9 @@ contract OmertaBondTest is Test {
     // ── the happy path ──
     function test_bond_pays_discounted_omr_and_splits_eth() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        uint256 id = bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        uint256 id = bond.bond{value: 1 ether}(q, sig);
 
         uint256 expect = _payout(1 ether, 800);
         (, uint256 payout, uint256 claimed, , ) = bond.bonds(id);
@@ -87,16 +88,18 @@ contract OmertaBondTest is Test {
     function test_bond_reverts_past_the_tranche() public {
         // 25 ETH @5000 = 125,000 OMR market → ~135,870 discounted > the 100k tranche
         OmertaBond.BondQuote memory q = _quote(bonder, 25 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.TrancheExhausted.selector);
-        bond.bond{value: 25 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 25 ether}(q, sig);
     }
 
     function test_bond_reverts_wrong_value() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert();
-        bond.bond{value: 0.5 ether}(q, _sign(q, signerPk)); // msg.value != principal
+        bond.bond{value: 0.5 ether}(q, sig); // msg.value != principal
     }
 
     function test_bond_reverts_not_payer() public {
@@ -119,20 +122,23 @@ contract OmertaBondTest is Test {
 
     function test_bond_reverts_discount_over_max() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 2001, 5 days, 1); // > MAX_DISCOUNT_BPS
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.BadBps.selector);
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
     }
 
     function test_bond_reverts_vest_too_long_or_zero() public {
         OmertaBond.BondQuote memory q1 = _quote(bonder, 1 ether, 800, 31 days, 1);
+        bytes memory sig1 = _sign(q1, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.VestTooLong.selector);
-        bond.bond{value: 1 ether}(q1, _sign(q1, signerPk));
+        bond.bond{value: 1 ether}(q1, sig1);
         OmertaBond.BondQuote memory q2 = _quote(bonder, 1 ether, 800, 0, 2);
+        bytes memory sig2 = _sign(q2, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.VestTooLong.selector);
-        bond.bond{value: 1 ether}(q2, _sign(q2, signerPk));
+        bond.bond{value: 1 ether}(q2, sig2);
     }
 
     function test_bond_reverts_deadline_too_far() public {
@@ -140,15 +146,17 @@ contract OmertaBondTest is Test {
         OmertaBond.BondQuote memory q = OmertaBond.BondQuote(
             bonder, 1 ether, PRICE, 800, 5 days, 1, block.timestamp + 31 days
         );
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.DeadlineTooFar.selector);
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
         // exactly at the backstop is still fine
         OmertaBond.BondQuote memory ok = OmertaBond.BondQuote(
             bonder, 1 ether, PRICE, 800, 5 days, 2, block.timestamp + 30 days
         );
+        bytes memory sigOk = _sign(ok, signerPk);
         vm.prank(bonder);
-        bond.bond{value: 1 ether}(ok, _sign(ok, signerPk));
+        bond.bond{value: 1 ether}(ok, sigOk);
         assertEq(bond.committedOMR(), _payout(1 ether, 800));
     }
 
@@ -163,16 +171,18 @@ contract OmertaBondTest is Test {
 
     function test_bond_reverts_bad_signature() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory badSig = _sign(q, 0xDEAD); // not the signer
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.BadSignature.selector);
-        bond.bond{value: 1 ether}(q, _sign(q, 0xDEAD)); // not the signer
+        bond.bond{value: 1 ether}(q, badSig);
     }
 
     // ── vesting + claim ──
     function test_claim_vests_linearly() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 100, 1); // 100-second vest
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        uint256 id = bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        uint256 id = bond.bond{value: 1 ether}(q, sig);
         uint256 expect = _payout(1 ether, 800);
 
         // immediately nothing vested
@@ -201,8 +211,9 @@ contract OmertaBondTest is Test {
 
     function test_claim_reverts_not_owner() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 100, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        uint256 id = bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        uint256 id = bond.bond{value: 1 ether}(q, sig);
         vm.warp(block.timestamp + 100);
         vm.prank(makeAddr("thief"));
         vm.expectRevert(OmertaBond.NotOwner.selector);
@@ -212,8 +223,9 @@ contract OmertaBondTest is Test {
     // ── sweep: only the UNCOMMITTED tranche, never OMR backing outstanding bonds ──
     function test_sweep_cannot_touch_committed() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
         uint256 committed = bond.committedOMR();
         uint256 free = omr.balanceOf(address(bond)) - committed;
         // sweeping the free tranche is fine
@@ -233,9 +245,10 @@ contract OmertaBondTest is Test {
     function test_pause_blocks_bonding() public {
         vm.prank(safe); bond.pause();
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(); // Pausable: paused
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
     }
 
     function test_bond_reverts_if_eth_forward_fails() public {
@@ -243,9 +256,10 @@ contract OmertaBondTest is Test {
         vm.prank(safe);
         bond.setRecipients(payable(address(rej)), dev, vig); // POL recipient rejects ETH
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.ForwardFailed.selector);
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
     }
 
     // ── ETH rescue: any stray ETH goes to the Safe, never trapped ──
@@ -272,9 +286,10 @@ contract OmertaBondTest is Test {
         vm.prank(safe);
         bond.setRecipients(payable(address(rej)), dev, vig);
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.ForwardFailed.selector); // the re-entry reverts, swallowed → forward fails
-        bond.bond{value: 1 ether}(q, _sign(q, signerPk));
+        bond.bond{value: 1 ether}(q, sig);
         // the whole tx rolled back: nothing committed, no OMR moved, the nonce is free again
         assertEq(bond.committedOMR(), 0, "no commitment survived the reverted bond");
         assertEq(omr.balanceOf(address(rej)), 0, "no OMR leaked");
@@ -287,8 +302,9 @@ contract OmertaBondTest is Test {
         disc = bound(disc, 0, MAX_DISCOUNT_BPS_T);
         vm.deal(bonder, principal);
         OmertaBond.BondQuote memory q = _quote(bonder, principal, disc, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        try bond.bond{value: principal}(q, _sign(q, signerPk)) {
+        try bond.bond{value: principal}(q, sig) {
             // a booked bond must be fully backed by the pre-funded balance
             assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "committed <= funded balance");
         } catch {
@@ -323,18 +339,21 @@ contract OmertaBondTest is Test {
         omr.transfer(address(capped), TRANCHE); // fund the tranche generously — the CAP, not the tranche, must bind
         // 1 ETH @ 5000, 8% disc → payout ≈ 5,434 OMR — under the cap, accepted
         OmertaBond.BondQuote memory q1 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 1, block.timestamp + 1 hours);
+        bytes memory sigC1 = _sign2(capped, q1);
         vm.prank(bonder);
-        capped.bond{value: 1 ether}(q1, _sign2(capped, q1));
+        capped.bond{value: 1 ether}(q1, sigC1);
         // a second 1-ETH bond the same day → cumulative ≈ 10,869 > 6,000 cap → reverts
         OmertaBond.BondQuote memory q2 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 2, block.timestamp + 1 hours);
+        bytes memory sigC2 = _sign2(capped, q2);
         vm.prank(bonder);
         vm.expectRevert("OB: daily cap");
-        capped.bond{value: 1 ether}(q2, _sign2(capped, q2));
+        capped.bond{value: 1 ether}(q2, sigC2);
         // next UTC day → the budget resets, the same bond now lands
         vm.warp(block.timestamp + 1 days);
         OmertaBond.BondQuote memory q3 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 3, block.timestamp + 1 hours);
+        bytes memory sigC3 = _sign2(capped, q3);
         vm.prank(bonder);
-        capped.bond{value: 1 ether}(q3, _sign2(capped, q3));
+        capped.bond{value: 1 ether}(q3, sigC3);
         // the Safe can retune the cap
         vm.prank(safe);
         capped.setDailyCap(0);

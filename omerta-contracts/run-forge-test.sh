@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the OMERTÀ Foundry suite on any machine with open internet.
-# This is the pre-mainnet gate the sandboxed build environment could never execute
-# (Foundry's hosts are egress-blocked there). 29 tests incl. a 512-run fuzz.
+# The NATIVE-toolchain run (belt-and-braces for the third-party audit). The sandboxed build
+# environment has its own runner — ./run-forge-test-sandboxed.sh (npm forge + solc-js shim),
+# first green 2026-07-23: 73/73 incl. two 512-run fuzzes.
 #
 #   chmod +x run-forge-test.sh && ./run-forge-test.sh
 #
