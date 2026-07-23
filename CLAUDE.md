@@ -4077,3 +4077,42 @@ share). Suite 33/33 + sim drift-0. `BUST_EXPOSURE`/`CONTRA_LOOT_RATE` are founde
 is a bounded transfer of already-capped commodity, the P1.1 argument — flagged in BALANCE.md). The Port
 pillar is now feature-complete (buy/run/collect → upgrades/piracy/rendezvous → legend/harbormaster →
 warehouse/berths → the Coast-Guard Law tie-in + the contraband loot surface).
+
+**FULL-PRODUCT MAX-EFFORT RED-TEAM (`AUDIT-full-product.md`, 2026-07-23 overnight)** — eight
+independent lenses over two rounds (R1: economy/§10.4, concurrency/locks, auth/OAuth,
+cross-system+contracts, UI/UX over the value-creation pivot + the overnight UX drop; R2:
+gameplay-flow/completeness, economy-balance, broad correctness sweep over the older core modules),
+every finding re-verified vs source, suite 30/30 + sim drift-0 at every commit. **No CRITICAL, no
+§10.4 leak, no auth bypass, no contract-parity drift.** Fixed in-commit (regression/verification
+each): **A1** `runWageEpoch` now takes a SESSION advisory lock `pg_try_advisory_lock(0x5741,epoch)`
+so two worker PROCESSES can't each read `emittedThisEpoch=0` and both pay the epoch budget — a
+silent per-epoch over-emission the lifetime endowment invariant can't see (releases on crash, so a
+resume still tops up); **B2** the invite is consumed ATOMICALLY inside `accountForIdentity`'s create
+txn (one invite per new account even under a concurrent same-new-identity OAuth/login race — an
+exhausted invite rolls the create back, gate never bypassed); **D1** `GET /v1/auth/x/callback` joined
+the keyless-heavy-GET per-IP limiter (the POST-only auth limiter + the token-gated read limiter both
+skipped it); **D2** `verifyPostUp` binds the tweet `author_id` for X-linked accounts (blocks a
+Spread-the-Word payout for registering someone else's permanent tweet); **B3** bounded the
+`actorNames`/`lastChatAt` in-process caches. **UI/UX (Lens C, founder top lens):** the **HIGH**
+literal-`\n` bug on every leaderboard/dossier/trace payoff screen (44 double-escaped sites), a
+curated **Extraction** card (Mint + Withdraw — the earn thesis was deck-only), the mobile bottom-nav
+(3 stops → the 5 starter screens in simple mode), the FAMILY-chat dead-end, den fight labels,
+empty-feed placeholder, undefined CSS vars, deck convoy templates, the 🌐 language affordance — all
+browser-verified. **Gameplay flow (Lens F, 2 HIGH):** **F1** the coach's First-Week rung masked all
+mid-game guidance AND was uncompletable on a default `SOCIAL_VERIFY_MODE=off` server (socials throw
+`verify_unavailable`), pinning the coach for the whole population → now gates on the five gameplay
+onboard tasks only, broadens the earner check (rackets/assets/fighters/speakeasy), adds a lvl-3
+racket nudge, stops promising fronts before L15; **F2** the death moment was invisible (heir
+auto-created, `report.kept/lost` had no consumer) → a death/heir modal driven off the estate event
+through `feedLine` (delivery-once safe, deduped per generation) + estate/vendetta feed lines,
+verified e2e (mod-kill → the modal). **Lens H (correctness sweep): CLEAN** — the core modules
+(kitchen/casino/social/territory/market/loans/boxing/port/races + accrual/estate) are genuinely
+hardened by the prior passes; the estate wipe covers every character-scoped table, lock order is
+acyclic, no persist-clobber, no pg-mem arith bug, worker settles are idempotent (residual un-traced
+surface flagged: casino stateful blackjack/poker in-hand, pen.executeBreak, world co-op internals,
+economy swap/stake). **Economy (Lens G): coherent + conservation-clean; recommendations for founder
+sign-off (NOT changed, ground rule #1)** — the passive-fronts-≫-active-loops shape (~$49M/day maxed
+stack, under-measured — needs a business-ladder sim probe), the Port Deep Run trap route (L32
+dominated by L16 Open Water — raise deeprun.sell/drop patrol), territory Numbers lazy-dominance, the
+Stable(4)-vs-Boxing(3) cap asymmetry, and the i18n prose-translation product call — all in
+`AUDIT-full-product.md` for decision.
