@@ -1405,6 +1405,8 @@
     const mySeat = (com.seats || []).find((s) => s.name === g.name);
     const boss = me.gang.role === 'boss' || me.gang.role === 'underboss';
     const distr = (await api('GET', '/v1/districts')).body?.districts || [];
+    const dip = (await api('GET', '/v1/diplomacy')).body || {};
+    const sov = (await api('GET', '/v1/sov')).body || {};
     t.innerHTML = `
       <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.foundation ? ` <span class="chip good">${g.foundation}</span>` : ''} — you are ${me.gang.role}</h2>
       <div class="grid">
@@ -1458,6 +1460,43 @@
           ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
       ${boss ? `<div style="margin-top:8px"><input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button></div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}
 
+      <h2 style="margin-top:12px">Diplomacy <span class="d" style="font-size:11px">(sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount)</span></h2>
+      ${dip.oathbreaker ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">OATHBREAKER</span> <span class="d">you broke a sworn treaty — marked for ${mins(dip.oathbreaker.seconds)}</span></div>` : ''}
+      ${(dip.dominant || []).length ? `<div class="d" style="color:var(--dim);font-size:12px">dominant families (fair game for a coalition): ${dip.dominant.map((x) => `[${x.tag}] ${x.name}`).join(', ')}</div>` : ''}
+      <div class="grid" style="margin-top:4px">${(dip.relations || []).map((r) => `
+        <div class="card"><span class="t">${r.with}</span> <span class="chip ${r.active ? 'good' : ''}">${r.active ? `pact — ${mins(r.seconds || 0)}` : r.pending ? (r.mine ? 'offered — awaiting them' : 'they offered you a pact') : 'lapsed'}</span>
+          ${boss && r.pending && !r.mine ? `<button class="act" data-pactaccept="${r.withId}">accept the pact</button>` : ''}
+          ${boss && r.active ? `<button class="act" data-pactbreak="${r.withId}" style="border-color:var(--blood)">break it (oathbreak)</button>` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no treaties. A pact is a handshake that stops a war before it starts.</span>'}</div>
+      <div class="grid" style="margin-top:4px">${(dip.coalitions || []).map((c) => `
+        <div class="card"><span class="t">vs ${c.against}</span> <span class="chip ${c.armed ? 'good' : ''}">${c.members} famil${c.members === 1 ? 'y' : 'ies'} — ${c.armed ? 'ARMED' : `need ${(dip.levers?.coalitionMin || 2)}`}</span>
+          ${c.targetsMe ? '<span class="chip bad">aimed at YOU</span>' : ''}
+          ${boss && !c.mine && !c.targetsMe ? `<button class="act" data-coaljoin="${c.id}">join the coalition</button>` : ''}
+          ${boss && c.mine ? `<button class="act" data-coalleave="${c.id}">walk out</button>` : ''}</div>`).join('')}</div>
+      ${boss ? `<div style="margin-top:6px">
+        <input id="pact-gang" placeholder="rival gang id" size="24"> <button class="act" id="pact-go">propose a pact</button>
+        <input id="coal-gang" placeholder="dominant gang id" size="24" style="margin-left:6px"> <button class="act" id="coal-go">form a coalition against them</button></div>`
+        : '<span class="d" style="color:var(--dim)">diplomacy is the boss’s to conduct</span>'}
+
+      <h2 style="margin-top:12px">Sovereignty <span class="d" style="font-size:11px">(fortify held turf with a stronghold — a daily vulnerability window when rivals can lay SIEGE; sov points = the family's iron reputation)</span></h2>
+      ${sov.family ? `<div class="d" style="color:var(--dim);font-size:12px">your family holds <b>${fmt(sov.family.points || 0)} sov points</b> (${sov.family.rank || ''})</div>` : ''}
+      <div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => s.mine).map((s) => `
+        <div class="card"><span class="t">${s.district} — ${s.tierName || 'Outpost'} (t${s.tier})</span> <span class="chip ${s.vulnerable ? 'bad' : 'good'}">${s.vulnerable ? 'VULNERABLE NOW' : `safe — window ${String(s.windowHour).padStart(2, '0')}:00 UTC`}</span>
+          <div class="d">garrison bonus +${s.garrisonBonus ?? 0}${s.upkeepOwed ? ` · upkeep owed $${fmt(s.upkeepOwed)}` : ''}</div>
+          ${boss ? `${s.nextTier ? `<button class="act" data-sovup="${s.district}">upgrade to ${s.nextTier.name} ($${fmt(s.nextTier.cost)})</button>` : '<span class="chip good">Citadel — the strongest hold</span>'}
+            ${s.upkeepOwed ? `<button class="act" data-sovkeep="${s.district}">pay upkeep ($${fmt(s.upkeepOwed)})</button>` : ''}` : ''}</div>`).join('')
+        || '<span class="d" style="color:var(--dim)">no strongholds. Build one on turf you hold to make it costly to take.</span>'}</div>
+      ${(sov.structures || []).some((s) => !s.mine && s.vulnerable) ? `<div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => !s.mine && s.vulnerable).map((s) => `
+        <div class="card" style="border-color:var(--blood)"><span class="t">${s.district} — ${s.holderTag ? `[${s.holderTag}]` : 'a rival'}'s ${s.tierName} <span class="chip bad">VULNERABLE</span></span>
+          <div class="d">stand at ${s.district} and lay siege ($${fmt(sov.siegeCost || 50000)}) — a win knocks a tier off</div>
+          ${boss ? `<button class="act" data-sovsiege="${s.district}" style="border-color:var(--blood)">lay siege</button>` : ''}</div>`).join('')}</div>` : ''}
+      ${boss && (g.held || []).length ? `<div style="margin-top:6px">
+        <select id="sov-dist">${(g.held || []).filter((d) => !(sov.structures || []).some((s) => s.district === d && s.mine)).map((d) => `<option value="${d}">${d}</option>`).join('')}</select>
+        <select id="sov-hour">${Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}:00 UTC window</option>`).join('')}</select>
+        <button class="act" id="sov-build">build a stronghold ($${fmt(sov.buildCost || 250000)})</button></div>` : ''}
+      <div class="d" style="margin-top:4px"><a href="#" id="sov-lb-link">the sovereignty board →</a></div>
+      <div id="sov-lb"></div>
+
       <h2 style="margin-top:12px">The Commission ${mySeat ? `<span class="chip good">seated — #${(com.seats || []).indexOf(mySeat) + 1}</span>` : '<span class="chip">no seat</span>'}</h2>
       <div class="d" style="color:var(--dim);font-size:12.5px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
       <div class="grid" style="margin-top:4px">${(com.seats || []).map((s, i) => `
@@ -1487,6 +1526,20 @@
     t.querySelectorAll('[data-spec]').forEach((b) => b.onclick = () => {
       const sel = $(`#spec-${b.dataset.spec}`); act('POST', `/v1/territory/${b.dataset.spec}/specialist`, { memberId: sel && sel.value }).then(() => renderFamily()); });
     t.querySelectorAll('[data-terrop]').forEach((b) => b.onclick = () => act('POST', `/v1/territory/${b.dataset.terrop}/op`, {}).then(() => renderFamily()));
+    // diplomacy
+    t.querySelectorAll('[data-pactaccept]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/pact/${b.dataset.pactaccept}/accept`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-pactbreak]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/pact/${b.dataset.pactbreak}/break`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-coaljoin]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/coalition/${b.dataset.coaljoin}/join`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-coalleave]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/coalition/${b.dataset.coalleave}/leave`, {}).then(() => renderFamily()));
+    { const b = $('#pact-go'); if (b) b.onclick = () => { const gid = $('#pact-gang').value.trim(); if (gid) act('POST', `/v1/diplomacy/pact/${gid}`, {}).then(() => renderFamily()); }; }
+    { const b = $('#coal-go'); if (b) b.onclick = () => { const gid = $('#coal-gang').value.trim(); if (gid) act('POST', `/v1/diplomacy/coalition/${gid}`, {}).then(() => renderFamily()); }; }
+    // sovereignty
+    t.querySelectorAll('[data-sovup]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovup}/upgrade`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-sovkeep]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovkeep}/upkeep`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-sovsiege]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovsiege}/siege`, {}).then(() => renderFamily()));
+    { const b = $('#sov-build'); if (b) b.onclick = () => { const d = $('#sov-dist')?.value; if (d) act('POST', `/v1/sov/${d}/build`, { windowHour: Number($('#sov-hour').value) }).then(() => renderFamily()); }; }
+    { const lb = $('#sov-lb-link'); if (lb) lb.onclick = async (e) => { e.preventDefault(); const b = (await api('GET', '/v1/leaderboard/sov')).body?.families || [];
+      $('#sov-lb').innerHTML = `<div class="grid" style="margin-top:4px">${b.map((f, i) => `<div class="card"><span class="t">#${i + 1} [${f.tag}] ${f.name}</span><div class="d">${fmt(f.points)} sov points · ${f.rank || ''}</div></div>`).join('') || '<span class="d">no strongholds standing yet</span>'}</div>`; }; }
     { const cg = $('#crest-go'); if (cg) cg.onclick = () => act('POST', '/v1/gangs/vanity/color', { color: $('#crest-color').value.trim() }).then(() => renderFamily()); }
     { const fr = $('#fam-rename-go'); if (fr) fr.onclick = () => act('POST', '/v1/gangs/vanity/name', { name: $('#fam-rename').value.trim(), tag: $('#fam-retag').value.trim() }).then(() => renderFamily()); }
     { const flb = $('#foundation-lb-link'); if (flb) flb.onclick = async (e) => {
@@ -3250,9 +3303,17 @@
     await refresh();
     const sk = (await api('GET', '/v1/skills')).body || {};
     const uw = (await api('GET', '/v1/underworld')).body || {};
+    const cam = (await api('GET', '/v1/campaigns')).body || {};
+    const bl = (await api('GET', '/v1/bloodline')).body || {};
+    const hon = me.honor || { value: 0, tier: 'Unproven' };
+    const honClass = hon.value >= 60 ? 'good' : hon.value <= -60 ? 'bad' : '';
     const branches = {};
     for (const s of (sk.tree || [])) (branches[s.branch] = branches[s.branch] || []).push(s);
     t.innerHTML = `
+      <h2>Your Name on the Street <span class="chip ${honClass}">honor ${hon.value > 0 ? '+' : ''}${hon.value} — ${hon.tier}</span></h2>
+      <div class="d" style="font-size:11px;margin:-4px 0 8px;color:var(--dim)">Deeds move it: keep your word, save a guard, avenge blood → a <b>Man of Honor</b> (laying low costs less, the street trusts you).
+        Welsh on a debt, rat, break an oath → a <b>Mad Dog</b> (no guard steps in front of you, no family swears a pact with you).</div>
+
       <h2>The Build <span class="d" style="font-size:11px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
         <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
       <div class="d" style="font-size:11px;margin:-4px 0 6px;color:var(--dim)">Bloodline (prestige ${sk.prestige ?? 0}):
@@ -3292,6 +3353,24 @@
           ${n.tier >= 1 && !uw.errand ? `<button class="act" data-uwerrand="${n.id}">take an errand</button>` : ''}</div>`).join('')}</div>
       ${me.hospSeconds > 0 ? `<div style="margin-top:8px"><button class="act" data-do="POST /v1/underworld/discharge">Doc's early discharge ($150/min left)</button></div>` : ''}
 
+      <h2 style="margin-top:12px">The Fixers' Stories <span class="d" style="font-size:11px">(authored jobs — do the work, make the call, collect once per street · opens at standing ${cam.minStanding ?? 25})</span></h2>
+      <div class="grid">${(cam.campaigns || []).map((c) => `
+        <div class="card"><span class="t">${c.name}</span> <span class="chip ${c.completed ? 'good' : c.active ? '' : c.locked ? 'bad' : ''}">${c.claimed ? 'told' : c.completed ? 'ready to collect' : c.active ? `step ${c.step + 1}/${c.steps}` : c.locked ? `locked (standing ${c.standing}/${cam.minStanding})` : 'available'}</span>
+          <div class="d" style="font-size:11px">${c.blurb}</div>
+          ${c.active && c.say ? `<div class="d" style="margin-top:4px;font-style:italic">"${c.say}"</div>` : ''}
+          ${c.active && c.need ? `<div class="d">do this: <b>${c.action}</b> ×${c.need} (${c.done}/${c.need})</div>` : ''}
+          ${c.active && c.choice ? `<div class="d" style="margin-top:4px">Make the call:</div>${c.choice.map((b) => `<button class="act" data-camchoose="${c.id}" data-branch="${b.id}" style="font-size:11px;padding:3px 6px;display:block;margin-top:3px;text-align:left">${b.label} ${b.honor ? `<span class="chip ${b.honor > 0 ? 'good' : 'bad'}">honor ${b.honor > 0 ? '+' : ''}${b.honor}</span>` : ''}</button>`).join('')}` : ''}
+          ${!c.active && !c.claimed && !c.locked && !c.completed ? `<button class="act" data-camstart="${c.id}">take the job</button>` : ''}
+          ${c.completed && !c.claimed ? `<button class="act" data-camclaim="${c.id}">collect — $${fmt(c.reward.cash)}${c.reward.standing ? ` · +${c.reward.standing} ${c.npc}` : ''}${c.reward.title ? ` · "${c.reward.title}"` : ''}</button>` : ''}</div>`).join('')}</div>
+
+      <h2 style="margin-top:12px">The Bloodline <span class="d" style="font-size:11px">(${bl.dynasty ? bl.dynasty + ' — ' : ''}${bl.steward?.title || ''} · dynasty score ${fmt(bl.score || 0)})</span></h2>
+      <div class="card">
+        ${(bl.ancestors || []).length ? (bl.ancestors || []).slice().reverse().map((a) => `
+          <div class="d" style="margin-top:4px">⚰ <b>${a.title}</b>${a.epithet ? `, ${a.epithet}` : ''} <span class="chip">${a.honorTier}</span>
+            <span class="d" style="color:var(--dim)">— ${a.cause} · lvl ${a.level}${a.kills ? ` · ${a.kills} kills` : ''}</span></div>`).join('')
+          : '<div class="d" style="color:var(--dim)">No ancestors yet — your line begins with you. When this street dies, the next one inherits a quarter of your name and reads your story here.</div>'}
+      </div>
+
       <h2 style="margin-top:12px">Vanity <span class="d" style="font-size:11px">(pure cosmetics — a $OMR flex · on hand: ${fmt(Math.floor(me.omr || 0))} $OMR)</span></h2>
       <div class="card">
         <div><input id="van-name" placeholder="new street name" size="16" maxlength="24"> <button class="act" id="van-name-go">rename yourself (5 $OMR)</button></div>
@@ -3310,6 +3389,12 @@
     for (const [attr, path] of [['uwgift', 'gift'], ['uwpenance', 'penance'], ['uwfavor', 'favor'], ['uwerrand', 'errand']])
       t.querySelectorAll(`[data-${attr}]`).forEach((btn) => btn.onclick = () =>
         act('POST', `/v1/underworld/${btn.dataset[attr]}/${path}`, {}).then(() => renderLife()));
+    t.querySelectorAll('[data-camstart]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/campaigns/${btn.dataset.camstart}/start`, {}).then(() => renderLife()));
+    t.querySelectorAll('[data-camchoose]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/campaigns/${btn.dataset.camchoose}/choose`, { branch: btn.dataset.branch }).then(() => renderLife()));
+    t.querySelectorAll('[data-camclaim]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/campaigns/${btn.dataset.camclaim}/claim`, {}).then(() => renderLife()));
     { const b = $('#van-name-go'); if (b) b.onclick = () => act('POST', '/v1/vanity/name', { name: $('#van-name').value.trim() }).then(() => renderLife()); }
     { const b = $('#van-title-go'); if (b) b.onclick = () => act('POST', '/v1/vanity/title', { title: $('#van-title').value.trim() }).then(() => renderLife()); }
     { const b = $('#van-plate-go'); if (b) b.onclick = () => act('POST', `/v1/vanity/plate/${$('#van-car').value}`, { plate: $('#van-plate').value.trim() }).then(() => renderLife()); }
