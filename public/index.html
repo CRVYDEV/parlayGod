@@ -126,6 +126,24 @@
   @keyframes pulseBad { 0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0); } 50% { box-shadow: 0 0 8px 0 rgba(192,57,43,.3); } }
 
   /* ── tabs: pill rail, grouped, a lit underline on the active screen ── */
+  /* THE TWO-TIER NAV (tester feedback: 24 flat tabs read as noise) — a bold GROUP rail on top,
+     and only the active group's screens beneath it. The group is the wayfinding unit now. */
+  #grouprail { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: -2px 0 7px; }
+  #grouprail button { background: transparent; color: var(--dim); border: 1px solid rgba(255,255,255,.09);
+    border-radius: 9px; padding: 8px 15px; font-size: 12px; font-weight: 600; letter-spacing: 1.8px;
+    text-transform: uppercase; cursor: pointer; }
+  #grouprail button:hover { color: var(--ink); background: rgba(255,255,255,.04); }
+  #grouprail button.on { color: var(--neon); background: var(--neon-soft);
+    border-color: color-mix(in srgb, var(--neon) 45%, transparent); }
+  /* collapsible screen sections (the Streets-density fix) — a summary that reads like an h2 */
+  details.sect { margin-top: 14px; }
+  details.sect > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; }
+  details.sect > summary::-webkit-details-marker { display: none; }
+  details.sect > summary::before { content: '▸'; color: var(--faint); font-size: 12px; flex: 0 0 auto;
+    transition: transform .15s; }
+  details.sect[open] > summary::before { transform: rotate(90deg); }
+  details.sect > summary h2 { margin: 0; display: inline; }
+  details.sect > .sect-body { margin-top: 8px; }
   #tabs { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; margin: -2px 0 12px;
     padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   #tabs button { position: relative; background: transparent; color: var(--dim); border: 1px solid transparent;
@@ -316,10 +334,11 @@
     #top { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
     #top h1 { font-size: 17px; letter-spacing: 4px; }
     #whoami { flex-basis: 100%; margin-left: 0; order: 3; }
-    #tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px;
+    #tabs, #grouprail { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px;
       scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
       mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
-    #tabs::-webkit-scrollbar { display: none; }
+    #tabs::-webkit-scrollbar, #grouprail::-webkit-scrollbar { display: none; }
+    #grouprail button { flex: 0 0 auto; }
     #tabs button { flex: 0 0 auto; padding: 10px 13px; min-height: 40px; }
     button.act, a.act { padding: 10px 13px; min-height: 38px; }
     input, select { padding: 10px 9px; min-height: 38px; }
@@ -466,6 +485,7 @@
     </div>
 
     <div class="panel">
+      <div id="grouprail"></div>
       <div id="tabs"></div>
       <div id="tabbodies"></div>
     </div>
@@ -1235,12 +1255,26 @@
   // (the choice sticks per browser). Veterans are untouched.
   const SIMPLE_TABS = ['start', 'streets', 'garage', 'city', 'family'];
   const simpleMode = () => !localStorage.getItem('omerta_alltabs') && (me?.level || 1) < 8;
+  // THE TWO-TIER NAV (tester feedback): full mode shows the GROUP rail + only the active group's
+  // screens beneath it — never all 24 at once. Simple mode keeps the flat five-tab starter rail
+  // (a fresh player doesn't need groups for five screens) and hides the rail entirely.
+  let activeGroup = 'streets';
+  const lastTabIn = {}; // remember where you were in each group, so group-hopping returns you there
   function applyTabVisibility() {
     const simple = simpleMode();
+    const grpTabs = TAB_GROUPS.find(([g, ids]) => (g ? g.toLowerCase() : ids[0]) === activeGroup)?.[1] || [];
     for (const b of $('#tabs').children) {
-      if (b.dataset.tab) b.classList.toggle('hidden', simple && !SIMPLE_TABS.includes(b.dataset.tab));
-      if (b.classList.contains('tabgrp')) b.classList.toggle('hidden', simple);
+      if (b.dataset.tab) b.classList.toggle('hidden', simple
+        ? !SIMPLE_TABS.includes(b.dataset.tab)
+        // full mode: only the active group's screens — and a one-screen group needs no sub-row at all
+        : !(grpTabs.length > 1 && grpTabs.includes(b.dataset.tab)));
+      if (b.classList.contains('tabgrp')) b.classList.add('hidden'); // the old inline labels are retired — the rail replaced them
       if (b.id === 'tabs-more') b.classList.toggle('hidden', !simple);
+    }
+    const rail = $('#grouprail');
+    if (rail) {
+      rail.classList.toggle('hidden', simple);
+      for (const b of rail.children) b.classList.toggle('on', b.dataset.group === activeGroup);
     }
     const bn = $('#bnav');
     // simple mode: the thumb-bar shows exactly the five SIMPLE_TABS (start/streets/garage/city/family).
@@ -1258,8 +1292,17 @@
   function buildTabs() {
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
+    const rail = $('#grouprail');
     for (const [group, ids] of TAB_GROUPS) {
-      if (group) tabs.appendChild(el(`<span class="tabgrp">${T('g_' + group.toLowerCase())}</span>`)); // display translated; groupOf stays English (the accent CSS keys off it)
+      const key = group ? group.toLowerCase() : ids[0];
+      // the group rail: one bold button per cluster (an ungrouped single screen is its own stop)
+      if (rail) {
+        const label = group ? T('g_' + group.toLowerCase()) : TABS[ids[0]];
+        const gb = el(`<button data-group="${key}">${label}</button>`);
+        gb.onclick = () => setTab(lastTabIn[key] || ids[0]);
+        rail.appendChild(gb);
+      }
+      if (group) tabs.appendChild(el(`<span class="tabgrp hidden">${T('g_' + group.toLowerCase())}</span>`)); // retired by the rail; kept for simple-mode DOM stability
       for (const id of ids) {
         const b = el(`<button data-tab="${id}">${TABS[id]}</button>`);
         b.onclick = () => { setTab(id); };
@@ -1296,6 +1339,9 @@
     // a deliberate jump to a screen simple mode hides (a coach hint, a checklist task) opens the whole city
     if (simpleMode() && !SIMPLE_TABS.includes(id)) unlockAllTabs(false);
     currentTab = id;
+    activeGroup = groupOf(id);
+    lastTabIn[activeGroup] = id;
+    applyTabVisibility(); // the sub-row follows the group (a coach jump lands with the right rail lit)
     for (const b of $('#tabs').children) {
       const on = b.dataset.tab === id;
       b.classList.toggle('on', on);
@@ -1341,6 +1387,17 @@
     return base + (w.you.lastWage ? ' · last wage: +' + w.you.lastWage.omr + ' $OMR' : '');
   };
   const coachCard = (title, body) => `<div class="card coach-card"><span class="t" style="color:var(--neon)">${title}</span><div class="d">${body}</div></div>`;
+  // collapsible screen section (the density fix): reads like an h2, folds like a drawer, and the
+  // open/closed choice STICKS per browser (localStorage) so the screen stays how you arranged it
+  const sect = (key, title, sub, inner, defaultOpen = false) => {
+    const saved = localStorage.getItem('omerta_sect_' + key);
+    const open = saved === null ? defaultOpen : saved === '1';
+    return `<details class="sect" data-sect="${key}"${open ? ' open' : ''}>
+      <summary><h2>${title}</h2>${sub ? `<span class="d" style="color:var(--dim);font-size:12.5px">${sub}</span>` : ''}</summary>
+      <div class="sect-body">${inner}</div></details>`;
+  };
+  const wireSects = (t) => t.querySelectorAll('details[data-sect]').forEach((d) =>
+    d.addEventListener('toggle', () => localStorage.setItem('omerta_sect_' + d.dataset.sect, d.open ? '1' : '0')));
 
   // ── THE KITCHEN: lab → makings → cook → collect → deal, the crew, heat management ──
   async function renderKitchen() {
@@ -1782,10 +1839,19 @@
     const spot = prices.goods?.[me?.loc] || {};
     const daily = (await api('GET', '/v1/daily')).body || {};
     const sq = (await api('GET', '/v1/soldiers')).body || {};
-    const crimes = (rules?.crimes || []).map((c) => `
+    // the density fix: don't wall a player with all 29 jobs — lead with the BEST ones they can
+    // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
+    const crimeCard = (c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
-        <button class="act" data-do="POST /v1/crimes/${c.id}">do it</button></div>`).join('');
+        <button class="act" data-do="POST /v1/crimes/${c.id}"${(me?.level || 1) < c.lvl ? ' disabled' : ''}>do it</button></div>`;
+    const allCrimes = [...(rules?.crimes || [])].sort((a, b) => a.lvl - b.lvl);
+    const lvl = me?.level || 1;
+    const unlocked = allCrimes.filter((c) => c.lvl <= lvl);
+    const best = unlocked.slice(-8);
+    const rest = allCrimes.filter((c) => !best.includes(c));
+    const crimes = best.map(crimeCard).join('');
+    const restCrimes = rest.map(crimeCard).join('');
     const travel = (rules?.districts || []).map((d) =>
       `<button class="act" data-do="POST /v1/travel/${d.id || d}">${d.name || d.id || d}</button>`).join('');
     const train = (rules?.stats || []).map((s) =>
@@ -1822,21 +1888,8 @@
     }).join('') + `<div class="card"><span class="t">The Daily Score</span>
         <div class="d">${me?.heistSeconds ? `cooling down (${mins(me.heistSeconds)})` : 'ready — a big score, level-scaled'}</div>
         ${me?.heistSeconds ? '' : '<button class="act" data-do="POST /v1/heist">pull the score</button>'}</div>`;
-    t.innerHTML = `
-      <h2>Crimes</h2><div class="grid">${crimes}</div>
-      <h2 style="margin-top:14px">Daily Work <span class="d" style="color:var(--dim);font-size:12.5px">— 3 contracts a day (all three pays a $OMR bonus) + the Daily Score</span></h2>
-      <div class="grid">${dailyCards}</div>
-      <h2 style="margin-top:14px">Train</h2>${train}
-      ${pathBlock}
-      <h2 style="margin-top:14px">The Bank</h2>
-      <input id="bank-amt" placeholder="amount" size="10">
-      <button class="act" id="bank-dep">deposit</button>
-      <button class="act" id="bank-wd">withdraw</button>
-      <span class="d" style="color:var(--dim);font-size:12.5px"> deposits ride in transit (lootable) before they clear</span>
-      <h2 style="margin-top:14px">Trade Goods <span class="d" style="color:var(--dim);font-size:12.5px">— buy low here, haul it, sell high (feeds the Black Market &amp; convoys)</span></h2>
-      <div class="grid">${goodsCards}</div>
-      <h2 style="margin-top:14px">Your Second <span class="d" style="color:var(--dim);font-size:12.5px">— named muscle who rides along on jobs, takes ${(sq.cutBps || 500) / 100}% of the take… and can DIE for good</span></h2>
-      <div class="grid">
+    const dailyReady = (daily.jobs || []).some((j) => !j.claimed && j.progress >= j.goal);
+    const soldierBlock = `<div class="grid">
         ${(sq.roster || []).map((s) => `
         <div class="card"><span class="t">${s.name}</span> <span class="chip ${s.onJob ? 'good' : ''}">${s.injuredSeconds > 0 ? `laid up ${mins(s.injuredSeconds)}` : s.onJob ? 'ON THE JOB' : 'benched'}</span>
           <div class="d">${s.traitName} — ${s.desc} · lvl ${s.level} (${s.xp} xp)</div>
@@ -1847,8 +1900,30 @@
           <div class="d">$${fmt(sq.hireCost || 25000)} — a name, one talent, no guarantees they come home</div>
           <button class="act" data-do="POST /v1/soldiers/hire">put the word out</button></div>` : ''}
       </div>
-      ${(sq.memorial || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim)">⚰ The wall: ${sq.memorial.map((m) => `<b>${m.name}</b> (${m.trait}, lvl ${m.level}) — ${m.cause}`).join(' · ')}</div>` : ''}
-      <h2 style="margin-top:14px">Travel</h2>${travel}`;
+      ${(sq.memorial || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim)">⚰ The wall: ${sq.memorial.map((m) => `<b>${m.name}</b> (${m.trait}, lvl ${m.level}) — ${m.cause}`).join(' · ')}</div>` : ''}`;
+    // the density fix (tester: "you have to scroll a while between disparate functions"): the best
+    // jobs + the bank/map lead the screen; everything else is a labeled drawer that stays how you
+    // left it. One glance = act; the depth is a click away, not a scroll away.
+    t.innerHTML = `
+      <h2>Crimes <span class="d" style="color:var(--dim);font-size:12.5px">— your best jobs at level ${lvl}</span></h2>
+      <div class="grid">${crimes || restCrimes && '<span class="d" style="color:var(--dim)">no jobs at your level yet — open the full book below</span>' || ''}</div>
+      ${rest.length ? sect('crimes-all', 'The Full Book', `every job in the city (${allCrimes.length})`, `<div class="grid">${restCrimes}</div>`) : ''}
+      <div class="card" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span class="t" style="margin-right:2px">The Bank</span>
+        <input id="bank-amt" placeholder="amount" size="9">
+        <button class="act" id="bank-dep">deposit</button>
+        <button class="act" id="bank-wd">withdraw</button>
+        <span class="d" style="color:var(--dim);font-size:12px;flex-basis:100%">deposits ride in transit (lootable) before they clear · interest is capped daily</span>
+      </div>
+      <div class="card" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <span class="t" style="margin-right:2px">The Map</span><span class="d" style="color:var(--dim)">you're in <b>${me?.loc || '—'}</b> ·</span> ${travel}
+      </div>
+      ${pathBlock}
+      ${sect('streets-daily', 'Daily Work', '3 contracts a day (all three pays a $OMR bonus) + the Daily Score', `<div class="grid">${dailyCards}</div>`, dailyReady)}
+      ${sect('streets-train', 'Train', 'raise muscle / cunning / speed', train)}
+      ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `<div class="grid">${goodsCards}</div>`)}
+      ${sect('streets-second', 'Your Second', `named muscle who rides along on jobs, takes ${(sq.cutBps || 500) / 100}% of the take… and can DIE for good`, soldierBlock, (sq.roster || []).length > 0)}`;
+    wireSects(t);
     t.querySelectorAll('[data-soldassign]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/soldiers/${b.dataset.soldassign}/assign`, {}).then(() => renderStreets()));
     t.querySelectorAll('[data-solddismiss]').forEach((b) => b.onclick = () =>
