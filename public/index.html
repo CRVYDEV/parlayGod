@@ -39,6 +39,9 @@
     --ink: #dbd7c8; --dim: #85826f; --faint: #5c594e;
     --neon: #e8b34b; --neon-soft: rgba(232,179,75,.12); --neon-glow: rgba(232,179,75,.35);
     --blood: #c0392b; --ok: #63b371; --bad: #d16055; --cold: #6b93b8;
+    /* (C14) aliases a few components referenced without defining — --fg had no fallback (chat input +
+       own-feed lines were rendering on inherited ink by luck). Map them to the real palette. */
+    --fg: #dbd7c8; --gold: #e8b34b; --warn: #d16055;
     /* geometry + motion */
     --r-lg: 12px; --r-md: 9px; --r-sm: 7px;
     --shadow: 0 1px 2px rgba(0,0,0,.55), 0 10px 28px -14px rgba(0,0,0,.65);
@@ -471,7 +474,7 @@
       <div id="wiretabs">
         <button class="wtab on" data-wtab="feed" data-i18n="w_feed">LIVE FEED</button>
         <button class="wtab" data-wtab="city" data-i18n="w_city">CITY CHAT</button>
-        <button class="wtab" data-wtab="family" data-i18n="w_family">FAMILY</button>
+        <button class="wtab" id="wtab-family" data-wtab="family" data-i18n="w_family">FAMILY</button>
       </div>
       <div id="feed" class="wpane"></div>
       <div id="chat-city" class="wpane hidden"></div>
@@ -1035,8 +1038,12 @@
   // recent history into the wire so a fresh page isn't blind to what happened while away
   async function backfillFeed() {
     const r = await api('GET', '/v1/notifications');
-    for (const n of (r.body?.notifications || []).slice(-20))
+    const notes = r.body?.notifications || [];
+    for (const n of notes.slice(-20))
       feedLine('me', { type: n.type, ...(typeof n.payload === 'object' ? n.payload : {}) });
+    // (C13) a brand-new street has an empty wire — say something instead of a blank panel.
+    if (!notes.length && $('#feed') && $('#feed').childElementCount === 0)
+      statusLine("the wire's quiet — pull a job and the city starts talking.");
   }
 
   async function refresh() {
@@ -1051,6 +1058,13 @@
   }
   function renderSheet() {
     if (!me) return;
+    // (C5) the FAMILY chat room only works in a family — hide the tab for the family-less (was a
+    // silent dead-end: clicking it 400'd no_gang into a blank pane). Fall back to the live feed.
+    const fam = $('#wtab-family');
+    if (fam) {
+      fam.classList.toggle('hidden', !me.gang);
+      if (!me.gang && wtab === 'family') { $('[data-wtab="feed"]')?.click(); }
+    }
     $('#whoami').innerHTML = `<b>${me.name}</b> · gen ${me.generation} · lvl ${me.level} · ${me.loc}` +
       (me.gang ? ` · <span style="color:${me.gang.color || 'var(--dim)'}">${me.gang.tag}</span>` : '');
     const chips = [];
@@ -1140,8 +1154,9 @@
   ];
   // which labeled cluster a tab belongs to (drives the per-screen accent + the mobile bottom nav)
   const groupOf = (id) => { for (const [g, ids] of TAB_GROUPS) if (ids.includes(id)) return g ? g.toLowerCase() : id; return ''; };
-  const BNAV = [ // the seven thumb-bar stops (deck stays rail-only — it's a power-user surface)
-    ['start', '🗺', T('t_start')], ['streets', '🌆', T('g_streets')], ['kitchen', '💰', T('g_earners')], ['den', '🎲', T('g_vice')],
+  const BNAV = [ // thumb-bar stops: the 7 group stops (full mode) + garage/city (simple mode only)
+    ['start', '🗺', T('t_start')], ['streets', '🌆', T('g_streets')], ['garage', '🚗', T('t_garage')], ['city', '🌃', T('t_city')],
+    ['kitchen', '💰', T('g_earners')], ['den', '🎲', T('g_vice')],
     ['pvp', '🔪', T('g_blood')], ['family', '🤝', T('g_family')], ['portfolio', '🏛', T('g_legit')] ];
   // ── PROGRESSIVE DISCLOSURE (founder: onboarding is overwhelming) — a fresh player sees FIVE
   // screens, not twenty-four. The full city unlocks at level 8, or the moment they ask for it
@@ -1156,7 +1171,12 @@
       if (b.id === 'tabs-more') b.classList.toggle('hidden', !simple);
     }
     const bn = $('#bnav');
-    if (bn) for (const b of bn.children) b.classList.toggle('hidden', simple && !SIMPLE_TABS.includes(b.dataset.go));
+    // simple mode: the thumb-bar shows exactly the five SIMPLE_TABS (start/streets/garage/city/family).
+    // full mode: show the seven group stops and hide garage/city (they're reachable via the Streets rail).
+    if (bn) for (const b of bn.children) {
+      const go = b.dataset.go;
+      b.classList.toggle('hidden', simple ? !SIMPLE_TABS.includes(go) : (go === 'garage' || go === 'city'));
+    }
   }
   function unlockAllTabs(say) {
     localStorage.setItem('omerta_alltabs', '1');
@@ -1441,7 +1461,7 @@
     }; }
     { const tlb = $('#terr-lb'); if (tlb) tlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/territory')).body || {};
-      alert('THE EMPIRE — biggest territorial families\\n\\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\\n') || 'no territory income logged yet')); }; }
+      alert('THE EMPIRE — biggest territorial families\n\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\n') || 'no territory income logged yet')); }; }
     { const te = $('#terr-establish'); if (te) te.onclick = () =>
       act('POST', `/v1/territory/${me.loc}/establish`, { kind: $('#terr-kind').value }).then(() => renderFamily()); }
     { const tr = $('#terr-raid-go'); if (tr) tr.onclick = () => {
@@ -1766,10 +1786,10 @@
     t.querySelectorAll('[data-reinforce]').forEach((b) => b.onclick = () => { const a = Number(prompt('How much to add to the garrison (from the treasury)?')); if (a > 0) act('POST', `/v1/world/${b.dataset.reinforce}/reinforce`, { amount: a }).then(() => renderCity()); });
     const wlb = $('#w-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/world')).body || {};
-      alert('THE WAR EFFORT — most feared cartel-hunters\\n\\n' + ((d.hunters || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} ($${fmt(x.damage)})`).join('\\n') || 'no cartel damage logged yet')); };
+      alert('THE WAR EFFORT — most feared cartel-hunters\n\n' + ((d.hunters || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} ($${fmt(x.damage)})`).join('\n') || 'no cartel damage logged yet')); };
     const wflb = $('#w-flb'); if (wflb) wflb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/frontier')).body || {};
-      alert('THE FRONTIER — families holding NPC turf\\n\\n' + ((d.families || []).map((x, i) => `${i + 1}. ${x.name} [${x.tag}] — ${x.held} outfit(s): ${x.outfits.join(', ')}`).join('\\n') || 'no frontier claimed yet — rout an apex outfit to plant your flag')); };
+      alert('THE FRONTIER — families holding NPC turf\n\n' + ((d.families || []).map((x, i) => `${i + 1}. ${x.name} [${x.tag}] — ${x.held} outfit(s): ${x.outfits.join(', ')}`).join('\n') || 'no frontier claimed yet — rout an apex outfit to plant your flag')); };
     // NAMED LANDMARKS — dedicate a district plaque to your dynasty (a $OMR status flex)
     const lm = (await api('GET', '/v1/landmarks')).body;
     $('#landmark-slot').innerHTML = `<div class="grid">${(lm?.landmarks || []).map((l) => `
@@ -1795,9 +1815,9 @@
       <button class="act" data-do="POST /v1/casino/numbers/claim">claim tickets</button>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:6px">yesterday's number: <b>${den.numbers?.yesterday ?? '—'}</b></div>
       <h2 style="margin-top:14px">The Fight</h2>
-      <div class="d" style="color:var(--dim);font-size:13.5px">${den.fight ? `${den.fight.a} vs ${den.fight.b}` : '—'}</div>
-      <button class="act" id="fight-a">back the favorite</button>
-      <button class="act" id="fight-b">back the dog</button>
+      <div class="d" style="color:var(--dim);font-size:13.5px">${den.fight ? `<b>${den.fight.a}</b> ★ favorite (pays ${den.fight.favPays}×) &nbsp;vs&nbsp; <b>${den.fight.b}</b> underdog (pays ${den.fight.dogPays}×)` : '—'}</div>
+      <button class="act" id="fight-a">back ${den.fight ? den.fight.a : 'the favorite'} (fav)</button>
+      <button class="act" id="fight-b">back ${den.fight ? den.fight.b : 'the dog'} (dog)</button>
       <input id="fight-amt" placeholder="stake" size="8" value="1000">
       <button class="act" data-do="POST /v1/casino/fight/claim">claim bets</button>
       <h2 style="margin-top:14px">The Track <span class="d" style="font-size:11px">(the dogs &amp; the ponies — daily card, one bet a race, pays the posted odds)</span></h2>
@@ -1907,7 +1927,7 @@
       ['GET', '/v1/exchange'], ['POST', '/v1/exchange/list', { kind: 'ammo', qty: 10, price: 50 }],
     ],
     'Convoys & Heists': [
-      ['GET', '/v1/convoys'], ['POST', '/v1/convoy', { to: 'docks' }], ['POST', '/v1/convoy/load', { good: 'gin', qty: 1 }],
+      ['GET', '/v1/convoys'], ['POST', '/v1/convoy', { to: 'docks', goodId: 'gin', qty: 1 }], ['POST', '/v1/convoy/load', { goodId: 'gin', qty: 1 }],
       ['POST', '/v1/convoy/depart', { guards: 'none' }], ['POST', '/v1/convoy/:id/ambush', {}], ['POST', '/v1/convoy/:id/collect', {}],
       ['GET', '/v1/heists'], ['POST', '/v1/heists/plan', { job: 'payroll', role: 'brains' }],
       ['POST', '/v1/heists/:id/join', { role: 'muscle' }], ['POST', '/v1/heists/:id/execute', {}],
@@ -2321,7 +2341,7 @@
       const r = await api('POST', '/v1/wire/trace', {});
       if (r.code >= 400) { toast(describe(r.body) || 'trace failed'); return; }
       const w = r.body.watchers || [];
-      alert(w.length ? 'BUGS TRACED — who\'s on your line:\\n\\n' + w.map((x) => `• ${x.name} (${minsTxt(x.expiresSeconds)} left)`).join('\\n') : 'your lines are clean — nobody\'s listening.');
+      alert(w.length ? 'BUGS TRACED — who\'s on your line:\n\n' + w.map((x) => `• ${x.name} (${minsTxt(x.expiresSeconds)} left)`).join('\n') : 'your lines are clean — nobody\'s listening.');
       renderWire();
     };
     $('#wire-dossier-go').onclick = async () => {
@@ -2329,18 +2349,18 @@
       const r = await api('POST', `/v1/wire/dossier/${tgt}`, {});
       if (r.code >= 400) { toast(describe(r.body) || 'no dossier'); return; }
       const d = r.body.dossier;
-      alert(`DOSSIER — ${d.name} (lvl ${d.level})\\n\\n`
-        + `law: ${d.law.stage.toUpperCase()}${d.law.indicted ? ' · INDICTED' : ''} · heat ${d.law.heat}\\n`
-        + `money: ${d.wealth}\\n`
-        + `record: ${d.record.kills} kill(s) / ${d.record.deaths} death(s)\\n`
-        + `flags: ${[d.flags.wanted && 'WANTED', d.flags.welsher && 'WELSHER', d.flags.rat && 'RAT', d.flags.indicted && 'INDICTED'].filter(Boolean).join(', ') || 'clean'}\\n`
-        + `family: ${d.family ? d.family.name + ' (' + d.family.role + ')' : 'unaffiliated'}\\n`
+      alert(`DOSSIER — ${d.name} (lvl ${d.level})\n\n`
+        + `law: ${d.law.stage.toUpperCase()}${d.law.indicted ? ' · INDICTED' : ''} · heat ${d.law.heat}\n`
+        + `money: ${d.wealth}\n`
+        + `record: ${d.record.kills} kill(s) / ${d.record.deaths} death(s)\n`
+        + `flags: ${[d.flags.wanted && 'WANTED', d.flags.welsher && 'WELSHER', d.flags.rat && 'RAT', d.flags.indicted && 'INDICTED'].filter(Boolean).join(', ') || 'clean'}\n`
+        + `family: ${d.family ? d.family.name + ' (' + d.family.role + ')' : 'unaffiliated'}\n`
         + `has wires on: ${d.watching.length ? d.watching.join(', ') : 'nobody'}`);
       renderWire();
     };
     const wlb = $('#wire-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/wire')).body || {};
-      alert('THE SPYMASTER — busiest intel operators\\n\\n' + ((d.spies || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${x.ops} ops)`).join('\\n') || 'nobody\'s been listening yet')); };
+      alert('THE SPYMASTER — busiest intel operators\n\n' + ((d.spies || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${x.ops} ops)`).join('\n') || 'nobody\'s been listening yet')); };
   }
 
   // ── THE STORE: ETH revenue packages (informational — purchases are made at the on-chain paywall) ──
@@ -2637,9 +2657,9 @@
     const bxa = $('#bx-accept'); if (bxa) bxa.onclick = () => act('POST', '/v1/boxing/callout/accept', null).then(() => renderBoxing());
     const lb = $('#bx-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/boxing')).body || {};
-      const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\\n');
-      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\\n');
-      alert('TOP FIGHTERS\\n\\n' + (f || 'none') + '\\n\\nMANAGER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
+      const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\n');
+      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\n');
+      alert('TOP FIGHTERS\n\n' + (f || 'none') + '\n\nMANAGER LEGEND (lifetime wins)\n\n' + (leg || 'none')); };
   }
 
   // ── THE STABLE: own the dogs & the ponies (buy/train/list/circuit(PvE)/match(PvP) + the legend) ──
@@ -2703,9 +2723,9 @@
     });
     const lb = $('#st-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/stable')).body || {};
-      const f = (d.racers || []).map((x, i) => `${i + 1}. ${x.kind === 'horse' ? '🐎' : '🐕'} ${x.racer} (${x.owner}) — ${x.rank} ${x.record}`).join('\\n');
-      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.owner} — ${x.title} (${x.wins} wins)`).join('\\n');
-      alert('TOP RACERS\\n\\n' + (f || 'none') + '\\n\\nOWNER LEGEND (lifetime wins)\\n\\n' + (leg || 'none')); };
+      const f = (d.racers || []).map((x, i) => `${i + 1}. ${x.kind === 'horse' ? '🐎' : '🐕'} ${x.racer} (${x.owner}) — ${x.rank} ${x.record}`).join('\n');
+      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.owner} — ${x.title} (${x.wins} wins)`).join('\n');
+      alert('TOP RACERS\n\n' + (f || 'none') + '\n\nOWNER LEGEND (lifetime wins)\n\n' + (leg || 'none')); };
   }
 
   // ── STREET RACES: the car catalog as a competitive loop (PvE circuit + tuning + PvP wagers) ──
@@ -2769,7 +2789,7 @@
     });
     const lb = $('#rc-lb'); if (lb) lb.onclick = async () => {
       const d = (await api('GET', '/v1/leaderboard/races')).body?.drivers || [];
-      alert('THE WHEEL — winningest drivers\\n\\n' + (d.map((x, i) => `${i + 1}. ${x.name} — ${x.wins} wins (${x.rank})`).join('\\n') || 'none yet'));
+      alert('THE WHEEL — winningest drivers\n\n' + (d.map((x, i) => `${i + 1}. ${x.name} — ${x.wins} wins (${x.rank})`).join('\n') || 'none yet'));
     };
   }
 
@@ -2818,7 +2838,7 @@
     { const bt = $('[data-berth]'); if (bt) bt.onclick = () => act('POST', '/v1/port/berth', null).then(() => renderPort()); }
     { const plb = $('#pt-lb'); if (plb) plb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/port')).body?.smugglers || [];
-      alert("THE SMUGGLER'S LEGEND — biggest lifetime haul\\n\\n" + (d.map((x, i) => `${i + 1}. ${x.name} — $${(x.smuggled||0).toLocaleString()} (${x.rank})`).join('\\n') || 'none yet')); }; }
+      alert("THE SMUGGLER'S LEGEND — biggest lifetime haul\n\n" + (d.map((x, i) => `${i + 1}. ${x.name} — $${(x.smuggled||0).toLocaleString()} (${x.rank})`).join('\n') || 'none yet')); }; }
     t.querySelectorAll('[data-up]').forEach((x) => x.onclick = () => act('POST', `/v1/port/upgrade/${x.dataset.up}`, { part: x.dataset.part }).then(() => renderPort()));
     t.querySelectorAll('[data-pirate]').forEach((x) => x.onclick = () => act('POST', `/v1/port/intercept/${x.dataset.pirate}`, null).then(() => renderPort()));
     t.querySelectorAll('.pt-rdv').forEach((x) => x.onchange = () => act('POST', `/v1/port/boat/${x.dataset.for}/rendezvous`, { open: x.checked }).then(() => renderPort()));
@@ -3030,6 +3050,22 @@
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Robinhood Wallet, or any injected wallet on desktop${rules?.walletConnect ? ', or scan with a mobile wallet (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
+      <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(become Made, then pull your earned $OMR out to your own wallet — what you earn is yours to keep)</span></h2>
+      <div class="card">
+        <div class="d">Made status: ${me.minted
+          ? '<b style="color:var(--ok)">✓ you\'re made</b> — extraction is unlocked'
+          : (me.mintCredits > 0
+            ? '<b style="color:var(--neon)">a mint credit is in hand</b> — get made to unlock extraction'
+            : 'a free trial street plays fully, but only a <b>Made</b> account can extract $OMR / gear on-chain. Get made with the Made Man package in <b>The Store</b> (0.01 ETH) or pay it from earned $OMR (PLEX).')}</div>
+        ${!me.minted && me.mintCredits > 0 ? '<button class="act" id="mint-go" style="border-color:var(--neon)">get made (spend a mint credit)</button>' : ''}
+        ${me.minted ? `
+        <div style="margin-top:8px" class="d">Withdraw $OMR to ${me.wallet ? `<span class="chip good">${me.wallet.slice(0,6)}…${me.wallet.slice(-4)}</span>` : 'your wallet'} — a 2% exit toll applies; fresh (&lt;48h) $OMR also pays the early-exit tax.</div>
+        ${me.wallet
+          ? `<input id="wd-amt" placeholder="$OMR amount" size="10"> <button class="act" id="withdraw-go">extract to my wallet →</button>
+             <div class="d" style="font-size:11px;color:var(--dim)">the on-chain rail is dormant until launch — a withdrawal debits + signs a voucher that queues until the reserve is funded.</div>`
+          : '<div class="d">link your wallet above first (the proven 0x address is where $OMR lands).</div>'}` : ''}
+      </div>
+
       <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:11px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat · selling fresh $OMR — under 48h old — pays an early-exit tax, 50% fading to 0)</span></h2>
       <div class="card"><div class="d">pocket $${fmt(me.cash)} · $OMR on hand ${fmt(Math.floor(me.omr || 0))}</div>
         <input id="swap-amt" placeholder="amount" size="9">
@@ -3088,6 +3124,9 @@
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
+    { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
+    { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
+        act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }
     const swapAmt = () => Number($('#swap-amt').value);
     $('#swap-buy').onclick = () => act('POST', '/v1/swap', { direction: 'buy', amount: swapAmt() }).then(() => renderPortfolio());
     $('#swap-sell').onclick = () => act('POST', '/v1/swap', { direction: 'sell', amount: swapAmt() }).then(() => renderPortfolio());
