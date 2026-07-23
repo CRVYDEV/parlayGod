@@ -14,6 +14,10 @@ import * as Fees from './fees.js';
 import * as V from './vanity.js';
 import * as Vig from './vig.js';
 import * as Territory from './territory.js';
+import * as Diplomacy from './diplomacy.js';
+import * as Sov from './sov.js';
+import * as Campaigns from './campaigns.js';
+import * as Bloodline from './bloodline.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
@@ -54,7 +58,8 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
-         EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps } from './rules.js';
+         EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -665,6 +670,15 @@ export async function buildServer() {
       decayEvery: EMISSION.DECAY_EVERY, capOmr: EMISSION.WAGE_CAP_OMR, minLevel: EMISSION.WAGE_MIN_LVL,
       minScore: EMISSION.WAGE_MIN_SCORE, mintedRequired: wageRequireMinted(),
       epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
+    // FIVE PILLARS — the public catalogs (levers are sign-off; the schedule/ladders are knowable)
+    honor: { tiers: HONOR.TIERS, trusted: HONOR.TRUSTED, dreaded: HONOR.DREADED },
+    diplomacy: { pactDays: DIPLOMACY.PACT_MS / 86400000, coalitionMin: DIPLOMACY.COALITION_MIN,
+      warMult: DIPLOMACY.COALITION_WAR_MULT, seizeMult: DIPLOMACY.COALITION_SEIZE_MULT,
+      dominance: { districts: DIPLOMACY.DOMINANCE_DISTRICTS, standingMult: DIPLOMACY.DOMINANCE_STANDING_MULT } },
+    sov: { tiers: SOV.TIERS, windowH: SOV.WINDOW_H, siegeCost: SOV.SIEGE_COST, ranks: SOV.RANKS,
+      overextBps: SOV.OVEREXT_BPS },
+    campaigns: CAMPAIGNS.map((c) => ({ id: c.id, npc: c.npc, name: c.name, blurb: c.blurb,
+      steps: c.steps.length, minStanding: CAMPAIGN_MIN_STANDING, reward: c.reward })),
     // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
     // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
     // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.
@@ -1698,6 +1712,44 @@ export async function buildServer() {
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
+
+  // ── FIVE PILLARS: diplomacy (#2), sovereignty (#3), campaigns (#4), the bloodline (#5) ──
+  app.get('/v1/diplomacy', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.diplomacyBoard(client, h)));
+  app.post('/v1/diplomacy/pact/:gangId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.proposePact(ch, req.params.gangId, client, h)));
+  app.post('/v1/diplomacy/pact/:gangId/accept', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.acceptPact(ch, req.params.gangId, client, h)));
+  app.delete('/v1/diplomacy/pact/:gangId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.breakPact(ch, req.params.gangId, client, h)));
+  app.post('/v1/diplomacy/coalition/:gangId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.formCoalition(ch, req.params.gangId, client, h)));
+  app.post('/v1/diplomacy/coalition/:id/join', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.joinCoalition(ch, req.params.id, client, h)));
+  app.delete('/v1/diplomacy/coalition/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.leaveCoalition(ch, req.params.id, client, h)));
+  app.get('/v1/sov', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.sovBoard(client, h)));
+  app.post('/v1/sov/:district/build', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.buildSov(ch, req.params.district, req.body?.windowHour, client, h)));
+  app.post('/v1/sov/:district/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.upgradeSov(ch, req.params.district, client, h)));
+  app.post('/v1/sov/upkeep', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.paySovUpkeep(ch, client, h)));
+  app.post('/v1/sov/:district/siege', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.siegeSov(ch, req.params.district, client, h)));
+  app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
+  app.get('/v1/campaigns', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.campaignBoard(ch, client, h)));
+  app.post('/v1/campaigns/:id/start', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.startCampaign(ch, req.params.id, client, h)));
+  app.post('/v1/campaigns/:id/choose', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.chooseCampaign(ch, req.params.id, req.body?.branch, client, h)));
+  app.post('/v1/campaigns/:id/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.claimCampaign(ch, req.params.id, client, h)));
+  app.get('/v1/bloodline', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
+  app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet

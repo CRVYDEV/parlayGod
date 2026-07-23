@@ -9,6 +9,8 @@ import { GameError, bus } from './game.js';
 import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
          yardEventOf, yardEventById, dayOf } from './rules.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
+import { bumpHonor } from './honor.js';
+import { HONOR } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -495,6 +497,7 @@ export async function shank(ch, victim, client, h) {
   // BEFORE the estate vacates the bounties. Cash only (still no loot, no chop, no feared-rep).
   const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']);
   const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
+  await bumpHonor(client, ch, HONOR.SHANK); // #1: a shiv in the yard is a coward's kill — the street remembers
   ch.jail_until = new Date(new Date(ch.jail_until).getTime() + PEN.KILL_ADD_S * 1000); // a body means more time
   bus.emit('streets', { type: 'shank', by: ch.name, victim: victim.name });
   await h.track(client, ch.account_id, 'shank', { victim: victim.id, bounty });

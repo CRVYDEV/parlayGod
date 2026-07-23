@@ -14,7 +14,11 @@ const KNOWN_REASONS = {
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',
     'lab:', 'crew:hire', 'crew:wages', 'laylow', 'mission:', 'daily:', 'onboard:', 'social:', 'referral:', 'mod:confiscate', 'npchit:', 'safehouse',
     'gang:contract', 'bodyguard:', 'territory:', 'business:', 'path:', 'casino:', 'convoy:', 'market:', 'underworld:',
-    'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:'],
+    'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:',
+    // FIVE PILLARS: `sov:` — pure treasury sinks (build/upgrade/upkeep/siege, gang-level, no faucet);
+    // `campaign:` — the authored-chain reward, a once-per-street-per-chain character_id'd faucet
+    // (the missions precedent — check (a) reconciles it per character).
+    'sov:', 'campaign:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:'],
@@ -79,6 +83,9 @@ async function collectLedgerChecks(pool) {
   // and (recurring sinks) `territory:upkeep` a treasury SINK too — all character_id NULL (gang-level).
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
   const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep','territory:raid','territory:fortify')"));
+  // FIVE PILLARS #3: sovereignty is a pure treasury DRAIN (build/upgrade/upkeep/siege — no faucet
+  // anywhere in the pillar, the anti-snowball posture). All character_id NULL, counterparty = gang.
+  const sovOut = -(await sum(pool, "currency='cash' AND reason LIKE 'sov:%'"));
   // STEP FOUR — a RIVAL raid muscles a held operation for a CUT of its pending income: `territory:muscle`
   // is a treasury FAUCET (character_id NULL, counterparty = the RAIDER's gang) that REDIRECTS uncollected
   // income (the owner's clock advances so they collect that much less — the business-shakedown pattern),
@@ -98,7 +105,7 @@ async function collectLedgerChecks(pool) {
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.
