@@ -301,11 +301,36 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
   assert.equal(r.code, 200, 'a sub-threshold paper buy flies from a safehouse');
   r = await call('POST', '/v1/vault/claim', { token: launderer.token, body: { ticker: 'AAPL', omr: 50 } });
   assert.equal(r.body.error, 'safe', 'the vault claim that crosses the SHARED window is blocked from a safehouse (structuring-proof across both books)');
+  // AUDIT F1: a mod buy carrying a txHash is STRIPPED (ALLOW_MOD_REAL_REVENUE off) — real=false,
+  // so a comp can never poison the real-vs-simulated unit ledger R3 reconciles against
+  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'GLD', eth: 0.001, priceEth: 0.001, txHash: '0xfaked' });
+  assert.equal(b.json().real, false, 'the modRealTxHash gate strips a caller-supplied txHash');
+  // AUDIT F3: price continuity — a dust buy can't reprice the whole float (>10× off the last refused)
+  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'AAPL', eth: 0.000001, priceEth: 0.000000001 });
+  assert.equal(b.json().error, 'price_sanity', 'a typo/fat-finger price is refused (the vig VIG_MAX_PRICE_JUMP twin)');
+  // AUDIT B-F1: a claim whose ask rounds to ZERO units is refused BEFORE the burn — never pay for nothing
+  b = await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'HOOD', eth: 0.4, priceEth: 100000 }); // absurdly expensive unit (first buy = no continuity ref)
+  assert.equal(b.statusCode, 200, 'the expensive-ticker buy lands');
+  const tiny = await mk('Tiny Tim');
+  await acctOmr(tiny.id, 100); grantDrift += 100;
+  r = await call('POST', '/v1/vault/claim', { token: tiny.token, body: { ticker: 'HOOD', omr: 5 } });
+  assert.equal(r.body.error, 'amount', 'a zero-unit ask is refused (no burn-for-nothing)');
+  assert.equal((await meOf(tiny.token)).omr, 100, 'and not a single $OMR moved');
+  // the fee slice end-to-end: a REAL gameplay fee routes FEE_RWA_BPS into rwa_revenue (source=fee)
+  const { recordFeePayment } = await import('../src/fees.js');
+  await recordFeePayment(pool, { nonce: 991001, kind: 'mint', payer: '0x' + '11'.repeat(20),
+    amountWei: (10n ** 18n).toString(), txHash: '0x' + 'ab'.repeat(32) }); // 1 ETH real fee
+  const feeRwa = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'")).rows[0].s);
+  assert.equal(feeRwa, 0.1, 'FEE_RWA_BPS (10%) of a real 1-ETH fee funds the float budget');
+  await recordFeePayment(pool, { nonce: 991001, kind: 'mint', payer: '0x' + '11'.repeat(20),
+    amountWei: (10n ** 18n).toString(), txHash: '0x' + 'ab'.repeat(32) }); // re-delivered event
+  assert.equal(Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='fee'")).rows[0].s), 0.1,
+    'a re-delivered fee event books the slice exactly once');
   // the real-value invariant: allocated ≤ held, spend ≤ revenue, unit sums exact
   const inv2 = (await modCall('GET', '/v1/mod/rwa')).json();
   assert.equal(inv2.ok, true, `the RWA invariants hold: ${JSON.stringify(inv2.checks.filter((c) => !c.ok))}`);
   assert(inv2.checks.find((c) => c.name === 'allocated <= held (AAPL)')?.ok, 'THE anti-Ponzi check present + green');
-  assert.equal(inv2.simulatedUnits, 510, 'the real-vs-simulated gap is visible (all pre-mainnet buys are simulated)');
+  assert.equal(inv2.simulatedUnits, 511.000004, 'the real-vs-simulated gap is visible (all pre-mainnet buys are simulated)');
   // DEATH SURVIVAL: the vaulted book is account-level — the heir keeps it
   const vaultedBefore = (await call('GET', '/v1/vault', { token: claimer.token })).body.mine;
   await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: claimer.id }, headers: { 'x-mod-key': 'test-mod-key' } });

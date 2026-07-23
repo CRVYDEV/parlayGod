@@ -1940,7 +1940,10 @@ export async function buildServer() {
   // real-value invariant view (allocated ≤ held — the anti-Ponzi check — spend ≤ revenue, unit sums)
   app.get('/v1/mod/rwa', { preHandler: modAuth }, async () => Rwa.runRwaInvariants(pool));
   app.post('/v1/mod/rwa/buy', { preHandler: modAuth }, async (req) =>
-    Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: req.body?.txHash }));
+    // AUDIT F1: txHash rides the modRealTxHash gate (route parity with mod/fees/record +
+    // mod/bond/simulate) — a mod comp can't stamp a simulated buy real=true and poison the
+    // real-vs-simulated unit ledger R3 extraction reconciles against
+    Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: modRealTxHash(req) }));
   app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
   app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
     // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
