@@ -38,6 +38,12 @@ Deploy with the deployer key, then immediately hand ownership to the Safe (§3).
 PHASE 1 for the exact calls/args.
 - [ ] **`OMR(treasurySafe)`** — fixed-supply `100_000_000e18` minted once to the Safe. Inert; no mint fn.
 - [ ] **`GearVault(safe)`** — ERC-1155; mint gated to VoucherClaim (set in the next step); per-`gearId` supply
+- [ ] **Arm the DEX sell tax (after the pool exists):** `OMR.setTaxRecipients(devWallet, buybackWallet)` →
+      `setExempt` for the POL manager + OmertaBond + VoucherClaim + the Safe → `setPair(pool, true)` →
+      `setSellTax(bps)` (hard-capped 10%; default 0 = off). Only transfers INTO registered pools are
+      taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
+      Uniswap V2-COMPATIBLE** (sell-taxed tokens need the *SupportingFeeOnTransferTokens router path;
+      Uniswap V3 does not support them) — verify which DEX Robinhood Chain runs BEFORE seeding liquidity.
       caps set by the Safe (§ set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
 - [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
