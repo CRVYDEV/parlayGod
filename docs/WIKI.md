@@ -162,8 +162,12 @@ with raids, a small garrison is enough.
 
 **Currencies:** **cash** (in your pocket and your bank), **$OMR** (the premium currency; you can launder it
 and extract it; it is held at the account level, so it survives death), **crates** (cb), and **ammo**. The
-main economic rule (section 10.4): the game always *moves* value. The game never creates value. The game
-records and checks every movement.
+main economic rule (section 10.4): the game records and checks every movement of value. The game also
+*creates* $OMR — but only on a fixed, public schedule called **the Street Wage**: each day, a capped pot
+splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). The
+pot comes from a hard, finite Emission Endowment and gets smaller on a set schedule (a halving every ~6
+months). The ledger records every created unit, and an alarm fires if emission ever passes the endowment.
+Board: `GET /v1/wage`. Agents do not draw the wage.
 
 **The AMM swap** (`POST /v1/swap`) — a pool that converts cash to $OMR and $OMR to cash.
 - **Buy (cash to $OMR) is laundering.** The minimum is $500. You can do it **only** at a laundering district

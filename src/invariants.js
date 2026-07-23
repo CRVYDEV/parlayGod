@@ -3,6 +3,7 @@
 // in the transactions ledger. Any drift beyond $1 (or one unit) — or any ledger
 // row with a reason outside the known vocabulary — is an alert.
 import crypto from 'node:crypto';
+import { EMISSION } from './rules.js';
 
 // The complete reason vocabulary, by currency. A row whose reason matches no
 // prefix here is an unenumerated faucet/sink — the loudest possible §10.4 alarm.
@@ -16,7 +17,7 @@ const KNOWN_REASONS = {
     'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:'],
 };
@@ -139,7 +140,9 @@ async function collectLedgerChecks(pool) {
   // withdrawal reserve (src/vig.js payPrizes) — legal because real revenue backs every token.
   // Phase 4: stake:reward is NO LONGER a mint — rewards are paid from stake_pool (a transfer, both
   // sides inside omrBuckets), so staking contributes zero to net supply. It's out of the mint term.
-  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr')");
+  // THE STREET WAGE (value-creation pivot): emission:% is an enumerated, SCHEDULED mint —
+  // the epoch budget + the endowment check below bound it; it is never discretionary.
+  const omrMints = await sum(pool, "currency='omr' AND (reason LIKE 'mission:%' OR reason='prize:omr' OR reason LIKE 'emission:%')");
   // plex:* is a Phase-2 burn: a player paid a real-money fee from earned $OMR instead of ETH (the
   // PLEX bridge), so the $OMR leaves the game (deflationary, offsets emission).
   // law:jury is a Phase-3 burn: the war chest reaching the jury box leaves the game (deflationary).
@@ -155,6 +158,11 @@ async function collectLedgerChecks(pool) {
   // (the vanity:gang:seal precedent; the reserve is already in omrBuckets, so only the burn term is new).
   const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
+
+  // THE STREET WAGE — lifetime emission may NEVER exceed the fixed Emission Endowment
+  // (the anti-Axie wall: the printer is hard-capped; overrun == the loudest alarm).
+  const emitted = await sum(pool, "currency='omr' AND reason LIKE 'emission:%'");
+  push('emission within endowment', Math.max(0, emitted - EMISSION.ENDOWMENT_OMR), 0, 0.001, { emitted, endowment: EMISSION.ENDOWMENT_OMR });
 
   // (d2) AUCTION ESCROW ($OMR): live standing bids == bid − refunded − won (the bounty-escrow twin,
   // on the $OMR side). bid rows are negative (escrowed in); refund rows positive (out); auction:win

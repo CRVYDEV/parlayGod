@@ -33,6 +33,7 @@ import * as World from './world.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
+import * as Emission from './emission.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -52,7 +53,8 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE } from './rules.js';
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
+         EMISSION, emissionEpochOf, epochBudget } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -614,6 +616,10 @@ export async function buildServer() {
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
     share: { gameUrl: SOCIAL_GAME_URL, xHandle: SOCIAL_X_HANDLE }, // brag-on-X: prefilled intents carry the player's name as a referral code
+    // THE STREET WAGE — the emission schedule is PUBLIC by design (anyone can verify the printer)
+    emission: { endowmentOmr: EMISSION.ENDOWMENT_OMR, epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY,
+      decayEvery: EMISSION.DECAY_EVERY, capOmr: EMISSION.WAGE_CAP_OMR, minLevel: EMISSION.WAGE_MIN_LVL,
+      minScore: EMISSION.WAGE_MIN_SCORE, epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
     // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
     // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
     // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.
@@ -1527,6 +1533,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.get('/v1/onboard', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
+  // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
+  app.get('/v1/wage', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet

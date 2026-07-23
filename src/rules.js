@@ -2331,3 +2331,26 @@ export const socialShareUrl = (kind, code = '') => {
   if (kind === 'referral') return tweet(`Come earn with me in OMERTÀ. Referral code: ${code}`)
   return `https://x.com/${h}` // boost: the profile / pinned post
 }
+
+// ═══ EMISSION — THE STREET WAGE (the value-creation pivot, founder-directed 2026-07-23;
+// design: omerta-value-creation-design.md). The game now CREATES value on a fixed, transparent,
+// decaying schedule: a hard-capped Emission Endowment (a tranche of the fixed $OMR supply —
+// mirrored on-chain in E2) releases a daily epoch budget that HALVES on a schedule, paid pro-rata
+// to measured play (respect gained that epoch), per-account-capped, level-floored, agent-excluded,
+// never by chance. The budget is a CEILING, not an obligation — what isn't earned isn't minted.
+// Every wage is a ledgered §10.4 mint (`emission:wage`) bounded by the `emission within endowment`
+// invariant. ALL numbers are founder sign-off levers — sim + re-derive real-money sizing before
+// any launch copy mentions earning. ═══
+export const EMISSION = {
+  ENDOWMENT_OMR: 1000000,  // lifetime emission ceiling, ever (mirror as the on-chain tranche in E2)
+  EPOCH0: Number(process.env.EMISSION_EPOCH0 || 20657), // the first epoch (day number) — halvings count from here
+  EPOCH_OMR: 500,          // day-one epoch budget ($OMR/day, a ceiling not an obligation)
+  DECAY: 0.5,              // budget multiplier applied every DECAY_EVERY epochs (the halving)
+  DECAY_EVERY: 180,        // epochs between halvings (~6 months)
+  WAGE_CAP_OMR: 5,         // max wage per account per epoch (anti-concentration / anti-Sybil)
+  WAGE_MIN_LVL: 5,         // level floor to draw a wage (the npcHit/WANTED rookie-floor precedent)
+  WAGE_MIN_SCORE: 25,      // respect gained in the epoch must clear this — real play, not a login
+}
+export const emissionEpochOf = (ms = Date.now()) => Math.floor(ms / 86400000)
+export const epochBudget = (epoch, e = EMISSION) => epoch < e.EPOCH0 ? 0
+  : e.EPOCH_OMR * Math.pow(e.DECAY, Math.floor((epoch - e.EPOCH0) / e.DECAY_EVERY))

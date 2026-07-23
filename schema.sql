@@ -1572,3 +1572,13 @@ CREATE INDEX IF NOT EXISTS ix_telemetry_event ON telemetry (event);
 CREATE INDEX IF NOT EXISTS ix_notif_char_undelivered ON notifications (character_id) WHERE NOT delivered;
 -- one wallet address binds to at most one account (§4)
 CREATE UNIQUE INDEX IF NOT EXISTS ux_wallet_address ON account_persistent (wallet_address) WHERE wallet_address IS NOT NULL;
+
+-- THE STREET WAGE (the value-creation pivot) — per-character epoch snapshots. One row per living
+-- character: `epoch` is the last epoch this character was processed in, `respect` the respect at
+-- that moment. The next epoch's wage = respect gained since. The epoch stamp is the idempotency
+-- latch (a re-run of the same epoch finds no character stamped epoch-1 and pays nothing twice).
+CREATE TABLE IF NOT EXISTS wage_snapshots (
+  character_id TEXT PRIMARY KEY REFERENCES characters(id),
+  epoch BIGINT NOT NULL,
+  respect NUMERIC NOT NULL DEFAULT 0
+);

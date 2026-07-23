@@ -77,6 +77,7 @@ const DISPOSITION = {
   character_rackets: 'wiped', character_skills: 'wiped', convoy_ambushes: 'wiped', crew_heist_members: 'wiped',
   daily_progress: 'wiped', fight_bets: 'wiped', makings: 'wiped', missions_done: 'wiped', npc_errands: 'wiped',
   npc_favors: 'wiped', npc_gain: 'wiped', npc_grudges: 'wiped', npc_leads: 'wiped', npc_standing: 'wiped',
+  wage_snapshots: 'wiped', // the Street Wage baseline dies with the street — the heir enrolls fresh (no inherited gain window)
   numbers_tickets: 'wiped', pen_break_members: 'wiped', pen_contraband: 'wiped', port_intercepts: 'wiped',
   racers: 'wiped', stash: 'wiped', track_bets: 'wiped', world_raid_members: 'wiped',
   fighters: 'special', gang_members: 'special', speakeasy_patrons: 'special',

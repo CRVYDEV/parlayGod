@@ -15,6 +15,7 @@ import { runVigInvariants } from './vig.js';
 import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
+import { runWageEpoch } from './emission.js';
 import { sweepUncreditedStore } from './store.js';
 import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
@@ -204,6 +205,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
     const s = await safe('season rollover', () => runSeasonRollover(pool));
     if (s?.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
+    // THE STREET WAGE — the daily emission epoch (idempotent per epoch, safe at any tick frequency)
+    const wg = await safe('street wage epoch', () => runWageEpoch(pool));
+    if (wg?.workers > 0) console.log(`💰 street wage: epoch ${wg.epoch} paid ${wg.paid} $OMR to ${wg.workers} of ${wg.candidates} earners (budget ${wg.budget})`);
     const sw = await safe('bounty sweep', () => sweepExpiredBounties(pool));
     if (sw?.pots > 0) console.log(`📜 contracts: refunded ${sw.pots} expired pot(s) → $${sw.refunded}`);
     const fs = await safe('fee reconcile', () => sweepUncreditedFees(pool));

@@ -6,7 +6,11 @@ You are building the production backend for OMERTÀ, a multiplayer noir mafia RP
 1. **`omerta-backend-spec.md` is the contract.** Every formula, table, and timer is specified there with production values. Do not invent mechanics or "improve" balance — the numbers were sim-audited.
 2. **`src/rules.js` is generated, never edited.** Regenerate from the prototype via `tools/extract-rules.js` if v25+ ships.
 3. **Server-authoritative always.** Client input is a choice, never a value. All randomness server-side and logged to `rng_audit`.
-4. **Every value movement writes to `transactions`.** The §10.4 invariants are sacred: value transfers, it is never minted. Add invariant checks to tests when you add faucets/sinks.
+4. **Every value movement writes to `transactions`.** The §10.4 invariants are sacred. AMENDED by the
+   founder-directed VALUE-CREATION pivot (2026-07-23, `omerta-value-creation-design.md`): value transfers,
+   OR is minted through ENUMERATED, SCHEDULED emission faucets only (today: `emission:wage`, bounded per-epoch
+   by `epochBudget` and lifetime by the `emission within endowment` check). Discretionary/unbudgeted minting
+   remains forbidden and is the loudest alarm. Add invariant checks to tests when you add faucets/sinks.
 5. **Lazy accrual, no global ticks** (§7.1). Any new time-based mechanic extends `src/accrual.js` inside the same pattern.
 6. **One DB transaction per action**, row-locked via `withCharacter` (extend it for two-party actions in M3: lock both rows in a stable order to avoid deadlock).
 7. Run `npm test` after every change; extend `test/smoke.js` (or add files) for every new endpoint — both success and gate-rejection paths.
@@ -3360,7 +3364,36 @@ section reference both. `test/hardening.js` covers the board (arbitrage spreads 
 next-tier ideas (not requested): agent-specific rate-tier tuning, a sandbox/testnet flag, and listing
 `omerta-mcp` in public MCP directories (a deploy/marketing step, not code).
 
+**THE VALUE-CREATION PIVOT — "THE STREET WAGE" (founder-directed 2026-07-23) — E1 BUILT**
+(`omerta-value-creation-design.md` is the new economic constitution; `src/emission.js`,
+`test/emission.js` — the 35th suite). The founder retired "the game never creates value": the game
+now CREATES $OMR on a fixed, transparent, DECAYING schedule so playing well is a real income stream
+(the side-hustle vision), built the anti-Axie way — supply is INELASTIC: **(1) the Emission
+Endowment** (`EMISSION.ENDOWMENT_OMR` 1M — lifetime ceiling, mirrored as a Safe-held tranche in E2)
++ **(2) halvings** (`EPOCH_OMR` 500/day × `DECAY` 0.5 every `DECAY_EVERY` 180 epochs from
+`EPOCH0`; `epochBudget` is a CEILING not an obligation — unearned budget is never minted) +
+**(3) earned, never by chance**: the daily worker epoch (`runWageEpoch`, the runSeasonRollover
+per-char-txn twin — chars→accounts lock order, pre-computed shares so a crash-resume can't inflate,
+snapshot-epoch stamp = idempotency) pays pro-rata on RESPECT GAINED that epoch (energy-bounded),
+per-account-capped (`WAGE_CAP_OMR` 5), level-floored (`WAGE_MIN_LVL` 5), min-score-gated
+(`WAGE_MIN_SCORE` 25), agents + banned EXCLUDED (the referral posture). §10.4: `emission:` joined
+the omr vocabulary + the MINT term, plus a NEW **`emission within endowment`** check (overrun =
+alarm); `wage_snapshots` (new table) is estate-WIPED (heir enrolls fresh; migrate.js DISPOSITION).
+Board `GET /v1/wage` + a public `rules.emission` block (the schedule is verifiable by anyone) + a
+Street Wage card on Going Legit. The Vig/full-reserve/extraction rails are UNTOUCHED — the endowment
+is the wage FLOOR, revenue the upside; the invariant generalizes to extraction ≤ endowment released +
+revenue inflow. E2 (chain, mainnet-gated): scheduled endowment tranche → `fundReserve` so wages are
+extractable 1:1; E3 (product): low-minimum withdrawals, sponsored claims, localization, wage
+statements. Suite 35/35 + sim drift-0. ALL `EMISSION.*` numbers are founder sign-off levers —
+re-derive real-money sizing before ANY launch copy mentions earning (see Sensitive notes).
+
 ## Sensitive design notes
+- **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
+  players real-value $OMR at scale can trigger money-transmission / employment / securities questions
+  by jurisdiction. The MECHANICS ship under the standing counsel-approval directive; the MESSAGING
+  does not: no earnings promises, no income claims, no "side hustle" language in official copy until
+  counsel clears exact wording. Describe the schedule factually only. The wage must NEVER become
+  discretionary or chance-based (it would break both the anti-Axie wall and the RWA no-chance rule).
 - **Utility-only is being retired** by the founder's Risk-to-Earn pivot (above). $OMR is becoming a
   losable/extractable asset (Phase 1 makes it lootable; Phase 2 makes it a real living). Still do NOT
   add explicit price-appreciation *marketing/messaging* — that stays out for legal reasons until
