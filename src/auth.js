@@ -16,11 +16,26 @@ import { GameError } from './game.js';
 // explicitly accepts the risk for a closed alpha (`X_TRUST_USER_TOKEN=on` — the
 // SOCIAL_VERIFY_MODE / INVITE_MODE default-safe posture). A misconfigured or
 // default production therefore never silently accepts an unbound X token.
+// every outbound X call is TIME-BOXED (the verify.js posture): a hung X API must never hang an
+// auth request; transient trouble (timeout/network/429/5xx) is a clean retryable 'x_busy'.
+const AUTH_TIMEOUT_MS = 10000;
+async function xApiFetch(url, opts = {}) {
+  let res;
+  try {
+    res = await fetch(url, { ...opts, signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
+  } catch {
+    throw new GameError('x_busy', 'X is not answering right now — try again in a minute.');
+  }
+  if (res.status === 429 || res.status >= 500)
+    throw new GameError('x_busy', 'X is busy right now — try again in a few minutes.');
+  return res;
+}
+
 export async function verifyX(accessToken) {
   if (!accessToken) throw new GameError('token', 'Missing X access token.');
   if ((process.env.X_TRUST_USER_TOKEN || 'off') !== 'on')
     throw new GameError('provider_unavailable', 'X sign-in is not enabled on this server.');
-  const res = await fetch('https://api.x.com/2/users/me', {
+  const res = await xApiFetch('https://api.x.com/2/users/me', {
     headers: { authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new GameError('auth_failed', 'X rejected that token.');
   const data = await res.json();
@@ -181,10 +196,10 @@ export async function xOAuthCallback(pool, { code, state }) {
   if (process.env.X_CLIENT_SECRET) {
     headers.authorization = 'Basic ' + Buffer.from(`${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`).toString('base64');
   }
-  const tok = await fetch('https://api.x.com/2/oauth2/token', { method: 'POST', headers, body: form });
+  const tok = await xApiFetch('https://api.x.com/2/oauth2/token', { method: 'POST', headers, body: form });
   const tj = await tok.json().catch(() => ({}));
   if (!tok.ok || !tj.access_token) throw new GameError('oauth_exchange', 'X refused the sign-in — try again.');
-  const me = await fetch('https://api.x.com/2/users/me', { headers: { authorization: `Bearer ${tj.access_token}` } });
+  const me = await xApiFetch('https://api.x.com/2/users/me', { headers: { authorization: `Bearer ${tj.access_token}` } });
   const mj = await me.json().catch(() => ({}));
   if (!me.ok || !mj.data?.id) throw new GameError('oauth_me', 'X did not return a profile — try again.');
   return { purpose: st.purpose, accountId: st.account_id, invite: st.invite,
