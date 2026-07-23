@@ -3404,7 +3404,7 @@
             : `<div class="d"><select id="cons-target"></select> <button class="act" id="cons-name">name a consigliere ($${fmt(rules?.marriage?.consigliereCost || 10000)})</button></div>`}
           ${(dyn.consigliereOffers || []).map((o) => `<div class="d">🎩 <b>${o.steward || '?'}</b> asks for your counsel <button class="act" data-consaccept="${o.accountId}">take the chair</button></div>`).join('')}
           ${(dyn.advising || []).length ? `<div class="d" style="color:var(--dim)">you counsel: ${dyn.advising.map((x) => x.dynasty || `the house of ${x.steward || '?'}`).join(' · ')}
-            <button class="act" data-do="DELETE /v1/dynasty/consigliere" style="font-size:11px;padding:2px 6px">walk away</button></div>` : ''}
+            <button class="act" data-do="DELETE /v1/dynasty/consigliere?role=adviser" style="font-size:11px;padding:2px 6px">walk away</button></div>` : ''}
         </div>
       </div>
 

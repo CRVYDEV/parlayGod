@@ -1770,7 +1770,7 @@ export async function buildServer() {
   app.post('/v1/dynasty/consigliere/accept/:accountId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.acceptConsigliere(ch, req.params.accountId, client, h)));
   app.delete('/v1/dynasty/consigliere', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.endConsigliere(ch, client)));
+    G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.endConsigliere(ch, client, req.query?.role || req.body?.role || null)));
   // NAMED SOLDIERS (XCOM — recruit / assign / dismiss; the assists live inside crime/heist/raids)
   app.get('/v1/soldiers', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.soldierBoard(ch, client)));

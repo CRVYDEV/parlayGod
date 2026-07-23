@@ -11,6 +11,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { MARRIAGE, SOLDIERS } from '../src/rules.js';
+import { checkScandal } from '../src/dynasty.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -148,10 +149,23 @@ let a, b;
   assert.ok(bd.consigliere?.accepted, "the house's board shows its adviser");
   const be = (await call('GET', '/v1/dynasty', { token: e.token })).body;
   assert.ok(be.advising.length === 1, "the adviser's board shows the house they counsel");
-  // end it from the adviser's chair
-  r = await call('DELETE', '/v1/dynasty/consigliere', { token: e.token });
+  // end it from the adviser's chair — SCOPED (audit LOW-1): resigning advising posts only
+  r = await call('DELETE', '/v1/dynasty/consigliere?role=adviser', { token: e.token });
   assert.equal(r.code, 200, 'the adviser can walk');
-  console.log('✓ divorce honor + mad-dog lockout + consigliere both ways');
+
+  // ── audit MED-2 regressions: the divorce tombstone ──
+  // (1) killing your RECENTLY-divorced ex still fires the FULL scandal (no divorce-first dodge)
+  const dRow = (await pool.query(`SELECT * FROM characters WHERE id='${d.id}'`)).rows[0];
+  const eRow = (await pool.query(`SELECT * FROM characters WHERE id='${e.id}'`)).rows[0];
+  const h1 = await honorOf(d.id);
+  const sc = await checkScandal(pool, dRow, eRow);
+  assert.ok(sc?.scandal && sc.graced, `the grace-window scandal fires post-divorce: ${JSON.stringify(sc)}`);
+  assert.equal(await honorOf(d.id), Math.max(-100, h1 + MARRIAGE.SCANDAL), 'the full -30 lands despite the divorce');
+  // (2) the same pair can't re-marry inside the window (slows marry/divorce vendetta laundering)
+  await setCash(d.id, 100000);
+  r = await call('POST', `/v1/dynasty/propose/${e.id}`, { token: d.token });
+  assert.equal(r.body?.error, 'cooling', `no re-marriage while the ink is wet: ${JSON.stringify(r.body)}`);
+  console.log('✓ divorce honor + mad-dog lockout + consigliere both ways + the scandal grace window');
 }
 
 // ═══ SOLDIERS — hire/assign + the crime assist + permadeath + the memorial ═══
@@ -191,7 +205,7 @@ let a, b;
     // an interleaved bust injures the second (death pinned OFF) and an injured soldier sits out —
     // patch him up between tries so the success-assist is always observable (anti-flake)
     await pool.query(`UPDATE soldiers SET injured_until=NULL WHERE id='${soldierId}'`);
-    const cr = await call('POST', '/v1/crimes/pick', { token: s.token });
+    const cr = await call('POST', '/v1/crimes/stereo', { token: s.token });
     if (cr.body?.success && cr.body?.soldier) got = cr.body;
   }
   assert.ok(got, 'a successful assisted crime lands');
@@ -199,6 +213,13 @@ let a, b;
   board = (await call('GET', '/v1/soldiers', { token: s.token })).body;
   const vet = board.roster.find((x) => x.id === soldierId);
   assert.ok(vet.xp >= 1, 'the soldier earned xp');
+  // audit regression: every assisted job pays the cut — the Score included (the safecracker was
+  // the one pure-upside trait; the pre-ledger shave makes assignment a real tradeoff, §10.4-safe)
+  await pool.query(`UPDATE characters SET heist_at=NULL, health=100, jail_until=NULL WHERE id='${s.id}'`);
+  await pool.query(`UPDATE soldiers SET injured_until=NULL WHERE id='${soldierId}'`);
+  r = await call('POST', '/v1/heist', { token: s.token });
+  assert.equal(r.code, 200, `assisted Score: ${JSON.stringify(r.body)}`);
+  assert.ok(r.body.soldier && r.body.soldier.cut > 0, 'the second takes his cut of the Score too');
   // the RISKY outcome: pin DEATH on and farm a bust — the soldier dies for good, onto the memorial
   process.env.SOLDIER_DEATH_P = '1';
   let died = false;
@@ -207,7 +228,7 @@ let a, b;
     // keep the second FIT going into each try (a prior bust's injury would bench him and the
     // death roll would never fire — the same anti-flake as the success farm)
     await pool.query(`UPDATE soldiers SET injured_until=NULL WHERE id='${soldierId}' AND alive`);
-    const cr = await call('POST', '/v1/crimes/pick', { token: s.token });
+    const cr = await call('POST', '/v1/crimes/stereo', { token: s.token });
     if (cr.body?.success === false && cr.body?.soldier?.died) died = true;
   }
   assert.ok(died, 'a busted job kills the pinned second');

@@ -4220,3 +4220,23 @@ Second" card on Streets (roster/hire/assign/memorial). `test/dynasty.js` proves 
 cap + assign + the crime cut/xp + pinned permadeath + the memorial + death-with-the-street), and
 §10.4 (vocabulary closed, sinks delta-0). ALL numbers (`MARRIAGE.*`, `SOLDIERS.*`) are founder
 sign-off levers; the gunner raid bump is the one emission-adjacent lever (sim before production).
+A **two-lens red-team** (`AUDIT-marriage-soldiers.md`: §10.4+locks, exploit/grief/death) returned
+**no CRITICAL/HIGH — §10.4 verified EXACT** (four sinks, all character_id'd; the cut a verified
+pre-ledger shave). Fixed in-commit (regression each): **MED — bigamy race** (monogamy was
+unlocked-read enforced; two accepts sharing one proposer could seal TWO marriages → `lockMarriageRows`,
+a deterministic ORDER-BY FOR UPDATE read of every row touching either account, is now the source
+of truth in propose/accept); **MED — accept-vs-withdraw race** (an acceptor could pay $25k + clear
+vendettas for a marriage that no longer existed, or a sealed marriage could be unwound as a free
+"withdrawal" → the pair row is locked in both paths + the accept UPDATE is `AND NOT accepted` with
+a rowCount assert); **MED — the divorce-first scandal dodge** (instant recordless divorce converted
+−30 into −10 one action before any premeditated in-law kill → a `dynasty_divorces` tombstone +
+`MARRIAGE.SCANDAL_GRACE_MS` 48h: the kill still fires the FULL scandal inside the window and the
+pair can't RE-marry in it — which also chokes the marry/divorce vendetta-laundering cycle);
+**economy flag — the safecracker was the one pure-upside trait** (zero risk/cost, +40% heist
+cadence → every assisted Score now pays the same 5% pre-ledger cut as crime — the faucet shrinks,
+assignment is a real tradeoff); **LOW** — `endConsigliere` scoped by role (was a shotgun);
+**LOW** — a withdrawn/declined proposal now notifies the counterparty. Verified CLEAN: lock posture
+(single-party, leaf rows, no AB-BA), checkScandal race-safety, absolute soldier writes,
+estate/dispositions, spam bounds, wheelman non-dominance. Flagged (ground rule #1): Mad-Dog
+consigliere flavor call, the wheelman jail-floor stack + gunner magnitude (sim levers), the
+multi-offer withdraw UX. Suite green + sim drift-0.

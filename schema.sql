@@ -1738,6 +1738,17 @@ CREATE TABLE IF NOT EXISTS dynasty_marriages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_a, account_b)
 );
+-- DIVORCE TOMBSTONES (audit MED-2/LOW): a divorced-or-scandaled pair leaves a record so (1) the
+-- SCANDAL still fires on a kill within MARRIAGE.SCANDAL_GRACE_MS of the split (closes the
+-- divorce-one-action-before-the-kill dodge) and (2) the same pair can't re-marry inside the window
+-- (slows marry/divorce vendetta-laundering cycles). Upserted on every accepted-marriage split.
+CREATE TABLE IF NOT EXISTS dynasty_divorces (
+  account_a TEXT NOT NULL,
+  account_b TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_a, account_b)
+);
+
 -- THE CONSIGLIERE — each dynasty names ONE adviser (another account); pure status both ways.
 CREATE TABLE IF NOT EXISTS consiglieri (
   dynasty_account TEXT PRIMARY KEY,               -- the house doing the naming

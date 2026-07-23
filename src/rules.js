@@ -2511,6 +2511,10 @@ export const MARRIAGE = {
   CONSIGLIERE_COST: 10000,    // naming an adviser (the envoy fee, paid at propose)
   SCANDAL: -30,               // killing your in-law — the honor hit; the marriage dissolves on the spot
   DIVORCE: -10,               // walking out on your vows — the initiator's honor hit
+  // audit MED-2: the scandal still fires on a kill within this window of divorcing that same house
+  // (closes the divorce-one-action-before-the-kill dodge), and the same pair can't RE-marry inside
+  // it (slows marry/divorce vendetta-laundering cycles). One tombstone powers both.
+  SCANDAL_GRACE_MS: 48 * 3600e3,
 }
 // Drop B — NAMED SOLDIERS (XCOM): recruit named muscle with ONE trait; they assist jobs, take a
 // cut, get injured, and DIE for good. Traits are single-touchpoint modifiers (the skills/decree
