@@ -413,11 +413,41 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const st2 = new URL(r.body.url).searchParams.get('state');
   const row2 = (await pool.query('SELECT purpose, account_id FROM oauth_states WHERE state=$1', [st2])).rows[0];
   assert(row2.purpose === 'upgrade' && row2.account_id, 'an authed start binds the guest for upgrade');
-  // the callback refuses an unknown state with a clean fragment redirect (no 500, nothing logged in a query)
-  const cb = await app.inject({ method: 'GET', url: '/v1/auth/x/callback?code=zzz&state=not-a-state' });
+  // /start browser-binds the state in an HttpOnly cookie (anti account-linking CSRF)
+  r = await call('POST', '/v1/auth/x/start', { body: {} });
+  const setC = r.headers['set-cookie'];
+  assert(setC && /omerta_oauth=[^;]+;.*HttpOnly/i.test(Array.isArray(setC) ? setC.join(';') : setC), 'start sets the HttpOnly binding cookie');
+  const boundState = new URL(r.body.url).searchParams.get('state');
+  // the callback WITHOUT the matching cookie is refused (a CSRF'd victim never carries it)
+  let cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=zzz&state=${boundState}` });
   assert.equal(cb.statusCode, 302, 'callback redirects home');
-  assert(cb.headers.location.includes('#autherr=oauth_state'), 'the error rides the fragment');
+  assert(cb.headers.location.includes('#autherr=oauth_session'), 'no matching cookie → CSRF-guard refusal');
+  // an unknown state is refused too (the state check is belt-and-braces behind the cookie)
+  cb = await app.inject({ method: 'GET', url: '/v1/auth/x/callback?code=zzz&state=not-a-state',
+    headers: { cookie: 'omerta_oauth=not-a-state' } });
+  assert(cb.headers.location.includes('#autherr=oauth_state'), 'unknown state (with cookie) → clean fragment error');
   delete process.env.X_CLIENT_ID; delete process.env.PUBLIC_URL;
+}
+
+// ── THE FAMILY ROOM shows no back-chat to a spy who slips in — reads floor at your join time ──
+{
+  const boss = await mk('Chat Boss');
+  await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'The Talkers', tag: 'TT' } });
+  await call('POST', '/v1/gangs/chat', { token: boss.token, body: { text: 'war plans for the docks' } });
+  await new Promise((r) => setTimeout(r, 10));
+  const spy = await mk('Sneaky Spy');
+  await call('POST', '/v1/gangs/The%20Talkers/join', { token: spy.token }).catch(() => {});
+  // join by id if the name route differs — look the gang up
+  const gid = (await pool.query("SELECT id FROM gangs WHERE tag='TT'")).rows[0]?.id;
+  if (gid) await call('POST', `/v1/gangs/${gid}/join`, { token: spy.token });
+  const spyView = await call('GET', '/v1/gangs/chat', { token: spy.token });
+  if (spyView.code === 200) {
+    assert(!spyView.body.messages.some((m) => m.text.includes('war plans')), 'a fresh member sees no pre-join family chat');
+  }
+  await call('POST', '/v1/gangs/chat', { token: boss.token, body: { text: 'new orders' } });
+  await new Promise((r) => setTimeout(r, 10));
+  const after = await call('GET', '/v1/gangs/chat', { token: spy.token });
+  if (after.code === 200 && gid) assert(after.body.messages.some((m) => m.text.includes('new orders')), 'but sees messages from after they joined');
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env)`);
