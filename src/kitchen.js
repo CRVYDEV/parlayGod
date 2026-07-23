@@ -6,7 +6,7 @@ import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, HONOR,
-} from './rules.js';
+  seasonModOf } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -190,9 +190,11 @@ export async function layLow(ch, client, h) {
   // FAST TALKER (skills) stacks multiplicatively with an amnesty decree — both are new levers
   // FIVE PILLARS #1: a Man of Honor lays low cheaper — the judges' benefit of the doubt
   // (stacks multiplicatively with the decree + the skill; a NEW lever, sign-off)
+  // SEASONAL MODIFIER (slate #6): the season's twist composes multiplicatively like the decree
   const cost = Math.floor(M4.LAYLOW_CASH * (amnesty ? COMMISSION.AMNESTY_MULT : 1)
     * skillMult(h, 'fast_talker', SKILLS.FX.LAYLOW_MULT)
-    * (Number(ch.honor || 0) >= HONOR.TRUSTED ? HONOR.LAYLOW_MULT : 1));
+    * (Number(ch.honor || 0) >= HONOR.TRUSTED ? HONOR.LAYLOW_MULT : 1)
+    * (seasonModOf().laylowMult || 1));
   if (Number(ch.cash) < cost) throw new GameError('cash', `Laying low takes $${cost}.`);
   if (Number(ch.energy) < M4.LAYLOW_ENERGY) throw new GameError('energy', `Laying low takes ${M4.LAYLOW_ENERGY} energy.`);
   ch.cash = Number(ch.cash) - cost;

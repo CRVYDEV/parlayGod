@@ -9,7 +9,7 @@ import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
   effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf,
-} from './rules.js';
+  seasonModOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -222,7 +222,8 @@ export async function sellGood(ch, goodId, qty, client, h) {
   const n = Math.min(Math.max(1, Math.floor(Number(qty) || 0)), have);
   if (n <= 0) throw new GameError('none', 'Nothing of that in the trunk.');
   const ev = cityEventOf(dayOf());
-  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'sell') * (ev.tradeMult || 1) * (ch.path === 'ledger' ? 1.05 : 1));
+  // SEASONAL MODIFIER (slate #6): THE GOLD RUSH lifts every sale (composes like the city event)
+  const unit = Math.round(goodPriceOf(goodId, ch.loc) * turfMult(h.owned.held || [], ch.loc, 'sell') * (ev.tradeMult || 1) * (ch.path === 'ledger' ? 1.05 : 1) * (seasonModOf().tradeSellMult || 1));
   const gross = unit * n, fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
   ch.cash = Number(ch.cash) + net;
