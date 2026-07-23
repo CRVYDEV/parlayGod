@@ -89,10 +89,25 @@ contract-driven by design); bank-interest per-character Sybil split (D5, accepte
 floor (self-limiting); trade-goods arbitrage (WATCH). The sim's NOS comment string contradicts its
 own +EV — cosmetic doc nit.
 
-**Coverage boundary (Lens H, honest):** did not exhaustively re-line-trace casino stateful
-blackjack/heads-up-poker in-hand branches, `pen.executeBreak`, world co-op-raid internals, or
-economy swap/stake internals — all within prior audit coverage; the residual surface for a future
-focused pass.
+## ROUND 3 — the coverage boundary, closed (1 focused lens)
+
+Lens H honestly flagged four surfaces it hadn't exhaustively line-traced. A dedicated round-3 lens
+traced all four to full depth — **CLEAN, no bug found**:
+- **casino blackjack** — paid exactly once (hand `FOR UPDATE` + delete-with-payout in one txn),
+  den-book `profit == bets − wins` exact (traced the doubled-win case), `openLiability` reserve
+  correct (the `dbl` column is vestigial, never persisted true), hit-after-stand / double-after-hit
+  gates hold, no hole-card leak; **heads-up poker** — the 7-card evaluator verified (wheel straight,
+  SF-vs-flush ordering, tie→push), the win path the audited `casino:pvp` taxed transfer.
+- **pen.executeBreak** — leader→sorted-members→break-row lock order acyclic, idempotent, rat branch
+  relief-only (never below the rat's own sentence), absolute writes, dead/left member self-heals.
+- **world co-op raid + frontier** — the heist lock-order twin, `cartel_damage == Σ world:raid`
+  (§10.4-neutral), reservoir remainder never ledgered, frontier flag/garrison/tribute atomic.
+- **economy swap/stake** — AMM k preserved both directions, the sell surcharge net-0 with NO
+  rounding leak (integer `amt` → exact), FIFO replay race-free, stake pool-capped + principal whole.
+
+**Net across 3 rounds / 9 lenses: no CRITICAL, no HIGH open, every confirmed finding fixed.** The
+codebase is genuinely hardened; the remaining open items are all founder economy sign-offs (above)
+and the i18n prose-translation product call.
 
 ---
 
