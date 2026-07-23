@@ -3432,6 +3432,30 @@ Constructor signature unchanged (\`OMR(treasurySafe)\`, now Ownable(treasurySafe
 hard cap + recipients-required, onlyOwner, a conservation fuzz — redirected never minted). Compiles
 clean (solc 0.8.26, 0 warnings); \`forge test\` remains the pre-mainnet gate.
 
+**VALUE-CREATION RED-TEAM (`AUDIT-value-creation.md`, 2026-07-23)** — a max-effort four-lens pass
+(§10.4/emission, concurrency/locks, exploit/economic, Solidity) over the five pivot drops (Street
+Wage, Exit Toll, Early-Exit Surcharge, bond dev cut, OMR sell tax), every finding re-verified vs
+source. **No CRITICAL/HIGH, no §10.4 drift, no conservation leak; both contracts CLEAN** (every
+`_update` edge, exact conservation incl. odd-wei dust, no reentrancy surface, anti-rug guardrails
+enforced in code; OmertaBond's three-way split exact with event↔watcher↔bonds.js parity
+byte-for-byte, tranche/EIP-712/daily-cap walls intact). Fixed in-commit (regression added): **F1
+(MED)** — a mid-epoch worker crash re-granted the FULL per-epoch wage budget to the unpaid
+remainder (the in-memory share pre-compute doesn't survive a restart; endowment-bounded but a
+silent breach of the signed halving schedule, invisible to the endowment invariant) →
+`emittedThisEpoch` (the epoch window's ledgered `emission:wage` sum — the ledger is the resume
+state) now caps `payable = min(budget − consumed, room)`, so a resume TOPS UP toward the budget;
+the same guard closes the dormant concurrent-run seam. Exit toll / surcharge / dev claim / bond
+split all verified conservation-exact to 6-dp; the surcharge replay is race-free (runs under the
+caller's held account lock). Flagged for founder sign-off (NOT patched, ground rule #1 — recorded
+in BALANCE.md as coupled rows D1/D2): **D1** the wage's Sybil gate — the agent flag is voluntary
+and guest alts clear the floors for ~a minute of automation each, so ~100 alts capture the whole
+daily budget (dials: INVITE_MODE=on, gate the wage on a linked+MINTED wallet, floors, diminishing
+shares — THE launch-gating decision); **D2** the surcharge's FIFO drains AGED lots first, so a
+patient extractor's daily exit is surcharge-free after a 48h ramp (as built it's anti-INSTANT-dump
+only; the fresh-end pricing flip is one ordering change if "every fresh token pays once" is the
+intent). The doc's stake→unstake wash seam RE-MEASURED as a non-dodge (fresh tokens washed through
+staking still price fresh) — design doc corrected. Suite 35/35 + sim drift-0.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

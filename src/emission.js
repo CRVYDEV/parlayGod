@@ -14,8 +14,12 @@
 // Concurrency discipline (the runSeasonRollover twin): ONE txn per character — lock the char row
 // FOR UPDATE (canonical characters→accounts order, so a concurrent player action can't clobber
 // the account credit), re-check the snapshot stamp under the lock (idempotent + crash-resumable),
-// pay, stamp. Shares are PRE-COMPUTED from the initial candidate set so a resumed run pays the
-// same amounts (a recomputed total over the remainder would inflate the survivors' shares).
+// pay, stamp. `payable` is the epoch budget MINUS what this epoch already minted (`emittedThisEpoch`),
+// so a mid-epoch process crash + resume TOPS UP toward the budget instead of restarting it — the
+// survivors split only the unspent remainder (reproducing their original shares) and the signed
+// per-epoch schedule is never breached. The lifetime endowment still bounds emission. (A single
+// worker + guardedTick keeps two runs of one epoch from racing the pre-commit `emittedThisEpoch`
+// read; any true endowment breach still trips the `emission within endowment` invariant regardless.)
 import crypto from 'node:crypto';
 import { EMISSION, emissionEpochOf, epochBudget, levelOf } from './rules.js';
 
@@ -27,6 +31,16 @@ export async function emittedTotal(pool) {
   )).rows[0].s);
 }
 
+// What THIS epoch has already minted — the crash-resume budget guard (survives a process restart,
+// unlike an in-memory pre-compute). The epoch is a raw UTC day number (emissionEpochOf =
+// floor(ms/86400000)), so its window opens at epoch × 86400000 and wage rows, dated at pay time,
+// fall inside that day. So a resumed run reads what run 1 committed and tops up toward the budget.
+export async function emittedThisEpoch(pool, epoch) {
+  return Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason='emission:wage' AND at >= $1 AND at < $2",
+    [new Date(epoch * 86400000), new Date((epoch + 1) * 86400000)])).rows[0].s);
+}
+
 // Run one wage epoch. Idempotent per epoch (safe at any worker tick frequency): candidates are
 // characters whose snapshot is stamped `epoch-1`; every processed character is re-stamped `epoch`,
 // so a second run the same day finds nobody. A character with no snapshot yet (fresh street, or
@@ -36,7 +50,11 @@ export async function runWageEpoch(pool, opts = {}) {
   const budget = opts.budget ?? epochBudget(epoch);
   // lifetime ceiling: what's already minted leaves this much endowment room
   const room = Math.max(0, EMISSION.ENDOWMENT_OMR - (await emittedTotal(pool)));
-  const payable = Math.min(budget, room);
+  // per-epoch ceiling that SURVIVES a mid-epoch crash: subtract what this epoch already minted, so a
+  // resumed run tops up toward the budget instead of re-granting the whole budget to the survivors
+  // (the confirmed crash-resume over-emission). Endowment room still hard-bounds lifetime emission.
+  const consumed = await emittedThisEpoch(pool, epoch);
+  const payable = Math.min(Math.max(0, budget - consumed), room);
 
   const rows = (await pool.query(`
     SELECT c.id, c.account_id, c.respect, s.epoch AS snap_epoch, s.respect AS snap_respect,
