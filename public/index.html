@@ -382,7 +382,7 @@
       <input id="invite-code" placeholder="invite code" size="18" style="font-size:15px">
       <div class="sub" style="font-size:12.5px;color:var(--bad);margin-top:4px">This alpha is invite-only. Ask a made man for a code.</div>
     </div>
-    <button class="act cta" id="btn-guest">ENTER AS A GHOST</button>
+    <button class="act cta" id="btn-guest" data-i18n="e_ghost">ENTER AS A GHOST</button>
     <div class="ctahint">No wallet, no email — one tap. Claim it with X / Privy later without losing the street.</div>
     <div class="wire-ticker"><span class="wl">THE WIRE</span><span id="wire-line">tuning in&hellip;</span></div>
   </div>
@@ -403,7 +403,7 @@
     <p>Server-authoritative, sim-audited, and honest to the cent — every dollar and every $OMR lives on a built-in ledger. The city pays its workers: a fixed, public emission schedule splits a daily $OMR pot among the players who actually played, and real revenue tops the pools up. What you earn is yours to keep, spend, or (at launch) extract on-chain. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
   </div>
 
-  <div class="encore"><button class="act cta" id="btn-guest2">MAKE YOUR BONES →</button></div>
+  <div class="encore"><button class="act cta" id="btn-guest2" data-i18n="e_bones">MAKE YOUR BONES →</button></div>
 
   <div class="signin">
     <div id="xoauth-row" class="hidden" style="margin-bottom:10px">
@@ -440,23 +440,23 @@
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
     <button class="act" id="btn-share" title="broadcast your legend — a shareable card that credits you for every recruit">📣 broadcast</button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
-    <button class="act" id="btn-logout">burn the papers</button>
+    <button class="act" id="btn-logout" data-i18n="b_burn">burn the papers</button>
   </div>
   <div id="layout">
 
     <div>
       <div class="panel" id="sheet">
-        <h2>The Sheet</h2>
+        <h2 data-i18n="w_sheet">The Sheet</h2>
         <div id="sheet-body">…</div>
         <div style="margin-top:8px">
-          <button class="act" data-do="POST /v1/heal">heal</button>
-          <button class="act" data-do="POST /v1/checkin">check in</button>
-          <button class="act" id="btn-refresh">refresh</button>
+          <button class="act" data-do="POST /v1/heal" data-i18n="b_heal">heal</button>
+          <button class="act" data-do="POST /v1/checkin" data-i18n="b_checkin">check in</button>
+          <button class="act" id="btn-refresh" data-i18n="b_refresh">refresh</button>
         </div>
         <div id="claim-card"></div>
       </div>
       <div class="panel" style="margin-top:12px">
-        <h2>Last Word</h2>
+        <h2 data-i18n="w_lastword">Last Word</h2>
         <div id="resp">—</div>
       </div>
     </div>
@@ -467,17 +467,17 @@
     </div>
 
     <div class="panel" id="wirepanel">
-      <h2>The Street <span id="ws-dot" style="color:var(--bad)">●</span> <span id="online-badge" class="dim" style="float:right;font-weight:400"></span></h2>
+      <h2><span data-i18n="w_panel">The Street</span> <span id="ws-dot" style="color:var(--bad)">●</span> <span id="online-badge" class="dim" style="float:right;font-weight:400"></span></h2>
       <div id="wiretabs">
-        <button class="wtab on" data-wtab="feed">LIVE FEED</button>
-        <button class="wtab" data-wtab="city">CITY CHAT</button>
-        <button class="wtab" data-wtab="family">FAMILY</button>
+        <button class="wtab on" data-wtab="feed" data-i18n="w_feed">LIVE FEED</button>
+        <button class="wtab" data-wtab="city" data-i18n="w_city">CITY CHAT</button>
+        <button class="wtab" data-wtab="family" data-i18n="w_family">FAMILY</button>
       </div>
       <div id="feed" class="wpane"></div>
       <div id="chat-city" class="wpane hidden"></div>
       <div id="chat-family" class="wpane hidden"></div>
       <form id="chatform" class="hidden" autocomplete="off">
-        <input id="chatinput" maxlength="240" placeholder="say it to the city…" />
+        <input id="chatinput" maxlength="240" placeholder="say it to the city…" data-i18n-ph="w_sayit" />
         <button class="act" type="submit">send</button>
       </form>
     </div>
@@ -540,6 +540,51 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
+  // ═══ LANGUAGE PACKS (founder-directed): the console CHROME in the world's 15 biggest player
+  // languages — toggleable (the 🌐 picker, sticky per browser), defaulting from the browser
+  // locale. T(key) resolves the active pack with an English fallback, so a missing key can never
+  // blank the UI. Coverage: tabs/groups, the sheet, the street panel, core buttons, the entry
+  // screen. Game PROSE (job names, event copy, toasts) stays English this pass — the pack
+  // structure makes each further surface a pure dictionary add. Arabic flips the page RTL. ═══
+  const I18N = {
+    en: { name: 'English', t_start: 'Start Here', t_streets: 'Streets', t_garage: 'The Garage', t_life: 'The Life', t_city: 'The City', t_kitchen: 'The Kitchen', t_empire: 'The Empire', t_scores: 'Big Scores', t_market: 'Black Market', t_port: 'The Port', t_den: 'The Den', t_speakeasy: 'The Speakeasy', t_boxing: 'The Fights', t_races: 'Street Races', t_stable: 'The Stable', t_pvp: 'Wet Work', t_loans: 'The Shylock', t_law: 'The Law', t_pen: 'The Pen', t_wire: 'The Wire', t_family: 'The Family', t_portfolio: 'Going Legit', t_estate: 'The Estate', t_store: 'The Store', t_deck: 'Everything Else', g_streets: 'Streets', g_earners: 'Earners', g_vice: 'Vice', g_blood: 'Blood', g_family: 'Family', g_legit: 'Legit', k_bank: 'bank', k_respect: 'respect', k_energy: 'energy', k_nerve: 'nerve', k_health: 'health', k_heat: 'heat', k_stats: 'muscle / cunning / speed', k_gun: 'gun', k_ammo: 'ammo / crates', k_cars: 'cars', k_liquid: 'liquid', k_staked: 'staked', k_intransit: 'in transit', b_heal: 'heal', b_checkin: 'check in', b_refresh: 'refresh', b_takeme: 'take me there →', b_send: 'send', b_burn: 'burn the papers', b_wholecity: '+ the whole city…', w_sheet: 'The Sheet', w_lastword: 'Last Word', w_panel: 'The Street', w_feed: 'LIVE FEED', w_city: 'CITY CHAT', w_family: 'FAMILY', w_sayit: 'say it to the city…', w_famonly: 'family only — talk business…', w_incity: 'in the city', e_ghost: 'ENTER AS A GHOST', e_bones: 'MAKE YOUR BONES →' },
+    es: { name: 'Español', t_start: 'Empieza Aquí', t_streets: 'Las Calles', t_garage: 'El Garaje', t_life: 'La Vida', t_city: 'La Ciudad', t_kitchen: 'La Cocina', t_empire: 'El Imperio', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'El Puerto', t_den: 'El Casino', t_speakeasy: 'El Clandestino', t_boxing: 'Las Peleas', t_races: 'Carreras Callejeras', t_stable: 'El Establo', t_pvp: 'Trabajo Sucio', t_loans: 'El Usurero', t_law: 'La Ley', t_pen: 'La Prisión', t_wire: 'El Cable', t_family: 'La Familia', t_portfolio: 'A Lo Legal', t_estate: 'La Mansión', t_store: 'La Tienda', t_deck: 'Todo Lo Demás', g_streets: 'Calles', g_earners: 'Negocios', g_vice: 'Vicio', g_blood: 'Sangre', g_family: 'Familia', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeto', k_energy: 'energía', k_nerve: 'nervio', k_health: 'salud', k_heat: 'calor policial', k_stats: 'músculo / astucia / velocidad', k_gun: 'arma', k_ammo: 'munición / cajas', k_cars: 'autos', k_liquid: 'líquido', k_staked: 'en staking', k_intransit: 'en tránsito', b_heal: 'curarse', b_checkin: 'pasar lista', b_refresh: 'actualizar', b_takeme: 'llévame ahí →', b_send: 'enviar', b_burn: 'quemar los papeles', b_wholecity: '+ toda la ciudad…', w_sheet: 'La Ficha', w_lastword: 'Última Palabra', w_panel: 'La Calle', w_feed: 'EN VIVO', w_city: 'CHAT CIUDAD', w_family: 'FAMILIA', w_sayit: 'dilo a la ciudad…', w_famonly: 'solo familia — hablemos de negocios…', w_incity: 'en la ciudad', e_ghost: 'ENTRA COMO FANTASMA', e_bones: 'HAZTE UN NOMBRE →' },
+    pt: { name: 'Português', t_start: 'Comece Aqui', t_streets: 'As Ruas', t_garage: 'A Garagem', t_life: 'A Vida', t_city: 'A Cidade', t_kitchen: 'A Cozinha', t_empire: 'O Império', t_scores: 'Grandes Golpes', t_market: 'Mercado Negro', t_port: 'O Porto', t_den: 'O Cassino', t_speakeasy: 'O Clandestino', t_boxing: 'As Lutas', t_races: 'Rachas de Rua', t_stable: 'O Estábulo', t_pvp: 'Serviço Sujo', t_loans: 'O Agiota', t_law: 'A Lei', t_pen: 'A Cadeia', t_wire: 'A Escuta', t_family: 'A Família', t_portfolio: 'Na Legalidade', t_estate: 'A Mansão', t_store: 'A Loja', t_deck: 'Todo o Resto', g_streets: 'Ruas', g_earners: 'Negócios', g_vice: 'Vício', g_blood: 'Sangue', g_family: 'Família', g_legit: 'Legal', k_bank: 'banco', k_respect: 'respeito', k_energy: 'energia', k_nerve: 'coragem', k_health: 'saúde', k_heat: 'pressão policial', k_stats: 'músculo / astúcia / velocidade', k_gun: 'arma', k_ammo: 'munição / caixas', k_cars: 'carros', k_liquid: 'líquido', k_staked: 'em staking', k_intransit: 'em trânsito', b_heal: 'curar', b_checkin: 'dar presença', b_refresh: 'atualizar', b_takeme: 'me leva lá →', b_send: 'enviar', b_burn: 'queimar os papéis', b_wholecity: '+ a cidade inteira…', w_sheet: 'A Ficha', w_lastword: 'Última Palavra', w_panel: 'A Rua', w_feed: 'AO VIVO', w_city: 'CHAT CIDADE', w_family: 'FAMÍLIA', w_sayit: 'fala pra cidade…', w_famonly: 'só família — papo de negócios…', w_incity: 'na cidade', e_ghost: 'ENTRE COMO FANTASMA', e_bones: 'FAÇA SEU NOME →' },
+    fr: { name: 'Français', t_start: 'Commencer Ici', t_streets: 'La Rue', t_garage: 'Le Garage', t_life: 'La Vie', t_city: 'La Ville', t_kitchen: 'La Cuisine', t_empire: "L'Empire", t_scores: 'Les Gros Coups', t_market: 'Marché Noir', t_port: 'Le Port', t_den: 'Le Tripot', t_speakeasy: 'Le Clandestin', t_boxing: 'La Boxe', t_races: 'Courses de Rue', t_stable: "L'Écurie", t_pvp: 'Basses Œuvres', t_loans: "L'Usurier", t_law: 'La Loi', t_pen: 'La Taule', t_wire: 'Les Écoutes', t_family: 'La Famille', t_portfolio: 'Devenir Clean', t_estate: 'Le Domaine', t_store: 'La Boutique', t_deck: 'Tout le Reste', g_streets: 'Rue', g_earners: 'Affaires', g_vice: 'Vice', g_blood: 'Sang', g_family: 'Famille', g_legit: 'Légal', k_bank: 'banque', k_respect: 'respect', k_energy: 'énergie', k_nerve: 'cran', k_health: 'santé', k_heat: 'pression policière', k_stats: 'muscle / ruse / vitesse', k_gun: 'arme', k_ammo: 'munitions / caisses', k_cars: 'voitures', k_liquid: 'liquide', k_staked: 'en staking', k_intransit: 'en transit', b_heal: 'se soigner', b_checkin: 'pointer', b_refresh: 'actualiser', b_takeme: 'emmène-moi →', b_send: 'envoyer', b_burn: 'brûler les papiers', b_wholecity: '+ toute la ville…', w_sheet: 'La Fiche', w_lastword: 'Dernier Mot', w_panel: 'La Rue', w_feed: 'EN DIRECT', w_city: 'CHAT VILLE', w_family: 'FAMILLE', w_sayit: 'dis-le à la ville…', w_famonly: 'famille seulement — parlons affaires…', w_incity: 'en ville', e_ghost: 'ENTRER EN FANTÔME', e_bones: 'FAIS TES PREUVES →' },
+    de: { name: 'Deutsch', t_start: 'Hier Starten', t_streets: 'Die Straßen', t_garage: 'Die Garage', t_life: 'Das Leben', t_city: 'Die Stadt', t_kitchen: 'Die Küche', t_empire: 'Das Imperium', t_scores: 'Große Dinger', t_market: 'Schwarzmarkt', t_port: 'Der Hafen', t_den: 'Die Spielhölle', t_speakeasy: 'Die Flüsterkneipe', t_boxing: 'Die Kämpfe', t_races: 'Straßenrennen', t_stable: 'Der Stall', t_pvp: 'Nasse Sachen', t_loans: 'Der Kredithai', t_law: 'Das Gesetz', t_pen: 'Der Knast', t_wire: 'Die Abhörung', t_family: 'Die Familie', t_portfolio: 'Sauber Werden', t_estate: 'Das Anwesen', t_store: 'Der Laden', t_deck: 'Alles Andere', g_streets: 'Straße', g_earners: 'Geschäfte', g_vice: 'Laster', g_blood: 'Blut', g_family: 'Familie', g_legit: 'Legal', k_bank: 'Bank', k_respect: 'Respekt', k_energy: 'Energie', k_nerve: 'Nerven', k_health: 'Gesundheit', k_heat: 'Fahndungsdruck', k_stats: 'Muskeln / List / Tempo', k_gun: 'Waffe', k_ammo: 'Munition / Kisten', k_cars: 'Autos', k_liquid: 'flüssig', k_staked: 'gestakt', k_intransit: 'unterwegs', b_heal: 'heilen', b_checkin: 'einchecken', b_refresh: 'aktualisieren', b_takeme: 'bring mich hin →', b_send: 'senden', b_burn: 'Papiere verbrennen', b_wholecity: '+ die ganze Stadt…', w_sheet: 'Die Akte', w_lastword: 'Letztes Wort', w_panel: 'Die Straße', w_feed: 'LIVE', w_city: 'STADT-CHAT', w_family: 'FAMILIE', w_sayit: 'sag es der Stadt…', w_famonly: 'nur Familie — reden wir Geschäfte…', w_incity: 'in der Stadt', e_ghost: 'ALS GEIST EINTRETEN', e_bones: 'MACH DIR EINEN NAMEN →' },
+    ru: { name: 'Русский', t_start: 'Начни здесь', t_streets: 'Улицы', t_garage: 'Гараж', t_life: 'Жизнь', t_city: 'Город', t_kitchen: 'Кухня', t_empire: 'Империя', t_scores: 'Крупные дела', t_market: 'Чёрный рынок', t_port: 'Порт', t_den: 'Казино', t_speakeasy: 'Спикизи', t_boxing: 'Бои', t_races: 'Уличные гонки', t_stable: 'Конюшня', t_pvp: 'Мокрые дела', t_loans: 'Ростовщик', t_law: 'Закон', t_pen: 'Тюрьма', t_wire: 'Прослушка', t_family: 'Семья', t_portfolio: 'Легализация', t_estate: 'Поместье', t_store: 'Магазин', t_deck: 'Всё остальное', g_streets: 'Улицы', g_earners: 'Бизнес', g_vice: 'Порок', g_blood: 'Кровь', g_family: 'Семья', g_legit: 'Легально', k_bank: 'банк', k_respect: 'уважение', k_energy: 'энергия', k_nerve: 'кураж', k_health: 'здоровье', k_heat: 'внимание полиции', k_stats: 'сила / хитрость / скорость', k_gun: 'ствол', k_ammo: 'патроны / ящики', k_cars: 'машины', k_liquid: 'ликвидно', k_staked: 'в стейкинге', k_intransit: 'в пути', b_heal: 'лечиться', b_checkin: 'отметиться', b_refresh: 'обновить', b_takeme: 'веди меня →', b_send: 'отправить', b_burn: 'сжечь бумаги', b_wholecity: '+ весь город…', w_sheet: 'Досье', w_lastword: 'Последнее слово', w_panel: 'Улица', w_feed: 'ЭФИР', w_city: 'ЧАТ ГОРОДА', w_family: 'СЕМЬЯ', w_sayit: 'скажи городу…', w_famonly: 'только семья — о делах…', w_incity: 'в городе', e_ghost: 'ВОЙТИ ПРИЗРАКОМ', e_bones: 'СДЕЛАЙ СЕБЕ ИМЯ →' },
+    ar: { name: 'العربية', rtl: true, t_start: 'ابدأ هنا', t_streets: 'الشوارع', t_garage: 'المرآب', t_life: 'الحياة', t_city: 'المدينة', t_kitchen: 'المطبخ', t_empire: 'الإمبراطورية', t_scores: 'الضربات الكبرى', t_market: 'السوق السوداء', t_port: 'الميناء', t_den: 'الكازينو', t_speakeasy: 'الحانة السرية', t_boxing: 'الملاكمة', t_races: 'سباقات الشوارع', t_stable: 'الإسطبل', t_pvp: 'العمل القذر', t_loans: 'المرابي', t_law: 'القانون', t_pen: 'السجن', t_wire: 'التنصت', t_family: 'العائلة', t_portfolio: 'طريق الشرعية', t_estate: 'العزبة', t_store: 'المتجر', t_deck: 'كل شيء آخر', g_streets: 'الشوارع', g_earners: 'الأعمال', g_vice: 'الملاهي', g_blood: 'الدم', g_family: 'العائلة', g_legit: 'شرعي', k_bank: 'البنك', k_respect: 'الاحترام', k_energy: 'الطاقة', k_nerve: 'الجرأة', k_health: 'الصحة', k_heat: 'ملاحقة الشرطة', k_stats: 'قوة / دهاء / سرعة', k_gun: 'السلاح', k_ammo: 'ذخيرة / صناديق', k_cars: 'السيارات', k_liquid: 'سائل', k_staked: 'مرهون', k_intransit: 'قيد التحويل', b_heal: 'تعافَ', b_checkin: 'سجّل حضورك', b_refresh: 'تحديث', b_takeme: '→ خذني إلى هناك', b_send: 'أرسل', b_burn: 'احرق الأوراق', b_wholecity: '+ المدينة كلها…', w_sheet: 'الملف', w_lastword: 'الكلمة الأخيرة', w_panel: 'الشارع', w_feed: 'البث الحي', w_city: 'دردشة المدينة', w_family: 'العائلة', w_sayit: 'قلها للمدينة…', w_famonly: 'للعائلة فقط — لنتحدث في العمل…', w_incity: 'في المدينة', e_ghost: 'ادخل كشبح', e_bones: 'اصنع اسمك →' },
+    hi: { name: 'हिन्दी', t_start: 'यहाँ शुरू करें', t_streets: 'सड़कें', t_garage: 'गैराज', t_life: 'ज़िंदगी', t_city: 'शहर', t_kitchen: 'रसोई', t_empire: 'साम्राज्य', t_scores: 'बड़े हाथ', t_market: 'काला बाज़ार', t_port: 'बंदरगाह', t_den: 'जुआघर', t_speakeasy: 'गुप्त अड्डा', t_boxing: 'मुक्केबाज़ी', t_races: 'सड़क रेस', t_stable: 'अस्तबल', t_pvp: 'गंदा काम', t_loans: 'सूदखोर', t_law: 'कानून', t_pen: 'जेल', t_wire: 'वायरटैप', t_family: 'परिवार', t_portfolio: 'वैध धंधा', t_estate: 'हवेली', t_store: 'दुकान', t_deck: 'बाकी सब', g_streets: 'सड़कें', g_earners: 'धंधा', g_vice: 'ऐयाशी', g_blood: 'खून', g_family: 'परिवार', g_legit: 'वैध', k_bank: 'बैंक', k_respect: 'इज़्ज़त', k_energy: 'ऊर्जा', k_nerve: 'हिम्मत', k_health: 'सेहत', k_heat: 'पुलिस की नज़र', k_stats: 'ताकत / चालाकी / रफ़्तार', k_gun: 'बंदूक', k_ammo: 'गोलियाँ / पेटियाँ', k_cars: 'गाड़ियाँ', k_liquid: 'नकद', k_staked: 'स्टेक पर', k_intransit: 'रास्ते में', b_heal: 'इलाज', b_checkin: 'हाज़िरी', b_refresh: 'ताज़ा करें', b_takeme: 'मुझे वहाँ ले चलो →', b_send: 'भेजें', b_burn: 'कागज़ जला दो', b_wholecity: '+ पूरा शहर…', w_sheet: 'फ़ाइल', w_lastword: 'आख़िरी बात', w_panel: 'सड़क', w_feed: 'लाइव फ़ीड', w_city: 'शहर चैट', w_family: 'परिवार', w_sayit: 'शहर से कहो…', w_famonly: 'सिर्फ़ परिवार — धंधे की बात…', w_incity: 'शहर में', e_ghost: 'भूत बनकर घुसो', e_bones: 'अपना नाम बनाओ →' },
+    id: { name: 'Bahasa Indonesia', t_start: 'Mulai di Sini', t_streets: 'Jalanan', t_garage: 'Garasi', t_life: 'Kehidupan', t_city: 'Kota', t_kitchen: 'Dapur', t_empire: 'Kerajaan', t_scores: 'Aksi Besar', t_market: 'Pasar Gelap', t_port: 'Pelabuhan', t_den: 'Kasino', t_speakeasy: 'Bar Rahasia', t_boxing: 'Tinju', t_races: 'Balap Liar', t_stable: 'Istal', t_pvp: 'Kerja Kotor', t_loans: 'Rentenir', t_law: 'Hukum', t_pen: 'Penjara', t_wire: 'Penyadapan', t_family: 'Keluarga', t_portfolio: 'Jadi Legal', t_estate: 'Rumah Besar', t_store: 'Toko', t_deck: 'Lainnya', g_streets: 'Jalanan', g_earners: 'Bisnis', g_vice: 'Hiburan', g_blood: 'Darah', g_family: 'Keluarga', g_legit: 'Legal', k_bank: 'bank', k_respect: 'respek', k_energy: 'energi', k_nerve: 'nyali', k_health: 'kesehatan', k_heat: 'incaran polisi', k_stats: 'otot / akal / kecepatan', k_gun: 'senjata', k_ammo: 'peluru / peti', k_cars: 'mobil', k_liquid: 'likuid', k_staked: 'di-stake', k_intransit: 'dalam perjalanan', b_heal: 'berobat', b_checkin: 'absen harian', b_refresh: 'muat ulang', b_takeme: 'antar aku ke sana →', b_send: 'kirim', b_burn: 'bakar dokumen', b_wholecity: '+ seluruh kota…', w_sheet: 'Berkas', w_lastword: 'Kata Terakhir', w_panel: 'Jalanan', w_feed: 'SIARAN', w_city: 'CHAT KOTA', w_family: 'KELUARGA', w_sayit: 'bilang ke kota…', w_famonly: 'khusus keluarga — bahas bisnis…', w_incity: 'di kota', e_ghost: 'MASUK SEBAGAI HANTU', e_bones: 'BANGUN NAMAMU →' },
+    vi: { name: 'Tiếng Việt', t_start: 'Bắt Đầu', t_streets: 'Đường Phố', t_garage: 'Ga-ra', t_life: 'Cuộc Đời', t_city: 'Thành Phố', t_kitchen: 'Nhà Bếp', t_empire: 'Đế Chế', t_scores: 'Phi Vụ Lớn', t_market: 'Chợ Đen', t_port: 'Bến Cảng', t_den: 'Sòng Bạc', t_speakeasy: 'Quán Ngầm', t_boxing: 'Võ Đài', t_races: 'Đua Xe', t_stable: 'Chuồng Ngựa', t_pvp: 'Việc Đẫm Máu', t_loans: 'Cho Vay Nặng Lãi', t_law: 'Pháp Luật', t_pen: 'Nhà Tù', t_wire: 'Nghe Lén', t_family: 'Gia Đình', t_portfolio: 'Làm Ăn Sạch', t_estate: 'Dinh Thự', t_store: 'Cửa Hàng', t_deck: 'Còn Lại', g_streets: 'Phố', g_earners: 'Làm Ăn', g_vice: 'Ăn Chơi', g_blood: 'Máu', g_family: 'Gia Đình', g_legit: 'Hợp Pháp', k_bank: 'ngân hàng', k_respect: 'uy tín', k_energy: 'thể lực', k_nerve: 'gan lì', k_health: 'sức khỏe', k_heat: 'cảnh sát để mắt', k_stats: 'cơ bắp / mưu mẹo / tốc độ', k_gun: 'súng', k_ammo: 'đạn / thùng hàng', k_cars: 'xe', k_liquid: 'khả dụng', k_staked: 'đang stake', k_intransit: 'đang chuyển', b_heal: 'chữa trị', b_checkin: 'điểm danh', b_refresh: 'làm mới', b_takeme: 'đưa tôi tới đó →', b_send: 'gửi', b_burn: 'đốt giấy tờ', b_wholecity: '+ cả thành phố…', w_sheet: 'Hồ Sơ', w_lastword: 'Lời Cuối', w_panel: 'Đường Phố', w_feed: 'TRỰC TIẾP', w_city: 'CHAT PHỐ', w_family: 'GIA ĐÌNH', w_sayit: 'nói với cả phố…', w_famonly: 'chỉ gia đình — bàn chuyện làm ăn…', w_incity: 'trong phố', e_ghost: 'VÀO NHƯ BÓNG MA', e_bones: 'TẠO DANH TIẾNG →' },
+    tl: { name: 'Filipino', t_start: 'Magsimula Dito', t_streets: 'Ang Kalye', t_garage: 'Ang Garahe', t_life: 'Ang Buhay', t_city: 'Ang Lungsod', t_kitchen: 'Ang Kusina', t_empire: 'Ang Imperyo', t_scores: 'Malalaking Trabaho', t_market: 'Black Market', t_port: 'Ang Pantalan', t_den: 'Ang Sugalan', t_speakeasy: 'Ang Speakeasy', t_boxing: 'Ang Boksing', t_races: 'Karera sa Kalye', t_stable: 'Ang Kuwadra', t_pvp: 'Madugong Trabaho', t_loans: 'Ang 5-6', t_law: 'Ang Batas', t_pen: 'Ang Bilangguan', t_wire: 'Ang Wiretap', t_family: 'Ang Pamilya', t_portfolio: 'Pagpapakalinis', t_estate: 'Ang Mansiyon', t_store: 'Ang Tindahan', t_deck: 'Iba Pa', g_streets: 'Kalye', g_earners: 'Negosyo', g_vice: 'Bisyo', g_blood: 'Dugo', g_family: 'Pamilya', g_legit: 'Legal', k_bank: 'bangko', k_respect: 'respeto', k_energy: 'lakas', k_nerve: 'tapang', k_health: 'kalusugan', k_heat: 'init ng pulis', k_stats: 'muscle / diskarte / bilis', k_gun: 'baril', k_ammo: 'bala / kahon', k_cars: 'kotse', k_liquid: 'likido', k_staked: 'naka-stake', k_intransit: 'padala pa', b_heal: 'magpagamot', b_checkin: 'mag-check in', b_refresh: 'i-refresh', b_takeme: 'dalhin mo ako →', b_send: 'ipadala', b_burn: 'sunugin ang papeles', b_wholecity: '+ ang buong lungsod…', w_sheet: 'Ang Rekord', w_lastword: 'Huling Salita', w_panel: 'Ang Kalye', w_feed: 'LIVE FEED', w_city: 'CITY CHAT', w_family: 'PAMILYA', w_sayit: 'sabihin sa lungsod…', w_famonly: 'pamilya lang — usapang negosyo…', w_incity: 'nasa lungsod', e_ghost: 'PUMASOK NA PARANG MULTO', e_bones: 'GAWIN ANG PANGALAN MO →' },
+    tr: { name: 'Türkçe', t_start: 'Buradan Başla', t_streets: 'Sokaklar', t_garage: 'Garaj', t_life: 'Hayat', t_city: 'Şehir', t_kitchen: 'Mutfak', t_empire: 'İmparatorluk', t_scores: 'Büyük Vurgunlar', t_market: 'Karaborsa', t_port: 'Liman', t_den: 'Kumarhane', t_speakeasy: 'Gizli Meyhane', t_boxing: 'Dövüşler', t_races: 'Sokak Yarışları', t_stable: 'Ahır', t_pvp: 'Kirli İşler', t_loans: 'Tefeci', t_law: 'Kanun', t_pen: 'Kodes', t_wire: 'Dinleme', t_family: 'Aile', t_portfolio: 'Aklanma', t_estate: 'Malikâne', t_store: 'Dükkân', t_deck: 'Geri Kalanı', g_streets: 'Sokak', g_earners: 'İşler', g_vice: 'Keyif', g_blood: 'Kan', g_family: 'Aile', g_legit: 'Yasal', k_bank: 'banka', k_respect: 'itibar', k_energy: 'enerji', k_nerve: 'cesaret', k_health: 'sağlık', k_heat: 'polis baskısı', k_stats: 'kas / kurnazlık / hız', k_gun: 'silah', k_ammo: 'mermi / kasa', k_cars: 'arabalar', k_liquid: 'likit', k_staked: 'stake edilmiş', k_intransit: 'yolda', b_heal: 'iyileş', b_checkin: 'giriş yap', b_refresh: 'yenile', b_takeme: 'beni oraya götür →', b_send: 'gönder', b_burn: 'evrakları yak', b_wholecity: '+ bütün şehir…', w_sheet: 'Dosya', w_lastword: 'Son Söz', w_panel: 'Sokak', w_feed: 'CANLI', w_city: 'ŞEHİR SOHBETİ', w_family: 'AİLE', w_sayit: 'şehre söyle…', w_famonly: 'sadece aile — iş konuşalım…', w_incity: 'şehirde', e_ghost: 'HAYALET OLARAK GİR', e_bones: 'ADINI DUYUR →' },
+    zh: { name: '中文', t_start: '从这里开始', t_streets: '街头', t_garage: '车库', t_life: '人生', t_city: '城市', t_kitchen: '厨房', t_empire: '帝国', t_scores: '大买卖', t_market: '黑市', t_port: '港口', t_den: '赌场', t_speakeasy: '地下酒吧', t_boxing: '拳赛', t_races: '街头赛车', t_stable: '马厩', t_pvp: '湿活', t_loans: '高利贷', t_law: '法律', t_pen: '监狱', t_wire: '窃听', t_family: '家族', t_portfolio: '洗白', t_estate: '庄园', t_store: '商店', t_deck: '其他一切', g_streets: '街头', g_earners: '生意', g_vice: '娱乐', g_blood: '血战', g_family: '家族', g_legit: '洗白', k_bank: '银行', k_respect: '声望', k_energy: '体力', k_nerve: '胆量', k_health: '健康', k_heat: '警方关注', k_stats: '肌肉 / 心机 / 速度', k_gun: '枪械', k_ammo: '弹药 / 货箱', k_cars: '车辆', k_liquid: '可用', k_staked: '质押中', k_intransit: '转账中', b_heal: '治疗', b_checkin: '签到', b_refresh: '刷新', b_takeme: '带我去 →', b_send: '发送', b_burn: '销毁证件', b_wholecity: '+ 整座城市…', w_sheet: '档案', w_lastword: '回执', w_panel: '街头', w_feed: '实时动态', w_city: '城市聊天', w_family: '家族', w_sayit: '向全城喊话…', w_famonly: '家族专属 — 谈正事…', w_incity: '人在城中', e_ghost: '以幽灵身份进入', e_bones: '闯出名号 →' },
+    ja: { name: '日本語', t_start: 'ここから始める', t_streets: 'ストリート', t_garage: 'ガレージ', t_life: '人生', t_city: '街', t_kitchen: 'キッチン', t_empire: '帝国', t_scores: '大仕事', t_market: '闇市場', t_port: '港', t_den: 'カジノ', t_speakeasy: 'もぐり酒場', t_boxing: 'ボクシング', t_races: 'ストリートレース', t_stable: '厩舎', t_pvp: '汚れ仕事', t_loans: '闇金', t_law: '警察', t_pen: 'ムショ', t_wire: '盗聴', t_family: 'ファミリー', t_portfolio: '堅気になる', t_estate: '屋敷', t_store: 'ストア', t_deck: 'その他すべて', g_streets: '街', g_earners: 'シノギ', g_vice: '遊び', g_blood: '血', g_family: '一家', g_legit: '堅気', k_bank: '銀行', k_respect: '評判', k_energy: 'スタミナ', k_nerve: '度胸', k_health: '体力', k_heat: '警察の注目', k_stats: '腕力 / 悪知恵 / 速さ', k_gun: '銃', k_ammo: '弾薬 / 箱', k_cars: '車', k_liquid: '流動', k_staked: 'ステーク中', k_intransit: '送金中', b_heal: '治療', b_checkin: 'チェックイン', b_refresh: '更新', b_takeme: '連れて行け →', b_send: '送信', b_burn: '書類を燃やす', b_wholecity: '+ 街のすべて…', w_sheet: '身上書', w_lastword: '結果', w_panel: 'ストリート', w_feed: 'ライブ', w_city: '街のチャット', w_family: 'ファミリー', w_sayit: '街に言え…', w_famonly: '一家のみ — 仕事の話を…', w_incity: '人が街に', e_ghost: '幽霊として入る', e_bones: '名を上げろ →' },
+    ko: { name: '한국어', t_start: '여기서 시작', t_streets: '거리', t_garage: '차고', t_life: '인생', t_city: '도시', t_kitchen: '주방', t_empire: '제국', t_scores: '큰 건수', t_market: '암시장', t_port: '항구', t_den: '카지노', t_speakeasy: '밀주점', t_boxing: '복싱', t_races: '거리 레이싱', t_stable: '마구간', t_pvp: '피의 일', t_loans: '사채업자', t_law: '법', t_pen: '감옥', t_wire: '도청', t_family: '패밀리', t_portfolio: '합법으로', t_estate: '저택', t_store: '상점', t_deck: '그 외 전부', g_streets: '거리', g_earners: '사업', g_vice: '유흥', g_blood: '피', g_family: '패밀리', g_legit: '합법', k_bank: '은행', k_respect: '명성', k_energy: '기력', k_nerve: '배짱', k_health: '체력', k_heat: '경찰의 주목', k_stats: '근육 / 꾀 / 속도', k_gun: '총', k_ammo: '탄약 / 상자', k_cars: '차량', k_liquid: '유동', k_staked: '스테이킹 중', k_intransit: '이체 중', b_heal: '치료', b_checkin: '출석', b_refresh: '새로고침', b_takeme: '데려다줘 →', b_send: '보내기', b_burn: '서류 태우기', b_wholecity: '+ 도시 전체…', w_sheet: '신상 기록', w_lastword: '결과', w_panel: '거리', w_feed: '라이브', w_city: '도시 채팅', w_family: '패밀리', w_sayit: '도시에 말해…', w_famonly: '패밀리 전용 — 사업 얘기…', w_incity: '접속 중', e_ghost: '유령으로 입장', e_bones: '이름을 떨쳐라 →' },
+  };
+  const LANG = (() => {
+    const saved = localStorage.getItem('omerta_lang');
+    if (saved && I18N[saved]) return saved;
+    const nav = (navigator.language || 'en').toLowerCase();
+    if (nav.startsWith('fil')) return 'tl';
+    const two = nav.slice(0, 2);
+    return I18N[two] ? two : 'en';
+  })();
+  const T = (k) => (I18N[LANG] && I18N[LANG][k]) || I18N.en[k] || k;
+  if (I18N[LANG]?.rtl) document.documentElement.dir = 'rtl';
+  document.documentElement.lang = LANG;
+  function applyI18n() {
+    for (const n of $$('[data-i18n]')) n.textContent = T(n.dataset.i18n);
+    for (const n of $$('[data-i18n-ph]')) n.placeholder = T(n.dataset.i18nPh);
+  }
+  function mountLangPicker(sel) {
+    const host = $(sel); if (!host) return;
+    const pick = el(`<select class="langpick" title="Language / Idioma / 语言">${Object.entries(I18N)
+      .map(([k, v]) => `<option value="${k}"${k === LANG ? ' selected' : ''}>${v.name}</option>`).join('')}</select>`);
+    pick.onchange = () => { localStorage.setItem('omerta_lang', pick.value); location.reload(); };
+    host.appendChild(pick);
+  }
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
   // ── polish layer: haptics + tactile feedback (progressive enhancement — silent no-ops where unsupported;
@@ -1020,23 +1065,23 @@
     if (me.guardedBy) chips.push(['good', 'GUARDED']);
     // THE COACH — the server-computed single next step (guides new players; quietly absent for vets)
     const coach = me.coach ? `<div id="coach"><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
-      <button class="act" id="coach-go" style="padding:5px 12px;font-size:12.5px">take me there →</button></div>` : '';
+      <button class="act" id="coach-go" style="padding:5px 12px;font-size:12.5px">${T('b_takeme')}</button></div>` : '';
     $('#sheet-body').innerHTML = coach + `
       <div class="money">$${fmt(me.cash)}</div>
-      <div class="row"><span class="k">bank</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} in transit)</span>` : ''}</span></div>
-      <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} liquid · ${fmt(me.staked)} staked</span></div>
-      <div class="row"><span class="k">respect</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>
+      <div class="row"><span class="k">${T('k_bank')}</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} ${T('k_intransit')})</span>` : ''}</span></div>
+      <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} ${T('k_liquid')} · ${fmt(me.staked)} ${T('k_staked')}</span></div>
+      <div class="row"><span class="k">${T('k_respect')}</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>
       <div class="chips">${chips.map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('')}</div>
-      <div class="row"><span class="k">energy</span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
-      <div class="row"><span class="k">nerve</span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
-      <div class="row"><span class="k">health</span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
-      <div class="row"><span class="k">heat</span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
-      <div class="row"><span class="k">muscle / cunning / speed</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
+      <div class="row"><span class="k">${T('k_energy')}</span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
+      <div class="row"><span class="k">${T('k_nerve')}</span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
+      <div class="row"><span class="k">${T('k_health')}</span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
+      <div class="row"><span class="k">${T('k_heat')}</span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
+      <div class="row"><span class="k">${T('k_stats')}</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>
       <div class="row"><span class="k">base build <span class="d" style="font-size:10px">(rolled at birth · total ${me.statTotal ?? 15})</span></span><span>${me.stats.muscle} / ${me.stats.cunning} / ${me.stats.speed}
         ${me.rerollCredits > 0 ? `<button class="act" id="reroll-go" style="font-size:10px;padding:1px 5px">re-roll (${me.rerollCredits})</button>` : ''}</span></div>
-      <div class="row"><span class="k">gun</span><span>${me.gun || '—'}</span></div>
-      <div class="row"><span class="k">ammo / crates</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
-      <div class="row"><span class="k">cars</span><span>${(me.cars || []).length}</span></div>`;
+      <div class="row"><span class="k">${T('k_gun')}</span><span>${me.gun || '—'}</span></div>
+      <div class="row"><span class="k">${T('k_ammo')}</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
+      <div class="row"><span class="k">${T('k_cars')}</span><span>${(me.cars || []).length}</span></div>`;
     // money tick — a brief up/down flash when the pocket changes (paired with the toast haptic)
     { const prev = renderSheet._cash; renderSheet._cash = me.cash;
       if (prev !== undefined && prev !== me.cash) { const m = $('#sheet .money');
@@ -1078,10 +1123,10 @@
   }
 
   // ── tabs ──
-  const TABS = { start: 'Start Here', streets: 'Streets', pvp: 'Wet Work', kitchen: 'The Kitchen', family: 'The Family',
-    market: 'Black Market', garage: 'The Garage', empire: 'The Empire', speakeasy: 'The Speakeasy', boxing: 'The Fights', races: 'Street Races', stable: 'The Stable', scores: 'Big Scores',
-    loans: 'The Shylock', portfolio: 'Going Legit', estate: 'The Estate', life: 'The Life', pen: 'The Pen', law: 'The Law',
-    wire: 'The Wire', store: 'The Store', city: 'The City', den: 'The Den', port: 'The Port', deck: 'Everything Else' };
+  // tab labels come from the language packs (T falls back to English if a pack misses a key)
+  const TABS = Object.fromEntries(['start', 'streets', 'pvp', 'kitchen', 'family', 'market', 'garage', 'empire',
+    'speakeasy', 'boxing', 'races', 'stable', 'scores', 'loans', 'portfolio', 'estate', 'life', 'pen', 'law',
+    'wire', 'store', 'city', 'den', 'port', 'deck'].map((id) => [id, T('t_' + id)]));
   // grouped + journey-ordered so the 22 screens read as clusters, not a flat wall
   const TAB_GROUPS = [
     ['', ['start']],
@@ -1096,8 +1141,8 @@
   // which labeled cluster a tab belongs to (drives the per-screen accent + the mobile bottom nav)
   const groupOf = (id) => { for (const [g, ids] of TAB_GROUPS) if (ids.includes(id)) return g ? g.toLowerCase() : id; return ''; };
   const BNAV = [ // the seven thumb-bar stops (deck stays rail-only — it's a power-user surface)
-    ['start', '🗺', 'Start'], ['streets', '🌆', 'Streets'], ['kitchen', '💰', 'Earners'], ['den', '🎲', 'Vice'],
-    ['pvp', '🔪', 'Blood'], ['family', '🤝', 'Family'], ['portfolio', '🏛', 'Legit'] ];
+    ['start', '🗺', T('t_start')], ['streets', '🌆', T('g_streets')], ['kitchen', '💰', T('g_earners')], ['den', '🎲', T('g_vice')],
+    ['pvp', '🔪', T('g_blood')], ['family', '🤝', T('g_family')], ['portfolio', '🏛', T('g_legit')] ];
   // ── PROGRESSIVE DISCLOSURE (founder: onboarding is overwhelming) — a fresh player sees FIVE
   // screens, not twenty-four. The full city unlocks at level 8, or the moment they ask for it
   // (the choice sticks per browser). Veterans are untouched.
@@ -1122,7 +1167,7 @@
     const tabs = $('#tabs'), bodies = $('#tabbodies');
     if (tabs.childElementCount) return;
     for (const [group, ids] of TAB_GROUPS) {
-      if (group) tabs.appendChild(el(`<span class="tabgrp">${group}</span>`));
+      if (group) tabs.appendChild(el(`<span class="tabgrp">${T('g_' + group.toLowerCase())}</span>`)); // display translated; groupOf stays English (the accent CSS keys off it)
       for (const id of ids) {
         const b = el(`<button data-tab="${id}">${TABS[id]}</button>`);
         b.onclick = () => { setTab(id); };
@@ -1131,7 +1176,7 @@
       }
     }
     { // the expander a simple-mode player uses to open the whole city early
-      const more = el('<button id="tabs-more" class="hidden" style="color:var(--neon)">+ the whole city…</button>');
+      const more = el(`<button id="tabs-more" class="hidden" style="color:var(--neon)">${T('b_wholecity')}</button>`);
       more.onclick = () => unlockAllTabs(true);
       tabs.appendChild(more);
     }
@@ -3400,7 +3445,7 @@
     $('#chat-city').classList.toggle('hidden', wtab !== 'city');
     $('#chat-family').classList.toggle('hidden', wtab !== 'family');
     $('#chatform').classList.toggle('hidden', wtab === 'feed');
-    $('#chatinput').placeholder = wtab === 'family' ? 'family only — talk business…' : 'say it to the city…';
+    $('#chatinput').placeholder = wtab === 'family' ? T('w_famonly') : T('w_sayit');
     if (wtab !== 'feed') loadChat(wtab);
   });
   $('#chatform')?.addEventListener('submit', async (e) => {
@@ -3419,7 +3464,7 @@
     try {
       const r = await fetch('/v1/online').then((x) => x.json());
       const n = r.active15m || r.online || 0;
-      $('#online-badge').textContent = `● ${n} in the city`;
+      $('#online-badge').textContent = `● ${n} ${T('w_incity')}`;
     } catch { /* offline */ }
   }
 
@@ -3460,6 +3505,9 @@
     } catch { /* headless */ }
   }
 
+  applyI18n();
+  mountLangPicker('#top');           // the console picker (persists; reload re-renders everything)
+  mountLangPicker('#screen-auth .lfoot'); // the landing picker for first-time visitors
   boot();
 })();
 </script>
