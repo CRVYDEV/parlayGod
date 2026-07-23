@@ -14,6 +14,7 @@ process.env.VOUCHER_CLAIM_ADDRESS = '0x1111111111111111111111111111111111111111'
 process.env.OMERTA_BOND_ADDRESS = '0x2222222222222222222222222222222222222222'; // the bond-quote verifyingContract
 process.env.CHAIN_ID = '46630';
 process.env.MOD_KEY = 'test-mod-key';
+process.env.WITHDRAW_TAX_BPS = '0'; // legacy exact-amount assertions run toll-free; the EXIT TOLL block below re-arms it
 
 const { buildServer } = await import('../src/server.js');
 const { chainConfig, VOUCHER_TYPES, markClaimed, bondChainConfig, BOND_QUOTE_TYPES } = await import('../src/chain.js');
@@ -372,5 +373,35 @@ delete process.env.DAILY_CAP_OMR;
   delete process.env.WALLETCONNECT_PROJECT_ID;
 }
 
-console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet)');
+
+// ── THE EXIT TOLL (founder-directed): a withdrawal pays a tax that splits DEV revenue + the
+// buyback/yield pool. Gross debited, NET signed, both toll shares ledgered transfers (tax:dev →
+// dev_fund, tax:buyback → stake_pool), §10.4 conservation unmoved, and the mod claim moves the
+// dev fund to an account without minting. Rate is read per-call, so re-arming the env here works. ──
+{
+  process.env.WITHDRAW_TAX_BPS = '200'; // 2%
+  const omr0 = (await meOf(token)).omr;
+  const pool0 = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+  const d0 = await driftOf('$OMR conservation');
+  const r = await call('POST', '/v1/withdraw', { token, body: { amount: 10 } });
+  assert.equal(r.code, 200, 'tolled withdrawal accepted');
+  assert.equal(r.body.gross, 10, 'gross is what the player paid');
+  assert.equal(r.body.tax, 0.2, 'the 2% toll');
+  assert.equal(r.body.net, 9.8, 'the voucher carries the NET');
+  assert.equal((await meOf(token)).omr, omr0 - 10, 'the account was debited the gross');
+  const dev = (await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0];
+  assert.equal(Number(dev.omr), 0.1, 'half the toll landed in the dev fund');
+  const pool1 = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+  assert.equal(Math.round((pool1 - pool0) * 1e6) / 1e6, 0.1, 'half the toll landed in the buyback/yield pool');
+  assert.equal(await driftOf('$OMR conservation'), d0, 'the toll is transfers + a net burn — conservation unmoved');
+  // the founder claims the dev fund to an account (a bucket transfer, never a mint)
+  const acctId = (await pool.query('SELECT account_id FROM account_persistent LIMIT 1')).rows[0].account_id;
+  const claim = await call('POST', '/v1/mod/dev/claim', { headers: modH, body: { accountId: acctId } });
+  assert.equal(claim.body.claimed, 0.1, 'the dev fund claims to an account');
+  assert.equal(Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr), 0, 'the fund empties');
+  assert.equal(await driftOf('$OMR conservation'), d0, 'the claim is a transfer — conservation unmoved');
+  process.env.WITHDRAW_TAX_BPS = '0';
+}
+
+console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');
 await app.close();

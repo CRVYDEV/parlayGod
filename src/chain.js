@@ -113,7 +113,7 @@ function toVoucherMessage(row) {
 }
 // Gear class id → on-chain uint256. The game's gear are string ids (MARKET table); the
 // on-chain tokenId is their 1-based index (matches "one tokenId per gear class").
-import { MARKET, BONDS, bondPayout } from './rules.js';
+import { MARKET, BONDS, bondPayout, TAX, withdrawTaxBps } from './rules.js';
 export function gearNumId(gearId) {
   const i = MARKET.findIndex((m) => m.id === gearId);
   if (i < 0) throw new GameError('bad_gear', 'No such gear class.');
@@ -149,13 +149,23 @@ async function committedOutstanding(client) {
 export async function requestWithdraw(pool, accountId, amount, toAddress) {
   const amt = Math.floor(Number(amount) * 1e6) / 1e6;          // clamp to the ledger's 6-dp precision
   if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
+  // THE EXIT TOLL (founder-directed): every withdrawal pays a tax that splits DEV revenue + the
+  // community buyback/yield pool (stake_pool — the same pool the 12h buyback funds). The player is
+  // debited the GROSS; the voucher signs the NET; the toll is NON-refundable (a cancelled queued
+  // withdrawal refunds the net only — the toll was paid at the gate). Rate read per-call (ops lever).
+  const flo6 = (x) => Math.floor(x * 1e6) / 1e6;
+  const taxBps = withdrawTaxBps();
+  const tax = flo6(amt * taxBps / 10000);
+  const devCut = flo6(tax * TAX.DEV_BPS / 10000);
+  const buyCut = flo6(tax - devCut);
+  const net = flo6(amt - devCut - buyCut);
   // AUDIT (OMR lens F-1): reject up-front any single withdrawal that exceeds the on-chain per-UTC-day
   // cap — otherwise the backend burns the $OMR and signs a voucher whose `claim()` reverts "VC: daily
   // cap" on EVERY day forever (the amount alone busts the cap), stranding the player until reclaim.
   // DAILY_CAP_OMR is the wei-denominated env the deploy uses; unset = unlimited (contract cap 0). The
   // per-day accumulation (many small claims filling the cap) stays a documented liveness/griefing item.
   const capWei = process.env.DAILY_CAP_OMR;
-  if (capWei && Number(capWei) > 0 && amt > Number(capWei) / 1e18)
+  if (capWei && Number(capWei) > 0 && net > Number(capWei) / 1e18)
     throw new GameError('daily_cap', `A single withdrawal can't exceed the daily cap of ${Math.floor(Number(capWei) / 1e18)} $OMR — split it across days.`);
   const client = await pool.connect();
   try {
@@ -167,9 +177,20 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
     if (!to || !isAddress(to)) throw new GameError('wallet', 'Link a wallet (SIWE) or pass a valid address first.');
     if (Number(acct.omr) < amt) throw new GameError('omr', 'Not that much $OMR.');
 
-    // debit the in-game ledger NOW so the balance can't be double-spent while queued
+    // debit the in-game ledger NOW so the balance can't be double-spent while queued.
+    // §10.4 shape: the NET is the burn (it leaves the game on-chain); the toll is two TRANSFERS —
+    // tax:dev → the dev_fund bucket, tax:buyback → stake_pool (both inside omrBuckets, so
+    // conservation nets 0; 'tax:' sits in the vocabulary in neither the mint nor the burn term).
     await client.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [accountId, amt]);
-    await ledger(client, { accountId, currency: 'omr', amount: -amt, reason: 'withdraw:omr' }); // legal §10.4 burn (leaves the game)
+    await ledger(client, { accountId, currency: 'omr', amount: -net, reason: 'withdraw:omr' }); // legal §10.4 burn (leaves the game)
+    if (devCut > 0) {
+      await ledger(client, { accountId, currency: 'omr', amount: -devCut, reason: 'tax:dev' });
+      await client.query('UPDATE dev_fund SET omr = omr + $1, lifetime = lifetime + $1 WHERE id=1', [devCut]);
+    }
+    if (buyCut > 0) {
+      await ledger(client, { accountId, currency: 'omr', amount: -buyCut, reason: 'tax:buyback' });
+      await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [buyCut]);
+    }
 
     const res = (await client.query('SELECT * FROM chain_reserve WHERE id=1 FOR UPDATE')).rows[0];
     const nonce = Number(res.next_nonce);
@@ -177,16 +198,16 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
     const deadline = Math.floor(Date.now() / 1000) + WITHDRAW_TTL_SEC;
 
     const outstanding = await committedOutstanding(client); // committed-ever, not just unclaimed
-    const fits = outstanding + amt <= Number(res.funded_omr);
+    const fits = outstanding + net <= Number(res.funded_omr);
     const id = uid();
-    const row = { id, account_id: accountId, kind: 'omr', amount: amt, gear_id: null, nonce, to_address: getAddress(to), deadline };
+    const row = { id, account_id: accountId, kind: 'omr', amount: net, gear_id: null, nonce, to_address: getAddress(to), deadline };
     let payload = null, status = 'queued';
     if (fits) { payload = JSON.stringify(await signVoucher(row)); status = 'signed'; }
     await client.query(
       'INSERT INTO vouchers (id, account_id, kind, amount, nonce, to_address, deadline, status, signed_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [id, accountId, 'omr', amt, nonce, getAddress(to), deadline, status, payload]);
+      [id, accountId, 'omr', net, nonce, getAddress(to), deadline, status, payload]);
     await client.query('COMMIT');
-    return { id, nonce, status, amount: amt, ...(payload ? JSON.parse(payload) : {}),
+    return { id, nonce, status, amount: net, gross: amt, tax, net, ...(payload ? JSON.parse(payload) : {}),
       queuedReason: fits ? undefined : 'reserve_insufficient' };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }

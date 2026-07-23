@@ -1585,3 +1585,6 @@ elapsed-since-collect so a raid can't hand fresh headroom. Not patched per groun
 The wage is the ONLY scheduled mint; `emission within endowment` is the hard wall. Before launch
 marketing mentions earning at all: re-derive per-region "what a day's grind pays" from the live $OMR
 price and retune EPOCH_OMR/WAGE_CAP_OMR (counsel-gated messaging — see CLAUDE.md Sensitive notes).
+
+| `WITHDRAW_TAX_BPS` (env, per-call) | 200 (2%) | the Exit Toll on every $OMR withdrawal — gross debited, net signed |
+| `TAX.DEV_BPS` | 5000 (50%) | the dev share of the toll; the rest → stake_pool (the buyback/yield pool) |

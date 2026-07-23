@@ -3386,6 +3386,17 @@ revenue inflow. E2 (chain, mainnet-gated): scheduled endowment tranche → `fund
 extractable 1:1; E3 (product): low-minimum withdrawals, sponsored claims, localization, wage
 statements. Suite 35/35 + sim drift-0. ALL `EMISSION.*` numbers are founder sign-off levers —
 re-derive real-money sizing before ANY launch copy mentions earning (see Sensitive notes).
+**THE EXIT TOLL (same directive):** every \$OMR withdrawal now pays \`WITHDRAW_TAX_BPS\` (2%, env,
+read per-call — the RATE_LIMIT precedent) split \`TAX.DEV_BPS\` (50%) → the new \`dev_fund\` bucket
+(founder revenue, claimed via \`POST /v1/mod/dev/claim\` — a transfer, never a mint) and 50% →
+\`stake_pool\` (the buyback/yield pool). Gross debited, NET signed on the voucher (reserve/daily-cap
+checks use net); the toll is NON-refundable (cancel/reclaim refund the net only). §10.4: \`tax:\` in
+the omr vocabulary (neither mint nor burn), \`dev_fund\` in omrBuckets — conservation exact.
+test/chain.js gained the EXIT TOLL block (legacy exact-amount blocks pin WITHDRAW_TAX_BPS=0);
+tools/chain-e2e.js asserts the on-chain delta against the voucher NET. Deliberately not a
+fee-on-transfer token (breaks DEX composability) — the toll sits at the game boundary. The full
+tax map (in-game takes → street-tax buyback; Store 40/40/20; bonds POL/Vig; the toll) is §8 of
+the value-creation design doc.
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
