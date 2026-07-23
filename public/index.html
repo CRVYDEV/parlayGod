@@ -621,6 +621,9 @@
     if (body.fire) bits.push('THE BATCH BURNED — you got out with your skin');
     if (body.readyAt) bits.push('the batch is on the burner');
     if (body.heat) bits.push(`heat +${body.heat}`);
+    if (body.kind === 'social' && body.pending) bits.push(body.registered
+      ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
+      : `still standing — it pays in ${minsTxt(body.matureSeconds || 0)}.`);
     if (body.kind === 'social' && body.cash !== undefined) bits.push(`thanks for spreading the word — +$${fmt(body.cash)}${body.allDone ? ' (all done today!)' : ''}`);
     if (body.task && body.cash !== undefined && body.kind !== 'social') bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
@@ -1467,12 +1470,16 @@
       <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:10px">— daily: share OMERTÀ for petty cash. Your code is your name; a recruit who sticks pays you real cash + $OMR</span></h2>
       ${!sw.enabled ? '<div class="d" style="color:var(--dim);font-size:11px;margin-bottom:4px">Reward payouts go live soon — but sharing still brings in new blood (and referral cash) right now.</div>' : ''}
       <div class="grid">${(sw.tasks || []).map((s) => `
-        <div class="card" ${!s.claimed && sw.enabled ? 'style="border-color:var(--neon)"' : ''}><span class="t">${s.claimed ? '✓ ' : ''}${s.name}</span>
-          ${s.claimed ? '<span class="chip good">done today</span>' : ''}
-          <div class="d">${s.desc} · pays $${fmt(s.cash)}</div>
+        <div class="card" ${s.state !== 'claimed' && sw.enabled ? 'style="border-color:var(--neon)"' : ''}><span class="t">${s.state === 'claimed' ? '✓ ' : ''}${s.name}</span>
+          ${s.state === 'claimed' ? '<span class="chip good">done today</span>'
+            : s.state === 'ready' ? '<span class="chip good">stood the test — collect</span>'
+            : s.state === 'pending' ? `<span class="chip">standing — pays in ${mins(s.matureSeconds)}</span>` : ''}
+          <div class="d">${s.desc} · pays $${fmt(s.cash)} <span style="color:var(--dim)">(the post must stand ${sw.matureHours || 4}h)</span></div>
           <a href="${s.share}" target="_blank" rel="noopener noreferrer"><button class="act">share ↗</button></a>
-          ${s.claimed ? '' : `<button class="act" data-swclaim="${s.id}">claim</button>`}</div>`).join('')}</div>
-      ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus.</div>` : ''}
+          ${s.state === 'claimed' ? '' : s.state === 'todo'
+            ? `<button class="act" data-swclaim="${s.id}">I posted — start the clock</button>`
+            : `<button class="act" data-swclaim="${s.id}"${s.state === 'pending' ? ' disabled' : ''}>${s.state === 'ready' ? 'collect' : 'standing…'}</button>`}</div>`).join('')}</div>
+      ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:11px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus. A share pays after it stands ${sw.matureHours || 4} hours — post-and-delete pays nothing.</div>` : ''}
 
       <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:10px">— the hall of fame for bringing in made men. Every recruit who sticks pays real cash + $OMR + milestone bonuses</span></h2>
       <div id="recruit-lb" class="d" style="color:var(--dim);font-size:11px">loading…</div>

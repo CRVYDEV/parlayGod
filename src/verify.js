@@ -46,3 +46,21 @@ export async function verifySocial(taskId, acct) {
   }
   throw new GameError('bad_task', 'Unknown social task.');
 }
+
+// THE 4-HOUR STAND (founder-directed anti-abuse for Spread-the-Word): when a matured share is
+// claimed, live mode re-checks that the registered post STILL EXISTS on X — post-and-delete pays
+// nothing. Trust mode skips the API check but the 4h clock itself is enforced in growth.js either
+// way (deleting early still forfeits under live; under trust the time cost alone deters churn).
+export async function verifyPostUp(proof) {
+  const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
+  if (mode !== 'live') return true;
+  if (!process.env.X_BEARER_TOKEN) throw new GameError('verify_unavailable', 'X verification not configured.');
+  const s = String(proof || '');
+  const id = s.match(/status(?:es)?\/(\d{8,25})/)?.[1] || s.match(/^(\d{8,25})$/)?.[1];
+  if (!id) throw new GameError('need_proof', 'Register the share with a link to your post so it can be verified.');
+  const res = await fetch(`https://api.x.com/2/tweets/${id}`, {
+    headers: { authorization: `Bearer ${process.env.X_BEARER_TOKEN}` } });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.data || j.errors) throw new GameError('post_gone', 'That post is gone — it has to stand to pay.');
+  return true;
+}

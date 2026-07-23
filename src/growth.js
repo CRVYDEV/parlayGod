@@ -5,7 +5,7 @@ import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
 } from './rules.js';
-import { verifySocial } from './verify.js';
+import { verifySocial, verifyPostUp } from './verify.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -347,17 +347,36 @@ export function socialRewardsLive() {
   return true;
 }
 
+// THE 4-HOUR STAND (founder-directed anti-abuse): a share pays in TWO steps. Step one REGISTERS
+// it (a social_claims row, paid=false, proof stored) — no cash. Step two, after SOCIAL_MATURE_MS
+// (4h; env is the test knob), the claim PAYS — and in live verify mode the stored proof is
+// re-checked against X first, so post-and-delete earns nothing. A registration unclaimed for
+// PENDING_TTL (48h) lapses (which also retires any pre-maturity historical rows cleanly).
+const socialMatureMs = () => Number(process.env.SOCIAL_MATURE_MS ?? 4 * 3600000);
+const SOCIAL_PENDING_TTL = 48 * 3600000;
+
 export async function socialBoard(pool, accountId, ch) {
   const day = dayOf();
-  const done = new Set(accountId
-    ? (await pool.query('SELECT task_id FROM social_claims WHERE account_id=$1 AND day=$2', [accountId, day])).rows.map((r) => r.task_id)
-    : []);
+  const rows = accountId
+    ? (await pool.query(
+        'SELECT task_id, day, posted_at, paid FROM social_claims WHERE account_id=$1 AND (day=$2 OR (NOT paid AND posted_at > $3))',
+        [accountId, day, new Date(Date.now() - SOCIAL_PENDING_TTL)])).rows
+    : [];
   const code = ch?.name || '';
-  const tasks = SOCIAL_TASKS.TASKS.map((t) => ({
-    id: t.id, name: t.name, desc: t.desc, cash: SOCIAL_TASKS.CASH,
-    claimed: done.has(t.id), share: socialShareUrl(t.kind, code),
-  }));
+  const mature = socialMatureMs();
+  const tasks = SOCIAL_TASKS.TASKS.map((t) => {
+    const pend = rows.filter((r) => r.task_id === t.id && !r.paid)
+      .sort((a, b) => new Date(b.posted_at) - new Date(a.posted_at))[0];
+    const paidToday = rows.some((r) => r.task_id === t.id && Number(r.day) === day && r.paid);
+    const age = pend ? Date.now() - new Date(pend.posted_at).getTime() : 0;
+    const state = paidToday ? 'claimed' : pend ? (age >= mature ? 'ready' : 'pending') : 'todo';
+    return { id: t.id, name: t.name, desc: t.desc, cash: SOCIAL_TASKS.CASH,
+      claimed: paidToday, state,
+      matureSeconds: state === 'pending' ? Math.ceil((mature - age) / 1000) : 0,
+      share: socialShareUrl(t.kind, code) };
+  });
   return { enabled: socialRewardsLive(), code, cash: SOCIAL_TASKS.CASH, allBonus: SOCIAL_TASKS.ALL_BONUS,
+    matureHours: Math.round(mature / 360000) / 10,
     tasks, allDone: tasks.length > 0 && tasks.every((t) => t.claimed) };
 }
 
@@ -367,21 +386,43 @@ export async function claimSocial(ch, taskId, proof, client, h) {
   const t = SOCIAL_TASKS.TASKS.find((x) => x.id === taskId);
   if (!t) throw new GameError('bad_task', 'Not a word-of-mouth task.');
   const day = dayOf();
+  const mature = socialMatureMs();
   // withCharacter row-locks the character (one living character per account), so an account's
-  // claims serialize — the SELECT-then-INSERT can't double-pay; the PK is the backstop.
+  // claims serialize — the SELECT-then-INSERT/UPDATE can't double-pay; the PK is the backstop.
+  // (1) a live registration in the window? pay it if matured, else report the clock
+  const pend = (await client.query(
+    'SELECT day, posted_at, proof FROM social_claims WHERE account_id=$1 AND task_id=$2 AND NOT paid AND posted_at > $3 ORDER BY posted_at DESC LIMIT 1',
+    [h.accountId, taskId, new Date(Date.now() - SOCIAL_PENDING_TTL)])).rows[0];
+  if (pend) {
+    const age = Date.now() - new Date(pend.posted_at).getTime();
+    if (age < mature) {
+      return { ok: true, kind: 'social', task: taskId, pending: true,
+        matureSeconds: Math.ceil((mature - age) / 1000) };
+    }
+    await verifyPostUp(pend.proof ?? proof); // live mode: the post must STILL be up; trust passes
+    await client.query('UPDATE social_claims SET paid=true WHERE account_id=$1 AND day=$2 AND task_id=$3',
+      [h.accountId, pend.day, taskId]);
+    const paidIds = (await client.query(
+      'SELECT task_id FROM social_claims WHERE account_id=$1 AND day=$2 AND paid', [h.accountId, pend.day])).rows.map((r) => r.task_id);
+    const allDone = SOCIAL_TASKS.TASKS.every((x) => paidIds.includes(x.id));
+    const cash = SOCIAL_TASKS.CASH + (allDone ? SOCIAL_TASKS.ALL_BONUS : 0); // the all-done bonus folds into the last payout (the onboard-capstone precedent)
+    ch.cash = Number(ch.cash) + cash;
+    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: `social:${taskId}` });
+    await h.track(client, h.accountId, 'social_task', { task: taskId, allDone, proof: cleanText(pend.proof ?? proof).slice(0, 300) });
+    return { ok: true, kind: 'social', task: taskId, cash, allDone };
+  }
+  // (2) no live registration → register today's share (once per task per day)
   const dup = await client.query('SELECT 1 FROM social_claims WHERE account_id=$1 AND day=$2 AND task_id=$3', [h.accountId, day, taskId]);
   if (dup.rowCount) throw new GameError('claimed', 'Already spread that word today — come back tomorrow.');
-  await client.query('INSERT INTO social_claims (account_id, day, task_id) VALUES ($1,$2,$3)', [h.accountId, day, taskId]);
-  const claimedIds = (await client.query('SELECT task_id FROM social_claims WHERE account_id=$1 AND day=$2', [h.accountId, day])).rows.map((r) => r.task_id);
-  const allDone = SOCIAL_TASKS.TASKS.every((x) => claimedIds.includes(x.id));
-  const cash = SOCIAL_TASKS.CASH + (allDone ? SOCIAL_TASKS.ALL_BONUS : 0); // fold the all-done bonus in (the onboard-capstone precedent)
-  ch.cash = Number(ch.cash) + cash;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: `social:${taskId}` });
   // (red-team R7 HIGH) cleanText the proof — it's player free-text surfaced verbatim on the mod /admin
   // activity feed (innerHTML), where the mod key lives in sessionStorage → unescaped markup was a
   // mod-side stored XSS → root escalation. Strip < > " ` at the source like every other display field.
-  await h.track(client, h.accountId, 'social_task', { task: taskId, allDone, proof: cleanText(proof).slice(0, 300) });
-  return { ok: true, kind: 'social', task: taskId, cash, allDone };
+  const cleanProof = cleanText(proof).slice(0, 300);
+  await client.query('INSERT INTO social_claims (account_id, day, task_id, paid, proof) VALUES ($1,$2,$3,false,$4)',
+    [h.accountId, day, taskId, cleanProof || null]);
+  await h.track(client, h.accountId, 'social_post', { task: taskId, proof: cleanProof });
+  return { ok: true, kind: 'social', task: taskId, pending: true, registered: true,
+    matureSeconds: Math.ceil(mature / 1000) };
 }
 
 // WALLET LINK is SIWE now — see chain.js walletChallenge/walletVerify. The legacy
