@@ -1592,3 +1592,19 @@ price and retune EPOCH_OMR/WAGE_CAP_OMR (counsel-gated messaging — see CLAUDE.
 | `EARLY_SELL_TAX_BPS` (env, per-call) | 5000 (50% at age 0) | the anti-dump surcharge on exits of fresh $OMR — linear decay to 0 over the window |
 | `FRESH_WINDOW_MS` (env, per-call) | 48h | the freshness window; no exemptions; split 50% dev / 50% buybacks |
 | `OMR.sellTaxBps` (on-chain, owner-armed) | 0 at deploy (arm ≤1000 = 10% cap) | the flat DEX sell tax — registered pools only, 50/50 dev/buyback, V2-compatible pool REQUIRED |
+
+### Red-team resolution (`AUDIT-value-creation.md`, 2026-07-23) — two D-rows for sign-off
+
+The four-lens pass over the five value-creation drops found no conservation leak and one fixed MED
+(the wage's crash-resume per-epoch budget breach — `emittedThisEpoch` now makes a resumed run top
+up toward the budget, regression in test/emission.js). Two DESIGN calls on the new (unsigned)
+levers are open, and they are COUPLED — together a bot farm captures the wage budget and extracts
+it near-toll-free after a 48h ramp:
+
+| Row | The call | Measured | Dials (pick before the faucet carries real value) |
+|---|---|---|---|
+| **D1 wage Sybil gate** | the agent flag is voluntary; guest alts are free; lvl-5 + 25 respect/day ≈ under a minute of automation per alt → ~100 alts capture the whole 500/day budget and pro-rata-starve honest earners | grind cost per alt ≈ one-time ~7 crimes + ~3 crimes/day | `INVITE_MODE=on` in production (built); gate the wage on a linked+MINTED wallet (the 0.01-ETH mint fee = a real per-alt cost); raise `WAGE_MIN_SCORE`/`WAGE_MIN_LVL`; diminishing per-account shares |
+| **D2 surcharge FIFO semantics** | FIFO drains AGED lots first → tax-free daily exit allowance == your balance 48h ago → a steady earner exits each day's wage surcharge-free after a 2-day ramp; the toll as built is anti-INSTANT-dump only | 0% realized toll for any patient extractor | if the intent is "every fresh token pays once": price the FRESH end (LIFO or proportional across lots) — one ordering change in `src/tax.js`; if anti-panic-dump is the intent, keep + relabel |
+
+(The doc's stake→unstake wash seam was re-measured and is NOT a real dodge — fresh tokens washed
+through staking still price as fresh; only already-aged tokens "re-age." Corrected in the design doc.)

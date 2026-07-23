@@ -120,6 +120,34 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   assert.ok(omr2.ok, `conservation exact with the surcharge as bucket transfers (drift ${omr2.drift})`);
 }
 
+// ── REGRESSION (AUDIT-value-creation.md F1): a mid-epoch worker crash must NOT re-grant the whole
+// per-epoch budget to the survivors. Simulate run-1 of epoch RE paying pA (4 $OMR) then the process
+// dying before pB (pA stamped RE, its wage row dated inside RE's window). The resume run must TOP UP
+// toward the budget (8), so pB — the only remaining candidate — draws budget − already-minted = 4,
+// NOT the full-budget share of 5. Without the emittedThisEpoch guard pB draws 5 and the epoch mints
+// 9 > 8, silently breaching the signed per-epoch schedule (invisible to the endowment invariant). ──
+{
+  const RE = E + 20; // a fresh epoch line, clear of the earlier assertions
+  const pA = await mk('Crash Casualty');
+  const pB = await mk('The Survivor');
+  await setRespect(pA.id, 200); await setRespect(pB.id, 200);
+  await runWageEpoch(pool, { epoch: RE - 1 });          // enroll both (stamped RE-1, baseline 200)
+  await setRespect(pB.id, 230);                         // +30 clears MIN_SCORE for the resume run
+  // simulate run-1 of epoch RE: pA was paid 4 and stamped, then the box died before reaching pB
+  const accA = (await pool.query(`SELECT account_id a FROM characters WHERE id='${pA.id}'`)).rows[0].a;
+  await pool.query('UPDATE wage_snapshots SET epoch=$2 WHERE character_id=$1', [pA.id, RE]);
+  await pool.query('UPDATE account_persistent SET omr = omr + 4 WHERE account_id=$1', [accA]);
+  await pool.query(
+    "INSERT INTO transactions (id, character_id, account_id, currency, amount, reason, counterparty, at) VALUES ($1,$2,$3,'omr',4,'emission:wage','emission',$4)",
+    ['reg-crash-pa', pA.id, accA, new Date(RE * 86400000 + 1000)]);
+  const rr = await runWageEpoch(pool, { epoch: RE, budget: 8 }); // the resume run, same epoch, tight budget
+  assert.equal(await omrOf(pB.id), 4, 'the survivor draws budget − already-minted (4), not the full-budget share (5)');
+  const epochMint = 4 + Number(rr.paid); // pA's simulated 4 + what the resume actually paid
+  assert.ok(epochMint <= 8 + 1e-9, `a crash-resume never mints past the epoch budget (minted ${epochMint})`);
+  const inv3 = await runLedgerInvariants(pool);
+  assert.ok(inv3.checks.find((c) => c.name === '$OMR conservation').ok, 'conservation stays exact across the resume');
+}
+
 console.log('✅ Street Wage test passed — schedule (halvings), enrollment→wage flow (pro-rata + cap), '
   + 'level/score/agent gates, per-epoch idempotency, tight-budget bound, the public board, and §10.4 '
   + '(ledgered emission mint, exact conservation, endowment ceiling), plus the EARLY-EXIT surcharge '

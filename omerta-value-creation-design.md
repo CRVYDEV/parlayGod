@@ -182,6 +182,13 @@ already carries a timestamp, so token age is derived by an exact FIFO replay of 
 window (credits append lots; debits consume oldest-first; the opening balance is an aged lot). No new
 tables, and nothing a player can forge. An on-chain wallet version was rejected deliberately: it is
 dodged by wallet-hopping or requires a fee-on-transfer token (breaks DEXes, reads as a honeypot). At
-the game boundary every token passes exactly once. Accepted seam: stake→unstake is bucket-internal
-(no ledger rows), so a round-trip re-enters as aged — throttled by its own 6h loot-exposed unbonding;
-the dials are UNSTAKE_CD_MS or ledgering the release if the alpha shows dump-washing through staking.
+the game boundary every token passes exactly once. The stake→unstake seam was RE-MEASURED by the
+red-team (`AUDIT-value-creation.md`) and is weaker than first documented: washing FRESH tokens
+through staking does NOT dodge the surcharge (the original credit row stays in the 48h window and
+the FIFO replay still prices it); the un-ledgered unbond release only "ages" tokens that were
+already aged. The REAL seam is FIFO itself: because aged lots drain first, a holder's tax-free
+daily exit allowance equals their balance of 48h ago — a steady earner who holds through a 2-day
+ramp exits each day's fresh tokens surcharge-free. So as built this is an anti-INSTANT-dump toll;
+if the intent is "every fresh token pays on its first exit," flip the replay to price the fresh
+end (LIFO / proportional) — a founder sign-off call recorded in AUDIT-value-creation.md (D2) and
+BALANCE.md.
