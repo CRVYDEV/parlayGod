@@ -162,17 +162,26 @@ export async function sovBoard(client, h) {
     `SELECT s.*, g.name AS gang_name, g.tag AS gang_tag FROM sov_structures s
        LEFT JOIN gangs g ON g.id = s.gang_id ORDER BY s.district_id`)).rows;
   const mult = h.owned.gangId ? await overextMult(client, h.owned.gangId) : 1;
+  const myGang = h.owned.gangId
+    ? (await client.query('SELECT sov_points FROM gangs WHERE id=$1', [h.owned.gangId])).rows[0] : null;
   return {
-    structures: rows.map((s) => ({
-      district: s.district_id, gang: s.gang_name, tag: s.gang_tag, mine: s.gang_id === h.owned.gangId,
-      tier: Number(s.tier), name: tierOf(s).name, garrison: tierOf(s).garrison,
-      windowHour: Number(s.window_hour), windowH: SOV.WINDOW_H, windowOpen: windowOpen(s),
-      crumbling: crumbling(s),
-      upkeepOwed: s.gang_id === h.owned.gangId ? upkeepOwed(s, mult) : undefined,
-      siegeCdSeconds: s.siege_cd_until && new Date(s.siege_cd_until) > new Date()
-        ? Math.floor((new Date(s.siege_cd_until) - Date.now()) / 1000) : 0,
-    })),
-    tiers: SOV.TIERS, siegeCost: SOV.SIEGE_COST,
+    structures: rows.map((s) => {
+      const tier = Number(s.tier);
+      const t = tierOf(s);
+      return {
+        district: s.district_id, gang: s.gang_name, tag: s.gang_tag, holderTag: s.gang_tag,
+        mine: s.gang_id === h.owned.gangId,
+        tier, name: t.name, tierName: t.name, garrison: t.garrison, garrisonBonus: t.garrison,
+        windowHour: Number(s.window_hour), windowH: SOV.WINDOW_H,
+        windowOpen: windowOpen(s), vulnerable: windowOpen(s), crumbling: crumbling(s),
+        nextTier: tier < SOV.TIERS.length ? { name: SOV.TIERS[tier].name, cost: SOV.TIERS[tier].cost } : null,
+        upkeepOwed: s.gang_id === h.owned.gangId ? upkeepOwed(s, mult) : undefined,
+        siegeCdSeconds: s.siege_cd_until && new Date(s.siege_cd_until) > new Date()
+          ? Math.floor((new Date(s.siege_cd_until) - Date.now()) / 1000) : 0,
+      };
+    }),
+    family: myGang ? { points: Number(myGang.sov_points || 0), rank: sovRankOf(myGang.sov_points || 0).name } : null,
+    tiers: SOV.TIERS, siegeCost: SOV.SIEGE_COST, buildCost: SOV.TIERS[0].cost,
     overextensionPct: Math.round((mult - 1) * 100),
   };
 }
