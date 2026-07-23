@@ -17,7 +17,7 @@ import { getAddress } from 'viem';
 import crypto from 'node:crypto';
 import { GameError, notify, deadlockToRetry } from './game.js';
 import { recordVigRevenue } from './vig.js';
-import { rollStats } from './rules.js';
+import { rollStats, RWA_FLOAT } from './rules.js';
 
 const norm = (addr) => { try { return getAddress(addr); } catch { return null; } };
 // A payment only grants an entitlement if it actually carried value — belt-and-suspenders
@@ -71,6 +71,18 @@ export async function recordFeePayment(pool, { nonce, kind, payer, amountWei, tx
     // "revenue" that runVigBuyback (which sums vig_revenue with no source filter) would spend,
     // unbacking the withdrawal reserve, invisible to runVigInvariants.
     if (txHash) await recordVigRevenue(client, { source: 'fee', ref: n, kind, amountWei });
+    // THE FLOAT (omerta-rwa-float-design.md): a FEE_RWA_BPS slice of the same real payment funds the
+    // RWA reserve budget — carved from the FOUNDER share (the Vig 60% is untouched), so the split is
+    // Vig 60 / RWA 10 / founder 30. Same txHash gate (no fabricated real-ETH revenue), same
+    // SELECT-then-INSERT idempotency on (source, ref) as the Store's rwa earmark.
+    if (txHash) {
+      let grossEth = 0;
+      try { grossEth = Number(BigInt(amountWei ?? '0')) / 1e18; } catch { grossEth = 0; }
+      const rwaEth = Math.round(grossEth * RWA_FLOAT.FEE_RWA_BPS() / 10000 * 1e6) / 1e6;
+      if (rwaEth > 0 && !(await client.query(
+        "SELECT 1 FROM rwa_revenue WHERE source='fee' AND ref=$1", [String(n)])).rows[0])
+        await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('fee',$1,$2)", [String(n), rwaEth]);
+    }
     const acct = (await client.query('SELECT account_id FROM account_persistent WHERE wallet_address=$1', [addr])).rows[0];
     let credited = false;
     if (acct) {

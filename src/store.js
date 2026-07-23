@@ -288,7 +288,8 @@ export async function revenueStatus(pool) {
   const grossEth = round6(Number((await pool.query("SELECT COALESCE(SUM(gross_eth),0) s FROM vig_revenue WHERE source='store'")).rows[0].s));
   const buybackEth = round6(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='store'")).rows[0].s));
   const rwaEth = round6(Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='store'")).rows[0].s));
-  const rwaSpent = round6(Number((await pool.query("SELECT COALESCE(SUM(spent_eth),0) s FROM rwa_revenue")).rows[0].s));
+  // THE FLOAT is live: rwaSpent now reads the buyback log (rwa_buys), the real spend seat
+  const rwaSpent = round6(Number((await pool.query('SELECT COALESCE(SUM(eth),0) s FROM rwa_buys')).rows[0].s));
   const founderEth = round6(grossEth - buybackEth - rwaEth);
   const bySku = (await pool.query(
     'SELECT sku, COUNT(*) n FROM store_payments WHERE granted GROUP BY sku')).rows.map((r) => ({ sku: r.sku, sold: Number(r.n) }));

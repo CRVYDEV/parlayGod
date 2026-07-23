@@ -1680,6 +1680,19 @@ export const dynastyTierOf = (invested = 0) => {
   for (const t of PORTFOLIO.DYNASTY_TIERS) if (n >= t.min) cur = t;
   return cur;
 };
+// ── THE FLOAT (omerta-rwa-float-design.md) — the full-reserve RWA layer. The founder-approved
+// redesign of R2: OMR never CONVERTS to stock (a burn funds nothing); ETH tax slices fund a buy-bot
+// reserve of REAL tokenized stocks (units held in the Safe on mainnet; chain-dormant here), and
+// players burn earned $OMR to CLAIM allocation from that float at the REAL oracle price —
+// $OMR is the rationing ticket, ETH the funding. allocated ≤ held BY CONSTRUCTION (the bond
+// anti-Ponzi cap / full-reserve-queue discipline, in UNITS so price moves can't create shortfall).
+// The legacy hash-priced book stays as the PAPER tier (pure status). ALL numbers sign-off levers.
+export const RWA_FLOAT = {
+  FEE_RWA_BPS: () => Number(process.env.FEE_RWA_BPS ?? 1000), // 10% of gameplay fees → rwa_revenue (carved from the founder share; Vig 60% untouched). Read per-call (the RATE_LIMIT precedent).
+  CLAIM_MIN_OMR: 5,              // smallest vault claim
+  CLAIM_DAILY_OMR: 500,          // per-account rolling-24h claim cap (the D3 wash-bucket pattern) — no float-sweeping
+  CLAIM_WINDOW_MS: 24 * 3600 * 1000,
+};
 // ── THE WIRE — the intelligence terminal (design omerta-the-wire-and-revenue-design.md) ──
 // Information as a spendable resource. WIRETAPS (a $OMR sink, intel:wiretap) surveil a rival for a
 // window — their Law heat, wealth/ops, and whether they're hunting you. SWEEP (intel:sweep) clears

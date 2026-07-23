@@ -42,6 +42,7 @@ import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
+import * as Rwa from './rwa.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -58,7 +59,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, ESTATE, AUCTION,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
@@ -715,6 +716,8 @@ export async function buildServer() {
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX },
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
+    vault: { claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
+      note: 'the backed tier — claims allocate real treasury-held stock units; the paper book above is status' },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
     speakeasy: { minLevel: SPEAKEASY.MIN_LEVEL, openCost: SPEAKEASY.OPEN_COST, nameOmr: SPEAKEASY.NAME_OMR,
       tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
@@ -1097,6 +1100,12 @@ export async function buildServer() {
   // the FAMILY dividend — the gang book's yield, drawn to the reserve by the boss/underboss
   app.post('/v1/gangs/portfolio/dividend', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.claimFamilyDividend(ch, client, h)));
+  // THE FLOAT (omerta-rwa-float-design.md) — the full-reserve VAULTED book: ETH taxes fund a real
+  // tokenized-stock reserve; players burn earned $OMR to claim allocation from it at the real oracle
+  // price (allocated ≤ held BY CONSTRUCTION). The legacy book above stays the PAPER (status) tier.
+  app.get('/v1/vault', { preHandler: auth }, async (req) => Rwa.vaultBoard(pool, req.user.sub));
+  app.post('/v1/vault/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Rwa.claimVaulted(ch, req.body?.ticker, req.body?.omr, client, h)));
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)
   app.post('/v1/gangs/portfolio/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameFamilyDynasty(ch, req.body?.name, client, h)));
@@ -1926,6 +1935,12 @@ export async function buildServer() {
   // can `eth_sendTransaction` it without the zero-dep client hand-rolling ABI (viem does it server-side).
   app.post('/v1/bond/calldata', { preHandler: auth }, async (req) => Chain.bondCalldata(pool, req.user.sub, req.body?.nonce));
   app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
+  // THE FLOAT — the RWA buy-bot seat (mod-driven until the mainnet Uniswap bot; the runVigBuyback
+  // twin: spend ≤ rwa_revenue, priceEth = the oracle param, txHash marks a REAL swap) + the
+  // real-value invariant view (allocated ≤ held — the anti-Ponzi check — spend ≤ revenue, unit sums)
+  app.get('/v1/mod/rwa', { preHandler: modAuth }, async () => Rwa.runRwaInvariants(pool));
+  app.post('/v1/mod/rwa/buy', { preHandler: modAuth }, async (req) =>
+    Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: req.body?.txHash }));
   app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
   app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
     // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
