@@ -2310,7 +2310,7 @@ export const auctionLotsOf = (week = weekOf()) => {
 // real referral cash + $OMR on qualification, so this feeds the existing referral loop. ALL
 // numbers are founder sign-off levers. Deploy sets SOCIAL_GAME_URL / SOCIAL_X_HANDLE.
 export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || 'https://playomerta.com'
-export const SOCIAL_X_HANDLE = (process.env.SOCIAL_X_HANDLE || 'PlayOmerta').replace(/^@/, '')
+export const SOCIAL_X_HANDLE = (process.env.SOCIAL_X_HANDLE || 'OmertaOnRH').replace(/^@/, '')
 export const SOCIAL_TASKS = {
   CASH: 300,       // petty cash per task
   ALL_BONUS: 500,  // a small bonus for doing every task in a day

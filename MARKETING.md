@@ -1,7 +1,7 @@
 # OMERTÀ — launch & social copy
 
 Ready-to-post copy for the closed-alpha launch. **Swap in your real URL + @handle** everywhere you see
-`[link]` / `@omerta`. Keep the tone noir, confident, understated — the game sells itself.
+`[link]` — the X handle is `@OmertaOnRH`. Keep the tone noir, confident, understated — the game sells itself.
 
 > ⚠️ **The one rule (protects you legally):** the copy below deliberately makes **no earnings or token-price
 > promises** — no "get rich," "earn a living," "moon," "guaranteed returns," APY, or price talk. Sell the

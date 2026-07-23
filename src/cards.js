@@ -7,7 +7,7 @@
 //       KILL notice) that unfurl in a feed and pull clicks a text link never would.
 // PUBLIC + keyless + read-only; ZERO §10.4 surface (status/marketing only). Wealth is never exact
 // (the anti-precise-kill-EV rule) — a card flexes rank/level/kills/family, never a dollar figure.
-import { levelOf, hitmanRankOf, dynastyTierOf } from './rules.js';
+import { levelOf, hitmanRankOf, dynastyTierOf, SOCIAL_X_HANDLE } from './rules.js';
 
 const GOLD = '#c9a24b', DIM = '#8f7433', TEAL = '#4fd6c2', BLOOD = '#9b2f2f', INK = '#e8e2d4', BG = '#0c0d11';
 const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -124,7 +124,7 @@ export function profilePage(d, baseUrl, ref) {
 <title>${esc(title)}</title>
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
 <meta property="og:image" content="${esc(cardUrl)}"><meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@${esc(SOCIAL_X_HANDLE)}"><meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}"><meta name="twitter:image" content="${esc(cardUrl)}">
 <style>:root{color-scheme:dark}body{margin:0;background:radial-gradient(120% 90% at 50% -10%,#16181f,#0c0d11 60%);
   color:${INK};font-family:'Helvetica Neue',Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:32px}
