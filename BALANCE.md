@@ -1633,3 +1633,15 @@ then exits free; conservation unmoved).
 | Completion perk | NOT BUILT | deliberately deferred — a district perk would touch the signed turf surface; ships only as an explicit sign-off, if ever |
 Zero new emission (cash burn + $OMR burn + goods deletion — §10.4-positive; strengthens extraction ≤ inflow).
 Red-team flags for sign-off (AUDIT — megaproject): **agents are NOT excluded from the plaque/Architect** (every other status board excludes them; here the plaque is bought with burned value, so inclusion may be intended — your call) · **the goods rail has no $-value floor** (1 cheap unit ≈ $40 vs the $100 cash floor — add a value floor only if dust spam shows in telemetry).
+
+## Slate drops 4/5/6 — levers, all PROPOSED (sign-off before production)
+**The Dueling Ladder (#5)** — `DUELS`: K 32 / floor 100 / variance 40 / MIN_LVL 5 / LEGEND_MIN_LVL 10 /
+stake floor $1k / 5% rake (the audited casino:pvp split — ZERO new emission). Anti-Sybil: per-account-pair
+daily K-diminishing + both floors + every feed pays the rake; residual: a patient multi-alt ring can still
+inflate elo slowly (status-only, seasonal reset bounds it — the fight-fix posture). Seasonal reset is a
+rollover rider.
+**Clue Scrolls (#4)** — `CLUES`: 2% drop / 3–5 steps / dig 5 energy / casket $3k–$12k / 8h cooldown.
+THE ONE NEW FAUCET: hard ceiling 3 caskets/day ≈ $22.5k mean/day/char (sim P9.19) — petty by design.
+**Seasonal Modifiers (#6)** — `SEASON_MODS`: THE ONE DROP THAT TOUCHES SIGNED LEVERS BY DESIGN (a
+season-long twist on laylow/law-gain/loot/safehouse/trade-sell). Pool ships SMALL (4 mods, 1 vanilla);
+every multiplier is a named lever; review the pool each season.

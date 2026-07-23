@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -768,7 +768,24 @@ export function doCrime(ch, crimeId, client, h) {
       await bumpFamilyTask(client, h, 'crime', 1);
       await logCollect(client, ch.account_id, 'crimes', c.id); // THE COLLECTION — first pull of each job
       const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
-      return { ok: true, success: true, take, rep, crates, makingsDrop,
+      // CLUE SCROLLS (slate #4): a rare treasure-trail drop — decorative on the crime path
+      // (a scroll isn't currency, §10.4-free; never fail a job for it). One active hunt per
+      // street + the post-casket cooldown bound it. CLUE_DROP_P is a TEST-ONLY roll knob.
+      let clue = null;
+      try {
+        const clueP = process.env.CLUE_DROP_P != null ? Number(process.env.CLUE_DROP_P) : CLUES.DROP_P;
+        if (!(ch.clue_at && new Date(ch.clue_at) > new Date()) && Math.random() < clueP) {
+          const held = (await client.query('SELECT 1 FROM clue_scrolls WHERE character_id=$1', [ch.id])).rows[0];
+          if (!held) {
+            const salt = crypto.randomUUID();
+            const nSteps = CLUES.STEPS_MIN + Math.floor(Math.random() * (CLUES.STEPS_MAX - CLUES.STEPS_MIN + 1));
+            await client.query('INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ($1,$2,1,$3)', [ch.id, salt, nSteps]);
+            clue = { steps: nSteps, riddle: clueStepOf(salt, 1).riddle };
+            await notify(client, ch.id, 'clue_found', clue);
+          }
+        }
+      } catch { /* the trail is a bonus, never a blocker */ }
+      return { ok: true, success: true, take, rep, crates, makingsDrop, clue,
         soldier: soldier ? { ...soldier, cut: soldierCut } : null };
     }
     // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever.

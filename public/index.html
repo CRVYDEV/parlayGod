@@ -722,6 +722,10 @@
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
+    if (body.casket) bits.push(`⛏ THE CASKET — $${fmt(body.take)} dug up (${body.caskets} lifetime — ${body.rank})`);
+    else if (body.cold) bits.push(body.hint || 'cold ground');
+    else if (body.riddle && body.step) bits.push(`the trail continues — “${body.riddle}” (step ${body.step} of ${body.of})`);
+    if (body.clue) bits.push(`🗺 a CLUE SCROLL fell out of the job — “${body.clue.riddle}”`);
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
@@ -2080,6 +2084,7 @@
         <span class="t" style="margin-right:2px">The Map</span><span class="d" style="color:var(--dim)">you're in <b>${me?.loc || '—'}</b> ·</span> ${travel}
       </div>
       ${pathBlock}
+      <div id="clue-slot"></div>
       ${sect('streets-daily', 'Daily Work', '3 contracts a day (all three pays a $OMR bonus) + the Daily Score', `<div class="grid">${dailyCards}</div>`, dailyReady)}
       ${sect('streets-train', 'Train', 'raise muscle / cunning / speed', train)}
       ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `<div class="grid">${goodsCards}</div>`)}
@@ -2095,6 +2100,20 @@
     t.querySelectorAll('[data-gdbuy]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/buy', { goodId: b.dataset.gdbuy, qty: gq(b.dataset.gdbuy) }).then(renderStreets));
     t.querySelectorAll('[data-gdsell]').forEach((b) => b.onclick = () => act('POST', '/v1/goods/sell', { goodId: b.dataset.gdsell, qty: gq(b.dataset.gdsell) }).then(renderStreets));
     t.querySelectorAll('[data-daily]').forEach((b) => b.onclick = () => act('POST', `/v1/daily/${b.dataset.daily}/claim`, {}).then(renderStreets));
+    { const slot = t.querySelector('#clue-slot');
+      if (slot) api('GET', '/v1/clues').then((r) => {
+        if (r.code >= 400 || !slot.isConnected) return;
+        const c = r.body;
+        slot.innerHTML = c.scroll ? `<div class="card" style="border-color:var(--gold,#c9a227);margin-top:8px">
+            <span class="t" style="color:var(--gold,#c9a227)">🗺 THE TREASURE TRAIL</span> <span class="d">step ${c.scroll.step} of ${c.scroll.of}</span>
+            <div class="d" style="font-style:italic">“${esc(c.scroll.riddle)}”</div>
+            <button class="act" id="clue-dig" style="margin-top:6px">DIG HERE (${c.digEnergy} energy)</button>
+            <div class="d" style="font-size:11px">stand on the ground the riddle names — travel first if you have to</div>
+          </div>`
+          : (c.legend.caskets > 0 ? `<div class="card" style="margin-top:8px"><span class="t">🗺 ${c.legend.caskets} casket${c.legend.caskets > 1 ? 's' : ''} dug</span> <span class="d">${esc(c.legend.rank)} — the next scroll turns up on a job${c.cooldownSeconds > 0 ? ' (the streets are quiet a while yet)' : ''}</span></div>` : '');
+        const dg = slot.querySelector('#clue-dig');
+        if (dg) dg.onclick = () => act('POST', '/v1/clues/dig', {}).then(() => renderStreets());
+      }); }
   }
 
   // The City board
@@ -2369,6 +2388,9 @@
       ['POST', '/v1/underworld/:npc/errand', {}], ['GET', '/v1/skills'], ['POST', '/v1/skills/:id', {}],
       ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
       ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
+    ],
+    'Clue Scrolls': [
+      ['GET', '/v1/clues'], ['POST', '/v1/clues/dig', {}], ['GET', '/v1/leaderboard/clues'],
     ],
     'The Dueling Circuit': [
       ['GET', '/v1/duels'], ['POST', '/v1/duels/list', { limit: 5000 }],
@@ -4009,6 +4031,7 @@
       vendetta_settled: () => `a vendetta was settled in blood`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
+      clue_found: () => `🗺 a CLUE SCROLL turned up on that job — “${d.riddle}” (${d.steps} steps to a casket)`,
       duel_result: () => `⚔ ${d.by} ${d.win ? 'lost to you' : 'beat you'} in a ranked duel — your elo is ${d.elo} (${d.delta > 0 ? '+' + d.delta : d.delta})`,
       megaproject_milestone: () => `🏗 ${d.monument} is ${d.pct}% raised — the scaffolding climbs`,
       megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,

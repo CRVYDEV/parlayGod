@@ -2653,3 +2653,45 @@ export const DUELS = {
   ],
 };
 export const duelRankOf = (elo) => [...DUELS.RANKS].reverse().find((r) => Number(elo) >= r.elo) || DUELS.RANKS[0];
+
+// ═══ CLUE SCROLLS (slate #4 — treasure trails). ALL numbers are founder sign-off levers.
+// The casket is the drop's ONE new faucet, bounded three ways (the 2% drop × one active hunt ×
+// the 8h post-casket cooldown → ≤ ~3 caskets/day ≈ $36k/day hard ceiling — sim probe P9.19). ═══
+export const CLUES = {
+  DROP_P: 0.02,            // per successful crime (only with no active scroll + cooldown clear)
+  STEPS_MIN: 3, STEPS_MAX: 5,
+  DIG_ENERGY: 5,
+  CASKET_MIN: 3000, CASKET_MAX: 12000,
+  CLUE_CD_MS: 8 * 3600 * 1000,       // after a casket, the streets go quiet for a spell
+  TIMED_P: 0.35,           // some steps only answer in a 6h city-hour window
+  RIDDLES: {               // district flavor — the riddle text derives from these
+    docks: 'Dig where the cranes bow to the sea.',
+    canal: 'Under the bridge where the water keeps secrets.',
+    brick: 'Between the kilns, where the clay remembers.',
+    neon: 'Beneath the sign that never sleeps.',
+    cathedral: 'In the shadow of the spire, third stone from grace.',
+    foundry: 'Where the slag cools and nobody asks questions.',
+  },
+  WINDOWS: [               // the timed variants ("when the city sleeps")
+    { lo: 0, hi: 5, text: 'when the city sleeps' },
+    { lo: 6, hi: 11, text: 'in the working morning' },
+    { lo: 12, hi: 17, text: 'in the loud afternoon' },
+    { lo: 18, hi: 23, text: 'after the lamps come on' },
+  ],
+  RANKS: [
+    { caskets: 0, title: 'Mudlark' },
+    { caskets: 5, title: 'Digger' },
+    { caskets: 20, title: 'Treasure Hunter' },
+    { caskets: 60, title: 'The Cartographer' },
+  ],
+};
+export const clueRankOf = (n) => [...CLUES.RANKS].reverse().find((r) => Number(n) >= r.caskets) || CLUES.RANKS[0];
+// the deterministic hunt: every step of a scroll derives from its stored salt (server-verifiable,
+// no stored answers — the §7.11 machinery). Returns {district, window|null, riddle}.
+export const clueStepOf = (salt, step) => {
+  const d = DISTRICTS[Math.floor(hash01(`clue:${salt}:${step}:d`) * DISTRICTS.length)].id;
+  const timed = hash01(`clue:${salt}:${step}:t`) < CLUES.TIMED_P;
+  const w = timed ? CLUES.WINDOWS[Math.floor(hash01(`clue:${salt}:${step}:w`) * CLUES.WINDOWS.length)] : null;
+  return { district: d, window: w,
+    riddle: (CLUES.RIDDLES[d] || `Dig in ${d}.`) + (w ? ` Come ${w.text}.` : '') };
+};

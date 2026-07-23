@@ -46,6 +46,7 @@ import * as Rwa from './rwa.js';
 import * as Phone from './phone.js';
 import * as Mega from './megaproject.js';
 import * as Duels from './duels.js';
+import * as Clues from './clues.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -62,7 +63,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
@@ -112,7 +113,7 @@ export async function buildServer() {
   // must never reach a real deployment — refuse to boot if any leaked into the env (the fail-closed JWT pattern;
   // CHAIN_POLL_MS is a legitimate production knob and is deliberately excluded).
   if (hardened) {
-    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
+    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CLUE_DROP_P', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
     const leaked = TEST_ONLY_ENV.filter((k) => process.env[k] != null);
     if (leaked.length) throw new Error(`Test-only roll/timer overrides must not be set in production (they turn money rolls into always-win switches): ${leaked.join(', ')}`);
   }
@@ -722,6 +723,10 @@ export async function buildServer() {
     vault: { claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
       note: 'the backed tier — claims allocate real treasury-held stock units; the paper book above is status' },
     estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
+    clues: { dropP: CLUES.DROP_P, digEnergy: CLUES.DIG_ENERGY, casket: [CLUES.CASKET_MIN, CLUES.CASKET_MAX],
+      cooldownHours: Math.round(CLUES.CLUE_CD_MS / 3600000), ranks: CLUES.RANKS,
+      note: 'a rare drop on any successful job — a riddle trail ending in a casket' },
+    duels: { stakeMin: DUELS.STAKE_MIN, rakeBps: DUELS.RAKE_BPS, minLevel: DUELS.MIN_LVL, ranks: DUELS.RANKS },
     megaproject: { monuments: MEGAPROJECT.MONUMENTS, minCash: MEGAPROJECT.MIN_CASH,
       minOmr: MEGAPROJECT.MIN_OMR, omrRate: MEGAPROJECT.OMR_RATE,
       note: 'the collective monument — every contribution is a burn; the plaque is forever' },
@@ -2177,6 +2182,13 @@ export async function buildServer() {
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId,
       (ch, opponent, client, h) => Duels.challenge(ch, opponent, req.body?.amount, client, h)));
   app.get('/v1/leaderboard/duels', { preHandler: auth }, async () => Duels.duelLeaderboard(pool));
+
+  // ── CLUE SCROLLS (slate #4) — treasure trails off the §7.11 seed; the casket is the one faucet ──
+  app.get('/v1/clues', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Clues.clueBoard(client, ch, h.acct)));
+  app.post('/v1/clues/dig', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Clues.dig(ch, client, h)));
+  app.get('/v1/leaderboard/clues', { preHandler: auth }, async () => Clues.clueLeaderboard(pool));
   // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));

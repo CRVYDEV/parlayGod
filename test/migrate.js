@@ -86,6 +86,7 @@ const DISPOSITION = {
   fighters: 'special', gang_members: 'special', speakeasy_patrons: 'special',
   futurity_runners: 'escrow', grand_prix_entries: 'escrow', poker_entries: 'escrow', stakes_entries: 'escrow', track_entries: 'escrow',
   transactions: 'ledger', rng_audit: 'ledger', notifications: 'log',
+  clue_scrolls: 'wiped', // the treasure trail dies with the street (the heir starts a fresh hunt)
   chat_messages: 'log', // troll-box lines keep their name snapshot — a dead man's words stand (7d worker retention)
 };
 // SCOPE: this guard covers the literal `character_id` column convention (42 tables). Tables that

@@ -1913,3 +1913,16 @@ CREATE TABLE IF NOT EXISTS duels (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_duels_pair_day ON duels (account_a, account_b, day);
+
+-- CLUE SCROLLS (slate #4 — the RuneScape treasure trail): a rare crime drop starts a multi-step
+-- riddle hunt derived from the §7.11 seed; the final dig opens a CASKET (a bounded cash faucet).
+-- One active scroll per street; it DIES with the street (DISPOSITION: wiped).
+CREATE TABLE IF NOT EXISTS clue_scrolls (
+  character_id TEXT PRIMARY KEY REFERENCES characters(id),
+  salt TEXT NOT NULL,                -- the deterministic seed for every step of THIS hunt
+  step INT NOT NULL DEFAULT 1,
+  steps INT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS clue_at TIMESTAMPTZ;      -- post-casket drop cooldown (direct-SQL col)
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS caskets INT NOT NULL DEFAULT 0; -- lifetime legend (survives death)
