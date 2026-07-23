@@ -1608,3 +1608,17 @@ it near-toll-free after a 48h ramp:
 
 (The doc's stake→unstake wash seam was re-measured and is NOT a real dodge — fresh tokens washed
 through staking still price as fresh; only already-aged tokens "re-age." Corrected in the design doc.)
+
+**D1 + D2 — BOTH BUILT (founder-directed 2026-07-23, "apply your recommended fixes").**
+**D1:** the wage now pays only **MINTED** accounts (`wageRequireMinted()` — env `WAGE_REQUIRE_MINTED`,
+default ON; the board + `/v1/rules.emission` surface `mintedRequired`/`minted`). Every wage-drawing
+identity now costs the 0.01-ETH mint fee (or its PLEX price in earned $OMR) — a Sybil farm pays the
+house per alt instead of draining the budget; free-trial players still play and earn everything else
+(minting was already the extraction gate, so paid-identity-earns-the-extractable-wage closes
+coherently). `INVITE_MODE=on` remains the recommended alpha posture on top.
+**D2:** `earlySurcharge` now prices exits (and replays historical debits) **NEWEST-first** — an aged
+buffer can no longer absorb a fresh dump; every fresh token pays on its first exit, exactly once
+(a past taxed exit is consumed newest-first in later replays), and the only free exit is genuinely
+holding a token 48h. Regressions: test/emission.js (unminted alt clearing every play gate draws $0;
+minted → paid) + test/chain.js (fresh tokens pay ~50% behind a fat aged buffer; the aged remainder
+then exits free; conservation unmoved).

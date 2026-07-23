@@ -1095,6 +1095,7 @@
   const wageLine = (w) => {
     if (!w?.you) return 'enrolling…';
     if (w.you.agentExcluded) return 'agents run their own economy — no wage';
+    if (w.you.mintedRequired && !w.you.minted) return 'made men only — mint your account (the Store\'s Made Man package, or PLEX it with earned $OMR) to get on the payroll';
     if (!w.you.enrolled) return 'enrolling — your first full day starts the count';
     const base = '+' + fmt(w.you.gainThisEpoch) + ' respect this epoch ' +
       (w.you.eligible ? '— <b style="color:var(--ok)">on the payroll</b>'

@@ -27,6 +27,10 @@ const mk = async (name) => {
 };
 // respect is NOT a §10.4 currency — setting it directly is a clean way to simulate a day's grind
 const setRespect = (id, n) => pool.query(`UPDATE characters SET respect=${n} WHERE id='${id}'`);
+// the D1 Sybil wall: only MINTED accounts draw the wage — mark the earners paid-up (minted is an
+// out-of-band entitlement, not a §10.4 currency, so direct SQL is the clean test path)
+const setMinted = (id) => pool.query(
+  `UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`);
 const omrOf = async (id) => Number((await pool.query(
   `SELECT omr FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`)).rows[0].omr);
 
@@ -42,6 +46,7 @@ assert.equal(epochBudget(EMISSION.EPOCH0 + EMISSION.DECAY_EVERY), EMISSION.EPOCH
 const p1 = await mk('Wage Earner');
 const p2 = await mk('Second Shift');
 const p3 = await mk('Green Rookie');
+await setMinted(p1.id); await setMinted(p2.id); await setMinted(p3.id);
 await setRespect(p1.id, 200); await setRespect(p2.id, 200); await setRespect(p3.id, 10);
 let r = await runWageEpoch(pool, { epoch: E });
 assert.equal(r.workers, 0, 'the enrollment epoch pays nobody');
@@ -130,6 +135,7 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   const RE = E + 20; // a fresh epoch line, clear of the earlier assertions
   const pA = await mk('Crash Casualty');
   const pB = await mk('The Survivor');
+  await setMinted(pA.id); await setMinted(pB.id);
   await setRespect(pA.id, 200); await setRespect(pB.id, 200);
   await runWageEpoch(pool, { epoch: RE - 1 });          // enroll both (stamped RE-1, baseline 200)
   await setRespect(pB.id, 230);                         // +30 clears MIN_SCORE for the resume run
@@ -146,6 +152,28 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   assert.ok(epochMint <= 8 + 1e-9, `a crash-resume never mints past the epoch budget (minted ${epochMint})`);
   const inv3 = await runLedgerInvariants(pool);
   assert.ok(inv3.checks.find((c) => c.name === '$OMR conservation').ok, 'conservation stays exact across the resume');
+}
+
+// ── REGRESSION (AUDIT-value-creation.md D1): the Sybil wall — only a MINTED account (one that paid
+// the 0.01-ETH mint fee, or its PLEX price) draws the wage. A free guest alt that clears every play
+// gate still earns NOTHING until it mints — so each wage-drawing identity costs real money and a
+// bot farm funds the house instead of draining the budget. ──
+{
+  const ED = E + 40; // a fresh epoch line
+  const alt = await mk('Free Alt');            // deliberately NOT minted
+  await setRespect(alt.id, 200);               // level 8 — clears the floor
+  await runWageEpoch(pool, { epoch: ED - 1 }); // enroll
+  await setRespect(alt.id, 260);               // +60 clears MIN_SCORE — real play, no papers
+  let rd = await runWageEpoch(pool, { epoch: ED });
+  assert.equal(await omrOf(alt.id), 0, 'an unminted account draws NO wage despite clearing every play gate');
+  const boardAlt = (await call('GET', '/v1/wage', { token: alt.token })).body;
+  assert.equal(boardAlt.you.mintedRequired, true, 'the board says papers are required');
+  assert.equal(boardAlt.you.minted, false, 'the board shows the account unminted');
+  assert.equal(boardAlt.you.eligible, false, 'unminted → not eligible');
+  await setMinted(alt.id);                     // pay the piper (the mint fee entitlement)
+  await setRespect(alt.id, 320);               // another +60 the next epoch
+  rd = await runWageEpoch(pool, { epoch: ED + 1 });
+  assert.ok(await omrOf(alt.id) > 0, 'the same account draws a wage once minted');
 }
 
 console.log('✅ Street Wage test passed — schedule (halvings), enrollment→wage flow (pro-rata + cap), '

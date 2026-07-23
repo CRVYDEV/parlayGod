@@ -105,10 +105,19 @@ all intact; the quote typehash carries no split fields, so the change added zero
 
 ---
 
-## FLAGGED FOR FOUNDER SIGN-OFF (design calls on the NEW, unsigned levers — not patched)
+## FLAGGED FOR FOUNDER SIGN-OFF (design calls on the NEW, unsigned levers)
 
-These are the two decisions to make before the wage faucet goes live with real-money value. They
-are coupled: together they mean a determined bot farm could capture most of the daily wage budget
+> **RESOLUTION (2026-07-23, founder-directed "apply your recommended fixes"): BOTH BUILT.**
+> D1 → the wage now pays only MINTED accounts (`wageRequireMinted()`, env `WAGE_REQUIRE_MINTED`
+> default on; surfaced on the board, `/v1/rules.emission`, and the console card) — every
+> wage-drawing identity costs the 0.01-ETH mint fee (or its PLEX price), so a Sybil farm funds the
+> house per alt instead of draining the budget. D2 → `earlySurcharge` prices exits (and replays
+> historical debits) NEWEST-first, so every fresh token pays on its first exit exactly once and an
+> aged buffer can't shield a fresh dump. Regressions in test/emission.js + test/chain.js; the
+> codices and design doc updated. The original findings are preserved below as the record.
+
+These were the two decisions to make before the wage faucet goes live with real-money value. They
+are coupled: together they meant a determined bot farm could capture most of the daily wage budget
 and extract it near-toll-free after a 48-hour ramp.
 
 **D1 — The wage's Sybil economics: the agent flag is the wrong humanity gate.** The exploit lens

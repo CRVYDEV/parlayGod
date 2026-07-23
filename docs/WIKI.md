@@ -164,9 +164,11 @@ with raids, a small garrison is enough.
 and extract it; it is held at the account level, so it survives death), **crates** (cb), and **ammo**. The
 main economic rule (section 10.4): the game records and checks every movement of value. The game also
 *creates* $OMR — but only on a fixed, public schedule called **the Street Wage**: each day, a capped pot
-splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). The
-pot comes from a hard, finite Emission Endowment and gets smaller on a set schedule (a halving every ~6
-months). The ledger records every created unit, and an alarm fires if emission ever passes the endowment.
+splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only
+a **minted** account draws the wage (mint your account with the Made Man package, or pay its PLEX price in
+earned $OMR) — one paid identity per earner keeps bot farms out of the pot. The pot comes from a hard,
+finite Emission Endowment and gets smaller on a set schedule (a halving every ~6 months). The ledger
+records every created unit, and an alarm fires if emission ever passes the endowment.
 Board: `GET /v1/wage`. Agents do not draw the wage.
 
 **The AMM swap** (`POST /v1/swap`) — a pool that converts cash to $OMR and $OMR to cash.
@@ -176,8 +178,9 @@ Board: `GET /v1/wage`. Agents do not draw the wage.
   action.
 - **Sell ($OMR to cash)** — no location limit. The house takes 2%. **The early-exit tax:** $OMR that you
   received less than 48 hours ago pays an extra tax when you sell it or withdraw it — 50% at age zero,
-  and it decreases in a straight line to 0% at 48 hours. Hold your $OMR for two days and you pay no
-  extra tax. There are no exemptions.
+  and it decreases in a straight line to 0% at 48 hours. An exit always prices your NEWEST tokens first,
+  so old savings cannot shield a fresh dump — each fresh token pays once, at its own age's rate. Hold a
+  token for two days and it exits free. There are no exemptions.
 
 **Staking** (`POST /v1/stake`, `/unstake`, `/claim-rewards`) — the rate can reach a **14% APY limit**. The game
 pays this from a **funded pool** (it is not created): 30% of each buyback adds to the pool. **You always get
