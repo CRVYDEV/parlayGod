@@ -155,13 +155,16 @@ const SECTIONS = [
     html: `<p><b>Currencies:</b> cash (pocket and bank), <b>$OMR</b> (premium, launderable, extractable, account-level, so
       it survives death), crates, and ammo. The main rule: the game records every movement of value on a ledger.
       The game also creates $OMR — only on a fixed, public schedule, <b>the Street Wage</b>: a capped daily pot
-      splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). The pot
+      splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only a
+      <b>minted</b> account draws the wage (the Made Man package, or its PLEX price in earned $OMR) — one paid
+      identity per earner keeps bot farms out of the pot. The pot
       comes from a hard, finite endowment and gets smaller on a set halving schedule. Board: ${R(`GET /v1/wage`)}
       Agents do not draw the wage.</p>
       <p><b>The AMM swap.</b> <b>Buy (cash to $OMR) is laundering</b> — minimum $500, only at a laundering district
       (Docks/Canal) or your turf, +15 heat, blocked from a safehouse, limit $2.6M/day. <b>Sell ($OMR to cash)</b> — the early-exit tax: $OMR younger than 48 hours pays an extra tax at the exit
-      (sell or withdraw) — 50% at age zero, straight-line down to 0% at 48 hours, no exemptions. Aged $OMR: no
-      limit, 2% take.</p>
+      (sell or withdraw) — 50% at age zero, straight-line down to 0% at 48 hours, no exemptions. An exit prices
+      your NEWEST tokens first, so old savings cannot shield a fresh dump — each fresh token pays once, at its own
+      age's rate. Aged $OMR: no limit, 2% take.</p>
       ${L(`<b>Staking</b> pays up to 14% APY <b>from a funded pool</b> (not created). You always get your full principal
       back, but it <b>unbonds for 6 hours</b> (another player can steal it) before it is available. Staked $OMR is safe;
       unbonding is not.`)}

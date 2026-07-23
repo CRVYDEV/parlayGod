@@ -54,7 +54,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
-         EMISSION, emissionEpochOf, epochBudget, TAX, withdrawTaxBps } from './rules.js';
+         EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -619,7 +619,8 @@ export async function buildServer() {
     // THE STREET WAGE — the emission schedule is PUBLIC by design (anyone can verify the printer)
     emission: { endowmentOmr: EMISSION.ENDOWMENT_OMR, epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY,
       decayEvery: EMISSION.DECAY_EVERY, capOmr: EMISSION.WAGE_CAP_OMR, minLevel: EMISSION.WAGE_MIN_LVL,
-      minScore: EMISSION.WAGE_MIN_SCORE, epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
+      minScore: EMISSION.WAGE_MIN_SCORE, mintedRequired: wageRequireMinted(),
+      epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
     // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
     // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
     // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.

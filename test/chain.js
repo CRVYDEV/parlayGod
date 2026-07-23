@@ -440,6 +440,36 @@ const d0Toll = await driftOf('$OMR conservation');
   assert.ok(Math.abs((dev1 - dev0) - 2.5) < 0.02, 'half the surcharge landed in the dev fund');
   // §10.4: the surcharge is transfers into audited buckets — conservation unmoved
   assert.equal(await driftOf('$OMR conservation'), d0Toll, 'the early surcharge is bucket transfers — conservation unmoved');
+
+  // ── REGRESSION (AUDIT-value-creation.md D2 fix — FRESH-FIRST pricing): under the original
+  // oldest-first ordering an AGED BUFFER absorbed every exit, so a steady earner's daily dump of
+  // fresh tokens was surcharge-free after a 48h ramp. Newest-first pricing closes it: the fresh
+  // tokens pay on their first exit even with a fat aged stack behind them — and pay exactly ONCE
+  // (the next replay consumes that exit newest-first too, so the aged remainder then exits free). ──
+  {
+    const { body: { token: tokenP } } = await call('POST', '/v1/auth/guest');
+    await call('POST', '/v1/character', { token: tokenP, body: { name: 'Patient Extractor' } });
+    const pAcct = (await pool.query("SELECT account_id FROM characters WHERE name='Patient Extractor'")).rows[0].account_id;
+    await pool.query("UPDATE account_persistent SET minted=true, wallet_address='0x00000000000000000000000000000000000000bb' WHERE account_id=$1", [pAcct]);
+    const creditP = async (amt, agoMs) => {
+      const id = crypto.randomUUID();
+      await pool.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [pAcct, amt]);
+      await pool.query("INSERT INTO transactions (id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,'omr',$3,'emission:wage','emission')",
+        [id, pAcct, amt]);
+      if (agoMs) await pool.query('UPDATE transactions SET at = $2 WHERE id=$1', [id, new Date(Date.now() - agoMs)]);
+    };
+    await creditP(20, 72 * 3600000); // the aged buffer (outside the window entirely)
+    await creditP(5, 60000);         // today's fresh wage (1 min old — deterministic row ordering)
+    let rp = await call('POST', '/v1/withdraw', { token: tokenP, body: { amount: 5 } });
+    assert.equal(rp.code, 200, 'the daily dump clears');
+    assert.ok(Math.abs(rp.body.earlyTax - 2.5) < 0.05,
+      `the FRESH tokens pay ~50% even behind a fat aged buffer (got ${rp.body.earlyTax}) — the ramp dodge is closed`);
+    rp = await call('POST', '/v1/withdraw', { token: tokenP, body: { amount: 20 } });
+    assert.equal(rp.code, 200, 'the aged remainder clears');
+    assert.ok(rp.body.earlyTax < 1e-6,
+      `the aged remainder exits free — each fresh token pays exactly once (got ${rp.body.earlyTax})`);
+    assert.equal(await driftOf('$OMR conservation'), d0Toll, 'fresh-first pricing stays pure bucket transfers');
+  }
   process.env.EARLY_SELL_TAX_BPS = '0';
 }
 

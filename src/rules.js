@@ -2352,6 +2352,15 @@ export const EMISSION = {
   WAGE_MIN_LVL: 5,         // level floor to draw a wage (the npcHit/WANTED rookie-floor precedent)
   WAGE_MIN_SCORE: 25,      // respect gained in the epoch must clear this — real play, not a login
 }
+// The Sybil wall (AUDIT-value-creation.md D1, founder-directed): the wage pays only MINTED
+// accounts — ones that paid the 0.01-ETH mint fee (or its PLEX price in earned $OMR). The agent
+// flag is voluntary and guest accounts are free, so level/score floors alone cost a bot farm
+// ~a minute of automation per alt; the mint fee makes every wage-drawing identity cost real
+// money (paid to the dev wallet — a Sybil farm funds the house). Free-trial players still play
+// and earn everything else; minting was already the extraction gate, so "paid identities earn
+// the extractable wage" closes the loop coherently. Env-overridable per-call (the RATE_LIMIT
+// precedent) so a closed playtest can waive it: WAGE_REQUIRE_MINTED=off.
+export const wageRequireMinted = () => (process.env.WAGE_REQUIRE_MINTED ?? 'on') !== 'off'
 export const emissionEpochOf = (ms = Date.now()) => Math.floor(ms / 86400000)
 export const epochBudget = (epoch, e = EMISSION) => epoch < e.EPOCH0 ? 0
   : e.EPOCH_OMR * Math.pow(e.DECAY, Math.floor((epoch - e.EPOCH0) / e.DECAY_EVERY))

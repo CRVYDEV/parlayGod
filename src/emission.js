@@ -21,7 +21,7 @@
 // worker + guardedTick keeps two runs of one epoch from racing the pre-commit `emittedThisEpoch`
 // read; any true endowment breach still trips the `emission within endowment` invariant regardless.)
 import crypto from 'node:crypto';
-import { EMISSION, emissionEpochOf, epochBudget, levelOf } from './rules.js';
+import { EMISSION, emissionEpochOf, epochBudget, levelOf, wageRequireMinted } from './rules.js';
 
 const floor2 = (x) => Math.floor(x * 100) / 100;
 
@@ -58,7 +58,7 @@ export async function runWageEpoch(pool, opts = {}) {
 
   const rows = (await pool.query(`
     SELECT c.id, c.account_id, c.respect, s.epoch AS snap_epoch, s.respect AS snap_respect,
-           a.agent_flag, acc.status
+           a.agent_flag, a.minted, acc.status
       FROM characters c
       JOIN account_persistent a ON a.account_id = c.account_id
       JOIN accounts acc ON acc.id = c.account_id
@@ -66,10 +66,12 @@ export async function runWageEpoch(pool, opts = {}) {
      WHERE c.alive ORDER BY c.id`)).rows;
 
   // score the candidates (baseline = last epoch's stamp; everyone else just [re-]enrolls)
+  const needMinted = wageRequireMinted();
   const scored = [];
   for (const r of rows) {
     if (Number(r.snap_epoch) !== epoch - 1) continue;
     if (r.agent_flag || r.status === 'banned') continue;
+    if (needMinted && !r.minted) continue; // the D1 Sybil wall: only paid (minted) identities draw
     const gain = Math.max(0, Number(r.respect) - Number(r.snap_respect));
     if (levelOf(Number(r.respect)) < EMISSION.WAGE_MIN_LVL) continue;
     if (gain < EMISSION.WAGE_MIN_SCORE) continue;
@@ -135,7 +137,10 @@ export async function wageBoard(pool, ch, acct) {
       minScore: EMISSION.WAGE_MIN_SCORE,
       minLevel: EMISSION.WAGE_MIN_LVL,
       capOmr: EMISSION.WAGE_CAP_OMR,
-      eligible: !!snap && !acct?.agent_flag && levelOf(Number(ch.respect)) >= EMISSION.WAGE_MIN_LVL && gain >= EMISSION.WAGE_MIN_SCORE,
+      mintedRequired: wageRequireMinted(),
+      minted: !!acct?.minted,
+      eligible: !!snap && !acct?.agent_flag && (!wageRequireMinted() || !!acct?.minted)
+        && levelOf(Number(ch.respect)) >= EMISSION.WAGE_MIN_LVL && gain >= EMISSION.WAGE_MIN_SCORE,
       agentExcluded: !!acct?.agent_flag,
       lastWage: lastWage ? { omr: Number(lastWage.amount), at: lastWage.at } : null,
     },

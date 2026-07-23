@@ -50,10 +50,15 @@ earned isn't minted, and the endowment lasts longer.
 
 **P3 — Earned, never given.** The wage pays **measured play**: respect gained during the epoch,
 pro-rata from the epoch budget, with a per-account cap. Respect gain costs energy (regen-limited),
-requires a level floor, and a minimum score — so a login-bot earns nothing, a Sybil farm pays a
-real grind cost per account, and agents (who have their own economy) are excluded like every other
-anti-Sybil faucet. **No chance, no lottery** — this keeps the "never distribute value by chance"
-posture that protects the RWA/legal architecture.
+requires a level floor and a minimum score — so a login-bot earns nothing — and agents (who have
+their own economy) are excluded like every other anti-Sybil faucet. **The Sybil wall (the
+AUDIT-value-creation.md D1 fix): only a MINTED account draws the wage** — the red-team measured
+the grind floors at ~a minute of automation per free guest alt, so the real wall is the 0.01-ETH
+mint fee (or its PLEX price in earned $OMR): every wage-drawing identity costs real money, paid to
+the dev wallet — a bot farm funds the house. Free-trial players still play and earn everything
+else; minting was already the extraction gate, so "paid identities earn the extractable wage"
+closes the loop coherently (`WAGE_REQUIRE_MINTED`, default on). **No chance, no lottery** — this
+keeps the "never distribute value by chance" posture that protects the RWA/legal architecture.
 
 **P4 — Revenue amplifies.** The existing Vig machinery is unchanged and now sits ON TOP of the
 endowment: spender revenue (Store, fees, bonds) still buys hard $OMR into the reserve and prize
@@ -188,7 +193,9 @@ through staking does NOT dodge the surcharge (the original credit row stays in t
 the FIFO replay still prices it); the un-ledgered unbond release only "ages" tokens that were
 already aged. The REAL seam is FIFO itself: because aged lots drain first, a holder's tax-free
 daily exit allowance equals their balance of 48h ago — a steady earner who holds through a 2-day
-ramp exits each day's fresh tokens surcharge-free. So as built this is an anti-INSTANT-dump toll;
-if the intent is "every fresh token pays on its first exit," flip the replay to price the fresh
-end (LIFO / proportional) — a founder sign-off call recorded in AUDIT-value-creation.md (D2) and
-BALANCE.md.
+ramp exits each day's fresh tokens surcharge-free. **RESOLVED (founder-directed): the replay now
+prices NEWEST-first** (both the exit pricing and the historical-debit consumption), so every fresh
+token pays on its first exit, exactly once — old savings can't shield a fresh dump, and the only
+free exit is genuinely holding a token through the 48h window. In-game spends consuming fresh
+tokens first is deliberate: spending fresh earnings IN the economy (deflationary) earns a cheaper
+aged exit later.

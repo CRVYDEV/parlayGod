@@ -3455,6 +3455,18 @@ patient extractor's daily exit is surcharge-free after a 48h ramp (as built it's
 only; the fresh-end pricing flip is one ordering change if "every fresh token pays once" is the
 intent). The doc's stake→unstake wash seam RE-MEASURED as a non-dodge (fresh tokens washed through
 staking still price fresh) — design doc corrected. Suite 35/35 + sim drift-0.
+**D1 + D2 APPLIED (founder-directed same day, regression each; suite + sim green):** **D1** — the
+wage pays only **MINTED** accounts (`rules.js:wageRequireMinted()`, env `WAGE_REQUIRE_MINTED`
+default on; the scoring filter in `runWageEpoch` + `mintedRequired`/`minted`/`eligible` on the
+board, `/v1/rules.emission`, and the console wage card) — every wage-drawing identity costs the
+0.01-ETH mint fee (or its PLEX price in earned $OMR), so a Sybil farm pays the house per alt;
+free-trial players still play and earn everything else (minting was already the extraction gate).
+**D2** — `tax.js:earlySurcharge` now consumes NEWEST-first in BOTH the historical-debit replay and
+the exit pricing (was oldest-first), so an aged buffer can no longer absorb a fresh dump: every
+fresh token pays on its first exit at its own age's rate, exactly once (a taxed exit is itself
+consumed newest-first in later replays, so the aged remainder then exits free); the only free exit
+is genuinely holding a token 48h. In-game spends consuming fresh first is deliberate (spending
+fresh IN the economy is deflationary and earns a cheaper aged exit). Codices + design doc updated.
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
