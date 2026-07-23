@@ -3404,6 +3404,20 @@ clean 0.8.26, 0 warnings — `forge test` still the pre-mainnet gate) and `recor
 (new `bond_reserve.dev_eth` accumulator, surfaced on the board/status; the event-authoritative on-chain
 path passes `onchainDev`; the watcher ABI updated). `runBondInvariants` check (4) is now
 POL + Dev + Vig == principal. tests: bonds (50/20/30 exact, comps book zero dev) + watcher (toDev lands).
+**THE EARLY-EXIT SURCHARGE (anti-dump, founder-directed):** $OMR younger than \`FRESH_WINDOW_MS\` (48h)
+pays an extra toll at BOTH exits — the AMM sell (\`economy.js:swap\` sell: the pool receives amt −
+surcharge) and the withdrawal (joins the flat toll) — \`EARLY_SELL_TAX_BPS\` (5000 = 50%) at age 0,
+LINEAR to 0 at 48h, NO exemptions, split 50/50 dev_fund/stake_pool on the same tax:dev/tax:buyback
+rail (zero invariant change). \`src/tax.js:earlySurcharge\` prices age by an EXACT FIFO REPLAY of the
+account's omr ledger window (credits append lots, debits consume oldest-first, opening balance = an
+aged lot) — the ledger IS the lot table: no new schema, unfakeable, and an SQL-granted balance reads
+as aged (why legacy tests never feel it). Differences of 6-dp amounts ROUND (never floor — a floored
+crumb leaks conservation). Accepted seam (doc'd): stake→unstake is bucket-internal (no rows) → re-
+enters aged; throttled by the 6h loot-exposed unbond (dial: UNSTAKE_CD_MS / ledger the release). An
+on-chain wallet version was REJECTED (wallet-hop dodge / fee-on-transfer breaks DEXes). Tests: chain
+(clean account: ~50% at age 0, ~25% at 24h — chronology-real FIFO; conservation unmoved), emission
+(fresh wage sold on the AMM pays ~50%, split lands both buckets, conservation exact); legacy suites
+pin the rate 0 (chain/economy). Suite 35/35 + sim drift-0 (surcharge live at default).
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

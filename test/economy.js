@@ -1,6 +1,7 @@
 // M2 economy smoke test: deterministic market, garage, workshop, goods, rackets,
 // assets, swap, staking, gear, buyback worker — plus the §10.4 cash-ledger and
 // car-conservation invariants. Runs on pg-mem — zero infra.
+process.env.EARLY_SELL_TAX_BPS = '0'; // legacy exact-amount swap assertions run surcharge-free (dedicated coverage: chain/emission suites)
 process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mod-gated
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';

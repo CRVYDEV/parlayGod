@@ -2864,7 +2864,7 @@
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Robinhood Wallet, or any injected wallet on desktop${rules?.walletConnect ? ', or scan with a mobile wallet (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
-      <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat)</span></h2>
+      <h2 style="margin-top:12px">The Exchange <span class="d" style="font-size:10px">(cash ↔ $OMR · buying = laundering: only at a wash district or your turf, draws heat · selling fresh $OMR — under 48h old — pays an early-exit tax, 50% fading to 0)</span></h2>
       <div class="card"><div class="d">pocket $${fmt(me.cash)} · $OMR on hand ${fmt(Math.floor(me.omr || 0))}</div>
         <input id="swap-amt" placeholder="amount" size="9">
         <button class="act" id="swap-buy">wash cash → $OMR</button>

@@ -2367,3 +2367,8 @@ export const TAX = {
   DEV_BPS: 5000,            // the dev share of each toll (50%); the rest → the buyback/yield pool
 }
 export const withdrawTaxBps = () => Number(process.env.WITHDRAW_TAX_BPS ?? 200)  // 2% exit toll
+// THE EARLY-EXIT SURCHARGE (founder-directed): $OMR younger than FRESH_WINDOW_MS pays an extra,
+// LINEARLY-DECAYING toll when it exits (AMM sell or withdrawal) — 50% at hour 0 → 0% at hour 48,
+// NO exemptions, split like the exit toll (half dev / half buybacks). Rates read per-call (ops levers).
+export const earlySellTaxBps = () => Number(process.env.EARLY_SELL_TAX_BPS ?? 5000)  // 50% at age 0
+export const freshWindowMs = () => Number(process.env.FRESH_WINDOW_MS ?? 48 * 3600000) // 48h fade

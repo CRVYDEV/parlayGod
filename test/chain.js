@@ -15,6 +15,7 @@ process.env.OMERTA_BOND_ADDRESS = '0x2222222222222222222222222222222222222222'; 
 process.env.CHAIN_ID = '46630';
 process.env.MOD_KEY = 'test-mod-key';
 process.env.WITHDRAW_TAX_BPS = '0'; // legacy exact-amount assertions run toll-free; the EXIT TOLL block below re-arms it
+process.env.EARLY_SELL_TAX_BPS = '0'; // same for the early-exit surcharge (its own block below re-arms it)
 
 const { buildServer } = await import('../src/server.js');
 const { chainConfig, VOUCHER_TYPES, markClaimed, bondChainConfig, BOND_QUOTE_TYPES } = await import('../src/chain.js');
@@ -401,6 +402,45 @@ delete process.env.DAILY_CAP_OMR;
   assert.equal(Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr), 0, 'the fund empties');
   assert.equal(await driftOf('$OMR conservation'), d0, 'the claim is a transfer — conservation unmoved');
   process.env.WITHDRAW_TAX_BPS = '0';
+}
+
+const d0Toll = await driftOf('$OMR conservation');
+
+// ── THE EARLY-EXIT SURCHARGE (anti-dump): $OMR younger than 48h pays a linearly-decaying extra
+// toll at the exit — 50% at age 0 → 0 at 48h, no exemptions, priced from the LEDGER's own credit
+// timestamps (an SQL-granted balance has no credit rows → aged → untaxed, which is exactly why the
+// legacy blocks above never felt it). Split half dev / half buybacks like the flat toll. ──
+{
+  process.env.EARLY_SELL_TAX_BPS = '5000';
+  // a CLEAN account (the legacy wallet account carries recent voucher-refund credit rows, which the
+  // no-exemptions FIFO correctly treats as fresh arrivals — that would muddy the age assertions here)
+  const { body: { token: tokenF } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: tokenF, body: { name: 'Fresh Seller' } });
+  const wAcct = (await pool.query("SELECT account_id FROM characters WHERE name='Fresh Seller'")).rows[0].account_id;
+  await pool.query("UPDATE account_persistent SET minted=true, wallet_address='0x00000000000000000000000000000000000000aa' WHERE account_id=$1", [wAcct]);
+  const credit = async (amt, agoMs) => {
+    const id = crypto.randomUUID();
+    await pool.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [wAcct, amt]);
+    await pool.query("INSERT INTO transactions (id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,'omr',$3,'emission:wage','emission')",
+      [id, wAcct, amt]);
+    if (agoMs) await pool.query('UPDATE transactions SET at = $2 WHERE id=$1', [id, new Date(Date.now() - agoMs)]);
+  };
+  // 24h-old tokens first (chronology matters to the FIFO replay): linear decay → ~25%
+  await credit(10.5, 24 * 3600000);
+  let r = await call('POST', '/v1/withdraw', { token: tokenF, body: { amount: 10.5 } });
+  assert.equal(r.code, 200, 'aged withdrawal accepted');
+  assert.ok(Math.abs(r.body.earlyTax - 10.5 * 0.25) < 0.05, `~25% at 24h — linear decay (got ${r.body.earlyTax})`);
+  // brand-new tokens: the surcharge is ~50% (age ≈ 0)
+  const dev0 = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
+  await credit(10, 0);
+  r = await call('POST', '/v1/withdraw', { token: tokenF, body: { amount: 10 } });
+  assert.ok(Math.abs(r.body.earlyTax - 5) < 0.02, `~50% early surcharge on age-0 tokens (got ${r.body.earlyTax})`);
+  assert.ok(Math.abs(r.body.net - 5) < 0.02, 'the voucher nets ~half');
+  const dev1 = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
+  assert.ok(Math.abs((dev1 - dev0) - 2.5) < 0.02, 'half the surcharge landed in the dev fund');
+  // §10.4: the surcharge is transfers into audited buckets — conservation unmoved
+  assert.equal(await driftOf('$OMR conservation'), d0Toll, 'the early surcharge is bucket transfers — conservation unmoved');
+  process.env.EARLY_SELL_TAX_BPS = '0';
 }
 
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');

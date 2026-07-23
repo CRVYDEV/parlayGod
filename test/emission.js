@@ -102,7 +102,26 @@ assert.ok(endow && endow.ok, 'lifetime emission stays inside the endowment');
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
 
+// ── THE EARLY-EXIT SURCHARGE meets the wage: freshly-earned wage $OMR sold on the AMM inside the
+// 48h window pays the linearly-decaying anti-dump toll (default ON — 50% at age 0), split half →
+// the dev fund / half → the buyback/yield pool, with $OMR conservation still EXACT (transfers). ──
+{
+  const devBefore = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
+  const poolBefore = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+  const sell = (await call('POST', '/v1/swap', { token: p1.token, body: { direction: 'sell', amount: 2 } })).body;
+  assert.ok(sell.gotCash > 0, 'the fresh sale still clears');
+  assert.ok(Math.abs(sell.earlyTax - 1) < 0.02, `~50% early surcharge on just-earned wage $OMR (got ${sell.earlyTax})`);
+  const devAfter = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
+  const poolAfter = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+  assert.ok(Math.abs((devAfter - devBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the dev fund');
+  assert.ok(Math.abs((poolAfter - poolBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the buyback/yield pool');
+  const inv2 = await runLedgerInvariants(pool);
+  const omr2 = inv2.checks.find((c) => c.name === '$OMR conservation');
+  assert.ok(omr2.ok, `conservation exact with the surcharge as bucket transfers (drift ${omr2.drift})`);
+}
+
 console.log('✅ Street Wage test passed — schedule (halvings), enrollment→wage flow (pro-rata + cap), '
   + 'level/score/agent gates, per-epoch idempotency, tight-budget bound, the public board, and §10.4 '
-  + '(ledgered emission mint, exact conservation, endowment ceiling).');
+  + '(ledgered emission mint, exact conservation, endowment ceiling), plus the EARLY-EXIT surcharge '
+  + 'on fresh wage $OMR (~50% at age 0, half dev / half buybacks, conservation exact).');
 process.exit(0);
