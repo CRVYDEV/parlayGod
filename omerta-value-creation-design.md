@@ -165,6 +165,7 @@ or both. The complete map:
 | ETH Store purchases | 100% of the price | **40% dev / 40% buyback (Vig) / 20% RWA reserve** (`STORE.SPLIT_BPS`) |
 | ETH gameplay fees (mint / respawn / re-roll) | 100% of the fee | dev wallet in-tx; the Vig share routes to **buybacks** |
 | Bonds | the discount is the cost | **50% POL (liquidity) / 20% dev wallet / 30% Vig (buybacks)** — the three-way split is immutable in the contract |
+| **Early exits (NEW — the anti-dump surcharge)** | $OMR younger than 48h | an extra toll at BOTH exits (AMM sell + withdrawal): **50% at age 0, linear to 0% at 48h, no exemptions**, split 50% dev / 50% buybacks |
 | **$OMR withdrawal (NEW — the Exit Toll)** | `WITHDRAW_TAX_BPS` 2% of the gross | **50% → the dev fund** (`tax:dev`, claimable by the founder) / **50% → the buyback/yield pool** (`tax:buyback` → stake_pool — the pool the 12h buyback funds) |
 
 Exit-toll mechanics: the player is debited the gross; the voucher signs the NET; both toll shares
@@ -174,3 +175,12 @@ the dev fund with `POST /v1/mod/dev/claim` (a bucket transfer, never a mint) and
 like any player — paying the toll like anyone. Deliberately NOT a fee-on-transfer token: taxing
 inside the ERC-20 breaks DEXes and composability; taxing at the GAME boundary catches every earner
 exactly once, with none of that damage.
+
+**Early-exit mechanics (the anti-dump surcharge):** the ledger is the lot table — every $OMR credit
+already carries a timestamp, so token age is derived by an exact FIFO replay of the account's ledger
+window (credits append lots; debits consume oldest-first; the opening balance is an aged lot). No new
+tables, and nothing a player can forge. An on-chain wallet version was rejected deliberately: it is
+dodged by wallet-hopping or requires a fee-on-transfer token (breaks DEXes, reads as a honeypot). At
+the game boundary every token passes exactly once. Accepted seam: stake→unstake is bucket-internal
+(no ledger rows), so a round-trip re-enters as aged — throttled by its own 6h loot-exposed unbonding;
+the dials are UNSTAKE_CD_MS or ledgering the release if the alpha shows dump-washing through staking.

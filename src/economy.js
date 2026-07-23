@@ -2,6 +2,7 @@
 // Every formula cites spec §7 / prototype v24. Actions receive the locked character
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
+import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
@@ -320,7 +321,15 @@ export async function swap(ch, direction, amount, client, h) {
   }
   // sell: amt is $OMR in
   if (Number(h.acct.omr) < amt) throw new GameError('omr', 'Not that much $OMR.');
-  const gross = c - k / (o + amt);
+  // THE EARLY-EXIT SURCHARGE (anti-dump): $OMR younger than the fresh window pays a linearly-
+  // decaying toll (50% at age 0 → 0 at 48h, no exemptions) carved from the tokens BEFORE they
+  // reach the pool — the pool prices only what actually enters it. Split half dev / half the
+  // buyback/yield pool (the exit-toll rail; tax:dev/tax:buyback + both buckets already audited).
+  const early = await earlySurcharge(client, h.accountId, Number(h.acct.omr), amt);
+  const { devCut, buyCut } = splitToll(early.surcharge);
+  const poolIn = Math.round((amt - devCut - buyCut) * 1e6) / 1e6; // round, not floor — a floored crumb would leak from conservation
+  if (!(poolIn > 0)) throw new GameError('min', 'That sale is all surcharge — hold it longer or sell more.');
+  const gross = c - k / (o + poolIn);
   if (!(gross > 0)) throw new GameError('pool', "The pool couldn't fill that.");
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01), net = Math.floor(gross - fee - tax);
   // the buy side has a $500 minimum; the sell side had none, so a dust sale could
@@ -328,11 +337,14 @@ export async function swap(ch, direction, amount, client, h) {
   if (net <= 0) throw new GameError('min', 'That sale is too small to clear the 2% house take.');
   h.acct.omr = Number(h.acct.omr) - amt;
   ch.cash = Number(ch.cash) + net;
-  await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c - gross, o + amt]);
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -amt, reason: 'swap:sell' });
+  await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c - gross, o + poolIn]);
+  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -poolIn, reason: 'swap:sell' });
+  if (devCut > 0) await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -devCut, reason: 'tax:dev' });
+  if (buyCut > 0) await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -buyCut, reason: 'tax:buyback' });
+  await creditTollBuckets(client, devCut, buyCut);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: 'swap:sell' });
   await takeHouse(client, tax);
-  return { ok: true, soldOmr: amt, gotCash: net, price: (c - gross) / (o + amt) };
+  return { ok: true, soldOmr: amt, gotCash: net, earlyTax: Math.floor((devCut + buyCut) * 1e6) / 1e6, freshSold: early.freshSold, price: (c - gross) / (o + poolIn) };
 }
 
 // ═══════════════════ STAKING (§7.1 / §5.4) ═══════════════════

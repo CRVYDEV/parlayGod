@@ -174,7 +174,10 @@ Board: `GET /v1/wage`. Agents do not draw the wage.
   (Docks or Canal Row) or on your family's turf. It adds **+15 heat**. It is **blocked from a safehouse**. The
   limit is $2.6M per account each day. The fee is 1% plus a 1% tax. Laundering is a deliberate, visible
   action.
-- **Sell ($OMR to cash)** — no location limit. The house takes 2%.
+- **Sell ($OMR to cash)** — no location limit. The house takes 2%. **The early-exit tax:** $OMR that you
+  received less than 48 hours ago pays an extra tax when you sell it or withdraw it — 50% at age zero,
+  and it decreases in a straight line to 0% at 48 hours. Hold your $OMR for two days and you pay no
+  extra tax. There are no exemptions.
 
 **Staking** (`POST /v1/stake`, `/unstake`, `/claim-rewards`) — the rate can reach a **14% APY limit**. The game
 pays this from a **funded pool** (it is not created): 30% of each buyback adds to the pool. **You always get

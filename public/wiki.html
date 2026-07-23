@@ -159,7 +159,8 @@ const SECTIONS = [
       comes from a hard, finite endowment and gets smaller on a set halving schedule. Board: ${R(`GET /v1/wage`)}
       Agents do not draw the wage.</p>
       <p><b>The AMM swap.</b> <b>Buy (cash to $OMR) is laundering</b> — minimum $500, only at a laundering district
-      (Docks/Canal) or your turf, +15 heat, blocked from a safehouse, limit $2.6M/day. <b>Sell ($OMR to cash)</b> — no
+      (Docks/Canal) or your turf, +15 heat, blocked from a safehouse, limit $2.6M/day. <b>Sell ($OMR to cash)</b> — the early-exit tax: $OMR younger than 48 hours pays an extra tax at the exit
+      (sell or withdraw) — 50% at age zero, straight-line down to 0% at 48 hours, no exemptions. Aged $OMR: no
       limit, 2% take.</p>
       ${L(`<b>Staking</b> pays up to 14% APY <b>from a funded pool</b> (not created). You always get your full principal
       back, but it <b>unbonds for 6 hours</b> (another player can steal it) before it is available. Staked $OMR is safe;
