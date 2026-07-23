@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <radialGradient id="lamp" cx="50%" cy="18%" r="80%">
+      <stop offset="0%" stop-color="#e0b054" stop-opacity=".10"/>
+      <stop offset="55%" stop-color="#e0b054" stop-opacity=".02"/>
+      <stop offset="100%" stop-color="#e0b054" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1000" height="1000" fill="#0c0d11"/>
+  <rect width="1000" height="1000" fill="url(#lamp)"/>
+  <circle cx="500" cy="500" r="452" fill="none" stroke="#e0b054" stroke-width="9"/>
+  <circle cx="500" cy="500" r="426" fill="none" stroke="#e0b054" stroke-width="2" opacity=".45"/>
+  <g transform="translate(500 385) scale(1.75)">
+  <ellipse cx="0" cy="30" rx="150" ry="24" fill="#e0b054"/>
+  <path d="M -94 30 C -92 -50 -58 -88 0 -88 C 58 -88 92 -50 94 30 Z" fill="#e0b054"/>
+  <rect x="-95" y="2" width="190" height="21" fill="#17141a"/>
+  <rect x="-95" y="21" width="190" height="3" fill="#8f7433"/>
+</g>
+  <text x="488" y="738" text-anchor="middle" font-family="Liberation Serif, DejaVu Serif, serif" font-size="116" letter-spacing="24"
+    fill="#e0b054">OMERTÀ</text>
+  <g stroke="#8f7433" stroke-width="3">
+    <line x1="330" y1="790" x2="470" y2="790"/><line x1="530" y1="790" x2="670" y2="790"/>
+  </g>
+  <rect x="494" y="784" width="12" height="12" transform="rotate(45 500 790)" fill="#e0b054"/>
+</svg>
