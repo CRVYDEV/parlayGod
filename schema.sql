@@ -1775,3 +1775,37 @@ CREATE TABLE IF NOT EXISTS soldiers (
   hired_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_soldiers_char ON soldiers (character_id);
+
+-- ═══ SECRETS & THE COLLECTION (founder picks #7+#8) ═══
+-- BLACKMAIL & SECRETS (CK3 intrigue) — dirt as a HELD asset. Holder = the spy's STREET (dies with
+-- them, estate-wiped); target = the mark's ACCOUNT (dirt on a dead street is worthless — deleted at
+-- the mark's estate). TTL'd; `demand`/`extort_deadline` set while an extortion window is open.
+CREATE TABLE IF NOT EXISTS secrets (
+  id TEXT PRIMARY KEY,
+  holder_character TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  target_name TEXT NOT NULL,                      -- the street the dirt was dug on (display)
+  kind TEXT NOT NULL,
+  demand NUMERIC,
+  extort_deadline TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_secrets_target ON secrets (target_account);
+-- the per-(digger, target) shovel cooldown
+CREATE TABLE IF NOT EXISTS digs (
+  character_id TEXT NOT NULL,
+  target_account TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (character_id, target_account)
+);
+
+-- THE COLLECTION — the account-level "ever owned / ever done" completion ledger. Survives death,
+-- selling, seizure (the Pokédex compulsion). Pure status — the log moves no value.
+CREATE TABLE IF NOT EXISTS collection_log (
+  account_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  first_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, category, item_id)
+);

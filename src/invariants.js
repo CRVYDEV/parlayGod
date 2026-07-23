@@ -22,7 +22,11 @@ const KNOWN_REASONS = {
     // MARRIAGES & SOLDIERS: dynasty ceremony/consigliere fees + the soldier hire — all
     // character_id'd cash SINKS (check (a) reconciles); the soldier's 5% crime cut is a
     // pre-ledger shave (the faucet shrinks — no reason of its own)
-    'dynasty:', 'soldier:'],
+    'dynasty:', 'soldier:',
+    // SECRETS: the hush payment is the audited taxed two-party transfer (mark −demand w/ character_id,
+    // holder +98% w/ character_id — check (a) reconciles; the 1% tax rides the non-§10.4 street_tax
+    // pool, the 1% dev is off-ledger — the bodyguard/speakeasy-round mechanism)
+    'secret:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:'],

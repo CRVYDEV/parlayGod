@@ -18,6 +18,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding } from './game.js';
 import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
+import { logCarCollect } from './collection.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -278,6 +279,7 @@ export async function buyListing(ch, listingId, qty, client, h) {
     // clear the seller's RACE flags on transfer — a bought car must not arrive still on the strip for a
     // wager/pinks without the BUYER's consent (RED-TEAM: race_limit/pink_slip survived ownership change).
     await client.query('UPDATE cars SET character_id=$2, listed=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [l.car_id, ch.id]);
+    await logCarCollect(client, ch.id, l.car_id); // THE COLLECTION
     const row = (await client.query('SELECT * FROM cars WHERE id=$1', [l.car_id])).rows[0];
     if (row) h.owned.cars.push(row); // the buyer's view sees the new iron this response
     await client.query("UPDATE market_listings SET status='sold', bid=NULL, bidder=NULL WHERE id=$1", [listingId]);
@@ -439,6 +441,7 @@ export async function sweepMarket(pool) {
             const bid = Number(l.bid);
             await paySeller(client, h, l.seller_character, bid);
             await client.query('UPDATE cars SET character_id=$2, listed=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [l.car_id, l.bidder]); // clear race flags on transfer (buyer consent)
+            await logCarCollect(client, l.bidder, l.car_id); // THE COLLECTION
             await client.query("UPDATE market_listings SET status='sold', bid=NULL, bidder=NULL WHERE id=$1", [l.id]);
             await notify(client, l.seller_character, 'market_sold', { listing: l.id, kind: 'car', net: bid - Math.ceil(bid * MARKET.TAKE_BPS / 10000) });
             await notify(client, l.bidder, 'market_won', { listing: l.id, carId: l.car_id, bid });

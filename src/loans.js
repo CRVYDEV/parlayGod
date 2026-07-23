@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
 import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR } from './rules.js';
+import { logCarCollect } from './collection.js';
 import { bumpHonor, sqlHonorDelta } from './honor.js';
 
 const uid = () => crypto.randomUUID();
@@ -245,6 +246,7 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   let carSeized = null;
   if (loan.collateral_car) {
     await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [loan.collateral_car, ch.id]); // clear race flags on seizure (lender consent)
+    await logCarCollect(client, ch.id, loan.collateral_car); // THE COLLECTION
     if (h.victimOwned?.cars) h.victimOwned.cars = h.victimOwned.cars.filter((c) => c.id !== loan.collateral_car);
     // push the FULL row into the lender's garage (the market auction-settle precedent) — a bare
     // {id} stub would render the seized car with null model/trim/dmg in this response's view.
@@ -487,6 +489,7 @@ export async function sweepLoans(pool, opts = {}) {
       // the pledged car goes to the lender (it can only still be pledged to a LIVE active loan)
       const car = (await client.query('SELECT id FROM cars WHERE id=$1', [loan.collateral_car])).rows[0];
       if (car) await client.query('UPDATE cars SET character_id=$2, pledged=false, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [loan.collateral_car, loan.lender_character]); // clear race flags on forfeit (lender consent)
+      if (car) await logCarCollect(client, loan.lender_character, loan.collateral_car); // THE COLLECTION
       await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
       await notify(client, loan.lender_character, 'loan_forfeited', { car: !!car });
       await notify(client, loan.borrower_character, 'loan_forfeited', { car: !!car, lost: true });

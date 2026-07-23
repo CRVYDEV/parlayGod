@@ -2,6 +2,7 @@
 // Every formula cites spec §7 / prototype v24. Actions receive the locked character
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
+import { logCollect } from './collection.js';
 import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
 import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import {
@@ -51,6 +52,7 @@ export async function boostCar(ch, client, h) {
     await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ($1,$2,$3,$4,$5)',
       [carId, ch.id, model.id, trim.id, dmg]);
     h.owned.cars.push({ id: carId, model_id: model.id, trim_id: trim.id, dmg });
+    await logCollect(client, ch.account_id, 'cars', model.id); // THE COLLECTION
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
     await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
@@ -209,6 +211,7 @@ export async function buyGood(ch, goodId, qty, client, h) {
   await setCargo(client, ch.id, goodId, have);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(cost + fee + tax), reason: `goods:buy:${goodId}` });
   await takeHouse(client, tax);
+  await logCollect(client, ch.account_id, 'goods', goodId); // THE COLLECTION
   return { ok: true, unit, qty: n, spent: cost + fee + tax };
 }
 
@@ -411,6 +414,7 @@ export async function buyGun(ch, gunId, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: `gun:buy:${gunId}` });
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -g.crates, reason: `gun:buy:${gunId}` });
   await bumpStanding(client, h, ch, 'armorer', 3, { action: 'gun' }); // Bella remembers a customer
+  await logCollect(client, ch.account_id, 'guns', gunId); // THE COLLECTION
   return { ok: true, gun: gunId, price, equipped: ch.gun === gunId };
 }
 

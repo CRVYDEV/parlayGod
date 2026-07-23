@@ -1476,7 +1476,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
@@ -1517,6 +1517,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query('DELETE FROM wire_informants WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // step five: a dead party's standing watches die too (the wiretap precedent — a dead watcher stops watching, a dead target frees the slot)
   await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
+  // SECRETS die with the SPY's street (holder) AND with the MARK's street (dirt on the dead is
+  // worthless — the heir starts clean); the dig cooldowns targeting the account go with them
+  await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [victim.id, victim.account_id]);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);
   // (boxing step three) a dead manager's booked MAIN EVENTS are cancelled — the crowd is refunded (dead
