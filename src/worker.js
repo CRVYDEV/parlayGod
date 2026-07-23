@@ -8,7 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { levelOf, dayOf, CONSTANTS, PORTFOLIO } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
@@ -166,7 +166,8 @@ export async function runSeasonRollover(pool, opts = {}) {
           [crypto.randomUUID(), id, 'season_prize', JSON.stringify({ rank: prize.rank, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
       }
       const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
-      await client.query('UPDATE characters SET respect=0, season_kills=0, season=$2 WHERE id=$1', [id, current]);
+      // THE DUELING LADDER: the elo race resets with the season (a fresh 28-day climb)
+      await client.query('UPDATE characters SET respect=0, season_kills=0, duel_elo=$3, season=$2 WHERE id=$1', [id, current, DUELS.ELO_START]);
       if (legacy > 0)
         await client.query('UPDATE account_persistent SET prestige = prestige + $2 WHERE account_id=$1', [ch.account_id, legacy]);
       await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',

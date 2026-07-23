@@ -29,7 +29,10 @@ const KNOWN_REASONS = {
     'secret:',
     // THE MEGAPROJECT: `megaproject:cash` — a character_id'd cash BURN into the monument
     // (check (a) reconciles it per character; nothing is ever paid back out — no faucet)
-    'megaproject:'],
+    'megaproject:',
+    // THE DUELING LADDER: `duel:wager` — the audited casino:pvp taxed transfer (both rows
+    // character_id'd; the rake's pool half rides the non-§10.4 street_tax, the rest burns)
+    'duel:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:'],

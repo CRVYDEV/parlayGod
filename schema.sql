@@ -1895,3 +1895,21 @@ CREATE TABLE IF NOT EXISTS megaproject_contributions (
 );
 -- (red-team B3) the plaque's hot reads: top-N by contribution + the rank count
 CREATE INDEX IF NOT EXISTS ix_megacontrib_top ON megaproject_contributions (project_id, contributed DESC);
+
+-- THE DUELING LADDER (slate #5 — the ranked ELO circuit): consent-by-listing PvP duels on the
+-- audited casino:pvp taxed transfer; the rating is pure status. duel_elo/duel_limit are
+-- DIRECT-SQL columns (never in the positional persist — clobber-safe, absolute writes).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_elo INT NOT NULL DEFAULT 1000;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_limit INT;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS duel_wins INT NOT NULL DEFAULT 0; -- lifetime legend (survives death)
+-- the duel log: ACCOUNT-pair keyed for the anti-Sybil K-diminishing (a fresh alt street doesn't
+-- reset the pair); no character_id → outside the estate wipe + DISPOSITION guard by construction.
+CREATE TABLE IF NOT EXISTS duels (
+  id TEXT PRIMARY KEY,
+  account_a UUID NOT NULL,           -- sorted pair (a < b)
+  account_b UUID NOT NULL,
+  winner_account UUID NOT NULL,
+  day INT NOT NULL,                  -- dayOf() at the duel (the per-day pair diminishing window)
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_duels_pair_day ON duels (account_a, account_b, day);
