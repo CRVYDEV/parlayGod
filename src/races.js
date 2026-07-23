@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog } from './game.js';
 import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf } from './rules.js';
+import { logCarCollect } from './collection.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -231,6 +232,7 @@ export async function pinkSlipRace(ch, opponent, body, client, h) {
   // TRANSFER the loser's car to the winner — reset listings/pinks/nitrous on the new title (§10.4-neutral,
   // no ledger row; car conservation counts rows). The winner may exceed GARAGE_CAP (the market-win precedent).
   await client.query('UPDATE cars SET character_id=$2, race_limit=NULL, pink_slip=false, nos=0 WHERE id=$1', [wonCar.id, winner.id]);
+  await logCarCollect(client, winner.id, wonCar.id); // THE COLLECTION
   // keep the actor's in-memory garage honest for this response (the next view reload is authoritative)
   if (winner.id === ch.id) { const w = { ...wonCar, character_id: ch.id, race_limit: null, pink_slip: false, nos: 0 }; h.owned.cars.push(w); }
   else h.owned.cars = (h.owned.cars || []).filter((c) => c.id !== wonCar.id);

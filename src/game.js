@@ -10,6 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf } from './rules.js';
 import { accrue } from './accrual.js';
+import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
 import { speakeasyOwnedOf } from './speakeasy.js';
 import { fightersOf } from './boxing.js';
@@ -276,6 +277,7 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
         [ch.id, npcId, next]);
     }
     h.owned.npc[npcId] = next;
+    if (next >= 25) await logCollect(client, ch.account_id, 'fixtures', npcId); // THE COLLECTION — befriended (tier 1)
   } else if (origPositive) {
     // a positive business contact that didn't move standing (hit the 100 cap, or capped-out on the
     // daily allowance) still counts as CONTACT — re-stamp the decay clock so a daily-active maxed
@@ -762,6 +764,7 @@ export function doCrime(ch, crimeId, client, h) {
       await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: true });
       await h.bumpDaily(client, ch.id, 'crime');
       await bumpFamilyTask(client, h, 'crime', 1);
+      await logCollect(client, ch.account_id, 'crimes', c.id); // THE COLLECTION — first pull of each job
       const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
       return { ok: true, success: true, take, rep, crates, makingsDrop,
         soldier: soldier ? { ...soldier, cut: soldierCut } : null };
@@ -855,6 +858,7 @@ export async function travel(ch, district, client, h) {
   if (Number(ch.cash) < CONSTANTS.TRAVEL_COST) throw new GameError('cash', `A ride costs $${CONSTANTS.TRAVEL_COST}.`);
   ch.cash = Number(ch.cash) - CONSTANTS.TRAVEL_COST; ch.loc = district;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -CONSTANTS.TRAVEL_COST, reason: 'travel' });
+  await logCollect(client, ch.account_id, 'districts', district); // THE COLLECTION — set foot everywhere
   return { ok: true, loc: district };
 }
 

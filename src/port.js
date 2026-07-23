@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf } from './rules.js';
+import { logCollect } from './collection.js';
 
 // THE SMUGGLER'S LEGEND — lifetime contraband value landed, account-level (survives death — the boxing/
 // wheel/war-effort precedent). Direct SQL on the account (NUMERIC, arith-safe); status only, no §10.4.
@@ -66,6 +67,7 @@ export async function buyBoat(ch, kind, client, h) {
   const id = crypto.randomUUID();
   await client.query('INSERT INTO boats (id, character_id, kind) VALUES ($1,$2,$3)', [id, ch.id, kind]);
   await h.track(client, ch.account_id, 'port', { act: 'buy', kind });
+  await logCollect(client, ch.account_id, 'boats', kind); // THE COLLECTION
   return { ok: true, boat: { id, kind, name: spec.name, hold: spec.hold, speed: spec.speed }, spent: spec.cost };
 }
 

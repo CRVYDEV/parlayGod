@@ -20,6 +20,8 @@ import * as Campaigns from './campaigns.js';
 import * as Bloodline from './bloodline.js';
 import * as Dynasty from './dynasty.js';
 import * as Soldiers from './soldiers.js';
+import * as Secrets from './secrets.js';
+import * as Collection from './collection.js';
 import * as Business from './business.js';
 import * as Speakeasy from './speakeasy.js';
 import * as Boxing from './boxing.js';
@@ -61,7 +63,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -685,6 +687,9 @@ export async function buildServer() {
       consigliereCost: MARRIAGE.CONSIGLIERE_COST, scandal: MARRIAGE.SCANDAL, divorce: MARRIAGE.DIVORCE },
     soldiers: { max: SOLDIERS.MAX, hireCost: SOLDIERS.HIRE_COST, cutBps: SOLDIERS.CUT_BPS,
       deathP: SOLDIERS.DEATH_P, traits: Object.entries(SOLDIERS.TRAITS).map(([id, t]) => ({ id, name: t.name, desc: t.desc })) },
+    secrets: { digOmr: SECRETS.DIG_OMR, maxHeld: SECRETS.MAX_HELD, ttlDays: SECRETS.TTL_MS / 86400e3,
+      windowHours: SECRETS.EXTORT_WINDOW_MS / 3600e3,
+      kinds: Object.entries(SECRETS.KINDS).map(([id, k]) => ({ id, name: k.name, hushCap: k.hushCap, exposeHeat: k.exposeHeat })) },
     // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): the public Cloud project id +
     // the chain to request. DORMANT (null) unless WALLETCONNECT_PROJECT_ID is set — the console hides the
     // option then. Project ids are public (client-embedded), so surfacing it here is standard + safe.
@@ -1782,6 +1787,34 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.unassignSoldier(ch, client)));
   app.delete('/v1/soldiers/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.dismissSoldier(ch, req.params.id, client)));
+  // BLACKMAIL & SECRETS (CK3 intrigue — dig / extort / pay the hush / expose)
+  app.get('/v1/secrets', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Secrets.secretsBoard(ch, client)));
+  app.post('/v1/wire/dig/:targetId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Secrets.digSecret(ch, req.params.targetId, client, h)));
+  app.post('/v1/secrets/:id/extort', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Secrets.extortSecret(ch, req.params.id, req.body?.demand, client, h)));
+  // the mark pays the hush — two-party (the holder is the counterparty); the holder is resolved
+  // from the secret row up front so withTwoCharacters can lock both char rows sorted
+  app.post('/v1/secrets/:id/pay', { preHandler: auth }, async (req) => {
+    const s = (await pool.query('SELECT holder_character FROM secrets WHERE id=$1', [req.params.id])).rows[0];
+    if (!s) return { error: 'no_secret', message: 'That page has already turned.' };
+    return G.withTwoCharacters(pool, req.user.sub, s.holder_character,
+      (ch, holder, client, h) => Secrets.payHush(ch, holder, req.params.id, client, h));
+  });
+  // expose — two-party (the holder + the mark's living street; both rows held so the meter bump
+  // rides the mark's positional persist)
+  app.post('/v1/secrets/:id/expose', { preHandler: auth }, async (req) => {
+    const s = (await pool.query('SELECT target_account FROM secrets WHERE id=$1', [req.params.id])).rows[0];
+    if (!s) return { error: 'no_secret', message: 'That page has already turned.' };
+    const mark = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [s.target_account])).rows[0];
+    if (!mark) return { error: 'gone', message: 'The dirt died with them.' };
+    return G.withTwoCharacters(pool, req.user.sub, mark.id,
+      (ch, markCh, client, h) => Secrets.exposeSecret(ch, markCh, req.params.id, client, h));
+  });
+  // THE COLLECTION — the account-level completion ledger (pure status)
+  app.get('/v1/collection', { preHandler: auth }, async (req) => Collection.collectionBoard(pool, req.user.sub));
+  app.get('/v1/leaderboard/collection', { preHandler: auth }, async () => Collection.collectionLeaderboard(pool));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet

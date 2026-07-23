@@ -2548,3 +2548,37 @@ export const soldierFxOf = (s) => {
 }
 export const rollSoldierName = () =>
   `${SOLDIERS.FIRST[Math.floor(Math.random() * SOLDIERS.FIRST.length)]} ${SOLDIERS.LAST[Math.floor(Math.random() * SOLDIERS.LAST.length)]}`
+
+// ═══ SECRETS & THE COLLECTION (founder picks #7+#8 — omerta-secrets-collection-design.md).
+// Every number is a founder sign-off lever. ═══
+// Drop A — BLACKMAIL & SECRETS (CK3 intrigue): dirt as a HELD asset. The dig fee rides the
+// existing `intel:` $OMR burn term; the hush payment is the audited taxed two-party transfer
+// (`secret:` cash prefix); exposure feeds the RICO meter (the Port BUST_EXPOSURE precedent —
+// the exposeHeat set is the one Law-surface lever).
+export const SECRETS = {
+  DIG_OMR: 10,                 // the shovel — burns win or lose (the npchit-fee posture)
+  DIG_CD_MS: 24 * 3600e3,      // per (digger, target)
+  TTL_MS: 7 * 86400e3,         // dirt goes stale
+  EXTORT_WINDOW_MS: 24 * 3600e3, // pay the hush or it blows
+  MAX_HELD: 5,                 // a spy's pocketbook only holds so much
+  // dig priority = object order (juiciest first); wealth is BANDED (never an exact figure)
+  KINDS: {
+    launderer: { name: 'The Wash Records',  hushCap: 250000, exposeHeat: 25 },
+    killer:    { name: 'The Bodies',        hushCap: 200000, exposeHeat: 20 },
+    cook:      { name: 'The Kitchen Books', hushCap: 150000, exposeHeat: 20 },
+    moneybags: { name: 'The Second Ledger', hushCap: 100000, exposeHeat: 12 },
+  },
+  MONEYBAGS_MIN: 500000,       // the bank floor that makes a second ledger worth keeping
+}
+export const secretKindOf = (id) => SECRETS.KINDS[id] || null
+// Drop B — THE COLLECTION: category totals derive from the live catalogs (content, never stored).
+export const collectionCatalog = () => ({
+  crimes:    { name: 'Jobs Pulled',        items: CRIMES.map((c) => ({ id: c.id, name: c.name })) },
+  districts: { name: 'The City',           items: DISTRICTS.map((d) => ({ id: d.id, name: d.name || d.id })) },
+  cars:      { name: 'The Garage',         items: CARS.map((c) => ({ id: c.id, name: c.name })) },
+  guns:      { name: 'The Armory',         items: GUNS.map((g) => ({ id: g.id, name: g.name })) },
+  drugs:     { name: 'The Kitchen',        items: DRUGS.map((d) => ({ id: d.id, name: d.name })) },
+  boats:     { name: 'The Marina',         items: Object.entries(PORT.BOATS).map(([id, b]) => ({ id, name: b.name })) },
+  goods:     { name: 'The Trade',          items: GOODS.map((g) => ({ id: g.id, name: g.name })) },
+  fixtures:  { name: 'The Underworld',     items: Object.entries(UNDERWORLD.NPCS).map(([id, n]) => ({ id, name: n.name })) },
+})

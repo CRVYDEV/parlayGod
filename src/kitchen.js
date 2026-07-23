@@ -8,6 +8,7 @@ import {
   makingsPriceOf, demandOf, effStat, crewWageOwed, HONOR,
 } from './rules.js';
 import { activeDecree } from './commission.js';
+import { logCollect } from './collection.js';
 
 const uid = () => crypto.randomUUID();
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -73,6 +74,7 @@ export async function cook(ch, drugId, qty, client, h) {
   await client.query('INSERT INTO batches (id, character_id, drug_id, qty, done_at) VALUES ($1,$2,$3,$4,$5)',
     [id, ch.id, drugId, n, doneAt]);
   h.owned.batch = { id, character_id: ch.id, drug_id: drugId, qty: n, done_at: doneAt };
+  await logCollect(client, ch.account_id, 'drugs', drugId); // THE COLLECTION — first cook of each line
   return { ok: true, qty: n, crates, readyAt: doneAt };
 }
 

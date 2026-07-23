@@ -25,6 +25,7 @@ import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy } from './diplomacy.js';
+import { sweepSecrets } from './secrets.js';
 import { spawnNpcConvoys, despawnArrivedNpc } from './convoy.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
@@ -227,6 +228,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
+    await safe('secrets sweep', () => sweepSecrets(pool)); // unpaid demands blow at the deadline; stale dirt reaped
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

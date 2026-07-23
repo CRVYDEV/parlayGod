@@ -2322,6 +2322,7 @@
     const r = await api('GET', '/v1/wire');
     if (r.code >= 400) { t.innerHTML = '<span class="d">the line is dead.</span>'; return; }
     const W = r.body;
+    const SEC = (await api('GET', '/v1/secrets')).body || {};
     const bandColor = (s) => ({ 'red hot': 'var(--bad)', hot: 'var(--blood)', warm: 'var(--neon)', cold: 'var(--dim)' })[s] || 'var(--dim)';
     const stageColor = { clean: 'var(--ok)', watched: 'var(--neon)', investigation: 'var(--neon)', indicted: 'var(--bad)' };
     // the ticker tape — a scrolling row of RWA prices, the day's biggest mover flagged
@@ -2416,6 +2417,24 @@
         <button class="act" id="wire-dossier-go">pull the dossier</button>
       </div>
 
+      <h2 style="margin-top:12px">Dirty Laundry <span class="d" style="font-size:11px">(dig up REAL dirt — hold it, name a price, or hand it to the Bureau)</span></h2>
+      <div class="card">
+        <div class="d">DIG through a mark's life for ${SEC.digOmr || 10} $OMR (burns win or lose — cooked books beat the shovel). What you find is LEVERAGE: extort hush money (they pay or it blows in ${SEC.windowHours || 24}h) or EXPOSE it — their federal file thickens and the street hears.</div>
+        <select id="sec-dig-target"></select>
+        <button class="act" id="sec-dig-go">dig up dirt (${SEC.digOmr || 10} $OMR)</button>
+      </div>
+      ${(SEC.held || []).length ? `<div class="grid" style="margin-top:6px">${SEC.held.map((s) => `
+        <div class="card"><span class="t">🗂 ${s.kindName}</span> <span class="chip">on ${s.on}</span>
+          ${s.demand != null ? `<div class="d">demand out: $${fmt(s.demand)} — ${mins(s.deadlineSeconds)} to pay or it blows</div>`
+            : `<div class="d">worth up to $${fmt(s.hushCap)} hush · goes stale in ${mins(s.ttlSeconds)}</div>
+               <div style="margin-top:4px"><input data-secamt="${s.id}" placeholder="demand $" size="9">
+               <button class="act" data-secextort="${s.id}" style="font-size:11px;padding:2px 6px">name the price</button></div>`}
+          <button class="act" data-secexpose="${s.id}" style="border-color:var(--blood);font-size:11px;padding:2px 6px">hand it to the Bureau</button></div>`).join('')}</div>` : ''}
+      ${(SEC.onMe || []).length ? `<div class="grid" style="margin-top:6px">${SEC.onMe.map((s) => `
+        <div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">⚠ THEY HAVE ${s.kindName.toUpperCase()}</span>
+          <div class="d"><b>${s.holder}</b> wants $${fmt(s.demand)} hush money — ${mins(s.deadlineSeconds)} before it goes to the Bureau</div>
+          <button class="act" data-secpay="${s.id}">pay the hush ($${fmt(s.demand)})</button></div>`).join('')}</div>` : ''}
+
       ${W.premium ? `
       <h2 style="margin-top:12px">The War Room</h2>
       <div class="card">
@@ -2437,6 +2456,16 @@
       const tgt = $('#wire-target').value;
       if (tgt) act('POST', `/v1/wire/tap/${tgt}`, {}).then(() => renderWire());
     };
+    // Dirty Laundry (secrets)
+    { const ds = $('#sec-dig-target'); if (ds) ds.innerHTML = opts; }
+    { const dg = $('#sec-dig-go'); if (dg) dg.onclick = () => { const v = $('#sec-dig-target')?.value; if (v) act('POST', `/v1/wire/dig/${v}`, {}).then(() => renderWire()); }; }
+    t.querySelectorAll('[data-secextort]').forEach((b) => b.onclick = () => {
+      const amt = Number(t.querySelector(`[data-secamt="${b.dataset.secextort}"]`)?.value);
+      if (amt > 0) act('POST', `/v1/secrets/${b.dataset.secextort}/extort`, { demand: amt }).then(() => renderWire()); });
+    t.querySelectorAll('[data-secexpose]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/secrets/${b.dataset.secexpose}/expose`, {}).then(() => renderWire()));
+    t.querySelectorAll('[data-secpay]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/secrets/${b.dataset.secpay}/pay`, {}).then(() => renderWire()));
     const watchGo = $('#wire-watch-go'); if (watchGo) watchGo.onclick = () => {
       const tgt = $('#wire-watch-target').value;
       if (tgt) act('POST', `/v1/wire/watch/${tgt}`, {}).then(() => renderWire());
@@ -3273,6 +3302,7 @@
     await refresh();
     const e = (await api('GET', '/v1/estate')).body || {};
     const auc = (await api('GET', '/v1/auction')).body || {};
+    const col = (await api('GET', '/v1/collection')).body || {};
     const tr = e.trophies || {};
     t.innerHTML = `
       ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with clean $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
@@ -3304,7 +3334,15 @@
           <div class="d">${l.blurb}</div>
           <div class="d">${l.currentBid > 0 ? `top bid ${fmt(l.currentBid)} $OMR` : 'no bids yet'} · next ≥ ${fmt(l.minNext)} $OMR</div>
           <input data-aucamt="${l.id}" placeholder="${fmt(l.minNext)}" size="7"> <button class="act" data-aucbid="${l.id}">bid</button></div>`).join('')}</div>
-      ${(auc.wins || []).length ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:8px">your trophies: ${auc.wins.map((w) => `${w.name} #${w.serial} (${fmt(w.price)} $OMR)`).join(' · ')}</div>` : ''}`;
+      ${(auc.wins || []).length ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:8px">your trophies: ${auc.wins.map((w) => `${w.name} #${w.serial} (${fmt(w.price)} $OMR)`).join(' · ')}</div>` : ''}
+
+      <h2 style="margin-top:14px">The Collection <span class="d" style="font-size:11px">(everything your bloodline has EVER touched — survives death, selling, seizure · ${col.have || 0}/${col.total || 0} · ${col.pct || 0}%)</span></h2>
+      <div class="grid">${(col.categories || []).map((c) => `
+        <div class="card"><span class="t">${c.name}</span> <span class="chip ${c.have === c.total ? 'good' : ''}">${c.have}/${c.total}${c.have === c.total ? ' ✦ COMPLETE' : ''}</span>
+          <div class="d" style="font-size:11px;line-height:1.7">${c.items.map((it) => `<span style="${it.got ? '' : 'opacity:.35'}" title="${it.name}">${it.got ? '◆' : '◇'}</span>`).join('')}</div>
+          ${c.have < c.total ? `<div class="d" style="font-size:10.5px;color:var(--dim)">missing: ${c.items.filter((it) => !it.got).slice(0, 4).map((it) => it.name).join(', ')}${c.total - c.have > 4 ? ` +${c.total - c.have - 4} more` : ''}</div>` : ''}</div>`).join('')}</div>
+      <div class="d" style="margin-top:4px"><a href="#" id="col-lb-link">the completionist board →</a></div>
+      <div id="col-lb"></div>`;
     const up = $('#est-up');
     if (up) up.onclick = () => act('POST', '/v1/estate/upgrade', {}).then(() => renderEstate());
     const nb = $('#est-name-go');
@@ -3313,6 +3351,10 @@
       act('POST', `/v1/estate/feature/${b.dataset.estfeat}`, {}).then(() => renderEstate()));
     t.querySelectorAll('[data-aucbid]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/auction/${b.dataset.aucbid}/bid`, { amount: Number(t.querySelector(`[data-aucamt="${b.dataset.aucbid}"]`).value) }).then(() => renderEstate()));
+    { const cl = $('#col-lb-link'); if (cl) cl.onclick = async (ev) => { ev.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/collection')).body || {};
+      $('#col-lb').innerHTML = `<div class="grid" style="margin-top:4px">${(b.collectors || []).map((c, i) => `
+        <div class="card"><span class="t">#${i + 1} ${c.name}</span><div class="d">${c.have}/${c.total} · ${c.pct}%${c.steward && c.steward !== c.name ? ` · steward: ${c.steward}` : ''}</div></div>`).join('') || '<span class="d">nobody has collected a thing</span>'}</div>`; }; }
   }
 
   // ── THE LIFE: the skill tree + the five fixtures who remember your name ──
