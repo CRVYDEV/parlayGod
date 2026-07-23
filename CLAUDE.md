@@ -4116,3 +4116,5 @@ stack, under-measured — needs a business-ladder sim probe), the Port Deep Run 
 dominated by L16 Open Water — raise deeprun.sell/drop patrol), territory Numbers lazy-dominance, the
 Stable(4)-vs-Boxing(3) cap asymmetry, and the i18n prose-translation product call — all in
 `AUDIT-full-product.md` for decision.
+
+**Round 3 (the coverage boundary, closed):** a dedicated lens exhaustively traced the four surfaces Lens H had not line-traced — casino stateful blackjack + heads-up poker (paid-once, den-book identity exact, 7-card evaluator verified, no hole-card leak), pen.executeBreak (lock order acyclic, rat relief-only, self-healing), world co-op raid + frontier (cartel_damage==Σ world:raid, §10.4-neutral), economy swap/stake (AMM k both ways, sell surcharge net-0 no rounding leak, pool-capped stake). **CLEAN — no bug.** Net across 3 rounds / 9 lenses: no CRITICAL, no HIGH open, every confirmed finding fixed; remaining opens are founder economy sign-offs + the i18n prose-translation call.
