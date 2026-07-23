@@ -389,7 +389,7 @@
 
   <div class="band">
     <h2>A REAL ECONOMY</h2>
-    <p>Server-authoritative, sim-audited, and honest to the cent — a built-in ledger proves no money is ever minted from nothing. What you earn is yours to keep, spend, or (at launch) extract on-chain as $OMR. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
+    <p>Server-authoritative, sim-audited, and honest to the cent — every dollar and every $OMR lives on a built-in ledger. The city pays its workers: a fixed, public emission schedule splits a daily $OMR pot among the players who actually played, and real revenue tops the pools up. What you earn is yours to keep, spend, or (at launch) extract on-chain. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
   </div>
 
   <div class="encore"><button class="act cta" id="btn-guest2">MAKE YOUR BONES →</button></div>
@@ -1091,6 +1091,16 @@
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
   const mins = (s) => s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
   // empty-state coaching: a friendly "what this is / do this first" card instead of a blank grid
+  // the Street Wage status line (Going Legit card) — reads the /v1/wage board, never re-derives
+  const wageLine = (w) => {
+    if (!w?.you) return 'enrolling…';
+    if (w.you.agentExcluded) return 'agents run their own economy — no wage';
+    if (!w.you.enrolled) return 'enrolling — your first full day starts the count';
+    const base = '+' + fmt(w.you.gainThisEpoch) + ' respect this epoch ' +
+      (w.you.eligible ? '— <b style="color:var(--ok)">on the payroll</b>'
+        : '(need ' + w.you.minScore + '+ and level ' + w.you.minLevel + '+)');
+    return base + (w.you.lastWage ? ' · last wage: +' + w.you.lastWage.omr + ' $OMR' : '');
+  };
   const coachCard = (title, body) => `<div class="card coach-card"><span class="t" style="color:var(--neon)">${title}</span><div class="d">${body}</div></div>`;
 
   // ── THE KITCHEN: lab → makings → cook → collect → deal, the crew, heat management ──
@@ -2817,6 +2827,7 @@
     const t = $('#tab-portfolio');
     await refresh();
     const pf = (await api('GET', '/v1/portfolio')).body || {};
+    const wage = (await api('GET', '/v1/wage')).body || {};
     const bd = (await api('GET', '/v1/bonds')).body || {};
     const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
     const flb = (await api('GET', '/v1/leaderboard/family-portfolio')).body || {};
@@ -2825,6 +2836,11 @@
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
     t.innerHTML = `
       <h2>Going Legit <span class="d" style="font-size:10px">(clean $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
+      <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">The Street Wage</span>
+        <div class="d">the city pays its workers: a fixed, public $OMR schedule splits today’s pot among everyone who really played
+          (respect earned today, level ${wage.you?.minLevel ?? 5}+, up to ${wage.you?.capOmr ?? 5} $OMR/day each). No claim button — the payout finds you at the day’s end.</div>
+        <div class="d">today’s pot: <b style="color:var(--ink)">${fmt(wage.budget ?? 0)} $OMR</b> · endowment left: ${fmt(Math.round(wage.endowment?.remaining ?? 0))} $OMR</div>
+        <div class="d">you: ${wageLine(wage)}</div></div>
       <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
         <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
         <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">

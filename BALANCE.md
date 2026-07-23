@@ -1569,3 +1569,19 @@ bounded by `TERRITORY_RIVAL_CUT_BPS` + the 8h per-racket cooldown, and only real
 over-cap (already losing income to the cap). **Recommendation:** accept as a sign-off lever (a raid on a
 neglected racket refunding some cap-forfeited time is arguably intended), OR clamp `remainMs` to the real
 elapsed-since-collect so a raid can't hand fresh headroom. Not patched per ground rule #1 — founder call.
+
+---
+
+## Addendum — THE STREET WAGE (the value-creation pivot, 2026-07-23; PROPOSED, sim + sign-off)
+
+| Lever | Default | Note |
+|---|---|---|
+| `EMISSION.ENDOWMENT_OMR` | 1,000,000 | lifetime emission ceiling (mirror on-chain in E2) |
+| `EMISSION.EPOCH_OMR` | 500/day | day-one budget (a CEILING — unearned budget is never minted) |
+| `EMISSION.DECAY` / `DECAY_EVERY` | 0.5 / 180 | the halving schedule (~6 months) |
+| `EMISSION.WAGE_CAP_OMR` | 5 | per-account/epoch cap — spreads the pot, bounds Sybil concentration |
+| `EMISSION.WAGE_MIN_LVL` / `WAGE_MIN_SCORE` | 5 / 25 | the anti-login-bot floor (respect gain is energy-bounded) |
+
+The wage is the ONLY scheduled mint; `emission within endowment` is the hard wall. Before launch
+marketing mentions earning at all: re-derive per-region "what a day's grind pays" from the live $OMR
+price and retune EPOCH_OMR/WAGE_CAP_OMR (counsel-gated messaging — see CLAUDE.md Sensitive notes).
