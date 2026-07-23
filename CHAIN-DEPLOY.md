@@ -43,7 +43,11 @@ PHASE 1 for the exact calls/args.
       `setSellTax(bps)` (hard-capped 10%; default 0 = off). Only transfers INTO registered pools are
       taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
       Uniswap V2-COMPATIBLE** (sell-taxed tokens need the *SupportingFeeOnTransferTokens router path;
-      Uniswap V3 does not support them) — verify which DEX Robinhood Chain runs BEFORE seeding liquidity.
+      Uniswap V3 does not support them). RESOLVED (verified July 2026): Uniswap deployed **v2, v3, v4 +
+      UniswapX on Robinhood Chain at its July 1, 2026 mainnet launch** — so a V2 pool is available. Still
+      CONFIRM ON-CHAIN at deploy: pull the addresses from Uniswap's deployment docs
+      (developers.uniswap.org → Robinhood Chain deployments) and run `node tools/check-dex.js` against
+      the live RPC (probes bytecode + the right view calls; prints a go/no-go verdict for the taxed pool).
       caps set by the Safe (§ set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
 - [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
       `gearVault.setMinter(voucherClaim)` so gear mints route through it.
