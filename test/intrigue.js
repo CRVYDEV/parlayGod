@@ -82,6 +82,9 @@ let spy, mark, secretId;
   // over-cap demand refused
   let r = await call('POST', `/v1/secrets/${secretId}/extort`, { token: spy.token, body: { demand: 10_000_000 } });
   assert.equal(r.body?.error, 'amount', 'the demand is capped by what the dirt is worth');
+  // AUDIT LOW-3: the demand FLOOR — a $1 demand would net the holder ≤ 0 through the 2% take
+  r = await call('POST', `/v1/secrets/${secretId}/extort`, { token: spy.token, body: { demand: 1 } });
+  assert.equal(r.body?.error, 'amount', 'the demand floor holds (no net-negative hush)');
   r = await call('POST', `/v1/secrets/${secretId}/extort`, { token: spy.token, body: { demand: 100000 } });
   assert.equal(r.code, 200, `extort: ${JSON.stringify(r.body)}`);
   // the mark sees the demand on their board
@@ -152,6 +155,22 @@ let spy, mark, secretId;
   console.log('✓ secrets die with the mark');
 }
 
+// ═══ death, the other chair: a dead HOLDER's demand drops off the mark's board ═══
+{
+  const spy2 = await mk('DeadSpy');
+  const mark2 = await mk('Mark2');
+  await pool.query(`UPDATE characters SET season_kills=2 WHERE id='${mark2.id}'`);
+  await grantOmr(spy2.id, 100);
+  const r = await call('POST', `/v1/wire/dig/${mark2.id}`, { token: spy2.token });
+  assert.ok(r.body.found, 'dead-holder setup dig lands');
+  await call('POST', `/v1/secrets/${r.body.id}/extort`, { token: spy2.token, body: { demand: 25000 } });
+  assert.equal((await call('GET', '/v1/secrets', { token: mark2.token })).body.onMe.length, 1, 'the threat shows');
+  await call('POST', '/v1/mod/kill', { body: { characterId: spy2.id, reason: 'test' }, mod: true });
+  const b = (await call('GET', '/v1/secrets', { token: mark2.token })).body;
+  assert.equal(b.onMe.length, 0, "a dead man's demand dies with him — the board is clean");
+  console.log("✓ a dead holder's demand drops off the mark's board");
+}
+
 // ═══ THE COLLECTION — the log sites + board + leaderboard + death survival ═══
 {
   const c = await mk('Col');
@@ -192,6 +211,14 @@ let spy, mark, secretId;
   // the leaderboard ranks the collector
   const lb = (await call('GET', '/v1/leaderboard/collection', { token: c.token })).body;
   assert.ok(lb.collectors.some((x) => x.have >= board.have && x.total === board.total), 'the completionist board renders');
+  // AUDIT F1: an off-catalog log row (a retired item / a future bad call site) never counts —
+  // the board and the leaderboard must agree, and have can never exceed total
+  await pool.query(
+    `INSERT INTO collection_log (account_id, category, item_id) VALUES ('${acct}', 'crimes', 'no_such_job')`);
+  const board3 = (await call('GET', '/v1/collection', { token: c.token })).body;
+  const lb2 = (await call('GET', '/v1/leaderboard/collection', { token: c.token })).body;
+  const mine = lb2.collectors.find((x) => x.have === board3.have && x.total === board3.total);
+  assert.ok(mine, 'the leaderboard counts only catalog members — board and leaderboard agree');
   // DEATH SURVIVAL: the ledger is account-level — the heir keeps the collection
   const have0 = board2.have;
   await call('POST', '/v1/mod/kill', { body: { characterId: c.id, reason: 'test' }, mod: true });

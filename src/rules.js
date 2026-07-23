@@ -2569,6 +2569,7 @@ export const SECRETS = {
     moneybags: { name: 'The Second Ledger', hushCap: 100000, exposeHeat: 12 },
   },
   MONEYBAGS_MIN: 500000,       // the bank floor that makes a second ledger worth keeping
+  DEMAND_MIN: 100,             // hush floor — the 2% take never nets the holder ≤ 0 (BODYGUARD_MIN_PRICE precedent)
 }
 export const secretKindOf = (id) => SECRETS.KINDS[id] || null
 // Drop B — THE COLLECTION: category totals derive from the live catalogs (content, never stored).

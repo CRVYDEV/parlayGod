@@ -1518,7 +1518,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // step five: a dead party's standing watches die too (the wiretap precedent — a dead watcher stops watching, a dead target frees the slot)
   await client.query('DELETE FROM wire_watches WHERE watcher_character=$1 OR target_character=$1', [victim.id]);
   // SECRETS die with the SPY's street (holder) AND with the MARK's street (dirt on the dead is
-  // worthless — the heir starts clean); the dig cooldowns targeting the account go with them
+  // worthless — the heir starts clean). Digs TARGETING the account deliberately persist: the
+  // per-(digger, house) cooldown is a bloodline-level throttle, so a fresh heir isn't instantly
+  // re-diggable by everyone who just dug the dead street (the 7-day hygiene sweep reaps them).
   await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [victim.id, victim.account_id]);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);

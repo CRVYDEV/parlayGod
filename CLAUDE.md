@@ -4240,3 +4240,49 @@ assignment is a real tradeoff); **LOW** — `endConsigliere` scoped by role (was
 estate/dispositions, spam bounds, wheelman non-dominance. Flagged (ground rule #1): Mad-Dog
 consigliere flavor call, the wheelman jail-floor stack + gunner magnitude (sim levers), the
 multi-offer withdraw UX. Suite green + sim drift-0.
+
+**BLACKMAIL & SECRETS + THE COLLECTION (founder picks #7+#8) — BUILT** (`omerta-secrets-collection-design.md`;
+`src/secrets.js`, `src/collection.js`; `test/intrigue.js` — the 36th suite). **Drop A — BLACKMAIL & SECRETS
+(CK3 intrigue):** information as leverage with money on the line. `digSecret` (`POST /v1/wire/dig/:targetId`)
+burns `SECRETS.DIG_OMR` (10 $OMR, `intel:dig` through the spymaster till — rank-DISCOUNTED via `intelCost`,
+bumps `intel_ops`, burns win or lose — the npchit-fee posture) to pull the mark's REAL dirt: `juiciestSecret`
+derives the KIND from actual state (launderer via `wash_used`/`rwa_used` → hushCap $250k / exposeHeat 25;
+killer via `season_kills` → 200k/20; cook via stash/lab → 150k/20; moneybags via bank ≥ `MONEYBAGS_MIN`
+$500k → 100k/12 — a boolean, coarser than the wire's wealth bands, so the anti-precise-kill-EV rule holds);
+a CLEAN mark yields nothing (the burn stands), and **disinformation defeats the shovel** (`disinfo_until`
+checked before the derive — the counter-intel triad extends to secrets). Anti-grief bounds: per-(digger,
+target) 24h cooldown (`digs` PK table), `MAX_HELD` 5, one secret per holder per target, `TTL_MS` 7d.
+`extortSecret` names a price (`DEMAND_MIN` $100 ≤ demand ≤ the kind's hushCap, validated under the secret's
+FOR UPDATE, once — `pending` on a re-extort) opening a `EXTORT_WINDOW_MS` 24h window and notifying the mark —
+**an un-extorted secret stays invisible to the mark** (the layered info economy: the demand IS the reveal).
+The mark `payHush` (`POST /v1/secrets/:id/pay`, two-party) — the audited bodyguard/speakeasy-round TAXED
+transfer byte-for-byte (`secret:hush` both sides, mark −demand / holder +98%, 1% street tax → buyback
+singleton locked LAST, 1% dev off-ledger; capped + dirt-gated, so a strictly-worse collusion rail than the
+existing 2% rails) and the secret is CONSUMED; or the holder `exposeSecret` — the kind's `exposeHeat` lands
+on the mark's RICO investigation meter (`heat_exposure`, the Port BUST_EXPOSURE precedent — in-memory on the
+locked second char, riding the positional persist) + a streets feed; the worker `sweepSecrets` BLOWS unpaid
+demands past the window (mark char locked FIRST then the secret — the bounty-sweep order, audit MED-1 fix).
+Secrets hold ZERO escrow (a demand is just a number → estate/sweep/expiry move no value); death kills dirt
+in BOTH directions (`runEstate` deletes holder-side + target-side; a dead holder's demand also drops off the
+board via the `alive` JOIN — the heir starts clean; target-side dig cooldowns deliberately persist as a
+bloodline throttle). §10.4: `secret:` joined the cash vocabulary (the transfer reconciles per character);
+`intel:dig` rides the existing `intel:%` omr burn term — zero invariant shape changes. **Drop B — THE
+COLLECTION (the completion compulsion pointed at content that already exists):** an account-level
+"ever done / ever owned" ledger (`collection_log` PK triple, idempotent ON CONFLICT insert under a probed
+SAVEPOINT so it can never poison the enclosing action txn — audit LOW-1) spanning 8 categories / 140 items:
+crimes pulled, districts walked, cars owned (all five transfer sites — GTA, market buy-now + auction settle,
+loan collect + sweep-forfeit, pink slips — via `logCarCollect`), guns bought, drugs cooked, boats bought,
+goods traded, fixtures befriended (standing ≥ 25). PURE STATUS, zero §10.4 surface, **SURVIVES DEATH**
+(account-keyed, outside the estate wipe — the heir keeps every mark). `GET /v1/collection` (per-category
+got flags + pct), `GET /v1/leaderboard/collection` (catalog-filtered tally so board and leaderboard always
+agree — audit F1; agents excluded, dynasty names). Console: "Dirty Laundry" on the Wire tab (dig/extort/
+pay/expose), "The Collection" on the Estate tab. A **two-lens red-team** (`AUDIT-secrets-collection.md`:
+§10.4+locks, exploit/grief/death) returned **no CRITICAL/HIGH**; fixed in-commit (regression each): the
+MED-1 sweep lock inversion, the F1 leaderboard catalog filter, the LOW-1 savepoint guard, a fake rng_audit
+roll on the deterministic dig (now roll-0 "(deterministic)"), the `DEMAND_MIN` floor (a $1 demand netted the
+holder ≤ 0 through the ceil'd takes), and the estate digs comment; plus a dead-holder board regression.
+Flagged for founder sign-off (NOT patched): instant expose-without-extort (bounded — 5 rings ≈ 125 exposure
+vs INDICT_AT 3000, real dirt required), the late-window quiet expiry, no actor gates (the Wire remote-
+surveillance posture; payHush is defensive), and multi-holder demand stacking (the pressure is the point —
+`MAX_HELD`/`DIG_OMR` the dials). Suite 36/36 + sim drift-0. All `SECRETS.*` numbers are founder sign-off
+levers.
