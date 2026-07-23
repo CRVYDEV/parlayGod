@@ -520,12 +520,21 @@ function coachOf(ch, acct, owned) {
   if (lvl >= 5 && !ch.path) return { label: 'You\'ve made rank', hint: 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', tab: 'streets' };
   if (!owned.gangId && lvl >= 3) return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
   if (Number(ch.cash) > 25000 && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
-  if (obDone < ONBOARD_TASKS.length) return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
-  if (!ch.lab && !(owned.businesses || []).length && lvl >= 8) return { label: 'Make money while you sleep', hint: 'Set up a Kitchen or a front — passive income is how the big families grow.', tab: 'kitchen' };
-  // the bridge into the deep game — so the coach doesn't go silent once the basics are learned
+  // (audit F1) Only the GAMEPLAY First-Week tasks gate the coach. The 3 socials + the wallet link are
+  // OPTIONAL bonuses on Start Here — they throw `verify_unavailable` when SOCIAL_VERIFY_MODE is off
+  // (the default), so counting them would pin the coach at "Finish your First Week" forever and mask
+  // every mid-game rung below. Gate on the five completable gameplay tasks instead.
+  const obGameplay = ONBOARD_TASKS.filter((t) => !t.social && t.id !== 'ob_wallet');
+  if (obGameplay.some((t) => !onboard[t.id]))
+    return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
+  // the bridge into the deep game — a ladder of "what next" so the coach never goes silent mid-game
+  const hasEarner = !!ch.lab || (owned.businesses || []).length || (owned.rackets || []).length
+    || (owned.assets || []).length || (owned.fighters || []).length || !!owned.speakeasy;
+  if (!hasEarner && lvl >= 3) return { label: 'Money while you sleep', hint: 'Buy a racket in The Empire — cheap passive income that pays while you\'re offline. Kitchens and fronts come later.', tab: 'empire' };
   if (lvl >= 4 && !(owned.skills || []).length) return { label: 'You\'ve earned skill points', hint: 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', tab: 'life' };
+  if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length) return { label: 'Cook up real money', hint: 'Set up a Kitchen — the drug trade is the deepest earner in the game.', tab: 'kitchen' };
   if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length) return { label: 'Time to go legit', hint: 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', tab: 'portfolio' };
-  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'You\'ve got energy to burn — go pull a job on the Streets.', tab: 'streets' };
+  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'You\'ve got energy to burn — go pull a job on the Streets, or try the Den, the Fights, or a heist crew.', tab: 'streets' };
   return null; // an established player who knows the ropes — no nag
 }
 
