@@ -58,8 +58,9 @@ export async function digSecret(ch, targetId, client, h) {
   await bumpIntelOps(client, ch.account_id);
   // DISINFORMATION beats the shovel (the counter-intel triad): cooked books, nothing to find
   const kind = disinfoActive(target) ? null : await juiciestSecret(client, target);
-  const roll = Math.random();
-  await h.rngLog(client, ch.id, 'secret:dig', roll, kind ? `dug ${kind} on ${target.name}` : `nothing on ${target.name}`);
+  // deterministic — the dig finds the mark's REAL dirt (or disinfo hides it); the audit row records
+  // the outcome, not a roll (roll 0 = no randomness decided this — the AUDIT LOW-2 hygiene fix)
+  await h.rngLog(client, ch.id, 'secret:dig', 0, kind ? `dug ${kind} on ${target.name} (deterministic)` : `nothing on ${target.name} (deterministic)`);
   if (!kind) return { ok: true, found: false, spent: cost };
   const id = uid();
   await client.query(
@@ -77,8 +78,8 @@ export async function extortSecret(ch, secretId, demand, client, h) {
   if (s.extort_deadline) throw new GameError('pending', 'The demand is already on their table.');
   const cap = secretKindOf(s.kind).hushCap;
   const amt = Math.floor(Number(demand));
-  if (!(Number.isFinite(amt) && amt > 0 && amt <= cap))
-    throw new GameError('amount', `Name a price between $1 and $${cap} — that's what this dirt is worth.`);
+  if (!(Number.isFinite(amt) && amt >= SECRETS.DEMAND_MIN && amt <= cap))
+    throw new GameError('amount', `Name a price between $${SECRETS.DEMAND_MIN} and $${cap} — that's what this dirt is worth.`);
   const deadline = new Date(Date.now() + SECRETS.EXTORT_WINDOW_MS);
   await client.query('UPDATE secrets SET demand=$2, extort_deadline=$3 WHERE id=$1', [secretId, amt, deadline]);
   const mark = (await client.query(
@@ -161,6 +162,9 @@ export async function secretsBoard(ch, client) {
 // the worker's deadline sweep: an unpaid demand past its window BLOWS — the meter bump runs under
 // the mark's char row lock (an absolute write; the lock serializes vs any in-flight withCharacter
 // so the positional persist can't clobber it) — then stale secrets are reaped.
+// LOCK ORDER (the bounty-sweep pattern, AUDIT MED-1): the mark's CHARACTER row locks FIRST, then the
+// secret — matching payHush/exposeSecret/runEstate (chars → secret), so a buzzer-beating pay or a
+// concurrent kill can't AB-BA the sweep. target_account is immutable, so the pre-scan value is safe.
 export async function sweepSecrets(pool) {
   const due = (await pool.query(
     `SELECT * FROM secrets WHERE extort_deadline IS NOT NULL AND extort_deadline <= now() AND expires_at > now()`)).rows;
@@ -168,10 +172,10 @@ export async function sweepSecrets(pool) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const mark = (await client.query(
+        'SELECT * FROM characters WHERE account_id=$1 AND alive FOR UPDATE', [s.target_account])).rows[0];
       const row = (await client.query('SELECT * FROM secrets WHERE id=$1 FOR UPDATE', [s.id])).rows[0];
       if (!row || !row.extort_deadline || new Date(row.extort_deadline) > new Date()) { await client.query('ROLLBACK'); continue; }
-      const mark = (await client.query(
-        'SELECT * FROM characters WHERE account_id=$1 AND alive FOR UPDATE', [row.target_account])).rows[0];
       const k = secretKindOf(row.kind);
       if (mark && k) {
         await client.query('UPDATE characters SET heat_exposure=$2 WHERE id=$1',

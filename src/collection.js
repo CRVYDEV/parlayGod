@@ -6,13 +6,27 @@
 // module imports NOTHING from game.js (acyclic — the callers import us).
 import { collectionCatalog } from './rules.js';
 
-// best-effort by design: a collection entry must never fail the underlying action
+// best-effort by design: a collection entry must never fail the underlying action. In real
+// Postgres a bare try/catch can't deliver that — an errored statement aborts the ENCLOSING txn
+// (25P02) — so the insert runs under a SAVEPOINT and a failure rolls back to it, leaving the
+// caller's transaction healthy (AUDIT LOW-1). pg-mem can't parse SAVEPOINT (probed once, cached)
+// — there the bare insert runs instead, which is safe because pg-mem doesn't poison a txn on a
+// failed statement. ON CONFLICT makes the dup path error-free in both engines anyway.
+let savepointsWork = null; // null = unprobed
 export async function logCollect(client, accountId, category, itemId) {
   if (!accountId || !itemId) return;
+  const insert = () => client.query(
+    `INSERT INTO collection_log (account_id, category, item_id) VALUES ($1,$2,$3)
+       ON CONFLICT (account_id, category, item_id) DO NOTHING`, [accountId, String(category), String(itemId)]);
   try {
-    await client.query(
-      `INSERT INTO collection_log (account_id, category, item_id) VALUES ($1,$2,$3)
-         ON CONFLICT (account_id, category, item_id) DO NOTHING`, [accountId, String(category), String(itemId)]);
+    if (savepointsWork === null) {
+      try { await client.query('SAVEPOINT collect_probe'); await client.query('RELEASE SAVEPOINT collect_probe'); savepointsWork = true; }
+      catch { savepointsWork = false; }
+    }
+    if (!savepointsWork) { await insert(); return; }
+    await client.query('SAVEPOINT collect_log');
+    try { await insert(); await client.query('RELEASE SAVEPOINT collect_log'); }
+    catch { await client.query('ROLLBACK TO SAVEPOINT collect_log').catch(() => {}); }
   } catch { /* the ledger of flexes never blocks the flex */ }
 }
 
@@ -44,14 +58,19 @@ export async function collectionBoard(client, accountId) {
 // the completionist board — dynasties ranked by lifetime completion (agents excluded, the boards
 // precedent). Flat queries + a JS tally (the /v1/gangs pg-mem precedent).
 export async function collectionLeaderboard(pool) {
-  const total = Object.values(collectionCatalog()).reduce((a, c) => a + c.items.length, 0);
+  const cat = collectionCatalog();
+  const total = Object.values(cat).reduce((a, c) => a + c.items.length, 0);
+  // count only catalog members — the board and the leaderboard must agree, and an off-catalog
+  // log row (a retired item, a future bad call site) can never push have > total (AUDIT F1)
+  const inCatalog = new Set(Object.entries(cat).flatMap(([id, c]) => c.items.map((it) => `${id}:${it.id}`)));
   const agents = new Set((await pool.query(
     'SELECT account_id FROM account_persistent WHERE agent_flag')).rows.map((a) => a.account_id));
   const names = Object.fromEntries((await pool.query(
     'SELECT account_id, dynasty_name FROM account_persistent')).rows.map((a) => [a.account_id, a.dynasty_name]));
   const tally = {};
-  for (const r of (await pool.query('SELECT account_id FROM collection_log')).rows) {
+  for (const r of (await pool.query('SELECT account_id, category, item_id FROM collection_log')).rows) {
     if (agents.has(r.account_id)) continue;
+    if (!inCatalog.has(`${r.category}:${r.item_id}`)) continue;
     tally[r.account_id] = (tally[r.account_id] || 0) + 1;
   }
   const top = Object.entries(tally).sort((a, b) => b[1] - a[1]).slice(0, 20);
