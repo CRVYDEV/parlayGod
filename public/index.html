@@ -406,11 +406,18 @@
   <div class="encore"><button class="act cta" id="btn-guest2">MAKE YOUR BONES →</button></div>
 
   <div class="signin">
-    <div class="sub" style="font-size:11px;color:var(--dim);margin-bottom:6px">Already made? Sign in with a provider token:</div>
-    <select id="auth-provider"><option value="x">X (Twitter)</option><option value="privy">Privy</option></select>
-    <input id="auth-token" placeholder="provider access token" size="24">
-    <button class="act" id="btn-provider">SIGN IN</button>
-    <div class="sub" style="font-size:10px;color:var(--dim);margin-top:4px">X: an OAuth2 user token (read scope). Privy: your session's ES256 JWT. The hosted redirect flow lands with deploy.</div>
+    <div id="xoauth-row" class="hidden" style="margin-bottom:10px">
+      <button class="act cta" id="btn-xoauth" style="font-size:14px">CONTINUE WITH 𝕏 →</button>
+      <div class="sub" style="font-size:10px;color:var(--dim);margin-top:4px">One click — you'll come right back, signed in.</div>
+    </div>
+    <details id="token-signin"><summary class="sub" style="font-size:11px;color:var(--dim);cursor:pointer">Advanced: sign in with a provider token</summary>
+      <div style="margin-top:6px">
+        <select id="auth-provider"><option value="x">X (Twitter)</option><option value="privy">Privy</option></select>
+        <input id="auth-token" placeholder="provider access token" size="24">
+        <button class="act" id="btn-provider">SIGN IN</button>
+        <div class="sub" style="font-size:10px;color:var(--dim);margin-top:4px">X: an OAuth2 user token (read scope). Privy: your session's ES256 JWT.</div>
+      </div>
+    </details>
   </div>
 
   <div class="lfoot">
@@ -881,6 +888,22 @@
     $('#' + id).classList.remove('hidden');
   }
 
+  // ── ONE-CLICK X SIGN-IN: the OAuth callback lands results in the URL FRAGMENT (never sent to
+  // servers/logs) — collect them before anything renders, then scrub the hash from history. ──
+  (function collectOAuthLanding() {
+    const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+    if (h.get('token')) { token = h.get('token'); localStorage.setItem('omerta_token', token); }
+    if (h.get('claimed')) setTimeout(() => toast('account claimed — this street is yours for keeps now'), 600);
+    if (h.get('autherr')) setTimeout(() => toast(`sign-in failed (${h.get('autherr')}) — try again`, true), 600);
+    if (h.get('token') || h.get('claimed') || h.get('autherr')) history.replaceState(null, '', location.pathname);
+  })();
+  const startXOAuth = async () => {
+    const inviteCode = $('#invite-code')?.value?.trim();
+    const r = await api('POST', '/v1/auth/x/start', inviteCode ? { inviteCode } : {});
+    if (r.body?.url) location.href = r.body.url;
+    else toast(r.body?.message || 'one-click sign-in is not configured here yet', true);
+  };
+
   async function boot() {
     if (!token) return show('screen-auth');
     const r = await api('GET', '/v1/me');
@@ -905,6 +928,12 @@
   };
   $('#btn-guest').onclick = enterAsGhost;
   { const g2 = $('#btn-guest2'); if (g2) g2.onclick = enterAsGhost; } // the secondary CTA at the foot of the pitch
+  $('#btn-xoauth').onclick = startXOAuth;
+  // show the one-click button only when the server says the redirect flow is configured
+  fetch('/v1/rules').then((x) => x.json()).then((ru) => {
+    rules = rules || ru;
+    if (ru?.auth?.xOAuth) $('#xoauth-row').classList.remove('hidden');
+  }).catch(() => {});
 
   // THE WIRE — a rotating police-scanner ticker on the landing (fictional flavor; makes the city feel alive
   // on a fresh alpha with no real events yet). Cycles a curated list; pure client-side, no API dependency.
@@ -1019,12 +1048,26 @@
     // account row, same street, §4 guest→provider) so a lost device doesn't mean a lost life
     const claim = $('#claim-card');
     if (claim && session?.provider === 'guest') {
+      const oneClick = rules?.auth?.xOAuth;
       claim.innerHTML = `<div class="card" style="margin-top:8px;border-color:var(--neon)">
         <span class="t" style="color:var(--neon)">CLAIM YOUR ACCOUNT</span>
-        <div class="d">you're a ghost — this street exists only in this browser. Tie it to X or Privy and keep everything.</div>
-        <select id="claim-provider"><option value="x">X</option><option value="privy">Privy</option></select>
-        <input id="claim-token" placeholder="provider token" size="16">
-        <button class="act" id="claim-go">claim it</button></div>`;
+        <div class="d">you're a ghost — this street exists only in this browser. Tie it to X and keep everything.</div>
+        ${oneClick ? '<button class="act cta" id="claim-x">CLAIM WITH 𝕏 — one click →</button>' : ''}
+        <details ${oneClick ? '' : 'open'} style="margin-top:6px"><summary class="d" style="cursor:pointer;color:var(--dim)">advanced: paste a provider token</summary>
+          <div style="margin-top:6px">
+            <select id="claim-provider"><option value="x">X</option><option value="privy">Privy</option></select>
+            <input id="claim-token" placeholder="provider token" size="16">
+            <button class="act" id="claim-go">claim it</button>
+          </div>
+        </details></div>`;
+      const cx = claim.querySelector('#claim-x');
+      if (cx) cx.onclick = async () => {
+        // an AUTHED start binds the OAuth state to THIS guest server-side → the callback upgrades
+        // in place (same account row, same street) and lands back here with #claimed=x
+        const r = await api('POST', '/v1/auth/x/start', {});
+        if (r.body?.url) location.href = r.body.url;
+        else toast(r.body?.message || 'one-click claim is not configured here yet', true);
+      };
       claim.querySelector('#claim-go').onclick = async () => {
         const r = await api('POST', '/v1/auth/upgrade',
           { provider: claim.querySelector('#claim-provider').value, token: claim.querySelector('#claim-token').value.trim() });
