@@ -4330,3 +4330,40 @@ stays mainnet/legal-gated — this drop is the complete off-chain core with zero
 surface. Deliberately NOT built: direct ETH→shares purchase (securities-dealer-at-point-of-sale —
 entry stays in-game). All `RWA_FLOAT.*` numbers are founder sign-off levers. Suite 38/38 + sim
 drift-0.
+
+**THE CELLPHONE (founder request) + tester-feedback fixes — BUILT** (`src/phone.js`, `schema.sql`
+`dm_messages`, `src/server.js`, `src/worker.js`, `public/index.html`, `test/hardening.js`, both codices).
+**The Cellphone** — a personal INBOX + player-to-player DMs, pure talk with **ZERO §10.4 surface** (the
+test proves the whole exchange writes no `transactions` rows). The inbox half is the EXISTING
+`notifications` stream surfaced as a PEEK that never flips `delivered` (that flag belongs to the WS
+backfill — `GET /v1/notifications` stays the one delivery-marking read). The DM half is the new
+`dm_messages` table — **ACCOUNT-keyed on both sides** (no character_id column → never estate-wiped, the
+DISPOSITION guard doesn't even see it): threads SURVIVE DEATH, the heir picks up the phone; name
+snapshots per line (the troll-box discipline); the counterpart's CURRENT living street is resolved for
+display + reply targeting, and **account UUIDs are stripped from every response** (the
+closeSocketsOnKill discipline — threads are client-keyed by living characterId; a dead line reads
+"line dead" until the heir rises). Discipline = the postChat trio verbatim: `cleanText` + 240-char
+clamp + a 2s per-account flood brake (gates before the brake, only a landed line arms it); self/gone
+gates; sending to a DEAD street still lands (addressed to the line, the heir reads it); a send rings
+the recipient's living character via the normal `notify()` (inbox row + live WS push, best-effort
+post-insert). Routes `GET /v1/phone` (threads + unread + the inbox peek), `GET /v1/phone/thread/
+:characterId` (marks seen), `POST /v1/phone/dm/:characterId`; worker 30-day retention (the troll-box
+7-day twin). Console: a 📱 top-bar button with a live unread badge (lit at boot from the board, bumped
+by the WS `dm` ring, cleared on thread read), THE CELL modal (compose off the streets roster, threads,
+a thread view with reply, the humanized inbox via `feedText`), and a `dm` feed line. `test/hardening.js`
+covers send/sanitize, self/empty/gone/flood gates, threads + unread + seen lifecycle, the peek NOT
+flipping delivered, both directions of a conversation, and the zero-ledger-rows assertion.
+**Tester-feedback fixes shipped with it:** (1) "says I'm in the hospital but still running jobs" — the
+MECHANIC is signed v24 design (hospital = protection, "rivals can't touch you", never actor incapacity;
+ground rule #1 — not changed); the LEGIBILITY was the bug: the coach line claimed "nothing to do but
+wait" → now says you're untouchable and can still work; the sheet chip `HOSPITAL` (bad) → `DOC'S CARE`
+(cold); the glossary explains "protection, not prison". (2) X sign-in confusion ("can't find the
+X-provider token") — a **"How do I sign in with X?" FAQ** on the entry screen (one-click PKCE is the
+way, there is NO token to find on x.com, the paste box is developers/agents-only and now labeled so)
++ the claim card explains the one-tap flow / says clearly when one-click isn't configured on the
+server. (3) the live feed's generic "pulled a job" now names the SPECIFIC job (`ACTIVITY_WIRE` values
+may be `(req) => text` functions; the crime id is already public on /v1/rules, no amounts ride the
+line — "pulled a job — Pickpocket a tourist"). Chromium-probed end-to-end (FAQ renders; DM round-trip;
+badge lights over WS + clears on read; the feed rings 📱 and names the job; ZERO page errors). Suite
+green + sim drift-0. Deferred (step two, flagged): block/mute lists, DM-from-the-streets-roster
+shortcut buttons, unread-DM chip on mobile nav.

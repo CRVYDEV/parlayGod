@@ -1841,3 +1841,21 @@ CREATE TABLE IF NOT EXISTS rwa_vault (
 );
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_used NUMERIC NOT NULL DEFAULT 0; -- rolling-24h claim bucket
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_at TIMESTAMPTZ;
+
+-- THE CELLPHONE (founder-directed): a personal inbox + player-to-player DIRECT MESSAGES. Pure
+-- talk — zero §10.4 surface (no currency ever rides a DM). ACCOUNT-keyed on BOTH sides (the
+-- troll-box name-snapshot discipline, lifted to the bloodline: threads survive death/rename —
+-- the heir inherits the phone; no character_id column, so the estate wipe never touches it).
+-- Retention: the worker's 30-day sweep (talk is ephemeral, not a ledger).
+CREATE TABLE IF NOT EXISTS dm_messages (
+  id TEXT PRIMARY KEY,
+  from_account UUID NOT NULL,
+  to_account UUID NOT NULL,
+  from_name TEXT NOT NULL,          -- sender's street name at send time (snapshot)
+  to_name TEXT NOT NULL,            -- recipient's street name at send time (snapshot)
+  body TEXT NOT NULL,
+  seen BOOLEAN NOT NULL DEFAULT false,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_dm_to_seen ON dm_messages (to_account, seen);
+CREATE INDEX IF NOT EXISTS ix_dm_from_at ON dm_messages (from_account, at);

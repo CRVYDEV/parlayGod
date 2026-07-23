@@ -43,6 +43,7 @@ import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
 import * as Rwa from './rwa.js';
+import * as Phone from './phone.js';
 import * as Estate from './estate.js';
 import * as Auction from './auction.js';
 import * as Wire from './wire.js';
@@ -1595,7 +1596,12 @@ export async function buildServer() {
   // info economy (anonymity, wealth bands, hidden hunts) is audited design. Only acts that are
   // already public-by-design (or harmlessly flavorful) are announced, and never with amounts.
   const ACTIVITY_WIRE = {
-    'POST /v1/crimes/:id': ['crime', 'pulled a job'],
+    // (founder) the specific job, not a generic line — the crime id is already public (the whole
+    // book is on /v1/rules) and the line carries no amounts, so naming it leaks nothing new
+    'POST /v1/crimes/:id': ['crime', (req) => {
+      const c = CRIMES.find((x) => x.id === req.params?.id);
+      return c ? `pulled a job — ${c.name}` : 'pulled a job';
+    }],
     'POST /v1/heist': ['crime', 'pulled a score'],
     'POST /v1/travel/:district': ['move', 'is on the move'],
     'POST /v1/casino/dice': ['den', 'is rolling dice at the den'],
@@ -1640,7 +1646,8 @@ export async function buildServer() {
       const hit = ACTIVITY_WIRE[key];
       if (!hit) return;
       const who = await actorName(req.user.sub);
-      if (who) G.bus.emit('activity', { type: 'act', cat: hit[0], who, text: hit[1] });
+      const text = typeof hit[1] === 'function' ? hit[1](req) : hit[1];
+      if (who) G.bus.emit('activity', { type: 'act', cat: hit[0], who, text });
     } catch { /* the wire is decorative — never fail a request for it */ }
   });
 
@@ -1688,6 +1695,14 @@ export async function buildServer() {
   app.get('/v1/chat', { preHandler: auth }, async (req) => readChat(req, false));
   app.post('/v1/gangs/chat', { preHandler: auth }, async (req) => postChat(req, true));
   app.get('/v1/gangs/chat', { preHandler: auth }, async (req) => readChat(req, true));
+
+  // ── THE CELLPHONE (founder request) — inbox + player-to-player DMs. Pure talk, zero §10.4;
+  // account-keyed threads survive death (the heir inherits the phone). src/phone.js. ──
+  app.get('/v1/phone', { preHandler: auth }, async (req) => Phone.phoneBoard(pool, req.user.sub));
+  app.get('/v1/phone/thread/:characterId', { preHandler: auth }, async (req) =>
+    Phone.readThread(pool, req.user.sub, req.params.characterId));
+  app.post('/v1/phone/dm/:characterId', { preHandler: auth }, async (req) =>
+    Phone.sendDm(pool, req.user.sub, req.params.characterId, req.body?.text));
 
   // ── M4: the Kitchen (§5.3, §7.10) ──
   app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>

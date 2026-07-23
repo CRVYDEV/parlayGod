@@ -576,7 +576,7 @@ function coachOf(ch, acct, owned) {
   const onboard = typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {});
   const obDone = ONBOARD_TASKS.filter((t) => onboard[t.id]).length;
   if (future(ch.jail_until)) return { label: 'You\'re in lockup', hint: 'Sit it out — or work the Pen: bribe the guard, work the yard, watch your back.', tab: 'pen' };
-  if (future(ch.hosp_until)) return { label: 'Laid up in the hospital', hint: 'Patched up soon. Nothing to do but heal and wait.', tab: 'streets' };
+  if (future(ch.hosp_until)) return { label: 'Under the Doc\'s care', hint: 'You\'re healing up and UNTOUCHABLE — rivals can\'t jump or shoot you. You can still work jobs and run your rackets; only fighting is off.', tab: 'streets' };
   if (Number(ch.health) < 30) return { label: 'You\'re bleeding out', hint: 'Heal up before someone finishes the job (the Heal button, top-left).', tab: 'streets' };
   // urgent, time-boxed threats — these cost you if you sit on them (all false for a fresh street)
   if (future(ch.wanted_until)) return { label: 'There\'s a price on you', hint: 'You\'re WANTED — even your family can hunt you and NPC guns are out. Square your name at the Shylock, or lie low.', tab: 'loans' };

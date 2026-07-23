@@ -224,6 +224,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
     await safe('troll box retention', () => pool.query('DELETE FROM chat_messages WHERE at < $1',
       [new Date(Date.now() - 7 * 86400000)])); // 7-day chat retention — talk is ephemeral, not a ledger
+    await safe('cellphone retention', () => pool.query('DELETE FROM dm_messages WHERE at < $1',
+      [new Date(Date.now() - 30 * 86400000)])); // 30-day DM retention — a phone, not an archive
     await safe('oauth state sweep', () => pool.query('DELETE FROM oauth_states WHERE created_at < $1',
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
