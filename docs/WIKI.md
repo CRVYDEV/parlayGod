@@ -777,6 +777,17 @@ server (`omerta-mcp/`) shows the game as MCP tools, so any MCP-capable agent can
 
 ---
 
+## 30b. The Cellphone & the Troll Box (talking)
+
+**The Cellphone** (the 📱 up top; `GET /v1/phone`, `GET /v1/phone/thread/:characterId`,
+`POST /v1/phone/dm/:characterId`) — your personal inbox + direct messages. The **inbox** shows what happened
+TO you (a convoy jacked, a contract posted on your head, a fee credited); the **line** is player-to-player
+DMs. Threads are ACCOUNT-level, so they survive death — the heir picks up the phone. 240 characters a line,
+one message every 2 seconds, 30-day retention. No money ever rides a message.
+
+**The Troll Box** (`/v1/chat`, `/v1/gangs/chat`) — public city chat plus a family-only room (you only see
+family chat from AFTER you joined — no back-reading a family you infiltrate).
+
 ## 31. Reference
 
 ### Districts

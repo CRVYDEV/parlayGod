@@ -388,6 +388,55 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert.deepEqual(r.body.messages, [], 'gangless family-room read is empty, not an error');
 }
 
+// ── THE CELLPHONE — the personal inbox + player-to-player DMs (founder request). Pure talk,
+// zero §10.4 (no transactions row ever); account-keyed threads; troll-box discipline (cleanText
+// + 240 clamp + flood brake); the inbox PEEK never flips `delivered` (that's the WS backfill's). ──
+{
+  const caller = await mk('Louie the Line');
+  const callee = await mk('Frankie Dial');
+  // send: sanitized, lands, rings the recipient's inbox
+  let r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: '  <b>meet me</b> at the docks at nine ' } });
+  assert.equal(r.code, 200, 'a DM sends');
+  // gates: self / empty / unknown number / flood brake
+  r = await call('POST', `/v1/phone/dm/${caller.id}`, { token: caller.token, body: { text: 'hello me' } });
+  assert.equal(r.body.error, 'self', 'no messaging your own line');
+  r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: '' } });
+  assert.equal(r.body.error, 'empty', 'an empty message is refused');
+  r = await call('POST', '/v1/phone/dm/no-such-character', { token: caller.token, body: { text: 'yo' } });
+  assert.equal(r.body.error, 'gone', 'an unknown number is refused');
+  r = await call('POST', `/v1/phone/dm/${callee.id}`, { token: caller.token, body: { text: 'double tap' } });
+  assert.equal(r.body.error, 'slow_down', 'the DM flood brake refuses a 2s double-tap');
+  // the recipient's board: one thread, one unread, the sanitized preview, replyable
+  r = await call('GET', '/v1/phone', { token: callee.token });
+  assert.equal(r.code, 200, 'the phone board reads');
+  assert.equal(r.body.unreadDm, 1, 'one unread DM waiting');
+  const th = r.body.threads.find((t) => t.name === 'Louie the Line');
+  assert(th && th.unread === 1 && th.replyable, 'the thread shows the sender, unread, replyable');
+  assert(!th.last.text.includes('<') && th.last.text.includes('meet me'), 'cleanText stripped the markup');
+  // the inbox PEEK carries the dm ring WITHOUT flipping delivered (the WS backfill owns that flag)
+  const ring = r.body.inbox.find((n) => n.type === 'dm');
+  assert(ring && ring.payload.from === 'Louie the Line', 'the dm notification rings the inbox');
+  const undeliv = await pool.query(
+    "SELECT COUNT(*) c FROM notifications n JOIN characters c2 ON c2.id=n.character_id WHERE c2.id=$1 AND n.type='dm' AND NOT n.delivered", [callee.id]);
+  assert.equal(Number(undeliv.rows[0].c), 1, 'the phone PEEK did not mark the notification delivered');
+  // reading the thread marks seen; reply flows back
+  r = await call('GET', `/v1/phone/thread/${caller.id}`, { token: callee.token });
+  assert.equal(r.code, 200, 'the thread reads');
+  assert.equal(r.body.messages.length, 1, 'one message in the thread');
+  assert.equal(r.body.messages[0].fromMe, false, 'their line, not mine');
+  r = await call('GET', '/v1/phone', { token: callee.token });
+  assert.equal(r.body.unreadDm, 0, 'reading the thread cleared the unread count');
+  r = await call('POST', `/v1/phone/dm/${caller.id}`, { token: callee.token, body: { text: 'nine it is' } });
+  assert.equal(r.code, 200, 'the reply sends');
+  r = await call('GET', `/v1/phone/thread/${callee.id}`, { token: caller.token });
+  assert.equal(r.body.messages.length, 2, 'both sides of the conversation');
+  assert(r.body.messages[1].fromMe === false && r.body.messages[1].text === 'nine it is', 'the reply landed in order');
+  // zero §10.4 surface: the whole exchange wrote NO transactions rows
+  const tx = await pool.query(
+    'SELECT COUNT(*) c FROM transactions WHERE character_id IN ($1,$2)', [caller.id, callee.id]);
+  assert.equal(Number(tx.rows[0].c), 0, 'the phone moved no value — zero ledger rows');
+}
+
 // ── ONE-CLICK X SIGN-IN (OAuth2 PKCE redirect) — dormant without env; configured: /start mints a
 // single-use state + authorize URL, the callback rejects unknown/replayed states with a clean
 // fragment redirect (the token/e­rror rides the URL FRAGMENT, never a query the server would log). ──
@@ -541,5 +590,5 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   if (after.code === 200 && gid) assert(after.body.messages.some((m) => m.text.includes('new orders')), 'but sees messages from after they joined');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows)`);
 await app.close();
