@@ -2354,3 +2354,15 @@ export const EMISSION = {
 export const emissionEpochOf = (ms = Date.now()) => Math.floor(ms / 86400000)
 export const epochBudget = (epoch, e = EMISSION) => epoch < e.EPOCH0 ? 0
   : e.EPOCH_OMR * Math.pow(e.DECAY, Math.floor((epoch - e.EPOCH0) / e.DECAY_EVERY))
+
+// ═══ TAX — the transaction tolls on the REAL-value boundary (founder-directed 2026-07-23).
+// Complements the existing tax map: in-game P2P takes already feed street_tax → the 12h BUYBACK;
+// ETH Store revenue already splits founder/buyback/rwa (STORE.SPLIT_BPS); bonds split POL/Vig.
+// This block adds the missing boundary: EXTRACTION. Every $OMR withdrawal pays an exit toll that
+// splits DEV revenue + the community BUYBACK pool. Non-refundable (paid at the gate — a cancelled
+// queued withdrawal refunds the NET only). Rate read per-call (the RATE_LIMIT precedent) so ops
+// can retune without a deploy; numbers are founder sign-off levers. ═══
+export const TAX = {
+  DEV_BPS: 5000,            // the dev share of each toll (50%); the rest → the buyback/yield pool
+}
+export const withdrawTaxBps = () => Number(process.env.WITHDRAW_TAX_BPS ?? 200)  // 2% exit toll

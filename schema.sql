@@ -1582,3 +1582,13 @@ CREATE TABLE IF NOT EXISTS wage_snapshots (
   epoch BIGINT NOT NULL,
   respect NUMERIC NOT NULL DEFAULT 0
 );
+
+-- THE DEV FUND — the founder's revenue bucket on the real-value boundary (a §10.4 $OMR bucket,
+-- the stake_pool twin). Fed by the withdrawal exit toll's dev share (tax:dev); claimed to the
+-- founder's own account via POST /v1/mod/dev/claim (tax:dev:claim — a bucket transfer, never a mint).
+CREATE TABLE IF NOT EXISTS dev_fund (
+  id INT PRIMARY KEY,
+  omr NUMERIC NOT NULL DEFAULT 0,
+  lifetime NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO dev_fund (id, omr, lifetime) SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM dev_fund);

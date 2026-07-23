@@ -139,7 +139,7 @@ assert(fund.code < 400, `reserve fund failed: ${JSON.stringify(fund.body)}`);
 step('reserve funded', '500 $OMR of signing room (full-reserve queue)');
 const wd = await api('POST', '/v1/withdraw', tok, { amount: 25 });
 assert(wd.body?.status === 'signed' && wd.body?.voucher && wd.body?.signature, `withdraw not signed: ${JSON.stringify(wd.body)}`);
-step('withdraw voucher SIGNED', `nonce ${wd.body.nonce} · 25 $OMR debited from the game ledger (withdraw:omr burn)`);
+step('withdraw voucher SIGNED', `nonce ${wd.body.nonce} · gross ${wd.body.gross ?? 25} $OMR debited · exit toll ${wd.body.tax ?? 0} · net ${wd.body.net ?? 25} on the voucher`);
 
 console.log('── PHASE 6: claim() on-chain with the real voucher ──');
 const v = wd.body.voucher;
@@ -147,7 +147,8 @@ const tuple = { to: v.to, amount: BigInt(v.amount), kind: Number(v.kind), gearId
 const balBefore = await read(omr, 'OMR', 'balanceOf', [playerAddr]);
 await write(player, vc, 'VoucherClaim', 'claim', [tuple, wd.body.signature]);
 const balAfter = await read(omr, 'OMR', 'balanceOf', [playerAddr]);
-assert(balAfter - balBefore === parseUnits('25', 18), `on-chain balance delta ${formatUnits(balAfter - balBefore, 18)} != 25`);
+// the EXIT TOLL means the voucher carries the NET — assert against the signed voucher amount itself
+assert(balAfter - balBefore === BigInt(v.amount), `on-chain balance delta ${formatUnits(balAfter - balBefore, 18)} != voucher net ${formatUnits(BigInt(v.amount), 18)}`);
 step('CLAIMED ON-CHAIN', `player wallet now holds ${formatUnits(balAfter, 18)} real OMR (ERC-20)`);
 await reverts('replay', () => write(player, vc, 'VoucherClaim', 'claim', [tuple, wd.body.signature]));
 step('replaying the same voucher REVERTS (nonce spent)');

@@ -17,7 +17,7 @@ const KNOWN_REASONS = {
     'law:', 'world:', 'pen:', 'loan:', 'speakeasy:', 'boxing:', 'race:', 'port:', 'stable:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:'],
 };
@@ -133,6 +133,7 @@ async function collectLedgerChecks(pool) {
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM gangs')
     + await one(pool, 'SELECT COALESCE(SUM(balance),0) s FROM stake_pool')   // Phase 4 backed-emission pool
+    + await one(pool, 'SELECT COALESCE(SUM(omr),0) s FROM dev_fund')          // the exit toll's dev share (tax:dev — a transfer bucket)
     + await one(pool, 'SELECT COALESCE(SUM(pool),0) s FROM rwa_dividend_pool') // Dynasty Fund personal dividend pool (fed by invests, paid to holders — both dividend: transfers)
     + await one(pool, 'SELECT COALESCE(SUM(pool),0) s FROM rwa_family_dividend_pool') // the SEPARATE family dividend pool (reserve→pool→reserve; keeps reserve $OMR off personal accounts)
     + auctionEscrow;

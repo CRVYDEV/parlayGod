@@ -151,3 +151,26 @@ ceilings extend it).
   pure status, cheap to add, drives retention.
 - **The family wage:** a cut of member wages to the treasury (the tribute pattern) — makes
   families recruit active players in earn-regions. Needs sim for treasury-inflation interplay.
+
+---
+
+## 8. The tax map (founder-directed addendum, 2026-07-23)
+
+Every layer of the economy carries a toll, and every toll routes to the dev wallet, the buybacks,
+or both. The complete map:
+
+| Boundary | Tax | Where it goes |
+|---|---|---|
+| In-game P2P transfers (bodyguard, speakeasy, casino PvP, market, boxing, races, loans…) | ~2% takes | half → the street-tax pool → **the 12h buyback**; half burns (deflation) |
+| ETH Store purchases | 100% of the price | **40% dev / 40% buyback (Vig) / 20% RWA reserve** (`STORE.SPLIT_BPS`) |
+| ETH gameplay fees (mint / respawn / re-roll) | 100% of the fee | dev wallet in-tx; the Vig share routes to **buybacks** |
+| Bonds | the discount is the cost | **60% POL (liquidity) / 40% Vig (buybacks)** — no dev cut by design (bonds buy liquidity, the Store buys revenue) |
+| **$OMR withdrawal (NEW — the Exit Toll)** | `WITHDRAW_TAX_BPS` 2% of the gross | **50% → the dev fund** (`tax:dev`, claimable by the founder) / **50% → the buyback/yield pool** (`tax:buyback` → stake_pool — the pool the 12h buyback funds) |
+
+Exit-toll mechanics: the player is debited the gross; the voucher signs the NET; both toll shares
+are ledgered §10.4 TRANSFERS into audited buckets (dev_fund + stake_pool — conservation nets 0);
+the toll is non-refundable (a cancelled queued withdrawal refunds the net only). The founder claims
+the dev fund with `POST /v1/mod/dev/claim` (a bucket transfer, never a mint) and then withdraws
+like any player — paying the toll like anyone. Deliberately NOT a fee-on-transfer token: taxing
+inside the ERC-20 breaks DEXes and composability; taxing at the GAME boundary catches every earner
+exactly once, with none of that damage.

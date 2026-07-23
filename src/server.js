@@ -54,7 +54,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
-         EMISSION, emissionEpochOf, epochBudget } from './rules.js';
+         EMISSION, emissionEpochOf, epochBudget, TAX, withdrawTaxBps } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -1748,6 +1748,33 @@ export async function buildServer() {
 
   // ── Risk-to-Earn Phase 4: BACKED EMISSION (the staking reward pool) ──
   // Gauge: pool balance + effective-APY runway; and an ops/test top-up (the buyback funds it live).
+  // THE DEV FUND — the founder's revenue bucket (fed by the withdrawal exit toll's tax:dev share).
+  app.get('/v1/mod/dev', { preHandler: modAuth }, async () => {
+    const d = (await pool.query('SELECT omr, lifetime FROM dev_fund WHERE id=1')).rows[0] || { omr: 0, lifetime: 0 };
+    return { omr: Number(d.omr), lifetime: Number(d.lifetime), taxBps: withdrawTaxBps(), devBps: TAX.DEV_BPS };
+  });
+  // claim the dev fund to an account (a bucket TRANSFER — tax:dev:claim rides the tax: vocabulary,
+  // never a mint); the founder then withdraws like any player (paying the toll like anyone).
+  app.post('/v1/mod/dev/claim', { preHandler: modAuth }, async (req) => {
+    const accountId = String(req.body?.accountId || '');
+    if (!accountId) return { error: 'account', message: 'accountId required' };
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const acct = (await client.query('SELECT account_id FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
+      if (!acct) { await client.query('ROLLBACK'); return { error: 'no_account' }; }
+      const d = (await client.query('SELECT omr FROM dev_fund WHERE id=1 FOR UPDATE')).rows[0];
+      const amt = Number(d?.omr || 0);
+      if (!(amt > 0)) { await client.query('ROLLBACK'); return { error: 'empty', message: 'nothing to claim' }; }
+      await client.query('UPDATE dev_fund SET omr = 0 WHERE id=1');
+      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [accountId, amt]);
+      await client.query('INSERT INTO transactions (id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5,$6)',
+        [crypto.randomUUID(), accountId, 'omr', amt, 'tax:dev:claim', 'dev_fund']);
+      await client.query('COMMIT');
+      return { claimed: amt };
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
+    finally { client.release(); }
+  });
   app.get('/v1/mod/emission', { preHandler: modAuth }, async () => {
     const sp = (await pool.query('SELECT balance, lifetime_funded, lifetime_paid FROM stake_pool WHERE id=1')).rows[0] || {};
     const staked = Number((await pool.query('SELECT COALESCE(SUM(staked),0) s FROM account_persistent')).rows[0].s);
