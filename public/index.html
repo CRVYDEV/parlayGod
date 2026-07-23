@@ -1425,13 +1425,13 @@
         <div class="d">${lab ? `batch cap ${lab.cap} · cook ~${lab.mins * 12}min · fire risk ${Math.round(lab.fire * 100)}%` : 'even a bathtub beats the corner'}</div>
         ${nextLab ? `<button class="act" data-do="POST /v1/kitchen/lab/upgrade">upgrade → ${nextLab.name} ($${fmt(nextLab.cost)}${nextLab.omr ? ` + ${nextLab.omr} $OMR` : ''})</button>` : ''}</div>
 
-      <h2 style="margin-top:12px">The Supplier <span class="d" style="font-size:11px">(makings — today's prices)</span></h2>
-      <div class="grid">${unlocked.map((d) => `
+      ${sect('kitchen-supplier', 'The Supplier', 'makings — today\'s prices', `<div class="grid">${unlocked.map((d) => `
         <div class="card">${ico('drug', d.id)}<span class="t">${d.name}</span> <span class="d">${d.tag}</span>
           <div class="d">makings $${fmt(prices.makings?.[d.id] ?? '?')}/unit · shelf: ${me.makings?.[d.id] || 0}</div>
           <input data-mk="${d.id}" placeholder="qty" size="5"> <button class="act" data-mkbuy="${d.id}">buy</button></div>`).join('')}</div>
       ${(rules?.drugs || []).filter((d) => d.unlock > rankIdx).map((d) =>
-        `<span class="chip">${d.name} — locked (rank ${d.unlock})</span>`).join(' ')}
+        `<span class="chip">${d.name} — locked (rank ${d.unlock})</span>`).join(' ')}`,
+        !!me.lab && !Object.values(me.makings || {}).some((n) => n > 0))}
 
       <h2 style="margin-top:12px">The Burner</h2>
       ${me.batch ? `
@@ -1450,15 +1450,16 @@
           <input data-deal="${s.drug}" placeholder="qty" size="5"> <button class="act" data-dealgo="${s.drug}">deal</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
 
-      <h2 style="margin-top:12px">The Crew</h2>
-      <div class="card"><span class="t">${me.crew || 0} hands${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
-        <div class="d">they move the cheapest lines while you sleep · wages owed $${fmt(me.crewWageOwed || 0)}${me.crewCold ? ' · COLD: nothing moves until the nut is paid' : ''}</div>
+      ${sect('kitchen-crew', 'The Crew', 'they move the cheapest lines while you sleep — mind the nut', `<div class="card"><span class="t">${me.crew || 0} hands${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
+        <div class="d">wages owed $${fmt(me.crewWageOwed || 0)}${me.crewCold ? ' · COLD: nothing moves until the nut is paid' : ''}</div>
         <button class="act" data-do="POST /v1/kitchen/crew/hire">hire (next: $${fmt((rules?.crew?.costStep || 50000) * ((me.crew || 0) + 1))})</button>
-        <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut</button></div>
+        <button class="act" data-do="POST /v1/kitchen/crew/wages">pay the nut</button></div>`,
+        !!me.crewCold || Number(me.crewWageOwed || 0) > 0 || (me.crew || 0) > 0)}
 
       <h2 style="margin-top:12px">Heat (${me.heat})</h2>
       <button class="act" data-do="POST /v1/kitchen/laylow">lay low</button>
       <button class="act" data-do="POST /v1/kitchen/cleanpapers">clean papers ($OMR)</button>`;
+    wireSects(t);
 
     t.querySelectorAll('[data-mkbuy]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/kitchen/makings/${b.dataset.mkbuy}`, { qty: Number(t.querySelector(`[data-mk="${b.dataset.mkbuy}"]`).value) || 1 }).then(() => renderKitchen()));
@@ -1510,9 +1511,8 @@
       ${g.war ? `<div class="card" style="border-color:var(--blood);margin-top:8px"><span class="t" style="color:var(--bad)">AT WAR</span>
         <div class="d">score us ${g.war.us} — them ${g.war.them}</div></div>` : ''}
 
-      <h2 style="margin-top:12px">Made Men (${g.members.length})</h2>
-      <div class="grid">${g.members.map((m) => `
-        <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>
+      ${sect('fam-members', `Made Men (${g.members.length})`, 'the roster', `<div class="grid">${g.members.map((m) => `
+        <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>`)}
 
       <h2 style="margin-top:12px">Territory Operations</h2>
       ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
@@ -1544,15 +1544,14 @@
       <button class="act" id="tribo-go">pool $OMR</button>
       <span class="d" style="color:var(--dim);font-size:12.5px">tribute builds the treasury AND the family's season standing</span>
 
-      <h2 style="margin-top:12px">War & Turf <span class="d" style="font-size:11px">(the apex outfits garrison the core districts — beat one down in The City, then LIBERATE its turf here)</span></h2>
-      <div class="grid">${distr.map((d) => `
+      ${sect('fam-war', 'War & Turf', 'the apex outfits garrison the core districts — beat one down in The City, then LIBERATE its turf here', `<div class="grid">${distr.map((d) => `
         <div class="card"><span class="t">${d.id}${d.perk ? '' : ''}</span> ${d.occupiedBy ? `<span class="chip bad">occupied — ${d.occupiedBy.name} @ ${d.occupiedBy.strengthPct}%</span>` : d.holder ? `<span class="chip ${d.holder.tag === g.tag ? 'good' : ''}">[${d.holder.tag}]</span>` : '<span class="chip">open</span>'}
           <div class="d">${d.perk || ''}</div>
           ${d.occupiedBy ? `<div class="d" style="color:var(--dim)">liberate for $${fmt(d.liberationCost)} (rout ${d.occupiedBy.name} to cheapen it)</div>` : d.holder ? `<div class="d" style="color:var(--dim)">garrison $${fmt(d.garrison)}</div>` : ''}
           ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
-      ${boss ? `<div style="margin-top:8px"><input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button></div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}
+      ${boss ? `<div style="margin-top:8px"><input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button></div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
 
-      <h2 style="margin-top:12px">Diplomacy <span class="d" style="font-size:11px">(sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount)</span></h2>
+      ${sect('fam-diplomacy', 'Diplomacy', 'sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount', `
       ${dip.oathbreaker ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">OATHBREAKER</span> <span class="d">you broke a sworn treaty — marked for ${mins(dip.oathbreaker.seconds)}</span></div>` : ''}
       ${(dip.dominant || []).length ? `<div class="d" style="color:var(--dim);font-size:12px">dominant families (fair game for a coalition): ${dip.dominant.map((x) => `[${x.tag}] ${x.name}`).join(', ')}</div>` : ''}
       <div class="grid" style="margin-top:4px">${(dip.relations || []).map((r) => `
@@ -1568,9 +1567,10 @@
       ${boss ? `<div style="margin-top:6px">
         <input id="pact-gang" placeholder="rival gang id" size="24"> <button class="act" id="pact-go">propose a pact</button>
         <input id="coal-gang" placeholder="dominant gang id" size="24" style="margin-left:6px"> <button class="act" id="coal-go">form a coalition against them</button></div>`
-        : '<span class="d" style="color:var(--dim)">diplomacy is the boss’s to conduct</span>'}
+        : '<span class="d" style="color:var(--dim)">diplomacy is the boss’s to conduct</span>'}`,
+        !!dip.oathbreaker || (dip.relations || []).some((r) => r.pending && !r.mine) || (dip.coalitions || []).some((c) => c.targetsMe))}
 
-      <h2 style="margin-top:12px">Sovereignty <span class="d" style="font-size:11px">(fortify held turf with a stronghold — a daily vulnerability window when rivals can lay SIEGE; sov points = the family's iron reputation)</span></h2>
+      ${sect('fam-sov', 'Sovereignty', 'fortify held turf with a stronghold — a daily vulnerability window when rivals can lay SIEGE; sov points = the family\'s iron reputation', `
       ${sov.family ? `<div class="d" style="color:var(--dim);font-size:12px">your family holds <b>${fmt(sov.family.points || 0)} sov points</b> (${sov.family.rank || ''})</div>` : ''}
       <div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => s.mine).map((s) => `
         <div class="card"><span class="t">${s.district} — ${s.tierName || 'Outpost'} (t${s.tier})</span> <span class="chip ${s.vulnerable ? 'bad' : 'good'}">${s.vulnerable ? 'VULNERABLE NOW' : `safe — window ${String(s.windowHour).padStart(2, '0')}:00 UTC`}</span>
@@ -1587,34 +1587,37 @@
         <select id="sov-hour">${Array.from({ length: 24 }, (_, i) => `<option value="${i}">${String(i).padStart(2, '0')}:00 UTC window</option>`).join('')}</select>
         <button class="act" id="sov-build">build a stronghold ($${fmt(sov.buildCost || 250000)})</button></div>` : ''}
       <div class="d" style="margin-top:4px"><a href="#" id="sov-lb-link">the sovereignty board →</a></div>
-      <div id="sov-lb"></div>
+      <div id="sov-lb"></div>`,
+        (sov.structures || []).some((s) => s.vulnerable))}
 
-      <h2 style="margin-top:12px">The Commission ${mySeat ? `<span class="chip good">seated — #${(com.seats || []).indexOf(mySeat) + 1}</span>` : '<span class="chip">no seat</span>'}</h2>
+      ${sect('fam-commission', `The Commission ${mySeat ? '· seated #' + ((com.seats || []).indexOf(mySeat) + 1) : '· no seat'}`, 'the five biggest families set a weekly decree over the whole city', `
       <div class="d" style="color:var(--dim);font-size:12.5px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
       <div class="grid" style="margin-top:4px">${(com.seats || []).map((s, i) => `
         <div class="card"><span class="t">#${i + 1} [${s.tag}] ${s.name}</span><div class="d">standing ${fmt(s.standing)} · weight ${s.weight}</div></div>`).join('')}</div>
       ${boss && mySeat ? `<div style="margin-top:6px">
         <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
         <button class="act" id="com-vote">cast the family's vote</button>
-        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}
+        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}`,
+        !!(boss && mySeat))}
 
-      <h2 style="margin-top:12px">The Foundation ${g.foundation ? `<span class="chip good">${g.foundation}</span>` : '<span class="chip">none</span>'}</h2>
+      ${sect('fam-foundation', `The Foundation ${g.foundation ? '· ' + g.foundation : ''}`, 'the family charity — public philanthropy that softens every member\'s RICO odds', `
       <div class="d" style="color:var(--dim);font-size:12.5px">the family charity — public philanthropy that launders the family's reputation: every member's RICO conviction odds ×${g.foundationBustMult ?? 1} AND their investigation meter cools ${g.foundationBleedMult ?? 1}× faster (keeps files thin)${g.foundationTier ? ` (tier ${g.foundationTier})` : ''}. Endowed from the $OMR reserve.</div>
       ${g.nextFoundation ? `<div class="card" style="margin-top:4px"><span class="t">Next: ${g.nextFoundation.name} — ${g.nextFoundation.omr} $OMR</span>
         <div class="d">${g.nextFoundation.blurb || ''} · softens odds ×${g.nextFoundation.bustMult}</div>
         ${boss ? `<button class="act" data-do="POST /v1/gangs/foundation">endow ${g.nextFoundation.name} (${g.nextFoundation.omr} $OMR from reserve)</button>` : '<span class="d" style="color:var(--dim)">the boss/underboss endows the foundation</span>'}</div>`
         : '<span class="d" style="color:var(--dim)">the family is the highest pillar of the community there is.</span>'}
       <div class="d" style="margin-top:4px"><a href="#" id="foundation-lb-link">the philanthropy leaderboard →</a></div>
-      <div id="foundation-lb"></div>
+      <div id="foundation-lb"></div>`)}
 
-      <h2 style="margin-top:12px">Family Regalia <span class="d" style="font-size:11px">(status badges bought from the $OMR reserve — the boss's call)</span></h2>
+      ${sect('fam-regalia', 'Family Regalia', 'status badges bought from the $OMR reserve — the boss\'s call', `
       <div class="card"><span class="t">Seal: ${g.seal || 'none'}</span>
         ${g.nextSeal ? (boss ? `<button class="act" data-do="POST /v1/gangs/vanity/seal">commission the ${g.nextSeal.name} (${g.nextSeal.omr} $OMR)</button>` : '<span class="d" style="color:var(--dim)"> — the boss commissions seals</span>') : '<span class="chip good"> Obsidian — the finest seal in the city</span>'}</div>
       ${boss ? `<div class="card" style="margin-top:6px"><span class="t">Crest &amp; Name</span>
         <div style="margin-top:4px"><input id="crest-color" placeholder="#rrggbb" size="9"> <button class="act" id="crest-go">recolor the crest (10 $OMR)</button></div>
-        <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (25 $OMR)</button></div></div>` : ''}
+        <div style="margin-top:4px"><input id="fam-rename" placeholder="new family name" size="16"> <input id="fam-retag" placeholder="TAG" size="5" maxlength="4"> <button class="act" id="fam-rename-go">rename the family (25 $OMR)</button></div></div>` : ''}`)}
 
       <div style="margin-top:14px"><button class="act" data-do="POST /v1/gangs/leave" style="border-color:var(--blood)">walk away from the family</button></div>`;
+    wireSects(t);
     t.querySelectorAll('[data-spec]').forEach((b) => b.onclick = () => {
       const sel = $(`#spec-${b.dataset.spec}`); act('POST', `/v1/territory/${b.dataset.spec}/specialist`, { memberId: sel && sel.value }).then(() => renderFamily()); });
     t.querySelectorAll('[data-terrop]').forEach((b) => b.onclick = () => act('POST', `/v1/territory/${b.dataset.terrop}/op`, {}).then(() => renderFamily()));
@@ -3327,7 +3330,7 @@
         <button class="act" id="stake-out">unstake</button>
         <button class="act" data-do="POST /v1/claim-rewards">claim rewards</button></div>
 
-      <h2 style="margin-top:12px">Reserve Bonds <span class="d" style="font-size:11px">(deposit ETH → discounted, vested treasury $OMR — deepens the OMR-ETH pool)</span></h2>
+      ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested treasury $OMR — deepens the OMR-ETH pool', `
       <div class="card">
         <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
         <div class="d" style="color:var(--dim);font-size:11px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
@@ -3335,7 +3338,8 @@
           <button class="act" id="bond-submit" style="display:none;border-color:var(--neon)">submit on-chain with wallet</button>
           <div class="d" style="font-size:11px;color:var(--dim)">signs an EIP-712 BondQuote bound to your linked wallet, then your wallet (MetaMask / Robinhood Wallet) submits it to the OmertaBond contract (mainnet, dormant)</div>
           <pre id="bond-quote-out" style="display:none;white-space:pre-wrap;font-size:11px;background:#111;padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto"></pre></div>
-        ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>
+        ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>`,
+        (bd.yours || []).some((b) => b.claimableOmr > 0))}
 
       <h2 style="margin-top:12px">The Float <span class="d" style="font-size:11px">(BACKED stock — real tokenized shares the treasury holds, funded by the city's ETH taxes; burn earned $OMR to claim your allocation at the real market price)</span></h2>
       <div class="card">
@@ -3348,13 +3352,13 @@
         ${(vault.mine || []).length ? `<div class="d" style="margin-top:6px">your vaulted book: ${vault.mine.map((m) => `<b>${m.ticker}</b> ${m.units}u`).join(' · ')} <span class="chip good">BACKED</span></div>` : ''}
         <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
 
-      <h2 style="margin-top:12px">The Paper Book <span class="d" style="font-size:11px">(the status collection — buy with clean $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
+      ${sect('legit-paper', 'The Paper Book', `the status collection — buy with clean $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
         <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
           <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
           <div class="d">${m.blurb}</div>
           ${h ? `<div class="d">you hold <b>${h.shares}</b> · book $${fmt(h.bookValue)}</div>` : ''}
-          <input data-rwaamt="${m.ticker}" placeholder="$OMR" size="7"> <button class="act" data-rwabuy="${m.ticker}">invest</button></div>`; }).join('')}</div>
+          <input data-rwaamt="${m.ticker}" placeholder="$OMR" size="7"> <button class="act" data-rwabuy="${m.ticker}">invest</button></div>`; }).join('')}</div>`, true)}
 
       ${pf.family ? `
       <h2 style="margin-top:12px">${pf.family.fundName ? pf.family.fundName : 'The Family Book'} <span class="d" style="font-size:11px">(${pf.family.name} — a seize-resistant flex, bought from the reserve)</span>
@@ -3370,18 +3374,19 @@
         ${pf.family.dividend ? `<div class="d" style="margin-top:6px">family dividend: a daily yield to the reserve (funded by family investing).${pf.family.dividend.claimable ? '' : pf.family.dividend.cooldownSeconds ? ` next in ${mins(pf.family.dividend.cooldownSeconds)}` : ''}</div>
           ${pf.family.dividend.claimable ? `<button class="act" id="fam-div" style="border-color:var(--neon)">draw the family dividend (~${fmt(pf.family.dividend.estimate)} $OMR)</button>` : ''}` : ''}</div>` : ''}
 
-      <h2 style="margin-top:12px">Biggest Books</h2>
+      ${sect('legit-boards', 'The Boards', 'the biggest personal books + family funds in the city', `
+      <h2 style="font-size:14px">Biggest Books</h2>
       <div class="grid">${(lb.board || []).slice(0, 8).map((row, i) => `
         <div class="card"><span class="t">#${i + 1} ${row.name || 'a ghost'}</span> <span class="d">$${fmt(row.bookValue)}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no books yet — be the first to go legit</span>'}</div>
-
-      <h2 style="margin-top:12px">Biggest Family Funds <span class="d" style="font-size:11px">(a dynasty's collective book — war-proof, boss-built)</span></h2>
+      <h2 style="margin-top:10px;font-size:14px">Biggest Family Funds <span class="d" style="font-size:11px">(a dynasty's collective book — war-proof, boss-built)</span></h2>
       <div class="grid">${(flb.board || []).slice(0, 8).map((row, i) => `
         <div class="card"><span class="t">#${i + 1} ${row.name || 'a family'}</span> ${row.crest ? `<span class="chip good">★ ${row.crest}</span>` : ''}
-          <span class="d">$${fmt(row.bookValue)}${row.dynasty && row.family !== row.name ? ` · ${row.family}` : ''}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no family funds yet</span>'}</div>
+          <span class="d">$${fmt(row.bookValue)}${row.dynasty && row.family !== row.name ? ` · ${row.family}` : ''}</span></div>`).join('') || '<span class="d" style="color:var(--dim)">no family funds yet</span>'}</div>`)}
 
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Earned exposure (never bought a spin): a completed crew score parks a legit AAPL cut · the season's top grinder wins SPCX at rollover.
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
+    wireSects(t);
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
     t.querySelectorAll('[data-vaultbuy]').forEach((b) => b.onclick = () =>
       act('POST', '/v1/vault/claim', { ticker: b.dataset.vaultbuy, omr: Number(t.querySelector(`[data-vaultamt="${b.dataset.vaultbuy}"]`).value) }).then(() => renderPortfolio()));
