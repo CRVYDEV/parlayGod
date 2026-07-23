@@ -4118,3 +4118,49 @@ Stable(4)-vs-Boxing(3) cap asymmetry, and the i18n prose-translation product cal
 `AUDIT-full-product.md` for decision.
 
 **Round 3 (the coverage boundary, closed):** a dedicated lens exhaustively traced the four surfaces Lens H had not line-traced — casino stateful blackjack + heads-up poker (paid-once, den-book identity exact, 7-card evaluator verified, no hole-card leak), pen.executeBreak (lock order acyclic, rat relief-only, self-healing), world co-op raid + frontier (cartel_damage==Σ world:raid, §10.4-neutral), economy swap/stake (AMM k both ways, sell surcharge net-0 no rounding leak, pool-capped stake). **CLEAN — no bug.** Net across 3 rounds / 9 lenses: no CRITICAL, no HIGH open, every confirmed finding fixed; remaining opens are founder economy sign-offs + the i18n prose-translation call.
+
+**THE FIVE PILLARS — a five-system content expansion (Fable / EU4 / EVE / RuneScape) — BUILT**
+(`omerta-five-pillars-design.md`; `src/honor.js` `src/diplomacy.js` `src/sov.js` `src/campaigns.js`
+`src/bloodline.js`; `test/expansion.js` — the 34th suite; suite 34/34 + sim drift-0). Five interlocking
+systems, honor first since the others gate on it. **#1 HONOR ↔ INFAMY** (Fable) — a `characters.honor`
+NUMERIC identity axis (−100..+100) moved by DEEDS: repay a loan +2, save a principal as a bodyguard +8,
+settle a vendetta +10; welsh −15, rat −30, shank −12, npc-hit −5, oathbreak −20. Two TEETH:
+**Man of Honor** (≥60) lays low cheaper (`HONOR.LAYLOW_MULT` 0.9 in `kitchen.js`); **Mad Dog** (≤−60)
+gets no bodyguard (`hireBodyguard` throws `mad_dog`) AND is locked out of diplomacy. The heir echoes
+`HEIR_KEEP` (0.25) of the dead street's honor. Honor is written by DIRECT SQL (`bumpHonor` — absolute
+clamped, off persistCharacter's positional UPDATE, the active_at discipline; NUMERIC → pg-mem-safe) and
+is a PURE STATUS axis outside §10.4. **#2 DIPLOMACY & COALITIONS** (EU4, `src/diplomacy.js`) — family
+PACTS (`proposePact`/`acceptPact` block `declareWar` with `pact`; `breakPact` = the OATHBREAK: an honor
+hit + a marked `oathbreaker_until` window) + anti-hegemon COALITIONS (`formCoalition`/`join`/`leave`)
+against a DOMINANT family (≥`DOMINANCE_DISTRICTS` core turf OR ≥2× the runner-up's standing) — a coalition
+member fights the hegemon at `COALITION_WAR_MULT` 0.5 war-chest + `COALITION_SEIZE_MULT` 0.85 seize (the
+discounted number is the one ledgered). Mad Dog can't pact or coalition. `sweepDiplomacy` reaps lapsed
+rows. Two-party pact locks are sorted; the discounts fold into `social.js` declareWar/seizeDistrict.
+**#3 SOVEREIGNTY** (EVE, `src/sov.js`) — one STRONGHOLD per held district (build/upgrade from the
+treasury — `sov:` treasury SINKS, NO faucet) with a chosen daily 2h UTC **vulnerability window**; a rival
+boss `siegeSov`s a vulnerable hold (chest burns win or lose — the npchit-fee posture; a win knocks a tier
+off + scores `sov_points`, razed at 0 — DESTRUCTION, never a transfer, anti-snowball). EU4
+**overextension** upkeep (every extra district inflates the whole empire's pad rate superlinearly). Seize
+razes the stronghold; dissolution cleans it. `sov_points` is a status leaderboard. Lock order: char → OWN
+gang → the sov row (the DEFENDER's gang never locked — the convoy-manifest discipline). **#4 UNDERWORLD
+CAMPAIGNS** (RuneScape+Fable, `src/campaigns.js`) — the game's first AUTHORED narrative: 5 quest chains
+(`CAMPAIGNS`, one per fixer) with task-steps that advance on the Underworld ACTION stream
+(`advanceCampaignsInline` in `game.js` bumpStanding — the errand-chain precedent) + Fable honor-vs-cash
+CHOICE branches; a once-per-street reward (`campaign:reward` — a character_id'd cash FAUCET at mission
+scale + the branch's cash sweetener, honor, fixer standing, a title). `campaign_progress` dies with the
+street (a fresh street re-walks the stories). **#5 THE BLOODLINE** (Fable+EU4, `src/bloodline.js`) — a
+death record per generation (`recordDeath` in `runEstate` BEFORE the wipe, account-level → survives), an
+ancestral hall (`bloodlineBoard` — Roman numerals + epithets + cause + a dynasty SCORE) and a great-houses
+leaderboard. §10.4: `sov:`/`campaign:` joined the cash `KNOWN_REASONS`; the treasury check gained `sovOut`
+(sink). Honor / sov points / bloodline score are pure STATUS axes (outside the conservation set). Fixed a
+real faucet bug the reconcile test caught — `campaign:reward` was ledgered with a NULL character_id
+(excluded from the per-character cash check); now carries `characterId`. pg-mem: the coalition correlated
+subqueries + the bloodline GROUP-BY aggregate rewritten as flat queries (the /v1/gangs precedent).
+Console: The Life tab gained an honor line + THE FIXERS' STORIES + THE BLOODLINE hall; the Family
+dashboard gained DIPLOMACY (pacts/coalitions) + SOVEREIGNTY (strongholds/sieges/leaderboard). `/v1/rules`
+gained honor/diplomacy/sov/campaigns blocks; routes after `/v1/wage`; `test/migrate.js` DISPOSITION guards
+`campaign_progress`. ALL numbers (honor deltas/tiers, DIPLOMACY/SOV/CAMPAIGN levers) are founder sign-off
+levers. `test/expansion.js` proves the honor axis+tiers+teeth+echo, pacts (propose/accept/block-war/
+oathbreak), coalitions (dominance gate + halved war chest), sovereignty (build/upgrade/siege-in-window +
+sov points), campaigns (gate/action-advance/choose/claim-once), the bloodline (record + heir echo + hall),
+and §10.4 (vocabulary closed + the sink/faucet ledger exactly — a before/after delta of 0).

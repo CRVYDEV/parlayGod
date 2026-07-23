@@ -110,7 +110,10 @@ cash), each wrapped in narrative prose the board renders.
   steps each with one choice.
 
 §10.4: `campaign:` joins the cash vocabulary as an enumerated faucet (character_id'd → check (a)
-reconciles). Magnitude: ≈ one mission tier (~$8–15k once per street per chain) — flagged.
+reconciles). Magnitude: ≈ one mission tier — base reward $9k–$12k/chain PLUS the ruthless-branch cash
+sweetener ($4k–$10k, always paired with a NEGATIVE honor cost so ruthless cash is never free), so
+$9k–$22k/chain, ~$88.5k total across all five chains, ONCE PER STREET (dies with the man) — flagged for
+sim + BALANCE.md sign-off.
 
 ## 5 · THE BLOODLINE (Fable legacy × EU4 succession) — `src/bloodline.js`
 
