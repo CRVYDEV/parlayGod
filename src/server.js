@@ -263,7 +263,11 @@ export async function buildServer() {
     // each connect still does a real jwt.verify + socket churn. Bound the pre-auth upgrade per-IP too.
     if (rateLimitsEnabled() && (req.method === 'GET' || req.method === 'HEAD')
       && (req.url.startsWith('/card/') || req.url.startsWith('/u/') || req.url.startsWith('/v1/u/')
-          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws'))) {
+          || req.url.startsWith('/v1/art/') || req.url.startsWith('/v1/landmarks') || req.url.startsWith('/v1/ws')
+          // (D1) the OAuth callback is a keyless GET that does real per-hit work (oauth_states DELETE +
+          // an outbound X token/user fetch); the POST-only auth limiter + the token-gated read limiter
+          // both skip it, so throttle it here with the other keyless heavy GETs.
+          || req.url.startsWith('/v1/auth/x/callback'))) {
       const limited = await checkPublicRateLimit({ ip: req.ip });
       if (limited) return reply.code(429).header('retry-after', limited.retryAfter)
         .send({ error: 'rate_limited', retryAfter: limited.retryAfter });
@@ -359,10 +363,9 @@ export async function buildServer() {
   });
   const providerLogin = (verify) => async (req) => {
     const identity = await verify(req.body?.token);
-    const existing = (await pool.query('SELECT id FROM accounts WHERE auth_provider=$1 AND auth_subject=$2',
-      [identity.provider, identity.subject])).rows[0];
-    if (!existing) await A.consumeInvite(pool, req.body?.inviteCode); // invites gate NEW accounts only
-    const { accountId, created } = await A.accountForIdentity(pool, identity, req.ip || '0.0.0.0');
+    // (B2) the invite is consumed ATOMICALLY inside accountForIdentity's create txn — one invite per
+    // new account, gate held even under a concurrent same-identity race (no separate pre-consume).
+    const { accountId, created } = await A.accountForIdentity(pool, identity, req.ip || '0.0.0.0', req.body?.inviteCode);
     return { token: app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }), created };
   };
   app.post('/v1/auth/x', providerLogin(A.verifyX));
@@ -399,10 +402,8 @@ export async function buildServer() {
         await A.upgradeAccount(pool, r.accountId, r.identity);
         return reply.redirect('/#claimed=x');
       }
-      const existing = (await pool.query('SELECT id FROM accounts WHERE auth_provider=$1 AND auth_subject=$2',
-        [r.identity.provider, r.identity.subject])).rows[0];
-      if (!existing) await A.consumeInvite(pool, r.invite); // invites gate NEW accounts only
-      const { accountId } = await A.accountForIdentity(pool, r.identity, req.ip || '0.0.0.0');
+      // (B2) invite consumed atomically inside accountForIdentity's create txn — gate held under races
+      const { accountId } = await A.accountForIdentity(pool, r.identity, req.ip || '0.0.0.0', r.invite);
       return reply.redirect(`/#token=${encodeURIComponent(app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }))}`);
     } catch (e) {
       const code = e instanceof G.GameError ? e.code : 'oauth_failed';
@@ -1584,13 +1585,18 @@ export async function buildServer() {
     'POST /v1/world/:id/raid': ['world', 'raided a cartel outfit'],
     'POST /v1/world/raids/:id/go': ['world', 'led a crew raid on a cartel'],
   };
+  // (B3) FIFO-bound the two in-process caches so a long-lived API process can't grow them without
+  // limit (one entry per account ever seen). A Map preserves insertion order, so evict the oldest
+  // key once over the cap — the caches are best-effort (a 60s name cache / a 2s flood brake), so
+  // dropping the coldest entry is harmless.
+  const capMap = (m, cap = 20000) => { while (m.size > cap) m.delete(m.keys().next().value); };
   const actorNames = new Map(); // accountId -> { name, at } (60s cache — one indexed read per miss)
   const actorName = async (accountId) => {
     const hit = actorNames.get(accountId);
     if (hit && Date.now() - hit.at < 60000) return hit.name;
     const r = (await pool.query('SELECT name FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
     const name = r?.name || null;
-    actorNames.set(accountId, { name, at: Date.now() });
+    actorNames.set(accountId, { name, at: Date.now() }); capMap(actorNames);
     return name;
   };
   app.addHook('onResponse', async (req, reply) => {
@@ -1622,7 +1628,7 @@ export async function buildServer() {
     // the flood brake LAST — semantic errors surface first, and only a landed line arms it
     const last = lastChatAt.get(req.user.sub) || 0;
     if (Date.now() - last < 2000) throw new G.GameError('slow_down', 'easy — one line at a time');
-    lastChatAt.set(req.user.sub, Date.now());
+    lastChatAt.set(req.user.sub, Date.now()); capMap(lastChatAt);
     const channel = family ? ch.gang_id : 'city';
     const id = crypto.randomUUID();
     await pool.query('INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,$4,$5)',

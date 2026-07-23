@@ -45,9 +45,37 @@ export async function emittedThisEpoch(pool, epoch) {
 // characters whose snapshot is stamped `epoch-1`; every processed character is re-stamped `epoch`,
 // so a second run the same day finds nobody. A character with no snapshot yet (fresh street, or
 // the feature just shipped) is ENROLLED this epoch and can earn from the next one.
+// Advisory-lock namespace for the wage epoch — the two-int form (classid, objid=epoch) so it can
+// never collide with the single-arg schema boot lock (db.js SCHEMA_LOCK_KEY). 0x5741 = "WA".
+const WAGE_LOCK_CLASS = 0x5741;
+
 export async function runWageEpoch(pool, opts = {}) {
   const epoch = opts.epoch ?? emissionEpochOf();
   const budget = opts.budget ?? epochBudget(epoch);
+  // Cross-PROCESS single-execution for this epoch. guardedTick only bounds IN-process overlap, so
+  // two worker replicas (or a mod-fired run alongside the scheduled tick) could each read
+  // emittedThisEpoch=0 pre-commit and both pay up to the budget — a SILENT per-epoch overrun the
+  // lifetime-endowment invariant can't see (it only bounds the total). A SESSION advisory lock held
+  // on a dedicated connection across the whole run serializes the replicas; a crashed run releases
+  // it when its session ends, so a resume still runs and tops up toward the budget (the
+  // emittedThisEpoch design is preserved). pg-mem (no DATABASE_URL) is single-process → no lock.
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [WAGE_LOCK_CLASS, epoch])).rows[0].ok;
+    if (!got) { lockConn.release(); return { epoch, budget, payable: 0, paid: 0, workers: 0, candidates: 0, skipped: 'locked' }; }
+  }
+  try {
+    return await runWageEpochInner(pool, opts, epoch, budget);
+  } finally {
+    if (lockConn) {
+      await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [WAGE_LOCK_CLASS, epoch]).catch(() => {});
+      lockConn.release();
+    }
+  }
+}
+
+async function runWageEpochInner(pool, opts, epoch, budget) {
   // lifetime ceiling: what's already minted leaves this much endowment room
   const room = Math.max(0, EMISSION.ENDOWMENT_OMR - (await emittedTotal(pool)));
   // per-epoch ceiling that SURVIVES a mid-epoch crash: subtract what this epoch already minted, so a
