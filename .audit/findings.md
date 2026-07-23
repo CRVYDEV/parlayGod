@@ -71,3 +71,16 @@ SOLID (verified): coach never dead-ends, Path card fixed, route/field names matc
 DEFERRED (flagged for founder): C3 (i18n prose translation — large content task ×15 langs, quality risk; chrome is translated, body/prose is English by documented design), C7 (feed templates — stitcher already legible), C8 (Last Word raw JSON — power-user surface), C11 (cb/ammo Exchange deck-only), C12 (breed foal dropdowns — clean server reject), C16 (garrison prompt() → inline).
 
 ## ROUND 2 LENSES (launched): F gameplay-flow/completeness, G economy-balance, H broad correctness sweep.
+
+## ROUND 2 RESULTS
+### Lens F — gameplay flow/completeness (2 HIGH, fixed)
+- [x] F1 (HIGH): coach First-Week rung (game.js:523) masked all mid-game rungs + was uncompletable on default SOCIAL_VERIFY_MODE=off (3 socials + wallet throw). FIXED: gate on the 5 gameplay onboard tasks only; socials/wallet optional; broadened the earner check (rackets/assets/fighters/speakeasy) + added a lvl-3 racket rung + reworded so fronts aren't promised before L15.
+- [x] F2 (HIGH): death moment invisible — heir auto-created in the estate txn, client never hit screen-create, report.kept/lost had no consumer, no estate/vendetta feedText. FIXED: death/heir modal driven off the estate event through feedLine (delivery-once safe, deduped per generation) + estate/vendetta feedText handlers. Verified e2e (mod-kill → modal).
+### Lens G — economy balance (all founder sign-off, ground rule #1 — RECOMMENDATIONS not changes)
+- HIGH: passive fronts ~$49M/day maxed stack ≫ active loops ($200-420k/day) — already flagged (AUDIT-sim #1), under-measured (sim only probes laundromat t1). REC: add business-ladder sim probe; founder decides pad/cap.
+- MED: Port Deep Run (L32) strictly dominated by Open Water (L16) — $131k/day @30% caught vs $303k/day @3%. REC: raise deeprun.sell or drop patrol.
+- MED: territory types — Numbers ×1.0 lazy-dominates Protection/Smuggling for a daily collector. Partly addressed (protection retune). REC: client guidance "collect actively or pick Numbers".
+- LOW: STABLE_MAX 4 vs BOXING.STABLE_MAX 3 → +33% racing ceiling, same faucet. REC: align caps.
+- LOW/NOTE: Street Wage in-game trivial ($2.5k/day) — significance is real-money $OMR only.
+- Cosmetic: sim NOS comment contradicts its own +EV (doc fix).
+### Lens H — broad correctness sweep: CLEAN (no bugs). Coverage boundary: didn't exhaustively re-trace casino blackjack/poker in-hand, pen executeBreak, world co-op internals, economy swap/stake — flagged for a future pass.
