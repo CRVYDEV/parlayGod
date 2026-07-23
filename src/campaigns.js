@@ -58,9 +58,12 @@ export async function claimCampaign(ch, campaignId, client, h) {
   if (p.claimed) throw new GameError('claimed', 'You already collected on that one.');
   await client.query(
     'UPDATE campaign_progress SET claimed=true WHERE character_id=$1 AND campaign_id=$2', [ch.id, campaignId]);
-  // the branch's cash sweetener (the ruthless path pays) folds into the one ledger row
+  // the branch's cash sweetener (the ruthless path pays) folds into the one ledger row. Key it to the
+  // choice STEP that actually offered the branch (not a global id scan) so a future multi-choice chain
+  // reusing a branch id can't pay the wrong sweetener (audit LOW-4 hardening).
   const branchCash = p.branch
-    ? c.steps.filter((s) => s.choice).flatMap((s) => s.choice).find((b) => b.id === p.branch)?.cash || 0 : 0;
+    ? (c.steps.find((s) => s.choice?.some((b) => b.id === p.branch))?.choice
+        .find((b) => b.id === p.branch)?.cash || 0) : 0;
   const cash = Number(c.reward.cash || 0) + branchCash;
   if (cash > 0) {
     ch.cash = Number(ch.cash) + cash;

@@ -119,7 +119,17 @@ let gA, gB, bossA, bossB;
   await pool.query(`UPDATE gangs SET treasury=${discounted}, war_with=NULL, war_until=NULL WHERE id='${gA}'`);
   r = await call('POST', `/v1/gangs/war/${gB}`, { token: bossA.token });
   assert.equal(r.code, 200, `coalition member declares war at the discount: ${JSON.stringify(r.body)}`);
-  console.log('✓ coalitions: dominance gate + halved war chest');
+  // audit LOW-1 regression: the Mad Dog political lockout can't be dodged by ACCEPTING / JOINING
+  const dog = await mk('MdD'); const gDog = await found(dog.token, 'MDD');
+  await setHonor(dog.id, -80); // a mad dog
+  // someone offers the dog a pact — the dog can't accept it
+  await call('POST', `/v1/diplomacy/pact/${gDog}`, { token: cc.token });
+  r = await call('POST', `/v1/diplomacy/pact/${gC}/accept`, { token: dog.token });
+  assert.equal(r.body?.error, 'mad_dog', `a mad dog can't accept a pact: ${JSON.stringify(r.body)}`);
+  // and can't join the armed coalition either (gDog isn't its target, so only the mad_dog gate can stop it)
+  r = await call('POST', `/v1/diplomacy/coalition/${coalId}/join`, { token: dog.token });
+  assert.equal(r.body?.error, 'mad_dog', `a mad dog can't join a coalition: ${JSON.stringify(r.body)}`);
+  console.log('✓ coalitions: dominance gate + halved war chest + mad-dog lockout (accept/join)');
 }
 
 // ═══ #3 SOVEREIGNTY ═══
@@ -149,8 +159,27 @@ let gA, gB, bossA, bossB;
   assert.ok(r.body.sovPoints > 0, 'the raider scores sov points');
   const lb = (await call('GET', '/v1/leaderboard/sov', { token: rival.token })).body;
   assert.ok(lb.families.some((f) => f.tag === 'RVL' && f.points > 0), 'the raider is on the sov board');
+  // audit HIGH-1 regression: the cooldown is PER-ATTACKER. RVL just sieged (structure now tier 1, still
+  // standing) — RVL re-sieging is blocked by ITS cooldown, but a DIFFERENT family is NOT shielded by it.
+  r = await call('POST', '/v1/sov/docks/siege', { token: rival.token });
+  assert.equal(r.body?.error, 'cooldown', `the same family is throttled 24h: ${JSON.stringify(r.body)}`);
+  const rival2 = await mk('Rv2'); const gr2 = await found(rival2.token, 'RV2');
+  await pool.query(`UPDATE gangs SET treasury=200000 WHERE id='${gr2}'`);
+  await pool.query(`UPDATE characters SET loc='docks', muscle=30, cunning=20 WHERE id='${rival2.id}'`);
+  r = await call('POST', '/v1/sov/docks/siege', { token: rival2.token });
+  assert.equal(r.code, 200, `a DIFFERENT family isn't shielded by RVL's cooldown: ${JSON.stringify(r.body)}`);
+  assert.ok(r.body.win && r.body.razed, 'the second family razes the Outpost (no shared shield)');
+  // audit MED-1 regression: a siege can't be led from a safehouse (P1.3 — build a fresh Fort to hit)
+  await pool.query(`UPDATE districts SET holder_gang='${g}' WHERE id='canal'`);
+  await pool.query(`UPDATE gangs SET treasury=3000000 WHERE id='${g}'`);
+  await call('POST', '/v1/sov/canal/build', { token: boss.token, body: { windowHour: 3 } });
+  const safe = await mk('Saf'); const gsafe = await found(safe.token, 'SAF');
+  await pool.query(`UPDATE gangs SET treasury=200000 WHERE id='${gsafe}'`);
+  await pool.query(`UPDATE characters SET loc='canal', safe_until=now()+interval '1 hour' WHERE id='${safe.id}'`);
+  r = await call('POST', '/v1/sov/canal/siege', { token: safe.token });
+  assert.equal(r.body?.error, 'safe', `no siege from a safehouse: ${JSON.stringify(r.body)}`);
   delete process.env.SOV_SIEGE_P;
-  console.log('✓ sovereignty: build/upgrade/siege + sov points');
+  console.log('✓ sovereignty: build/upgrade/siege + sov points + per-attacker cooldown + safehouse gate');
 }
 
 // ═══ #4 CAMPAIGNS ═══
@@ -231,7 +260,7 @@ let gA, gB, bossA, bossB;
   // seed EVERYTHING (un-ledgered UPDATEs) BEFORE the snapshot, so the measured window contains ONLY the
   // ledgered new-reason actions → a correctly-ledgered sink/faucet moves the per-check drift by exactly 0.
   const boss = await mk('LedB'); const g = await found(boss.token, 'LDG');
-  await pool.query(`UPDATE districts SET holder_gang='${g}' WHERE id='canal'`);
+  await pool.query(`UPDATE districts SET holder_gang='${g}' WHERE id='brick'`);
   await pool.query(`UPDATE gangs SET treasury=3000000 WHERE id='${g}'`);
   const p = await mk('LedC');
   await pool.query(`INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ('${p.id}','armorer',30)`);
@@ -246,7 +275,7 @@ let gA, gB, bossA, bossB;
   const treasBefore = driftOf(before, 'gang treasuries');
 
   // the sov: sink — a ledgered treasury drain
-  let r = await call('POST', '/v1/sov/canal/build', { token: boss.token, body: { windowHour: 3 } });
+  let r = await call('POST', '/v1/sov/brick/build', { token: boss.token, body: { windowHour: 3 } });
   assert.equal(r.code, 200, `ledger sov build: ${JSON.stringify(r.body)}`);
   // the campaign: faucet — a ledgered character-cash credit at claim
   r = await call('POST', '/v1/campaigns/bella_daughter/claim', { token: p.token });

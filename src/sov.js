@@ -17,6 +17,11 @@ import { GameError, bus } from './game.js';
 import { SOV, sovRankOf, cityHourOf, DISTRICTS } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
+// actor-state gates (the raidRivalRacket/P1.3 set — you can't run a siege from lockup, a hospital
+// bed, or a safehouse). Local copies of the social.js one-liners (not exported there).
+const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 const tierOf = (s) => SOV.TIERS[Number(s.tier) - 1];
 const crumbling = (s, now = Date.now()) => now - new Date(s.upkeep_at).getTime() > SOV.CRUMBLE_MS;
 export const windowOpen = (s, now = Date.now()) => {
@@ -48,10 +53,15 @@ export async function sovGarrisonBonus(client, districtId) {
 // a seized district's stronghold is RAZED (the victor tears it down — never inherited; anti-snowball)
 export async function razeSov(client, districtId) {
   const r = await client.query('DELETE FROM sov_structures WHERE district_id=$1', [districtId]);
+  // the structure is gone → the contest resets: clear every attacker's cooldown on this district
+  // (a fresh stronghold built later isn't shielded by sieges of the razed one)
+  await client.query('DELETE FROM sov_siege_cooldowns WHERE district_id=$1', [districtId]);
   return r.rowCount > 0;
 }
 export async function dissolveSov(client, gangId) {
   await client.query('DELETE FROM sov_structures WHERE gang_id=$1', [gangId]);
+  // reap the dissolved family's siege cooldowns as an attacker (no ghost throttle when it re-forms)
+  await client.query('DELETE FROM sov_siege_cooldowns WHERE gang_id=$1', [gangId]);
 }
 
 export async function buildSov(ch, districtId, windowHour, client, h) {
@@ -125,13 +135,20 @@ export async function paySovUpkeep(ch, client, h) {
 export async function siegeSov(ch, districtId, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', 'A siege takes a family behind you.');
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss orders a siege.');
+  if (jailed(ch)) throw new GameError('jailed', 'Not from lockup.');
+  if (hospitalized(ch)) throw new GameError('hospitalized', "You're in no shape to lead a siege.");
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run a siege from a safehouse.");  // P1.3
   if (ch.loc !== districtId) throw new GameError('district', 'You lead a siege from their block, not from a barstool.');
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   const s = (await client.query('SELECT * FROM sov_structures WHERE district_id=$1 FOR UPDATE', [districtId])).rows[0];
   if (!s) throw new GameError('no_structure', 'Nothing stands there to tear down.');
   if (s.gang_id === h.owned.gangId) throw new GameError('own', 'Those are YOUR walls.');
   if (!windowOpen(s)) throw new GameError('window', 'The walls only crack in their vulnerability window.');
-  if (s.siege_cd_until && new Date(s.siege_cd_until) > new Date()) throw new GameError('cooldown', 'The dust from the last assault is still settling.');
+  // PER-ATTACKER cooldown (audit HIGH-1): each family is throttled 24h, but one family/alt can't burn
+  // the single daily slot to shield the hold from every OTHER attacker. Locked with the structure row.
+  const cd = (await client.query(
+    'SELECT cd_until FROM sov_siege_cooldowns WHERE district_id=$1 AND gang_id=$2 FOR UPDATE', [districtId, g.id])).rows[0];
+  if (cd && new Date(cd.cd_until) > new Date()) throw new GameError('cooldown', 'Your family already moved on those walls today.');
   if (Number(g.treasury) < SOV.SIEGE_COST) throw new GameError('treasury', `A siege takes a $${SOV.SIEGE_COST} war chest.`);
   // the chest burns WIN OR LOSE (the npchit-fee posture — aggression is never free)
   await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [g.id, SOV.SIEGE_COST]);
@@ -145,17 +162,22 @@ export async function siegeSov(ch, districtId, client, h) {
   const roll = Math.random();
   const win = roll < pEff;
   await h.rngLog(client, ch.id, `sov:siege:${districtId}`, roll, `${win ? 'breached' : 'repelled'} (P ${pEff.toFixed(3)}, tier ${tier})`);
+  // stamp THIS attacker's 24h cooldown win or lose (the npchit-cd posture — per (attacker, district))
+  const cdUntil = new Date(Date.now() + SOV.SIEGE_CD_MS);
+  await client.query(
+    `INSERT INTO sov_siege_cooldowns (district_id, gang_id, cd_until) VALUES ($1,$2,$3)
+       ON CONFLICT (district_id, gang_id) DO UPDATE SET cd_until=$3`, [districtId, g.id, cdUntil]);
   if (win) {
     const points = SOV.SOV_POINTS[tier] || 0;
     await client.query('UPDATE gangs SET sov_points=$2 WHERE id=$1', [g.id, Number(g.sov_points || 0) + points]);
-    if (tier <= 1) await client.query('DELETE FROM sov_structures WHERE district_id=$1', [districtId]);
-    else await client.query('UPDATE sov_structures SET tier=$2, siege_cd_until=$3 WHERE district_id=$1',
-      [districtId, tier - 1, new Date(Date.now() + SOV.SIEGE_CD_MS)]);
+    if (tier <= 1) {
+      await client.query('DELETE FROM sov_structures WHERE district_id=$1', [districtId]);
+      // razed → the contest resets: clear every attacker's cooldown (a rebuild isn't pre-shielded)
+      await client.query('DELETE FROM sov_siege_cooldowns WHERE district_id=$1', [districtId]);
+    } else await client.query('UPDATE sov_structures SET tier=$2 WHERE district_id=$1', [districtId, tier - 1]);
     bus.emit('streets', { type: 'sov_breached', gang: g.name, district: districtId, razed: tier <= 1 });
     return { ok: true, win: true, razed: tier <= 1, newTier: tier - 1, sovPoints: points, cost: SOV.SIEGE_COST };
   }
-  await client.query('UPDATE sov_structures SET siege_cd_until=$2 WHERE district_id=$1',
-    [districtId, new Date(Date.now() + SOV.SIEGE_CD_MS)]);
   ch.health = Math.max(1, Number(ch.health) - SOV.SIEGE_FAIL_DMG);
   return { ok: true, win: false, dmg: SOV.SIEGE_FAIL_DMG, cost: SOV.SIEGE_COST };
 }
@@ -168,10 +190,15 @@ export async function sovBoard(client, h) {
   const mult = h.owned.gangId ? await overextMult(client, h.owned.gangId) : 1;
   const myGang = h.owned.gangId
     ? (await client.query('SELECT sov_points FROM gangs WHERE id=$1', [h.owned.gangId])).rows[0] : null;
+  // the viewer's OWN per-attacker siege cooldowns (the retired structure column is no longer read)
+  const myCd = h.owned.gangId ? Object.fromEntries((await client.query(
+    'SELECT district_id, cd_until FROM sov_siege_cooldowns WHERE gang_id=$1', [h.owned.gangId])).rows
+    .map((r) => [r.district_id, r.cd_until])) : {};
   return {
     structures: rows.map((s) => {
       const tier = Number(s.tier);
       const t = tierOf(s);
+      const cd = myCd[s.district_id];
       return {
         district: s.district_id, gang: s.gang_name, tag: s.gang_tag, holderTag: s.gang_tag,
         mine: s.gang_id === h.owned.gangId,
@@ -180,8 +207,7 @@ export async function sovBoard(client, h) {
         windowOpen: windowOpen(s), vulnerable: windowOpen(s), crumbling: crumbling(s),
         nextTier: tier < SOV.TIERS.length ? { name: SOV.TIERS[tier].name, cost: SOV.TIERS[tier].cost } : null,
         upkeepOwed: s.gang_id === h.owned.gangId ? upkeepOwed(s, mult) : undefined,
-        siegeCdSeconds: s.siege_cd_until && new Date(s.siege_cd_until) > new Date()
-          ? Math.floor((new Date(s.siege_cd_until) - Date.now()) / 1000) : 0,
+        siegeCdSeconds: cd && new Date(cd) > new Date() ? Math.floor((new Date(cd) - Date.now()) / 1000) : 0,
       };
     }),
     family: myGang ? { points: Number(myGang.sov_points || 0), rank: sovRankOf(myGang.sov_points || 0).name } : null,

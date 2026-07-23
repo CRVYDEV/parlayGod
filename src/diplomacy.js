@@ -91,6 +91,7 @@ export async function proposePact(ch, targetGangId, client, h) {
 export async function acceptPact(ch, targetGangId, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', 'Treaties are family business.');
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss speaks for the family.');
+  if (isMadDog(ch)) throw new GameError('mad_dog', "No family shakes a mad dog's hand — accepting the pact doesn't dodge that.");
   const [id1, id2] = pair(h.owned.gangId, targetGangId);
   await client.query('SELECT id FROM gangs WHERE id=$1 FOR UPDATE', [id1]);
   await client.query('SELECT id FROM gangs WHERE id=$1 FOR UPDATE', [id2]);
@@ -151,6 +152,7 @@ export async function formCoalition(ch, targetGangId, client, h) {
 export async function joinCoalition(ch, coalitionId, client, h) {
   if (!h.owned.gangId) throw new GameError('no_gang', 'Coalitions are family business.');
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss commits the family.');
+  if (isMadDog(ch)) throw new GameError('mad_dog', "Nobody stands beside a mad dog — joining doesn't dodge that.");
   await client.query('SELECT id FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId]);
   const c = (await client.query('SELECT * FROM coalitions WHERE id=$1 AND expires_at > now() FOR UPDATE', [coalitionId])).rows[0];
   if (!c) throw new GameError('no_coalition', 'That coalition has dissolved.');

@@ -1679,7 +1679,18 @@ CREATE TABLE IF NOT EXISTS sov_structures (
   window_hour INT NOT NULL DEFAULT 0,            -- UTC hour the 2h vulnerability window opens
   built_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   upkeep_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  siege_cd_until TIMESTAMPTZ
+  siege_cd_until TIMESTAMPTZ                       -- legacy (retired): the cooldown is now PER-ATTACKER
+);
+
+-- #3 SOVEREIGNTY — the siege cooldown is scoped PER (attacker gang, district), NOT per structure,
+-- so one family (or a friendly alt) can't burn the single daily window/24h slot to SHIELD a hold
+-- from every other attacker (audit HIGH-1). Each attacker is still throttled 24h; a hated hegemon
+-- still faces many families' sieges (the anti-snowball contest). Cleared when the structure is razed.
+CREATE TABLE IF NOT EXISTS sov_siege_cooldowns (
+  district_id TEXT NOT NULL,
+  gang_id TEXT NOT NULL,                           -- the ATTACKER
+  cd_until TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (district_id, gang_id)
 );
 
 -- #4 CAMPAIGNS — authored quest chains from the Underworld fixers. Progress advances on the
