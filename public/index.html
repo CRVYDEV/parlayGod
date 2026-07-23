@@ -500,6 +500,12 @@
   <div style="margin-top:14px;text-align:right"><button class="act" id="welcome-go" style="font-size:15px;padding:10px 22px">STEP OUT →</button></div>
 </div></div>
 
+<!-- the death / heir moment (F2) — the "play for keeps" beat, shown the turn a street dies -->
+<div id="deathmodal" class="modal-bg hidden"><div class="modal">
+  <div id="death-body"></div>
+  <div style="margin-top:14px;text-align:right"><button class="act" id="death-go" style="font-size:15px;padding:10px 22px">THE HEIR RISES →</button></div>
+</div></div>
+
 <!-- the wallet picker (EIP-6963 multi-wallet discovery: MetaMask, Robinhood Wallet, Coinbase, …) -->
 <div id="walletpick" class="modal-bg hidden"><div class="modal">
   <h2>CHOOSE A WALLET</h2>
@@ -1031,6 +1037,7 @@
   $('#glossary-close').onclick = () => $('#glossary').classList.add('hidden');
   $('#glossary').onclick = (e) => { if (e.target.id === 'glossary') $('#glossary').classList.add('hidden'); };
   $('#welcome-go').onclick = () => { localStorage.setItem('omerta_welcomed', '1'); $('#welcome').classList.add('hidden'); setTab('start'); };
+  $('#death-go').onclick = () => { $('#deathmodal').classList.add('hidden'); setTab('streets'); };
 
   // the sheet stays honest on its own: countdowns and accrual don't wait for a click
   setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); pollOnline(); } }, 30000);
@@ -1049,7 +1056,36 @@
 
   async function refresh() {
     const r = await api('GET', '/v1/me');
-    if (r.code < 400) { me = r.body.character || r.body; renderSheet(); applyTabVisibility(); }
+    if (r.code < 400) {
+      const prevGen = me?.generation; // (F2) capture before the reassign — a bump means the street died
+      me = r.body.character || r.body;
+      renderSheet(); applyTabVisibility();
+      // a generation bump = the street died while we were online. The estate notification is still
+      // undelivered (/v1/notifications is one-shot), so pull it in — feedLine routes `estate` to showDeath.
+      if (prevGen != null && me.generation > prevGen) backfillFeed();
+    }
+  }
+  // (F2) the death/heir moment — the client never hits screen-create on death (the estate txn auto-
+  // creates the heir), so this is the "play for keeps" beat. Rendered from the estate report as it
+  // flows through feedLine (delivery is one-shot — never re-fetched); deduped per generation so a
+  // reload or a second refresh can't re-pop it.
+  function showDeath(rep = {}) {
+    if (!me || Number(localStorage.getItem('omerta_death_seen') || 0) >= Number(me.generation || 0)) return;
+    localStorage.setItem('omerta_death_seen', String(me.generation || 0));
+    const k = rep.kept || {}, l = rep.lost || {};
+    const line = (v, s) => (v ? `${s}<br>` : '');
+    const body = $('#death-body'); if (!body) return;
+    body.innerHTML = `
+      <h2 style="color:var(--blood)">YOUR STREET IS DEAD</h2>
+      <p class="dim">${rep.by ? `Put in the ground by <b>${esc(rep.by)}</b>.` : 'The city took its due.'} But the name lives on — your bloodline rises again as <b>${esc(me.name)}</b>, generation ${me.generation}.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
+        <div style="flex:1;min-width:150px"><div class="t" style="color:var(--ok)">the heir KEEPS</div>
+          <div class="dim" style="font-size:13px">${line(k.omr, `${fmt(Math.floor(k.omr || 0))} $OMR liquid`)}${line(k.staked, `${fmt(Math.floor(k.staked || 0))} staked`)}${line(k.gear, `${k.gear} on-chain gear`)}${line(k.prestige, `prestige ${k.prestige}`)}${line(k.portfolio, `$${fmt(k.portfolio)} legit book`)}${line(k.estate, `the ${esc(String(k.estate))}`)}the account, always</div></div>
+        <div style="flex:1;min-width:150px"><div class="t" style="color:var(--blood)">the street LOST</div>
+          <div class="dim" style="font-size:13px">${line(l.cash, `$${fmt(l.cash || 0)} pocket cash`)}${line(l.cars, `${l.cars} car(s)`)}${line(l.guns, `${l.guns} gun(s)`)}${line(l.rackets, `${l.rackets} racket(s)`)}${line(l.assets, `${l.assets} asset(s)`)}level ${l.lvl || '?'} — you start again at 1</div></div>
+      </div>
+      <p class="dim" style="margin-top:8px">Play like it counts. Bank your cash. Don't carry a body you can't answer for.</p>`;
+    $('#deathmodal').classList.remove('hidden');
   }
 
   // ── the sheet ──
@@ -3437,6 +3473,8 @@
       vendetta_settled: () => `a vendetta was settled in blood`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
+      estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,
+      vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       chat: () => `${d.who}: ${d.text}`,
     };
     if (T[t]) { try { return T[t](); } catch { /* fall through */ } }
@@ -3446,6 +3484,9 @@
   }
   function feedLine(channel, ev) {
     if (channel === 'hello') { statusLine('— you are on the wire —'); return; }
+    // (F2) the estate report flows through here on death (backfill on load, or the gen-bump re-backfill)
+    // — pop the death/heir modal from it (deduped per generation inside showDeath).
+    if (channel === 'me' && ev && ev.type === 'estate') showDeath(ev);
     if (channel === 'chat' || (channel === 'gang' && ev.type === 'chat')) { chatLine(channel === 'chat' ? 'city' : 'family', ev); return; }
     const f = $('#feed');
     const cat = channel === 'gang' ? 'family' : catOf(ev);
