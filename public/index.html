@@ -2135,6 +2135,9 @@
         your day: <b>buy goods where they're cheap, sell where they're rich</b> (the Streets tab trades them; convoys and
         boats move them in bulk), watch the <b>law line</b> before you do anything loud, and hit the <b>cartels</b> when
         their guard is down. The forecast is knowable — the sharp players plan around it.</div></div>
+      ${c.season && c.season.mod && c.season.mod.id !== 'dead_quiet' ? `
+        <div class="card" style="border-color:var(--blood,#8a2b2b)"><span class="t" style="color:var(--bad)">THIS SEASON: ${esc(c.season.mod.name.toUpperCase())}</span>
+          <div class="d">${esc(c.season.mod.blurb)} <span style="font-size:11px">(${c.season.daysLeft}d left — the rules snap back at rollover)</span></div></div>` : ''}
       <h2>Today's Conditions</h2>
       <div class="card"><span class="t">${c.event?.name || c.event?.id || '—'}</span>
         <div class="d">${c.event?.desc || ''}</div>

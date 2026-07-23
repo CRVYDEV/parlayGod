@@ -2695,3 +2695,30 @@ export const clueStepOf = (salt, step) => {
   return { district: d, window: w,
     riddle: (CLUES.RIDDLES[d] || `Dig in ${d}.`) + (w ? ` Come ${w.text}.` : '') };
 };
+
+// ═══ SEASONAL LEAGUE MODIFIERS (slate #6 — the PoE league twist). THE ONE DROP THAT TOUCHES
+// SIGNED LEVERS BY DESIGN: each 28-day season draws ONE modifier from this small founder-approved
+// pool, deterministically off the season index + MARKET_SEED (the §7.11 ethos — no state, no
+// cron; every touchpoint COMPOSES multiplicatively on an EXISTING modifier site, the decree
+// pattern, and the modified number is what's ledgered). ALL multipliers are sign-off levers;
+// one season in four is vanilla so the baseline stays felt. SEASON_MOD is a TEST-ONLY override. ═══
+export const SEASON_MODS = [
+  { id: 'dead_quiet', name: 'Dead Quiet', blurb: 'The city holds its breath. No twist this season — play it straight.' },
+  { id: 'the_crackdown', name: 'The Crackdown', blurb: 'The Bureau is everywhere. Cases build faster; the judges are cheap.',
+    lawGainMult: 1.25, laylowMult: 0.75 },
+  { id: 'blood_in_the_streets', name: 'Blood in the Streets', blurb: 'The knives are out. Kills loot deeper; going to ground costs more.',
+    lootMult: 1.15, safehouseMult: 1.25 },
+  { id: 'the_gold_rush', name: 'The Gold Rush', blurb: 'Trade fever. Every good sells rich — move freight while it lasts.',
+    tradeSellMult: 1.05 },
+];
+export const seasonIdxOf = (day = dayOf()) => Math.floor(day / 28);
+export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
+  const ov = process.env.SEASON_MOD; // TEST-ONLY (boot-guard listed)
+  if (ov != null) return SEASON_MODS.find((m) => m.id === ov) || SEASON_MODS[0];
+  // DORMANT until the founder arms it (SEASON_MODS=on, read per call — the SOCIAL_VERIFY_MODE
+  // posture): this is the one drop that twists SIGNED levers, so it ships vanilla until the
+  // pool is production-signed. Dormant == Dead Quiet everywhere.
+  if ((process.env.SEASON_MODS || 'off') !== 'on') return SEASON_MODS[0];
+  return SEASON_MODS[Math.floor(hash01(`seasonmod:${seasonIdx}:${MARKET_SEED}`) * SEASON_MODS.length)];
+};
+export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);

@@ -11,7 +11,7 @@ import {
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
   worldNpcOf, liberationCost, HONOR, DIPLOMACY,
-} from './rules.js';
+  seasonModOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
 import { releaseFrontierHolds, abandonRaidsAtDeath, outfitStrengthFrac } from './world.js';
@@ -1023,8 +1023,11 @@ export async function fire(ch, victim, client, h, rounds) {
     // stays out of reach. One ledger pair covers both legs (the character-cash check spans
     // cash+bank, so a single whack:loot row per side stays exact).
     const inTransit = Math.min(Math.floor(Number(victim.bank_intransit || 0)), Math.floor(Number(victim.bank)));
-    const pocketLoot = Math.floor(Number(victim.cash) * M3.CASH_LOOT_RATE);
-    const transitLoot = Math.floor(inTransit * M3.CASH_LOOT_RATE);
+    // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS loots deeper (clamped — never past half)
+    const seasonLootMult = seasonModOf().lootMult || 1;
+    const cashLootRate = Math.min(0.5, M3.CASH_LOOT_RATE * seasonLootMult);
+    const pocketLoot = Math.floor(Number(victim.cash) * cashLootRate);
+    const transitLoot = Math.floor(inTransit * cashLootRate);
     const loot = pocketLoot + transitLoot;
     if (loot > 0) {
       victim.cash = Number(victim.cash) - pocketLoot;      // the estate now burns only the remainder
@@ -1037,7 +1040,7 @@ export async function fire(ch, victim, client, h, rounds) {
     // …and liquid $OMR PLUS unbonding principal (the unstake exposure window). Staked stays the
     // untouchable safe harbour; extraction is what crosses the street.
     const liquid = Number(h.victimAcct.omr), unbonding = Number(h.victimAcct.unbonding || 0);
-    const omrLoot = Math.floor((liquid + unbonding) * M3.OMR_LOOT_RATE);
+    const omrLoot = Math.floor((liquid + unbonding) * Math.min(0.5, M3.OMR_LOOT_RATE * seasonLootMult));
     if (omrLoot > 0) {
       const fromLiquid = Math.min(omrLoot, liquid);
       h.victimAcct.omr = liquid - fromLiquid;
@@ -1150,8 +1153,10 @@ export async function enterSafehouse(ch, client, h) {
   // max(flat floor, cash+bank × SAFEHOUSE_NW_BPS). The flat $25k was ~0.25%/day for an endgame
   // landlord (the audit's safehoused-landlord stack); a % keeps the shield real for street
   // players and expensive for whales. Paid from pocket — going to ground takes walking money.
-  const cost = Math.max(M3.SAFEHOUSE_COST,
-    Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000));
+  // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS prices shelter up (composes like the decree)
+  const cost = Math.floor(Math.max(M3.SAFEHOUSE_COST,
+    Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
+    * (seasonModOf().safehouseMult || 1));
   if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'safehouse' });

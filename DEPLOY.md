@@ -99,3 +99,9 @@ break is closed; a proper FK/migration-tool pass remains an optional defense-in-
 Mainnet / on-chain extraction — `forge test` on a real toolchain, the third-party audit of the contracts
 **and** the off-chain signer, and legal counsel on the Risk-to-Earn / RWA line. See CLAUDE.md + `SIGN-OFF.md`.
 Founder balance sign-offs (`BALANCE.md` / `SIGN-OFF.md`) are numbers, not blockers, for the alpha.
+
+## 3c. Seasonal League Modifiers (slate #6) — DORMANT by default
+`SEASON_MODS=on` arms the once-per-season seed-drawn rule twist (the pool in `rules.js
+SEASON_MODS` — it deliberately modifies SIGNED levers: laylow, law-gain, kill loot, safehouse,
+goods sell). Leave UNSET until the founder signs the pool in BALANCE.md; unset = every season is
+"Dead Quiet" (the signed baseline). `SEASON_MOD=<id>` is a test-only pin — never in production.

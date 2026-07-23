@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -154,7 +154,9 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
     // speed the BLEED (foundationBleedMult, sourced from ctx.foundationTier — the family's lawyers keep
     // every member's file thin), so both PREVENT the case, not just soften a filed one. Composed.
     const enveloped = envelopeActive(ch, now.getTime());
-    const gain = Math.max(0, hv - LAW.WATCH) * cappedMin * LAW.EXPOSURE_RATE * evMult * (enveloped ? LAW.ENVELOPE_GAIN_MULT : 1);
+    // SEASONAL MODIFIER (slate #6): THE CRACKDOWN builds cases faster (composes like the envelope)
+    const gain = Math.max(0, hv - LAW.WATCH) * cappedMin * LAW.EXPOSURE_RATE * evMult * (enveloped ? LAW.ENVELOPE_GAIN_MULT : 1)
+      * (seasonModOf().lawGainMult || 1);
     const bleedMult = (enveloped ? LAW.ENVELOPE_BLEED_MULT : 1) * foundationBleedMult(ctx.foundationTier || 0);
     const bleed = dtMin * LAW.EXPOSURE_DECAY * bleedMult;
     ch.heat_exposure = Math.max(0, Number(ch.heat_exposure || 0) + gain - bleed);
