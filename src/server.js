@@ -367,6 +367,36 @@ export async function buildServer() {
   };
   app.post('/v1/auth/x', providerLogin(A.verifyX));
   app.post('/v1/auth/privy', providerLogin(A.verifyPrivy));
+  // ── ONE-CLICK X SIGN-IN (founder: no manual token pasting) — OAuth2 PKCE, server-side exchange.
+  // POST start (optionally authed → binds the state to the guest for a claim-in-place upgrade;
+  // the bearer never rides a URL) → the browser goes to X → GET callback exchanges the code
+  // server-side, then redirects home with the result in the URL FRAGMENT (never sent to servers/
+  // logs): #token= for a sign-in, #claimed=x for an upgrade, #autherr= on failure. DORMANT unless
+  // X_CLIENT_ID + PUBLIC_URL are set (the callback URL to register on the X app is PUBLIC_URL +
+  // /v1/auth/x/callback).
+  app.post('/v1/auth/x/start', async (req) => {
+    let accountId = null;
+    try { await req.jwtVerify(); accountId = req.user.sub; } catch { /* unauthed start = a fresh sign-in */ }
+    return A.xOAuthStart(pool, { accountId, invite: req.body?.inviteCode });
+  });
+  app.get('/v1/auth/x/callback', async (req, reply) => {
+    try {
+      const r = await A.xOAuthCallback(pool, { code: req.query?.code, state: req.query?.state });
+      if (r.purpose === 'upgrade' && r.accountId) {
+        await A.upgradeAccount(pool, r.accountId, r.identity);
+        return reply.redirect('/#claimed=x');
+      }
+      const existing = (await pool.query('SELECT id FROM accounts WHERE auth_provider=$1 AND auth_subject=$2',
+        [r.identity.provider, r.identity.subject])).rows[0];
+      if (!existing) await A.consumeInvite(pool, r.invite); // invites gate NEW accounts only
+      const { accountId } = await A.accountForIdentity(pool, r.identity, req.ip || '0.0.0.0');
+      return reply.redirect(`/#token=${encodeURIComponent(app.jwt.sign({ sub: accountId }, { expiresIn: '30d' }))}`);
+    } catch (e) {
+      const code = e instanceof G.GameError ? e.code : 'oauth_failed';
+      if (!(e instanceof G.GameError)) console.error('x oauth callback', e);
+      return reply.redirect(`/#autherr=${encodeURIComponent(code)}`);
+    }
+  });
   // guest → provider upgrade preserves the account row and everything on it (§4)
   app.post('/v1/auth/upgrade', { preHandler: auth }, async (req) => {
     const verify = req.body?.provider === 'x' ? A.verifyX
@@ -627,6 +657,8 @@ export async function buildServer() {
     walletConnect: process.env.WALLETCONNECT_PROJECT_ID
       ? { projectId: process.env.WALLETCONNECT_PROJECT_ID, chainId: Number(process.env.CHAIN_ID) || 1 }
       : null,
+    // one-click X sign-in (OAuth redirect): the console shows the button only when configured
+    auth: { xOAuth: A.xOAuthConfigured() },
 
     rackets: RACKETS.map((r) => ({ id: r.id, name: r.name, lvl: r.lvl, cost: r.cost, income: r.income, desc: r.desc })),
     assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),

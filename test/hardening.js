@@ -388,5 +388,37 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert.deepEqual(r.body.messages, [], 'gangless family-room read is empty, not an error');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked)`);
+// ── ONE-CLICK X SIGN-IN (OAuth2 PKCE redirect) — dormant without env; configured: /start mints a
+// single-use state + authorize URL, the callback rejects unknown/replayed states with a clean
+// fragment redirect (the token/e­rror rides the URL FRAGMENT, never a query the server would log). ──
+{
+  let r = await call('POST', '/v1/auth/x/start', { body: {} });
+  assert.equal(r.body.error, 'oauth_unconfigured', 'dormant without X_CLIENT_ID + PUBLIC_URL');
+  process.env.X_CLIENT_ID = 'test-client-id';
+  process.env.PUBLIC_URL = 'https://omerta.example';
+  const rules = await call('GET', '/v1/rules');
+  assert.equal(rules.body.auth.xOAuth, true, 'the rules surface flips on with the env');
+  r = await call('POST', '/v1/auth/x/start', { body: { inviteCode: 'ABC' } });
+  assert.equal(r.code, 200, 'start mints an authorize URL');
+  const u = new URL(r.body.url);
+  assert.equal(u.hostname, 'x.com', 'authorize lives on x.com');
+  assert.equal(u.searchParams.get('code_challenge_method'), 'S256', 'PKCE S256');
+  assert(u.searchParams.get('redirect_uri').endsWith('/v1/auth/x/callback'), 'the registered callback path');
+  const state = u.searchParams.get('state');
+  const row = (await pool.query('SELECT purpose, invite FROM oauth_states WHERE state=$1', [state])).rows[0];
+  assert(row && row.purpose === 'login' && row.invite === 'ABC', 'the state row persists the PKCE context');
+  // an AUTHED start binds the state to the guest account (the claim-in-place upgrade path)
+  const ghost = await mk('Oauth Ghost');
+  r = await call('POST', '/v1/auth/x/start', { token: ghost.token, body: {} });
+  const st2 = new URL(r.body.url).searchParams.get('state');
+  const row2 = (await pool.query('SELECT purpose, account_id FROM oauth_states WHERE state=$1', [st2])).rows[0];
+  assert(row2.purpose === 'upgrade' && row2.account_id, 'an authed start binds the guest for upgrade');
+  // the callback refuses an unknown state with a clean fragment redirect (no 500, nothing logged in a query)
+  const cb = await app.inject({ method: 'GET', url: '/v1/auth/x/callback?code=zzz&state=not-a-state' });
+  assert.equal(cb.statusCode, 302, 'callback redirects home');
+  assert(cb.headers.location.includes('#autherr=oauth_state'), 'the error rides the fragment');
+  delete process.env.X_CLIENT_ID; delete process.env.PUBLIC_URL;
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env)`);
 await app.close();

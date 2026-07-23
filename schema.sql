@@ -1613,3 +1613,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_chat_channel_at ON chat_messages (channel, at);
+
+-- ONE-CLICK X SIGN-IN: OAuth2 PKCE state (single-use, 15-min TTL, swept by the worker). An authed
+-- start binds the state to the guest account for a claim-in-place upgrade; the bearer never rides a URL.
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state TEXT PRIMARY KEY,
+  verifier TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  account_id TEXT,
+  invite TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -126,3 +126,62 @@ export async function consumeInvite(pool, code) {
   if (r.rowCount !== 1) throw new GameError('invite', 'This alpha is invite-only. Ask a made man for a code.');
   return true;
 }
+
+// ── ONE-CLICK X SIGN-IN (OAuth2 + PKCE, server-side code exchange) ─────────────────────────────
+// The "real path" the E-H1 audit prescribed: the console never handles a provider token. The
+// client asks /v1/auth/x/start for an authorize URL (the state + PKCE verifier persist in
+// oauth_states — the bearer never rides a URL, and an authed start binds the state to the guest
+// account for a claim-in-place upgrade); X redirects back to /v1/auth/x/callback, where the
+// SERVER exchanges the code (so the token was provably issued to OUR app — no confused deputy),
+// reads /2/users/me, and either upgrades the bound guest or signs the identity in. DORMANT unless
+// X_CLIENT_ID + PUBLIC_URL are set (register the X app's callback as PUBLIC_URL + the callback
+// path; X_CLIENT_SECRET optional — set it for a confidential client, omit for public PKCE).
+const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+export const xOAuthConfigured = () => !!(process.env.X_CLIENT_ID && (process.env.PUBLIC_URL || process.env.SOCIAL_GAME_URL));
+const xRedirectUri = () => `${(process.env.PUBLIC_URL || process.env.SOCIAL_GAME_URL || '').replace(/\/$/, '')}/v1/auth/x/callback`;
+
+export async function xOAuthStart(pool, { accountId = null, invite = null } = {}) {
+  if (!xOAuthConfigured()) throw new GameError('oauth_unconfigured', 'One-click X sign-in is not configured on this server.');
+  const state = b64url(crypto.randomBytes(24));
+  const verifier = b64url(crypto.randomBytes(48));
+  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+  await pool.query(
+    'INSERT INTO oauth_states (state, verifier, purpose, account_id, invite) VALUES ($1,$2,$3,$4,$5)',
+    [state, verifier, accountId ? 'upgrade' : 'login', accountId, invite ? String(invite).slice(0, 64) : null]);
+  const u = new URL('https://x.com/i/oauth2/authorize');
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('client_id', process.env.X_CLIENT_ID);
+  u.searchParams.set('redirect_uri', xRedirectUri());
+  u.searchParams.set('scope', 'users.read tweet.read');
+  u.searchParams.set('state', state);
+  u.searchParams.set('code_challenge', challenge);
+  u.searchParams.set('code_challenge_method', 'S256');
+  return { url: u.toString() };
+}
+
+// Returns { purpose, accountId, invite, identity } — the route decides upgrade vs login + signs.
+export async function xOAuthCallback(pool, { code, state }) {
+  if (!xOAuthConfigured()) throw new GameError('oauth_unconfigured', 'Not configured.');
+  // single-use: DELETE-returning claims the state atomically (a replayed callback finds nothing)
+  const st = (await pool.query(
+    'DELETE FROM oauth_states WHERE state=$1 AND created_at > $2 RETURNING verifier, purpose, account_id, invite',
+    [String(code ? state : ''), new Date(Date.now() - 15 * 60000)])).rows[0];
+  if (!st) throw new GameError('oauth_state', 'Sign-in expired or already used — try again.');
+  const form = new URLSearchParams({
+    grant_type: 'authorization_code', code: String(code),
+    client_id: process.env.X_CLIENT_ID, redirect_uri: xRedirectUri(), code_verifier: st.verifier,
+  });
+  const headers = { 'content-type': 'application/x-www-form-urlencoded' };
+  if (process.env.X_CLIENT_SECRET) {
+    headers.authorization = 'Basic ' + Buffer.from(`${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`).toString('base64');
+  }
+  const tok = await fetch('https://api.x.com/2/oauth2/token', { method: 'POST', headers, body: form });
+  const tj = await tok.json().catch(() => ({}));
+  if (!tok.ok || !tj.access_token) throw new GameError('oauth_exchange', 'X refused the sign-in — try again.');
+  const me = await fetch('https://api.x.com/2/users/me', { headers: { authorization: `Bearer ${tj.access_token}` } });
+  const mj = await me.json().catch(() => ({}));
+  if (!me.ok || !mj.data?.id) throw new GameError('oauth_me', 'X did not return a profile — try again.');
+  return { purpose: st.purpose, accountId: st.account_id, invite: st.invite,
+    identity: { provider: 'x', subject: String(mj.data.id) } };
+}
