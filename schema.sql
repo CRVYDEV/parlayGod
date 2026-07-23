@@ -1447,6 +1447,7 @@ CREATE TABLE IF NOT EXISTS bond_reserve (
   capacity_omr NUMERIC NOT NULL DEFAULT 0,   -- the budgeted OMR the treasury will bond out (set via mod/bond/fund)
   committed_omr NUMERIC NOT NULL DEFAULT 0,  -- Σ payout_omr of all bonds (invariant: ≤ capacity_omr)
   pol_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ POL share of bonded ETH (deepens the OMR-ETH pool on mainnet)
+  dev_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ dev share of bonded ETH (founder revenue — forwarded in-tx on-chain; recorded here)
   next_nonce BIGINT NOT NULL DEFAULT 1        -- monotonic quote-nonce allocator (OmertaBond's usedNonce space; independent of chain_reserve)
 );
 INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);

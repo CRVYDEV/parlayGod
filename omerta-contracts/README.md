@@ -50,9 +50,9 @@ const signature = await account.signTypedData({
 ### OmertaBond quote signing (backend `src/bonds.js` parity — mainnet wiring)
 The bond service signs `BondQuote`s the contract accepts; domain `OmertaBond`/`1`, chainId from the live
 chain (never hardcode), `verifyingContract` = the deployed `OmertaBond`. **On-chain/off-chain must not
-drift:** the contract's immutable `polBps` == the backend `BONDS.POL_BPS`, and `MAX_DISCOUNT_BPS` (2000) ==
+drift:** the contract's immutable `polBps`/`devBps` == the backend `BONDS.POL_BPS`/`BONDS.DEV_BPS`, and `MAX_DISCOUNT_BPS` (2000) ==
 `BONDS.MAX_DISCOUNT_BPS`. The backend prices `payout = principal × priceOmrPerEth / 1e18 × 1e4/(1e4−discountBps)`
-(the exact integer math the contract recomputes), watches `Bonded(bondId, payer, nonce, principal, payout,…)`
+(the exact integer math the contract recomputes), watches `Bonded(bondId, payer, nonce, principal, payout, toPol, toDev, toVig)`
 → `recordBond` (attributes/reconciles the bonder), and the `bond_reserve` tranche mirrors the on-chain
 `committedOMR ≤ omr.balanceOf(bond)` cap.
 ```ts

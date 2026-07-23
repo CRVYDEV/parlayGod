@@ -27,17 +27,19 @@ contract OmertaBondTest is Test {
     uint256 signerPk = 0xB0B;
     address signer;
     address payable pol = payable(makeAddr("pol"));
+    address payable dev = payable(makeAddr("dev"));
     address payable vig = payable(makeAddr("vig"));
     address bonder = makeAddr("bonder");
 
     uint256 constant TRANCHE = 100_000e18;   // OMR the Safe pre-funds for bonding
-    uint256 constant POL_BPS = 6000;          // 60% of ETH → POL (matches backend BONDS.POL_BPS)
+    uint256 constant POL_BPS = 5000;          // 50% of ETH → POL (matches backend BONDS.POL_BPS)
+    uint256 constant DEV_BPS = 2000;          // 20% → the dev wallet (founder revenue; the rest is the Vig)
     uint256 constant PRICE = 5000e18;         // 5000 OMR per 1 ETH
 
     function setUp() public {
         signer = vm.addr(signerPk);
         omr = new OMR(safe);
-        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, pol, vig, 0); // 0 = uncapped (existing tests)
+        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 0); // 0 = uncapped (existing tests)
         vm.prank(safe);
         omr.transfer(address(bond), TRANCHE); // fund the tranche (the pre-funded discipline)
         vm.deal(bonder, 100 ether);
@@ -72,8 +74,9 @@ contract OmertaBondTest is Test {
         assertEq(claimed, 0);
         assertEq(bond.committedOMR(), expect, "committed bumped");
         // the ETH was split + forwarded in the same tx; the contract custodies NOTHING
-        assertEq(pol.balance, 0.6 ether, "60% to POL");
-        assertEq(vig.balance, 0.4 ether, "40% to Vig");
+        assertEq(pol.balance, 0.5 ether, "50% to POL");
+        assertEq(dev.balance, 0.2 ether, "20% to the dev wallet");
+        assertEq(vig.balance, 0.3 ether, "30% to Vig");
         assertEq(address(bond).balance, 0, "contract holds no ETH");
         // NOTHING MINTED — the OMR still all exists; the payout is committed against the pre-funded tranche
         assertEq(omr.totalSupply(), 100_000_000e18);
@@ -238,7 +241,7 @@ contract OmertaBondTest is Test {
     function test_bond_reverts_if_eth_forward_fails() public {
         RejectETH2 rej = new RejectETH2();
         vm.prank(safe);
-        bond.setRecipients(payable(address(rej)), vig); // POL recipient rejects ETH
+        bond.setRecipients(payable(address(rej)), dev, vig); // POL recipient rejects ETH
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.ForwardFailed.selector);
@@ -267,7 +270,7 @@ contract OmertaBondTest is Test {
         ReenterOnPol rej = new ReenterOnPol();
         rej.set(bond);
         vm.prank(safe);
-        bond.setRecipients(payable(address(rej)), vig);
+        bond.setRecipients(payable(address(rej)), dev, vig);
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
         vm.prank(bonder);
         vm.expectRevert(OmertaBond.ForwardFailed.selector); // the re-entry reverts, swallowed → forward fails
@@ -309,12 +312,13 @@ contract OmertaBondTest is Test {
         assertEq(bond.owner(), safe);
         assertEq(bond.signer(), signer);
         assertEq(bond.polBps(), POL_BPS);
+        assertEq(bond.devBps(), DEV_BPS);
     }
 
     // ── the per-UTC-day cap (leaked-signer daily blast-radius backstop) ──
     function test_daily_cap_blocks_over_budget() public {
         // a fresh bond contract with a tight daily cap of 6,000 OMR
-        OmertaBond capped = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, pol, vig, 6_000e18);
+        OmertaBond capped = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 6_000e18);
         vm.prank(safe);
         omr.transfer(address(capped), TRANCHE); // fund the tranche generously — the CAP, not the tranche, must bind
         // 1 ETH @ 5000, 8% disc → payout ≈ 5,434 OMR — under the cap, accepted

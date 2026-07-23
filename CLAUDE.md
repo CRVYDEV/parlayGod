@@ -3395,8 +3395,15 @@ the omr vocabulary (neither mint nor burn), \`dev_fund\` in omrBuckets — conse
 test/chain.js gained the EXIT TOLL block (legacy exact-amount blocks pin WITHDRAW_TAX_BPS=0);
 tools/chain-e2e.js asserts the on-chain delta against the voucher NET. Deliberately not a
 fee-on-transfer token (breaks DEX composability) — the toll sits at the game boundary. The full
-tax map (in-game takes → street-tax buyback; Store 40/40/20; bonds POL/Vig; the toll) is §8 of
-the value-creation design doc.
+tax map (in-game takes → street-tax buyback; Store 40/40/20; bonds POL/Dev/Vig; the toll) is §8 of
+the value-creation design doc. **BONDS now carry a DEV CUT (founder-directed):** the ETH split is
+three-way — `BONDS.POL_BPS` 5000 / `DEV_BPS` 2000 / `VIG_BPS` 3000 (sum-validated at load) — in BOTH
+layers: `OmertaBond.sol` gained an immutable `devBps` + `devRecipient` (forwarded in-tx, remainder math
+→ zero dust; `Bonded` event now emits `toPol, toDev, toVig`; `setRecipients` is three-way; compiles
+clean 0.8.26, 0 warnings — `forge test` still the pre-mainnet gate) and `recordBond` books `devEth`
+(new `bond_reserve.dev_eth` accumulator, surfaced on the board/status; the event-authoritative on-chain
+path passes `onchainDev`; the watcher ABI updated). `runBondInvariants` check (4) is now
+POL + Dev + Vig == principal. tests: bonds (50/20/30 exact, comps book zero dev) + watcher (toDev lands).
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

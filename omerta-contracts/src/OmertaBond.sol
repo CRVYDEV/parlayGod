@@ -62,8 +62,10 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice POL share of every bond's ETH, in basis points. IMMUTABLE — set once at deploy in
     ///         lockstep with the backend's BONDS.POL_BPS so on-chain and off-chain never drift.
     uint256 public immutable polBps;
+    uint256 public immutable devBps;   // the founder-revenue share of each bond's ETH (the rest after POL is the Vig)
     address public signer;              // the game server's quote signer (rotatable by the Safe)
     address payable public polRecipient; // where the POL ETH share is forwarded (the pairing manager)
+    address payable public devRecipient; // where the dev ETH share is forwarded (founder revenue — the OmertaFees dev-wallet pattern)
     address payable public vigRecipient; // where the Vig ETH share is forwarded (the Vig wallet)
 
     /// @notice OMR promised to outstanding (unclaimed) bonds. INVARIANT: <= omr.balanceOf(this).
@@ -78,10 +80,10 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     mapping(uint256 => Bond) public bonds;     // bondId => Bond
     uint256 public nextBondId = 1;
 
-    event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toVig);
+    event Bonded(uint256 indexed bondId, address indexed payer, uint256 indexed nonce, uint256 principal, uint256 payout, uint256 toPol, uint256 toDev, uint256 toVig);
     event BondClaimed(uint256 indexed bondId, address indexed owner, uint256 amount);
     event SignerSet(address indexed signer);
-    event RecipientsSet(address indexed pol, address indexed vig);
+    event RecipientsSet(address indexed pol, address indexed dev, address indexed vig);
     event DailyCapSet(uint256 cap);
     event Swept(address indexed to, uint256 amount);
 
@@ -105,22 +107,27 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         address signer_,
         IERC20 omr_,
         uint256 polBps_,
+        uint256 devBps_,
         address payable polRecipient_,
+        address payable devRecipient_,
         address payable vigRecipient_,
         uint256 dailyCapOMR_
     ) EIP712("OmertaBond", "1") Ownable(owner_) {
         if (signer_ == address(0) || address(omr_) == address(0)) revert ZeroAddress();
-        if (polBps_ > 10000) revert BadBps();
+        if (polBps_ + devBps_ > 10000) revert BadBps();
         if (polBps_ > 0 && polRecipient_ == address(0)) revert ZeroAddress();
-        if (polBps_ < 10000 && vigRecipient_ == address(0)) revert ZeroAddress();
+        if (devBps_ > 0 && devRecipient_ == address(0)) revert ZeroAddress();
+        if (polBps_ + devBps_ < 10000 && vigRecipient_ == address(0)) revert ZeroAddress();
         signer = signer_;
         omr = omr_;
         polBps = polBps_;
+        devBps = devBps_;
         polRecipient = polRecipient_;
+        devRecipient = devRecipient_;
         vigRecipient = vigRecipient_;
         dailyCapOMR = dailyCapOMR_;
         emit SignerSet(signer_);
-        emit RecipientsSet(polRecipient_, vigRecipient_);
+        emit RecipientsSet(polRecipient_, devRecipient_, vigRecipient_);
         emit DailyCapSet(dailyCapOMR_);
     }
 
@@ -171,13 +178,17 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         bondId = nextBondId++;
         bonds[bondId] = Bond({ owner: q.payer, payout: payout, claimed: 0, start: uint64(block.timestamp), vestSeconds: uint64(q.vestSeconds) });
 
-        // split + forward the ETH in this tx (the OmertaFees custody-nothing pattern)
+        // split + forward the ETH in this tx (the OmertaFees custody-nothing pattern):
+        // POL (liquidity) + DEV (founder revenue) + Vig (buybacks) — the remainder math means the
+        // three shares always sum EXACTLY to msg.value (no dust stranded in the contract).
         uint256 toPol = (msg.value * polBps) / 10000;
-        uint256 toVig = msg.value - toPol;
+        uint256 toDev = (msg.value * devBps) / 10000;
+        uint256 toVig = msg.value - toPol - toDev;
         if (toPol > 0) { (bool okP, ) = polRecipient.call{value: toPol}(""); if (!okP) revert ForwardFailed(); }
+        if (toDev > 0) { (bool okD, ) = devRecipient.call{value: toDev}(""); if (!okD) revert ForwardFailed(); }
         if (toVig > 0) { (bool okV, ) = vigRecipient.call{value: toVig}(""); if (!okV) revert ForwardFailed(); }
 
-        emit Bonded(bondId, q.payer, q.nonce, msg.value, payout, toPol, toVig);
+        emit Bonded(bondId, q.payer, q.nonce, msg.value, payout, toPol, toDev, toVig);
     }
 
     /// @notice Claim the vested (linear) OMR of a bond you own. Releases from the pre-funded balance.
@@ -212,12 +223,14 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         emit SignerSet(s);
     }
 
-    function setRecipients(address payable pol, address payable vig) external onlyOwner {
+    function setRecipients(address payable pol, address payable dev, address payable vig) external onlyOwner {
         if (polBps > 0 && pol == address(0)) revert ZeroAddress();
-        if (polBps < 10000 && vig == address(0)) revert ZeroAddress();
+        if (devBps > 0 && dev == address(0)) revert ZeroAddress();
+        if (polBps + devBps < 10000 && vig == address(0)) revert ZeroAddress();
         polRecipient = pol;
+        devRecipient = dev;
         vigRecipient = vig;
-        emit RecipientsSet(pol, vig);
+        emit RecipientsSet(pol, dev, vig);
     }
 
     function pause() external onlyOwner { _pause(); }

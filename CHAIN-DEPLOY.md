@@ -45,9 +45,10 @@ PHASE 1 for the exact calls/args.
 - [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
       `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
       the dev wallet in-tx; custodies nothing.
-- [ ] **`OmertaBond(omr, signer, polRecipient, vigRecipient, safe, polBps=6000, maxDiscountBps=2000, maxVest,
-      dailyCapOMR)`** — POL bonding; the tranche cap is `committedOMR + payout ≤ omr.balanceOf(this)` (never
-      mints). Keep `polBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+- [ ] **`OmertaBond(safe, signer, omr, polBps=5000, devBps=2000, polRecipient, devRecipient, vigRecipient,
+      dailyCapOMR)`** — POL bonding with the three-way ETH split (50% POL / 20% dev wallet / 30% Vig,
+      forwarded in-tx — custodies nothing); the tranche cap is `committedOMR + payout ≤ omr.balanceOf(this)`
+      (never mints). Keep `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
 - [ ] **Fund the on-chain tranches (a plain OMR transfer — the contracts NEVER mint):** transfer OMR from the
       Safe into `VoucherClaim` (backs signed withdrawal vouchers) and into `OmertaBond` (backs bond payouts).
       The contract's `balanceOf` IS its cap.
