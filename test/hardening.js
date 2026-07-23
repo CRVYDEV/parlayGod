@@ -359,5 +359,34 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert(!xp.body.includes('<script>alert'), 'the profile page escapes the name + ref (no injection)');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks)`);
+// ── PRESENCE + THE TROLL BOX (founder overnight list): the keyless online counter, the public
+// city box + the family-only room (member-gated), server-side sanitization + the length clamp,
+// and the flood brake. Zero §10.4 surface (talk moves no value). ──
+{
+  const on = await app.inject({ method: 'GET', url: '/v1/online' });
+  assert.equal(on.statusCode, 200, 'online counter is keyless');
+  const ob = on.json();
+  assert(typeof ob.online === 'number' && typeof ob.active15m === 'number', 'online counter shape');
+
+  const talker = await mk('Chatty Vinnie');
+  const lurker = await mk('Quiet Sal');
+  let r = await call('POST', '/v1/chat', { token: talker.token, body: { text: '  <b>ayo</b> the city hears me ' } });
+  assert.equal(r.code, 200, 'city chat accepts a line');
+  r = await call('GET', '/v1/chat', { token: lurker.token });
+  assert.equal(r.code, 200, 'anyone can read the city box');
+  const line = r.body.messages.find((m) => m.who === 'Chatty Vinnie');
+  assert(line, 'the line landed in the city box');
+  assert(!line.text.includes('<') && line.text.includes('ayo'), 'server-side cleanText strips markup');
+  r = await call('POST', '/v1/chat', { token: talker.token, body: { text: 'double tap' } });
+  assert.equal(r.code, 400, 'the flood brake refuses'); assert.equal(r.body.error, 'slow_down');
+  r = await call('POST', '/v1/chat', { token: talker.token, body: { text: '' } });
+  assert.equal(r.code, 400, 'an empty line is refused'); assert.equal(r.body.error, 'empty');
+  r = await call('POST', '/v1/gangs/chat', { token: talker.token, body: { text: 'family biz' } });
+  assert.equal(r.code, 400, 'no family → no family room');
+  assert.equal(r.body.error, 'no_gang');
+  r = await call('GET', '/v1/gangs/chat', { token: talker.token });
+  assert.deepEqual(r.body.messages, [], 'gangless family-room read is empty, not an error');
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked)`);
 await app.close();

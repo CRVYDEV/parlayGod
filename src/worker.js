@@ -220,6 +220,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if (ps?.paid > 0) console.log(`🎟  pass: paid ${ps.paid} $OMR of owed Ledger stipend`);
     // lapsed vendettas grant nothing (reads filter on expires_at); this is just row hygiene
     await safe('vendetta prune', () => pool.query('DELETE FROM vendettas WHERE expires_at <= now()'));
+    await safe('troll box retention', () => pool.query('DELETE FROM chat_messages WHERE at < $1',
+      [new Date(Date.now() - 7 * 86400000)])); // 7-day chat retention — talk is ephemeral, not a ledger
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

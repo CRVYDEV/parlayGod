@@ -174,14 +174,25 @@
   .ico.row { display: inline-block; width: 46px; height: 30px; vertical-align: middle;
     margin: -3px 8px -3px 0; border: 0; background: none; border-radius: 0; }
 
-  /* ── the live feed ── */
-  #feed { max-height: 75vh; overflow-y: auto; font-size: 12px; overscroll-behavior: contain; }
-  #feed .ev { border-bottom: 1px dashed var(--line); padding: 6px 0 6px 8px; border-left: 2px solid transparent;
-    animation: evIn .3s var(--ease); }
+  /* ── the street panel: live feed + the troll box ── */
+  .wpane { max-height: 68vh; overflow-y: auto; font-size: 12.5px; overscroll-behavior: contain; }
+  .wpane .ev { border-bottom: 1px dashed var(--line); padding: 6px 0 6px 8px; border-left: 2px solid transparent;
+    animation: evIn .3s var(--ease); line-height: 1.45; }
   @keyframes evIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
-  #feed .ev .ch { color: var(--cold); font-size: 9.5px; letter-spacing: 1.5px; text-transform: uppercase; }
-  #feed .ev.me { border-left-color: var(--neon); background: linear-gradient(90deg, var(--neon-soft), transparent 55%); }
-  #feed .ev.me .ch { color: var(--neon); }
+  .wpane .ev .dot { font-size: 9px; vertical-align: 1px; margin-right: 2px; }
+  .wpane .ev.me { border-left-color: var(--neon); background: linear-gradient(90deg, var(--neon-soft), transparent 55%); }
+  #wiretabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .wtab { flex: 1; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
+    color: var(--dim); font: inherit; font-size: 10px; letter-spacing: 1.2px; padding: 6px 4px; cursor: pointer; }
+  .wtab.on { color: var(--neon); border-color: var(--neon); background: var(--neon-soft); }
+  #chatform { display: flex; gap: 6px; margin-top: 8px; }
+  #chatform.hidden { display: none; }
+  #chatinput { flex: 1; min-width: 0; background: #0e0e13; border: 1px solid var(--line); border-radius: var(--r-sm);
+    color: var(--fg); font: inherit; font-size: 13px; padding: 8px 10px; }
+  #chatinput:focus { outline: none; border-color: var(--neon); }
+  .cdt { color: var(--warn, #e8a54b); font-variant-numeric: tabular-nums; }
+  .cdt.cd-ready { color: var(--ok); font-weight: 600; }
+  #online-badge { font-size: 11px; letter-spacing: .5px; }
   #resp { white-space: pre-wrap; font-size: 11px; color: var(--dim); max-height: 260px; overflow: auto;
     background: #0e0e13; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px;
     box-shadow: inset 0 1px 3px rgba(0,0,0,.4); }
@@ -309,7 +320,7 @@
     button.act, a.act { padding: 10px 13px; min-height: 38px; }
     input, select { padding: 10px 9px; min-height: 38px; }
     .grid { grid-template-columns: 1fr 1fr; }
-    #feed { max-height: 30vh; }
+    .wpane { max-height: 30vh; }
     #resp { max-height: 140px; }
     .landing { padding: 3vh 12px 30px; } .landing .hero h1 { letter-spacing: 6px; }
     .wire-ticker { font-size: 11.5px; }
@@ -448,9 +459,20 @@
       <div id="tabbodies"></div>
     </div>
 
-    <div class="panel">
-      <h2>Live Feed <span id="ws-dot" style="color:var(--bad)">●</span></h2>
-      <div id="feed"></div>
+    <div class="panel" id="wirepanel">
+      <h2>The Street <span id="ws-dot" style="color:var(--bad)">●</span> <span id="online-badge" class="dim" style="float:right;font-weight:400"></span></h2>
+      <div id="wiretabs">
+        <button class="wtab on" data-wtab="feed">LIVE FEED</button>
+        <button class="wtab" data-wtab="city">CITY CHAT</button>
+        <button class="wtab" data-wtab="family">FAMILY</button>
+      </div>
+      <div id="feed" class="wpane"></div>
+      <div id="chat-city" class="wpane hidden"></div>
+      <div id="chat-family" class="wpane hidden"></div>
+      <form id="chatform" class="hidden" autocomplete="off">
+        <input id="chatinput" maxlength="240" placeholder="say it to the city…" />
+        <button class="act" type="submit">send</button>
+      </form>
     </div>
 
   </div>
@@ -510,6 +532,7 @@
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
   const el = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.firstElementChild; };
   const fmt = (n) => Number(n).toLocaleString('en-US');
   // ── polish layer: haptics + tactile feedback (progressive enhancement — silent no-ops where unsupported;
@@ -929,7 +952,7 @@
   $('#welcome-go').onclick = () => { localStorage.setItem('omerta_welcomed', '1'); $('#welcome').classList.add('hidden'); setTab('start'); };
 
   // the sheet stays honest on its own: countdowns and accrual don't wait for a click
-  setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); } }, 30000);
+  setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); pollOnline(); } }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && me) { refresh(); renderActive(); } });
 
   // recent history into the wire so a fresh page isn't blind to what happened while away
@@ -1089,7 +1112,11 @@
   }
   const drugName = (id) => (rules?.drugs || []).find((d) => d.id === id)?.name || id;
   const goodName = (id) => (rules?.goods || []).find((g) => g.id === id)?.name || id;
-  const mins = (s) => s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
+  // a LIVE countdown (founder: dynamic cooldown timers) — every `mins(seconds)` render site ticks
+  // down in place via the 1s ticker; at zero it reads 0:00 and the next poll/render flips the state.
+  // minsTxt is the plain-text variant for non-HTML contexts (alerts, titles).
+  const minsTxt = (s) => s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
+  const mins = (s) => cd(s, '0:00');
   // empty-state coaching: a friendly "what this is / do this first" card instead of a blank grid
   // the Street Wage status line (Going Legit card) — reads the /v1/wage board, never re-derives
   const wageLine = (w) => {
@@ -2156,7 +2183,7 @@
       const r = await api('POST', '/v1/wire/trace', {});
       if (r.code >= 400) { toast(describe(r.body) || 'trace failed'); return; }
       const w = r.body.watchers || [];
-      alert(w.length ? 'BUGS TRACED — who\'s on your line:\\n\\n' + w.map((x) => `• ${x.name} (${mins(x.expiresSeconds)} left)`).join('\\n') : 'your lines are clean — nobody\'s listening.');
+      alert(w.length ? 'BUGS TRACED — who\'s on your line:\\n\\n' + w.map((x) => `• ${x.name} (${minsTxt(x.expiresSeconds)} left)`).join('\\n') : 'your lines are clean — nobody\'s listening.');
       renderWire();
     };
     $('#wire-dossier-go').onclick = async () => {
@@ -3165,24 +3192,159 @@
     act(m, p, body);
   });
 
-  // ── the wire (websocket feed) ──
+  // ── the wire (websocket feed) — HUMAN lines only, color-coded by what happened.
+  // (founder: the feed must never show raw JSON, and actions read at a glance by color) ──
+  // (red-team R6) complete HTML escaper for player-controlled strings rendered into innerHTML —
+  // defense-in-depth over the server-side cleanText() strip (covers & and the attribute quotes too).
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const escapeHtml = esc;
+  // category → color: combat red · law blue · den/vice purple · racing/fights yellow ·
+  // money/market green · family gold · world cyan · info/movement grey
+  const FEED_CAT = [
+    [/^(kill|jump|shank|bounty|whack|war|seize|vendetta|standover|convoy_hijack|port_piracy|npchit|attack|took_bullet|guard|breakout$)/, 'combat'],
+    [/^(bust|indicted|raid|law|escape|breakout_foiled|busted)/, 'law'],
+    [/^(highroller|numbers|fight|dice|poker|tourney|track|futurity|casino|den|blackjack)/, 'den'],
+    [/^(gp_|match_race|race|stable|boxing|belt|fights|callout)/, 'race'],
+    [/^(market|sale|port_landing|port_fence|heist_score|order|auction|paper|loan|flex)/, 'market'],
+    [/^(tribute|family|gang|weekly|commission|crest|seal|foundation)/, 'family'],
+    [/^(world|frontier|cartel|uprising|liberated)/, 'world'],
+    [/^(vice|speakeasy)/, 'den'],
+    [/^(crime|score)/, 'crime'],
+  ];
+  const FEED_COLOR = { combat: '#e05252', law: '#5aa7e0', den: '#c07ae8', race: '#e0cf5a', market: '#5ad489',
+    family: '#d4af37', world: '#5ac9c9', crime: '#e8a54b', move: 'var(--dim)', info: 'var(--dim)', chat: 'var(--fg)' };
+  const catOf = (ev) => {
+    if (ev.cat) return ev.cat;
+    const t = String(ev.type || '');
+    for (const [re, c] of FEED_CAT) if (re.test(t)) return c;
+    return 'info';
+  };
+  // one honest sentence per event — templates for the big ones, a field-stitcher for the rest,
+  // NEVER raw JSON. Live `me` events carry fields under .payload; streets events are flat.
+  function feedText(ev) {
+    const d = ev.payload && typeof ev.payload === 'object' ? { ...ev.payload, type: ev.type } : ev;
+    const t = String(d.type || '');
+    const $c = (n) => (n == null ? '' : '$' + fmt(n));
+    const T = {
+      act: () => `${d.who} ${d.text}`,
+      kill: () => `${d.by} whacked ${d.victim}`,
+      jump: () => `${d.by} jumped ${d.on}${d.war ? ' — war points' : ''}`,
+      bounty: () => `a ${$c(d.amount)} ${d.kind === 'kill' ? 'KILL' : 'hospital'} contract is out on ${d.on}`,
+      bust: () => `${d.by} busted ${d.freed} out of lockup`,
+      busted: () => `${d.who} got hauled in`,
+      seize: () => `${d.gang || 'a family'} seized ${d.district || 'turf'}`,
+      tribute: () => `${d.who || 'someone'} kicked tribute up to the family`,
+      war_declared: () => `WAR: ${d.attacker || d.by || 'a family'} declared on ${d.defender || d.on || 'a rival'}`,
+      war_over: () => `the war is over — ${d.winner || 'a family'} took it`,
+      bodyguard: () => `${d.guard} took a bullet for ${d.saved}`,
+      revive: () => `${d.who || 'a made man'} got back up — paid protection`,
+      convoy: () => `a convoy is rolling ${d.from || ''} → ${d.to || ''} (${d.band || 'unknown value'})`,
+      convoy_hijacked: () => `${d.by} hijacked a convoy on the ${d.from || ''}–${d.to || ''} road`,
+      heist_score: () => `a crew of ${d.crew} pulled off ${d.job} — ${$c(d.pot)}`,
+      heist_blown: () => `a ${d.job} job got blown — somebody talked`,
+      heist_bust: () => `a crew of ${d.crew} went down on a ${d.job} job`,
+      highroller: () => `${d.who} is betting big at the den${d.amount ? ` — ${$c(d.amount)}` : ''}`,
+      market_sale: () => `a ${d.kind === 'car' ? 'car' : d.kind === 'order' ? 'buy order' : 'shipment'} moved on the Black Market`,
+      gp_entry: () => `${d.who} entered the Grand Prix (${d.entrants} on the grid)`,
+      gp_result: () => `${d.winner} won the Grand Prix — ${$c(d.pool)} pool, ${d.runners} ran`,
+      futurity_result: () => `${d.winner} won the Futurity (${d.runners} ran)`,
+      port_landing: () => `${d.by} landed a ${d.route} shipment — ${$c(d.value)}`,
+      port_piracy: () => `${d.by} took a prize at sea${d.route ? ` on the ${d.route}` : ''}`,
+      breakout: () => `a crew of ${d.crew} went OVER THE WALL`,
+      breakout_foiled: () => `a ${d.crew}-man break got foiled — everyone's in the hole`,
+      escape: () => `${d.who} escaped the Pen — WANTED`,
+      liberated: () => `${d.gang || 'a family'} liberated ${d.district || 'a district'} from the cartels`,
+      frontier_seized: () => `${d.gang} planted their flag on ${d.npc}'s turf`,
+      errand_done: () => `${d.who} did right by ${d.npc}`,
+      vendetta_settled: () => `a vendetta was settled in blood`,
+      vendetta_peace: () => `two bloodlines sat down and made peace`,
+      wage_paid: () => `street wage: +${d.omr} $OMR`,
+      chat: () => `${d.who}: ${d.text}`,
+    };
+    if (T[t]) { try { return T[t](); } catch { /* fall through */ } }
+    const who = d.who || d.by || d.name || d.gang || d.family || d.winner || '';
+    const tgt = d.on || d.victim || d.target || '';
+    return [who, t.replace(/_/g, ' '), tgt].filter(Boolean).join(' ') || t.replace(/_/g, ' ');
+  }
   function feedLine(channel, ev) {
+    if (channel === 'hello') { statusLine('— you are on the wire —'); return; }
+    if (channel === 'chat' || (channel === 'gang' && ev.type === 'chat')) { chatLine(channel === 'chat' ? 'city' : 'family', ev); return; }
     const f = $('#feed');
-    const line = el(`<div class="ev ${channel === 'me' ? 'me' : ''}"><span class="ch">${channel}</span> ` +
-      `<span>${ev.type || ''}</span> <span style="color:var(--dim)">${escapeHtml(summarize(ev))}</span></div>`);
+    const cat = channel === 'gang' ? 'family' : catOf(ev);
+    const color = FEED_COLOR[cat] || 'var(--dim)';
+    const mine = channel === 'me';
+    const line = el(`<div class="ev ${mine ? 'me' : ''}"><span class="dot" style="color:${color}">●</span> ` +
+      `<span style="color:${mine ? 'var(--fg)' : color}">${esc(feedText(ev))}</span></div>`);
     f.prepend(line);
     while (f.childElementCount > 120) f.lastElementChild.remove();
   }
-  const escapeHtml = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-  // (red-team R6) complete HTML escaper for player-controlled strings rendered into innerHTML —
-  // defense-in-depth over the server-side cleanText() strip (covers & and the attribute quotes too).
-  // The lone `esc(...)` call site (the Wire-watch render) previously referenced this undefined → threw.
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  function summarize(ev) {
-    const { type, channel, ...rest } = ev;
-    const s = JSON.stringify(rest);
-    return s.length > 140 ? s.slice(0, 140) + '…' : s;
+  function statusLine(text) {
+    const f = $('#feed');
+    f.prepend(el(`<div class="ev" style="color:var(--dim)">${esc(text)}</div>`));
   }
+
+  // ── the troll box (public city chat + the family room) ──
+  let wtab = 'feed';
+  function chatLine(room, ev) {
+    const pane = $(room === 'city' ? '#chat-city' : '#chat-family');
+    if (!pane) return;
+    pane.append(el(`<div class="ev"><b style="color:${room === 'family' ? 'var(--gold, #d4af37)' : 'var(--neon)'}">${esc(ev.who)}</b> <span>${esc(ev.text)}</span></div>`));
+    while (pane.childElementCount > 120) pane.firstElementChild.remove();
+    pane.scrollTop = pane.scrollHeight;
+  }
+  async function loadChat(room) {
+    const r = await api('GET', room === 'family' ? '/v1/gangs/chat' : '/v1/chat');
+    const pane = $(room === 'city' ? '#chat-city' : '#chat-family');
+    if (!pane || !r.body?.messages) return;
+    pane.innerHTML = '';
+    for (const m of r.body.messages) chatLine(room, m);
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target?.closest?.('[data-wtab]'); if (!b) return;
+    wtab = b.dataset.wtab;
+    $$('#wiretabs .wtab').forEach((t) => t.classList.toggle('on', t === b));
+    $('#feed').classList.toggle('hidden', wtab !== 'feed');
+    $('#chat-city').classList.toggle('hidden', wtab !== 'city');
+    $('#chat-family').classList.toggle('hidden', wtab !== 'family');
+    $('#chatform').classList.toggle('hidden', wtab === 'feed');
+    $('#chatinput').placeholder = wtab === 'family' ? 'family only — talk business…' : 'say it to the city…';
+    if (wtab !== 'feed') loadChat(wtab);
+  });
+  $('#chatform')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = $('#chatinput').value.trim();
+    if (!text) return;
+    $('#chatinput').value = '';
+    const r = await api('POST', wtab === 'family' ? '/v1/gangs/chat' : '/v1/chat', { text });
+    if (r.code === 400 && r.body?.error === 'no_gang') toast('you need a family for the family room');
+    else if (r.code === 400 && r.body?.error === 'slow_down') toast('easy — one line at a time');
+    else if (r.code >= 400) toast('the line is dead — try again');
+  });
+
+  // ── presence: who's on the wire (polled with the sheet refresh) ──
+  async function pollOnline() {
+    try {
+      const r = await fetch('/v1/online').then((x) => x.json());
+      const n = r.active15m || r.online || 0;
+      $('#online-badge').textContent = `● ${n} in the city`;
+    } catch { /* offline */ }
+  }
+
+  // ── the cooldown ticker: every [data-until] element live-counts down to READY ──
+  function tickCooldowns() {
+    const now = Date.now();
+    for (const n of $$('[data-until]')) {
+      const left = Math.max(0, Math.floor((Number(n.dataset.until) - now) / 1000));
+      if (left <= 0) { n.textContent = n.dataset.ready || 'READY'; n.classList.add('cd-ready'); continue; }
+      const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), s = left % 60;
+      n.textContent = h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
+    }
+  }
+  setInterval(tickCooldowns, 1000);
+  // helper for renderers: a live countdown span from a seconds-remaining number
+  const cd = (seconds, ready) => Number(seconds) > 0
+    ? `<span class="cdt" data-until="${Date.now() + Number(seconds) * 1000}"${ready ? ` data-ready="${esc(ready)}"` : ''}></span>`
+    : `<span class="cdt cd-ready">${ready || 'READY'}</span>`;
   function connectWs() {
     if (ws) return;
     try {
@@ -3190,7 +3352,7 @@
       // (red-team R12 F2) pass the session JWT as a subprotocol value, NOT in the URL — a WS URL lands in
       // access/proxy logs + browser history, and this is the same full bearer token (→ account takeover).
       ws = new WebSocket(`${proto}://${location.host}/v1/ws`, ['bearer', token]);
-      ws.onopen = () => { $('#ws-dot').style.color = 'var(--ok)'; };
+      ws.onopen = () => { $('#ws-dot').style.color = 'var(--ok)'; pollOnline(); };
       ws.onmessage = (m) => {
         try {
           const ev = JSON.parse(m.data);
