@@ -1449,7 +1449,8 @@ export async function buildServer() {
       if (!me) { socket.close(4004, 'no_character'); return; }
       const gm = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=$1', [me.id])).rows[0];
       const send = (channel) => (event) => { try { socket.send(JSON.stringify({ channel, ...event })); } catch { /* gone */ } };
-      const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')]];
+      const subs = [[`me:${me.id}`, send('me')], ['streets', send('streets')],
+        ['activity', send('activity')], ['chat', send('chat')]]; // the public wire: town-wide action ticker + the troll box
       if (gm?.gang_id) subs.push([`gang:${gm.gang_id}`, send('gang')]);
       for (const [ev, fn] of subs) G.bus.on(ev, fn);
       let set = wsClients.get(accountId); if (!set) wsClients.set(accountId, set = new Set()); set.add(socket);
@@ -1493,6 +1494,111 @@ export async function buildServer() {
       if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
     } catch (e) { console.error('kill socket-close (post-commit, non-fatal)', e?.code || e); }
   };
+
+  // ── PRESENCE — who's on the wire right now (founder: "display of all users online") ──
+  // `online` = distinct accounts with a live websocket (in the console this second);
+  // `active15m` = distinct accounts with any telemetry in the last 15 min (playing, maybe over REST).
+  // Keyless + cached 15s so the badge poll costs ~nothing.
+  let onlineCache = { at: 0, active15m: 0 };
+  app.get('/v1/online', async () => {
+    if (Date.now() - onlineCache.at > 15000) {
+      const r = await pool.query('SELECT COUNT(DISTINCT account_id) c FROM telemetry WHERE at > $1',
+        [new Date(Date.now() - 15 * 60000)]);
+      onlineCache = { at: Date.now(), active15m: Number(r.rows[0].c) };
+    }
+    return { online: wsClients.size, active15m: Math.max(wsClients.size, onlineCache.active15m) };
+  });
+
+  // ── THE ACTION WIRE — a public, color-coded ticker of PUBLIC-SAFE acts (founder: "activity feed
+  // of whenever any user performs any action, color coded"). DELIBERATELY an allowlist: covert acts
+  // (searches, taps, bank moves, kitchen deals, port runs, laundering) must NOT leak — the game's
+  // info economy (anonymity, wealth bands, hidden hunts) is audited design. Only acts that are
+  // already public-by-design (or harmlessly flavorful) are announced, and never with amounts.
+  const ACTIVITY_WIRE = {
+    'POST /v1/crimes/:id': ['crime', 'pulled a job'],
+    'POST /v1/heist': ['crime', 'pulled a score'],
+    'POST /v1/travel': ['move', 'is on the move'],
+    'POST /v1/casino/dice': ['den', 'is rolling dice at the den'],
+    'POST /v1/casino/numbers': ['den', 'played the numbers'],
+    'POST /v1/casino/blackjack': ['den', 'sat down at the blackjack table'],
+    'POST /v1/casino/track': ['den', 'bet the races at the track'],
+    'POST /v1/casino/tournament': ['den', 'entered the poker tournament'],
+    'POST /v1/races/npc': ['race', 'ran the street circuit'],
+    'POST /v1/races/challenge/:ownerId': ['race', 'raced for money on the strip'],
+    'POST /v1/races/pinks/:ownerId': ['race', 'raced for pink slips'],
+    'POST /v1/races/gp': ['race', 'entered the Grand Prix'],
+    'POST /v1/stable/circuit/:racerId': ['race', 'raced an animal on the circuit'],
+    'POST /v1/boxing/exhibition': ['fights', 'put a fighter in the ring'],
+    'POST /v1/boxing/fight/:opponentId': ['fights', 'staked a fighter in a bout'],
+    'POST /v1/boxing/recruit': ['fights', 'signed a contender'],
+    'POST /v1/market': ['market', 'posted a Black Market listing'],
+    'POST /v1/market/order': ['market', 'posted a buy order'],
+    'POST /v1/auction/:lotId/bid': ['flex', 'bid on the Auction Block'],
+    'POST /v1/speakeasy/:district/round': ['vice', 'bought a round at a speakeasy'],
+    'POST /v1/speakeasy/:district/bottle': ['vice', 'ordered bottle service'],
+    'POST /v1/world/:id/raid': ['world', 'raided a cartel outfit'],
+    'POST /v1/world/raids/:id/go': ['world', 'led a crew raid on a cartel'],
+  };
+  const actorNames = new Map(); // accountId -> { name, at } (60s cache — one indexed read per miss)
+  const actorName = async (accountId) => {
+    const hit = actorNames.get(accountId);
+    if (hit && Date.now() - hit.at < 60000) return hit.name;
+    const r = (await pool.query('SELECT name FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
+    const name = r?.name || null;
+    actorNames.set(accountId, { name, at: Date.now() });
+    return name;
+  };
+  app.addHook('onResponse', async (req, reply) => {
+    try {
+      if (reply.statusCode < 200 || reply.statusCode >= 300 || !req.user?.sub) return;
+      const key = `${req.method} ${req.routeOptions?.url || ''}`;
+      const hit = ACTIVITY_WIRE[key];
+      if (!hit) return;
+      const who = await actorName(req.user.sub);
+      if (who) G.bus.emit('activity', { type: 'act', cat: hit[0], who, text: hit[1] });
+    } catch { /* the wire is decorative — never fail a request for it */ }
+  });
+
+  // ── THE TROLL BOX — public city chat + a family-only room (founder request). Pure talk:
+  // zero §10.4 surface, name snapshots (history survives death/rename), server-side cleanText +
+  // a 240-char clamp + a 2s per-account cooldown on top of the global rate buckets. Retention is
+  // the worker's 7-day sweep. Family room = the sender's CURRENT gang; reads are member-gated. ──
+  const lastChatAt = new Map(); // accountId -> ms (in-process flood brake)
+  const chatChar = async (accountId) => (await pool.query(
+    `SELECT c.id, c.name, gm.gang_id FROM characters c
+       LEFT JOIN gang_members gm ON gm.character_id = c.id
+      WHERE c.account_id=$1 AND c.alive`, [accountId])).rows[0];
+  const postChat = async (req, family) => {
+    const body = G.cleanText(req.body?.text ?? '').trim().slice(0, 240);
+    if (!body) throw new G.GameError('empty', 'say something');
+    const ch = await chatChar(req.user.sub);
+    if (!ch) throw new G.GameError('no_character', 'no living street');
+    if (family && !ch.gang_id) throw new G.GameError('no_gang', 'you need a family for the family room');
+    // the flood brake LAST — semantic errors surface first, and only a landed line arms it
+    const last = lastChatAt.get(req.user.sub) || 0;
+    if (Date.now() - last < 2000) throw new G.GameError('slow_down', 'easy — one line at a time');
+    lastChatAt.set(req.user.sub, Date.now());
+    const channel = family ? ch.gang_id : 'city';
+    const id = crypto.randomUUID();
+    await pool.query('INSERT INTO chat_messages (id, channel, character_id, name, body) VALUES ($1,$2,$3,$4,$5)',
+      [id, channel, ch.id, ch.name, body]);
+    const ev = { type: 'chat', who: ch.name, text: body, at: Date.now() };
+    if (family) G.bus.emit(`gang:${ch.gang_id}`, ev); else G.bus.emit('chat', ev);
+    return { ok: true };
+  };
+  const readChat = async (req, family) => {
+    const ch = await chatChar(req.user.sub);
+    if (!ch) throw new G.GameError('no_character', 'no living street');
+    if (family && !ch.gang_id) return { messages: [] };
+    const channel = family ? ch.gang_id : 'city';
+    const rows = (await pool.query(
+      'SELECT name, body, at FROM chat_messages WHERE channel=$1 ORDER BY at DESC LIMIT 50', [channel])).rows;
+    return { messages: rows.reverse().map((r) => ({ who: r.name, text: r.body, at: r.at })) };
+  };
+  app.post('/v1/chat', { preHandler: auth }, async (req) => postChat(req, false));
+  app.get('/v1/chat', { preHandler: auth }, async (req) => readChat(req, false));
+  app.post('/v1/gangs/chat', { preHandler: auth }, async (req) => postChat(req, true));
+  app.get('/v1/gangs/chat', { preHandler: auth }, async (req) => readChat(req, true));
 
   // ── M4: the Kitchen (§5.3, §7.10) ──
   app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>

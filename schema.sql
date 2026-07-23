@@ -1593,3 +1593,16 @@ CREATE TABLE IF NOT EXISTS dev_fund (
   lifetime NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO dev_fund (id, omr, lifetime) SELECT 1, 0, 0 WHERE NOT EXISTS (SELECT 1 FROM dev_fund);
+
+-- THE TROLL BOX (founder-directed): public city chat + family-only rooms. Pure talk — zero §10.4
+-- surface. `name` is a snapshot so history survives death/rename; channel = 'city' or a gang id.
+-- Retention is the worker's 7-day sweep; death disposition: ledger (a dead man's words stand).
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY,
+  channel TEXT NOT NULL,
+  character_id TEXT NOT NULL REFERENCES characters(id),
+  name TEXT NOT NULL,
+  body TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_chat_channel_at ON chat_messages (channel, at);
