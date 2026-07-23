@@ -783,7 +783,11 @@ server (`omerta-mcp/`) shows the game as MCP tools, so any MCP-capable agent can
 `POST /v1/phone/dm/:characterId`) — your personal inbox + direct messages. The **inbox** shows what happened
 TO you (a convoy jacked, a contract posted on your head, a fee credited); the **line** is player-to-player
 DMs. Threads are ACCOUNT-level, so they survive death — the heir picks up the phone. 240 characters a line,
-one message every 2 seconds, 30-day retention. No money ever rides a message.
+one message every 2 seconds, 30-day retention. No money ever rides a message. **Blocked lines**
+(`POST`/`DELETE /v1/phone/block/:characterId`) — block a pest and they get a dead tone (they will know);
+the block follows their bloodline until you lift it, and it only mutes their mouth — game events (a jump,
+a contract on your head) still reach you. There is also a 📱 button on every street in Wet Work, and a
+cell stop with an unread badge on the mobile thumb bar.
 
 **The Troll Box** (`/v1/chat`, `/v1/gangs/chat`) — public city chat plus a family-only room (you only see
 family chat from AFTER you joined — no back-reading a family you infiltrate).

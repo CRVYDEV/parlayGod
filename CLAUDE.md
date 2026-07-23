@@ -4367,3 +4367,29 @@ line — "pulled a job — Pickpocket a tourist"). Chromium-probed end-to-end (F
 badge lights over WS + clears on read; the feed rings 📱 and names the job; ZERO page errors). Suite
 green + sim drift-0. Deferred (step two, flagged): block/mute lists, DM-from-the-streets-roster
 shortcut buttons, unread-DM chip on mobile nav.
+**Cellphone step two — BLOCKED LINES + the roster shortcut + the mobile chip — BUILT** (`src/phone.js`,
+`schema.sql` `dm_blocks`, `src/server.js`, `public/index.html`, `test/hardening.js`, both codices; the
+three deferred step-one items). **(1) BLOCKED LINES** — `dm_blocks (blocker_account, blocked_account,
+name-snapshot)` PK pair, **account-level both sides** (a block outlives death: you blocked the BLOODLINE,
+the heir stays blocked until you relent; no character_id → outside the estate wipe + DISPOSITION guard by
+construction). `sendDm` gates BOTH directions before the flood brake: a blocked sender gets an honest
+`blocked` dead tone (no silent drop — they can know you hung up), the blocker gets `you_blocked` (unblock
+to talk). Blocks gate ONLY DMs — game events (a jump, a contract) still notify: you mute a man's mouth,
+never the city. History stands (blocking never deletes the thread). `POST`/`DELETE
+/v1/phone/block/:characterId` (idempotent insert / clean `not_blocked` on a double-lift); the board gains
+a per-thread `blocked` flag + a `blocks` list (client-keyed by the blocked line's LIVING characterId — the
+no-account-UUID discipline; a dead blocked line shows its snapshot name); the thread view gains
+`with.blocked` (+ `replyable:false` while blocked). Console: a 🚫 block/unblock button in the thread
+header (with a what-it-does confirm), BLOCKED chips on threads, a BLOCKED LINES card with unblock buttons,
+ERRMAP entries. **(2) THE ROSTER SHORTCUT** — every street in Wet Work's roster carries a 📱 button that
+opens THE CELL straight onto that thread (an empty thread doubles as compose — the reply box is the
+composer). **(3) THE MOBILE CHIP** — the mobile thumb bar (`#bnav`) gained a **cell** stop (visible in
+BOTH simple + full modes — the visibility loop skips no-`data-go` stops) that opens the phone, with its
+own unread badge mirrored by `phoneBadge()` (top-bar + bnav always agree). Zero §10.4 (pure talk; the
+step-one zero-ledger-rows assertion still covers the whole exchange). Deck gained a 'The Cellphone' group.
+`test/hardening.js` (STEP TWO block): block → dead tone before the brake, `you_blocked` the other way,
+board/thread surfacing + history stands, self/double-unblock gates, unblock → the line takes calls again.
+Chromium-probed end-to-end (roster 📱 opens compose, both badges light '1', block flips the thread to
+read-only + B's send returns `blocked`, board-list unblock works; ZERO page errors). Suite 38/38 green.
+Deferred (step three, if ever): a mute-without-tone variant (silent drop — rejected for now: honesty is
+cheaper than paranoia), per-thread notification muting.

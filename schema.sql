@@ -1859,3 +1859,14 @@ CREATE TABLE IF NOT EXISTS dm_messages (
 );
 CREATE INDEX IF NOT EXISTS ix_dm_to_seen ON dm_messages (to_account, seen);
 CREATE INDEX IF NOT EXISTS ix_dm_from_at ON dm_messages (from_account, at);
+
+-- CELLPHONE step two: BLOCKED LINES. Account-level both sides (a block outlives death — you
+-- blocked the bloodline, not the street; the heir stays blocked until you relent). `name` is a
+-- display snapshot at block time (the dm name-snapshot discipline). Zero §10.4 surface.
+CREATE TABLE IF NOT EXISTS dm_blocks (
+  blocker_account UUID NOT NULL,
+  blocked_account UUID NOT NULL,
+  name TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_account, blocked_account)
+);

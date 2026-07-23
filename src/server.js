@@ -1703,6 +1703,10 @@ export async function buildServer() {
     Phone.readThread(pool, req.user.sub, req.params.characterId));
   app.post('/v1/phone/dm/:characterId', { preHandler: auth }, async (req) =>
     Phone.sendDm(pool, req.user.sub, req.params.characterId, req.body?.text));
+  app.post('/v1/phone/block/:characterId', { preHandler: auth }, async (req) =>
+    Phone.blockLine(pool, req.user.sub, req.params.characterId));
+  app.delete('/v1/phone/block/:characterId', { preHandler: auth }, async (req) =>
+    Phone.unblockLine(pool, req.user.sub, req.params.characterId));
 
   // ── M4: the Kitchen (§5.3, §7.10) ──
   app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>
