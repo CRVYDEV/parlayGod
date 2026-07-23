@@ -444,7 +444,7 @@
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
     <button class="act" id="btn-share" title="broadcast your legend — a shareable card that credits you for every recruit">📣 broadcast</button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
-    <button class="act" id="btn-logout" data-i18n="b_burn">burn the papers</button>
+    <button class="act" id="btn-logout" title="sign out of this account">sign out</button>
   </div>
   <div id="layout">
 
@@ -755,7 +755,11 @@
     if (body.principal !== undefined && body.owed !== undefined) bits.push(`took the loan — $${fmt(body.principal)} now, owe $${fmt(body.owed)}${body.collateral ? ' (car pledged)' : ''}`);
     if (body.guard !== undefined && body.price !== undefined) bits.push(`hired protection — $${fmt(body.price)} up front`);
     if (body.bid !== undefined && body.id !== undefined && body.name === undefined && !body.youLead) bits.push(`bid $${fmt(body.bid)} placed${body.extended ? ' (clock reset)' : ''}`);
-    if (body.cost && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
+    // the repair is a GAMBLE (a botched roll charges you and doesn't fix it) — say so plainly so a
+    // failed repair reads as "the shop botched it," never as a silent charge that looks like fraud
+    if (body.fixed === true && body.cost !== undefined) bits.push(`the shop fixed her up — good as new, $${fmt(body.cost)}`);
+    if (body.fixed === false && body.cost !== undefined) bits.push(`the shop botched it — $${fmt(body.cost)} gone and she's still banged up (a bad repair job; try again)`);
+    if (body.cost && body.fixed === undefined && !bits.length) bits.push(`paid $${fmt(body.cost)}`);
     return bits.length ? bits.join(' · ') : (body.message || 'done.');
   }
 
@@ -1050,7 +1054,17 @@
     const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim(), ...(ref ? { referralCode: ref } : {}) });
     if (r.code < 400) { localStorage.removeItem('omerta_ref'); boot(); } else toast(r.body?.message || r.body?.error, true);
   };
-  $('#btn-logout').onclick = () => { localStorage.removeItem('omerta_token'); location.reload(); };
+  $('#btn-logout').onclick = () => {
+    // A GUEST has no way back in — the token IS the only key, so signing out abandons the street
+    // forever. (A real player's alpha-critical bug: "burn the papers" read like a gameplay action,
+    // logged them out, and lost the character to limbo.) Warn hard for guests; confirm for everyone.
+    const guest = !session || session.provider === 'guest';
+    const msg = guest
+      ? "Sign out?\n\nYou're playing as a GUEST — this account has no login, so signing out will lose this street for good (there's no way back to it).\n\nTo keep it, cancel and use \"claim your account\" on The Sheet first."
+      : 'Sign out of this account?';
+    if (!confirm(msg)) return;
+    localStorage.removeItem('omerta_token'); location.reload();
+  };
   $('#btn-share').onclick = shareDossier;
   $('#btn-refresh').onclick = () => refresh();
   // the glossary (the ? up top) + the first-session welcome (shown once per browser)
@@ -2586,7 +2600,7 @@
         <div class="card">${ico('car', c.model)}<span class="t">${c.model}${c.trim ? ' · ' + c.trim : ''}</span>
           ${c.plate ? `<span class="chip">[${c.plate}]</span>` : ''}${c.listed ? '<span class="chip cold">ON THE BLOCK</span>' : ''}${c.pledged ? '<span class="chip cold">PLEDGED</span>' : ''}
           <div class="d">damage ${c.dmg}%</div>
-          ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}">repair</button>
+          ${c.listed || c.pledged ? '' : `<button class="act" data-cardo="repair:${c.id}" title="a repair can botch on badly-damaged iron — you pay either way">repair${c.dmg > 50 ? ' ⚠' : ''}</button>
           <button class="act" data-cardo="fence:${c.id}">fence</button>
           <button class="act" data-cardo="melt:${c.id}">melt</button>`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no iron — boost something</span>'}
