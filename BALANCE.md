@@ -1622,3 +1622,14 @@ buffer can no longer absorb a fresh dump; every fresh token pays on its first ex
 holding a token 48h. Regressions: test/emission.js (unminted alt clearing every play gate draws $0;
 minted → paid) + test/chain.js (fresh tokens pay ~50% behind a fat aged buffer; the aged remainder
 then exits free; conservation unmoved).
+
+## THE MEGAPROJECT (founder pick #1) — levers, all PROPOSED (sign-off before production)
+| Lever | Value | Note |
+|---|---|---|
+| `MONUMENTS[].target` | $25M / $60M / $150M / $400M | pure SINKS — the deeper the base, the faster a wall rises; retune to alpha population (a shared weeks-long goal, not an afternoon) |
+| `OMR_RATE` | $500/$OMR | FIXED credit rate (genesis AMM) — deliberately not live spot (deterministic, unmanipulable); re-peg if spot drifts far |
+| `MIN_CASH` / `MIN_OMR` | $100 / 1 | spam floors |
+| `TIERS` | Architect 1 / Foreman 3 / Patron 10 / Builder ∞ | plaque tiers — pure status |
+| Completion perk | NOT BUILT | deliberately deferred — a district perk would touch the signed turf surface; ships only as an explicit sign-off, if ever |
+Zero new emission (cash burn + $OMR burn + goods deletion — §10.4-positive; strengthens extraction ≤ inflow).
+Red-team flags for sign-off (AUDIT — megaproject): **agents are NOT excluded from the plaque/Architect** (every other status board excludes them; here the plaque is bought with burned value, so inclusion may be intended — your call) · **the goods rail has no $-value floor** (1 cheap unit ≈ $40 vs the $100 cash floor — add a value floor only if dust spam shows in telemetry).

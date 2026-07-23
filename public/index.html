@@ -722,6 +722,9 @@
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
+    if (body.credited !== undefined && body.monument) bits.push(body.completed
+      ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
+      : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
@@ -2099,6 +2102,7 @@
     const c = r.body;
     const w = (await api('GET', '/v1/world')).body || {};
     const rd = (await api('GET', '/v1/world/raids')).body || { raids: [] };
+    const mega = (await api('GET', '/v1/megaproject')).body || {};
     // the trade-winds read: turn raw shock multipliers into the one actionable sentence
     const shocks = Object.entries(c.weather || {}).map(([d, x]) => [d, Number(x)]).sort((a, b) => a[1] - b[1]);
     const cheap = shocks[0], rich = shocks[shocks.length - 1];
@@ -2114,6 +2118,26 @@
         <div class="d">${c.event?.desc || ''}</div>
         <div class="d"><b>The law today:</b> ${c.lawEvent?.name || c.lawEvent?.id || '—'} · it's ${c.clock?.phase || 'daytime'} (h${c.clock?.hour ?? '?'})
           ${c.clock?.patrol ? '· <span style="color:var(--bad)">PATROL HOURS — busts and trials convict harder right now</span>' : '· the Bureau is off the clock — a better hour for loud work'}</div></div>
+      ${(() => { const M = mega.current; if (!M && !(mega.skyline || []).length) return '';
+        const bar = M ? `<div style="background:var(--line2);border-radius:6px;height:14px;overflow:hidden;margin:6px 0">
+          <div style="background:var(--neon);height:100%;width:${M.pct}%"></div></div>` : '';
+        return `<h2 style="margin-top:12px">🏗 THE MEGAPROJECT <span class="d" style="font-size:11px">— the whole city builds one monument. The plaque is forever.</span></h2>
+        ${M ? `<div class="card" style="border-color:var(--gold,#c9a227)"><span class="t" style="color:var(--gold,#c9a227)">${esc(M.name)}</span> <span class="d">rises in ${esc(M.district)}</span>
+          <div class="d">${esc(M.blurb)}</div>
+          ${bar}
+          <div class="d"><b>$${fmt(M.progress)}</b> of $${fmt(M.target)} raised (${M.pct}%) — $${fmt(M.remaining)} to go${M.you ? ` · your share: $${fmt(M.you.contributed)} (#${M.you.rank} — ${M.you.tier})` : ''}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+            <input id="mg-cash" type="number" placeholder="$ cash" style="width:110px"><button class="act" id="mg-give-cash">give cash</button>
+            <select id="mg-good">${Object.entries(me.cargo || {}).filter(([, q]) => q > 0).map(([g, q]) => `<option value="${g}">${g} ×${q}</option>`).join('') || '<option value="">trunk empty</option>'}</select>
+            <input id="mg-qty" type="number" placeholder="qty" style="width:70px"><button class="act" id="mg-give-goods">give goods</button>
+            <input id="mg-omr" type="number" placeholder="$OMR" style="width:90px"><button class="act" id="mg-give-omr">give $OMR</button>
+          </div>
+          <div class="d" style="font-size:11px;margin-top:4px">every brick BURNS (cash 1:1 · goods at base value · $OMR at $${fmt(M.omrRate)} each) — this buys glory, not power</div>
+          ${(M.plaque || []).length ? `<div class="d" style="margin-top:6px"><b>THE PLAQUE</b> — ${M.plaque.slice(0, 8).map((pl, i) => `${i + 1}. ${esc(pl.name)} $${fmt(pl.contributed)} <span style="color:var(--gold,#c9a227)">${pl.tier}</span>`).join(' · ')}</div>` : '<div class="d" style="margin-top:6px">no bricks laid yet — be the first name on the plaque</div>'}
+        </div>` : '<div class="card"><span class="t">THE SKYLINE IS COMPLETE</span><div class="d">Every monument stands. The city rests — for now.</div></div>'}
+        ${(mega.skyline || []).length ? `<div class="card" style="margin-top:8px"><span class="t">THE SKYLINE</span>
+          ${mega.skyline.map((sk) => `<div class="d">🏛 <b>${esc(sk.name)}</b> in ${esc(sk.district)} — raised by the city, Architect: <span style="color:var(--gold,#c9a227)">${esc(sk.architect || 'unknown')}</span>${(sk.plaque || []).length > 1 ? `<br><span style="font-size:11px">the plaque: ${sk.plaque.map((pl, i) => `${i + 1}. ${esc(pl.name)} (${pl.tier})`).join(' · ')}</span>` : ''}</div>`).join('')}
+        </div>` : ''}`; })()}
       <h2 style="margin-top:12px">Trade Winds <span class="d" style="font-size:11px">— today's goods prices by district (the arbitrage map)</span></h2>
       ${cheap && rich ? `<div class="card"><span class="t">📦 the play today</span>
         <div class="d">goods run <b>cheapest in ${cheap[0]}</b> (×${cheap[1].toFixed(2)}) and <b>richest in ${rich[0]}</b> (×${rich[1].toFixed(2)})
@@ -2149,6 +2173,12 @@
           <button class="act" data-joinraid="${x.id}">join the crew</button></div>`).join('') || (w.myRaid ? '' : '<span class="d" style="color:var(--dim)">no crew raids forming — plan one on an apex outfit above</span>')}</div>
       <h2 style="margin-top:12px">Landmarks <span class="d" style="font-size:11px">(one dedicable plaque per district — the biggest $OMR flex holds it)</span></h2>
       <div id="landmark-slot"></div>`;
+    { const gc = t.querySelector('#mg-give-cash');
+      if (gc) gc.onclick = () => act('POST', '/v1/megaproject/cash', { amount: Number(t.querySelector('#mg-cash').value) }).then(() => renderCity());
+      const gg = t.querySelector('#mg-give-goods');
+      if (gg) gg.onclick = () => act('POST', '/v1/megaproject/goods', { goodId: t.querySelector('#mg-good').value, qty: Number(t.querySelector('#mg-qty').value) || 1 }).then(() => renderCity());
+      const go = t.querySelector('#mg-give-omr');
+      if (go) go.onclick = () => act('POST', '/v1/megaproject/omr', { amount: Number(t.querySelector('#mg-omr').value) }).then(() => renderCity()); }
     t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-plan]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.plan}/plan`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-joinraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.joinraid}/join`, {}).then(() => renderCity()));
@@ -2336,6 +2366,10 @@
       ['POST', '/v1/underworld/:npc/errand', {}], ['GET', '/v1/skills'], ['POST', '/v1/skills/:id', {}],
       ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
       ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
+    ],
+    'The Megaproject': [
+      ['GET', '/v1/megaproject'], ['POST', '/v1/megaproject/cash', { amount: 1000 }],
+      ['POST', '/v1/megaproject/goods', { goodId: 'gin', qty: 1 }], ['POST', '/v1/megaproject/omr', { amount: 1 }],
     ],
     'The Cellphone': [
       ['GET', '/v1/phone'], ['GET', '/v1/phone/thread/:characterId'],
@@ -3940,6 +3974,9 @@
       vendetta_settled: () => `a vendetta was settled in blood`,
       vendetta_peace: () => `two bloodlines sat down and made peace`,
       wage_paid: () => `street wage: +${d.omr} $OMR`,
+      megaproject_milestone: () => `🏗 ${d.monument} is ${d.pct}% raised — the scaffolding climbs`,
+      megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,
+      megaproject_architect: () => `🏛 you are THE ARCHITECT of ${d.monument} — your name leads the plaque forever`,
       estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,
       vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,

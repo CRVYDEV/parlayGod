@@ -2605,3 +2605,32 @@ export const collectionCatalog = () => ({
   goods:     { name: 'The Trade',          items: GOODS.map((g) => ({ id: g.id, name: g.name })) },
   fixtures:  { name: 'The Underworld',     items: Object.entries(UNDERWORLD.NPCS).map(([id, n]) => ({ id, name: n.name })) },
 })
+
+// ═══ THE MEGAPROJECT (founder pick #1 — the collective monument). ALL numbers are founder
+// sign-off levers. Targets are sized for the alpha base (a shared weeks-long goal, not an
+// afternoon); OMR_RATE is the FIXED $-credit per donated $OMR (the genesis AMM rate — never the
+// live spot, so the credit is deterministic and unmanipulable). Pure sinks + status. ═══
+export const MEGAPROJECT = {
+  MONUMENTS: [
+    { id: 'cathedral_restoration', name: 'The Cathedral Restoration', district: 'cathedral',
+      target: 25_000_000, blurb: 'The old church kept every secret this city ever whispered. Put her spire back against the sky.' },
+    { id: 'grand_casino', name: 'The Grand Casino', district: 'neon',
+      target: 60_000_000, blurb: 'A palace of vice with your name in the lobby marble. The Mile deserves a crown.' },
+    { id: 'founders_bridge', name: "The Founder's Bridge", district: 'docks',
+      target: 150_000_000, blurb: 'Steel across the bay — every crate in the city will roll over it, forever.' },
+    { id: 'colossus', name: 'The Colossus of the Docks', district: 'docks',
+      target: 400_000_000, blurb: 'A statue taller than the cranes, facing the sea. Let the next boat in know whose town this is.' },
+  ],
+  MIN_CASH: 100,          // smallest cash brick
+  MIN_OMR: 1,             // smallest $OMR brick
+  OMR_RATE: 500,          // $-value credited per donated $OMR (fixed lever, genesis AMM rate)
+  MILESTONES: [0.25, 0.5, 0.75],  // streets-feed scaffolding announcements
+  TIERS: [                // plaque tiers by contribution RANK (computed at read, pure status)
+    { rank: 1,  title: 'The Architect' },
+    { rank: 3,  title: 'Foreman' },
+    { rank: 10, title: 'Patron' },
+    { rank: Infinity, title: 'Builder' },
+  ],
+};
+export const megaMonumentAt = (seq) => MEGAPROJECT.MONUMENTS[seq] || null;
+export const megaTierOf = (rank) => (MEGAPROJECT.TIERS.find((t) => rank <= t.rank) || MEGAPROJECT.TIERS.at(-1)).title;

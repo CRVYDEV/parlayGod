@@ -4393,3 +4393,40 @@ Chromium-probed end-to-end (roster 📱 opens compose, both badges light '1', bl
 read-only + B's send returns `blocked`, board-list unblock works; ZERO page errors). Suite 38/38 green.
 Deferred (step three, if ever): a mute-without-tone variant (silent drop — rejected for now: honesty is
 cheaper than paranoia), per-thread notification muting.
+
+**THE MEGAPROJECT (founder pick #1 — the collective monument) — BUILT** (`omerta-megaproject-design.md`;
+`src/megaproject.js`, `test/megaproject.js` — the 39th suite; schema `megaprojects` +
+`megaproject_contributions`; the `MEGAPROJECT` rules tail). The WoW Ahn'Qiraj-gate server event: the city
+announces a MONUMENT (the authored `MONUMENTS` catalog, raised in order — Cathedral Restoration $25M →
+Grand Casino $60M → Founder's Bridge $150M → Colossus $400M) and the whole base pools value toward the
+target; completion PERMANENTLY changes the city and the contributors' names go on the plaque forever.
+**§10.4-POSITIVE by construction — every contribution is a SINK, nothing ever minted**: cash burns
+(`megaproject:cash`, character_id'd — check (a) reconciles), $OMR burns through the audited `spendOmr`
+primitive (`megaproject:omr`, joined the omr vocabulary + omrBurns), goods are deleted from the trunk
+(non-currency ownership sink) credited at CATALOG BASE value (location-free — the §7.11 arbitrage surface
+can't leak in); $OMR credits at the FIXED `OMR_RATE` $500 (deliberately not live spot — deterministic,
+unmanipulable). One 'building' row at a time, materialized on the first contribution (deterministic PK →
+23505 → `contention`, the auction-F1 pattern), locked FOR UPDATE singleton-last; contributions CLAMP to
+what the wall needs; the crossing brick COMPLETES it in the same txn (lazy, no worker) — streets
+celebration, THE ARCHITECT (top contributor) notified, the monument joins **THE SKYLINE** (a permanent
+section on the keyless `GET /v1/city`, 30s-cached) carrying its top-8 plaque forever. The plaque
+(`megaproject_contributions`) is ACCOUNT-level — survives death, the dynasty keeps its glory (no
+character_id → outside the estate wipe by construction); tiers computed at read (The Architect →
+Foreman → Patron → Builder — pure status, zero power; the completion district-perk option is DELIBERATELY
+DEFERRED to founder sign-off since it would touch the signed turf surface). Milestones at 25/50/75% feed
+the streets. Routes `GET /v1/megaproject`, `POST /v1/megaproject/cash|goods|omr`; `/v1/rules.megaproject`;
+console: the City tab leads with the monument card (progress bar + three contribute rails + the plaque +
+your share) + THE SKYLINE; `describe()` + feed lines humanize bricks/milestones/completion; deck group
+added. `test/megaproject.js` proves the announced-unstarted board, all three rails (ledger-exact burns,
+trunk deletion at base value, the fixed rate), the floors/jailed/bad-good/qty-0 gates, the plaque +
+Architect tier + your-rank, the CLAMP + COMPLETION (no overpay; skyline WITH the kept plaque; the next
+monument announced), death survival, and §10.4 (both vocabularies closed; cash + $OMR drift == the SQL
+seeds only). A focused three-lens red-team (`AUDIT-megaproject.md`) returned **no CRITICAL/HIGH/MED** —
+§10.4/locks/UUID hygiene verified sound (incl. the safehouse-ungated argument holding: a burn is
+scorched-earth denial, not shelter) — and fixed six LOWs in-commit (qty coercion → clean refusal; the
+"plaque forever" surface on the skyline; tie determinism across all three rank surfaces; the
+last-known-street name fallback; the completion-feed name fallback; the plaque index) with one accepted
+dust note (≤$1 on the final brick, ledger bit-exact). Flagged for founder sign-off (BALANCE.md): agent
+inclusion on the plaque (every other status board excludes agents; here the plaque is bought with burned
+value), a goods $-value floor if dust spam shows. All `MEGAPROJECT.*` numbers (targets, OMR_RATE, floors,
+tiers) are founder sign-off levers. Suite 39/39 + sim drift-0.
