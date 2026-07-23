@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -636,6 +636,16 @@ phase('P9.18 the Stable — PvE circuit purse EV by racer form + kind (the new f
         `best meet ${best.meet} @P${(best.p * 100).toFixed(0)}% · ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * perDay))}/day/racer · ×${STABLE.STABLE_MAX} stable ${best.ev >= 0 ? '+' : ''}$${fmt(Math.round(best.ev * perDay * STABLE.STABLE_MAX))}/day — bounded faucet (fee burns win/lose, cooldown + injury-on-loss); sign-off vs boxing exhibition`);
     }
   }
+}
+
+// ════════ P9.19 CLUE SCROLLS — the casket faucet (slate #4; the drop's one new emission) ════════
+// Analytic ceiling: one active hunt + the 8h post-casket cooldown → ≤ 24/CLUE_CD caskets/day/char;
+// mean take = (MIN+MAX)/2. The realized rate is far lower (a hunt takes travel + the 2% drop).
+phase('P9.19 clue scrolls — the casket faucet (bounded)');
+{ const perDay = 24 / (CLUES.CLUE_CD_MS / 3600000);
+  const mean = (CLUES.CASKET_MIN + CLUES.CASKET_MAX) / 2;
+  note('clues', 'casket faucet ceiling', `$${fmt(Math.round(perDay * mean))}/day/char hard max`,
+    `${perDay}/day cadence cap × $${fmt(mean)} mean take (band $${fmt(CLUES.CASKET_MIN)}–$${fmt(CLUES.CASKET_MAX)}); realized far lower (2% drop on jobs, travel per step) — petty vs the signed loops; KEEP unless dust telemetry says otherwise`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

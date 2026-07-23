@@ -32,7 +32,10 @@ const KNOWN_REASONS = {
     'megaproject:',
     // THE DUELING LADDER: `duel:wager` — the audited casino:pvp taxed transfer (both rows
     // character_id'd; the rake's pool half rides the non-§10.4 street_tax, the rest burns)
-    'duel:'],
+    'duel:',
+    // CLUE SCROLLS: `clue:casket` — the treasure-trail faucet (character_id'd; bounded by the
+    // 2% drop × one-active-hunt × the 8h post-casket cooldown — sim P9.19)
+    'clue:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:'],
