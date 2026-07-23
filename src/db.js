@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA = fs.readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
+// A fixed key for the boot-time schema advisory lock (any constant bigint — must match across processes).
+const SCHEMA_LOCK_KEY = 918273645;
 
 // (red-team R30 MED-1 — the in-place-upgrade migration) schema.sql is 100% `CREATE TABLE IF NOT EXISTS`,
 // so on an ALREADY-created Postgres DB every column added to a table's CREATE block AFTER that table first
@@ -82,10 +84,24 @@ export async function makeDb() {
     // whole pool and starve every other account. Raise the headroom (env-tunable); paired with the
     // per-account read throttle in the server preHandler, this bounds the connection-flood.
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 20) });
-    await pool.query(SCHEMA);
-    // in-place upgrade: add any columns that a pre-existing table is missing (a fresh DB → all no-ops).
-    const mig = await migrateColumns(pool, SCHEMA);
-    console.log(`[db] Postgres ready — column migration ran ${mig.total} ADD COLUMN IF NOT EXISTS statements${mig.failed ? ` (${mig.failed} skipped — see above)` : ''}.`);
+    // (deploy R31) SERIALIZE first-boot schema creation ACROSS PROCESSES. In a multi-process deploy (the API
+    // + the worker), both boot at the same instant against a FRESH DB and BOTH run `CREATE TABLE IF NOT
+    // EXISTS` concurrently — Postgres races on its internal type catalog and one process crashes with
+    // `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`. `CREATE TABLE IF NOT
+    // EXISTS` is NOT concurrency-safe. A session advisory lock makes the second booter wait, then apply the
+    // (now already-created) schema where every CREATE/ADD IF NOT EXISTS cleanly no-ops. One dedicated
+    // connection holds the lock across the DDL, then releases it; pg-mem (single process) needs none of this.
+    const boot = await pool.connect();
+    try {
+      await boot.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_KEY]);
+      await boot.query(SCHEMA);
+      // in-place upgrade: add any columns that a pre-existing table is missing (a fresh DB → all no-ops).
+      const mig = await migrateColumns(boot, SCHEMA);
+      console.log(`[db] Postgres ready — column migration ran ${mig.total} ADD COLUMN IF NOT EXISTS statements${mig.failed ? ` (${mig.failed} skipped — see above)` : ''}.`);
+    } finally {
+      await boot.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_KEY]).catch(() => {});
+      boot.release();
+    }
     return pool;
   }
   // (red-team R9 config F2) A production deploy that forgot DATABASE_URL would SILENTLY boot the whole
