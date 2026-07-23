@@ -618,6 +618,13 @@
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
+    verify_busy: "X is busy right now — try again in a few minutes (nothing is lost)",
+    x_busy: "X is busy right now — try again in a minute",
+    post_gone: "that post is gone — it has to stand to pay",
+    not_your_post: "that post has to come from YOUR linked X account to pay",
+    need_proof: "register the share with a link to your post so it can be verified",
+    verify_provider: "sign in with X first so the follow can be verified",
+    verify_unavailable: "social verification isn't switched on for this server yet",
     safe: "they're in a safehouse — can't touch them there", no_search: "you haven't put a tail on them yet",
     directed: "that contract's promised to a named gun right now", directed_exists: "there's already a named gun on that pot",
     feds_watching: "the Bureau's watching that front — too hot to touch", cold: "that operation's gone cold — square the upkeep first",
@@ -950,7 +957,20 @@
     const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
     if (h.get('token')) { token = h.get('token'); localStorage.setItem('omerta_token', token); }
     if (h.get('claimed')) setTimeout(() => toast('account claimed — this street is yours for keeps now'), 600);
-    if (h.get('autherr')) setTimeout(() => toast(`sign-in failed (${h.get('autherr')}) — try again`, true), 600);
+    if (h.get('autherr')) {
+      const AUTHERR = {
+        oauth_state: 'that sign-in link expired — hit the X button again',
+        oauth_session: 'that sign-in started in a different browser — hit the X button again here',
+        oauth_exchange: 'X refused the sign-in — try again',
+        oauth_me: 'X did not return your profile — try again',
+        x_busy: 'X is busy right now — try again in a minute',
+        linked_elsewhere: 'that X account already runs a street here — sign in with it instead of claiming',
+        not_guest: 'this account is already claimed',
+        invite: 'that invite code is not valid',
+      };
+      const code = h.get('autherr');
+      setTimeout(() => toast(AUTHERR[code] || `sign-in failed (${code}) — try again`, true), 600);
+    }
     if (h.get('token') || h.get('claimed') || h.get('autherr')) history.replaceState(null, '', location.pathname);
   })();
   const startXOAuth = async () => {

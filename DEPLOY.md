@@ -30,11 +30,34 @@ are set). Two Node processes over one Postgres DB. No build step.
 - [ ] `PG_POOL_MAX=20` (default) — raise with instance count / concurrency.
 - [ ] `INVARIANT_WEBHOOK_URL=<url>` — §10.4 drift + reserve alerts from the nightly worker job (recommended).
 
-## 3. Optional
+## 3. The X integrations — the full checklist (one-click sign-in + social verification)
+All from https://developer.x.com (create a Project + App once). Every X surface degrades cleanly
+when unconfigured — sign-in buttons hide, social claims fail-closed — so set these when ready:
+
+**One-click X sign-in (OAuth2 PKCE, server-side exchange):**
+- [ ] `X_CLIENT_ID` — the app's OAuth 2.0 Client ID.
+- [ ] `X_CLIENT_SECRET` — set it if the app is a *confidential* client (recommended); omit for public PKCE.
+- [ ] `PUBLIC_URL=https://www.omerta.fun` — and register the callback on the X app as **exactly**
+      `https://www.omerta.fun/v1/auth/x/callback` (App settings → User authentication → Callback URI).
+      Scopes needed: `users.read tweet.read`. Type of app: Web App. A mismatched callback = every
+      sign-in fails at X's door.
+
+**Social verification (First-Week follow + Spread-the-Word post checks, `SOCIAL_VERIFY_MODE=live`):**
+- [ ] `X_BEARER_TOKEN` — the app's Bearer Token (app-only auth; reads tweets + follow lists).
+- [ ] `X_TARGET_USER_ID` — the game's X account **numeric id** (not the handle — get it from
+      `GET /2/users/by/username/<handle>` or an online lookup) for the follow check.
+- [ ] `SOCIAL_X_HANDLE` — the handle (no @) used in share/brag intent links.
+- Note: the follow check paginates to 5000 follows; X rate limits are per-app and tight — transient
+  429s surface to players as a clean retryable "X is busy" (`verify_busy`), never as a failed task,
+  and every X call is time-boxed at 8–10s so an X outage can never hang the game.
+
+**Leave unset:** `X_TRUST_USER_TOKEN` — the legacy paste-token sign-in (default off; the PKCE flow
+above is the real path and the only one the console offers).
+
+## 3b. Other optional
 - `INVITE_MODE=on` — closed-alpha gate; mint codes via `POST /v1/mod/invites`.
-- `PRIVY_APP_ID` — enables Privy sign-in (else guest + X only). `X_TRUST_USER_TOKEN` — **leave unset**
-  (default off; the hosted X OAuth-code flow is deploy-time work, not the paste-token path).
-- `PUBLIC_URL` / `SOCIAL_GAME_URL`, `SOCIAL_X_HANDLE` — share links, OG cards, the OpenAPI `baseUrl`.
+- `PRIVY_APP_ID` — enables Privy sign-in (else guest + X only).
+- `SOCIAL_GAME_URL` — falls back for `PUBLIC_URL` in share links, OG cards, the OpenAPI `baseUrl`.
 - `REDIS_URL` — moves the rate-limit buckets off in-memory (needed only for multi-instance).
 
 ## 4. Chain — LEAVE UNSET for the off-chain alpha

@@ -429,6 +429,97 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   delete process.env.X_CLIENT_ID; delete process.env.PUBLIC_URL;
 }
 
+// ── X INTEGRATIONS BULLETPROOF (mocked X API) — the full callback exchange, upgrade + identity
+// collision, transient-vs-definitive error semantics, author binding, follow pagination ──
+{
+  const realFetch = globalThis.fetch;
+  const jres = (status, body) => ({ ok: status < 400, status, json: async () => body });
+  const xmock = {};
+  globalThis.fetch = async (url, opts) => {
+    const s = String(url);
+    if (s.includes('api.x.com/2/oauth2/token')) return xmock.token(s, opts);
+    if (s.includes('api.x.com/2/users/me')) return xmock.me(s, opts);
+    if (s.includes('/following')) return xmock.following(s, opts);
+    if (s.includes('api.x.com/2/tweets/')) return xmock.tweet(s, opts);
+    return realFetch(url, opts);
+  };
+  try {
+    process.env.X_CLIENT_ID = 'test-client-id';
+    process.env.PUBLIC_URL = 'https://omerta.example';
+    // (1) the FULL sign-in: start → X redirects back → server exchanges the code → #token lands
+    xmock.token = () => jres(200, { access_token: 'tok-abc' });
+    xmock.me = () => jres(200, { data: { id: '777' } });
+    let r = await call('POST', '/v1/auth/x/start', { body: {} });
+    let state = new URL(r.body.url).searchParams.get('state');
+    let cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=ok&state=${state}`,
+      headers: { cookie: `omerta_oauth=${state}` } });
+    assert(cb.headers.location.includes('#token='), 'a real exchange lands a signed session token');
+    const xToken = decodeURIComponent(cb.headers.location.split('#token=')[1]);
+    const sess = await call('GET', '/v1/session', { token: xToken });
+    assert.equal(sess.body.provider, 'x', 'the minted session is the X identity');
+    // REPLAY the same callback → the state was consumed (single-use, DELETE-returning)
+    cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=ok&state=${state}`,
+      headers: { cookie: `omerta_oauth=${state}` } });
+    assert(cb.headers.location.includes('#autherr=oauth_state'), 'a replayed callback finds no state');
+    // (2) the guest UPGRADE: an authed start claims-in-place; the same X id can never claim twice
+    const claimer = await mk('Claim Kid');
+    xmock.me = () => jres(200, { data: { id: '888' } });
+    r = await call('POST', '/v1/auth/x/start', { token: claimer.token, body: {} });
+    state = new URL(r.body.url).searchParams.get('state');
+    cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=ok&state=${state}`,
+      headers: { cookie: `omerta_oauth=${state}` } });
+    assert(cb.headers.location.includes('#claimed=x'), 'the guest is upgraded in place');
+    assert.equal((await call('GET', '/v1/session', { token: claimer.token })).body.provider, 'x',
+      'same account row, now an X identity');
+    const rival = await mk('Second Claimer');
+    r = await call('POST', '/v1/auth/x/start', { token: rival.token, body: {} });
+    state = new URL(r.body.url).searchParams.get('state');
+    cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=ok&state=${state}`,
+      headers: { cookie: `omerta_oauth=${state}` } });
+    assert(cb.headers.location.includes('#autherr=linked_elsewhere'), 'one X account, one street — the collision is clean');
+    // (3) a transient X failure during the exchange is a clean retryable x_busy, never a 500
+    xmock.token = () => jres(500, {});
+    r = await call('POST', '/v1/auth/x/start', { body: {} });
+    state = new URL(r.body.url).searchParams.get('state');
+    cb = await app.inject({ method: 'GET', url: `/v1/auth/x/callback?code=ok&state=${state}`,
+      headers: { cookie: `omerta_oauth=${state}` } });
+    assert(cb.headers.location.includes('#autherr=x_busy'), 'an X outage mid-exchange reads as busy, not broken');
+    // (4) verifyPostUp semantics: transient ≠ definitive (an outage must NEVER read as "post gone")
+    process.env.SOCIAL_VERIFY_MODE = 'live';
+    process.env.X_BEARER_TOKEN = 'bearer-test';
+    const { verifyPostUp, verifySocial } = await import('../src/verify.js');
+    const postUrl = 'https://x.com/who/status/12345678901234';
+    const errOf = async (fn) => { try { await fn(); return null; } catch (e) { return e.code; } };
+    xmock.tweet = () => jres(429, {});
+    assert.equal(await errOf(() => verifyPostUp(postUrl)), 'verify_busy', 'a rate limit is BUSY — the registration stands');
+    xmock.tweet = () => { throw new Error('network down'); };
+    assert.equal(await errOf(() => verifyPostUp(postUrl)), 'verify_busy', 'a network failure is BUSY too');
+    xmock.tweet = () => jres(200, { errors: [{ title: 'Not Found' }] });
+    assert.equal(await errOf(() => verifyPostUp(postUrl)), 'post_gone', 'a DEFINITIVE not-found is post_gone');
+    // author binding: the upgraded account (X id 888) can only be paid for ITS OWN post
+    const boundAcct = (await pool.query("SELECT id FROM accounts WHERE auth_provider='x' AND auth_subject='888'")).rows[0];
+    xmock.tweet = () => jres(200, { data: { id: '12345678901234', author_id: '999' } });
+    assert.equal(await errOf(() => verifyPostUp(postUrl, { client: pool, accountId: boundAcct.id })),
+      'not_your_post', "someone else's tweet doesn't pay an X-linked account");
+    xmock.tweet = () => jres(200, { data: { id: '12345678901234', author_id: '888' } });
+    assert.equal(await verifyPostUp(postUrl, { client: pool, accountId: boundAcct.id }), true, 'their own standing post pays');
+    // (5) the follow check PAGINATES (the >1000-follows false-negative fix) + busy semantics
+    process.env.X_TARGET_USER_ID = 'TARGET1';
+    const acct888 = { auth_provider: 'x', auth_subject: '888' };
+    xmock.following = (s) => s.includes('pagination_token=page2')
+      ? jres(200, { data: [{ id: 'TARGET1' }] })
+      : jres(200, { data: [{ id: 'someone-else' }], meta: { next_token: 'page2' } });
+    assert.equal(await verifySocial('ob_x', acct888), true, 'a follow parked on page 2 is FOUND (pagination)');
+    xmock.following = () => jres(429, {});
+    assert.equal(await errOf(() => verifySocial('ob_x', acct888)), 'verify_busy', 'a rate-limited follow check is BUSY, not "not found"');
+    console.log('✓ X integrations: full PKCE exchange + replay, upgrade + identity collision, x_busy transient semantics, post author binding, follow pagination');
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.X_CLIENT_ID; delete process.env.PUBLIC_URL;
+    delete process.env.SOCIAL_VERIFY_MODE; delete process.env.X_BEARER_TOKEN; delete process.env.X_TARGET_USER_ID;
+  }
+}
+
 // ── THE FAMILY ROOM shows no back-chat to a spy who slips in — reads floor at your join time ──
 {
   const boss = await mk('Chat Boss');
