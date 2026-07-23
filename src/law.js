@@ -17,8 +17,9 @@
 // founder sign-off levers (ground rule #1).
 import crypto from 'node:crypto';
 import { GameError, ledger, rngLog, notify, track, bus } from './game.js';
+import { bumpHonor } from './honor.js';
 import { LAW, rapStageOf, bribeCostOf, retainerActive, witproActive, envelopeActive, bustProbOf,
-         cityEventOf, dayOf, cityHourOf } from './rules.js';
+         cityEventOf, dayOf, cityHourOf , HONOR } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -229,6 +230,7 @@ export async function flip(ch, victim, client, h) {
   ch.indicted_at = null; ch.heat_exposure = 0; ch.jury_bought = false;
   ch.jail_until = new Date(Date.now() + LAW.FLIP_JAIL_S * 1000);
   h.acct.rat = true; // the permanent badge — follows the bloodline (persistAccount)
+  await bumpHonor(client, ch, HONOR.RAT); // #1: the deepest stain there is
   // the named rival's case grows — seed their meter; if it crosses the line, they're indicted too
   victim.heat_exposure = Number(victim.heat_exposure || 0) + LAW.FLIP_SEED;
   let namedIndicted = false;

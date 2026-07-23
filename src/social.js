@@ -10,7 +10,7 @@ import {
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
-  worldNpcOf, liberationCost,
+  worldNpcOf, liberationCost, HONOR, DIPLOMACY,
 } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -20,6 +20,12 @@ import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
 import { wipeSpeakeasyAtDeath } from './speakeasy.js';
 import { wipeFighterAtDeath, cancelMainEventsAtDeath } from './boxing.js';
+// FIVE PILLARS: honor deeds (#1), the pact/coalition touchpoints (#2), sov razing/garrison (#3),
+// the bloodline death record (#5). All one-way imports (none of these modules import social.js).
+import { bumpHonor, isMadDog } from './honor.js';
+import { pactActive, coalitionDiscountActive, dissolveDiplomacy } from './diplomacy.js';
+import { sovGarrisonBonus, razeSov, dissolveSov } from './sov.js';
+import { recordDeath } from './bloodline.js';
 
 const uid = () => crypto.randomUUID();
 const now = () => new Date();
@@ -101,6 +107,8 @@ export async function removeMember(client, gangId, characterId) {
     await client.query('UPDATE districts SET holder_gang=NULL, garrison=0 WHERE holder_gang=$1', [gangId]);
     await releaseTerritoryRackets(client, gangId); // Phase 3: the operations die with the family (turf released)
     await releaseFrontierHolds(client, gangId);    // World step three: the frontier flags drop (the house takes its turf back)
+    await dissolveDiplomacy(client, gangId);       // FIVE PILLARS #2: a dead family's treaties + coalition seats go with it
+    await dissolveSov(client, gangId);             // FIVE PILLARS #3: its strongholds are razed (nobody inherits walls)
     await client.query('UPDATE gangs SET war_with=NULL, war_until=NULL WHERE war_with=$1', [gangId]);
     // the Commission forgets a dead family: its ballots die with it (audit H1 — a dissolved
     // gang's frozen vote must not govern next week from beyond the grave, invisible to the
@@ -221,6 +229,10 @@ export async function declareWar(ch, targetGangId, client, h) {
   // Commission decree: THE PAX — no new wars this week (running wars still resolve)
   if ((await activeDecree(client))?.id === 'pax')
     throw new GameError('pax', 'The Commission has declared the Pax — no new wars this week.');
+  // FIVE PILLARS #2: a SWORN pact blocks war between the two families (the pax precedent — one
+  // touchpoint). Break the treaty first, and wear the oathbreaker mark for it.
+  if (await pactActive(client, h.owned.gangId, targetGangId))
+    throw new GameError('pact', 'A sworn treaty stands between the families — break it first (and wear the mark).');
   await resolveWarIfDue(client, h.owned.gangId);
   await resolveWarIfDue(client, targetGangId);
   const [id1, id2] = [h.owned.gangId, targetGangId].sort();
@@ -229,13 +241,17 @@ export async function declareWar(ch, targetGangId, client, h) {
   const us = g1?.id === h.owned.gangId ? g1 : g2, them = g1?.id === h.owned.gangId ? g2 : g1;
   if (!them) throw new GameError('no_gang', 'That family no longer exists.');
   if (warActive(us) || warActive(them)) throw new GameError('at_war', 'One of you is already at war.');
-  if (Number(us.treasury) < M3.WAR_COST) throw new GameError('treasury', `War takes a $${M3.WAR_COST} war chest in the treasury.`);
+  // FIVE PILLARS #2: an ARMED coalition against the target halves a member's war chest — the EU4
+  // anti-hegemon tooth. The DISCOUNTED number is what's deducted AND ledgered (the decree precedent).
+  const coalition = await coalitionDiscountActive(client, us.id, them.id);
+  const warCost = coalition ? Math.floor(M3.WAR_COST * DIPLOMACY.COALITION_WAR_MULT) : M3.WAR_COST;
+  if (Number(us.treasury) < warCost) throw new GameError('treasury', `War takes a $${warCost} war chest in the treasury.`);
   const until = new Date(Date.now() + M3.WAR_MS);
   // the war chest burns — a §10.4 cash sink out of the treasury bucket
   await client.query('UPDATE gangs SET treasury = treasury - $2, war_with=$3, war_until=$4, war_score_us=0, war_score_them=0 WHERE id=$1',
-    [us.id, M3.WAR_COST, them.id, until]);
+    [us.id, warCost, them.id, until]);
   await client.query('UPDATE gangs SET war_with=$2, war_until=$3, war_score_us=0, war_score_them=0 WHERE id=$1', [them.id, us.id, until]);
-  await h.ledger(client, { currency: 'cash', amount: -M3.WAR_COST, reason: 'gang:war', counterparty: us.id });
+  await h.ledger(client, { currency: 'cash', amount: -warCost, reason: 'gang:war', counterparty: us.id });
   bus.emit(`gang:${them.id}`, { type: 'war_declared', by: us.name });
   return { ok: true, until, spoilsPct: M3.WAR_SPOILS };
 }
@@ -267,7 +283,14 @@ export async function seizeDistrict(ch, districtId, client, h) {
     const op = (await client.query('SELECT tier FROM territory_rackets WHERE district_id=$1', [districtId])).rows[0];
     premium = op ? Math.floor(territoryBuildCost(op.tier) * M3.TERRITORY_SEIZE_BPS / 10000) : 0;
   }
-  const cost = base + premium;
+  // FIVE PILLARS #3: a standing (non-crumbling) STRONGHOLD stiffens the price of taking the district
+  // — its garrison joins the outbid COST (never the stored garrison — the defense budget stays the
+  // plain quote). #2: an ARMED coalition vs the holder discounts the whole bill ×COALITION_SEIZE_MULT
+  // (the anti-hegemon tooth; the discounted number is what's deducted AND ledgered).
+  const sovBonus = occupied ? 0 : await sovGarrisonBonus(client, districtId);
+  const coalitionVsHolder = !occupied && d.holder_gang
+    && await coalitionDiscountActive(client, h.owned.gangId, d.holder_gang);
+  const cost = Math.floor((base + sovBonus + premium) * (coalitionVsHolder ? DIPLOMACY.COALITION_SEIZE_MULT : 1));
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
   if (Number(g.treasury) < cost)
     throw new GameError('treasury', occupied
@@ -281,10 +304,13 @@ export async function seizeDistrict(ch, districtId, client, h) {
   // Phase 3: the district's productive operation (if any) transfers to the victor with the turf —
   // wars are now fought over income, not just a treasury cut. Uncollected income forfeits (clock resets).
   if (!occupied) await seizeTerritoryRackets(client, districtId, h.owned.gangId);
+  // FIVE PILLARS #3: the fallen holder's stronghold is RAZED with the turf (destruction, never a
+  // transfer — the EVE anti-snowball; you build your own walls on conquered ground).
+  const razed = occupied ? false : await razeSov(client, districtId);
   if (!h.owned.held.includes(districtId)) h.owned.held.push(districtId);
   bus.emit('streets', occupied ? { type: 'liberated', district: districtId, gang: g.name, npc: worldNpcOf(d.npc_holder)?.name }
     : { type: 'seize', district: districtId, gang: g.name });
-  return { ok: true, district: districtId, garrison: base, premium, cost, liberated: occupied };
+  return { ok: true, district: districtId, garrison: base, premium, cost, liberated: occupied, razedStronghold: razed };
 }
 
 // ═══════════════════ JUMPS (§7.6) ═══════════════════
@@ -1062,6 +1088,7 @@ export async function fire(ch, victim, client, h, rounds) {
       [ch.account_id, victim.account_id])).rows[0];
     if (vend) {
       await client.query('DELETE FROM vendettas WHERE avenger_account=$1 AND target_account=$2', [ch.account_id, victim.account_id]);
+      await bumpHonor(client, ch, HONOR.VENDETTA_SETTLE); // #1: blood answered for blood — the honorable kill
       await h.notify(client, ch.id, 'vendetta_settled', { for: vend.sworn, killed: victim.name });
       bus.emit('streets', { type: 'vendetta_settled', by: ch.name, on: victim.name, for: vend.sworn });
     }
@@ -1157,6 +1184,9 @@ export async function offerBodyguard(ch, price, client, h) {
 export async function hireBodyguard(ch, guard, client, h) {
   const price = guard.guard_price != null ? Math.floor(Number(guard.guard_price)) : 0;
   if (!(price > 0)) throw new GameError('not_offering', "They're not in the protection business.");
+  // FIVE PILLARS #1: nobody takes a bullet for a MAD DOG — infamy shuts the protection market
+  // (a new lever off every signed surface; the Fable "your legend precedes you" tooth).
+  if (isMadDog(ch)) throw new GameError('mad_dog', 'No guard alive steps in front of a mad dog. Earn some honor first.');
   if (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date())
     throw new GameError('guarded', 'You already have a shadow. One bullet-catcher at a time.');
   if (jailed(guard) || hospitalized(guard)) throw new GameError('unavailable', "They can't watch your back from where they are.");
@@ -1197,7 +1227,9 @@ async function bodyguardAbsorbs(client, h, attacker, victim) {
   // second blocks on the row, re-reads hosp_until in the future → no match → no absorb). Clobber-safe:
   // no in-memory copy of the guard exists, so direct SQL is the record of truth (the refundPot rule).
   const g = (await client.query(
-    `UPDATE characters SET health=10, hosp_until=$2 WHERE id=$1 AND alive
+    `UPDATE characters SET health=10, hosp_until=$2,
+            honor = LEAST(${HONOR.MAX}, honor + ${HONOR.BODYGUARD_SAVE}) -- #1: taking the bullet is the honorable deed (set-based, NUMERIC-safe, same guarded write)
+      WHERE id=$1 AND alive
        AND (hosp_until IS NULL OR hosp_until <= now()) AND (jail_until IS NULL OR jail_until <= now())
      RETURNING id, name`,
     [victim.guarded_by, new Date(Date.now() + M3.BODYGUARD_HOSP_MS)])).rows[0];
@@ -1254,6 +1286,7 @@ export async function npcHit(ch, victim, client, h, tierId, opts = {}) {
   // pay the contractor — cash BURNED (a §10.4 sink), win or lose — then heat + cooldown
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'npchit:hire', counterparty: victim.id });
+  await bumpHonor(client, ch, HONOR.NPC_HIT); // #1: paying strangers for your killing is cowards' work
   await bumpStanding(client, h, ch, 'fixer', 4, { action: 'hire' }); // arranged work is business with the Match
   // RIVALRY (step two): the Doc hears who sent the man with the bag
   await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);
@@ -1402,6 +1435,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
             rackets: h.victimOwned.rackets.length, assets: h.victimOwned.assets.length, lvl },
   };
 
+  // FIVE PILLARS #5 — THE BLOODLINE: every generation gets its line in the family book (account-level,
+  // written BEFORE the wipe, idempotent per generation — the ancestral hall + dynasty score read it).
+  await recordDeath(client, victim, {
+    cause: killerName, level: lvl, kills: Number(victim.season_kills || 0), honor: Number(victim.honor || 0) });
+
   // §10.4: the estate burns street value — every currency leaves through a ledgered sink
   if (exactCash > 0) await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -exactCash, reason: 'death:estate' });
   if (Number(victim.cb) > 0) await h.ledger(client, { characterId: victim.id, currency: 'cb', amount: -Number(victim.cb), reason: 'death:estate' });
@@ -1432,7 +1470,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots'])
+  for (const table of ['cars', 'boats', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
@@ -1581,8 +1619,11 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const stake = 500 + 100 * Number(acct.prestige);
   // the bloodline stays "made" — a paid mint (§11) carries down the estate to the heir
   await client.query(
-    'INSERT INTO characters (id, account_id, name, generation, season, cash, minted) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-    [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake, !!acct.minted]);
+    'INSERT INTO characters (id, account_id, name, generation, season, cash, minted, honor) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+    [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake, !!acct.minted,
+     // FIVE PILLARS #1: the honor ECHO — identity shadows the name at a quarter strength (the
+     // npc-memory precedent; a Mad Dog's heir starts under the cloud, a Man of Honor's with a nod)
+     Math.round(Number(victim.honor || 0) * HONOR.HEIR_KEEP)]);
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
   // …and the names that remember the bloodline follow the heir (fresh touched_at — the clock restarts)

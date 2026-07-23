@@ -127,6 +127,10 @@ CREATE TABLE IF NOT EXISTS characters (
   -- M7 Phase 2 — this STREET's kills this season (the fresh, contestable board); resets on
   -- season rollover and starts at 0 for an heir (dies with the man, unlike the account legend).
   season_kills INT NOT NULL DEFAULT 0,
+  -- FIVE PILLARS #1 — HONOR ↔ INFAMY (−100..+100): the Fable identity axis, moved by deeds at
+  -- existing sites (repay/save/settle vs welsh/rat/shank/oathbreak). NUMERIC so set-based clamped
+  -- arithmetic (GREATEST/LEAST) is pg-mem-safe. Dies with the street; the heir echoes ×0.25.
+  honor NUMERIC NOT NULL DEFAULT 0,
   npchit_at TIMESTAMPTZ,                          -- M7 Phase 3: NPC-hitman hire cooldown
   safe_until TIMESTAMPTZ,                          -- M7 Phase 4: safehouse — untargetable by fire/NPC-hit
   guard_price NUMERIC,                             -- M7 Phase 4: bodyguard-for-hire listing (NULL = not offering)
@@ -296,6 +300,11 @@ CREATE TABLE IF NOT EXISTS gangs (
   dividend_at TIMESTAMPTZ,
   rwa_invested NUMERIC NOT NULL DEFAULT 0,
   dynasty_name TEXT,
+  -- FIVE PILLARS #2/#3: oathbreaker_until = the mark a family wears after breaking a sworn pact
+  -- (can't propose new treaties while marked — trust is priced). sov_points = lifetime sovereignty
+  -- points from razing rival strongholds (NUMERIC, arith-safe; pure status, the war-effort twin).
+  oathbreaker_until TIMESTAMPTZ,
+  sov_points NUMERIC NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- role is the source of truth for command: 'boss' | 'underboss' | 'capo' | 'soldier'
@@ -1624,3 +1633,85 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   invite TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ═══ THE FIVE PILLARS (content expansion): diplomacy, sovereignty, campaigns, bloodline ═══
+
+-- #2 DIPLOMACY — formal treaties between families. Sorted-pair PK (gang_a < gang_b); a row is a
+-- PENDING proposal until `accepted`, then active until `until`. Breaking an active pact early is
+-- the OATHBREAK (gangs.oathbreaker_until + boss honor). Rows die with either family (dissolution).
+CREATE TABLE IF NOT EXISTS gang_relations (
+  gang_a TEXT NOT NULL,
+  gang_b TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'pact',
+  proposed_by TEXT NOT NULL,                     -- the proposing gang's id (the OTHER side accepts)
+  accepted BOOLEAN NOT NULL DEFAULT false,
+  until TIMESTAMPTZ,                             -- set at accept: now + DIPLOMACY.PACT_MS
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (gang_a, gang_b)
+);
+
+-- #2 COALITIONS — the EU4 anti-hegemon: bosses band together against a DOMINANT family. While a
+-- coalition holds ≥ COALITION_MIN member families, members get the war-chest + seize discounts vs
+-- the target. Expires (lazy-filtered + worker-swept); dies with the target or a member (rows pruned).
+CREATE TABLE IF NOT EXISTS coalitions (
+  id TEXT PRIMARY KEY,
+  target_gang TEXT NOT NULL,
+  formed_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coalition_members (
+  coalition_id TEXT NOT NULL,
+  gang_id TEXT NOT NULL,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (coalition_id, gang_id)
+);
+
+-- #3 SOVEREIGNTY — one stronghold per held district (the territory-racket shape). The garrison
+-- stiffens the district's seize outbid EXCEPT during the daily vulnerability window, when a rival
+-- boss can SIEGE it down a tier (razed at 0 — destruction, never a transfer: anti-snowball).
+-- Upkeep accrues on its own clock with the EU4 overextension multiplier; unpaid 3d → crumbling
+-- (garrison 0). Razed on district seizure + on dissolution.
+CREATE TABLE IF NOT EXISTS sov_structures (
+  district_id TEXT PRIMARY KEY,
+  gang_id TEXT NOT NULL,
+  tier INT NOT NULL DEFAULT 1,
+  window_hour INT NOT NULL DEFAULT 0,            -- UTC hour the 2h vulnerability window opens
+  built_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  upkeep_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  siege_cd_until TIMESTAMPTZ
+);
+
+-- #4 CAMPAIGNS — authored quest chains from the Underworld fixers. Progress advances on the
+-- existing bumpStanding ACTION stream (the errand precedent) + explicit choices; the one-time
+-- reward is claimed (the missions pay-once precedent). Death disposition: WIPED (a fresh street
+-- walks the stories again — the roguelike spine).
+CREATE TABLE IF NOT EXISTS campaign_progress (
+  character_id TEXT NOT NULL,
+  campaign_id TEXT NOT NULL,
+  step INT NOT NULL DEFAULT 0,
+  done INT NOT NULL DEFAULT 0,                   -- progress within the current task step
+  branch TEXT,                                   -- the choice taken (colors the finale + reward)
+  completed BOOLEAN NOT NULL DEFAULT false,
+  claimed BOOLEAN NOT NULL DEFAULT false,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (character_id, campaign_id)
+);
+
+-- #5 THE BLOODLINE — the dynasty's death record, written by runEstate at every death.
+-- ACCOUNT-level (no character_id — it IS the record of the dead, outside the estate wipe by
+-- construction); survives forever. Epithets/titles derive at read (pure status).
+CREATE TABLE IF NOT EXISTS bloodline (
+  account_id TEXT NOT NULL,
+  generation INT NOT NULL,
+  name TEXT NOT NULL,
+  died_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cause TEXT,                                    -- killer's name, or THE COMMISSION / the Law
+  level INT NOT NULL DEFAULT 1,
+  kills INT NOT NULL DEFAULT 0,                  -- that street's season kills at death
+  honor NUMERIC NOT NULL DEFAULT 0,              -- honor at death (feeds the epithet)
+  PRIMARY KEY (account_id, generation)
+);
+CREATE INDEX IF NOT EXISTS ix_relations_b ON gang_relations (gang_b);
+CREATE INDEX IF NOT EXISTS ix_coalition_target ON coalitions (target_gang);
+CREATE INDEX IF NOT EXISTS ix_sov_gang ON sov_structures (gang_id);

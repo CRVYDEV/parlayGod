@@ -7,7 +7,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gangLevelOf, roleMultOf, weekOf, familyTaskOf, M3, M4,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
-         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf } from './rules.js';
+         cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { businessesOf } from './business.js';
 import { speakeasyOwnedOf } from './speakeasy.js';
@@ -283,6 +283,33 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
     await client.query('UPDATE npc_standing SET touched_at=now() WHERE character_id=$1 AND npc_id=$2', [ch.id, npcId]);
   }
   if (lead) await notify(client, ch.id, 'lead_done', { npc: npcId, bonus, streak });
+  // FIVE PILLARS #4 — the CAMPAIGN chains ride the same action stream (the errand precedent,
+  // inline here to keep game.js import-acyclic). Any fixer's tagged action can advance any
+  // active chain whose current step wants it; choice steps wait for the player.
+  if (action) await advanceCampaignsInline(client, ch, action);
+}
+
+async function advanceCampaignsInline(client, ch, action) {
+  const rows = (await client.query(
+    'SELECT * FROM campaign_progress WHERE character_id=$1 AND NOT completed', [ch.id])).rows;
+  for (const p of rows) {
+    const c = campaignOf(p.campaign_id);
+    const step = c?.steps[Number(p.step)];
+    if (!step || !step.action || step.action !== action) continue;
+    const done = Number(p.done) + 1;
+    if (done >= (step.n || 1)) {
+      const nextStep = Number(p.step) + 1;
+      const finished = nextStep >= c.steps.length;
+      await client.query(
+        'UPDATE campaign_progress SET step=$3, done=0, completed=$4 WHERE character_id=$1 AND campaign_id=$2',
+        [ch.id, p.campaign_id, nextStep, finished]);
+      await notify(client, ch.id, finished ? 'campaign_done' : 'campaign_step',
+        { campaign: c.name, step: nextStep, of: c.steps.length });
+    } else {
+      await client.query('UPDATE campaign_progress SET done=$3 WHERE character_id=$1 AND campaign_id=$2',
+        [ch.id, p.campaign_id, done]);
+    }
+  }
 }
 
 // Skill touchpoint helpers — every effect is a NEW single-touchpoint modifier (sign-off lever).
@@ -589,6 +616,8 @@ export function view(ch, acct = {}, owned = {}) {
       + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
       + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0),
     skills: [...(owned.skills || [])],
+    // FIVE PILLARS #1 — the honor axis (Fable): the value + tier the world reads you by
+    honor: { value: Number(ch.honor || 0), tier: honorTierOf(ch.honor || 0).name },
     // (red-team R5) mirror pointsOf() — total = level-derived + the prestige bonus the learn-gate grants;
     // the display had omitted the prestige points, under-reporting a prestiged bloodline's real budget.
     skillPoints: (() => {

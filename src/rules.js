@@ -2381,3 +2381,122 @@ export const withdrawTaxBps = () => Number(process.env.WITHDRAW_TAX_BPS ?? 200) 
 // NO exemptions, split like the exit toll (half dev / half buybacks). Rates read per-call (ops levers).
 export const earlySellTaxBps = () => Number(process.env.EARLY_SELL_TAX_BPS ?? 5000)  // 50% at age 0
 export const freshWindowMs = () => Number(process.env.FRESH_WINDOW_MS ?? 48 * 3600000) // 48h fade
+
+// ═══ THE FIVE PILLARS (content expansion — omerta-five-pillars-design.md). Every number below is
+// a founder sign-off lever. #1 honor / #2 diplomacy / #3 sovereignty / #4 campaigns / #5 bloodline. ═══
+export const HONOR = {
+  MIN: -100, MAX: 100,
+  TIERS: [ { min: -100, name: 'Mad Dog' }, { min: -60, name: 'Ruthless' }, { min: -20, name: 'Unproven' },
+           { min: 20, name: 'Respected' }, { min: 60, name: 'Man of Honor' } ],
+  // deed deltas — single touchpoints at existing sites (the discounted/bumped number is the event)
+  REPAY: 2, BODYGUARD_SAVE: 8, VENDETTA_SETTLE: 10,
+  WELSH: -15, RAT: -30, SHANK: -12, NPC_HIT: -5, OATHBREAK: -20,
+  TRUSTED: 60, DREADED: -60,        // the two teeth thresholds (Man of Honor / Mad Dog)
+  LAYLOW_MULT: 0.9,                 // Man of Honor: the judges go easier (stacks multiplicatively)
+  HEIR_KEEP: 0.25,                  // the bloodline echo — the heir inherits a quarter of the name's honor
+}
+export const honorTierOf = (h) => [...HONOR.TIERS].reverse().find((t) => Number(h) >= t.min) || HONOR.TIERS[0]
+
+export const DIPLOMACY = {
+  PACT_MS: 7 * 86400000,            // a sworn pact runs a week
+  OATHBREAK_MS: 3 * 86400000,       // the oathbreaker mark (no new proposals while it stands)
+  COALITION_MS: 7 * 86400000,       // a coalition's mandate (re-form if the target is still dominant)
+  DOMINANCE_DISTRICTS: 2,           // holding ≥2 core districts marks a family DOMINANT…
+  DOMINANCE_STANDING_MULT: 2,       // …or standing ≥ 2× the runner-up family
+  COALITION_MIN: 2,                 // the teeth switch on at 2+ member families
+  COALITION_WAR_MULT: 0.5,          // members' war chest vs the target (discounted number ledgered)
+  COALITION_SEIZE_MULT: 0.85,       // members' garrison outbid vs the target's districts
+}
+
+export const SOV = {
+  TIERS: [ { name: 'Outpost', cost: 100000, garrison: 15000, upkeepPerDay: 5000 },
+           { name: 'Fort', cost: 400000, garrison: 60000, upkeepPerDay: 15000 },
+           { name: 'Citadel', cost: 1500000, garrison: 250000, upkeepPerDay: 40000 } ],
+  WINDOW_H: 2,                      // the daily vulnerability window (UTC, chosen at build)
+  SIEGE_COST: 50000,                // the assault chest — burns win or lose (the npchit-fee posture)
+  SIEGE_CD_MS: 24 * 3600000,        // per-structure, win or lose (the owner isn't ground down)
+  SIEGE_BASE_P: 0.35, SIEGE_STAT_SCALE: 400, SIEGE_TIER_P: 0.08, // p = BASE + atk/SCALE − (tier−1)×TIER_P
+  SIEGE_MIN_P: 0.10, SIEGE_MAX_P: 0.75,
+  SIEGE_FAIL_DMG: 20,
+  OVEREXT_BPS: 5000,                // +50% upkeep per EXTRA district held (EU4 overextension — the anti-snowball)
+  UPKEEP_CAP_MS: 7 * 86400000, CRUMBLE_MS: 3 * 86400000, // the pad/cold pattern
+  SOV_POINTS: [0, 10, 25, 60],      // razing a tier-N stronghold scores SOV_POINTS[N] (index by tier)
+  RANKS: [ { min: 0, name: 'Street Corner' }, { min: 25, name: 'A Name on the Block' },
+           { min: 100, name: 'The Iron Grip' }, { min: 300, name: 'Lords of the City' } ],
+}
+export const sovRankOf = (p) => [...SOV.RANKS].reverse().find((r) => Number(p) >= r.min) || SOV.RANKS[0]
+
+// #4 — the authored chains. Steps: {say, action, n} advance on the Underworld ACTION stream (the
+// errand vocabulary — heal/hire/post/craft/ammo/gun/deal/dice/numbers/train/list/depart/sign/fight);
+// {say, choice:[{id,label,honor,cash?}]} is the Fable branch (honor now; a cash branch sweetens the
+// final claim). Reward pays ONCE per street per chain (the missions precedent).
+export const CAMPAIGN_MIN_STANDING = 25
+export const CAMPAIGN_REWARD_TITLE_FINAL = true
+export const CAMPAIGNS = [
+  { id: 'doc_oath', npc: 'doc', name: 'The Hippocratic Oath',
+    blurb: "Doc Moretti's hands shake these days. He needs someone who can keep a secret — and keep men breathing.",
+    steps: [
+      { say: 'The Doc slides a list across the table. "Three of ours are bleeding out in flophouses. Patch yourself up where I can watch your hands work."', action: 'heal', n: 2 },
+      { say: 'A man on the table is a made man from a RIVAL family. The Doc looks at you: "He dies, we lose nothing. He lives, maybe the city owes us one."',
+        choice: [ { id: 'save', label: 'Every man on the table is just a man. Save him.', honor: 8 },
+                  { id: 'walk', label: 'Walk out. Let the Doc decide alone.', honor: -6, cash: 5000 } ] },
+      { say: '"Word got around," the Doc says. "Whichever way it went. One more night on the ward and we\'re square."', action: 'heal', n: 2 },
+    ],
+    reward: { cash: 10000, standing: 15, honor: 5, title: null } },
+  { id: 'vinnie_debt', npc: 'fixer', name: 'A Debt of Blood',
+    blurb: 'Vinnie the Match owes somebody an ending. He wants it arranged clean — through the board, like civilized people.',
+    steps: [
+      { say: '"First, prove you know how the board works. Put paper on somebody — anybody. The pot\'s the message."', action: 'post', n: 1 },
+      { say: '"Now the hard part. My debt needs professionals." Hire the work out — the trade has to move through hands like yours.', action: 'hire', n: 1 },
+      { say: 'Vinnie lights the match he never strikes. "The man I owed is settled. But there was a witness. A kid."',
+        choice: [ { id: 'spare', label: 'A kid is a kid. Walk him home and buy his silence with kindness.', honor: 10 },
+                  { id: 'scare', label: 'Scare him so deep he forgets his own name. Cheaper. Uglier.', honor: -10, cash: 8000 } ] },
+    ],
+    reward: { cash: 12000, standing: 15, honor: 0, title: null } },
+  { id: 'bella_daughter', npc: 'armorer', name: "The Gunsmith's Daughter",
+    blurb: "Bella Bang-Bang's kid wants into the family business. Bella wants her taught RIGHT — steel first, blood never.",
+    steps: [
+      { say: '"Show the kid the trade. Work the bench with her watching — crates, powder, the smell of oil."', action: 'craft', n: 1 },
+      { say: '"Now the counter. Buy ammo like a professional — count it twice, pay in full, thank the house."', action: 'ammo', n: 2 },
+      { say: 'The daughter asks you, quiet, when Bella steps out: "Is there a version of this life that doesn\'t end on a slab?"',
+        choice: [ { id: 'truth', label: 'Tell her the truth: no. And that\'s why you bank every dollar.', honor: 6 },
+                  { id: 'lie', label: 'Tell her what she wants to hear. Kids fight harder with hope.', honor: -4, cash: 4000 } ] },
+    ],
+    reward: { cash: 9000, standing: 15, honor: 3, title: null } },
+  { id: 'tuna_haul', npc: 'harbor', name: 'The Long Haul',
+    blurb: 'Big Tuna has one shipment he cannot lose, and a harbor full of people he cannot trust. Except maybe you.',
+    steps: [
+      { say: '"Run something first. Anything. I want to see how you handle a manifest before I hand you MINE."', action: 'depart', n: 1 },
+      { say: '"Good. Now the market side — list goods on the board. A smuggler who can\'t SELL is just a courier."', action: 'list', n: 1 },
+      { say: 'The big shipment lands. Inside the crates: not goods. People. Families, paying their way into the city.',
+        choice: [ { id: 'harbor', label: 'Get them somewhere warm. This one\'s free.', honor: 12 },
+                  { id: 'fee', label: 'Everyone pays the toll. Everyone.', honor: -12, cash: 10000 } ] },
+    ],
+    reward: { cash: 12000, standing: 15, honor: 0, title: null } },
+  { id: 'madame_house', npc: 'madame', name: 'The House Always Knows',
+    blurb: 'The Madame hears everything at the tables. Someone is bleeding her house from the inside, and she wants ears she owns.',
+    steps: [
+      { say: '"Sit. Play. Watch the dealer\'s left hand." Lose a little money like a gentleman while you watch.', action: 'dice', n: 2 },
+      { say: '"The numbers runner. He\'s the leak." Play his game — get close, get the pattern.', action: 'numbers', n: 1 },
+      { say: 'You catch the runner skimming — a sick mother, a debt to the wrong people. The Madame wants a NAME tonight.',
+        choice: [ { id: 'mercy', label: 'Pay his skim back yourself and tell the Madame the trail went cold.', honor: 10 },
+                  { id: 'name', label: 'Give him up. The house is the house.', honor: -8, cash: 7500 } ] },
+    ],
+    reward: { cash: 11000, standing: 15, honor: 0, title: 'FRIEND OF THE HOUSE' } },
+]
+export const campaignOf = (id) => CAMPAIGNS.find((c) => c.id === id)
+
+export const BLOODLINE = {
+  SCORE: { LEVEL: 10, KILL: 25, HONOR_ABS: 1 },  // dynasty score weights (pure status)
+  NUMERALS: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'],
+}
+// the epithet a generation earns — first match wins (data-driven, derived at read, never stored)
+export const bloodlineEpithet = (g) => {
+  if (Number(g.kills) >= 10) return 'the Butcher'
+  if (Number(g.honor) >= 60) return 'the Honorable'
+  if (Number(g.honor) <= -60) return 'the Mad Dog'
+  if (Number(g.level) >= 40) return 'the Great'
+  if (Number(g.level) >= 20) return 'the Made'
+  if (Number(g.level) <= 3) return 'the Brief'
+  return null
+}

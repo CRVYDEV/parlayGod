@@ -4,7 +4,8 @@
 // is a §10.4-ledgered transfer; only the house vig leaves the economy (a sink → the buyback pool).
 import crypto from 'node:crypto';
 import { GameError, ledger, notify, bus, track } from './game.js';
-import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf } from './rules.js';
+import { LOAN, loanVig, loanOwed, paperTake, M3, carCollateralValue, levelOf, HONOR } from './rules.js';
+import { bumpHonor, sqlHonorDelta } from './honor.js';
 
 const uid = () => crypto.randomUUID();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -176,6 +177,7 @@ export async function repayLoan(ch, lender, loanId, client, h) {
   if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring it takes $${owed} in pocket.`);
   const vig = loanVig(owed), toLender = owed - vig;
   ch.cash = Number(ch.cash) - owed;
+  await bumpHonor(client, ch, HONOR.REPAY); // #1: a squared debt is the everyday honorable deed
   lender.cash = Number(lender.cash) + toLender;
   await client.query("UPDATE loans SET status='repaid' WHERE id=$1", [loanId]);
   if (loan.collateral_car) { // square the debt → the pledged car comes home (unlock it)
@@ -220,6 +222,7 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
   // The marks are in-memory (persisted by withTwoCharacters).
   borrower.hosp_until = new Date(Date.now() + LOAN.COLLECT_HOSP_MS); // the leg-breaking
   borrower.welsher = true;                                          // marked — can't borrow again
+  await bumpHonor(client, borrower, HONOR.WELSH); // #1: a broken word stains the name (direct SQL — honor isn't positional)
   borrower.wanted_until = new Date(Date.now() + LOAN.WANTED_MS);     // WANTED: omertà stripped + hunted
   await postWantedBounty(client, borrower.id, h);                   // the underworld puts a price on their head
   if (collected > 0) {
@@ -448,7 +451,7 @@ export async function sweepLoans(pool, opts = {}) {
       const b = (await client.query('SELECT id, welsher FROM characters WHERE id=$1 AND alive FOR UPDATE', [borrower_character])).rows[0];
       const still = b && (await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active' AND due_at < $2", [borrower_character, now])).rows[0];
       if (!b || b.welsher || !still) { await client.query('ROLLBACK'); continue; }
-      await client.query('UPDATE characters SET welsher=true, wanted_until=$2 WHERE id=$1', [borrower_character, new Date(now.getTime() + LOAN.WANTED_MS)]);
+      await client.query(`UPDATE characters SET welsher=true, wanted_until=$2, honor = ${sqlHonorDelta(HONOR.WELSH)} WHERE id=$1`, [borrower_character, new Date(now.getTime() + LOAN.WANTED_MS)]);
       await postWantedBounty(client, borrower_character, { ledger });
       await client.query('COMMIT'); welshed++;
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans welsher', borrower_character, e.message); }
