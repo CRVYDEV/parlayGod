@@ -374,13 +374,26 @@ export async function buildServer() {
   // logs): #token= for a sign-in, #claimed=x for an upgrade, #autherr= on failure. DORMANT unless
   // X_CLIENT_ID + PUBLIC_URL are set (the callback URL to register on the X app is PUBLIC_URL +
   // /v1/auth/x/callback).
-  app.post('/v1/auth/x/start', async (req) => {
+  const cookieVal = (req, name) => (req.headers.cookie || '').split(';')
+    .map((c) => c.trim().split('=')).find(([k]) => k === name)?.[1];
+  app.post('/v1/auth/x/start', async (req, reply) => {
     let accountId = null;
     try { await req.jwtVerify(); accountId = req.user.sub; } catch { /* unauthed start = a fresh sign-in */ }
-    return A.xOAuthStart(pool, { accountId, invite: req.body?.inviteCode });
+    const { url, state } = await A.xOAuthStart(pool, { accountId, invite: req.body?.inviteCode });
+    // BROWSER-BIND the state (anti account-linking CSRF): the callback must present the same cookie,
+    // so an attacker who leaks their authorize URL can't have a victim's X identity bound to the
+    // attacker's account (the victim's browser never carries the attacker's cookie). Path-scoped +
+    // HttpOnly + Lax so it rides the top-level redirect back but nothing else.
+    reply.header('Set-Cookie', `omerta_oauth=${state}; Path=/v1/auth/x; HttpOnly; SameSite=Lax; Max-Age=900`);
+    return { url };
   });
   app.get('/v1/auth/x/callback', async (req, reply) => {
+    // clear the one-shot binding cookie no matter the outcome
+    reply.header('Set-Cookie', 'omerta_oauth=; Path=/v1/auth/x; HttpOnly; SameSite=Lax; Max-Age=0');
     try {
+      if (!req.query?.state || cookieVal(req, 'omerta_oauth') !== req.query.state) {
+        return reply.redirect('/#autherr=oauth_session'); // no matching browser binding → refuse (CSRF guard)
+      }
       const r = await A.xOAuthCallback(pool, { code: req.query?.code, state: req.query?.state });
       if (r.purpose === 'upgrade' && r.accountId) {
         await A.upgradeAccount(pool, r.accountId, r.identity);
@@ -1549,7 +1562,7 @@ export async function buildServer() {
   const ACTIVITY_WIRE = {
     'POST /v1/crimes/:id': ['crime', 'pulled a job'],
     'POST /v1/heist': ['crime', 'pulled a score'],
-    'POST /v1/travel': ['move', 'is on the move'],
+    'POST /v1/travel/:district': ['move', 'is on the move'],
     'POST /v1/casino/dice': ['den', 'is rolling dice at the den'],
     'POST /v1/casino/numbers': ['den', 'played the numbers'],
     'POST /v1/casino/blackjack': ['den', 'sat down at the blackjack table'],
@@ -1597,7 +1610,7 @@ export async function buildServer() {
   // the worker's 7-day sweep. Family room = the sender's CURRENT gang; reads are member-gated. ──
   const lastChatAt = new Map(); // accountId -> ms (in-process flood brake)
   const chatChar = async (accountId) => (await pool.query(
-    `SELECT c.id, c.name, gm.gang_id FROM characters c
+    `SELECT c.id, c.name, gm.gang_id, gm.joined_at FROM characters c
        LEFT JOIN gang_members gm ON gm.character_id = c.id
       WHERE c.account_id=$1 AND c.alive`, [accountId])).rows[0];
   const postChat = async (req, family) => {
@@ -1623,8 +1636,12 @@ export async function buildServer() {
     if (!ch) throw new G.GameError('no_character', 'no living street');
     if (family && !ch.gang_id) return { messages: [] };
     const channel = family ? ch.gang_id : 'city';
+    // the family room shows only messages from AFTER you joined — a spy who slips into a family
+    // can't read its back-chat (war planning, contracts). City chat has no floor.
+    const since = family ? (ch.joined_at || new Date(0)) : new Date(0);
     const rows = (await pool.query(
-      'SELECT name, body, at FROM chat_messages WHERE channel=$1 ORDER BY at DESC LIMIT 50', [channel])).rows;
+      'SELECT name, body, at FROM chat_messages WHERE channel=$1 AND at >= $2 ORDER BY at DESC LIMIT 50',
+      [channel, since])).rows;
     return { messages: rows.reverse().map((r) => ({ who: r.name, text: r.body, at: r.at })) };
   };
   app.post('/v1/chat', { preHandler: auth }, async (req) => postChat(req, false));

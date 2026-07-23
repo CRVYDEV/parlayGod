@@ -157,7 +157,7 @@ export async function xOAuthStart(pool, { accountId = null, invite = null } = {}
   u.searchParams.set('state', state);
   u.searchParams.set('code_challenge', challenge);
   u.searchParams.set('code_challenge_method', 'S256');
-  return { url: u.toString() };
+  return { url: u.toString(), state }; // state returned so the route can browser-bind it (anti-CSRF cookie)
 }
 
 // Returns { purpose, accountId, invite, identity } — the route decides upgrade vs login + signs.
