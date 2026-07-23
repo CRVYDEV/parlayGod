@@ -3483,6 +3483,44 @@ genuinely exercises `bond()`. Contracts themselves needed ZERO changes — consi
 audit. Residual for mainnet: the third-party audit re-runs with NATIVE solc (CHAIN-DEPLOY.md gate 1
 updated; gates 2 legal + 3 audit stand).
 
+**THE OVERNIGHT UX DROP (founder's 11-item list, 2026-07-23 night)** — all eleven built, a commit
+per item, suite green + sim drift-0 throughout, each client change browser-verified. **(1) Live
+Feed humanized** — feedText() renders one sentence per event (never raw JSON; the WS hello is a
+quiet status line), color-coded by category (combat red / law blue / den purple / racing yellow /
+market green / family gold / world cyan). **(2) THE ACTION WIRE** — a new 'activity' bus channel
+broadcasts an ALLOWLISTED set of public-safe acts via an onResponse hook (+60s actor-name cache);
+deliberately an allowlist so covert acts (searches, taps, bank moves, kitchen deals, port runs,
+laundering) never leak — the audited info economy stands; no amounts. **(3) THE TROLL BOX** —
+public city chat + a family-only room (chat_messages table, name snapshots, 7-day retention,
+cleanText + 240 clamp + 2s flood brake, gang-channel WS fanout, member-gated reads; zero §10.4).
+**(4) PRESENCE** — keyless GET /v1/online (live sockets + active15m, cached) → the "N in the city"
+badge. **(5) LIVE COOLDOWNS** — mins() now emits a ticking [data-until] span (1s global ticker);
+minsTxt for plain-text contexts. **(6) THE 4-HOUR STAND** — Spread-the-Word pays in two phases:
+register (posted_at/paid/proof on social_claims) → pay only after SOCIAL_MATURE_MS (4h; env test
+knob) with live-mode re-verification that the post still stands (verify.js verifyPostUp; deleted →
+post_gone); 48h pending TTL; board states todo/pending/ready/claimed. **(7) ONE-CLICK X SIGN-IN**
+— OAuth2 PKCE with SERVER-SIDE code exchange (the E-H1 real path): POST /v1/auth/x/start mints a
+single-use state (oauth_states, 15-min TTL, worker-swept; an authed start binds the guest for a
+claim-in-place upgrade — the bearer never rides a URL), GET /v1/auth/x/callback exchanges + reads
+/2/users/me, results ride the URL FRAGMENT; DORMANT unless X_CLIENT_ID + PUBLIC_URL (register the
+callback as PUBLIC_URL + /v1/auth/x/callback); rules.auth.xOAuth gates the console buttons; token
+pasting collapsed to an advanced fallback. **(8) THE CITY clarified** — a what-this-is lead card,
+plain-language law/patrol lines, the weather table upgraded to TRADE WINDS (the shock multipliers
+become "cheapest in X, richest in Y — a ~N% spread" + cheap/fair/rich labels), a human forecast,
+the cartel loop stated in one line. **(9) PROGRESSIVE DISCLOSURE** — a fresh player sees FIVE
+screens (start/streets/garage/city/family) + a "+ the whole city…" expander; level 8 or any
+deliberate jump to a hidden screen opens everything (sticky); veterans untouched. **(10) THE
+TYPE-SCALE LIFT** — one single-pass map bumped all 173 declared px font sizes a step (root 15→16)
+with no double-bumping, plus a larger masthead, 31px money figure, roomier panels/cards/grids,
+line-height 1.5. **(11) LANGUAGE PACKS** — an I18N layer with 15 packs (en es pt fr de ru ar hi id
+vi tl tr zh ja ko), browser-locale auto-detect + a sticky 🌐 picker (top bar + landing), T(key)
+with English fallback, Arabic flips RTL; coverage = the chrome (all tab/group labels, the sheet,
+the street panel, core buttons, entry CTAs) with noir-correct local flavor (Мокрые дела, El
+Usurero, 闇金, Ang 5-6…); game PROSE stays English — each further surface is a pure dictionary
+add. Client-patch lesson recorded: String.replace substitution patterns ($$→$) corrupted a
+first pass — patchers must use replacement FUNCTIONS. Deferred (flagged): activity/chat i18n,
+translating game prose + describe(), the /wiki codex translation, a Privy one-click embed.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions
