@@ -3150,6 +3150,7 @@
     const t = $('#tab-portfolio');
     await refresh();
     const pf = (await api('GET', '/v1/portfolio')).body || {};
+    const vault = (await api('GET', '/v1/vault')).body || {};
     const wage = (await api('GET', '/v1/wage')).body || {};
     const bd = (await api('GET', '/v1/bonds')).body || {};
     const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
@@ -3226,7 +3227,18 @@
           <pre id="bond-quote-out" style="display:none;white-space:pre-wrap;font-size:11px;background:#111;padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto"></pre></div>
         ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>
 
-      <h2 style="margin-top:12px">The Board <span class="d" style="font-size:11px">(buy with clean $OMR — big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
+      <h2 style="margin-top:12px">The Float <span class="d" style="font-size:11px">(BACKED stock — real tokenized shares the treasury holds, funded by the city's ETH taxes; burn earned $OMR to claim your allocation at the real market price)</span></h2>
+      <div class="card">
+        <div class="d">the house never owes a unit it doesn't own · claims ${vault.claimMin ?? 5}–${fmt(vault.claimDailyOmr ?? 500)} $OMR/day per house · big moves draw heat like any laundering</div>
+        ${(vault.float || []).some((f) => f.available > 0) ? `
+        <div style="margin-top:6px">${(vault.float || []).filter((f) => f.omrPerUnit).map((f) => `
+          <div class="d"><b>${f.ticker}</b> ${f.name} — float ${f.available} of ${f.held} units open · ${fmt(f.omrPerUnit)} $OMR/unit
+            <input data-vaultamt="${f.ticker}" placeholder="$OMR" size="7"> <button class="act" data-vaultbuy="${f.ticker}">claim</button></div>`).join('')}</div>`
+        : '<div class="d" style="color:var(--dim)">the float is empty — the next treasury buyback stocks it (the taxes are accumulating)</div>'}
+        ${(vault.mine || []).length ? `<div class="d" style="margin-top:6px">your vaulted book: ${vault.mine.map((m) => `<b>${m.ticker}</b> ${m.units}u`).join(' · ')} <span class="chip good">BACKED</span></div>` : ''}
+        <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
+
+      <h2 style="margin-top:12px">The Paper Book <span class="d" style="font-size:11px">(the status collection — buy with clean $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat)</span></h2>
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
         <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
           <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
@@ -3261,6 +3273,8 @@
         Cash-out to a real on-chain token is a later phase (gated on legal review).</div>`;
 
     { const wl = $('#wallet-link'); if (wl) wl.onclick = () => linkWallet(); }
+    t.querySelectorAll('[data-vaultbuy]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/vault/claim', { ticker: b.dataset.vaultbuy, omr: Number(t.querySelector(`[data-vaultamt="${b.dataset.vaultbuy}"]`).value) }).then(() => renderPortfolio()));
     { const mg = $('#mint-go'); if (mg) mg.onclick = () => act('POST', '/v1/character/mint').then(() => renderPortfolio()); }
     { const wd = $('#withdraw-go'); if (wd) wd.onclick = () =>
         act('POST', '/v1/withdraw', { amount: Number($('#wd-amt').value), address: me.wallet }).then(() => renderPortfolio()); }

@@ -1809,3 +1809,35 @@ CREATE TABLE IF NOT EXISTS collection_log (
   first_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_id, category, item_id)
 );
+
+-- ═══ THE FLOAT (omerta-rwa-float-design.md) — the full-reserve RWA layer. Out-of-band REAL value
+-- (the vig/bond/fees precedent): these tables move no §10.4 currency except the rwa:vault $OMR burn,
+-- which rides the existing rwa:% vocabulary. Everything is denominated in token UNITS so price
+-- movement can never create a shortfall; allocated ≤ held is the anti-Ponzi invariant.
+CREATE TABLE IF NOT EXISTS rwa_reserve (
+  ticker TEXT PRIMARY KEY,            -- PORTFOLIO.TICKERS id
+  units NUMERIC NOT NULL DEFAULT 0,   -- tokenized-stock units the treasury holds (the float)
+  eth_spent NUMERIC NOT NULL DEFAULT 0, -- cost basis
+  last_price_eth NUMERIC NOT NULL DEFAULT 0, -- the oracle at the last buy (ETH per unit)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS rwa_buys (
+  id TEXT PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  eth NUMERIC NOT NULL,               -- ETH spent (≤ unspent rwa_revenue at buy time)
+  units NUMERIC NOT NULL,             -- units bought = eth / price_eth
+  price_eth NUMERIC NOT NULL,         -- oracle price (mainnet: the Uniswap TWAP)
+  tx_hash TEXT,                       -- the real swap tx; NULL = simulated (QA / pre-mainnet)
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- the VAULTED book — account-level (SURVIVES DEATH, the portfolios precedent; never estate-wiped)
+CREATE TABLE IF NOT EXISTS rwa_vault (
+  account_id UUID NOT NULL,
+  ticker TEXT NOT NULL,
+  units NUMERIC NOT NULL DEFAULT 0,
+  cost_omr NUMERIC NOT NULL DEFAULT 0, -- lifetime $OMR burned into this line (display)
+  PRIMARY KEY (account_id, ticker)
+);
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_used NUMERIC NOT NULL DEFAULT 0; -- rolling-24h claim bucket
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS vault_at TIMESTAMPTZ;
