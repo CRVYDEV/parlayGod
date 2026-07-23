@@ -51,16 +51,26 @@ export async function verifySocial(taskId, acct) {
 // claimed, live mode re-checks that the registered post STILL EXISTS on X — post-and-delete pays
 // nothing. Trust mode skips the API check but the 4h clock itself is enforced in growth.js either
 // way (deleting early still forfeits under live; under trust the time cost alone deters churn).
-export async function verifyPostUp(proof) {
+export async function verifyPostUp(proof, ctx = {}) {
   const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
   if (mode !== 'live') return true;
   if (!process.env.X_BEARER_TOKEN) throw new GameError('verify_unavailable', 'X verification not configured.');
   const s = String(proof || '');
   const id = s.match(/status(?:es)?\/(\d{8,25})/)?.[1] || s.match(/^(\d{8,25})$/)?.[1];
   if (!id) throw new GameError('need_proof', 'Register the share with a link to your post so it can be verified.');
-  const res = await fetch(`https://api.x.com/2/tweets/${id}`, {
-    headers: { authorization: `Bearer ${process.env.X_BEARER_TOKEN}` } });
+  // (D2) for an X-linked account we KNOW the player's X id, so bind the post to THEM — upgrades
+  // "a post with this id exists" to "THIS player's post exists", blocking a payout for registering
+  // a celebrity's (or anyone's) permanent tweet. Guest/Privy accounts keep the plain existence check.
+  let wantAuthor = null;
+  if (ctx.client && ctx.accountId) {
+    const acc = (await ctx.client.query('SELECT auth_provider, auth_subject FROM accounts WHERE id=$1', [ctx.accountId])).rows[0];
+    if (acc && acc.auth_provider === 'x' && acc.auth_subject) wantAuthor = String(acc.auth_subject);
+  }
+  const url = `https://api.x.com/2/tweets/${id}` + (wantAuthor ? '?tweet.fields=author_id' : '');
+  const res = await fetch(url, { headers: { authorization: `Bearer ${process.env.X_BEARER_TOKEN}` } });
   const j = await res.json().catch(() => ({}));
   if (!res.ok || !j.data || j.errors) throw new GameError('post_gone', 'That post is gone — it has to stand to pay.');
+  if (wantAuthor && String(j.data.author_id || '') !== wantAuthor)
+    throw new GameError('not_your_post', "That post has to come from your linked X account to pay.");
   return true;
 }

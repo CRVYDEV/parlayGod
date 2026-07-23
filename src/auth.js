@@ -74,7 +74,7 @@ export async function verifyPrivy(token) {
 // Find-or-create the account for a verified identity. Returns {accountId, created}.
 // UNIQUE(auth_provider,auth_subject) makes the create race-safe: on a concurrent
 // double sign-in one INSERT wins, the loser catches the conflict and adopts the row.
-export async function accountForIdentity(pool, { provider, subject }, ip) {
+export async function accountForIdentity(pool, { provider, subject }, ip, invite) {
   const existing = (await pool.query('SELECT id, status FROM accounts WHERE auth_provider=$1 AND auth_subject=$2', [provider, subject])).rows[0];
   if (existing) {
     if (existing.status === 'banned') throw new GameError('banned', 'This account is banned.');
@@ -85,6 +85,11 @@ export async function accountForIdentity(pool, { provider, subject }, ip) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // (red-team B2) consume the invite ATOMICALLY with creation — inside the same txn, so exactly one
+    // invite is burned per created account: a concurrent second callback for the SAME new identity
+    // either loses the accounts insert race (adopts, no consume) or is deduped by the caller. An
+    // exhausted invite throws here and rolls the whole create back → the gate is never bypassed.
+    await consumeInvite(client, invite);
     await client.query('INSERT INTO accounts (id, auth_provider, auth_subject, created_ip, last_ip) VALUES ($1,$2,$3,$4,$4)',
       [id, provider, subject, ip]);
     await client.query('INSERT INTO account_persistent (account_id) VALUES ($1)', [id]);
