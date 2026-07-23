@@ -61,7 +61,11 @@ export async function buildSov(ch, districtId, windowHour, client, h) {
   const wh = Number(windowHour);
   if (!Number.isInteger(wh) || wh < 0 || wh > 23) throw new GameError('bad_window', 'Pick the vulnerability hour (0–23 UTC).');
   const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
-  const d = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [districtId])).rows[0];
+  // lock the district row (the seizeDistrict discipline) so a build can't race a seizure and orphan a
+  // stronghold on turf that just changed hands — re-verify the holder under the lock. Lock order is
+  // gang → district here; seizeDistrict locks district → gang, but no sov path ever locks district THEN
+  // gang, so the only shared pair (this build vs a seize of the SAME district) serializes without a cycle.
+  const d = (await client.query('SELECT holder_gang FROM districts WHERE id=$1 FOR UPDATE', [districtId])).rows[0];
   if (d?.holder_gang !== h.owned.gangId) throw new GameError('not_yours', 'You can only build on turf your family holds.');
   const existing = (await client.query('SELECT 1 FROM sov_structures WHERE district_id=$1', [districtId])).rows[0];
   if (existing) throw new GameError('exists', 'A stronghold already stands there.');
