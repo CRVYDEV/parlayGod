@@ -435,6 +435,40 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const tx = await pool.query(
     'SELECT COUNT(*) c FROM transactions WHERE character_id IN ($1,$2)', [caller.id, callee.id]);
   assert.equal(Number(tx.rows[0].c), 0, 'the phone moved no value — zero ledger rows');
+
+  // ── STEP TWO: BLOCKED LINES (a fresh pair — the flood brake stays clean) ──
+  const pest = await mk('Petey Pest');
+  const mark = await mk('Marie the Mark');
+  r = await call('POST', `/v1/phone/dm/${mark.id}`, { token: pest.token, body: { text: 'hey. hey. answer me' } });
+  assert.equal(r.code, 200, 'the pest gets one message in');
+  r = await call('POST', `/v1/phone/block/${pest.id}`, { token: mark.token });
+  assert.equal(r.code, 200, 'the mark blocks the line');
+  assert.equal(r.body.blocked, 'Petey Pest', 'the block names who got blocked');
+  r = await call('POST', `/v1/phone/dm/${mark.id}`, { token: pest.token, body: { text: 'why no answer' } });
+  assert.equal(r.body.error, 'blocked', 'a blocked sender gets the dead tone (before the flood brake)');
+  r = await call('POST', `/v1/phone/dm/${pest.id}`, { token: mark.token, body: { text: 'testing' } });
+  assert.equal(r.body.error, 'you_blocked', 'the blocker cannot message the blocked line either');
+  // the board surfaces it: the thread flags blocked + the blocks list carries the name
+  r = await call('GET', '/v1/phone', { token: mark.token });
+  const bth = r.body.threads.find((t) => t.name === 'Petey Pest');
+  assert(bth && bth.blocked === true, 'the thread shows BLOCKED');
+  assert(r.body.blocks.some((bl) => bl.name === 'Petey Pest' && bl.characterId === pest.id), 'the blocks list names the line');
+  // thread view: replyable false while blocked (history stands)
+  r = await call('GET', `/v1/phone/thread/${pest.id}`, { token: mark.token });
+  assert(r.body.with.blocked === true && r.body.with.replyable === false, 'a blocked thread reads but cannot reply');
+  assert.equal(r.body.messages.length, 1, 'blocking never deletes history');
+  // self / unknown / double-unblock gates
+  r = await call('POST', `/v1/phone/block/${mark.id}`, { token: mark.token });
+  assert.equal(r.body.error, 'self', 'no blocking your own line');
+  r = await call('DELETE', `/v1/phone/block/${pest.id}`, { token: mark.token });
+  assert.equal(r.code, 200, 'unblock lifts it');
+  r = await call('DELETE', `/v1/phone/block/${pest.id}`, { token: mark.token });
+  assert.equal(r.body.error, 'not_blocked', 'a second unblock is a clean refusal');
+  // the line works again (the pest's brake armed at the first landed send, long since elapsed —
+  // his blocked attempts never armed it; still, wait out the 2s brake to keep this deterministic)
+  await new Promise((res) => setTimeout(res, 2100));
+  r = await call('POST', `/v1/phone/dm/${mark.id}`, { token: pest.token, body: { text: 'thank you' } });
+  assert.equal(r.code, 200, 'an unblocked line takes calls again');
 }
 
 // ── ONE-CLICK X SIGN-IN (OAuth2 PKCE redirect) — dormant without env; configured: /start mints a
@@ -590,5 +624,5 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   if (after.code === 200 && gid) assert(after.body.messages.some((m) => m.text.includes('new orders')), 'but sees messages from after they joined');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates)`);
 await app.close();

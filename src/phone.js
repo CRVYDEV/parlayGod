@@ -10,7 +10,12 @@
 //                resolved for display + reply targeting.
 // Discipline: cleanText + 240-char clamp + a 2s per-account flood brake (the postChat trio);
 // self-DM blocked; a recipient with no living street still receives (the heir reads it later).
-// Retention: the worker's 30-day sweep. No block/mute in step one (flagged in the design margin).
+// Retention: the worker's 30-day sweep. STEP TWO: BLOCKED LINES — `dm_blocks`, account-level both
+// sides (a block outlives death: you blocked the BLOODLINE; the heir stays blocked until you
+// relent). A blocked sender gets an honest 'blocked' (no silent drop — this is a mafia game, they
+// can know you hung up on them); blocking someone also stops YOU messaging them ('you_blocked',
+// unblock to talk). Blocks gate only DMs — game events (a jump, a contract) still notify: you can
+// mute a man's mouth, never the city.
 import crypto from 'crypto';
 import { GameError, cleanText, notify } from './game.js';
 
@@ -32,6 +37,15 @@ export async function sendDm(pool, fromAccountId, targetCharacterId, text) {
     [targetCharacterId])).rows[0];
   if (!target) throw new GameError('gone', 'Nobody answers that number.');
   if (target.account_id === fromAccountId) throw new GameError('self', 'Talking to yourself again.');
+  // BLOCKED LINES (step two) — both directions, before the brake (a gate, not a landed line)
+  const blocks = (await pool.query(
+    `SELECT blocker_account FROM dm_blocks
+      WHERE (blocker_account=$1 AND blocked_account=$2) OR (blocker_account=$2 AND blocked_account=$1)`,
+    [target.account_id, fromAccountId])).rows;
+  if (blocks.some((b) => b.blocker_account === target.account_id))
+    throw new GameError('blocked', "The line is dead — they're not taking your calls.");
+  if (blocks.some((b) => b.blocker_account === fromAccountId))
+    throw new GameError('you_blocked', 'You blocked this line — unblock it to talk.');
   // the flood brake LAST — semantic errors surface first, and only a landed line arms it
   const last = lastDmAt.get(fromAccountId) || 0;
   if (Date.now() - last < DM_BRAKE_MS) throw new GameError('slow_down', 'Easy — one message at a time.');
@@ -101,8 +115,50 @@ export async function phoneBoard(pool, accountId) {
   // account UUIDs are NEVER exposed to clients (the closeSocketsOnKill discipline) — threads are
   // keyed for the client by the counterpart's living characterId; a dead line simply can't be
   // opened until the heir rises (the already-sent messages are waiting for them, not for you).
-  return { threads: [...threads.values()].map(({ account, ...t }) => ({ ...t, replyable: !!t.characterId })),
-    unreadDm, inbox, unreadInbox };
+  const blocks = await blockList(pool, accountId);
+  return { threads: [...threads.values()].map(({ account, ...t }) =>
+      ({ ...t, replyable: !!t.characterId, blocked: blocks.set.has(account) })),
+    blocks: blocks.list, unreadDm, inbox, unreadInbox };
+}
+
+// ── STEP TWO: block / unblock a line (by any character id on that bloodline) ──
+export async function blockLine(pool, accountId, targetCharacterId) {
+  const target = (await pool.query('SELECT id, name, account_id FROM characters WHERE id=$1',
+    [targetCharacterId])).rows[0];
+  if (!target) throw new GameError('gone', 'Nobody answers that number.');
+  if (target.account_id === accountId) throw new GameError('self', 'You cannot block your own line.');
+  const live = await livingChar(pool, target.account_id);
+  await pool.query(
+    `INSERT INTO dm_blocks (blocker_account, blocked_account, name) VALUES ($1,$2,$3)
+     ON CONFLICT (blocker_account, blocked_account) DO NOTHING`,
+    [accountId, target.account_id, live?.name || target.name]);
+  return { ok: true, blocked: live?.name || target.name };
+}
+export async function unblockLine(pool, accountId, targetCharacterId) {
+  const target = (await pool.query('SELECT account_id FROM characters WHERE id=$1',
+    [targetCharacterId])).rows[0];
+  if (!target) throw new GameError('gone', 'Nobody answers that number.');
+  const r = await pool.query('DELETE FROM dm_blocks WHERE blocker_account=$1 AND blocked_account=$2',
+    [accountId, target.account_id]);
+  if (!r.rowCount) throw new GameError('not_blocked', 'That line was never blocked.');
+  return { ok: true };
+}
+// my block list, client-keyed by the blocked bloodline's LIVING character (the no-UUID discipline);
+// a line with no living street still shows (snapshot name) — unblockable once the heir rises.
+async function blockList(pool, accountId) {
+  const rows = (await pool.query('SELECT blocked_account, name FROM dm_blocks WHERE blocker_account=$1 ORDER BY at',
+    [accountId])).rows;
+  if (!rows.length) return { list: [], set: new Set() };
+  const ph = rows.map((_, i) => `$${i + 1}`).join(',');
+  const live = (await pool.query(
+    `SELECT id, name, account_id FROM characters WHERE alive AND account_id IN (${ph})`,
+    rows.map((r) => r.blocked_account))).rows;
+  const byAcct = new Map(live.map((c) => [c.account_id, c]));
+  return {
+    list: rows.map((r) => { const c = byAcct.get(r.blocked_account);
+      return { name: c?.name || r.name, characterId: c?.id || null }; }),
+    set: new Set(rows.map((r) => r.blocked_account)),
+  };
 }
 
 // ── read one thread (by the counterpart's character id) — marks their lines to me as seen ──
@@ -118,8 +174,10 @@ export async function readThread(pool, accountId, counterpartCharacterId) {
   await pool.query('UPDATE dm_messages SET seen=true WHERE to_account=$1 AND from_account=$2 AND NOT seen',
     [accountId, target.account_id]);
   const live = await livingChar(pool, target.account_id);
+  const iBlocked = (await pool.query('SELECT 1 FROM dm_blocks WHERE blocker_account=$1 AND blocked_account=$2',
+    [accountId, target.account_id])).rowCount > 0;
   return { with: { name: live?.name || target.name,
-      characterId: live?.id || null, replyable: !!live },
+      characterId: live?.id || null, replyable: !!live && !iBlocked, blocked: iBlocked },
     messages: rows.reverse().map((m) => ({ fromMe: m.from_account === accountId,
       who: m.from_name, text: m.body, at: m.at })) };
 }

@@ -272,9 +272,10 @@
     width: 24px; height: 24px; line-height: 22px; text-align: center; font-size: 14px; flex: 0 0 auto;
     transition: color .16s, border-color .16s, box-shadow .16s; }
   #top .help:hover { color: var(--neon); border-color: var(--neon); box-shadow: 0 0 10px var(--neon-soft); }
-  #phone-badge { position: absolute; top: -6px; right: -6px; background: var(--neon); color: #08131a;
+  #phone-badge, #bnav-phone-badge { position: absolute; top: -6px; right: -6px; background: var(--neon); color: #08131a;
     border-radius: 9px; font-size: 10.5px; font-weight: bold; min-width: 17px; height: 17px; line-height: 17px;
     text-align: center; padding: 0 3px; }
+  #bnav-phone-badge { top: 0; right: 4px; }
   .ph-thread { display: flex; gap: 8px; align-items: baseline; padding: 7px 4px; border-bottom: 1px solid var(--line2); cursor: pointer; }
   .ph-thread:hover { background: rgba(255,255,255,.03); }
   .ph-thread .nm { color: var(--neon); min-width: 110px; }
@@ -681,6 +682,7 @@
     crew_changed: "your crew changed — line it up again", hole: "you're in the hole — nothing doing from solitary",
     witpro: "they're in witness protection — untouchable", welsher: "you welshed on a debt — square your name first",
     wanted: "there's a price on you — lie low or square it", jailed: "not from lockup", hospitalized: "not from a hospital bed",
+    blocked: "the line is dead — they're not taking your calls", you_blocked: "you blocked this line — unblock it to talk", not_blocked: "that line was never blocked",
     safehoused: "not from a safehouse — that's a shield, not a base", nerve: "not enough nerve", energy: "not enough energy",
     broke: "you can't cover that", cash: "you can't cover that", omr: "not enough $OMR", rank: "your rank isn't high enough",
     level: "you're not a high enough level yet", rookie: "you're too green for that yet", pledged: "that car's pledged as collateral",
@@ -1125,9 +1127,11 @@
   let phoneUnread = 0;
   function phoneBadge(n) {
     phoneUnread = Math.max(0, Number(n) || 0);
-    const b = $('#phone-badge'); if (!b) return;
-    b.textContent = phoneUnread > 99 ? '99+' : String(phoneUnread);
-    b.classList.toggle('hidden', phoneUnread === 0);
+    for (const id of ['#phone-badge', '#bnav-phone-badge']) {
+      const b = $(id); if (!b) continue;
+      b.textContent = phoneUnread > 99 ? '99+' : String(phoneUnread);
+      b.classList.toggle('hidden', phoneUnread === 0);
+    }
   }
   // a live dm arrived over the wire — bump the badge; if the phone is open, refresh the view
   function phoneRing(p) {
@@ -1166,9 +1170,14 @@
           <div class="ph-thread" data-th="${t.characterId || ''}">
             <span class="nm">${esc(t.name)}${t.unread ? ` <span class="chip" style="color:var(--neon)">${t.unread} new</span>` : ''}</span>
             <span class="lp">${t.last.fromMe ? 'you: ' : ''}${esc(t.last.text)}</span>
-            ${t.replyable ? '' : '<span class="chip cold">line dead</span>'}
+            ${t.blocked ? '<span class="chip" style="color:var(--bad)">BLOCKED</span>' : ''}${t.replyable ? '' : '<span class="chip cold">line dead</span>'}
           </div>`).join('') : '<div class="d">nobody has called. Message someone above — or keep it that way.</div>'}
       </div>
+      ${(b.blocks || []).length ? `<div class="card" style="margin-top:8px"><span class="t">BLOCKED LINES</span>
+        ${b.blocks.map((bl) => `<div class="ph-thread"><span class="nm">${esc(bl.name)}</span>
+          ${bl.characterId ? `<button class="act" data-unblock="${bl.characterId}" style="padding:3px 10px;font-size:12px">unblock</button>` : '<span class="chip cold">line dead</span>'}
+        </div>`).join('')}
+      </div>` : ''}
       <div class="card" style="margin-top:8px"><span class="t">THE INBOX — what happened to you</span>
         ${b.inbox.length ? b.inbox.slice(0, 15).map((n) => `
           <div class="ph-msg"${n.unread ? '' : ' style="opacity:.65"'}><span class="who">${new Date(n.at).toLocaleString()}</span><br>${esc(feedText({ type: n.type, payload: n.payload }))}</div>`).join('')
@@ -1178,7 +1187,13 @@
     m.querySelectorAll('.ph-thread').forEach((row) => { row.onclick = () => {
       const cid = row.dataset.th;
       if (cid) openPhoneThread(cid);
-      else toast('that line is dead — nobody living to answer. The heir will read what you already sent.', true);
+      else if (!row.querySelector('[data-unblock]')) toast('that line is dead — nobody living to answer. The heir will read what you already sent.', true);
+    }; });
+    m.querySelectorAll('[data-unblock]').forEach((bt) => { bt.onclick = async (e) => {
+      e.stopPropagation();
+      const r = await api('DELETE', '/v1/phone/block/' + bt.dataset.unblock);
+      toast(r.code < 400 ? 'the line is open again' : (r.body?.message || r.body?.error), r.code >= 400);
+      renderPhone();
     }; });
   }
   async function openPhoneThread(cid) {
@@ -1189,18 +1204,28 @@
     const t = r.body;
     m.innerHTML = `
       <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><button class="act" id="ph-back">← all threads</button>
-        <span class="t" style="color:var(--neon)">${esc(t.with.name)}</span>${t.with.replyable ? '' : '<span class="chip cold">line dead</span>'}</div>
+        <span class="t" style="color:var(--neon)">${esc(t.with.name)}</span>
+        ${t.with.blocked ? '<span class="chip" style="color:var(--bad)">BLOCKED</span>' : t.with.replyable ? '' : '<span class="chip cold">line dead</span>'}
+        ${t.with.characterId ? `<button class="act" id="ph-block" style="margin-left:auto;padding:3px 10px;font-size:12px">${t.with.blocked ? 'unblock' : '🚫 block'}</button>` : ''}</div>
       <div style="max-height:44vh;overflow-y:auto;margin-top:8px;border:1px solid var(--line2);border-radius:6px;padding:8px" id="ph-msgs">
         ${t.messages.map((x) => `<div class="ph-msg ${x.fromMe ? 'mine' : ''}"><span class="who">${x.fromMe ? 'you' : esc(x.who)} · ${new Date(x.at).toLocaleString()}</span><br>${esc(x.text)}</div>`).join('') || '<div class="d">no words yet</div>'}
       </div>
       ${t.with.replyable ? `<div style="display:flex;gap:6px;margin-top:8px">
         <input id="ph-reply" placeholder="say it (240 max)" maxlength="240" style="flex:1">
         <button class="act" id="ph-reply-go">send</button></div>`
+        : t.with.blocked ? '<div class="d" style="margin-top:8px">you blocked this line — unblock it to talk.</div>'
         : '<div class="d" style="margin-top:8px">their street is gone — the heir picks this thread up when they rise.</div>'}`;
     const box = $('#ph-msgs'); box.scrollTop = box.scrollHeight;
     $('#ph-back').onclick = () => renderPhone();
     const rg = $('#ph-reply-go');
     if (rg) rg.onclick = () => sendPhoneDm(t.with.characterId, $('#ph-reply').value, cid);
+    const bb = $('#ph-block');
+    if (bb) bb.onclick = async () => {
+      if (!t.with.blocked && !confirm(`Block ${t.with.name}?\n\nThey won't be able to message you (they'll know the line is dead). The block follows their bloodline until you lift it. Game events still reach you — this only mutes their mouth.`)) return;
+      const r = await api(t.with.blocked ? 'DELETE' : 'POST', '/v1/phone/block/' + t.with.characterId);
+      toast(r.code < 400 ? (t.with.blocked ? 'the line is open again' : 'line blocked — they get a dead tone now') : (r.body?.message || r.body?.error), r.code >= 400);
+      openPhoneThread(cid);
+    };
     // reading the thread marked their lines seen — resync the badge off the server count
     api('GET', '/v1/phone').then((rr) => { if (rr.code < 400) phoneBadge(rr.body.unreadDm); }).catch(() => {});
   }
@@ -1401,6 +1426,7 @@
     // full mode: show the seven group stops and hide garage/city (they're reachable via the Streets rail).
     if (bn) for (const b of bn.children) {
       const go = b.dataset.go;
+      if (!go) continue; // the cell stop rides in both modes
       b.classList.toggle('hidden', simple ? !SIMPLE_TABS.includes(go) : (go === 'garage' || go === 'city'));
     }
   }
@@ -1436,10 +1462,16 @@
       tabs.appendChild(more);
     }
     const bnav = $('#bnav');
-    if (bnav && !bnav.childElementCount) for (const [id, icon, label] of BNAV) {
-      const b = el(`<button data-go="${id}"><span class="bi">${icon}</span>${label}</button>`);
-      b.onclick = () => setTab(id);
-      bnav.appendChild(b);
+    if (bnav && !bnav.childElementCount) {
+      for (const [id, icon, label] of BNAV) {
+        const b = el(`<button data-go="${id}"><span class="bi">${icon}</span>${label}</button>`);
+        b.onclick = () => setTab(id);
+        bnav.appendChild(b);
+      }
+      // the cell rides the thumb bar in BOTH modes (no data-go — the visibility loop skips it)
+      const pb = el(`<button style="position:relative"><span class="bi">📱</span>cell<span id="bnav-phone-badge" class="hidden"></span></button>`);
+      pb.onclick = () => { $('#phone').classList.remove('hidden'); renderPhone(); };
+      bnav.appendChild(pb);
     }
     applyTabVisibility();
     renderStreets(); renderCity(); renderDen(); renderDeck();
@@ -2305,6 +2337,11 @@
       ['POST', '/v1/skills/respec', {}], ['POST', '/v1/respec', { muscle: 5, cunning: 5, speed: 5 }],
       ['POST', '/v1/vanity/name', { name: '' }], ['POST', '/v1/vanity/title', { title: '' }],
     ],
+    'The Cellphone': [
+      ['GET', '/v1/phone'], ['GET', '/v1/phone/thread/:characterId'],
+      ['POST', '/v1/phone/dm/:characterId', { text: '' }],
+      ['POST', '/v1/phone/block/:characterId', {}], ['DELETE', '/v1/phone/block/:characterId', {}],
+    ],
     'The Wire': [
       ['GET', '/v1/wire'], ['POST', '/v1/wire/tap/:targetId', {}], ['POST', '/v1/wire/sweep', {}],
       ['POST', '/v1/wire/subscribe', {}], ['POST', '/v1/wire/trace', {}], ['POST', '/v1/wire/dossier/:targetId', {}],
@@ -2427,6 +2464,7 @@
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
+          <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
           <button class="act" data-jump="${s.id}">jump</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
@@ -2446,6 +2484,9 @@
         const ex = Number(t.querySelector('#ct-excl').value); if (ex) body.exclusiveHours = ex; }
       act('POST', `/v1/streets/${t.querySelector('#ct-target').value}/bounty`, body).then(() => renderPvp());
     };
+    t.querySelectorAll('[data-dm]').forEach((b) => b.onclick = () => {
+      $('#phone').classList.remove('hidden'); openPhoneThread(b.dataset.dm);
+    });
     t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/streets/${b.dataset.jump}/jump`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-search]').forEach((b) => b.onclick = async () => {
