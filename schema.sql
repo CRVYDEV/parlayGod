@@ -2086,3 +2086,27 @@ ALTER TABLE gangs ADD COLUMN IF NOT EXISTS monument_built NUMERIC NOT NULL DEFAU
 -- legend axis. Bumped in honor.js:bumpHonor (the account is held under the caller's char lock).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS honor_peak NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS honor_low NUMERIC NOT NULL DEFAULT 0;
+
+-- ── CONVOYS TIER-4 DEEPENING (design omerta-tier3-deepening-design.md §Convoys) ──
+-- THE TEAMSTER / THE HIGHWAYMAN legends: lifetime value delivered clean / hijacked off the roads
+-- (account-level → survive death, the port-smuggled precedent; pure STATUS, outside §10.4).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS freight_delivered NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS freight_hijacked NUMERIC NOT NULL DEFAULT 0;
+-- THE RIG: one buyable hauler per character (armor→guard-def, engine→transit); dies with the street.
+CREATE TABLE IF NOT EXISTS rigs (
+  character_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  armor_lvl INT NOT NULL DEFAULT 0,
+  engine_lvl INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- the weekly Road Boss / Teamster-of-the-Week contest log (account-keyed → survives death; worker-swept ~8d).
+CREATE TABLE IF NOT EXISTS convoy_hauls (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  value NUMERIC NOT NULL DEFAULT 0,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_convoy_hauls_win ON convoy_hauls (kind, at);
+CREATE INDEX IF NOT EXISTS ix_convoy_hauls_acct ON convoy_hauls (account_id, at);

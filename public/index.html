@@ -3508,6 +3508,16 @@
           <button class="act" data-joinheist="${o.id}">crew up</button>` : ''}</div>`).join('')}</div>` : ''}
 
       <h2 style="margin-top:12px">Smuggling Convoys</h2>
+      ${cb.legend ? `<div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">🚚 ${cb.legend.hauler} · 🔫 ${cb.legend.bandit}</span>
+        <div class="d">delivered clean $${fmt(cb.legend.delivered || 0)} · hijacked off the roads $${fmt(cb.legend.hijacked || 0)} <span style="color:var(--dim)">(survives death)</span> · <a href="#" id="cv-lb">🏆 the roads →</a></div>
+        ${cb.roadBoss || cb.teamsterOfWeek ? `<div class="d">${cb.roadBoss ? `👑 ROAD BOSS this week: <b>${esc(cb.roadBoss.name)}</b> ($${fmt(cb.roadBoss.value)})` : ''}${cb.roadBoss && cb.teamsterOfWeek ? ' · ' : ''}${cb.teamsterOfWeek ? `🏅 TEAMSTER OF THE WEEK: <b>${esc(cb.teamsterOfWeek.name)}</b> ($${fmt(cb.teamsterOfWeek.value)})` : ''}</div>` : ''}
+        <div id="cv-lbout"></div></div>` : ''}
+      ${cb.rig ? `<div class="card"><span class="t">THE RIG — ${cb.rig.name}</span> <span class="chip">🛡 armor ${cb.rig.armorLvl}/${cb.rig.max}</span> <span class="chip">⚙ engine ${cb.rig.engineLvl}/${cb.rig.max}</span>
+        <div class="d">+${cb.rig.armorDef} guard defense · −${(cb.rig.speedBps / 100).toFixed(0)}% transit</div>
+        ${cb.rig.nextArmorCost != null ? `<button class="act" data-rigup="armor">upgrade armor ($${fmt(cb.rig.nextArmorCost)})</button>` : '<span class="chip">armor maxed</span>'}
+        ${cb.rig.nextEngineCost != null ? `<button class="act" data-rigup="engine">upgrade engine ($${fmt(cb.rig.nextEngineCost)})</button>` : '<span class="chip">engine maxed</span>'}</div>`
+        : `<div class="card"><span class="t">THE RIG</span><div class="d">a built hauler adds armor (defense) + engine (speed) to your runs. Buy one:</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${(cb.rigs || []).filter((r) => (me.level || 0) >= r.minLvl).map((r) => `<button class="act" data-rigbuy="${r.id}">${r.name} ($${fmt(r.cost)})</button>`).join('') || '<span class="d" style="color:var(--dim)">level up to unlock a rig</span>'}</div></div>`}
       ${cv ? `
         <div class="card" style="border-color:var(--neon)"><span class="t">your shipment · ${cv.from} → ${cv.to || '?'}</span> <span class="chip">${cv.status.toUpperCase()}</span>
           <div class="d">manifest: ${cv.manifest.map((x) => `${goodName(x.good)} ×${x.qty}`).join(', ') || 'empty'}${cv.insured ? ' · INSURED' : ''}${cv.ambushes ? ` · hit ${cv.ambushes}×` : ''}${cv.insuranceDue ? ` · claim due $${fmt(cv.insuranceDue)}` : ''}</div>
@@ -3572,6 +3582,15 @@
       act('POST', `/v1/convoy/${b.dataset.convoyCollect}/collect`, {}).then(() => renderScores()));
     t.querySelectorAll('[data-ambush]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/convoy/${b.dataset.ambush}/ambush`, {}).then(() => renderScores()));
+    t.querySelectorAll('[data-rigbuy]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/convoy/rig/${b.dataset.rigbuy}`, {}).then(() => renderScores()));
+    t.querySelectorAll('[data-rigup]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/convoy/rig/upgrade', { track: b.dataset.rigup }).then(() => renderScores()));
+    { const lb = t.querySelector('#cv-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/convoy')).body || {};
+      t.querySelector('#cv-lbout').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <div style="flex:1;min-width:170px"><div class="d"><b>TEAMSTERS</b> (delivered)</div>${(b.teamsters || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — ${k.rank} ($${fmt(k.value)})</div>`).join('') || '<div class="d">none yet</div>'}</div>
+        <div style="flex:1;min-width:170px"><div class="d"><b>HIGHWAYMEN</b> (hijacked)</div>${(b.highwaymen || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — ${k.rank} ($${fmt(k.value)})</div>`).join('') || '<div class="d">none yet</div>'}</div></div>`; }; }
   }
 
   // ── THE SHYLOCK: the loan board, your book, the paper market ──
