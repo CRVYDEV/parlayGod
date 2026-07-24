@@ -38,22 +38,23 @@ outside that envelope.
 **§10.4 is CLEAN** — every front is a ledgered faucet, the sweep stays drift-0. This is a **balance**
 problem, not a leak. The dial is the front `incomePerHr` CURVE, not the ledger.
 
-**PROPOSED levers (founder pick; NOT applied):**
-- **L1a — flatten the top-tier front curve.** The casino front alone is $36M/day gross. Halving the
-  top two tiers' `incomePerHr` (hotel/casino) cuts the personal stack ~2× toward the active grind while
-  leaving the early fronts (the on-ramp) untouched. **Recommended.**
-- **L1b — wealth-scaled pad.** Make `BUSINESS_UPKEEP_BPS` climb with the empire's total income (a
-  progressive tax) instead of a flat 20%, so the 5th front costs more to run than the 1st. Bounds the
-  stack without touching the on-ramp.
-- **L1c — a global personal-income cap** (a daily $ ceiling on total front collection, like the
-  wash/bank caps). Cleanest bound, most invasive.
-- **L1d — territory: raise the type-mult risk or cap districts-per-family.** The $20.9M/day/district
-  is the bigger number; a per-family district-income cap or a steeper Bureau-raid curve on the hot
-  types is the dial.
+**LEVERS — L1a + L1b BUILT (founder-directed "Balance the economy"):**
+- **L1a — flatten the top-tier front curve. ✅ BUILT.** The apex fronts (`hotel` lvl42 / `casino` lvl58)
+  had their `incomePerHr` HALVED at every tier in `BUSINESSES` (casino was $36M/day gross). The early/
+  mid fronts (the on-ramp — laundromat/restaurant/nightclub) are UNTOUCHED, so a new player is unaffected.
+- **L1b — progressive (wealth-scaled) pad. ✅ BUILT.** `BUSINESS_UPKEEP_PROG_BPS` (500 = +5%) is added
+  per EXTRA front owned (`business.js:upkeepBps(count)` threaded through `upkeepOwed` + the view + the
+  P9.20 probe), so a 1-front operator pays the base 20% pad while a full 5-front stack pays 40% — the
+  5th front costs more to run than the 1st. Both stay ledgered `business:upkeep` sinks → §10.4 untouched.
+- *L1c/L1d (a global personal-income cap / territory type-mult risk) remain the further dials if the
+  full front `incomePerHr` curve or the family-side territory stack ($20.9M/day/district) still wants
+  trimming — NOT applied; the L1a+L1b pass targeted the personal-stack headline.*
 
-My recommendation: **L1a + L1b** together (flatten the top of the curve, make the pad progressive) —
-they bound the endgame without hurting a new player, and both stay ledgered faucets so §10.4 is
-untouched. Re-run `node tools/sim.js` (P9.20 prints the new ratio) after any pick.
+**Measured effect (P9.20, re-run):** the personal 5-front stack dropped **~$48.96M/day → $21.6M/day NET**
+(gross halved by L1a → $36M, then × the 0.6 progressive-pad keep by L1b) — a firm **2.27× cut** to the
+stack. The passive:active ratio (vs the sim's active-grind baseline, which floats run-to-run) lands
+**~2–3.5×** now, down from ~6× — still passive-favoured (a maxed empire *should* out-earn the grind) but no
+longer dwarfing the active loop. §10.4 stays drift-0 (every front a ledgered faucet).
 
 ---
 
@@ -77,19 +78,20 @@ design.
 stake. For an established player, dying costs a street's cash + a respec — a bad afternoon, not a
 setback. That structurally **defuses the PvP loop the whole PvP economy is built to drive** (see #3).
 
-**PROPOSED levers (founder pick; NOT applied):**
-- **L2a — an inheritance/estate tax on death.** The heir inherits the account-level wealth (portfolio,
-  estate, treasury share) but pays a **death duty** — e.g. burn X% of liquid $OMR and a slice of the
-  RWA book on succession (a §10.4 sink, the confiscation precedent). Makes dying *cost* the dynasty,
-  not just the street. **Recommended — the single highest-leverage stake fix.**
-- **L2b — legend decay on death.** The *seasonal* legends already die with the street; make a few of
-  the *lifetime* ones **decay a step** on death (e.g. −1 rank tier) so a bloodline that dies constantly
-  bleeds status. Pure status, §10.4-free.
-- **L2c — succession friction.** A short "the family is in disarray" window after death (reduced income
-  / no new contracts for N hours) so death has a felt cost even for the rich. Pacing, §10.4-free.
-
-Recommendation: **L2a** (the estate tax) is the one that actually re-anchors stakes; L2b/L2c are cheap
-flavor on top.
+**LEVER — L2a BUILT (founder-directed "Balance the economy"):**
+- **L2a — the DEATH DUTY. ✅ BUILT.** On EVERY death (`runEstate`), the succession now burns
+  `M3.DEATH_DUTY_RATE` (25%) of the heir's inherited **LIQUID $OMR** — a §10.4 `death:duty` $OMR BURN
+  (the enumerated-burn/confiscation precedent, in `omrBurns`). Applied AFTER the P1.1 loot (the killer
+  takes their share, then the estate taxes the remainder), so a whacked player's liquid hoard is docked
+  twice on the way out. **STAKED $OMR, the RWA portfolio, and the Estate are UNTOUCHED** — the "go
+  legit / retire the dynasty in safe harbours" pitch is intact by design; the duty only bites the
+  *extractable, un-committed* hoard, so dying finally costs the bloodline something it valued while
+  leaving the long-term wealth it was told is safe. A respawn-token save skips the estate entirely →
+  no duty (you didn't die). Runs on every death path (fire/shank/npc-hit/mod-kill/NPC-hunter — the
+  two hand-rolled headless persists carry the `omr` decrement too). Regression in `test/social.js`
+  (heir keeps 7 → 6 after loot → 5 after the 25% duty).
+- *L2b (legend decay) / L2c (succession friction) remain the further §10.4-free flavor levers if the
+  duty alone doesn't re-anchor stakes enough — NOT applied.*
 
 ---
 
@@ -179,8 +181,8 @@ crime loop** is the highest-leverage single addition.
 
 | # | issue | status | founder action |
 |---|---|---|---|
-| 1 | passive stack ≫ active loop ($49M/day, 6× the grind) | **MEASURED** | pick L1a+L1b (or L1c/L1d) |
-| 2 | death costs nothing for the established | **MEASURED** | pick L2a (estate tax) |
+| 1 | passive stack ≫ active loop ($49M/day, 6× the grind) | **L1a+L1b BUILT** | stack → $21.6M/day (2.27× cut), ~2–3.5× the grind; L1c/L1d further dials |
+| 2 | death costs nothing for the established | **L2a BUILT** | the Death Duty (25% of liquid $OMR); L2b/L2c further flavor |
 | 3 | PvP is −EV and opt-out-able | **L3a/L3b/L3c ALL BUILT** | the Sacking + the Shield Cap + the Contract's Bullets — done |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |

@@ -4842,3 +4842,36 @@ kill pays none). Suite 46/46 + sim drift-0 (the rebate faucet reconciles). Both 
 disable each). **The review's #3 is now fully addressed** (L3a Sacking + L3b Shield Cap + L3c Contract's
 Bullets); the remaining founder picks are the #1/#2 economy levers (L1a/L1b front-curve flatten + progressive
 pad; L2a the death/estate tax) and #6 (D6a deepen crime / D6b embrace the collection game).
+
+**THE L1/L2 ECONOMY BALANCE PACKAGE (stakes/spine review #1 + #2, founder-directed "Balance the economy")
+— BUILT** (`src/rules.js`, `src/business.js`, `src/social.js`, `src/server.js`, `src/invariants.js`,
+`tools/sim.js` P9.20; the review's economy remainder after L3a/b/c shipped the PvP-stakes fixes). The
+founder's "Balance the economy" pick IS the sign-off for these signed levers (ground rule #1's
+don't-unilaterally-retune is overridden by the explicit direction). **L1a — FLATTEN THE APEX FRONT CURVE:**
+the two endgame personal fronts (`hotel` lvl42 / `casino` lvl58) had `incomePerHr` HALVED at every tier in
+the `BUSINESSES` catalog (the casino alone was $36M/day gross); the on-ramp fronts (laundromat/restaurant/
+nightclub) are UNTOUCHED so a new player is unaffected — only the top of the curve is trimmed, every front
+still a ledgered `business:income` faucet (§10.4 drift-0). **L1b — THE PROGRESSIVE PAD:**
+`CONSTANTS.BUSINESS_UPKEEP_PROG_BPS` (500 = +5%) is added per EXTRA front owned (`business.js:upkeepBps(count)`
+threaded through `upkeepOwed` + the empire view + the P9.20 probe), so a 1-front operator pays the base 20%
+pad and a full 5-front stack pays 40% — the 5th front costs twice the 1st to run, so stacking every kind has
+diminishing returns; still a ledgered `business:upkeep` sink (§10.4 untouched). **L2a — THE DEATH DUTY:**
+every death (`runEstate`) burns `M3.DEATH_DUTY_RATE` (25%) of the heir's inherited **LIQUID $OMR** — a §10.4
+`death:duty` $OMR BURN (joined the omr `KNOWN_REASONS` + `omrBurns`), applied AFTER the P1.1 loot (killer's
+cut first, then the estate taxes the remainder). **Staked $OMR, the RWA portfolio/vault, and the Estate are
+UNTOUCHED** (the "go legit / retire in safe harbours" pitch stays intact — the duty bites only the
+extractable, un-committed hoard), so dying finally costs the bloodline something without touching the wealth
+it was told is safe. A respawn-token save skips the estate → no duty. Runs on all five death paths: fire/
+shank/npc-hit persist via the wrapped `persistAccount`; the two HAND-ROLLED headless persists (`server.js`
+mod-kill + `social.js` `huntWanted` NPC-hunter, which wrote only `prestige`/`deaths`) now also carry the
+`omr` decrement — else the death:duty ledger row drifts §10.4 on those paths (the bug the portfolio test
+caught). **Measured (P9.20, drift-0):** the personal 5-front stack drops **~$48.96M/day → $21.6M/day NET**
+(L1a halves the gross to $36M, L1b's 40% progressive pad keeps 60%) → a firm **2.27× cut** to the stack;
+the passive:active ratio (vs the sim's floating grind baseline) lands **~2–3.5×**, down from ~6×: a maxed
+empire still out-earns the grind (as it should) but no longer dwarfs it. Tests:
+`test/economy.js` (L1b upkeep view/pay unchanged — no hardcoded apex income), `test/social.js` (the heir
+keeps 7→6 after loot→5 after the 25% duty). Remaining founder dials (NOT applied): the full front
+`incomePerHr` curve (L1a touched only the apex two kinds), a global personal-income cap (L1c), the family-
+side territory stack (L1d), and legend-decay/succession-friction (L2b/L2c). Suite 46/46 + sim drift-0. All
+numbers (`DEATH_DUTY_RATE`, `BUSINESS_UPKEEP_PROG_BPS`, the halved apex incomes) are founder sign-off levers
+(BALANCE.md).

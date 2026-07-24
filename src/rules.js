@@ -537,6 +537,11 @@ export const CONSTANTS = {
   // BUSINESS_UPKEEP_COLD_MS (3d) goes COLD (no income / no launder / no upgrade) until the pad is
   // paid. New/tunable — sim + founder sign-off before production (ground rule #1).
   BUSINESS_UPKEEP_BPS: 2000, BUSINESS_UPKEEP_CAP_MS: 7*24*3600*1000, BUSINESS_UPKEEP_COLD_MS: 3*24*3600*1000,
+  // L1b — THE PROGRESSIVE PAD (stakes/spine review #1, founder-directed): the pad rate climbs with the
+  // SIZE of the empire — each front you own adds BUSINESS_UPKEEP_PROG_BPS to EVERY front's upkeep rate, so
+  // a 5-front stack pays 20% + 4×5% = 40% pad (vs a 1-front's 20%). Bounds the measured passive stack
+  // without touching the on-ramp (a 1-front owner is unaffected). Sim-re-measured; a sign-off lever.
+  BUSINESS_UPKEEP_PROG_BPS: 500,
   // Business Empire step two — the RISK layer (passive income you must protect). SCRUTINY: only
   // LAUNDERING draws the Bureau's eyes onto a front (PER_CAP points per full day-capacity washed,
   // decaying DECAY_HR/hour) — income-only fronts never get raided; their risk is rival shakedowns.
@@ -934,6 +939,13 @@ export const M3 = {
   // tradeoff: keep it in-game to use it (losable) or extract it on-chain (safe + tradeable, but
   // it leaves play). New/tunable — sim + sign-off.
   GEAR_LOOT_CHANCE: 0.15,
+  // L2a — THE DEATH DUTY (stakes/spine review #2, founder-directed): the account-level wealth survives
+  // death, so dying cost the established dynasty almost nothing. A succession tax burns DEATH_DUTY_RATE of
+  // the heir's inherited LIQUID $OMR (staked $OMR, the RWA portfolio, the estate — all safe harbours — are
+  // untouched, keeping the "put your money to work / go legit" pitch intact) so death finally costs the
+  // bloodline its extractable hoard. A §10.4 $OMR BURN (`death:duty`); applies to EVERY death (a respawn-
+  // token save skips the estate → no duty). Sign-off lever (0 disables).
+  DEATH_DUTY_RATE: 0.25,
   // L3b — THE SHIELD CAP (stakes/spine review). The earned safehouse is capped at SAFEHOUSE_DAILY_CAP_MS
   // of off-grid time per rolling day (a token bucket, the wash-cap twin) — you can shelter to weather a
   // specific contract, but you can't live permanently unreachable. Closes the "eight untouchable states"
@@ -1825,15 +1837,20 @@ export const BUSINESSES = [
     { tier: 2, cost: 2800000,  incomePerHr: 110000, launderCapDay: 210000 },
     { tier: 3, cost: 6500000,  incomePerHr: 260000, launderCapDay: 480000 },
   ] },
+  // L1a — FLATTEN THE TOP FRONT CURVE (stakes/spine review #1, founder-directed): the two apex fronts
+  // (hotel lvl42 / casino lvl58) had incomePerHr ×0.5'd at EVERY tier — they dominated the measured
+  // ~$49M/day passive stack (P9.20). Late-game only (lvl42+), so the on-ramp fronts (laundro/restaurant/
+  // nightclub) are untouched; tier progression stays monotonic (same ×0.5 across each ladder). launderCap
+  // is a separate laundering-throughput lever (unchanged). Sim-re-measured; a sign-off lever.
   { kind: 'hotel', name: 'Hotel', lvl: 42, tiers: [
-    { tier: 1, cost: 3000000,  incomePerHr: 110000, launderCapDay: 200000 },
-    { tier: 2, cost: 7000000,  incomePerHr: 255000, launderCapDay: 460000 },
-    { tier: 3, cost: 16000000, incomePerHr: 600000, launderCapDay: 1050000 },
+    { tier: 1, cost: 3000000,  incomePerHr: 55000,  launderCapDay: 200000 },
+    { tier: 2, cost: 7000000,  incomePerHr: 128000, launderCapDay: 460000 },
+    { tier: 3, cost: 16000000, incomePerHr: 300000, launderCapDay: 1050000 },
   ] },
   { kind: 'casino', name: 'Casino', lvl: 58, tiers: [
-    { tier: 1, cost: 8000000,  incomePerHr: 280000,  launderCapDay: 500000 },
-    { tier: 2, cost: 18000000, incomePerHr: 640000,  launderCapDay: 1150000 },
-    { tier: 3, cost: 40000000, incomePerHr: 1500000, launderCapDay: 2600000 },
+    { tier: 1, cost: 8000000,  incomePerHr: 140000, launderCapDay: 500000 },
+    { tier: 2, cost: 18000000, incomePerHr: 320000, launderCapDay: 1150000 },
+    { tier: 3, cost: 40000000, incomePerHr: 750000, launderCapDay: 2600000 },
   ] },
 ];
 export const businessOf = (kind) => BUSINESSES.find((b) => b.kind === kind) || null;

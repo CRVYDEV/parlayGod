@@ -1846,3 +1846,39 @@ loss and a smaller contract turns a hit +EV. Only on a contracted kill (a standa
 −$72k standalone EV — the D1 anchor is untouched). SIGN-OFF: sim the contract break-even shift (a paid
 kill now costs ~half the ammo) before production; dial `CONTRACT_AMMO_REBATE` (0 disables). Both close
 review #3 alongside L3a (the Sacking).
+
+## THE L1/L2 ECONOMY BALANCE PACKAGE (review #1 + #2) — founder-directed "Balance the economy"
+Applied per the founder's explicit "Balance the economy" direction (the sign-off for these specific
+signed levers; ground rule #1's "don't unilaterally retune" is overridden by the founder's pick).
+Re-measured in `tools/sim.js` P9.20 (drift-0 throughout).
+
+**L1a — FLATTEN THE APEX FRONT CURVE.** The two endgame personal fronts — `hotel` (lvl 42) and `casino`
+(lvl 58) — had their `incomePerHr` HALVED at every tier in the `BUSINESSES` catalog (the casino alone
+was $36M/day gross). The early/mid on-ramp fronts (laundromat/restaurant/nightclub) are UNTOUCHED, so a
+new player is unaffected — only the top of the curve is trimmed. Every front is still a ledgered
+`business:income` faucet → §10.4 drift-0.
+
+**L1b — THE PROGRESSIVE PAD.** `BUSINESS_UPKEEP_PROG_BPS` (500 = +5%) is added per EXTRA front owned
+(`business.js:upkeepBps(count)`, threaded through `upkeepOwed` + the empire view + the P9.20 probe). A
+1-front operator pays the base 20% pad; a full 5-front stack pays 40% — the 5th front costs twice as
+much to run as the 1st, so stacking every kind has diminishing returns. Still a ledgered
+`business:upkeep` sink → §10.4 untouched.
+
+**Measured effect (P9.20):** the personal 5-front stack drops **~$48.96M/day → $21.6M/day NET**
+(L1a halves the gross to $36M, L1b's 40% progressive pad keeps 60%) — a firm 2.27× cut to the stack. The
+passive:active ratio (vs the sim's floating active-grind baseline) lands **~2–3.5×**, down from ~6× — a
+maxed empire still out-earns the active grind (as it should), but no longer dwarfs it.
+**Remaining dials (NOT applied):** the full front `incomePerHr` curve (L1a only touched the apex two
+kinds), a global personal-income cap (L1c), and the family-side territory stack ($20.9M/day/district, L1d).
+
+**L2a — THE DEATH DUTY.** On every death (`runEstate`), succession burns `M3.DEATH_DUTY_RATE` (25%) of
+the heir's inherited **LIQUID $OMR** — a §10.4 `death:duty` $OMR BURN (in `omrBurns`), applied AFTER
+the P1.1 loot (killer takes their cut, then the estate taxes the remainder). **Staked $OMR, the RWA
+portfolio/vault, and the Estate are UNTOUCHED** — the "go legit / retire in safe harbours" pitch stays
+intact by design; the duty bites only the *extractable, un-committed* hoard, so dying finally costs the
+bloodline something while the wealth it was told is safe stays safe. A respawn-token save skips the
+estate → no duty. Runs on all five death paths (fire/shank/npc-hit via the wrapped persist; mod-kill +
+NPC-hunter carry the `omr` decrement in their hand-rolled persists). Dial: `DEATH_DUTY_RATE` (0 disables).
+**SIGN-OFF:** the duty concentrates nothing (it's a pure deflationary $OMR sink — it helps
+extraction≤inflow) but it *does* make repeated death a real $OMR cost; sim the effect on a high-death-rate
+PvP player's extraction runway before production.

@@ -29,14 +29,21 @@ export function accrued(row) {
   return Math.floor(tier.incomePerHr * Math.max(0, elapsed) / 3600000);
 }
 
-// RECURRING SINKS ("the pad"): upkeep owed on one front, in whole dollars — BUSINESS_UPKEEP_BPS of
+// L1b — THE PROGRESSIVE PAD: the upkeep rate climbs with the SIZE of the empire (BUSINESS_UPKEEP_PROG_BPS
+// per front beyond the first) — a 5-front stack pays 40% pad vs a 1-front's 20%, bounding the passive
+// stack without touching the on-ramp. `count` is the owner's total front count (defaults to 1 = the base
+// 20% rate, so any legacy call is unchanged).
+export const upkeepBps = (count = 1) =>
+  CONSTANTS.BUSINESS_UPKEEP_BPS + CONSTANTS.BUSINESS_UPKEEP_PROG_BPS * Math.max(0, count - 1);
+
+// RECURRING SINKS ("the pad"): upkeep owed on one front, in whole dollars — upkeepBps(count) of
 // the tier's income per hour, accrued on its OWN clock (upkeep_at) up to BUSINESS_UPKEEP_CAP_MS.
 // Distinct from the 24h income cap: an absent owner owes up to a week while earning at most a day.
-export function upkeepOwed(row, now = Date.now()) {
+export function upkeepOwed(row, count = 1, now = Date.now()) {
   const tier = businessTierOf(row.kind, row.tier);
   if (!tier) return 0;
   const elapsed = Math.min(now - new Date(row.upkeep_at).getTime(), CONSTANTS.BUSINESS_UPKEEP_CAP_MS);
-  return Math.floor(tier.incomePerHr * (CONSTANTS.BUSINESS_UPKEEP_BPS / 10000) * Math.max(0, elapsed) / 3600000);
+  return Math.floor(tier.incomePerHr * (upkeepBps(count) / 10000) * Math.max(0, elapsed) / 3600000);
 }
 // a front whose pad has gone unpaid past the cold window produces nothing until squared
 export const isCold = (row, now = Date.now()) =>
@@ -193,7 +200,7 @@ export async function payBusinessUpkeep(ch, client, h) {
   if (!rows.length) throw new GameError('none', 'You run no fronts — no pad to pay.');
   let paid = 0; const settled = []; let stillOwed = 0;
   for (const r of rows) {
-    const owed = upkeepOwed(r);
+    const owed = upkeepOwed(r, rows.length); // L1b: the pad rate scales with the empire's front count
     if (owed <= 0) continue;
     if (Number(ch.cash) >= owed) {
       ch.cash = Number(ch.cash) - owed;
@@ -458,7 +465,7 @@ export async function businessesOf(pool, characterId) {
       id: r.id, kind: r.kind, name: cat?.name || r.kind, tier: Number(r.tier),
       incomePerHr: tier?.incomePerHr || 0, pending: accrued(r),
       // recurring sinks ("the pad"): what's owed, the hourly rate, and whether the front's gone cold
-      upkeepOwed: upkeepOwed(r), upkeepPerHr: Math.floor((tier?.incomePerHr || 0) * (CONSTANTS.BUSINESS_UPKEEP_BPS / 10000)),
+      upkeepOwed: upkeepOwed(r, rows.length), upkeepPerHr: Math.floor((tier?.incomePerHr || 0) * (upkeepBps(rows.length) / 10000)),
       cold: isCold(r),
       launderCapDay: tier?.launderCapDay || 0, launderHeadroom: Math.max(0, (tier?.launderCapDay || 0) - usedToday),
       scrutiny: Math.round(decayedScrutiny(r)), raidRisk: decayedScrutiny(r) >= CONSTANTS.BUSINESS_RAID_THRESHOLD,

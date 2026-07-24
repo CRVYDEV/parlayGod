@@ -295,7 +295,7 @@ const heir = await meOf(rocco.token);
 assert.equal(heir.generation, 2, 'heir generation');
 assert.equal(heir.name, 'Rocco Two-Knives', 'the bloodline keeps the name');
 assert.equal(heir.cash, 500 + 100 * 5, 'legacy stake: $500 + $100 × prestige (floor(11/2))');
-assert.equal(heir.omr, 6, 'liquid $OMR survives death on the account MINUS the 20% the killer looted (7−1)');
+assert.equal(heir.omr, 5, 'liquid $OMR survives death MINUS the 20% loot (7→6) MINUS the L2a 25% death duty (floor(6×0.25)=1 → 5)');
 assert.equal(heir.cars.length, 0, 'fleet died');
 assert(!heir.gang, 'gang seat vacated');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM cars WHERE character_id='${rocco.id}'`)).rows[0].n), 0, 'victim cars wiped');

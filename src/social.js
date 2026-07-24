@@ -1461,7 +1461,9 @@ export async function huntWanted(pool) {
       }
       // the hunter lands it — the estate runs (no killerCh: no chop/loot/rep; the pool bounty burns)
       await runEstate(client, h, victim, 'A BOUNTY HUNTER');
-      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3 WHERE account_id=$1', [victim.account_id, victimAcct.prestige, victimAcct.deaths]);
+      // narrow hand-rolled persist (no persistAccount here): must carry every account field runEstate
+      // mutates — prestige, deaths, and (L2a) the death-duty $OMR burn (ledgered inside runEstate).
+      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4 WHERE account_id=$1', [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr]);
       bus.emit('streets', { type: 'kill', by: 'a bounty hunter', victim: victim.name });
       await client.query('COMMIT'); killed++;
     } catch (e) { await client.query('ROLLBACK'); console.error('huntWanted', m.id, e.message); }
@@ -1509,6 +1511,17 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   const priorPrestige = Number(acct.prestige);  // muscle memory reads the bloodline's ACCUMULATED prestige (pre-death) — a fresh line's skills still fully die
   acct.prestige = Number(acct.prestige) + legacy;
   acct.deaths = Number(acct.deaths) + 1;
+  // L2a — THE DEATH DUTY (stakes/spine review #2): the account-level wealth survives death, so dying cost
+  // the established dynasty almost nothing. A succession tax burns DEATH_DUTY_RATE of the heir's inherited
+  // LIQUID $OMR (staked $OMR / the RWA portfolio / the estate are safe harbours — untouched) so death
+  // finally costs the bloodline its extractable hoard. A §10.4 $OMR BURN (`death:duty`); runs on EVERY
+  // death path (a respawn-token save skips the estate entirely → no duty). acct.omr is persisted by
+  // persistAccount at the end of the wrapper (the whack:loot $OMR precedent).
+  const deathDuty = Math.floor(Number(acct.omr) * (M3.DEATH_DUTY_RATE || 0));
+  if (deathDuty > 0) {
+    acct.omr = Number(acct.omr) - deathDuty;
+    await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -deathDuty, reason: 'death:duty' });
+  }
 
   // burn the EXACT cash+bank (both NUMERIC — bank interest accrues fractionally), not a floored
   // integer: the row is zeroed below, so flooring the ledger sink destroyed frac(cash+bank) ∈
