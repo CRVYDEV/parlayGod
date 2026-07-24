@@ -69,7 +69,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -565,6 +565,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.buyAsset(ch, req.params.id, client, h)));
   app.post('/v1/assets/:id/sell', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.sellAsset(ch, req.params.id, client, h)));
+  // ── ASSETS & RACKETS → Tier 4 ──
+  app.post('/v1/rackets/:id/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => E.upgradeRacket(ch, req.params.id, client, h)));
+  app.get('/v1/leaderboard/tycoons', async () => E.tycoonLeaderboard(pool));
 
   // ── M2: swap, staking, gear (§7.12 / §5.4) ──
   app.post('/v1/swap', { preHandler: auth }, async (req) =>
@@ -708,6 +712,9 @@ export async function buildServer() {
 
     rackets: RACKETS.map((r) => ({ id: r.id, name: r.name, lvl: r.lvl, cost: r.cost, income: r.income, desc: r.desc })),
     assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),
+    // ASSETS & RACKETS → Tier 4 — the upgrade axis, the tycoon ladder, the empire-set titles
+    empire: { upMax: RACKET_EMPIRE.UP_MAX, upStep: RACKET_EMPIRE.UP_STEP, tycoonRanks: RACKET_EMPIRE.TYCOON_RANKS,
+      sets: RACKET_EMPIRE.SETS.map((s) => ({ id: s.id, name: s.name })) },
     missions: MISSIONS.map((m) => ({ id: m.id, name: m.name, req: m.req, reward: m.reward, brief: m.brief })),
     seals: GANG_SEALS,
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),

@@ -2063,3 +2063,10 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_purity INT NOT NULL DEFAULT 
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_yield INT NOT NULL DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_stealth INT NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS product_moved NUMERIC NOT NULL DEFAULT 0;
+
+-- ── ASSETS & RACKETS TIER-4 DEEPENING (design omerta-tier2-deepening-design.md §2) ──
+-- level: a per-racket upgrade level (0..UP_MAX) multiplying its accrual income (a cash sink to buy).
+-- tycoon_earned: lifetime racket + front income earned (account-level → survives death, THE TYCOON
+-- legend — pure status, outside §10.4; the racket:income cash still rides its ledgered faucet).
+ALTER TABLE character_rackets ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS tycoon_earned NUMERIC NOT NULL DEFAULT 0;

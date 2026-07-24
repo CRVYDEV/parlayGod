@@ -822,6 +822,54 @@ export const kingpinRankOf = (moved = 0) => {
   const m = Number(moved) || 0;
   return [...KITCHEN.KINGPIN_RANKS].reverse().find((r) => m >= r.at) || KITCHEN.KINGPIN_RANKS[0];
 };
+
+// ═══ ASSETS & RACKETS → Tier 4 (omerta-tier2-deepening-design.md §2) ═══
+// The buy-once/drip-forever personal-income layer gets: RACKET UPGRADES (a per-racket level that
+// multiplies its accrual income — the management axis; a cash sink), THE TYCOON LEGEND (account-level
+// lifetime racket+front income, survives death → a ladder + board), and EMPIRE SETS (own a full
+// category → a pure-STATUS title; the completion meta). §10.4: `racket:upgrade` is a cash sink;
+// tycoon/sets are status axes outside the ledger.
+export const RACKET_EMPIRE = {
+  UP_MAX: 5, UP_STEP: 0.12,       // +12% income/level, capped at 5 → +60% on that racket's drip
+  UP_COST_MULT: 0.5,             // an upgrade to level L costs racket.cost × UP_COST_MULT × L
+  // THE TYCOON LEGEND — lifetime racket + front income earned (account-level, survives death).
+  TYCOON_RANKS: [
+    { at: 0,          name: 'Hustler' },
+    { at: 500000,     name: 'Operator' },
+    { at: 5000000,    name: 'Businessman' },
+    { at: 40000000,   name: 'Magnate' },
+    { at: 250000000,  name: 'Tycoon' },
+    { at: 1000000000, name: 'The Invisible Hand' },
+  ],
+  // EMPIRE SETS — own every member of a category for a pure-status title (the completion meta).
+  SETS: [
+    { id: 'rackets',  name: 'The Racket King', kind: 'rackets' },
+    { id: 'fronts',   name: 'The Legit Baron', kind: 'asset', cat: 'Legit Fronts' },
+    { id: 'property', name: 'The Landlord',    kind: 'asset', cat: 'Property' },
+    { id: 'wheels',   name: 'The Collector',   kind: 'asset', cat: 'Wheels' },
+  ],
+};
+export const tycoonRankOf = (earned = 0) => {
+  const e = Number(earned) || 0;
+  return [...RACKET_EMPIRE.TYCOON_RANKS].reverse().find((r) => e >= r.at) || RACKET_EMPIRE.TYCOON_RANKS[0];
+};
+export const racketUpgradeCost = (racketId, curLevel) => {
+  const r = RACKETS.find((x) => x.id === racketId);
+  return r ? Math.floor(r.cost * RACKET_EMPIRE.UP_COST_MULT * (curLevel + 1)) : 0;
+};
+// the leveled per-minute income of a single racket (the accrual multiplier)
+export const racketIncomeLeveled = (racketId, level = 0) => {
+  const r = RACKETS.find((x) => x.id === racketId);
+  return r ? (r.income || 0) * (1 + Math.max(0, Number(level) || 0) * RACKET_EMPIRE.UP_STEP) : 0;
+};
+// the earned EMPIRE-SET titles for a holding (pure status — completion meta)
+export const empireTitles = (rackets = [], assets = []) => {
+  const owned = new Set(assets);
+  return RACKET_EMPIRE.SETS.filter((set) => {
+    if (set.kind === 'rackets') return RACKETS.every((r) => rackets.includes(r.id));
+    return ASSETS.filter((a) => a.cat === set.cat).every((a) => owned.has(a.id));
+  }).map((set) => set.name);
+};
 export const labModuleCost = (modId, curLevel, labIdx) => {
   const cash = KITCHEN.MODULE_BASE_CASH * (curLevel + 1) * (Math.max(0, labIdx) + 1);
   const result = curLevel + 1;

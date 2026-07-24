@@ -3062,8 +3062,13 @@
     const owned = (await api('GET', '/v1/business')).body?.businesses || [];
     const cat = (await api('GET', '/v1/catalog')).body?.businesses || [];
     const ownedKinds = new Set(owned.map((b) => b.kind));
+    const emp = rules?.empire || {};
     t.innerHTML = `
       ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own, plus doubles as private laundering. They cost upkeep (the pad) and can draw the Bureau, so tend them. A late-game engine — come back as you level.') : ''}
+      ${me.tycoon ? `<div class="card" style="border-color:var(--gold)"><span class="t">THE TYCOON — ${me.tycoon.rank}</span>
+        <div class="d">lifetime racket &amp; front income $${fmt(me.tycoon.earned || 0)} <span style="color:var(--dim)">(survives death)</span>
+        ${(me.empireTitles || []).length ? ` · ${me.empireTitles.map((x) => `<span class="chip good">${x}</span>`).join(' ')}` : ''}
+        · <a href="#" id="tycoon-board">the biggest earners →</a></div><div id="tycoon-lb"></div></div>` : ''}
       <h2>Your Fronts (${owned.length})
         <button class="act" data-do="POST /v1/business/collect" style="margin-left:8px">collect all</button>
         <button class="act" data-do="POST /v1/business/upkeep">pay the pad</button></h2>
@@ -3084,9 +3089,11 @@
 
       <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>
       <div class="grid">${(rules?.rackets || []).map((r) => { const owned = (me.rackets || []).includes(r.id), locked = me.level < r.lvl;
-        return `<div class="card"><span class="t">${r.name}</span>${owned ? '<span class="chip good">owned</span>' : locked ? `<span class="chip">lvl ${r.lvl}+</span>` : ''}
-          <div class="d">$${fmt(r.income)}/hr · $${fmt(r.cost)} · ${r.desc}</div>
-          ${owned || locked ? '' : `<button class="act" data-rkbuy="${r.id}">buy</button>`}</div>`; }).join('')}</div>
+        const lvl = Number(me.racketLevels?.[r.id] || 0); const upMax = emp.upMax || 5;
+        const effIncome = owned ? Math.round(r.income * (1 + lvl * (emp.upStep || 0.12))) : r.income;
+        return `<div class="card"><span class="t">${r.name}</span>${owned ? `<span class="chip good">owned${lvl ? ` · lvl ${lvl}` : ''}</span>` : locked ? `<span class="chip">lvl ${r.lvl}+</span>` : ''}
+          <div class="d">$${fmt(effIncome)}/hr${owned && lvl ? ` <span style="color:var(--dim)">(base $${fmt(r.income)})</span>` : ''} · $${fmt(r.cost)} · ${r.desc}</div>
+          ${owned ? (lvl < upMax ? `<button class="act" data-rkup="${r.id}">muscle it up → lvl ${lvl + 1}</button>` : '<span class="chip">maxed</span>') : locked ? '' : `<button class="act" data-rkbuy="${r.id}">buy</button>`}</div>`; }).join('')}</div>
 
       <h2 style="margin-top:14px">Assets <span class="d" style="font-size:11px">— wheels (cargo/speed), property (energy cap) & legit fronts (income)</span></h2>
       <div class="grid">${(rules?.assets || []).map((a) => { const owned = (me.assets || []).includes(a.id);
@@ -3100,7 +3107,12 @@
     t.querySelectorAll('[data-bizwash]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizwash}/launder`, { amount: Number(t.querySelector(`[data-bizamt="${b.dataset.bizwash}"]`).value) }).then(() => renderEmpire()));
     t.querySelectorAll('[data-rkbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkbuy}/buy`, {}).then(() => renderEmpire()));
+    t.querySelectorAll('[data-rkup]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-asbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/assets/${b.dataset.asbuy}/buy`, {}).then(() => renderEmpire()));
+    const tb = t.querySelector('#tycoon-board');
+    if (tb) tb.onclick = async (e) => { e.preventDefault();
+      const r = (await api('GET', '/v1/leaderboard/tycoons')).body?.tycoons || [];
+      t.querySelector('#tycoon-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} ${esc(k.name)}</span><div class="d">${k.rank} · $${fmt(k.earned)} earned</div></div>`).join('') || '<span class="d">no earners ranked yet</span>'}</div>`; };
   }
 
   // ── THE SPEAKEASY: the social hub — your club, the nightlife map, buying rounds where you stand ──

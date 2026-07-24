@@ -93,6 +93,30 @@ await seed("last_accrued_at = now() - interval '30 minutes'"); // lazy racket in
 assert((await meOf(token)).cash > cashPre, 'racket income accrued lazily');
 assert.equal((await call('POST', '/v1/rackets/laundro/buy', { token })).code, 400, 'no double-buy');
 
+// ══ ASSETS & RACKETS → Tier 4: racket upgrades, the tycoon legend ══
+await seed("cash=5000000");
+// (A) RACKET UPGRADE — a level multiplies the racket's accrual income (a ledgered cash sink)
+assert.equal((await call('POST', '/v1/rackets/pawn/upgrade', { token })).body.error, 'none', "can't upgrade a racket you don't run");
+r = await call('POST', '/v1/rackets/laundro/upgrade', { token });
+assert.equal(r.code, 200, 'upgraded the laundromat'); assert.equal(r.body.level, 1);
+assert.equal((await meOf(token)).racketLevels.laundro, 1, 'the view shows the racket level');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='racket:upgrade' AND character_id='${cid}'`)).rows[0].s) < 0, 'racket:upgrade is a ledgered §10.4 cash sink');
+// a level-1 laundro out-earns a level-0 one over the same accrual window (income ×1.12)
+await seed("cash=0, bank=0, racket_credit_ms=3600000, last_accrued_at = now() - interval '1 hour'");
+const upEarn = (await meOf(token)).cash;
+await pool.query(`UPDATE character_rackets SET level=0 WHERE character_id='${cid}' AND racket_id='laundro'`);
+await seed("cash=0, racket_credit_ms=3600000, last_accrued_at = now() - interval '1 hour'");
+const baseEarn = (await meOf(token)).cash;
+assert(upEarn > baseEarn, `the upgraded racket out-earns the base (${upEarn} vs ${baseEarn})`);
+// (B) THE TYCOON LEGEND — lifetime racket income banked to an account-level counter that survives death
+me = await meOf(token);
+assert(me.tycoon && me.tycoon.earned > 0, 'the tycoon ledger shows lifetime racket income');
+assert.equal(Number((await pool.query(`SELECT tycoon_earned FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`)).rows[0].tycoon_earned), me.tycoon.earned, 'the view matches the persisted legend');
+r = await call('GET', '/v1/leaderboard/tycoons', { token });
+assert.equal(r.code, 200); assert(r.body.tycoons.some((k) => k.name === 'Don Testa' && k.earned > 0), 'the don is on the tycoon board');
+await pool.query(`UPDATE character_rackets SET level=1 WHERE character_id='${cid}' AND racket_id='laundro'`); // restore for downstream tests
+await seed("cash=2000000, bank=0, racket_credit_ms=28800000");
+
 // ── assets: buy then sell back at 80% ──
 const capBefore = (await meOf(token)).maxEnergy;
 r = await call('POST', '/v1/assets/studio/buy', { token });

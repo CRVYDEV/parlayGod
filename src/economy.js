@@ -8,7 +8,7 @@ import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding }
 import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
-  effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf,
+  effStat, cargoCapacity, goodPriceOf, gearOf, gunObjOf, RACKET_EMPIRE, racketUpgradeCost, racketIncomeLeveled, tycoonRankOf,
   seasonModOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
@@ -246,8 +246,40 @@ export async function buyRacket(ch, racketId, client, h) {
   ch.cash = Number(ch.cash) - r.cost;
   await client.query('INSERT INTO character_rackets (character_id, racket_id) VALUES ($1,$2)', [ch.id, r.id]);
   h.owned.rackets.push(r.id);
+  if (h.owned.racketLevels) h.owned.racketLevels[r.id] = 0;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -r.cost, reason: `racket:buy:${r.id}` });
   return { ok: true, racket: r.id, income: r.income };
+}
+
+// ASSETS & RACKETS → Tier 4 — RACKET UPGRADES: buy the next level of a racket you run; its accrual
+// income multiplies by RACKET_EMPIRE.UP_STEP/level (capped UP_MAX). A §10.4 cash SINK `racket:upgrade`;
+// the level lives on character_rackets.level (direct SQL, not a persistCharacter column → clobber-safe).
+export async function upgradeRacket(ch, racketId, client, h) {
+  const r = RACKETS.find((x) => x.id === racketId);
+  if (!r) throw new GameError('bad_racket', 'No such racket.');
+  if (!h.owned.rackets.includes(r.id)) throw new GameError('none', "You don't run that racket.");
+  const level = Number(h.owned.racketLevels?.[r.id] || 0);
+  if (level >= RACKET_EMPIRE.UP_MAX) throw new GameError('maxed', `The ${r.name} is running as hard as it can.`);
+  const cost = racketUpgradeCost(r.id, level);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `Muscling the ${r.name} up a level runs $${cost}.`);
+  ch.cash = Number(ch.cash) - cost;
+  await client.query('UPDATE character_rackets SET level=$1 WHERE character_id=$2 AND racket_id=$3', [level + 1, ch.id, r.id]);
+  if (h.owned.racketLevels) h.owned.racketLevels[r.id] = level + 1;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'racket:upgrade' });
+  return { ok: true, racket: r.id, level: level + 1, cost,
+    incomePerHr: Math.floor(racketIncomeLeveled(r.id, level + 1) * 60) };
+}
+
+// THE TYCOON LEADERBOARD (Tier-4) — the biggest lifetime racket/front earners (agents excluded).
+// Pure STATUS — account-level, survives death.
+export async function tycoonLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT c.name, ap.tycoon_earned FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.tycoon_earned > 0
+      ORDER BY ap.tycoon_earned DESC, c.name LIMIT 20`)).rows;
+  return { tycoons: rows.map((r, i) => ({ pos: i + 1, name: r.name, earned: Number(r.tycoon_earned),
+    rank: tycoonRankOf(r.tycoon_earned).name })) };
 }
 
 export async function buyAsset(ch, assetId, client, h) {
