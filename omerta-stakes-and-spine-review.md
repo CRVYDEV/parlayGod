@@ -156,11 +156,16 @@ crime loop** is the highest-leverage single addition.
   aggregate metric + `GET /v1/leaderboard/city` that ranks players across the axes, so the endgame has a
   single answer to "what am I climbing." Pure status aggregation, zero §10.4. *(see the City Standing
   commit / CLAUDE.md entry.)*
-- **#5 — free-path legibility.** Honest minted-vs-free capability disclosure on the wage/onboarding (no
-  earnings marketing — the counsel-gated line holds). A free-trial player can now *see* exactly what
-  they can and can't do.
-- **#7 — consistency snags.** Cooldown legibility + an audit that every ownership-transfer site clears
-  the right flags (the class the audits keep re-finding).
+- **#5 — free-path legibility (BUILT).** The wage card now carries a plain "Free trial vs Made Man —
+  straight facts, no promises" disclosure (a free account plays the WHOLE game; minting unlocks the
+  wage payroll + on-chain extraction, nothing else). Facts, not earnings marketing — the counsel-gated
+  line holds.
+- **#7 — consistency snags (VERIFIED / already shipped).** Cooldown legibility was already live (the
+  `[data-until]` ticker from the overnight UX drop). The ownership-transfer-flag class is **verified
+  clean**: all 5 car-transfer sites clear `pledged/listed/race_limit/pink_slip/nos` (the races-audit
+  fix) and the business takeover resets `spec/scrutiny` — no other table transfers ownership with a
+  stale consent flag. The remaining snag — **inconsistent cooldown WINDOWS** (1h/4h/6h/8h/12h/24h with
+  no legible rhythm) — is a pacing observation, not a bug; left as a founder tuning call.
 
 ---
 
@@ -174,7 +179,7 @@ crime loop** is the highest-leverage single addition.
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
 | 6 | breadth ≫ depth | **PROPOSED** | choose D6a (deepen crime) or D6b (embrace collection) |
-| 7 | consistency snags | **BUILT** | — |
+| 7 | consistency snags | **VERIFIED / shipped** | (cooldown-window rhythm = a tuning call) |
 
 **The one thing to take away:** #1, #2, #3 are the same problem, and **L3a — make passive wealth
 losable to PvP — is the single lever that fixes all three.** Everything else is polish.
