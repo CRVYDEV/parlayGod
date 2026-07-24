@@ -1999,3 +1999,65 @@ to `0` (test knobs) to disable either cooldown; the divisor and regen rates are 
 **Follow-on levers if the alpha still runs hot/cold:** the crime `respect` table itself (untouched — it's
 sim-signed), the daily-contract `5×lvl` / Score `8×lvl` level-scaled respect, and jump rep (1% of the
 victim's respect — the one *compounding* source, currently bounded by the 3-min hospital window).
+
+---
+
+## THE PROGRESSION HARNESS — the pacing pass, verified by simulation (2026-07-24)
+
+`tools/playthrough.js` (`npm run playthrough`) is the **player-experience** twin of `tools/sim.js`.
+The sim answers *"does the economy conserve, and how big is each faucet"*; the harness answers
+*"what does a person actually experience"* — what they can do in a sitting, what gates them, where
+they stall, and how long a level takes. Same discipline as the sim: **public API only, no value
+seeded**; the only SQL is the clock (this character's timestamps pulled back N minutes, which is the
+§7.1 lazy-accrual contract). The player is **plausible, not optimal** — a fixed priority ladder
+(checklist → Path → bank → boost+melt → the Score → the mission ladder → arm up → the gym → grind
+the best crime the nerve pool covers → claim dailies). If a plausible player can speedrun, a real
+one certainly can.
+
+The level-240 speedrun was a **progression** bug, not an economy bug — the §10.4 sweep was drift-0
+the whole time. This is the harness that would have caught it.
+
+### The headline: the speedrun is closed
+
+| | before the pacing pass | measured now |
+|---|---|---|
+| 3 hours straight, one sitting | *(tester reached **level 240**)* | **level 17** |
+| 2 hours at the keyboard | — | **level 14–16** |
+| 5 hours | — | level ~26 |
+| 10.5 hours (2 × 45 min/day, 7 days) | — | **level 44** |
+
+The earlier BALANCE estimate of *"2 hours → level ~11"* was analytic; the simulated figure is
+**14–16** (the estimate omitted the Score, the mission ladder and the checklist). Same order,
+corrected upward — recorded here as the measured number.
+
+### What actually throttles a sitting (measured over 10h30m of play)
+
+| Resource | Reading | Verdict |
+|---|---|---|
+| **Nerve** | pool sat at **21% of cap** on average, full only **3%** of minutes; funds **60 crimes/hour** | **This is the throttle.** A continuous drip, not burst-then-wait — the player is always limited, never idle. Working as intended. |
+| **Energy** | full **94%** of minutes | **Vestigial for a street player.** Only the gym (10) and the garage (10) spend it against 12/min regen. A whole resource bar with no bite on the core loop. **Flagged — founder call.** |
+| **The gym** | 209 sessions, hard-capped at **15/sitting** by the 3-min cooldown | The stat gates are now a multi-day investment, as designed. |
+| **The mission ladder** | 14 jobs in 14 sittings | The **4h cooldown is longer than a sitting**, so the ladder advances ~**once per session** no matter how long you play. The cascade is now structurally impossible. |
+| **Lockup** | **0%** of played minutes | Busts are cheap; jail is not a pacing lever at low level. |
+
+### The solo ceiling
+
+Using **only** crime, the gym, the garage, the Score, the mission ladder and the checklist — with
+zero contact with another player — a 45-min-twice-a-day player reaches **level 44, $1.9M, 14/28 of
+the story in 7 days.** Two observations, both **founder calls, not patched**:
+
+1. **Cash outruns progression.** Session 1 nets $11k; session 14 nets $360k (a 30× ramp in a week,
+   because crime cash scales with level). By day 7 a solo grinder holds $1.9M — far past the level-15
+   business-front entry — so the passive stack is affordable long before the content that gates it.
+   Couples directly to the L1a/L1b front-curve levers.
+2. **Energy has no role in the core loop.** If it's meant to pace anything, it needs a sink on the
+   street side; otherwise it's honest to say so in the UI rather than show a bar that never moves.
+
+### Using it
+
+    npm run playthrough                          # default: 2 sittings/day × 45 min, 7 days
+    node tools/playthrough.js --days 14          # longer horizon
+    node tools/playthrough.js --sessions 1 --session 180 --days 1   # the speedrun case
+
+Re-run it after **any** pacing, cooldown, regen, mission or level-curve change — it is the only tool
+that measures what a player feels rather than what the ledger conserves.
