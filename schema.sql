@@ -2110,3 +2110,9 @@ CREATE TABLE IF NOT EXISTS convoy_hauls (
 );
 CREATE INDEX IF NOT EXISTS ix_convoy_hauls_win ON convoy_hauls (kind, at);
 CREATE INDEX IF NOT EXISTS ix_convoy_hauls_acct ON convoy_hauls (account_id, at);
+
+-- THE UNDERWRITER (Reserve Bond Tier-4): the earn-in-game backer-prestige axis. pledged_omr is a
+-- $OMR-burn-fed account legend (survives death, ranked); bond_charter is the sequential cosmetic seal.
+-- Both written by DIRECT SQL only (OFF persistAccount's positional list — the pledged-columns discipline).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS pledged_omr NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS bond_charter INT NOT NULL DEFAULT 0;

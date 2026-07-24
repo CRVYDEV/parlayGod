@@ -729,6 +729,8 @@
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
+    if (body.pledged !== undefined && body.standing) bits.push(`pledged ${fmt(body.pledged)} $OMR to the treasury — ${body.standing.tier} (score ${fmt(body.standing.score)})`);
+    if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
     if (body.credited !== undefined && body.monument) bits.push(body.completed
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
@@ -3751,6 +3753,19 @@
         ${(bd.yours || []).length ? (bd.yours || []).map((b) => `<div class="d">bond #${b.id}: ${fmt(b.payoutOmr)} $OMR total · ${fmt(b.claimableOmr)} claimable ${b.claimableOmr ? `<button class="act" data-bondclaim="${b.id}">claim</button>` : ''}</div>`).join('') : '<div class="d" style="color:var(--dim)">no bonds yet — you\'re not a Treasury Backer</div>'}</div>`,
         (bd.yours || []).some((b) => b.claimableOmr > 0))}
 
+      ${bd.yourStanding ? sect('legit-underwriter', "The Underwriters' League", 'back the treasury with $OMR — earn a backer tier, commission a Charter seal, climb the league', `
+      <div class="card">
+        <div><span class="t">${bd.yourStanding.tier}</span> <span class="chip good">score ${fmt(bd.yourStanding.score)}</span>
+          ${bd.yourStanding.charterName ? `<span class="chip good">✦ ${bd.yourStanding.charterName}</span>` : ''}</div>
+        <div class="d">${fmt(bd.yourStanding.pledgedOmr)} $OMR pledged${bd.yourStanding.bondedEth ? ` · ${bd.yourStanding.bondedEth} ETH bonded (×${fmt(bd.catalogs.ethScoreOmr)})` : ''}${bd.yourStanding.nextTier ? ` · ${fmt(bd.yourStanding.nextTier.delta)} to ${bd.yourStanding.nextTier.name}` : ' · top tier'} <span style="color:var(--dim)">(survives death)</span></div>
+        <div style="margin-top:6px"><input id="uw-pledge" placeholder="$OMR (min ${bd.catalogs.pledgeMin})" size="14"> <button class="act" id="uw-pledge-go">pledge to the treasury</button></div>
+        ${bd.yourStanding.nextCharter ? `<div style="margin-top:6px"><button class="act" id="uw-charter-go">commission the ${bd.yourStanding.nextCharter.name} (${bd.yourStanding.nextCharter.omr} $OMR)</button>
+          <span class="d" style="font-size:11px;color:var(--dim)">a permanent treasury seal — pure display</span></div>`
+          : (bd.yourStanding.charter ? '<div class="d" style="color:var(--dim)">you hold The Founding Charter — the top seal</div>' : '<div class="d" style="color:var(--dim)">back the treasury to commission a Charter</div>')}
+        <div class="d" style="margin-top:6px"><a href="#" id="uw-lb">🏛 the Underwriters →</a></div>
+        <div id="uw-lbout"></div></div>`,
+        bd.yourStanding.score > 0) : ''}
+
       <h2 style="margin-top:12px">The Float <span class="d" style="font-size:11px">(BACKED stock — real tokenized shares the treasury holds, funded by the city's ETH taxes; burn earned $OMR to claim your allocation at the real market price)</span></h2>
       <div class="card">
         <div class="d">the house never owes a unit it doesn't own · claims ${vault.claimMin ?? 5}–${fmt(vault.claimDailyOmr ?? 500)} $OMR/day per house · big moves draw heat like any laundering</div>
@@ -3809,6 +3824,13 @@
     $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     $('#stake-out').onclick = () => act('POST', '/v1/unstake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     t.querySelectorAll('[data-bondclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/bonds/${b.dataset.bondclaim}/claim`, {}).then(() => renderPortfolio()));
+    { const p = $('#uw-pledge-go'); if (p) p.onclick = () => act('POST', '/v1/bonds/pledge', { omr: Number($('#uw-pledge').value) }).then(() => renderPortfolio()); }
+    { const c = $('#uw-charter-go'); if (c) c.onclick = () => act('POST', '/v1/bonds/charter', {}).then(() => renderPortfolio()); }
+    { const lk = t.querySelector('#uw-lb'); if (lk) lk.onclick = async (e) => { e.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/underwriters')).body || {};
+      t.querySelector('#uw-lbout').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <div style="flex:1;min-width:190px"><div class="d"><b>THE LEAGUE</b></div>${(b.league || []).slice(0, 10).map((e2) => `<div class="d">${e2.financier ? '👑 ' : `#${e2.rank} `}${esc(e2.name)} — ${e2.tier} (${fmt(e2.score)})${e2.charterName ? ` ✦` : ''}</div>`).join('') || '<div class="d">none yet</div>'}</div>
+        <div style="flex:1;min-width:190px"><div class="d"><b>THE SYNDICATES</b> (family backing)</div>${(b.syndicate || []).slice(0, 8).map((g) => `<div class="d">#${g.rank} ${esc(g.name)}${g.tag ? ` [${esc(g.tag)}]` : ''} — ${fmt(g.score)} (${g.backers})</div>`).join('') || '<div class="d">none yet</div>'}</div></div>`; }; }
     { const bq = $('#bond-quote'); if (bq) { let lastNonce = null;
       bq.onclick = async () => {
         const r = await api('POST', '/v1/bond/quote', { principalEth: Number($('#bond-eth').value) });

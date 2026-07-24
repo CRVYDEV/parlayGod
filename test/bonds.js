@@ -115,5 +115,111 @@ assert((await runVigInvariants(pool)).ok, 'the Vig invariant holds — a comp ad
 // ── §10.4 in-game STILL untouched after claims ──
 assert(await inGameOk(), 'in-game §10.4 clean through the whole bond lifecycle');
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// THE UNDERWRITER (Tier-4) — the off-chain backer-prestige pillar: THE PLEDGE ($OMR sink) + THE CHARTER
+// (sequential seal) + the read-derived Underwriters' League / Financier crown / Family Syndicate.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+let grantedOmr = 0; // track the SQL-seeded $OMR (the only unledgered mint — everything else reconciles as a bond: burn)
+const grantOmr = async (aid, omr) => { await pool.query('UPDATE account_persistent SET omr = omr + $1 WHERE account_id=$2', [omr, aid]); grantedOmr += omr; };
+const mk = async (name) => {
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token, body: { name } });
+  const row = (await pool.query('SELECT id, account_id FROM characters WHERE name=$1 AND alive LIMIT 1', [name])).rows[0];
+  return { token, aid: row.account_id, cid: row.id };
+};
+const pledgedOf = async (aid) => Number((await pool.query('SELECT pledged_omr v FROM account_persistent WHERE account_id=$1', [aid])).rows[0].v);
+const charterOfAcct = async (aid) => Number((await pool.query('SELECT bond_charter v FROM account_persistent WHERE account_id=$1', [aid])).rows[0].v);
+
+// ── (A) THE PLEDGE — the live-now $OMR sink ──
+const alice = await mk('Alice Underwriter');
+await grantOmr(alice.aid, 5000);
+assert.equal((await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 5 } })).body.error, 'min', 'a pledge below PLEDGE_MIN is rejected');
+const pl = await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 500 } });
+assert.equal(pl.code, 200, `pledge landed: ${JSON.stringify(pl.body)}`);
+assert.equal(await pledgedOf(alice.aid), 500, 'pledged_omr banked the pledge (account legend)');
+assert.equal(pl.body.standing.pledgedOmr, 500, 'the standing reflects the pledge');
+assert.equal(pl.body.standing.score, 500, 'score == pledge (no bonds)');
+assert.equal(pl.body.standing.tier, 'Patron', 'score 500 → Patron tier');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:pledge' AND account_id='${alice.aid}'`)).rows[0].s) === -500, 'bond:pledge is a ledgered $OMR burn (-500)');
+// over-pledge: more $OMR than held → the spendOmr 'omr' error (alice has 4500 left)
+assert.equal((await call('POST', '/v1/bonds/pledge', { token: alice.token, body: { omr: 99999 } })).body.error, 'omr', 'you cannot pledge $OMR you do not hold');
+
+// ── (B) THE CHARTER — sequential seals, backer-gated ──
+const c1 = await call('POST', '/v1/bonds/charter', { token: alice.token });
+assert.equal(c1.code, 200); assert.equal(c1.body.charter, 1, 'commissioned the Bronze Charter'); assert.equal(c1.body.spent, 25);
+assert.equal(await charterOfAcct(alice.aid), 1, 'bond_charter == 1');
+const c2 = await call('POST', '/v1/bonds/charter', { token: alice.token });
+assert.equal(c2.body.charter, 2, 'the next call buys the Silver Charter (sequential)'); assert.equal(c2.body.spent, 75);
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='bond:charter' AND account_id='${alice.aid}'`)).rows[0].s) === -100, 'bond:charter ledgered (-25 -75)');
+// a fresh account with score 0 cannot commission a charter
+const bob = await mk('Bob NoBacker');
+assert.equal((await call('POST', '/v1/bonds/charter', { token: bob.token })).body.error, 'not_backer', 'a non-backer cannot commission a charter');
+
+// ── (C) BACKER TIER DERIVATION — the combined ETH + pledge score ──
+const whale = await mk('Whale Financier');
+await grantOmr(whale.aid, 2000);
+await call('POST', '/v1/bonds/pledge', { token: whale.token, body: { omr: 1000 } });
+// a 2-ETH bond to the whale → derivedBondedEth 2 → score = 1000 + 2×5000 = 11000
+await call('POST', '/v1/mod/bond/simulate', { modkey: mod, body: { nonce: 20, account: whale.aid, principalEth: 2, price: 5000, discountBps: 800, txHash: '0xwhalebond' } });
+const wStand = (await call('GET', '/v1/bonds', { token: whale.token })).body.yourStanding;
+assert.equal(wStand.bondedEth, 2, 'the whale bonded 2 ETH (read-derived)');
+assert.equal(wStand.score, 11000, 'underwriterScore == pledge + bondedEth × ETH_SCORE_OMR (1000 + 2×5000)');
+assert.equal(wStand.tier, 'Financier', 'score 11000 → the Financier tier');
+
+// ── (D) THE UNDERWRITERS' LEAGUE + the Financier crown + agent exclusion ──
+let lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
+assert(lb.league.some((e) => e.name === 'Whale Financier'), 'the whale is on the league (a real backer)');
+assert.equal(lb.league[0].financier, true, 'the top backer wears the Financier crown (exactly one)');
+assert.equal(lb.league.filter((e) => e.financier).length, 1, 'the crown is unique');
+const topBefore = lb.league[0].name; // whoever currently leads (an earlier bonder outranks the fresh whale)
+// an agent with a huge (would-be-top) pledge never appears (excluded like referral payouts)
+const spook = await mk('Spook Agent');
+await pool.query('UPDATE account_persistent SET agent_flag=true WHERE account_id=$1', [spook.aid]);
+await grantOmr(spook.aid, 60000);
+await call('POST', '/v1/bonds/pledge', { token: spook.token, body: { omr: 50000 } });
+lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
+assert(!lb.league.some((e) => e.name === 'Spook Agent'), 'an agent_flag backer never appears on the league');
+assert.equal(lb.league[0].name, topBefore, 'the crown did NOT go to the agent (still the prior top)');
+// the crown is READ-DERIVED — a bigger pledge by a new account flips it (25000 > any standing backer)
+const titan = await mk('Titan Reserve');
+await grantOmr(titan.aid, 26000);
+await call('POST', '/v1/bonds/pledge', { token: titan.token, body: { omr: 25000 } });
+lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
+assert.equal(lb.league[0].name, 'Titan Reserve', 'the biggest pledge flips the crown (recomputed on read)');
+assert.equal(lb.league[0].financier, true, 'Titan now wears the crown');
+assert.equal(lb.league.find((e) => e.name === topBefore).financier, false, 'the prior top lost the crown');
+
+// ── (E) THE FAMILY SYNDICATE — a gang's summed roster score ──
+// seed a gang with the whale (boss) + titan on its roster (SQL — a light gang, the syndicate is a read)
+await pool.query(`INSERT INTO gangs (id, name, tag) VALUES ('synd-gang','The Syndicate','SYN')`);
+await pool.query(`INSERT INTO gang_members (gang_id, character_id, role, joined_at) VALUES ('synd-gang','${whale.cid}','boss',now()), ('synd-gang','${titan.cid}','soldier',now())`);
+lb = (await call('GET', '/v1/leaderboard/underwriters', { token: alice.token })).body;
+const syn = lb.syndicate.find((g) => g.name === 'The Syndicate');
+assert(syn, 'the family appears on the syndicate board');
+assert.equal(syn.backers, 2, 'both backers counted');
+assert.equal(syn.score, 11000 + 25000, "the syndicate sums its roster's scores (whale 11000 + titan 25000)");
+
+// ── (F) §10.4 — the vocabulary knows bond:; the burns reconcile; only the SQL grant drifts ──
+const inv = await runLedgerInvariants(pool);
+assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'bond: is enumerated (no unknown-reason alarm)');
+const bondBurns = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason LIKE 'bond:%'")).rows[0].s);
+const totalSpent = 500 + 100 + 1000 + 50000 + 25000; // alice pledge+charters, whale pledge, spook pledge, titan pledge
+assert.equal(bondBurns, totalSpent, 'every $OMR pledge/charter reconciles as a bond: burn');
+const cons = inv.checks.find((c) => c.name === '$OMR conservation');
+assert(Math.abs((cons.lhs - cons.rhs) - grantedOmr) < 0.01, 'the only $OMR conservation drift is the SQL-seeded grant (the burns are all ledgered)');
+
+// ── (G) DEATH SURVIVAL — the backer legend + charter are account-level (survive death) ──
+const wPledged = await pledgedOf(whale.aid), wCharter = await charterOfAcct(whale.aid);
+await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': mod }, payload: { characterId: whale.cid } });
+assert.equal(await pledgedOf(whale.aid), wPledged, 'pledged_omr survives death (account legend)');
+assert.equal(await charterOfAcct(whale.aid), wCharter, 'bond_charter survives death');
+const wEth = Number((await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds WHERE account_id=$1', [whale.aid])).rows[0].s);
+assert.equal(wEth, 2, 'bonded_eth still read-derives from the surviving bonds rows after death');
+
+// ── (H) bonds are STILL out-of-band — the whole underwriter lifecycle wrote zero perturbation of the sweep ──
+assert((await runBondInvariants(pool)).ok, 'the bond invariant still holds through the underwriter lifecycle');
+
+console.log('✅ THE UNDERWRITER (Reserve Bond Tier-4) test passed — THE PLEDGE (min gate, ledgered bond:pledge burn, over-pledge → omr), THE CHARTER (sequential Bronze→Silver seals, not_backer gate, ledgered bond:charter), backer-tier derivation (pledge + bondedEth×ETH_SCORE_OMR → Financier), THE UNDERWRITERS LEAGUE + the read-derived Financier crown (agent excluded, the crown flips on a bigger pledge), THE FAMILY SYNDICATE (summed roster score), §10.4 (bond: enumerated + every burn reconciles + the only drift is the SQL seed), and DEATH SURVIVAL (pledged_omr/bond_charter/bonded_eth all survive the estate)');
+
 console.log('✅ The Reserve Bond test passed — fund the tranche, record a bond (the discounted payout + the 50/20/30 POL/Dev/Vig ETH split), the ANTI-PONZI cap (committed ≤ capacity → over_capacity), idempotency (duplicate nonce = no-op), the bond invariant (committed==Σpayout, ≤capacity, claimed≤committed, ETH-split==principal, discounts capped), the Vig integration (bond ETH feeds the buyback → reserve+prizes), CLAIM (linear vesting → full claim → nothing left), the Treasury Backer status, and §10.4 IN-GAME UNTOUCHED (bonds are out-of-band real value — zero transactions rows — so the sweep stays drift-free through the whole lifecycle)');
 await app.close();
