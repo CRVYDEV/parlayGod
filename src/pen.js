@@ -93,7 +93,10 @@ export async function penBoard(ch, client, h) {
     contraband: held,
     armed: (held.shiv || 0) > 0,
     commissary: PEN.CONTRABAND.map((c) => ({ id: c.id, name: c.name, cost: c.cost, desc: c.desc })),
-    protectionCost: Math.round(PEN.PROTECTION_COST * (ev.protMult || 1)), bribePerSecond: Math.round(PEN.BRIBE_PER_S * (ev.bribeMult || 1)),
+    // the quote MIRRORS payProtection exactly (incl. the wealth scale + the incident mult)
+    protectionCost: protectionCostOf(ch, ev.protMult || 1), bribePerSecond: Math.round(PEN.BRIBE_PER_S * (ev.bribeMult || 1)),
+    shankCooldownSeconds: ch.shank_at && new Date(ch.shank_at) > new Date()
+      ? Math.ceil((new Date(ch.shank_at) - Date.now()) / 1000) : 0,
     // step two: today's yard incident (the block-wide modifier everyone shares)
     incident: { id: ev.id, name: ev.name, desc: ev.desc },
     // step five: your yard crew + the cover it buys, the shot-caller status, and the roster of crews
@@ -137,10 +140,18 @@ export async function buyContraband(ch, itemId, client, h) {
   return { ok: true, item: itemId, cost: item.cost };
 }
 
+// the yard boss prices cover off the man's liquid wealth (the SAFEHOUSE_NW_BPS pattern) — a flat rate
+// sold a jailed whale immunity for pocket change. The floor guards the WEALTH SCALE only; the yard
+// incident's mult then applies on top, because a riot's half-price cover is a DESIGNED discount below
+// the flat rate (unlike the safehouse's season mults, which are all ≥1 and re-floored).
+export const protectionCostOf = (ch, mult = 1) => Math.round(
+  Math.max(PEN.PROTECTION_COST,
+    Math.floor((Number(ch.cash) + Number(ch.bank)) * PEN.PROTECTION_NW_BPS / 10000)) * mult);
+
 // POST /v1/pen/protection — pay the yard boss for a no-shank window (the in-jail safehouse)
 export async function payProtection(ch, client, h) {
   insideOnly(ch);
-  const cost = Math.round(PEN.PROTECTION_COST * (activeYardEvent().protMult || 1)); // a riot puts cover on sale
+  const cost = protectionCostOf(ch, activeYardEvent().protMult || 1); // a riot puts cover on sale
   if (Number(ch.cash) < cost) throw new GameError('cash', `The yard boss wants $${cost}.`);
   ch.cash = Number(ch.cash) - cost;
   const base = penSafe(ch) ? new Date(ch.pen_safe_until).getTime() : Date.now();
@@ -454,8 +465,18 @@ export async function shank(ch, victim, client, h) {
   const held = await contrabandOf(client, ch.id);
   if (!(held.shiv > 0)) throw new GameError('no_shiv', 'You need a shiv for that kind of talk.');
   if (Number(ch.energy) < PEN.SHANK_ENERGY) throw new GameError('energy', `A move like that takes ${PEN.SHANK_ENERGY} energy.`);
+  // per-attacker cooldown (SIGN-OFF Tier 3): energy + a shiv + the sentence extension were the only
+  // brakes, so a stocked-up inmate could work down a whole wing in one sitting. Direct-SQL column
+  // (outside persistCharacter's positional UPDATE — the active_at pattern), set win OR lose below.
+  // PEN_SHANK_CD_MS is a TEST-ONLY knob (the SEARCH_MS / SHOOT_CD_MS precedent) — never in production.
+  const shankCd = Number(process.env.PEN_SHANK_CD_MS ?? PEN.SHANK_CD_MS);
+  if (ch.shank_at && new Date(ch.shank_at) > new Date())
+    throw new GameError('cooldown', `Too soon — the guards are still watching you. ${Math.ceil((new Date(ch.shank_at) - Date.now()) / 60000)}m.`);
 
   ch.energy = Number(ch.energy) - PEN.SHANK_ENERGY;
+  const shankUntil = new Date(Date.now() + shankCd);
+  await client.query('UPDATE characters SET shank_at=$2 WHERE id=$1', [ch.id, shankUntil]);
+  ch.shank_at = shankUntil;
   await setContraband(client, ch.id, 'shiv', held.shiv - 1); // the shiv is spent whether it lands or not
   const km = effStat(Number(ch.muscle), 'muscle', h.owned.assets || [], h.owned.gear || []);
   const vm = effStat(Number(victim.muscle), 'muscle', h.victimOwned.assets || [], h.victimOwned.gear || []);

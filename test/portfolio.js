@@ -267,6 +267,11 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
   // the board shows the float
   const claimer = await mk('Vault Vinny');
   await acctOmr(claimer.id, 2000); grantDrift += 2000;
+  // MINTED-ONLY (AUDIT-rwa-float #2): the float is the on-ramp to the KYC-gated extraction, so a
+  // claiming identity must have paid the mint fee — the Street Wage D1 anti-Sybil precedent.
+  r = await call('POST', '/v1/vault/claim', { token: claimer.token, body: { ticker: 'AAPL', omr: 50 } });
+  assert.equal(r.body.error, 'mint', 'a free-trial character cannot claim from the float');
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${claimer.id}')`);
   let vb = (await call('GET', '/v1/vault', { token: claimer.token })).body;
   const aapl = vb.float.find((f) => f.ticker === 'AAPL');
   assert.equal(aapl.held, 500, 'the float shows held units');
@@ -286,6 +291,7 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
   await modCall('POST', '/v1/mod/rwa/buy', { ticker: 'TSLA', eth: 0.01, priceEth: 0.001 });
   const clamper = await mk('Clamp Carl');
   await acctOmr(clamper.id, 500); grantDrift += 500;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${clamper.id}')`);
   r = await call('POST', '/v1/vault/claim', { token: clamper.token, body: { ticker: 'TSLA', omr: 100 } });
   assert.equal(r.code, 200, 'the clamped claim lands');
   assert.equal(r.body.clamped, true, 'the float ran short of the ask');
@@ -296,6 +302,7 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
   // the RICO graduation SHARES the paper window: paper 990 then a vault 50 crosses 1000 → safehouse-blocked
   const launderer = await mk('Sly Sal');
   await acctOmr(launderer.id, 2000); grantDrift += 2000;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${launderer.id}')`);
   await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${launderer.id}'`);
   r = await call('POST', '/v1/portfolio/invest', { token: launderer.token, body: { ticker: 'GLD', omr: 990 } });
   assert.equal(r.code, 200, 'a sub-threshold paper buy flies from a safehouse');
@@ -313,6 +320,7 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
   assert.equal(b.statusCode, 200, 'the expensive-ticker buy lands');
   const tiny = await mk('Tiny Tim');
   await acctOmr(tiny.id, 100); grantDrift += 100;
+  await pool.query(`UPDATE account_persistent SET minted=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${tiny.id}')`);
   r = await call('POST', '/v1/vault/claim', { token: tiny.token, body: { ticker: 'HOOD', omr: 5 } });
   assert.equal(r.body.error, 'amount', 'a zero-unit ask is refused (no burn-for-nothing)');
   assert.equal((await meOf(tiny.token)).omr, 100, 'and not a single $OMR moved');

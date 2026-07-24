@@ -1920,3 +1920,35 @@ is deliberately not price. What moves is nerve (the corner's real throttle), hea
 *slow* rank progression, never accelerate access to the rank price bonus. SIGN-OFF: the heat/nerve/rep
 multipliers are new levers; sim whether `flood`'s doubled heat is a real deterrent at endgame laylow
 prices before production.
+
+---
+
+## FINAL SWEEP — every open flagged item resolved (founder-directed 2026-07-24)
+
+*"Bring up a list of all not patched items and apply your game balancing recommendations to all."*
+The full ranked ledger — APPLIED / ACCEPTED / not-a-balance-item — lives in **`SIGN-OFF.md` § FINAL
+SWEEP**. This section records only the **numeric levers that moved**, so BALANCE.md stays the table of
+what the economy actually runs on. Suite green + sim drift-0 after the package.
+
+| Lever | Was | Now | Why (one line) |
+|---|---|---|---|
+| `PORT.ROUTES.deeprun.sell` | 1900 | **2700** | the deepest route was a trap ($131k/day vs Open Water's $303k); ×3.0 is the derived floor for it to actually beat the safe route → ~$380k/day |
+| `STABLE.STABLE_MAX` | 4 | **3** | aligned with `BOXING.STABLE_MAX` — identical bounded-purse mechanic, so the 4th slot was a free +33% ceiling |
+| `SEASON_MODS.the_gold_rush.tradeSellMult` | 1.05 | **1.03** | 1.05 flipped a same-district round trip past the 4% fee wall (~+1% riskless/cycle for a season) |
+| `LOAN.HOUSE_MIN_LVL` | 3 | **10** | the loan-house death cycle: a disposable alt borrowed the cap, extracted, died — now it costs a real grind |
+| `M3.LOOT_MIN_LVL` | *(none)* | **10** | a fire-kill loots nothing off a rookie — closes the disposable-alt value funnel; the estate still runs |
+| `M3.JUMP_INTENTS.message.energyMult` | *(none, flat 25)* | **1.5 (38)** | prices THE MESSAGE's 1.5× rep + 1.5× hospital so it's rate-neutral per energy, not a free multiplier |
+| `M3.DEATH_DUTY_RATE` base | liquid $OMR | **liquid + unbonding** | the sibling P1.1 loot already used that base; dying mid-unbond had sheltered the hoard |
+| `PEN.PROTECTION_NW_BPS` | *(none, flat $15k)* | **50 (0.5%)** | a jailed whale bought shank-immunity for pocket change; wealth-scaled like the safehouse |
+| `PEN.SHANK_CD_MS` | *(none)* | **30 min** | per-attacker; a stocked-up inmate could work down a whole wing in one sitting |
+| Crew-sale raid heat feed | uncapped `heat` | **`min(100, heat)`** | parity with the Law-exposure path; a hot stash can't exceed the heat-100 ceiling's odds |
+| `TERRITORY_TYPES[*].desc` | — | **collection-cadence guidance** | Numbers lazy-dominates the hot types; the fix is an informed choice at establish, NOT a curve retune |
+
+**Gates added (no numbers, closing parity holes):** `fenceLoot` and `buyPaper` are safehouse-blocked;
+`upgradeRacket` resolves a pending Bureau raid before banking the pending take; the megaproject goods rail
+carries the cash rail's `$MIN_CASH` floor; `claimVaulted` (the RWA float) is minted-only; `duel_wins`
+credits only the first duel against a bloodline each day.
+
+**All of the above are still founder sign-off levers** — every one is a single constant or a one-line gate,
+reversible by setting it back. The three faucet-touching rows (deeprun sell ↑, stable cap ↓, gold rush ↓)
+should be re-measured in `tools/sim.js` alongside the existing P9 probes before production.

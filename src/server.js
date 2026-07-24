@@ -2020,9 +2020,10 @@ export async function buildServer() {
       const estate = await S.runEstate(client, h, victim, 'THE COMMISSION'); // tracks the death itself
       // this hand-rolled txn isn't wrapped by persistAccount, so it must persist every account field
       // runEstate mutates in memory: prestige, deaths, and (L2a) the death-duty $OMR burn (the ledger
-      // row is written inside runEstate; without omr here the burn drifts §10.4 on a mod-kill).
-      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4 WHERE account_id=$1',
-        [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr]);
+      // row is written inside runEstate; without omr here the burn drifts §10.4 on a mod-kill). The duty
+      // reaches liquid AND unbonding, so both columns ride.
+      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4, unbonding=$5 WHERE account_id=$1',
+        [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr, victimAcct.unbonding ?? 0]);
       if (reason) await G.track(client, victim.account_id, 'mod_kill_reason', { reason });
       await client.query('COMMIT');
       closeAccountSockets(victim.account_id, 4009, 'gang_changed'); // R26 WS: the heir is gangless — cut the dead street's stale gang: feed

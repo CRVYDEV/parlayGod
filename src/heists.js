@@ -157,6 +157,10 @@ export async function caseJob(ch, heistId, client, h) {
 // faucet centered below 1.0, so it's a variance play, never a net faucet increase). Draws heat — moving
 // hot goods is exposure. A marked man's stash can be looted on a fire-kill (P1.1 twin, in social.js).
 export async function fenceLoot(ch, client, h) {
+  // D2 parity (AUDIT-tier1-deepening): fencing is an income-REALIZING act, so it can't be run from a
+  // safehouse — otherwise a crew takes a score HOT, goes to ground, and converts it from cover, dodging
+  // the fire-kill hot-loot exposure the risk layer is for. Matches every other collect/realize gate.
+  if (safeHoused(ch)) throw new GameError('safe', "No fence takes a meeting with a ghost — the loot waits until you surface.");
   const loot = Math.floor(Number(ch.heist_loot || 0));
   if (loot <= 0) throw new GameError('nothing', "You've got no hot loot to move.");
   const mult = heistFenceMultOf();

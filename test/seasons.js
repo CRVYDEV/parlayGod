@@ -4,7 +4,7 @@
 // is what's ledgered (the decree discipline). Covers: the deterministic seed draw + the SEASON_MOD
 // test-only override, the /v1/city surface, and every touchpoint pinned: THE CRACKDOWN (laylow
 // ×0.75 ledger-exact), BLOOD IN THE STREETS (safehouse cost ×1.25 ledger-exact + kill loot ×1.15),
-// THE GOLD RUSH (goods sell ×1.05 vs the dead-quiet baseline), and DEAD QUIET (the vanilla
+// THE GOLD RUSH (goods sell ×1.03 vs the dead-quiet baseline), and DEAD QUIET (the vanilla
 // baseline). §10.4 stays exact throughout (the modified numbers ride the normal ledger rails).
 process.env.MOD_KEY = 'test-mod-key';
 process.env.SEASON_MOD = 'dead_quiet'; // TEST-ONLY override (boot-guard rejects it in production)
@@ -69,12 +69,16 @@ const crackLaylow = Math.abs(Number((await cashRow(vic.id, 'laylow')).amount));
 assert.equal(crackLaylow, Math.floor(M4.LAYLOW_CASH * 0.75), `the judges are cheap — ×0.75 ledgered exactly (${crackLaylow})`);
 assert(crackLaylow < baseLaylow, 'cheaper than the vanilla season');
 
-// ── THE GOLD RUSH: the same sale runs ×1.05 vs the dead-quiet baseline unit ──
+// ── THE GOLD RUSH: the same sale runs ×1.03 vs the dead-quiet baseline unit ──
+// (retuned 1.05 → 1.03: at 1.05 the sell-only bonus flipped a same-district buy→sell round trip
+// past the 4% fee wall — ~+1% riskless per cycle for a whole season. 1.03 sits under the wall.)
 process.env.SEASON_MOD = 'the_gold_rush';
 r = await call('POST', '/v1/goods/sell', { token: vic.token, body: { goodId: 'gin', qty: 1 } });
 assert.equal(r.code, 200, 'the gold-rush sale lands');
 assert(r.body.unit > baseUnit, `gold rush lifts the sale (${baseUnit} → ${r.body.unit})`);
-assert(Math.abs(r.body.unit - baseUnit * 1.05) <= 1, 'by ~5% (rounding-exact)');
+assert(Math.abs(r.body.unit - baseUnit * 1.03) <= 1, 'by ~3% (rounding-exact)');
+// and the lift must stay UNDER the 4% round-trip fee wall, or the season pays for standing still
+assert(r.body.unit < baseUnit * 1.04, 'under the 4% fee wall — no riskless same-district round trip');
 
 // ── BLOOD IN THE STREETS: the safehouse quote ×1.25 (ledger-exact) + kill loot ×1.15 ──
 process.env.SEASON_MOD = 'blood_in_the_streets';
@@ -131,4 +135,4 @@ const cash = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cash.drift, 3_300_000, `cash drift == the SQL seeds only (modified prices ledger exactly): ${cash.drift}`);
 
 await app.close();
-console.log('✅ SEASONAL MODIFIERS test passed — the deterministic seed draw + the SEASON_MOD test-only override, the /v1/city + /v1/rules surfaces, THE CRACKDOWN (laylow ×0.75 ledger-exact), THE GOLD RUSH (goods sell ×1.05 vs the vanilla baseline), BLOOD IN THE STREETS (safehouse ×1.25 ledger-exact + a real §9 kill looting at the ×1.15 rate, clamped), and §10.4 exact throughout (the modified numbers ride the normal ledger rails — drift == the SQL seeds only)');
+console.log('✅ SEASONAL MODIFIERS test passed — the deterministic seed draw + the SEASON_MOD test-only override, the /v1/city + /v1/rules surfaces, THE CRACKDOWN (laylow ×0.75 ledger-exact), THE GOLD RUSH (goods sell ×1.03 vs the vanilla baseline, under the 4% round-trip fee wall), BLOOD IN THE STREETS (safehouse ×1.25 ledger-exact + a real §9 kill looting at the ×1.15 rate, clamped), and §10.4 exact throughout (the modified numbers ride the normal ledger rails — drift == the SQL seeds only)');

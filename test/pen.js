@@ -5,6 +5,7 @@
 // vocabulary stays closed (pen:* — a bounded work faucet + commissary/protection/bribe sinks). pg-mem.
 process.env.MOD_KEY = 'test-mod-key';
 process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the step-one tests (overridden per-case below)
+process.env.PEN_SHANK_CD_MS = '1';    // TEST-ONLY: shrink the per-attacker shank cooldown (SEARCH_MS precedent) — a dedicated block below restores it to assert the gate
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { PEN, NPC_HITMEN, yardEventOf } from '../src/rules.js';
@@ -145,6 +146,32 @@ assert.equal(r.body.caught, true, 'the move is fumbled');
 assert(r.body.dmg > 0 && Number((await rawCh(killer2.id)).health) < 100, 'the killer takes the beating');
 assert(r.body.sentenceSeconds >= k2sent0 + PEN.CAUGHT_ADD_S - 3, 'getting caught adds time');
 assert(!!(await rawCh(mark2.id)).alive, 'the mark walks away');
+
+// ── SIGN-OFF Tier 3: the per-attacker SHANK COOLDOWN ───────────────────────────────────────────
+// Energy + a shiv + the sentence extension were the only brakes, so a stocked-up inmate could work
+// down a whole wing in one sitting. (The suite runs with PEN_SHANK_CD_MS=1 so the sequences above
+// aren't serialised; here we restore the real gate to prove it exists.)
+{
+  const cd = await mk('Cooldown Carl');
+  const mark3 = await mk('Wing Walter');
+  await seedCh(cd.id, `${jailFuture}, energy=200, cash=200000, health=100, muscle=90`);
+  await seedCh(mark3.id, `${jailFuture}, respect=500, muscle=1`);
+  await call('POST', '/v1/pen/buy/shiv', { token: cd.token });
+  await call('POST', '/v1/pen/buy/shiv', { token: cd.token });
+  process.env.PEN_SHANK_CD_MS = String(30 * 60 * 1000); // the production value
+  process.env.SHANK_P = '0';
+  r = await call('POST', `/v1/pen/shank/${mark3.id}`, { token: cd.token });
+  assert.equal(r.body.caught, true, 'the first move is made (and fumbled)');
+  const board = (await call('GET', '/v1/pen', { token: cd.token })).body;
+  assert(board.shankCooldownSeconds > 1700, 'the yard board shows the cooldown running');
+  await seedCh(cd.id, 'hole_until=NULL, energy=200'); // walk him out of solitary so the COOLDOWN is what bites
+  r = await call('POST', `/v1/pen/shank/${mark3.id}`, { token: cd.token });
+  assert.equal(r.body.error, 'cooldown', 'a second move is refused — win or lose, the guards are watching');
+  assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraband WHERE character_id='${cd.id}' AND item='shiv'`)).rows[0].q, 1,
+    'the refused move spends nothing — the second shiv is still in the sock');
+  delete process.env.SHANK_P;
+  process.env.PEN_SHANK_CD_MS = '1';
+}
 
 // AUDIT REGRESSION: a shank is a DIRECT player kill — it FULFILS an open kill contract on the mark
 // (like fire, not the hired npcHit), so a hunter who does the wet work in the yard gets paid rather

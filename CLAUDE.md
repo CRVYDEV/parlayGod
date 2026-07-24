@@ -4961,3 +4961,40 @@ what death costs → a signed-lever change), "jump-to-shield" being 50% more eff
 per-mark but ~1.5× per-energy across many marks (paid for in law heat). Process note: sackEmpire
 reproduced F1 by copying a column list instead of calling the helper — the two reset blocks should be
 collapsed into one exported helper next time either is touched. Suite 46/46 + sim drift-0.
+
+**THE FINAL SWEEP — every open flagged item resolved (founder-directed 2026-07-24: "Do what you recommend
+for all 3 / bring up a list of all not patched items and apply your game balancing recommendations to
+all").** Two passes. **(1) The three AUDIT-stakes-spine-session flags**: the **DEATH DUTY** now taxes
+liquid **+ unbonding** $OMR (the exact base the sibling P1.1 `whack:loot` uses — dying inside the 6h
+unbond window had sheltered the whole hoard; both hand-rolled headless persists carry `unbonding` or the
+burn drifts §10.4), and **THE MESSAGE gained `energyMult` 1.5** (`M3.JUMP_INTENTS`) — one change closing
+BOTH remaining flags, since rep ×1.5 with hospital ×1.5 was rate-neutral per mark-clock but a straight
+1.5× rep-per-ENERGY lever AND a 1.5×-better ally-shield; charging 1.5× energy restores neutrality on both
+axes, so the intent buys CONCENTRATION + damage paid in law heat, never a free multiplier. **(2) The full
+sweep** over `BALANCE.md`, `SIGN-OFF.md` and all 56 `AUDIT-*.md` reports: every open item is now APPLIED,
+ACCEPTED (recorded as a decision), or filed to the legal/chain track — the complete ranked ledger is
+**`SIGN-OFF.md` § FINAL SWEEP**, the moved numbers are the **`BALANCE.md` § FINAL SWEEP** table. Applied:
+`PORT.ROUTES.deeprun.sell` 1900→**2700** (the trap route — realized/day is `cap × [(m−1)·P(clean) −
+1.5·P(caught)]`, so the audit's own "~$2,400" still lost to Open Water; ×3.0 → ~$380k/day vs $303k),
+`STABLE.STABLE_MAX` 4→**3** (Boxing parity — identical bounded-purse mechanic), Gold Rush `tradeSellMult`
+1.05→**1.03** (back under the 4% round-trip fee wall), `LOAN.HOUSE_MIN_LVL` 3→**10** (the loan-house death
+cycle), new **`M3.LOOT_MIN_LVL` 10** (a fire-kill loots NOTHING off a rookie — closes the disposable-alt
+value funnel; the estate still runs, D1 whale-hunting untouched), new **`PEN.PROTECTION_NW_BPS` 50**
+(wealth-scaled yard-boss cover; the riot's protMult stays a designed sub-floor discount) + **`PEN.SHANK_CD_MS`
+30min** per attacker (`PEN_SHANK_CD_MS` test knob, `characters.shank_at` direct-SQL), the safehouse floor
+re-asserted AFTER the season mult (both `enterSafehouse` and the view quote — a future sub-1 season can't
+breach the signed $25k), `duel_wins` now needs a NEW opponent bloodline each day (`prior === 0`, reusing the
+ELO K-decay's pair/day counter — the level floor bounded WHO, this bounds HOW OFTEN), the crew-sale Bureau
+raid reads **clamped** heat (S1 parity, player-favourable), `upgradeRacket` resolves a pending crackdown
+before banking the pending take (the speakeasy precedent), safehouse gates on `fenceLoot` + `buyPaper`, the
+megaproject goods rail floored at `MIN_CASH`, `claimVaulted` **minted-only** (rwa-float #2 — the Wage D1
+Sybil precedent + R3 dead-allocation), and TERRITORY_TYPES descriptions now state each type's collection
+cadence (Numbers lazy-dominates — the fix is an informed choice, NOT a curve retune). Accepted-as-designed
+(now decisions, not to-dos): the megaproject plaque stays agent-inclusive (it's BOUGHT with burned value,
+unlike the free-to-farm status boards), jump-to-shield (hospital = protection is signed; A2 removed the
+amplification), the secrets pressure mechanics, status-board Sybil inflation (no payout attaches — the
+hitman-rep posture), estate staff walking, the Commission levy/proposal leverage, ring-poker soft play, and
+the whole previously-WATCHed Tier 5. Left on the separate track: the third-party contract+signer audit and
+legal counsel (`forge test` is GREEN 73/73 since 2026-07-23, so gate 1 is closed), and the RWA float's
+stale-oracle free option (#1 — the single most important economics decision before the real buy bot ships).
+Regressions per fix across social/pen/portfolio/seasons. All moved numbers remain founder sign-off levers.

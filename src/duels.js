@@ -154,8 +154,13 @@ export async function challenge(ch, opponent, amount, client, h) {
     [crypto.randomUUID(), pa, pb, winner.account_id, day]);
   await client.query('UPDATE characters SET duel_at=$2 WHERE id=$1', [ch.id, new Date(Date.now() + cdMs)]);
   ch.duel_at = new Date(Date.now() + cdMs);
-  // the lifetime legend — only vs a real opponent (the WHEEL anti-Sybil floor); absolute-safe increment
-  if (levelOf(Number(loser.respect)) >= DUELS.LEGEND_MIN_LVL)
+  // The lifetime legend needs a real opponent (the WHEEL anti-Sybil floor) AND a NEW one each day:
+  // `prior === 0` means this is the first duel against that bloodline today, so the same funded
+  // lvl-10 alt can't feed wins at rate-limit speed (AUDIT-slate-drops #2 — the level floor alone
+  // bounded WHO you farm, never HOW OFTEN). It reuses the pair/day counter the ELO K-decay already
+  // computes, and mirrors the hitman-rep bloodline-diminishing precedent. ELO is unaffected (it
+  // already decays); the wager is unaffected (a taxed transfer either way).
+  if (prior === 0 && levelOf(Number(loser.respect)) >= DUELS.LEGEND_MIN_LVL)
     await client.query('UPDATE account_persistent SET duel_wins = duel_wins + 1 WHERE account_id=$1', [winner.account_id]);
   // (red-team) report the ACTUAL applied deltas — the floor clamp means the loser may move less
   // than `delta` (or 0 at the floor); persisted values were always right, the report now matches

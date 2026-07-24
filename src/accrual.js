@@ -120,9 +120,14 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
 
   // §7.1 RAID — sustained heat past 60 draws the Bureau: one roll per accrued
   // window with P = 1 − (1−p)^minutes, p = (heat−60)/2000 per minute.
-  if (Number(ch.heat) > 60 && stash.reduce((a, s) => a + Number(s.qty), 0) > 0) {
+  // S1 (SIGN-OFF addendum): read the CLAMPED heat. The crew's own sales re-add heat inside this same
+  // accrual pass, so an untouched hot stash could carry `ch.heat` past 100 and face worse odds than
+  // the heat-100 ceiling implies — while the sibling Law-exposure path above deliberately clamps.
+  // Player-favourable and parity-restoring: the raid can never be harsher than a maxed-out heat bar.
+  const raidHeat = Math.min(100, Number(ch.heat));
+  if (raidHeat > 60 && stash.reduce((a, s) => a + Number(s.qty), 0) > 0) {
     // LAB MODULE (Tier-4) — Ghost Vents cut the per-minute raid probability
-    const p = ((Number(ch.heat) - 60) / 2000) * Math.max(0, 1 - Number(ch.lab_stealth || 0) * KITCHEN.MODULES.stealth.step);
+    const p = ((raidHeat - 60) / 2000) * Math.max(0, 1 - Number(ch.lab_stealth || 0) * KITCHEN.MODULES.stealth.step);
     const pWindow = 1 - Math.pow(1 - p, Math.max(1, cappedMin));
     const roll = Math.random();
     if (roll < pWindow) {

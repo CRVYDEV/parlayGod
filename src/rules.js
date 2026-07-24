@@ -950,6 +950,13 @@ export const M3 = {
   // burns/survives. Makes killing +EV, the rich into targets, and staking a real safe harbour.
   // OMR_LOOT_RATE is the dial: set to 0 to ship a cash-only version first.
   CASH_LOOT_RATE: 0.25, OMR_LOOT_RATE: 0.20,
+  // LOOT_MIN_LVL (SIGN-OFF 2.3): a fire-kill only LOOTS a mark at/above this level. Below it the kill
+  // still runs the full estate (death is death) — it just pays no cash/$OMR/gear/contraband, closing
+  // the "funnel value through disposable low-level alts onto one main" concentration rail. Nothing is
+  // minted either way, so this is a fairness floor, not a §10.4 fix; the whale-hunting economics D1
+  // signed are untouched (a real mark is far past level 10). The WANTED_MIN_LVL / npcHit-rookie /
+  // legend-floor posture, applied to the one loot surface that lacked it.
+  LOOT_MIN_LVL: 10,
   // Phase 3 remainder — GEAR LOOT: on a player fire-kill, a chance to strip ONE piece of the
   // victim's IN-GAME gear to the killer. On-chain-minted gear (minted_onchain) is SAFE — it's been
   // extracted to the player's own ERC-1155, out of the game's reach — so gear is a real risk
@@ -1007,13 +1014,19 @@ export const M3 = {
   //   • message  — you're there to be SEEN: big rep + a real beating, but you're not there to rob them
   //                (a fraction of the cash), it draws LAW HEAT, and the longer hospital stay shields the
   //                mark from you too (the hospital is protection in this game) — a self-limiting flex.
+  // energyMult (red-team): `message` scales rep AND the hospital blanket by 1.5, which is rate-neutral
+  // against ONE repeatedly-jumped mark — but ENERGY, not the mark's hospital clock, is the real binding
+  // constraint across MANY marks, so a flat energy price made it a straight 1.5× rep-per-energy lever AND
+  // a 1.5×-better "jump an ally to shield them" play. Charging 1.5× energy restores neutrality on BOTH
+  // axes at once: the intent now buys CONCENTRATION (one big statement instead of two small ones) plus
+  // damage, paid for in law heat — never a free multiplier.
   // §10.4: the steal is a pure TRANSFER (jump:steal/jump:stolen, still bounded by JUMP_STEAL_CAP), so
   // scaling it moves who holds the cash and NEVER creates any — zero faucet, zero new reason. Rep is a
-  // status axis; damage/hospital is pacing; heat is a Law lever. All numbers are founder sign-off levers.
+  // status axis; damage/hospital/energy is pacing; heat is a Law lever. All founder sign-off levers.
   JUMP_INTENTS: {
-    rob:      { id: 'rob',      name: 'Roll Them',      stealMult: 1.35, repMult: 0.6, dmgMult: 0.7, hospMult: 0.7, heat: 0 },
-    standard: { id: 'standard', name: 'Jump Them',      stealMult: 1.0,  repMult: 1.0, dmgMult: 1.0, hospMult: 1.0, heat: 0 },
-    message:  { id: 'message',  name: 'Send a Message', stealMult: 0.4,  repMult: 1.5, dmgMult: 1.4, hospMult: 1.5, heat: 5 },
+    rob:      { id: 'rob',      name: 'Roll Them',      stealMult: 1.35, repMult: 0.6, dmgMult: 0.7, hospMult: 0.7, heat: 0, energyMult: 1.0 },
+    standard: { id: 'standard', name: 'Jump Them',      stealMult: 1.0,  repMult: 1.0, dmgMult: 1.0, hospMult: 1.0, heat: 0, energyMult: 1.0 },
+    message:  { id: 'message',  name: 'Send a Message', stealMult: 0.4,  repMult: 1.5, dmgMult: 1.4, hospMult: 1.5, heat: 5, energyMult: 1.5 },
   },
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
@@ -1325,9 +1338,18 @@ export const PEN = {
     { id: 'cutkit', name: 'Hacksaw & Rope',       cost: 50000, desc: 'A blade for the bars, a rope for the wall. The long way out — if you make it.' },
   ],
   PROTECTION_COST: 15000, PROTECTION_MS: 2 * 3600 * 1000,   // pay the yard boss for a no-shank window
+  // PROTECTION_NW_BPS (SIGN-OFF Tier 3): the yard boss charges what the man is worth, not a flat rate —
+  // max(floor, (cash+bank) × 50bps) per 2h stay, the SAFEHOUSE_NW_BPS pattern at half the rate for half
+  // the window. A flat $15k sold a jailed whale shank-immunity for pocket change; a street inmate pays
+  // exactly what they paid before (the floor). Ledgered on the same `pen:protection` sink.
+  PROTECTION_NW_BPS: 50,
   BRIBE_PER_S: 200,                                         // bribe the guard: $/second shaved off the remaining sentence
   SHANK_ENERGY: 25, SHANK_BASE: 0.5, SHANK_SCALE: 200,      // the shank contest: base + (musc edge)/scale, clamped
   SHANK_MIN: 0.15, SHANK_MAX: 0.9,
+  // SHANK_CD_MS (SIGN-OFF Tier 3): a per-attacker cooldown between yard hits. The shank was soft-limited
+  // by energy + a shiv + a sentence extension only, so a stocked-up inmate could work down a whole wing
+  // in one sitting. 30 min is short enough that a real feud still resolves inside a normal sentence.
+  SHANK_CD_MS: 30 * 60 * 1000,
   KILL_ADD_S: 600, CAUGHT_ADD_S: 300, FAIL_DMG: [15, 35],   // a body / getting caught both add time; a miss hurts
   HOLE_MS: 30 * 60 * 1000,                                  // step two: solitary — a caught shank throws you in the hole (no yard actions, untouchable)
   // step three — THE BREAKOUT: a high-risk escape. Needs a 'cutkit' (bought from the commissary),
@@ -1443,8 +1465,14 @@ export const LOAN = {
   // its sink-fed pool holds (full-reserve — never a mint); HOUSE_VIG_BPS of every P2P vig feeds the
   // window. Defaults are auto-collected by the sweep (seize → pool + the standard welsher/WANTED
   // machinery — the house always enforces). All founder sign-off levers.
+  // HOUSE_MIN_LVL 3 → 10 (AUDIT-deep-deferred, the loan-house death cycle): at 3 a throwaway alt
+  // could borrow the per-level cap, extract, and die — the heir repeats, a recurring net drain on a
+  // pool that only sinks refill. Level 10 (respect 324 vs 36) is the codebase's standing anti-Sybil
+  // floor — the same WANTED_MIN_LVL / npcHit-rookie / legend-floor posture — so each disposable
+  // borrower now costs a real grind. Genuine new players reach the window a little later; the P2P
+  // market (no level floor) is still open to them from the start.
   HOUSE_RATE: 0.35, HOUSE_TERM_H: 24, HOUSE_MIN: 1000,
-  HOUSE_MAX_PER_LVL: 2000, HOUSE_MAX: 50000, HOUSE_MIN_LVL: 3,
+  HOUSE_MAX_PER_LVL: 2000, HOUSE_MAX: 50000, HOUSE_MIN_LVL: 10,
   HOUSE_VIG_BPS: 5000, // half of every P2P loan vig → the house window (the rest → the buyback pool)
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
@@ -1823,13 +1851,17 @@ export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tie
 // (zero territory.js code — the type is data), so it's content, not a rebalance; the income mults +
 // scrutiny are NEW founder sign-off levers (numbers keeps parity with the signed curve). `syndicate`
 // is the same-type meta title (Tier-4 §D).
+// (AUDIT-full-product #3) Numbers LAZY-dominates: for a once-a-day collector the hot types heat past
+// the raid threshold before the collect, so their higher take is eaten by crackdowns — they only win
+// if you collect INSIDE their heat window. Rather than flatten the (signed) curve, each type now says
+// so in its own description, so the choice at establish is informed instead of a trap.
 export const TERRITORY_TYPES = [
-  { id: 'numbers',        name: 'Numbers Game',       incomeMult: 1.0,  scrutinyPerHr: 0,  syndicate: 'The Numbers Syndicate',   desc: 'Bookmaking — steady and quiet. The Bureau never comes.' },
-  { id: 'protection',     name: 'Protection Racket',   incomeMult: 1.15, scrutinyPerHr: 10, syndicate: 'The Protection Combine',   desc: 'Muscle on the block — more take, more heat.' },
-  { id: 'loansharking',   name: 'Loansharking Book',   incomeMult: 1.20, scrutinyPerHr: 11, syndicate: 'The Shylock Ring',         desc: 'Vig on the street — good money, watched books.' },
-  { id: 'chop_shop',      name: 'Chop Shop',           incomeMult: 1.25, scrutinyPerHr: 12, syndicate: 'The Chop Cartel',          desc: 'Stolen iron parted out — fast cash, hot plates.' },
-  { id: 'smuggling',      name: 'Smuggling Ring',      incomeMult: 1.35, scrutinyPerHr: 14, syndicate: 'The Smuggling Syndicate',   desc: 'Contraband moves big money — and brings the Feds.' },
-  { id: 'counterfeiting', name: 'Counterfeiting Plant', incomeMult: 1.45, scrutinyPerHr: 18, syndicate: 'The Forgers Guild',        desc: 'Printing money is the biggest take — and the biggest heat.' },
+  { id: 'numbers',        name: 'Numbers Game',       incomeMult: 1.0,  scrutinyPerHr: 0,  syndicate: 'The Numbers Syndicate',   desc: 'Bookmaking — steady and quiet. The Bureau never comes: the best type if you collect once a day.' },
+  { id: 'protection',     name: 'Protection Racket',   incomeMult: 1.15, scrutinyPerHr: 10, syndicate: 'The Protection Combine',   desc: 'Muscle on the block — more take, more heat. Collect inside ~10h or the Bureau eats the gain.' },
+  { id: 'loansharking',   name: 'Loansharking Book',   incomeMult: 1.20, scrutinyPerHr: 11, syndicate: 'The Shylock Ring',         desc: 'Vig on the street — good money, watched books. Needs collecting inside ~9h.' },
+  { id: 'chop_shop',      name: 'Chop Shop',           incomeMult: 1.25, scrutinyPerHr: 12, syndicate: 'The Chop Cartel',          desc: 'Stolen iron parted out — fast cash, hot plates. Needs collecting inside ~8h.' },
+  { id: 'smuggling',      name: 'Smuggling Ring',      incomeMult: 1.35, scrutinyPerHr: 14, syndicate: 'The Smuggling Syndicate',   desc: 'Contraband moves big money — and brings the Feds. Needs collecting inside ~7h.' },
+  { id: 'counterfeiting', name: 'Counterfeiting Plant', incomeMult: 1.45, scrutinyPerHr: 18, syndicate: 'The Forgers Guild',        desc: 'Printing money is the biggest take — and the biggest heat. Needs collecting inside ~5h.' },
 ];
 export const territoryTypeOf = (id) => TERRITORY_TYPES.find((t) => t.id === id) || TERRITORY_TYPES[0];
 // TIER-4 §D — THE SYNDICATE: a family running ≥ TERRITORY_SYNDICATE_MIN operations of ONE type earns
@@ -2446,7 +2478,10 @@ export const STABLE = {
   STAT_CAP: 25,                       // training ceiling per stat
   TRAIN_COST: 15000, TRAIN_ENERGY: 12, TRAIN_GAIN: 1,   // a session: +1 to the chosen stat
   STATS: ['speed', 'stamina', 'heart'],
-  STABLE_MAX: 4,                      // racers you can run at once
+  STABLE_MAX: 3,                      // racers you can run at once — aligned with BOXING.STABLE_MAX
+                                      // (AUDIT-full-product #4): the circuit purse and the exhibition
+                                      // purse are the identical bounded-PvE-faucet mechanic, so a 4th
+                                      // slot was a free +33% racing ceiling for no design reason.
   MIN_STAKE: 5000, MAX_STAKE: 500000, // PvP match-race wager bounds
   RAKE_BPS: 500,                      // 5% vig off the match pot (half → buyback, half burns — casino:pvp)
   VARIANCE: 22,                       // rng added to each racer's form — enough for upsets
@@ -2599,7 +2634,14 @@ export const PORT = {
   ROUTES: [
     { id: 'coastal',   name: 'Coastal Hop',  minLvl: 6,  buy: 120, sell: 200,  patrol: 30,  ms: 60 * 60 * 1000,  minSpeed: 0 },  // ×1.67, safe
     { id: 'openwater', name: 'Open Water',   minLvl: 16, buy: 350, sell: 640,  patrol: 90,  ms: 90 * 60 * 1000,  minSpeed: 40 }, // ×1.83, medium
-    { id: 'deeprun',   name: 'The Deep Run', minLvl: 32, buy: 900, sell: 1900, patrol: 150, ms: 150 * 60 * 1000, minSpeed: 70 }, // ×2.11, high-variance
+    // deeprun sell 1900 → 2700 (AUDIT-full-product #2): at 1900 the deepest route was a TRAP — realized
+    // $131k/day vs Open Water's $303k, so unlocking it at L32 was a downgrade. Realized/day with the
+    // SUPPLY_CAP binding is `cap × [(sell/buy − 1)×P(clean) − P(caught) − ½·P(caught)]` (cargo cost is
+    // lost on a bust and the fine is ½ of it): at ×2.11/30% that is 0.33×cap, at Open Water's ×1.83/3%
+    // it is 0.76×cap. The audit's "~$2,400" guess still lands UNDER Open Water (0.72×cap) — ×3.0 is the
+    // honest floor, giving 0.95×cap ≈ $380k/day: ~25% over the safe route for 30% bust odds, the
+    // boat-sinking exposure, a 150-min leg and an L32 gate. Still bounded by the same daily supply cap.
+    { id: 'deeprun',   name: 'The Deep Run', minLvl: 32, buy: 900, sell: 2700, patrol: 150, ms: 150 * 60 * 1000, minSpeed: 70 }, // ×3.0, high-variance
   ],
 };
 export const boatOf = (id) => PORT.BOATS.find((b) => b.id === id) || null;
@@ -3366,8 +3408,13 @@ export const SEASON_MODS = [
     lawGainMult: 1.25, laylowMult: 0.75 },
   { id: 'blood_in_the_streets', name: 'Blood in the Streets', blurb: 'The knives are out. Kills loot deeper; going to ground costs more.',
     lootMult: 1.15, safehouseMult: 1.25 },
+  // tradeSellMult 1.05 → 1.03 (AUDIT-slate-drops #1): at ×1.05 the sell-only bonus flipped a
+  // SAME-DISTRICT buy→sell round trip past the 4% fee wall — ~+1% riskless per cycle, trunk-bounded
+  // but repeatable for a whole 28-day season. 1.03 sits under the wall, so the season still pays
+  // traders who actually MOVE freight (the arbitrage spread is what it rewards) and pays nothing for
+  // standing still. The alternative dial (make the mult buy+sell symmetric) kills the flavour.
   { id: 'the_gold_rush', name: 'The Gold Rush', blurb: 'Trade fever. Every good sells rich — move freight while it lasts.',
-    tradeSellMult: 1.05 },
+    tradeSellMult: 1.03 },
 ];
 // NOTE: this 28-day clock is textually duplicated in worker.js runSeasonRollover (`dayOf()/28`) —
 // they MUST agree; if the 28 ever becomes a lever, change BOTH (red-team flag, AUDIT-slate-drops.md).
