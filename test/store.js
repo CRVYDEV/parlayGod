@@ -13,7 +13,8 @@ import assert from 'node:assert';
 import { getAddress } from 'viem';
 import { buildServer } from '../src/server.js';
 import { STORE } from '../src/rules.js';
-import { recordStorePurchase, reconcileStore, revenueStatus } from '../src/store.js';
+import { recordStorePurchase, reconcileStore, revenueStatus, benefactorLeaderboard } from '../src/store.js';
+import { PATRON, PASS, patronTierOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runVigInvariants } from '../src/vig.js';
 
@@ -186,6 +187,86 @@ assert.equal((await meOf(plexer.token)).omr, omrBeforePatron, 'the refused patro
 // insufficient earned $OMR + bad sku are clean refusals
 assert.equal((await call('POST', '/v1/store/plex/revive_5', { token: plexer.token })).body.error, 'omr', 'not enough earned $OMR is refused');
 assert.equal((await call('POST', '/v1/store/plex/nope', { token: plexer.token })).body.error, 'bad_sku', 'no such package');
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// THE PATRON PROGRAM (Store Tier-4) — the backer-prestige ladder (patron_spent), THE LEDGER PRESTIGE
+// (pass_seasons), THE BENEFACTORS league + THE HOUSE'S FAVOR, the (ship-at-0) PLEX discount. Status only.
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// (A) THE PATRON LADDER — a REAL purchase bumps patron_spent; a COMP does not; the tier climbs.
+// alice made a REAL made_man (0.01) earlier + a COMP revive_3 (0.25, no txHash) → spent should be 0.01.
+let sbA = (await call('GET', '/v1/store', { token: alice.token })).body;
+assert.equal(sbA.owned.patronStanding.spentEth, 0.01, 'a REAL purchase bumped patron_spent (0.01); the comp did NOT (txHash-gated)');
+assert.equal(sbA.owned.patronStanding.tierName, 'Friend', '0.01 ETH → Friend tier');
+// two more REAL purchases climb the ladder: 0.01 + 0.10 (patron) + 0.40 (revive_5) = 0.51 → Benefactor
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'patron', payer: W1, amountWei: ethWei(0.10), txHash: '0xreal_pat' } });
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'revive_5', payer: W1, amountWei: ethWei(0.40), txHash: '0xreal_rev5' } });
+sbA = (await call('GET', '/v1/store', { token: alice.token })).body;
+assert.equal(sbA.owned.patronStanding.spentEth, 0.51, 'patron_spent summed the real purchases');
+assert.equal(sbA.owned.patronStanding.tier, patronTierOf(0.51), 'the tier index matches patronTierOf');
+assert.equal(sbA.owned.patronStanding.tierName, 'Benefactor', '0.51 ETH → Benefactor');
+assert(sbA.owned.patronStanding.nextTier && sbA.owned.patronStanding.nextTier.name === 'Patron', 'the next tier + delta surface');
+
+// (B) THE PLEX CONTRIBUTION — a PLEX purchase (earned $OMR) bumps patron_spent by the SKU priceEth
+const plexPat = await mk('Plex Patron');
+await pool.query(`UPDATE account_persistent SET omr=1000 WHERE account_id='${plexPat.aid}'`);
+r = await call('POST', '/v1/store/plex/wire_month', { token: plexPat.token }); // 0.03 ETH SKU
+assert.equal(r.code, 200, `PLEX-bought the wire: ${JSON.stringify(r.body)}`);
+const sbPl = (await call('GET', '/v1/store', { token: plexPat.token })).body;
+assert.equal(sbPl.owned.patronStanding.spentEth, 0.03, 'a PLEX buy bumps patron_spent (a real earned-$OMR contribution)');
+
+// (C) THE PLEX DISCOUNT lever (ships 0) — armed, a higher tier burns less $OMR (never below the floor)
+await pool.query("INSERT INTO vig_buyback (id, eth_spent, omr_bought, price_omr_per_eth, to_reserve, to_prize) VALUES ('bb-disc', 1, 20000, 20000, 10000, 10000)"); // an oracle so raw > floor
+const noDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr;
+PATRON.TIERS[2].plexDiscountBps = 1000; // arm Benefactor 10% off (TEST ONLY — ships at 0)
+const withDisc = (await call('GET', '/v1/store', { token: alice.token })).body.packages.find((p) => p.sku === 'revive_5').plexOmr; // alice is Benefactor
+assert.equal(withDisc, Math.round(noDisc * 0.9 * 1e6) / 1e6, 'an armed Benefactor discount shaves 10% off the PLEX price');
+PATRON.TIERS[2].plexDiscountBps = 0; // restore pure status
+
+// (D) THE BENEFACTORS + THE HOUSE'S FAVOR — ranked by patron_spent; agents excluded; families aggregate
+let lb = await benefactorLeaderboard(pool);
+assert(lb.patrons.some((p) => p.steward === 'Patron Alice'), 'alice is on the Benefactors board');
+assert.equal(lb.patrons[0].steward, 'Patron Alice', 'the top spender (0.51) leads');
+assert(lb.favor && lb.favor.steward === 'Patron Alice', "THE HOUSE'S FAVOR is the top patron (read-derived crown)");
+// an agent with the biggest spend is EXCLUDED from the status board
+const spook = await mk('Spook Patron');
+await pool.query('UPDATE account_persistent SET agent_flag=true, patron_spent=99 WHERE account_id=$1', [spook.aid]);
+lb = await benefactorLeaderboard(pool);
+assert(!lb.patrons.some((p) => p.steward === 'Spook Patron'), 'an agent_flag patron never appears on the board');
+assert.equal(lb.favor.steward, 'Patron Alice', "the agent did not steal the House's Favor");
+// families aggregate a roster's spend (seed a light gang with alice + plexPat)
+await pool.query(`INSERT INTO gangs (id, name, tag) VALUES ('pat-gang','The Benefactors','BEN')`);
+await pool.query(`INSERT INTO gang_members (gang_id, character_id, role, joined_at) VALUES ('pat-gang','${alice.id}','boss',now()), ('pat-gang','${plexPat.id}','soldier',now())`);
+lb = await benefactorLeaderboard(pool);
+const fam = lb.families.find((g) => g.name === 'The Benefactors');
+assert(fam && fam.patrons === 2, 'the family board counts both patrons');
+assert.equal(fam.spentEth, Math.round((0.51 + 0.03) * 1e6) / 1e6, "the family sums its roster's spend");
+
+// (E) THE LEDGER PRESTIGE — completing the 12-tier track then buying a FRESH pass bumps pass_seasons
+const led = await mk('Ledger Larry');
+// set a COMPLETED, LAPSED track (tier at the cap, pass expired) then buy a fresh pass → +1 season
+await pool.query(`UPDATE account_persistent SET pass_tier=${PASS.TRACK.length}, pass_until=now() - interval '1 day' WHERE account_id='${led.aid}'`);
+await setWallet(led.aid, getAddress('0x' + '44'.repeat(20)));
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'season_pass', payer: getAddress('0x' + '44'.repeat(20)), amountWei: ethWei(0.05), txHash: '0xled1' } });
+let pbL = (await call('GET', '/v1/pass', { token: led.token })).body;
+assert.equal(pbL.seasons, 1, 'a completed-then-renewed track bumps pass_seasons to 1');
+assert.equal(pbL.prestigeName, 'Regular', 'the prestige rank advances (Regular @ 1 season)');
+// buying a fresh pass WITHOUT completing does NOT bump (leave it mid-track, lapse it, re-buy)
+await pool.query(`UPDATE account_persistent SET pass_tier=3, pass_until=now() - interval '1 day' WHERE account_id='${led.aid}'`);
+await call('POST', '/v1/mod/store/grant', { mod: true, body: { nonce: nonce(), sku: 'season_pass', payer: getAddress('0x' + '44'.repeat(20)), amountWei: ethWei(0.05), txHash: '0xled2' } });
+pbL = (await call('GET', '/v1/pass', { token: led.token })).body;
+assert.equal(pbL.seasons, 1, 'an unfinished track does NOT bump pass_seasons');
+// pass_seasons + patron_spent SURVIVE DEATH (account-level status)
+await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: led.id } });
+assert.equal((await call('GET', '/v1/pass', { token: led.token })).body.seasons, 1, 'pass_seasons survives death (the heir keeps the prestige)');
+const aliceSpentBefore = sbA.owned.patronStanding.spentEth;
+await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: alice.id } });
+assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.patronStanding.spentEth, aliceSpentBefore, 'patron_spent survives death');
+
+// (F) §10.4 STILL NEUTRAL — the whole patron program minted nothing (the PLEX burns are ledgered)
+const inv2 = await runLedgerInvariants(pool);
+assert(inv2.checks.find((c) => c.name === 'reason vocabulary').ok, 'no unknown-reason alarm from the patron program');
+
+console.log('✅ THE PATRON PROGRAM (Store Tier-4) test passed — the patron ladder (a REAL purchase bumps patron_spent, a COMP does not, the tier climbs Friend→Benefactor), the PLEX contribution bump, the (ship-at-0) PLEX discount lever, THE BENEFACTORS league + THE HOUSE\'S FAVOR crown (agents excluded, families aggregate a roster), THE LEDGER PRESTIGE (a completed-then-renewed track bumps pass_seasons, an unfinished one does not), and DEATH SURVIVAL of both status axes');
 
 console.log('✅ The Store (ETH revenue packages) test passed — the catalog board, the three-way revenue split (founder/buyback/rwa, exact math), idempotent ingestion (re-delivered nonce = no-op), per-SKU grants (mint credit, revive bundle, ETH Street Wire window, the season pass + patron, the permanent patron badge), pay-before-link reconcile (claim-then-grant, exactly-once), zero-value no-grant, §10.4 NEUTRALITY (every check drift-0 — the Store mints no currency), and the buyback share funding the EXISTING Vig flywheel (spend ≤ revenue holds; RWA recorded-only, R2 dormant)');
 await app.close();

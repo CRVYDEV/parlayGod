@@ -66,7 +66,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, BONDS, SPEAKEASY, BOXING,
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
@@ -772,7 +772,8 @@ export async function buildServer() {
       spyRanks: WIRE.SPY_RANKS.map((r) => ({ min: r.min, name: r.name, tapBonus: r.tapBonus || 0, discountBps: r.discountBps || 0 })), // step four tradecraft
       subTiers: WIRE.SUB_TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, days: Math.round(t.ms / 86400000), watchSlots: t.watchSlots, warRoom: t.warRoom })) }, // step five ladder + standing watch
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
-    pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })) },
+    pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })), prestigeRanks: PASS.PRESTIGE_RANKS },
+    patron: { tiers: PATRON.TIERS.map((t) => ({ name: t.name, minEth: t.minEth })), prestigeRanks: PASS.PRESTIGE_RANKS },
     bonds: { backerTiers: BONDS.BACKER_TIERS, charterTiers: BONDS.CHARTER_TIERS, ethScoreOmr: BONDS.ETH_SCORE_OMR, pledgeMin: BONDS.PLEDGE_MIN,
       discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS },
     casino: { district: CASINO.DISTRICT, minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET,
@@ -2136,6 +2137,8 @@ export async function buildServer() {
   // (dormant); the watcher observes StorePaid and calls recordStorePurchase (the mint/respawn fee
   // pattern). §10.4-neutral — the Store grants only entitlements/access/status, never currency.
   app.get('/v1/store', { preHandler: auth }, async (req) => Store.storeBoard(pool, req.user.sub));
+  // THE PATRON PROGRAM (Tier-4) — the read-derived Benefactors league + Patron Families + The House's Favor
+  app.get('/v1/leaderboard/patrons', { preHandler: auth }, async () => Store.benefactorLeaderboard(pool));
   // PLEX-for-packages — buy a Store SKU with EARNED $OMR (burns $OMR for the same entitlement)
   app.post('/v1/store/plex/:sku', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Store.payPackagePlex(ch, req.params.sku, client, h)));

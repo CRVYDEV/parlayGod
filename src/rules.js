@@ -2016,6 +2016,27 @@ STORE.PLEX_PREMIUM_BPS = Number(process.env.STORE_PLEX_PREMIUM_BPS || 12000); //
 export const packageOf = (sku) => STORE.PACKAGES.find((p) => p.sku === sku) || null;
 export const passActive = (a, now = Date.now()) => !!a?.pass_until && new Date(a.pass_until).getTime() > now;
 
+// ── THE PATRON PROGRAM (Store Tier-4) — the off-chain backer-prestige ladder over the Store. patron_spent
+// is a lifetime ETH-equivalent contribution meter (bumped only on REAL contributions — a txHash'd ETH
+// purchase or a PLEX burn — the txHash-gate precedent, so a comp can't fabricate a top benefactor). PURE
+// STATUS: no new §10.4 reason (the PLEX discount rides the EXISTING plex:% burn — a smaller sink, no mint).
+// plexDiscountBps SHIPS AT 0 (pure status); the armed values are the one flagged sign-off lever. All numbers
+// are founder sign-off levers (cosmetic-axis, the family-seal/hitman-rep precedent).
+export const PATRON = {
+  TIERS: [
+    { name: 'Friend', minEth: 0, plexDiscountBps: 0 },
+    { name: 'Associate', minEth: 0.05, plexDiscountBps: 0 },
+    { name: 'Benefactor', minEth: 0.25, plexDiscountBps: 0 },
+    { name: 'Patron', minEth: 1.0, plexDiscountBps: 0 },
+    { name: 'Grand Patron', minEth: 5.0, plexDiscountBps: 0 },
+    { name: "The Family's Patron", minEth: 20.0, plexDiscountBps: 0 },
+  ],
+};
+export const patronTierOf = (spentEth) => {
+  let t = 0; for (let i = 0; i < PATRON.TIERS.length; i++) if (Number(spentEth || 0) >= PATRON.TIERS[i].minEth) t = i; return t;
+};
+export const patronTierName = (s) => PATRON.TIERS[patronTierOf(s)].name;
+
 // ── THE RESERVE BOND (omerta-reserve-bond-design.md) — Protocol-Owned Liquidity via a budgeted treasury
 // bond (Olympus Pro, disciplined: a SALE of budgeted treasury OMR, NEVER a mint; real-value/out-of-band, so
 // §10.4 is untouched). The bonder deposits ETH → gets discounted OMR vested; the ETH deepens the pool (POL)
@@ -2087,6 +2108,16 @@ export const PASS = {
 // the per-tier claim cooldown (~daily). A TEST-ONLY env knob shrinks it (the SEARCH_MS precedent) —
 // read per-call so a test can toggle it; NEVER set PASS_CLAIM_MS in production.
 export const passClaimMs = () => Number(process.env.PASS_CLAIM_MS ?? (20 * 3600 * 1000));
+// THE LEDGER PRESTIGE (Store Tier-4) — a death-proof status axis: lifetime Ledger tracks COMPLETED
+// (a returning supporter accumulates prestige across seasons — the PoE-league precedent). A player who
+// FINISHED a 12-tier track then buys a fresh pass bumps pass_seasons. Cosmetic-axis sign-off levers.
+PASS.PRESTIGE_RANKS = [
+  { name: 'First Season', min: 0 }, { name: 'Regular', min: 1 }, { name: 'Season Veteran', min: 3 },
+  { name: 'Old Hand', min: 6 }, { name: 'Ledger Legend', min: 12 },
+];
+export const passPrestigeOf = (seasons) => {
+  let r = 0; for (let i = 0; i < PASS.PRESTIGE_RANKS.length; i++) if (Number(seasons || 0) >= PASS.PRESTIGE_RANKS[i].min) r = i; return r;
+};
 // validate the split sums to 10000 at load — a misconfig would silently mis-earmark real revenue
 (() => { const s = STORE.SPLIT_BPS; const t = s.founder + s.buyback + s.rwa;
   if (t !== 10000) throw new Error(`REVENUE_SPLIT_BPS must sum to 10000 (got ${t})`); })();

@@ -2116,3 +2116,9 @@ CREATE INDEX IF NOT EXISTS ix_convoy_hauls_acct ON convoy_hauls (account_id, at)
 -- Both written by DIRECT SQL only (OFF persistAccount's positional list — the pledged-columns discipline).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS pledged_omr NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS bond_charter INT NOT NULL DEFAULT 0;
+
+-- THE PATRON PROGRAM (Store Tier-4): patron_spent is the lifetime ETH-equivalent contribution meter
+-- (bumped only on REAL contributions — a txHash'd ETH purchase or a PLEX burn; status, survives death);
+-- pass_seasons is the Ledger prestige (lifetime tracks completed). Both DIRECT SQL only (OFF persistAccount).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS patron_spent NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS pass_seasons INT NOT NULL DEFAULT 0;
