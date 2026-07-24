@@ -566,7 +566,8 @@ async function persistCharacter(client, ch) {
       bank_intransit=$40, bank_intransit_at=$41, fade_limit=$42, wash_used=$43, wash_at=$44, respec_at=$45,
       crew_paid_at=$46, heat_exposure=$47, indicted_at=$48, retainer_until=$49, jury_bought=$50, witpro_until=$51,
       world_raid_at=$52, pen_safe_until=$53, hole_until=$54, welsher=$55, wanted_until=$56,
-      rwa_used=$57, rwa_at=$58, envelope_until=$59, wire_until=$60, poker_limit=$61 WHERE id=$1`,
+      rwa_used=$57, rwa_at=$58, envelope_until=$59, wire_until=$60, poker_limit=$61,
+      safehouse_used=$62, safehouse_at=$63 WHERE id=$1`,
     [ch.id, ch.respect, ch.energy, ch.nerve, ch.health, ch.cash, ch.bank,
      ch.muscle, ch.cunning, ch.speed, ch.jail_until, ch.loc, ch.streak, ch.checkin_day,
      ch.lc_crime, ch.ammo, ch.cb, ch.heat, ch.trade_rep, ch.gta_at, ch.path,
@@ -578,7 +579,7 @@ async function persistCharacter(client, ch) {
      ch.heat_exposure ?? 0, ch.indicted_at ?? null, ch.retainer_until ?? null, ch.jury_bought ?? false, ch.witpro_until ?? null,
      ch.world_raid_at ?? null, ch.pen_safe_until ?? null, ch.hole_until ?? null, ch.welsher ?? false, ch.wanted_until ?? null,
      ch.rwa_used ?? 0, ch.rwa_at ?? null, ch.envelope_until ?? null, ch.wire_until ?? null,
-     ch.poker_limit ?? null]);
+     ch.poker_limit ?? null, ch.safehouse_used ?? 0, ch.safehouse_at ?? null]);
 }
 
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
@@ -659,6 +660,11 @@ export function view(ch, acct = {}, owned = {}) {
     hospSeconds: ch.hosp_until ? Math.max(0, Math.ceil((new Date(ch.hosp_until) - Date.now()) / 1000)) : 0,
     shootCdSeconds: ch.shoot_cd_until ? Math.max(0, Math.ceil((new Date(ch.shoot_cd_until) - Date.now()) / 1000)) : 0,
     safeSeconds: ch.safe_until ? Math.max(0, Math.ceil((new Date(ch.safe_until) - Date.now()) / 1000)) : 0,
+    // L3b — the safehouse daily-cap bucket remaining (seconds of off-grid time left today; the wash-cap twin)
+    safeCapSeconds: (() => { const cap = M3.SAFEHOUSE_DAILY_CAP_MS; if (!cap) return null;
+      const refill = ch.safehouse_at ? (Date.now() - new Date(ch.safehouse_at).getTime()) / 86400000 * cap : cap;
+      const used = Math.max(0, Number(ch.safehouse_used || 0) - Math.max(0, refill));
+      return Math.max(0, Math.floor((cap - used) / 1000)); })(),
     guardPrice: ch.guard_price != null ? Math.floor(Number(ch.guard_price)) : null,
     fadeLimit: ch.fade_limit != null ? Math.floor(Number(ch.fade_limit)) : null,
     pokerLimit: ch.poker_limit != null ? Math.floor(Number(ch.poker_limit)) : null,

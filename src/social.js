@@ -1148,6 +1148,18 @@ export async function fire(ch, victim, client, h, rounds) {
       bus.emit('streets', { type: 'sacked', by: ch.name, on: victim.name, front: empireLoot.name });
     }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
+    // L3c — THE CONTRACT'S BULLETS: ammo is the −EV driver on a hit, so when a kill fulfils a PAID contract
+    // (any pool/directed/family/WANTED bounty → bounty > 0) the contract covers CONTRACT_AMMO_REBATE of the
+    // rounds spent — the pot no longer has to carry the whole loss, and a smaller contract turns a hit +EV.
+    // A bounded ammo FAUCET (`contract:rebate`, in the ammo vocabulary), only on a contracted kill.
+    let ammoBack = 0;
+    if (bounty > 0 && M3.CONTRACT_AMMO_REBATE > 0) {
+      ammoBack = Math.floor(fired * M3.CONTRACT_AMMO_REBATE);
+      if (ammoBack > 0) {
+        ch.ammo = Number(ch.ammo) + ammoBack;
+        await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: ammoBack, reason: 'contract:rebate', counterparty: victim.id });
+      }
+    }
     // VENDETTA SETTLEMENT — if this kill answers a blood debt (my bloodline sworn against
     // theirs, inside the window), the vendetta is settled: the row closes, the street hears,
     // and the rep multiplier below pays vengeance rates.
@@ -1196,7 +1208,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true, bloodOathMult: bloodOath });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
-      ...(empireLoot ? { empireLoot } : {}), vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
+      ...(empireLoot ? { empireLoot } : {}), ...(ammoBack ? { ammoBack } : {}), vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());
@@ -1222,11 +1234,25 @@ export async function enterSafehouse(ch, client, h) {
     Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
     * (seasonModOf().safehouseMult || 1));
   if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
-  ch.cash = Number(ch.cash) - cost;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'safehouse' });
   // Commission decree: OPEN SEASON halves every stay — the knives are out this week
   const decree = await activeDecree(client);
   const ms = Math.floor(M3.SAFEHOUSE_MS * (decree?.id === 'open_season' ? COMMISSION.OPEN_SEASON_MULT : 1));
+  // L3b — THE SHIELD CAP: a rolling-window token bucket on total off-grid TIME per day (the wash-cap twin),
+  // so the earned survival shield can't keep a whale PERMANENTLY unreachable — the rich must surface. Charge
+  // the granted stay against the bucket BEFORE spending the cash (so a capped-out player pays nothing).
+  const cap = M3.SAFEHOUSE_DAILY_CAP_MS;
+  if (cap > 0) {
+    const refill = ch.safehouse_at ? (Date.now() - new Date(ch.safehouse_at).getTime()) / 86400000 * cap : cap;
+    const used = Math.max(0, Number(ch.safehouse_used || 0) - Math.max(0, refill));
+    if (used + ms > cap) {
+      const leftMin = Math.max(0, Math.floor((cap - used) / 60000));
+      throw new GameError('safe_cap', `You've been off the grid too long — ${leftMin} min of safehouse time left today. You have to surface. It refills over the day.`);
+    }
+    ch.safehouse_used = used + ms;
+    ch.safehouse_at = new Date();
+  }
+  ch.cash = Number(ch.cash) - cost;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'safehouse' });
   ch.safe_until = new Date(Date.now() + ms);
   await h.track(client, ch.account_id, 'safehouse', { cost });
   return { ok: true, safeUntil: ch.safe_until, cost, ...(decree?.id === 'open_season' ? { openSeason: true } : {}) };

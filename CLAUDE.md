@@ -4818,3 +4818,27 @@ other #3 levers, founder call): L3b (cap the eight untouchable states — mutual
 max-uptime) and L3c (a cheaper contracted-kill ammo floor). #7 consistency snags done; the review's #1/#2
 economy levers (L1a/L1b flatten the front curve + progressive pad; L2a the death/estate tax) remain
 founder picks.
+
+**THE SHIELDS (L3b + L3c — the review's #3 remainder, founder-directed "build them all out") — BUILT**
+(`src/social.js`, `src/rules.js`, `src/game.js`, `schema.sql`, `src/invariants.js`, `test/shields.js` —
+the 46th suite). The stakes/spine review's #3 (PvP is −EV AND has eight opt-outs) had three levers; L3a
+(the Sacking) shipped the prize, these two close the loop. **L3b — THE SHIELD CAP**: the safehouse is now
+a rolling-window token bucket (`M3.SAFEHOUSE_DAILY_CAP_MS` 12h/day — the D3 wash-cap twin, new
+`characters.safehouse_used`/`safehouse_at`): entering charges the granted stay against the bucket BEFORE
+the cash spend, so with a 4h stay three stays fill it and the fourth is refused (`safe_cap`) — a whale
+can't live permanently off-grid, the rich must surface (closes "eight untouchable states"). §10.4-untouched
+(a gate on the existing `safehouse` cash sink — moves no value). `safeCapSeconds` surfaced on the view +
+a "daily allowance left" line on the console defense card; the two columns joined `persistCharacter` ($62/
+$63). **L3c — THE CONTRACT'S BULLETS**: ammo is the −EV driver on a hit, so a `fire` kill that fulfils a
+PAID contract (any pool/directed/family/WANTED bounty → `bounty > 0` from `claimBounty`) rebates
+`M3.CONTRACT_AMMO_REBATE` (0.5) of the rounds spent — a bounded, ledgered ammo FAUCET (`contract:rebate`,
+added to the ammo §10.4 vocabulary in `invariants.js`) — so the pot no longer carries the whole ammo loss
+and a smaller contract turns a hit +EV; a STANDALONE kill pays no rebate (the −$72k standalone EV / the D1
+anchor is untouched). The kill toast reads "the contract covered N rounds". `test/shields.js` proves the
+cap (3 stays allowed, the 4th refused, the board bucket drained vs a fresh face's full allowance) and the
+rebate (a paid kill returns exactly `floor(rounds×0.5)` as a ledgered `contract:rebate` row; a standalone
+kill pays none). Suite 46/46 + sim drift-0 (the rebate faucet reconciles). Both are founder sign-off levers
+(BALANCE.md — sim the contract break-even shift; `SAFEHOUSE_DAILY_CAP_MS`/`CONTRACT_AMMO_REBATE` = 0
+disable each). **The review's #3 is now fully addressed** (L3a Sacking + L3b Shield Cap + L3c Contract's
+Bullets); the remaining founder picks are the #1/#2 economy levers (L1a/L1b front-curve flatten + progressive
+pad; L2a the death/estate tax) and #6 (D6a deepen crime / D6b embrace the collection game).

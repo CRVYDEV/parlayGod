@@ -116,11 +116,15 @@ they have no reason to take PvP risk) and #2 (killing them doesn't matter).
   *hold* a front they could run (level + an empty kind slot). Now the passive empire is genuine RISK CAPITAL
   and the kill economy has a prize worth far more than the ammo — the keystone that converges #1/#2/#3. Lever
   `M3.SACK_ON_KILL` (default on); `test/sacking.js` (45th suite). **DONE.**
-- **L3b — cap the untouchable stack.** Eight opt-outs is too many; consider making the *earned* shields
-  (safehouse/bodyguard) and the *paid* shields (respawn token) mutually exclusive, or adding a max-uptime
-  so no one is permanently unreachable.
-- **L3c — lower the kill cost floor** (ammo is the −EV driver). A cheaper "hit" tier, or ammo rebate on
-  a *contracted* kill, moves the baseline toward neutral so contracts don't have to carry the whole loss.
+- **L3b — cap the untouchable stack. ✅ BUILT — THE SHIELD CAP.** The safehouse is now a rolling-window
+  token bucket (`M3.SAFEHOUSE_DAILY_CAP_MS` 12h/day — the wash-cap twin): you can shelter to weather a
+  contract, but three 4h stays fill the bucket and the fourth is refused (`safe_cap`) — no one is
+  permanently unreachable, the rich must surface. `safeCapSeconds` on the view; `test/shields.js`.
+- **L3c — lower the kill cost floor. ✅ BUILT — THE CONTRACT'S BULLETS.** A kill that fulfils a PAID
+  contract (any pool/directed/family/WANTED bounty → `bounty > 0`) now rebates `M3.CONTRACT_AMMO_REBATE`
+  (0.5) of the rounds spent — a bounded, ledgered ammo faucet (`contract:rebate`) — so the pot doesn't
+  carry the whole ammo loss and a smaller contract turns a hit +EV. A standalone kill pays no rebate
+  (the standalone −EV stays). `test/shields.js`.
 
 Recommendation: **L3a** — it's the keystone. It makes #1's passive wealth *risk capital*, gives #3 a
 real prize, and makes #2's death actually cost the dynasty's income base.
@@ -177,7 +181,7 @@ crime loop** is the highest-leverage single addition.
 |---|---|---|---|
 | 1 | passive stack ≫ active loop ($49M/day, 6× the grind) | **MEASURED** | pick L1a+L1b (or L1c/L1d) |
 | 2 | death costs nothing for the established | **MEASURED** | pick L2a (estate tax) |
-| 3 | PvP is −EV and opt-out-able | **L3a BUILT** (the Sacking) | consider L3b (cap the untouchable stack) next |
+| 3 | PvP is −EV and opt-out-able | **L3a/L3b/L3c ALL BUILT** | the Sacking + the Shield Cap + the Contract's Bullets — done |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
 | 6 | breadth ≫ depth | **PROPOSED** | choose D6a (deepen crime) or D6b (embrace collection) |
