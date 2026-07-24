@@ -47,10 +47,14 @@ await acctOmr(b.id, 5000); grantDrift += 5000;
 // ── lot determinism + the board ──
 const week = weekOf();
 const lots = auctionLotsOf(week);
-assert.equal(lots.length, AUCTION.LOTS_PER_WEEK, 'the week draws LOTS_PER_WEEK lots');
+// Tier-4: the week now draws LOTS_PER_WEEK regular lots + 1 always-legendary MARQUEE lot
+assert.equal(lots.length, AUCTION.LOTS_PER_WEEK + 1, 'the week draws LOTS_PER_WEEK regular lots + the marquee');
 assert.equal(auctionLotsOf(week)[0].id, lots[0].id, 'the draw is deterministic per week');
+const marquee = lots.find((l) => l.rarity === 'legendary');
+assert(marquee && marquee.id === `${week}:m`, 'the marquee lot is a legendary drawn from RARE_ARCHETYPES');
+assert(AUCTION.RARE_ARCHETYPES.some((x) => x.id === marquee.archetype), 'and it comes from the rare set');
 let board = (await call('GET', '/v1/auction', { token: a.token })).body;
-assert.equal(board.lots.length, AUCTION.LOTS_PER_WEEK, 'the block shows this week\'s lots');
+assert.equal(board.lots.length, AUCTION.LOTS_PER_WEEK + 1, 'the block shows this week\'s lots + the marquee');
 const lot = board.lots[0];
 assert.equal(lot.currentBid, 0, 'no bids yet');
 assert.equal(lot.minBid, lots[0].min, 'the opening bid is the archetype floor');
@@ -119,5 +123,84 @@ assert(esc.ok && esc.lhs === 0, 'the escrow is empty after settle');
 assert(inv.checks.find((c) => c.name === '$OMR conservation').ok === false && inv.checks.find((c) => c.name === '$OMR conservation').drift === grantDrift, 'the win is a properly-ledgered burn — conservation-neutral (drift still only the test grant)');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'auction: rides the omr vocabulary');
 
-console.log('✅ Auction House ("the sit-down") test passed — weekly lot determinism, the block, first bid (floor + escrow), the +5% min-raise, OUTBID (loser refunded exactly), SELF-RAISE (net = new−old), the auction-escrow §10.4 check mid-auction (bids/refunds are transfers), SETTLE (worker burns the winning bid + grants the account trophy, no extra debit), the loser kept his $OMR, DEATH SURVIVAL (heir inherits the trophy), and §10.4 (escrow empties, the win is a burn, vocabulary closed)');
+// ══════════ TIER-4 — THE BLOCK (RESALE): PLAYER CONSIGNMENT ══════════
+const { sweepConsignments } = await import('../src/auction.js');
+const { collectorLeaderboard } = await import('../src/estate.js');
+const { collectionSetsOf } = await import('../src/rules.js');
+const CONS = AUCTION.CONSIGN;
+const cc = await mk('Collector Carl');
+await acctOmr(cc.id, 20000); grantDrift += 20000;
+const sellerTok = b.token; // Bob's heir holds the account-level trophy (lot.id)
+
+// ── COLLECTION SETS (read-derived, pure) — all six base archetypes complete the Full House ──
+const fh = collectionSetsOf(['plate', 'watch', 'pistol', 'ring', 'painting', 'car'].map((x) => ({ archetype: x })));
+assert(fh.find((s) => s.id === 'full_house').complete, 'the Full House completes with all six base archetypes');
+assert(!collectionSetsOf([{ archetype: 'plate' }]).find((s) => s.id === 'full_house').complete, 'a partial set is incomplete');
+
+// ── consign gates: reserve bounds, ownership ──
+assert.equal((await call('POST', '/v1/auction/consign', { token: sellerTok, body: { lotId: lot.id, reserve: CONS.MIN_RESERVE - 1 } })).body.error, 'reserve', 'reserve under the floor is refused');
+assert.equal((await call('POST', '/v1/auction/consign', { token: a.token, body: { lotId: lot.id, reserve: 50 } })).body.error, 'not_owned', 'you can only consign what you own');
+
+// ── list it — the fee BURNS, the trophy flags listed, no double-list ──
+const sBefore = await omrOf(sellerTok);
+let cr = await call('POST', '/v1/auction/consign', { token: sellerTok, body: { lotId: lot.id, reserve: 50 } });
+assert.equal(cr.code, 200, 'the trophy goes on the block');
+assert.equal(await omrOf(sellerTok), sBefore - CONS.FEE_OMR, 'the listing fee burned from the seller');
+const cid = cr.body.id;
+assert.equal((await call('POST', '/v1/auction/consign', { token: sellerTok, body: { lotId: lot.id, reserve: 50 } })).body.error, 'listed', 'no double-listing a trophy');
+board = (await call('GET', '/v1/auction', { token: sellerTok })).body;
+assert(board.consignments.some((x) => x.id === cid && x.mine), 'the seller sees their own consignment (mine)');
+assert(board.wins.find((w) => w.lot === lot.id).listed, 'the trophy reads on the block');
+
+// ── the seller can't bid their own lot; Carl bids; an OUTBID refunds exactly ──
+assert.equal((await call('POST', `/v1/auction/consign/${cid}/bid`, { token: sellerTok, body: { amount: 60 } })).body.error, 'own', 'no bidding your own consignment');
+const carlBefore = await omrOf(cc.token);
+assert.equal((await call('POST', `/v1/auction/consign/${cid}/bid`, { token: cc.token, body: { amount: 100 } })).code, 200, 'Carl bids');
+assert.equal(await omrOf(cc.token), carlBefore - 100, 'Carl\'s bid is escrowed');
+const alBefore = await omrOf(a.token);
+const raise2 = Math.ceil(100 * (1 + CONS.MIN_RAISE_BPS / 10000));
+assert.equal((await call('POST', `/v1/auction/consign/${cid}/bid`, { token: a.token, body: { amount: raise2 } })).code, 200, 'Al outbids');
+assert.equal(await omrOf(cc.token), carlBefore, 'Carl got his bid back — outbid refunded exactly');
+const top = Math.ceil(raise2 * (1 + CONS.MIN_RAISE_BPS / 10000));
+assert.equal((await call('POST', `/v1/auction/consign/${cid}/bid`, { token: cc.token, body: { amount: top } })).code, 200, 'Carl re-takes the lead over reserve');
+assert.equal(await omrOf(a.token), alBefore, 'Al got his bid back too');
+assert.equal((await call('POST', `/v1/auction/consign/${cid}/cancel`, { token: sellerTok })).body.error, 'has_bid', 'no pulling a lot with a standing bid');
+
+// ── §10.4 mid-listing: the escrow bucket now spans BOTH auctions + consignments ──
+inv = await runLedgerInvariants(pool);
+esc = inv.checks.find((c) => c.name === 'auction escrow');
+assert(esc.ok, `escrow reconciles mid-consignment: ${JSON.stringify(esc)}`);
+assert.equal(esc.lhs, top, 'the escrow bucket == the one live consignment bid');
+
+// ── SETTLE: reserve MET → Carl takes the trophy, the seller is paid NET, the take BURNS ──
+await pool.query('UPDATE auction_consignments SET closes_at=$1 WHERE id=$2', [new Date(Date.now() - 3600000), cid]);
+const sellBefore = await omrOf(sellerTok);
+const swc = await sweepConsignments(pool);
+assert.equal(swc.sold, 1, 'the consignment sold');
+const net = Math.floor(top * (1 - CONS.TAKE_BPS / 10000)), take = top - net;
+assert.equal(swc.burned, take, 'the house take was burned');
+assert.equal(await omrOf(sellerTok), sellBefore + net, 'the seller was paid net of the take');
+assert((await call('GET', '/v1/auction', { token: cc.token })).body.wins.some((w) => w.lot === lot.id), 'Carl now holds the trophy');
+assert(!(await call('GET', '/v1/auction', { token: sellerTok })).body.wins.some((w) => w.lot === lot.id), 'the seller no longer holds it');
+
+// ── THE COLLECTOR legend + leaderboard + Patron ──
+const clb = await collectorLeaderboard(pool);
+assert(clb.collectors.length >= 1 && clb.collectors.every((x) => x.sunk > 0 && x.rank), 'the collectors board ranks the prestige-spenders with a rank');
+assert(clb.collectors.some((x) => x.steward === 'Collector Carl'), 'Carl (bought the trophy) is on the board');
+assert(clb.patron && clb.patron.sunk > 0, 'a Patron of the Season is crowned by this-season spend');
+
+// ── §10.4 after the consignment settle: escrow empty, conservation still only the grants ──
+inv = await runLedgerInvariants(pool);
+esc = inv.checks.find((c) => c.name === 'auction escrow');
+assert(esc.ok && esc.lhs === 0, 'the consignment escrow is empty after settle');
+assert.equal(inv.checks.find((c) => c.name === '$OMR conservation').drift, grantDrift, 'conservation drift is still only the test grants (consign = transfer, take + fee = proper burns)');
+assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'auction:consign/take/consign:fee ride the omr vocabulary');
+
+// ── pull a NO-BID consignment (listed cleared) — Carl re-lists then cancels ──
+cr = await call('POST', '/v1/auction/consign', { token: cc.token, body: { lotId: lot.id, reserve: 80 } });
+assert.equal(cr.code, 200, 'Carl re-lists his trophy');
+assert.equal((await call('POST', `/v1/auction/consign/${cr.body.id}/cancel`, { token: cc.token })).code, 200, 'and pulls it clean (no standing bid)');
+assert(!(await call('GET', '/v1/auction', { token: cc.token })).body.wins.find((w) => w.lot === lot.id).listed, 'the trophy is off the block again');
+
+console.log('✅ Auction House ("the sit-down") test passed — weekly lot determinism, the block, first bid (floor + escrow), the +5% min-raise, OUTBID (loser refunded exactly), SELF-RAISE (net = new−old), the auction-escrow §10.4 check mid-auction (bids/refunds are transfers), SETTLE (worker burns the winning bid + grants the account trophy, no extra debit), the loser kept his $OMR, DEATH SURVIVAL (heir inherits the trophy), and §10.4 (escrow empties, the win is a burn, vocabulary closed) + TIER-4: the LEGENDARY marquee lot (LOTS_PER_WEEK+1, from the rare set), COLLECTION SETS (read-derived), and PLAYER CONSIGNMENT (list a trophy — fee burns; bid/outbid-refund/own-bid gates; the escrow spans both auctions+consignments; settle reassigns the trophy to the buyer, pays the seller NET, BURNS the house take, bumps the buyer\'s Collector legend; the collectors leaderboard + Patron; pull a no-bid lot; §10.4 exact — consign is a transfer, take + fee proper burns)');
 await app.close();

@@ -30,7 +30,7 @@ import { sweepSecrets } from './secrets.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
-import { sweepAuctions } from './auction.js';
+import { sweepAuctions, sweepConsignments } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
 import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js';
 import { sweepRingTables } from './ring.js';
@@ -200,6 +200,10 @@ export async function runSeasonRollover(pool, opts = {}) {
       }
       // THE DUELING LADDER: the elo race resets with the season (a fresh 28-day climb)
       await client.query('UPDATE characters SET respect=0, season_kills=0, duel_elo=$3, season=$2 WHERE id=$1', [id, current, DUELS.ELO_START]);
+      // THE ESTATE/AUCTION Tier-4: the PATRON crown is seasonal — the account's this-season prestige
+      // spend resets with the character's season (account-level, but zeroed here under the char lock,
+      // gated by season<current so it's idempotent — the same account write the prestige/title bumps use).
+      await client.query('UPDATE account_persistent SET season_sunk=0 WHERE account_id=$1', [ch.account_id]);
       if (legacy > 0)
         await client.query('UPDATE account_persistent SET prestige = prestige + $2 WHERE account_id=$1', [ch.account_id, legacy]);
       await client.query('INSERT INTO telemetry (id, account_id, event, props) VALUES ($1,$2,$3,$4)',
@@ -292,6 +296,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
     const auc = await safe('auction sweep', () => sweepAuctions(pool));
     if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
+    // Tier-4 THE BLOCK — RESALE: settle expired player consignments (reserve met → buyer takes the trophy,
+    // the cut burns as the house take; reserve unmet → the top bidder refunded, the trophy returns)
+    const con = await safe('consignment sweep', () => sweepConsignments(pool));
+    if (con && con.sold > 0) console.log(`🔨 consignments: ${con.sold} sold, ${con.burned} $OMR taken`);
     // THE FIGHT CIRCUIT (step three): resolve any past-window MAIN EVENT card — roll the fight + pay the crowd
     const me = await safe('main event sweep', () => sweepMainEvents(pool));
     if (me && me.resolved > 0) console.log(`🥊 boxing: resolved ${me.resolved} main event(s)`);

@@ -739,7 +739,7 @@ export async function buildServer() {
       tickers: PORTFOLIO.TICKERS.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })) },
     vault: { claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
       note: 'the backed tier — claims allocate real treasury-held stock units; the paper book above is status' },
-    estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES },
+    estate: { nameOmr: ESTATE.NAME_OMR, tiers: ESTATE.TIERS, features: ESTATE.FEATURES, staff: ESTATE.STAFF },
     seasonMods: { pool: SEASON_MODS, note: 'one seed-drawn twist per 28-day season — the touchpoints compose on existing modifier sites' },
     clues: { dropP: CLUES.DROP_P, digEnergy: CLUES.DIG_ENERGY, casket: [CLUES.CASKET_MIN, CLUES.CASKET_MAX],
       cooldownHours: Math.round(CLUES.CLUE_CD_MS / 3600000), ranks: CLUES.RANKS,
@@ -764,7 +764,8 @@ export async function buildServer() {
       trainEnergy: STABLE.TRAIN_ENERGY, statCap: STABLE.STAT_CAP, stats: STABLE.STATS, stableMax: STABLE.STABLE_MAX,
       minStake: STABLE.MIN_STAKE, maxStake: STABLE.MAX_STAKE, ranks: STABLE.RANKS, legendRanks: STABLE.LEGEND_RANKS, rakeBps: STABLE.RAKE_BPS,
       breedCost: STABLE.BREED_COST, stakes: { buyin: STABLE.STAKES.BUYIN, minEntrants: STABLE.STAKES.MIN_ENTRANTS, payouts: STABLE.STAKES.PAYOUTS, rakeBps: STABLE.STAKES.RAKE_BPS } },
-    auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES },
+    auction: { lotsPerWeek: AUCTION.LOTS_PER_WEEK, minRaiseBps: AUCTION.MIN_RAISE_BPS, archetypes: AUCTION.ARCHETYPES,
+      rareArchetypes: AUCTION.RARE_ARCHETYPES, sets: AUCTION.SETS, collectorRanks: AUCTION.COLLECTOR_RANKS, consign: AUCTION.CONSIGN },
     envelope: { omr: LAW.ENVELOPE_OMR, days: Math.round(LAW.ENVELOPE_MS / 86400000), gainMult: LAW.ENVELOPE_GAIN_MULT, bleedMult: LAW.ENVELOPE_BLEED_MULT },
     foundation: FOUNDATION.TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, bustMult: t.bustMult, bleedMult: t.bleedMult, blurb: t.blurb })),
     wire: { tapOmr: WIRE.TAP_OMR, tapHours: Math.round(WIRE.TAP_MS / 3600000), tapMax: WIRE.TAP_MAX,
@@ -1199,6 +1200,14 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.auctionBoard(ch, client, h)));
   app.post('/v1/auction/:lotId/bid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidAuction(ch, req.params.lotId, req.body?.amount, client, h)));
+  // Tier-4 — THE BLOCK (RESALE): consign a won trophy, bid on / pull a consignment; the collectors board
+  app.post('/v1/auction/consign', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.consignTrophy(ch, req.body?.lotId, req.body?.reserve, client, h)));
+  app.post('/v1/auction/consign/:id/bid', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidConsignment(ch, req.params.id, req.body?.amount, client, h)));
+  app.post('/v1/auction/consign/:id/cancel', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.reclaimConsignment(ch, req.params.id, client, h)));
+  app.get('/v1/leaderboard/collectors', { preHandler: auth }, async () => Estate.collectorLeaderboard(pool)); // the survives-death Collector legend + the Patron
 
   // NAMED LANDMARKS — one dedicable plaque per district, held by the highest $OMR flex (a status sink).
   app.get('/v1/landmarks', async () => Landmarks.landmarkBoard(pool));

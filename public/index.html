@@ -742,6 +742,7 @@
     if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
+    if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`moved product — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
@@ -3902,7 +3903,8 @@
     t.innerHTML = `
       ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with clean $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
       <h2>${e.name ? e.name : (e.tierName || 'No Compound Yet')}
-        <span class="d" style="font-size:12.5px">${e.tierName ? `· ${e.tierName} · ${fmt(e.spent)} $OMR sunk` : ''}</span></h2>
+        <span class="d" style="font-size:12.5px">${e.tierName ? `· ${e.tierName} · ${fmt(e.spent)} $OMR sunk` : ''}</span>
+        ${auc.collector ? `<span class="chip">${auc.collector.rank} · ${fmt(auc.collector.sunk)} $OMR sunk into prestige</span>` : ''}</h2>
       <div class="card"><span class="t">The Deed</span>
         <div class="d">${e.tierName ? `You hold a ${e.tierName}.` : 'You don\'t own a thing worth showing.'} · ${fmt(Math.floor(e.omr || 0))} $OMR on hand</div>
         ${e.nextTier ? `<button class="act" id="est-up">move up → ${e.nextTier.name} (${fmt(e.nextTier.omr)} $OMR)</button> <span class="d">${e.nextTier.blurb}</span>` : '<span class="chip good">THE COMPOUND — top of the world</span>'}
@@ -3949,11 +3951,30 @@
       <h2 style="margin-top:14px">The Auction Block <span class="d" style="font-size:11px">(this week's lots — highest $OMR bid wins, and burns · closes ${auc.closesInSeconds ? mins(auc.closesInSeconds) : 'soon'})</span></h2>
       <div class="grid">${(auc.lots || []).map((l) => `
         <div class="card" ${l.youLead ? 'style="border-color:var(--neon)"' : ''}><span class="t">${l.name} <span class="d">#${l.serial}</span></span>
-          ${l.youLead ? '<span class="chip good">you lead</span>' : ''}
+          ${l.rarity === 'legendary' ? '<span class="chip good">LEGENDARY</span>' : ''}${l.youLead ? '<span class="chip good">you lead</span>' : ''}
           <div class="d">${l.blurb}</div>
           <div class="d">${l.currentBid > 0 ? `top bid ${fmt(l.currentBid)} $OMR` : 'no bids yet'} · next ≥ ${fmt(l.minNext)} $OMR</div>
           <input data-aucamt="${l.id}" placeholder="${fmt(l.minNext)}" size="7"> <button class="act" data-aucbid="${l.id}">bid</button></div>`).join('')}</div>
-      ${(auc.wins || []).length ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:8px">your trophies: ${auc.wins.map((w) => `${w.name} #${w.serial} (${fmt(w.price)} $OMR)`).join(' · ')}</div>` : ''}
+      ${(auc.wins || []).length ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:8px">your trophies: ${auc.wins.map((w) => `${w.name} #${w.serial} (${fmt(w.price)} $OMR)${w.listed ? ' [on the block]' : ''}`).join(' · ')}</div>` : ''}
+
+      <h2 style="margin-top:14px">The Block — Resale <span class="d" style="font-size:11px">(put a trophy up for a $OMR reserve; the house takes ${(rules?.auction?.consign?.TAKE_BPS ?? 500) / 100}% — and it burns)</span></h2>
+      ${(auc.wins || []).some((w) => !w.listed) ? `<div class="card"><span class="t">Consign a trophy</span>
+        <div style="margin-top:4px"><select id="consign-lot">${auc.wins.filter((w) => !w.listed).map((w) => `<option value="${w.lot}">${w.name} #${w.serial}</option>`).join('')}</select>
+        <input id="consign-res" placeholder="reserve $OMR" size="10"> <button class="act" id="consign-go">put it on the block (${auc.consign?.FEE_OMR ?? 2} $OMR fee)</button></div></div>` : ''}
+      ${(auc.consignments || []).length ? `<div class="grid" style="margin-top:6px">${auc.consignments.map((c) => `
+        <div class="card" ${c.youLead ? 'style="border-color:var(--neon)"' : ''}><span class="t">${c.name} <span class="d">#${c.serial}</span></span>
+          ${c.mine ? '<span class="chip">yours</span>' : ''}${c.youLead ? '<span class="chip good">you lead</span>' : ''}${c.reserveMet ? '<span class="chip good">reserve met</span>' : '<span class="chip cold">reserve not met</span>'}
+          <div class="d">${c.currentBid > 0 ? `top bid ${fmt(c.currentBid)} $OMR` : 'no bids yet'} · next ≥ ${fmt(c.minNext)} $OMR · closes ${mins(c.closesSeconds)}</div>
+          ${c.mine ? (c.currentBid > 0 ? '<span class="d" style="color:var(--dim)">a standing bid — you can\'t pull it now</span>' : `<button class="act" data-consigncancel="${c.id}">pull it</button>`)
+            : `<input data-consignamt="${c.id}" placeholder="${fmt(c.minNext)}" size="7"> <button class="act" data-consignbid="${c.id}">bid</button>`}</div>`).join('')}</div>`
+        : '<div class="d" style="color:var(--dim);font-size:12px">nothing on the resale block right now.</div>'}
+
+      ${(auc.sets || []).length ? `<h2 style="margin-top:14px">The Collection — Sets <span class="d" style="font-size:11px">(own the right archetypes as trophies)</span></h2>
+      <div class="grid">${auc.sets.map((s) => `<div class="card"><span class="t">${s.name}</span> <span class="chip ${s.complete ? 'good' : ''}">${s.have}/${s.total}${s.complete ? ' ✦ COMPLETE' : ''}</span>
+        ${!s.complete ? `<div class="d" style="font-size:11px;color:var(--dim)">missing: ${s.missing.join(', ')}</div>` : ''}</div>`).join('')}</div>` : ''}
+      ${auc.patron ? `<div class="d" style="margin-top:6px"><span class="chip good">PATRON OF THE SEASON</span> ${auc.patron.name} — ${fmt(auc.patron.sunk)} $OMR this season</div>` : ''}
+      <div class="d" style="margin-top:2px"><a href="#" id="collectors-lb-link">the collectors of the city →</a></div>
+      <div id="collectors-lb"></div>
 
       <h2 style="margin-top:14px">The Collection <span class="d" style="font-size:11px">(everything your bloodline has EVER touched — survives death, selling, seizure · ${col.have || 0}/${col.total || 0} · ${col.pct || 0}%)</span></h2>
       <div class="grid">${(col.categories || []).map((c) => `
@@ -3978,6 +3999,16 @@
         <div class="card"><span class="t">#${hh.pos} ${hh.estate}</span><div class="d">${hh.steward} · ${hh.tierName || ''} · ${fmt(hh.value)} $OMR sunk · staff ${hh.staff} · galas ${hh.galas}${hh.bestGala ? ` (best ${hh.bestGala})` : ''}</div></div>`).join('') || '<span class="d">no great houses yet</span>'}</div>`; }; }
     t.querySelectorAll('[data-aucbid]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/auction/${b.dataset.aucbid}/bid`, { amount: Number(t.querySelector(`[data-aucamt="${b.dataset.aucbid}"]`).value) }).then(() => renderEstate()));
+    { const cg = $('#consign-go'); if (cg) cg.onclick = () =>
+      act('POST', '/v1/auction/consign', { lotId: $('#consign-lot').value, reserve: Number($('#consign-res').value) }).then(() => renderEstate()); }
+    t.querySelectorAll('[data-consignbid]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/auction/consign/${b.dataset.consignbid}/bid`, { amount: Number(t.querySelector(`[data-consignamt="${b.dataset.consignbid}"]`).value) }).then(() => renderEstate()));
+    t.querySelectorAll('[data-consigncancel]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/auction/consign/${b.dataset.consigncancel}/cancel`, {}).then(() => renderEstate()));
+    { const el = $('#collectors-lb-link'); if (el) el.onclick = async (ev) => { ev.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/collectors')).body || {};
+      $('#collectors-lb').innerHTML = `${b.patron ? `<div class="d" style="margin:4px 0"><span class="chip good">PATRON</span> ${b.patron.name} — ${fmt(b.patron.sunk)} $OMR this season</div>` : ''}<div class="grid">${(b.collectors || []).map((c) => `
+        <div class="card"><span class="t">#${c.pos} ${c.steward}</span><div class="d">${c.rank} · ${fmt(c.sunk)} $OMR sunk</div></div>`).join('') || '<span class="d">no collectors yet</span>'}</div>`; }; }
     { const cl = $('#col-lb-link'); if (cl) cl.onclick = async (ev) => { ev.preventDefault();
       const b = (await api('GET', '/v1/leaderboard/collection')).body || {};
       $('#col-lb').innerHTML = `<div class="grid" style="margin-top:4px">${(b.collectors || []).map((c, i) => `
