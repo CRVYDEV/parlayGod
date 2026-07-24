@@ -12,7 +12,7 @@
 // (pass_tier/pass_at) → the track SURVIVES DEATH (the heir keeps claiming what the pass paid for).
 import { GameError, ledger } from './game.js';
 import { fundReserve } from './chain.js';
-import { PASS, passClaimMs, passActive, levelOf, assetEnergyCap } from './rules.js';
+import { PASS, passClaimMs, passActive, passPrestigeOf, levelOf, assetEnergyCap } from './rules.js';
 
 const round6 = (x) => Math.round(x * 1e6) / 1e6;
 
@@ -28,13 +28,15 @@ const rewardText = (r) => {
 // GET /v1/pass — the Ledger: your tier, the track, the claim cooldown, the stipend pool.
 export async function passBoard(pool, accountId) {
   const a = (await pool.query(
-    'SELECT pass_until, pass_tier, pass_at, pass_owed FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+    'SELECT pass_until, pass_tier, pass_at, pass_owed, pass_seasons FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
   const now = Date.now();
   const active = passActive(a, now);
   const tier = Number(a.pass_tier || 0);
   const cd = a.pass_at ? Math.max(0, Math.ceil((new Date(a.pass_at).getTime() + passClaimMs() - now) / 1000)) : 0;
   const complete = tier >= PASS.TRACK.length;
   const poolBal = Number((await pool.query('SELECT balance FROM vig_prize_pool WHERE id=1')).rows[0]?.balance || 0);
+  const seasons = Number(a.pass_seasons || 0);   // THE LEDGER PRESTIGE — lifetime tracks completed (Tier-4)
+  const prIdx = passPrestigeOf(seasons);
   return {
     active, passSeconds: a.pass_until ? Math.max(0, Math.ceil((new Date(a.pass_until).getTime() - now) / 1000)) : 0,
     tier, of: PASS.TRACK.length, complete,
@@ -43,6 +45,7 @@ export async function passBoard(pool, accountId) {
     track: PASS.TRACK.map((t, i) => ({ tier: t.tier, reward: rewardText(t.reward), claimed: i < tier, next: i === tier })),
     stipendPoolOmr: Math.round(poolBal * 100) / 100,
     stipendOwed: round6(Number(a.pass_owed || 0)), // accrued $OMR not yet paid (paid as the pool funds)
+    seasons, prestigeRank: prIdx, prestigeName: PASS.PRESTIGE_RANKS[prIdx].name, // the Ledger prestige axis
     note: active ? null : 'Buy a Season Pass in the Store to unlock the Ledger track.',
   };
 }

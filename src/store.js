@@ -13,7 +13,7 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError, notify } from './game.js';
-import { STORE, packageOf, passActive } from './rules.js';
+import { STORE, PASS, PATRON, packageOf, passActive, patronTierOf, patronTierName, passPrestigeOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
@@ -49,11 +49,14 @@ async function splitRevenue(client, { ref, amountWei }) {
 }
 
 // ── apply a SKU's grant to the account (headless — direct SQL, the fees.js no-clobber discipline) ──
-async function grantPackage(client, accountId, sku, ref = null) {
+async function grantPackage(client, accountId, sku, ref = null, real = false) {
   const pkg = packageOf(sku);
   if (!pkg) throw new GameError('bad_sku', `Unknown package: ${sku}`);
   const g = pkg.grant || {};
   const now = Date.now();
+  // THE PATRON PROGRAM (Tier-4): a REAL contribution (a txHash'd ETH purchase — never a comp) bumps the
+  // lifetime patron_spent status meter by the SKU's ETH price. Direct SQL, OFF persistAccount's list.
+  if (real && pkg.priceEth > 0) await client.query('UPDATE account_persistent SET patron_spent = patron_spent + $2 WHERE account_id=$1', [accountId, pkg.priceEth]);
   if (g.mintCredits) await client.query('UPDATE account_persistent SET mint_credits = mint_credits + $2 WHERE account_id=$1', [accountId, g.mintCredits]);
   if (g.respawnTokens) await client.query('UPDATE account_persistent SET respawn_tokens = respawn_tokens + $2 WHERE account_id=$1', [accountId, g.respawnTokens]);
   if (g.patron) await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [accountId]);
@@ -66,13 +69,17 @@ async function grantPackage(client, accountId, sku, ref = null) {
   if (g.passDays) {
     // EXTEND from the later of now / current end (the retainer/subscription precedent); absolute write
     // (pg-mem timestamp-interval arithmetic is unreliable — compute in JS, the setCargo discipline).
-    const cur = (await client.query('SELECT pass_until FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
+    const cur = (await client.query('SELECT pass_until, pass_tier FROM account_persistent WHERE account_id=$1', [accountId])).rows[0];
     const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
     const until = new Date(laterMs(now, cur?.pass_until) + g.passDays * 86400000);
     // buying the pass while it's LAPSED starts a FRESH season — reset the Ledger track. Renewing an
-    // ACTIVE pass keeps your progress (the track just runs longer).
+    // ACTIVE pass keeps your progress (the track just runs longer). THE LEDGER PRESTIGE (Tier-4): if the
+    // prior track was COMPLETED (all tiers claimed), the fresh season bumps the lifetime pass_seasons meter.
     if (wasActive) await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [accountId, until]);
-    else await client.query('UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL WHERE account_id=$1', [accountId, until]);
+    else {
+      const completed = Number(cur?.pass_tier || 0) >= PASS.TRACK.length;
+      await client.query(`UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL${completed ? ', pass_seasons = pass_seasons + 1' : ''} WHERE account_id=$1`, [accountId, until]);
+    }
   }
   if (g.wireDays) {
     // the ETH Street Wire — extend the LIVING character's wire_until (character-level access window).
@@ -147,7 +154,7 @@ export async function recordStorePurchase(pool, { nonce, sku, payer, amountWei, 
     let granted = false;
     if (acct) {
       const doGrant = positiveWei(amountWei);
-      if (doGrant) await grantPackage(client, acct.account_id, sku, n);
+      if (doGrant) await grantPackage(client, acct.account_id, sku, n, !!txHash); // real=!!txHash → patron_spent bumps only on real ETH
       await client.query('UPDATE store_payments SET account_id=$2, granted=$3 WHERE nonce=$1', [n, acct.account_id, doGrant]);
       granted = doGrant;
     }
@@ -169,10 +176,12 @@ export async function reconcileStore(pool, accountId, address) {
   try {
     await client.query('BEGIN');
     const claimed = (await client.query(
-      'UPDATE store_payments SET granted=true, account_id=$2 WHERE lower(payer_address)=lower($1) AND NOT granted RETURNING nonce, sku, amount_wei',
+      'UPDATE store_payments SET granted=true, account_id=$2 WHERE lower(payer_address)=lower($1) AND NOT granted RETURNING nonce, sku, amount_wei, tx_hash',
       [addr, accountId])).rows;
     for (const r of claimed) {
-      if (positiveWei(r.amount_wei)) { await grantPackage(client, accountId, r.sku, Number(r.nonce)); granted++; }
+      // real=!!tx_hash — a pay-before-link REAL purchase still bumps patron_spent at reconcile (the risk
+      // note: without SELECTing tx_hash here, the entitlement would credit but the patron meter would miss it).
+      if (positiveWei(r.amount_wei)) { await grantPackage(client, accountId, r.sku, Number(r.nonce), !!r.tx_hash); granted++; }
     }
     await client.query('COMMIT');
     return { granted };
@@ -231,19 +240,29 @@ export async function payPackagePlex(ch, sku, client, h) {
   if (g.cosmetic && (await client.query('SELECT 1 FROM store_cosmetics WHERE account_id=$1 AND style=$2', [ch.account_id, g.cosmetic])).rows[0])
     throw new GameError('owned', 'You already own that decor style.');
   const q = await plexPackageQuote(client, sku);
-  const price = q.price;
+  // THE PATRON DISCOUNT (Tier-4) — a higher patron tier shaves plexDiscountBps off the PLEX price (the
+  // DISCOUNTED $OMR is the number burned). SHIPS AT 0 (pure status) → q.price unchanged; the flagged lever.
+  const spent0 = Number((await client.query('SELECT patron_spent FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.patron_spent || 0);
+  const discBps = PATRON.TIERS[patronTierOf(spent0)]?.plexDiscountBps || 0;
+  const floor = round6(pkg.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
+  const price = Math.max(floor, round6(q.price * (10000 - discBps) / 10000)); // discounted, never below the PLEX floor
   if (Number(h.acct.omr) < price) throw new GameError('omr', `That runs ${price} $OMR at the current rate — earn it, or pay the ETH fee.`);
   await spendOmr(client, h, price, `plex:${sku}`); // gates h.acct.omr, debits in-memory, ledgers the burn (plex:% term)
+  // PLEX is a REAL earned-$OMR contribution → bump the lifetime patron meter (direct SQL under the actor lock, off the persist list)
+  if (pkg.priceEth > 0) await client.query('UPDATE account_persistent SET patron_spent = patron_spent + $2 WHERE account_id=$1', [ch.account_id, pkg.priceEth]);
   if (g.mintCredits) h.acct.mint_credits = Number(h.acct.mint_credits || 0) + g.mintCredits;         // persistAccount commits
   if (g.respawnTokens) h.acct.respawn_tokens = Number(h.acct.respawn_tokens || 0) + g.respawnTokens; // persistAccount commits
   if (g.patron) { await client.query('UPDATE account_persistent SET patron=true WHERE account_id=$1', [ch.account_id]); if (h.acct) h.acct.patron = true; }
   if (g.cosmetic) await client.query('INSERT INTO store_cosmetics (account_id, style) VALUES ($1,$2)', [ch.account_id, g.cosmetic]); // gated above → never a dup
   if (g.passDays) {
-    const cur = (await client.query('SELECT pass_until FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0];
+    const cur = (await client.query('SELECT pass_until, pass_tier FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0];
     const wasActive = cur?.pass_until && new Date(cur.pass_until).getTime() > now;
     const until = new Date(laterMs(now, cur?.pass_until) + g.passDays * 86400000);
     if (wasActive) await client.query('UPDATE account_persistent SET pass_until=$2 WHERE account_id=$1', [ch.account_id, until]);
-    else await client.query('UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL WHERE account_id=$1', [ch.account_id, until]);
+    else {
+      const completed = Number(cur?.pass_tier || 0) >= PASS.TRACK.length; // THE LEDGER PRESTIGE: a finished track → +1 season
+      await client.query(`UPDATE account_persistent SET pass_until=$2, pass_tier=0, pass_at=NULL${completed ? ', pass_seasons = pass_seasons + 1' : ''} WHERE account_id=$1`, [ch.account_id, until]);
+    }
   }
   if (g.wireDays) ch.wire_until = new Date(laterMs(now, ch.wire_until) + g.wireDays * 86400000); // persistCharacter commits
   await client.query('INSERT INTO store_grants (id, account_id, sku, ref) VALUES ($1,$2,$3,NULL)', [uid(), ch.account_id, sku]);
@@ -254,7 +273,7 @@ export async function payPackagePlex(ch, sku, client, h) {
 // ── read model: the catalog + your live entitlements ──
 export async function storeBoard(pool, accountId) {
   const a = (await pool.query(
-    'SELECT minted, mint_credits, respawn_tokens, patron, pass_until FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+    'SELECT minted, mint_credits, respawn_tokens, patron, pass_until, patron_spent, pass_seasons FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
   const ch = (await pool.query('SELECT wire_until FROM characters WHERE account_id=$1 AND alive', [accountId])).rows[0];
   const now = Date.now();
   const wireMs = ch?.wire_until ? new Date(ch.wire_until).getTime() : 0;
@@ -264,9 +283,17 @@ export async function storeBoard(pool, accountId) {
   const rawOracle = last ? Number(last.price_omr_per_eth) : null;
   const oracle = (rawOracle != null && Number.isFinite(rawOracle) && rawOracle > 0) ? rawOracle : null; // LOW-1 guard
   const cosmetics = (await pool.query('SELECT style FROM store_cosmetics WHERE account_id=$1', [accountId])).rows.map((r) => r.style);
+  // THE PATRON PROGRAM (Tier-4): the caller's backer standing + the (ship-at-0) PLEX discount for their tier
+  const spentEth = round6(Number(a.patron_spent || 0));
+  const tierIdx = patronTierOf(spentEth);
+  const discBps = PATRON.TIERS[tierIdx]?.plexDiscountBps || 0;
+  const nextT = PATRON.TIERS[tierIdx + 1] || null;
+  const seasons = Number(a.pass_seasons || 0);
+  const prIdx = passPrestigeOf(seasons);
   const plexOf = (p) => {
     const floor = round6(p.priceEth * STORE.PLEX_FLOOR_OMR_PER_ETH);
-    return oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
+    const raw = oracle ? Math.max(floor, round6(p.priceEth * oracle * STORE.PLEX_PREMIUM_BPS / 10000)) : floor;
+    return Math.max(floor, round6(raw * (10000 - discBps) / 10000)); // patron-discounted, never below the floor
   };
   return {
     packages: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, plexOmr: plexOf(p), grant: p.grant, blurb: p.blurb })),
@@ -274,13 +301,46 @@ export async function storeBoard(pool, accountId) {
     owned: {
       minted: !!a.minted, mintCredits: Number(a.mint_credits || 0), respawnTokens: Number(a.respawn_tokens || 0),
       patron: !!a.patron,
-      pass: { active: passActive(a, now), seconds: Math.max(0, Math.ceil((passMs - now) / 1000)) },
+      patronStanding: { spentEth, tier: tierIdx, tierName: PATRON.TIERS[tierIdx].name, plexDiscountBps: discBps,
+        nextTier: nextT ? { name: nextT.name, minEth: nextT.minEth, delta: round6(nextT.minEth - spentEth) } : null },
+      pass: { active: passActive(a, now), seconds: Math.max(0, Math.ceil((passMs - now) / 1000)),
+        seasons, prestigeRank: prIdx, prestigeName: PASS.PRESTIGE_RANKS[prIdx].name },
       wire: { active: wireMs > now, seconds: Math.max(0, Math.ceil((wireMs - now) / 1000)) },
       cosmetics, // owned decor styles (applied to your club via POST /v1/speakeasy/decor)
     },
+    catalogs: { patronTiers: PATRON.TIERS, prestigeRanks: PASS.PRESTIGE_RANKS },
     // real-money payments are on-chain (the OmertaFees paywall) — this endpoint is informational
     note: 'Purchases are made on-chain at the OmertaFees paywall; the watcher credits your account.',
   };
+}
+
+// ── THE BENEFACTORS + PATRON FAMILIES + THE HOUSE'S FAVOR (Store Tier-4) — all read-derived (zero writes).
+// A full-scan of living non-agent accounts with patron_spent > 0 (the recruiter-board precedent; agents pay
+// like anyone but are excluded from the status board, matching estates/collection — the founder-choice default).
+// families aggregates a gang's roster spend in JS (the /gangs pg-mem precedent); favor is the top patron (crown). ──
+export async function benefactorLeaderboard(pool, limit = 25) {
+  const rows = (await pool.query(
+    `SELECT a.account_id, a.patron_spent, a.pass_seasons, c.name, g.name AS gang, g.tag
+       FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+       LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN gangs g ON g.id = gm.gang_id
+      WHERE a.patron_spent > 0 AND NOT a.agent_flag`)).rows;
+  const patrons = []; const gangTally = {};
+  for (const r of rows) {
+    const spentEth = round6(Number(r.patron_spent || 0));
+    const seasons = Number(r.pass_seasons || 0);
+    patrons.push({ steward: r.name, gang: r.gang || null, tag: r.tag || null, spentEth,
+      tier: patronTierOf(spentEth), tierName: patronTierName(spentEth),
+      seasons, prestige: passPrestigeOf(seasons), prestigeName: PASS.PRESTIGE_RANKS[passPrestigeOf(seasons)].name });
+    if (r.gang) { const k = r.gang; (gangTally[k] = gangTally[k] || { name: r.gang, tag: r.tag || null, spentEth: 0, patrons: 0 });
+      gangTally[k].spentEth += spentEth; gangTally[k].patrons += 1; }
+  }
+  patrons.sort((a, b) => b.spentEth - a.spentEth);
+  const ranked = patrons.slice(0, limit).map((p, i) => ({ ...p, rank: i + 1, spentEth: round6(p.spentEth) }));
+  const families = Object.values(gangTally).map((g) => ({ ...g, spentEth: round6(g.spentEth) }))
+    .sort((a, b) => b.spentEth - a.spentEth).slice(0, 15).map((g, i) => ({ ...g, rank: i + 1 }));
+  return { patrons: ranked, families, favor: ranked[0] || null }; // favor = THE HOUSE'S FAVOR (the read-derived crown)
 }
 
 // ── the founder's revenue view (the three-way split totals) for the ops dashboard ──
