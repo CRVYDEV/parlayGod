@@ -806,6 +806,33 @@ at a time; after a casket the streets go quiet for 8 hours.
 pool (The Crackdown, Blood in the Streets, The Gold Rush — or a vanilla Dead Quiet season). The
 banner on the City board tells you the season's law; it snaps back at rollover.
 
+## 30a3. The deferred four: the Household, the Motion, the House Window & Ring Poker
+
+**The Household & the Gala** (Estate tab) — your compound now RUNS: hire staff (Groundskeeper to
+the Capo of the House) who draw daily $OMR wages on one household clock. Pay the book or they WALK
+after a week — arrears die with the insult, but so do your hires. With a Butler on staff and a
+square book, a tier-2+ house can throw a GALA: a big $OMR burn that opens the doors for four hours
+and puts every guest's name on your list. `GET /v1/leaderboard/estates` ranks the great houses.
+
+**Motions before the Commission** (Family tab) — a seated family's boss can now TABLE A MOTION:
+stake a $100,000 treasury deposit to put a decree on the week's ballot. When any motions exist,
+ONLY proposed decrees are votable; the enacted motion's deposit comes home, every other forfeits to
+the confiscation pool. The fifth decree is **THE LEVY** — while in force, the buyback's family cut
+pays the five seated families by seat weight instead of the lifetime top-25. Politics finally pays.
+
+**The House Window** (Shylock tab; `POST /v1/loans/house`) — the lender of last resort. Always
+open, terms deliberately bad (35% for 24 hours, a level-scaled cap), and it lends ONLY what its
+pool holds — the window is fed by half of every street vig, never printed money. Default and the
+house ALWAYS collects: the sweep seizes what you have, brands you a welsher, and puts you on the
+WANTED books.
+
+**Ring Poker** (Den tab; `GET /v1/casino/ring`) — the den's skill game at last: real multi-way
+hold'em with betting streets. The TABLE holds the money — you buy in, your stack lives on the felt,
+and cash only moves when you sit down or stand up. Raises cap at the shortest stack (everyone can
+always call), a 90-second clock folds stallers, the rake is carved from the pot. Die at the table
+and your stack burns with you. The tournament also gained **THE BRACKET** — open it in bracket
+format and the field plays down in rounds of heats to a televised final.
+
 ## 30b. The Cellphone & the Troll Box (talking)
 
 **The Cellphone** (the 📱 up top; `GET /v1/phone`, `GET /v1/phone/thread/:characterId`,
