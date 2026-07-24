@@ -1927,3 +1927,101 @@ CREATE TABLE IF NOT EXISTS clue_scrolls (
 );
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS clue_at TIMESTAMPTZ;      -- post-casket drop cooldown (direct-SQL col)
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS caskets INT NOT NULL DEFAULT 0; -- lifetime legend (survives death)
+
+-- ── ESTATE STEP TWO: THE STAFF & THE GALA (design omerta-deep-deferred-design.md §A) ──
+-- The household: account-level staff (survive death with the compound). Wages accrue LAZILY on the
+-- estate's single household clock (estates.staff_paid_at — the business-pad/crew-nut pattern) and
+-- are settled all-or-nothing as an `estate:staff` $OMR burn. Unpaid past the walk window the staff
+-- WALK (rows deleted, arrears cleared — you stiffed them, they left; rehire from scratch).
+CREATE TABLE IF NOT EXISTS estate_staff (
+  account_id TEXT NOT NULL,
+  staff_id TEXT NOT NULL,
+  hired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, staff_id)
+);
+ALTER TABLE estates ADD COLUMN IF NOT EXISTS staff_paid_at TIMESTAMPTZ;  -- the household wage clock
+ALTER TABLE estates ADD COLUMN IF NOT EXISTS gala_until TIMESTAMPTZ;     -- the live gala window
+ALTER TABLE estates ADD COLUMN IF NOT EXISTS galas_hosted INT NOT NULL DEFAULT 0;
+ALTER TABLE estates ADD COLUMN IF NOT EXISTS gala_best INT NOT NULL DEFAULT 0; -- biggest turnout (status)
+-- THE GALA's guest list: one attendance per guest per gala (the gala is keyed by its window end).
+-- Account-level both sides (pure status, survives death); guest name snapshotted (the chat pattern).
+CREATE TABLE IF NOT EXISTS gala_guests (
+  host_account TEXT NOT NULL,
+  guest_account TEXT NOT NULL,
+  gala_key TIMESTAMPTZ NOT NULL,     -- = the gala's gala_until (identifies the party)
+  guest_name TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (host_account, guest_account, gala_key)
+);
+CREATE INDEX IF NOT EXISTS ix_gala_guests_host ON gala_guests (host_account, gala_key);
+
+-- ── COMMISSION STEP THREE: PROPOSALS WITH DEPOSITS (design omerta-deep-deferred-design.md §B) ──
+-- A seated family stakes a treasury CASH deposit to put a decree on the week's ballot. The deposit
+-- is ESCROW (ledgered commission:proposal, character_id NULL, counterparty=gang — the family-contract
+-- pattern): the proposal matching the tally-enacted decree REFUNDS at settle (commission:refund);
+-- the rest FORFEIT to the street-tax pool (commission:forfeit). Rows survive dissolution (the escrow
+-- must settle — a dead family's deposit forfeits, the dead-funder precedent).
+CREATE TABLE IF NOT EXISTS commission_proposals (
+  week INT NOT NULL,
+  gang_id UUID NOT NULL,
+  decree TEXT NOT NULL,
+  deposit NUMERIC NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',   -- open | refunded | forfeited
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (week, gang_id)
+);
+
+-- ── THE LOAN HOUSE (Shylock step five, design omerta-deep-deferred-design.md §C) ──
+-- The backed NPC lender: a sink-fed cash pool (half of every P2P loan vig + mod funding from the
+-- confiscation pool + its own interest/seizures). THE WALL: the house lends ONLY what the pool
+-- holds (full-reserve — an NPC lender that mints cash to lend is a net inflation faucet on default,
+-- the audits' standing rule). House loans are normal `loans` rows with lender_character='HOUSE'
+-- (the bounty_contributors sentinel precedent — every characters JOIN naturally excludes them).
+CREATE TABLE IF NOT EXISTS loan_house (
+  id INT PRIMARY KEY CHECK (id = 1),
+  pool NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO loan_house (id, pool) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+
+-- ── CASINO STEP FIVE: RING POKER (design omerta-deep-deferred-design.md §D) ──
+-- True multi-way hold'em on the blackjack_hands stateful precedent + one structural rule that makes
+-- it atomic-architecture-native: THE TABLE IS AN ESCROW — cash moves ONLY at sit-down
+-- (casino:ring:sit) and cash-out (casino:ring:leave); stacks/bets/pots live in these rows, so no
+-- action ever locks another player's character row. THE TABLE ROW LOCK IS THE MUTEX for all of its
+-- seat rows (every mutation path — actions, estate, sweep — locks the table first). Raises are
+-- capped at the smallest live stack (table-stakes simplified: everyone can always call → NO side
+-- pots). Rake is carved from the pot (casino:ring:take — half → street tax, half burns, the
+-- audited casino:pvp split). A dead player's stack burns (casino:ring:death, the dead-funder rule).
+CREATE TABLE IF NOT EXISTS poker_tables (
+  id TEXT PRIMARY KEY,
+  bb INT NOT NULL,                     -- the table stake (everyone antes the big blind — ante poker)
+  street TEXT,                         -- NULL = no live hand | preflop | flop | turn | river
+  deck TEXT,                           -- JSON [[rank,suit],…] — the undealt remainder
+  board TEXT,                          -- JSON [[rank,suit],…] — community cards
+  pot NUMERIC NOT NULL DEFAULT 0,
+  current_bet NUMERIC NOT NULL DEFAULT 0,
+  acting_seat INT,
+  act_deadline TIMESTAMPTZ,
+  hand_no INT NOT NULL DEFAULT 0,
+  last_result TEXT,                    -- JSON summary of the last hand (public — shown at the rail)
+  last_action_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS poker_ring_seats (
+  table_id TEXT NOT NULL,
+  seat INT NOT NULL,
+  character_id TEXT NOT NULL,
+  name TEXT NOT NULL,                  -- snapshot (the chat pattern)
+  stack NUMERIC NOT NULL,
+  hole TEXT,                           -- JSON [[rank,suit],[rank,suit]] — REDACTED from every other seat
+  in_hand BOOLEAN NOT NULL DEFAULT false,
+  bet_street NUMERIC NOT NULL DEFAULT 0,
+  acted BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (table_id, seat)
+);
+CREATE INDEX IF NOT EXISTS ix_ring_seats_char ON poker_ring_seats (character_id);
+-- THE BRACKET (multi-table elimination): the existing tournament escrow, run in ROUNDS of heats.
+ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'showdown';
+ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS round INT NOT NULL DEFAULT 0;
+ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS next_round_at TIMESTAMPTZ;
+ALTER TABLE poker_entries ADD COLUMN IF NOT EXISTS eliminated BOOLEAN NOT NULL DEFAULT false;

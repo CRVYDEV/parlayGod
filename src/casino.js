@@ -871,7 +871,7 @@ export async function blackjackDouble(ch, client, h) {
 // (half → street tax, half burns — the back-room-dice mechanism, §10.4-exact per character). A tie
 // splits (stakes returned, no rake). One atomic showdown — no betting streets (turn-based sessions
 // are deferred).
-function evalFive(cs) { // returns a comparable tuple [category, ...tiebreakers], higher is better
+export function evalFive(cs) { // returns a comparable tuple [category, ...tiebreakers], higher is better
   const ranks = cs.map((c) => c.rank).sort((a, b) => b - a);
   const flush = cs.every((c) => c.suit === cs[0].suit);
   const uniq = [...new Set(ranks)];
@@ -895,8 +895,8 @@ function evalFive(cs) { // returns a comparable tuple [category, ...tiebreakers]
   if (shape === '2111') return [1, k[0], k[1], k[2], k[3]];
   return [0, ...ranks];
 }
-function cmpHand(a, b) { for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x - y; } return 0; }
-function best7(seven) { // the best 5-card hand out of 7 (21 combinations — small and exact)
+export function cmpHand(a, b) { for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x - y; } return 0; }
+export function best7(seven) { // the best 5-card hand out of 7 (21 combinations — small and exact)
   let best = null;
   for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) for (let c = b + 1; c < 5; c++)
     for (let d = c + 1; d < 6; d++) for (let e = d + 1; e < 7; e++) {
@@ -906,7 +906,7 @@ function best7(seven) { // the best 5-card hand out of 7 (21 combinations — sm
   return best;
 }
 const HAND_NAMES = ['high card', 'a pair', 'two pair', 'trips', 'a straight', 'a flush', 'a full house', 'quads', 'a straight flush'];
-const handName = (score) => HAND_NAMES[score[0]];
+export const handName = (score) => HAND_NAMES[score[0]];
 function dealPoker() { // a real 52-card shuffle — distinct cards matter for poker
   const deck = [];
   for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) deck.push({ rank: r, suit: s });
@@ -980,7 +980,7 @@ function deal7() { // an independent 7-card hand from a fresh shuffle (scales to
   return deck.slice(0, 7);
 }
 
-export async function enterTournament(ch, client, h) {
+export async function enterTournament(ch, client, h, opts = {}) {
   if (jailed(ch)) throw new GameError('jailed', 'No cards in lockup.');
   if (ch.loc !== CASINO.DISTRICT) throw new GameError('district', `The big table is on the ${CASINO.DISTRICT}.`);
   const buyin = CASINO.TOURNEY.BUYIN;
@@ -991,9 +991,12 @@ export async function enterTournament(ch, client, h) {
   if (!t) {
     const id = crypto.randomUUID();
     const resolvesAt = new Date(Date.now() + tourneyMs());
-    await client.query('INSERT INTO poker_tournaments (id, status, resolves_at, pool) VALUES ($1,$2,$3,0)', [id, 'open', resolvesAt]);
+    // THE BRACKET (step five): the open tournament's FORMAT locks at materialization — whoever
+    // seats it first picks showdown (the one-shot pooled draw) or bracket (rounds of heats).
+    const format = opts.bracket ? 'bracket' : 'showdown';
+    await client.query("INSERT INTO poker_tournaments (id, status, resolves_at, pool, format) VALUES ($1,$2,$3,0,$4)", [id, 'open', resolvesAt, format]);
     await client.query('UPDATE poker_state SET current=$1 WHERE id=1', [id]);
-    t = { id, status: 'open', resolves_at: resolvesAt, pool: 0 };
+    t = { id, status: 'open', resolves_at: resolvesAt, pool: 0, format };
   } else if (new Date(t.resolves_at) <= new Date()) {
     throw new GameError('closed', 'Registration has closed — the tournament is about to run. Try again after it settles.');
   }
@@ -1008,11 +1011,112 @@ export async function enterTournament(ch, client, h) {
   await h.track(client, ch.account_id, 'casino', { game: 'tourney', buyin });
   bus.emit('streets', { type: 'tourney_entry', who: ch.name, entrants });
   return { ok: true, game: 'tourney', tournament: t.id, buyin, pool: Number(t.pool) + buyin, entrants,
+    format: t.format || 'showdown',
     closesSeconds: Math.max(0, Math.ceil((new Date(t.resolves_at) - Date.now()) / 1000)) };
 }
 
 // Worker settle: deal every LIVE entrant an independent 7-card hand, rank them, pay the top places a
 // share of the pool net of the rake. Single-writer (no player-lock races), idempotent (status gate).
+// THE BRACKET (step five, omerta-deep-deferred-design.md §D): the multi-table elimination format on
+// the SAME tournament escrow (identical casino:tourney:* reasons → the escrow identity is untouched).
+// Each due sweep tick advances ONE round: live entrants shuffle into heats of BRACKET.HEAT_SIZE, each
+// heat deals every runner an independent 7-card hand (the audited draw), and the top BRACKET.ADVANCE
+// go through; the FINAL heat's ranking pays TOURNEY.PAYOUTS renormalized net of the same rake.
+// Eliminated ≠ refunded (the buy-in bought the seat); a dead runner's stake burns ONCE (the
+// `eliminated` latch). Ties on a heat's advance cut fall to rank order. BRACKET_ROUND_MS TEST-ONLY.
+const bracketRoundMs = () => (process.env.BRACKET_ROUND_MS != null ? Number(process.env.BRACKET_ROUND_MS) : CASINO.BRACKET.ROUND_MS);
+async function resolveBracketRound(client, t, entries) {
+  const tid = t.id;
+  if (t.next_round_at && new Date(t.next_round_at) > new Date()) return null; // the round clock paces the spectacle
+  const clearCurrent = async () => { await client.query('UPDATE poker_state SET current=NULL WHERE id=1 AND current=$1', [tid]); };
+  // newly-dead, un-eliminated runners scratch — their stake burns ONCE (eliminated is the latch)
+  const live = [];
+  for (const e of entries) {
+    if (e.eliminated) continue;
+    if (e.alive) { live.push(e); continue; }
+    await ledger(client, { currency: 'cash', amount: -Number(e.buyin), reason: 'casino:tourney:death', counterparty: tid });
+    await client.query('UPDATE poker_entries SET eliminated=true WHERE tournament_id=$1 AND character_id=$2', [tid, e.character_id]);
+  }
+  if (Number(t.round) === 0 && live.length < CASINO.TOURNEY.MIN_ENTRANTS) { // a short field refunds (round 0 only)
+    for (const e of live) {
+      await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, Number(e.buyin)]);
+      await ledger(client, { characterId: e.character_id, currency: 'cash', amount: Number(e.buyin), reason: 'casino:tourney:refund', counterparty: tid });
+      await notify(client, e.character_id, 'tourney_refund', { buyin: Number(e.buyin) });
+    }
+    await client.query("UPDATE poker_tournaments SET status='refunded' WHERE id=$1", [tid]);
+    await clearCurrent();
+    return { tournament: tid, refunded: live.length };
+  }
+  if (live.length <= CASINO.BRACKET.HEAT_SIZE) {
+    // ═ THE FINAL ═ rank everyone left; the live pool (Σ surviving buy-ins — dead stakes burned,
+    // eliminated stakes stay in the pot the finalists play for) pays PAYOUTS net of the rake.
+    const ranked = live.map((e) => { const cards = deal7(); const score = best7(cards); return { ...e, score, hand: handName(score) }; })
+      .sort((a, b) => cmpHand(b.score, a.score));
+    const alreadyBurned = entries.filter((e) => e.eliminated && !e.alive).length; // informational only
+    const deadTotal = -(Number((await client.query(
+      "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:tourney:death' AND counterparty=$1", [tid])).rows[0].s));
+    const livePool = Number(t.pool) - deadTotal; // everything not burned rides to the final
+    const rake = Math.floor(livePool * CASINO.TOURNEY.RAKE_BPS / 10000);
+    const net = livePool - rake;
+    const frac = CASINO.TOURNEY.PAYOUTS.slice(0, ranked.length);
+    const denom = frac.reduce((a, b) => a + b, 0) || 1;
+    const placeShare = frac.map((f) => Math.floor(net * f / denom));
+    const payouts = new Array(ranked.length).fill(0);
+    for (let i = 0; i < ranked.length;) { // ties split the covered places' shares (the showdown rule)
+      let j = i; while (j + 1 < ranked.length && cmpHand(ranked[j + 1].score, ranked[i].score) === 0) j++;
+      let sum = 0; for (let p = i; p <= j; p++) sum += placeShare[p] || 0;
+      const each = Math.floor(sum / (j - i + 1));
+      for (let p = i; p <= j; p++) payouts[p] = each;
+      i = j + 1;
+    }
+    let handedOut = 0;
+    for (let i = 0; i < ranked.length; i++) {
+      const e = ranked[i], payout = payouts[i];
+      if (payout > 0) {
+        handedOut += payout;
+        await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, payout]);
+        await ledger(client, { characterId: e.character_id, currency: 'cash', amount: payout, reason: 'casino:tourney:win', counterparty: tid });
+      }
+      await client.query('UPDATE poker_entries SET place=$3, hand=$4 WHERE tournament_id=$1 AND character_id=$2', [tid, e.character_id, i + 1, e.hand]);
+      await notify(client, e.character_id, 'tourney_result', { place: i + 1, of: ranked.length, hand: e.hand, payout, bracket: true });
+    }
+    const totalTake = rake + (net - handedOut);
+    if (totalTake > 0) {
+      await ledger(client, { currency: 'cash', amount: -totalTake, reason: 'casino:tourney:take', counterparty: tid });
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(totalTake / 2)]);
+    }
+    await client.query("UPDATE poker_tournaments SET status='resolved' WHERE id=$1", [tid]);
+    await clearCurrent();
+    await rngLog(client, ranked[0].character_id, `casino:bracket:${tid}`, ranked[0].score[0],
+      `champion ${ranked[0].name} ${ranked[0].hand} · round ${t.round} final · pool $${Number(t.pool)}`);
+    bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool: Number(t.pool), runners: entries.length, bracket: true });
+    return { tournament: tid, round: Number(t.round), finalists: ranked.length, winner: ranked[0].name, take: totalTake, scratchedEarlier: alreadyBurned };
+  }
+  // ═ A ROUND ═ shuffle the field into heats; each heat deals + ranks; the top ADVANCE go through
+  const shuffled = [...live];
+  for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+  let cut = 0;
+  for (let i = 0; i < shuffled.length; i += CASINO.BRACKET.HEAT_SIZE) {
+    const heat = shuffled.slice(i, i + CASINO.BRACKET.HEAT_SIZE)
+      .map((e) => { const cards = deal7(); const score = best7(cards); return { ...e, score, hand: handName(score) }; })
+      .sort((a, b) => cmpHand(b.score, a.score));
+    const keep = Math.min(CASINO.BRACKET.ADVANCE, heat.length); // a short tail heat still advances up to ADVANCE
+    for (let k = 0; k < heat.length; k++) {
+      const e = heat[k];
+      if (k < keep) { await notify(client, e.character_id, 'bracket_advance', { round: Number(t.round) + 1, hand: e.hand }); continue; }
+      cut++;
+      await client.query('UPDATE poker_entries SET eliminated=true, hand=$3 WHERE tournament_id=$1 AND character_id=$2', [tid, e.character_id, e.hand]);
+      await notify(client, e.character_id, 'bracket_out', { round: Number(t.round) + 1, hand: e.hand });
+    }
+  }
+  const nextAt = new Date(Date.now() + bracketRoundMs());
+  await client.query('UPDATE poker_tournaments SET round=$2, next_round_at=$3 WHERE id=$1', [tid, Number(t.round) + 1, nextAt]);
+  await rngLog(client, live[0].character_id, `casino:bracket:${tid}`, Math.random(),
+    `round ${Number(t.round) + 1} · ${live.length} in, ${live.length - cut} advance`);
+  bus.emit('streets', { type: 'bracket_round', round: Number(t.round) + 1, remaining: live.length - cut });
+  return { tournament: tid, round: Number(t.round) + 1, remaining: live.length - cut, cut };
+}
+
 export async function resolveTournament(client, tid) {
   const t0 = (await client.query('SELECT * FROM poker_tournaments WHERE id=$1', [tid])).rows[0];
   if (!t0 || t0.status !== 'open') return null;
@@ -1027,7 +1131,9 @@ export async function resolveTournament(client, tid) {
   if (!t) return null;
   const pool = Number(t.pool);
   const entries = (await client.query(
-    'SELECT e.character_id, e.buyin, c.alive, c.name FROM poker_entries e LEFT JOIN characters c ON c.id=e.character_id WHERE e.tournament_id=$1', [tid])).rows;
+    'SELECT e.character_id, e.buyin, e.eliminated, c.alive, c.name FROM poker_entries e LEFT JOIN characters c ON c.id=e.character_id WHERE e.tournament_id=$1', [tid])).rows;
+  // THE BRACKET (step five): rounds of heats on the SAME escrow — its own resolver
+  if ((t.format || 'showdown') === 'bracket') return resolveBracketRound(client, t, entries);
   let deadBurn = 0;
   const live = [];
   for (const e of entries) {
@@ -1137,6 +1243,9 @@ export async function denInfo(pool, characterId) {
     entrants: Number((await pool.query('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [tr.id])).rows[0].n),
     seated: !!(await pool.query('SELECT 1 FROM poker_entries WHERE tournament_id=$1 AND character_id=$2', [tr.id, characterId])).rows[0],
     closesSeconds: Math.max(0, Math.ceil((new Date(tr.resolves_at) - Date.now()) / 1000)),
+    format: tr.format || 'showdown', round: Number(tr.round || 0), // THE BRACKET surfaces live
+    remaining: (tr.format === 'bracket' && Number(tr.round || 0) > 0)
+      ? Number((await pool.query('SELECT COUNT(*) n FROM poker_entries e JOIN characters c ON c.id=e.character_id AND c.alive WHERE e.tournament_id=$1 AND NOT e.eliminated', [tr.id])).rows[0].n) : null,
     buyin: CASINO.TOURNEY.BUYIN, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS,
   } : { buyin: CASINO.TOURNEY.BUYIN, payouts: CASINO.TOURNEY.PAYOUTS, minEntrants: CASINO.TOURNEY.MIN_ENTRANTS, open: false };
   return {

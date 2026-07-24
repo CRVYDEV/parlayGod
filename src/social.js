@@ -19,6 +19,7 @@ import { activeDecree } from './commission.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from './market.js';
 import { voidLoansAtDeath } from './loans.js';
 import { wipeSpeakeasyAtDeath } from './speakeasy.js';
+import { wipeRingAtDeath } from './ring.js';
 import { wipeFighterAtDeath, cancelMainEventsAtDeath } from './boxing.js';
 // FIVE PILLARS: honor deeds (#1), the pact/coalition touchpoints (#2), sov razing/garrison (#3),
 // the bloodline death record (#5). All one-way imports (none of these modules import social.js).
@@ -1529,6 +1530,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   await client.query('DELETE FROM secrets WHERE holder_character=$1 OR target_account=$2', [victim.id, victim.account_id]);
   // a dead proprietor's club goes dark (+ its guest list); the man's patronage at other clubs clears too
   await wipeSpeakeasyAtDeath(client, victim.id);
+  // RING POKER: fold the dead player's seat + BURN their stack (casino:ring:death — the dead-funder
+  // rule; their chips already in a live pot ride to whoever wins the hand, escrow-conserving)
+  await wipeRingAtDeath(client, victim.id, h);
   // (boxing step three) a dead manager's booked MAIN EVENTS are cancelled — the crowd is refunded (dead
   // bettors burn) BEFORE the fighters are deleted; the killer, if they bet this card, is mirrored in memory
   await cancelMainEventsAtDeath(client, victim.id, opts.killerCh);

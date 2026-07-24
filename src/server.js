@@ -30,6 +30,7 @@ import * as Races from './races.js';
 import * as Port from './port.js';
 import * as Bonds from './bonds.js';
 import * as Casino from './casino.js';
+import * as Ring from './ring.js';
 import * as Heists from './heists.js';
 import * as Convoy from './convoy.js';
 import * as Commission from './commission.js';
@@ -113,7 +114,7 @@ export async function buildServer() {
   // must never reach a real deployment — refuse to boot if any leaked into the env (the fail-closed JWT pattern;
   // CHAIN_POLL_MS is a legitimate production knob and is deliberately excluded).
   if (hardened) {
-    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CLUE_DROP_P', 'DUEL_CD_MS', 'SEASON_MOD', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
+    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CLUE_DROP_P', 'DUEL_CD_MS', 'SEASON_MOD', 'RING_TURN_MS', 'BRACKET_ROUND_MS', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
     const leaked = TEST_ONLY_ENV.filter((k) => process.env[k] != null);
     if (leaked.length) throw new Error(`Test-only roll/timer overrides must not be set in production (they turn money rolls into always-win switches): ${leaked.join(', ')}`);
   }
@@ -963,6 +964,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.castVote(ch, req.body?.decree, client, h)));
   app.post('/v1/commission/veto', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.vetoDecree(ch, client, h)));
+  // step three — a seated family stakes a treasury deposit to put a motion on the week's ballot
+  app.post('/v1/commission/propose', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.proposeDecree(ch, req.body?.decree, client, h)));
 
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
@@ -1044,7 +1048,7 @@ export async function buildServer() {
 
   // LOAN SHARKING — the Shylock: escrowed offers, a taken loan is a live debt, default is enforced.
   app.get('/v1/loans', { preHandler: auth }, async (req) => {
-    const ch = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    const ch = (await pool.query('SELECT id, respect, welsher FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
     return ch ? Loans.loanBoard(pool, ch) : { offers: [], active: [] };
   });
   app.post('/v1/loans', { preHandler: auth }, async (req) =>
@@ -1071,6 +1075,13 @@ export async function buildServer() {
   app.post('/v1/loans/:id/unsell', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.unsellPaper(ch, req.params.id, client, h)));
   // step 4 — square your name: pay to clear WANTED + the welsher mark (calls off the hunt + pool bounty)
+  // step 5 — THE LOAN HOUSE: the always-open backed NPC lender (bad terms, pool-bounded)
+  app.post('/v1/loans/house', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.takeHouseLoan(ch, req.body?.amount, client, h)));
+  app.post('/v1/loans/house/repay', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.repayHouseLoan(ch, client, h)));
+  app.post('/v1/mod/loanhouse/fund', { preHandler: modAuth }, async (req) =>
+    Loans.fundLoanHouse(pool, req.body?.amount));
   app.post('/v1/loans/square', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.squareWanted(ch, client, h)));
   // buy is two-party (buyer pays the current lender, becomes the new lender): look up the seller, lock both.
@@ -1136,6 +1147,18 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.unlockFeature(ch, req.params.id, client, h)));
   app.post('/v1/estate/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.nameEstate(ch, req.body?.name, client, h)));
+  // step two — THE STAFF (recurring $OMR payroll) + THE GALA (design omerta-deep-deferred-design.md §A)
+  app.post('/v1/estate/staff/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.hireStaff(ch, req.params.id, client, h)));
+  app.delete('/v1/estate/staff/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.dismissStaff(ch, req.params.id, client, h)));
+  app.post('/v1/estate/wages', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.payStaffWages(ch, client, h)));
+  app.post('/v1/estate/gala', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.throwGala(ch, client, h)));
+  app.post('/v1/estate/gala/attend', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.attendGala(ch, req.body?.hostId, client, h)));
+  app.get('/v1/leaderboard/estates', { preHandler: auth }, async () => Estate.estateLeaderboard(pool));
 
   // THE AUCTION HOUSE ("the sit-down"): weekly $OMR auctions of unique prestige items — highest bid burns.
   app.get('/v1/auction', { preHandler: auth }, async (req) =>
@@ -1278,7 +1301,26 @@ export async function buildServer() {
       Casino.playPoker(ch, dealer, req.body?.amount, client, h)));
   // the scheduled POKER TOURNAMENT — buy in during the open window; the worker deals + settles
   app.post('/v1/casino/tournament', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.enterTournament(ch, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Casino.enterTournament(ch, client, h, { bracket: !!req.body?.bracket })));
+  // step five — RING POKER: the multi-way stateful table (the table is an escrow; see src/ring.js)
+  app.get('/v1/casino/ring', { preHandler: auth }, async (req) => {
+    const ch = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    return Ring.ringLobby(pool, ch);
+  });
+  app.get('/v1/casino/ring/:id', { preHandler: auth }, async (req) => {
+    const ch = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0];
+    return Ring.viewOf(pool, req.params.id, ch?.id);
+  });
+  app.post('/v1/casino/ring/open', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Ring.openTable(ch, req.body, client, h)));
+  app.post('/v1/casino/ring/:id/sit', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Ring.sitAt(ch, req.params.id, req.body?.buyin, client, h)));
+  app.post('/v1/casino/ring/:id/leave', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Ring.leaveTable(ch, req.params.id, client, h)));
+  app.post('/v1/casino/ring/:id/deal', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Ring.dealHand(ch, req.params.id, client, h)));
+  app.post('/v1/casino/ring/:id/act', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Ring.actAt(ch, req.params.id, req.body, client, h)));
   app.get('/v1/casino', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     if (!cid) throw new G.GameError('no_character', 'Create a character first.');

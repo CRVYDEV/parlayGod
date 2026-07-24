@@ -87,6 +87,89 @@ assert.notEqual(heir.id, don.id, 'a new street');
 assert.equal(heir.estate.tier, 2, 'the heir inherits the compound — it survived the death');
 assert.equal((await call('GET', '/v1/estate', { token: don.token })).body.name, 'The Havens', 'name and all');
 
+// ══ STEP TWO — THE STAFF (recurring $OMR payroll) + THE GALA + the leaderboard ══
+const aid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${heir.id}'`)).rows[0].a;
+const staffOf = (id) => ESTATE.STAFF.find((s) => s.id === id);
+
+// the board carries the household + gala surfaces
+r = await call('GET', '/v1/estate', { token: don.token });
+assert.equal(r.body.household.catalog.length, ESTATE.STAFF.length, 'the full staff catalog');
+assert.equal(r.body.household.staff.length, 0, 'nobody on the payroll yet');
+assert.equal(r.body.gala.live, false, 'no party on');
+
+// hire gates: unknown trade, tier lock (Capo needs tier 4; the heir holds a tier-2 Row House)
+assert.equal((await call('POST', '/v1/estate/staff/nonsuch', { token: don.token })).body.error, 'staff', 'no such trade');
+assert.equal((await call('POST', '/v1/estate/staff/house_capo', { token: don.token })).body.error, 'tier', 'the Capo needs a bigger house');
+
+// hire the Groundskeeper + the Butler — exact ledgered estate:staff:hire burns
+const omrBeforeHire = (await meOf(don.token)).omr;
+assert.equal((await call('POST', '/v1/estate/staff/groundskeeper', { token: don.token })).code, 200, 'groundskeeper hired');
+r = await call('POST', '/v1/estate/staff/butler', { token: don.token });
+assert.equal(r.code, 200, 'butler hired');
+assert.equal((await call('POST', '/v1/estate/staff/butler', { token: don.token })).body.error, 'hired', 'one of each');
+assert.equal((await meOf(don.token)).omr, omrBeforeHire - staffOf('groundskeeper').hireOmr - staffOf('butler').hireOmr,
+  'hire fees burned exactly');
+
+// wages accrue lazily on the household clock — backdate 2 days, the book shows the arrears
+await pool.query(`UPDATE estates SET staff_paid_at = now() - interval '2 days' WHERE account_id='${aid}'`);
+r = await call('GET', '/v1/estate', { token: don.token });
+const perDay = staffOf('groundskeeper').wageOmrDay + staffOf('butler').wageOmrDay;
+assert.equal(r.body.household.wagePerDay, perDay, 'the daily rate sums the household');
+assert(Math.abs(r.body.household.owed - perDay * 2) < 0.02, `two days owed (${r.body.household.owed})`);
+assert(r.body.household.walkInSeconds > 0 && r.body.household.walkInSeconds <= 5 * 86400 + 5, 'the walk clock runs');
+assert.equal((await call('POST', '/v1/estate/staff/sommelier', { token: don.token })).body.error, 'tier', 'sommelier needs tier 3 anyway');
+assert.equal((await call('POST', '/v1/estate/gala', { token: don.token })).body.error, 'wages', 'no party on a delinquent book');
+
+// pay the household — an exact ledgered estate:staff burn, the clock resets
+const omrBeforeWages = (await meOf(don.token)).omr;
+const owedNow = r.body.household.owed;
+r = await call('POST', '/v1/estate/wages', { token: don.token });
+assert.equal(r.code, 200, 'the pad is paid');
+assert(Math.abs(r.body.paid - owedNow) < 0.02, 'paid what was owed');
+assert(Math.abs((await meOf(don.token)).omr - (omrBeforeWages - r.body.paid)) < 1e-6, 'the wage burn debited exactly');
+assert.equal((await call('GET', '/v1/estate', { token: don.token })).body.household.owed, 0, 'the book is square');
+
+// THE WALK: stiff them past the window — the whole household leaves, arrears die with the insult
+await pool.query(`UPDATE estates SET staff_paid_at = now() - interval '8 days' WHERE account_id='${aid}'`);
+r = await call('GET', '/v1/estate', { token: don.token });
+assert.equal(r.body.household.walked, true, 'the board warns the house has walked');
+assert.equal((await call('POST', '/v1/estate/wages', { token: don.token })).body.error, 'walked', 'too late to pay — they left');
+r = await call('GET', '/v1/estate', { token: don.token });
+assert.equal(r.body.household.staff.length, 0, 'the house is empty');
+assert.equal(r.body.household.owed, 0, 'and the debt died with the insult');
+
+// THE GALA: rehire the Butler, throw the party (tier-scaled burn), the city attends
+assert.equal((await call('POST', '/v1/estate/gala', { token: don.token })).body.error, 'butler', 'no gala without the Butler');
+await call('POST', '/v1/estate/staff/butler', { token: don.token });
+const omrBeforeGala = (await meOf(don.token)).omr;
+r = await call('POST', '/v1/estate/gala', { token: don.token });
+assert.equal(r.code, 200, 'the doors open');
+assert.equal(r.body.cost, ESTATE.GALA_OMR * 2, 'the burn scales with the tier');
+assert.equal((await meOf(don.token)).omr, omrBeforeGala - r.body.cost, 'ledgered exactly');
+assert.equal((await call('POST', '/v1/estate/gala', { token: don.token })).body.error, 'already', 'one party at a time');
+const guest = await mk('Party Pete');
+assert.equal((await call('POST', '/v1/estate/gala/attend', { token: don.token, body: { hostId: heir.id } })).body.error, 'self',
+  'the host is not a guest');
+r = await call('POST', '/v1/estate/gala/attend', { token: guest.token, body: { hostId: heir.id } });
+assert.equal(r.code, 200, 'Pete makes his entrance');
+assert.equal(r.body.guests, 1, 'first on the list');
+assert.equal((await call('POST', '/v1/estate/gala/attend', { token: guest.token, body: { hostId: heir.id } })).body.error,
+  'attended', 'one entrance per party');
+r = await call('GET', '/v1/estate', { token: don.token });
+assert.deepEqual(r.body.gala.guests, ['Party Pete'], 'the guest list shows the name');
+assert.equal(r.body.gala.hosted, 1, 'galas hosted banked');
+assert.equal(r.body.gala.best, 1, 'best turnout banked');
+
+// the leaderboard: the great houses by $OMR sunk, the living steward named
+r = await call('GET', '/v1/leaderboard/estates', { token: don.token });
+assert.equal(r.body.houses[0].estate, 'The Havens', 'the Havens tops the board');
+assert.equal(r.body.houses[0].steward, heir.name, 'with the living steward');
+assert.equal(r.body.houses[0].staff, 1, 'and the household counted');
+// spends == ledgered estate:* burns (now including hires + wages + the gala)
+const burned2 = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason LIKE 'estate:%'")).rows[0].s);
+assert(Math.abs(burned2 - (await call('GET', '/v1/estate', { token: don.token })).body.spent) < 0.02,
+  'every dollar sunk is a ledgered estate:* burn — step two included');
+
 // ── §10.4: estate:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');

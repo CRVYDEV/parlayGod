@@ -47,6 +47,22 @@ async function postWantedBounty(client, targetId, h) {
   await h.ledger(client, { currency: 'cash', amount: -bounty, reason: 'bounty:wanted', counterparty: targetId });
 }
 
+// step 5 (THE LOAN HOUSE): every P2P vig now SPLITS — HOUSE_VIG_BPS → the house window (a §10.4
+// bucket, ledgered `loan:house:vig`), the rest → the buyback pool (the original `loan:vig` sink).
+// Order everywhere: street_tax THEN loan_house (payVig + fundLoanHouse agree — no AB-BA).
+async function payVig(client, hLedger, vig) {
+  const houseShare = Math.floor(vig * LOAN.HOUSE_VIG_BPS / 10000);
+  const poolShare = vig - houseShare;
+  if (poolShare > 0) {
+    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [poolShare]);
+    await hLedger(client, { currency: 'cash', amount: -poolShare, reason: 'loan:vig' });
+  }
+  if (houseShare > 0) {
+    await client.query('UPDATE loan_house SET pool = pool + $1 WHERE id=1', [houseShare]);
+    await hLedger(client, { currency: 'cash', amount: houseShare, reason: 'loan:house:vig' });
+  }
+}
+
 // GET /v1/loans — the board: open offers (the market) + your active loans, both sides. Unlocked read.
 // step 2: a DIRECTED offer (offered_to) is shown only to its named borrower + the lender; secured
 // offers surface their collateral_min. Active loans surface any pledged collateral (both roles).
@@ -84,7 +100,88 @@ export async function loanBoard(pool, ch) {
       lender: r.lender, borrower: r.borrower, mine: r.lender_character === ch.id,
       collateral: !!r.collateral_car, borrowerWelsher: !!r.borrower_welsher,
       dueSeconds: Math.ceil((new Date(r.due_at) - Date.now()) / 1000), overdue: new Date(r.due_at) <= new Date() }));
-  return { offers, active, paper, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS, paperTakeBps: LOAN.PAPER_TAKE_BPS } };
+  // step 5: THE HOUSE WINDOW — the always-open NPC lender (bad terms, no counterparty needed).
+  // lender_character='HOUSE' rows never hit the characters JOINs above, so they surface only here.
+  const houseRow = (await pool.query('SELECT pool FROM loan_house WHERE id=1')).rows[0];
+  const lvl = levelOf(Number(ch.respect));
+  const houseCap = Math.min(LOAN.HOUSE_MAX, LOAN.HOUSE_MAX_PER_LVL * Math.max(lvl, 0));
+  const marker = (await pool.query(
+    "SELECT id, principal, rate, due_at FROM loans WHERE borrower_character=$1 AND lender_character='HOUSE' AND status='active'", [ch.id])).rows[0];
+  const house = {
+    rate: LOAN.HOUSE_RATE, termHours: LOAN.HOUSE_TERM_H, min: LOAN.HOUSE_MIN, minLevel: LOAN.HOUSE_MIN_LVL,
+    cap: houseCap, available: Math.min(houseCap, Math.floor(Number(houseRow?.pool || 0))),
+    eligible: lvl >= LOAN.HOUSE_MIN_LVL && !ch.welsher,
+    yourMarker: marker ? { id: marker.id, owed: loanOwed(marker.principal, marker.rate),
+      dueSeconds: Math.ceil((new Date(marker.due_at) - Date.now()) / 1000),
+      overdue: new Date(marker.due_at) <= new Date() } : null,
+  };
+  return { offers, active, paper, house, terms: { min: LOAN.MIN, max: LOAN.MAX, rateMax: LOAN.RATE_MAX, termMaxHours: LOAN.TERM_MAX_H, vigBps: LOAN.VIG_BPS, paperTakeBps: LOAN.PAPER_TAKE_BPS } };
+}
+
+// ── step 5: THE LOAN HOUSE — the backed NPC lender (the window is always open, the terms are bad) ──
+// POST /v1/loans/house {amount}. Gates: level floor, welsher-blocked, ONE active debt of any kind
+// (the no-debt-stacking rule covers the window too), jailed, and THE WALL — the pool must cover it.
+export async function takeHouseLoan(ch, amount, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No taking a loan from lockup.');
+  if (ch.welsher) throw new GameError('welsher', 'The house knows your name. Nobody lends to a welsher — square up first.');
+  const lvl = levelOf(Number(ch.respect));
+  if (lvl < LOAN.HOUSE_MIN_LVL) throw new GameError('level', `The window opens at level ${LOAN.HOUSE_MIN_LVL}.`);
+  const amt = Math.floor(Number(amount) || 0);
+  const cap = Math.min(LOAN.HOUSE_MAX, LOAN.HOUSE_MAX_PER_LVL * lvl);
+  if (!(amt >= LOAN.HOUSE_MIN && amt <= cap))
+    throw new GameError('amount', `The window writes markers from $${LOAN.HOUSE_MIN} to $${cap} at your level.`);
+  if ((await client.query("SELECT 1 FROM loans WHERE borrower_character=$1 AND status='active'", [ch.id])).rows[0])
+    throw new GameError('maxed', 'One debt at a time — square what you owe first.');
+  const house = (await client.query('SELECT pool FROM loan_house WHERE id=1 FOR UPDATE')).rows[0];
+  if (!house || Number(house.pool) < amt)
+    throw new GameError('pool', "The window can't cover that today — the house lends only what it holds.");
+  await client.query('UPDATE loan_house SET pool = pool - $1 WHERE id=1', [amt]);
+  ch.cash = Number(ch.cash) + amt;
+  const id = uid();
+  await client.query(
+    `INSERT INTO loans (id, lender_character, borrower_character, principal, rate, hours, status, due_at)
+     VALUES ($1,'HOUSE',$2,$3,$4,$5,'active',$6)`,
+    [id, ch.id, amt, LOAN.HOUSE_RATE, LOAN.HOUSE_TERM_H, new Date(Date.now() + LOAN.HOUSE_TERM_H * 3600000)]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: amt, reason: 'loan:house:take' });
+  await track(client, ch.account_id, 'loan_house_take', { amount: amt });
+  return { ok: true, id, principal: amt, rate: LOAN.HOUSE_RATE,
+    owed: loanOwed(amt, LOAN.HOUSE_RATE), dueHours: LOAN.HOUSE_TERM_H };
+}
+
+// POST /v1/loans/house/repay — the whole marker, interest and all. The interest STAYS IN THE POOL
+// (the house's take — good loans grow the window). Honor credit like any squared debt.
+export async function repayHouseLoan(ch, client, h) {
+  const loan = (await client.query(
+    "SELECT * FROM loans WHERE borrower_character=$1 AND lender_character='HOUSE' AND status='active' FOR UPDATE", [ch.id])).rows[0];
+  if (!loan) throw new GameError('no_loan', 'No marker at the window.');
+  const owed = loanOwed(loan.principal, loan.rate);
+  if (Number(ch.cash) < owed) throw new GameError('cash', `Squaring the marker takes $${owed} in pocket.`);
+  ch.cash = Number(ch.cash) - owed;
+  await bumpHonor(client, ch, HONOR.REPAY);
+  await client.query('UPDATE loan_house SET pool = pool + $1 WHERE id=1', [owed]);
+  await client.query("UPDATE loans SET status='repaid' WHERE id=$1", [loan.id]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'loan:house:repay' });
+  await track(client, ch.account_id, 'loan_house_repay', { paid: owed });
+  return { ok: true, paid: owed, interest: owed - Number(loan.principal) };
+}
+
+// POST /v1/mod/loanhouse/fund — the founder seeds the window from the confiscation pool (a bucket
+// transfer, ledgered `loan:house:fund` so the loan-house §10.4 check reconciles it).
+export async function fundLoanHouse(db, amount) {
+  const amt = Math.floor(Number(amount) || 0);
+  if (!(amt > 0)) throw new GameError('amount', 'A real figure.');
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const tax = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    if (Number(tax.pool) < amt) throw new GameError('pool', "The confiscation pool can't cover that.");
+    await client.query('UPDATE street_tax SET pool = pool - $1 WHERE id=1', [amt]);
+    await client.query('UPDATE loan_house SET pool = pool + $1 WHERE id=1', [amt]);
+    await ledger(client, { currency: 'cash', amount: amt, reason: 'loan:house:fund' });
+    await client.query('COMMIT');
+    return { ok: true, funded: amt };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
 }
 
 // POST /v1/loans — offer capital (escrow the principal, the bounty:post pattern). step 2: `to` names a
@@ -185,10 +282,9 @@ export async function repayLoan(ch, lender, loanId, client, h) {
     await client.query('UPDATE cars SET pledged=false WHERE id=$1', [loan.collateral_car]);
     const c = (h.owned.cars || []).find((x) => x.id === loan.collateral_car); if (c) c.pledged = false;
   }
-  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [vig]); // the house vig → the buyback pool
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -owed, reason: 'loan:repay', counterparty: lender.id });
   await h.ledger(client, { characterId: lender.id, currency: 'cash', amount: toLender, reason: 'loan:repay', counterparty: ch.id });
-  await h.ledger(client, { currency: 'cash', amount: -vig, reason: 'loan:vig' }); // NULL-character sink (the market-take precedent)
+  await payVig(client, h.ledger, vig); // step 5: the vig splits — half → the buyback pool, half → the house window
   await h.notify(client, lender.id, 'loan_repaid', { by: ch.name, amount: toLender });
   return { ok: true, paid: owed, toLender, vig };
 }
@@ -233,11 +329,10 @@ export async function collectLoan(ch, borrower, loanId, client, h) {
     // remainder would stay flagged lootable — an over-exposure nit); clamp to the reduced bank.
     borrower.bank_intransit = Math.min(Number(borrower.bank_intransit || 0) - fromTransit, Number(borrower.bank));
     ch.cash = Number(ch.cash) + toLender;
-    await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [vig]);
     // one row spans the borrower's cash+bank (check (a) is on cash+bank — the whack:loot precedent)
     await h.ledger(client, { characterId: borrower.id, currency: 'cash', amount: -collected, reason: 'loan:collect', counterparty: ch.id });
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: toLender, reason: 'loan:collect', counterparty: borrower.id });
-    await h.ledger(client, { currency: 'cash', amount: -vig, reason: 'loan:vig' });
+    await payVig(client, h.ledger, vig); // step 5: the vig splits — half → the buyback pool, half → the house window
   }
   // step 2: a SECURED default forfeits the collateral — the car changes hands to the lender (a pure
   // ownership move; cars conserve by row count, so NO §10.4 row — the market/chop precedent). Keep
@@ -405,8 +500,10 @@ export async function voidLoansAtDeath(client, victimId, h, killerCh = null, loo
         await h.notify(client, l.borrower_character, 'loan_voided', { reason: 'lender_dead' });
       }
     } else if (l.borrower_character === victimId) {
-      // the borrower is dead: the claim is uncollectable, any pledged car dies with the fleet (the estate wipe).
-      await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead' });
+      // the borrower is dead: the claim is uncollectable, any pledged car dies with the fleet (the
+      // estate wipe). A house marker has no lender to tell ('HOUSE' is a sentinel, not a character —
+      // the pool simply ate the shortfall, bounded by what sinks funded).
+      if (l.lender_character !== 'HOUSE') await h.notify(client, l.lender_character, 'loan_defaulted', { reason: 'borrower_dead' });
     }
   }
   // delete only the loans that did NOT survive: borrower-dead actives (+ any no-heir lender-dead actives).
@@ -459,6 +556,46 @@ export async function sweepLoans(pool, opts = {}) {
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans welsher', borrower_character, e.message); }
     finally { client.release(); }
   }
+  // step 5: THE HOUSE ALWAYS COLLECTS — an overdue house marker is auto-seized (pocket + in-transit
+  // up to owed → the pool, the collectLoan surface with no collector character); the borrower was
+  // already welsher-marked + WANTED by the pass above (the loan was still active then). Shortfall is
+  // eaten by the pool (bounded — the house only ever lent what sinks funded). Lock order: borrower
+  // char → loan row → loan_house singleton (chars → rows → singletons).
+  let houseCollected = 0;
+  const houseDue = (await pool.query(
+    "SELECT id FROM loans WHERE status='active' AND lender_character='HOUSE' AND due_at < $1 ORDER BY id", [now])).rows;
+  for (const { id } of houseDue) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const pre = (await client.query("SELECT borrower_character FROM loans WHERE id=$1 AND status='active'", [id])).rows[0];
+      if (!pre) { await client.query('ROLLBACK'); continue; }
+      const b = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [pre.borrower_character])).rows[0];
+      const loan = (await client.query("SELECT * FROM loans WHERE id=$1 AND status='active' FOR UPDATE", [id])).rows[0];
+      if (!loan) { await client.query('ROLLBACK'); continue; }
+      if (!b) { // a dead borrower's row is normally estate-voided; belt-and-braces resolve
+        await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
+        await client.query('COMMIT'); continue;
+      }
+      const owed = loanOwed(loan.principal, loan.rate);
+      const pocket = Math.floor(Number(b.cash));
+      const inTransit = Math.min(Math.floor(Number(b.bank_intransit || 0)), Math.floor(Number(b.bank)));
+      const collected = Math.min(owed, pocket + inTransit);
+      if (collected > 0) {
+        const fromPocket = Math.min(collected, pocket), fromTransit = collected - fromPocket;
+        const newBank = Number(b.bank) - fromTransit;
+        await client.query('UPDATE characters SET cash=$2, bank=$3, bank_intransit=$4 WHERE id=$1',
+          [b.id, Number(b.cash) - fromPocket, newBank,
+            Math.max(0, Math.min(Number(b.bank_intransit || 0) - fromTransit, newBank))]);
+        await client.query('UPDATE loan_house SET pool = pool + $1 WHERE id=1', [collected]);
+        await ledger(client, { characterId: b.id, currency: 'cash', amount: -collected, reason: 'loan:house:seize' });
+      }
+      await client.query("UPDATE loans SET status='collected' WHERE id=$1", [id]);
+      await notify(client, b.id, 'loan_collected', { by: 'the house', seized: collected, wanted: true });
+      await client.query('COMMIT'); houseCollected++;
+    } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans house', id, e.message); }
+    finally { client.release(); }
+  }
   // audit F1: a SECURED loan left un-collected past due + GRACE_MS auto-forfeits its collateral car to
   // the lender — so an absent/spiteful lender can't freeze the borrower's car forever (the borrower
   // always had the grace to repay). COLLATERAL-ONLY: the car changes hands (a pure ownership move, no
@@ -497,5 +634,5 @@ export async function sweepLoans(pool, opts = {}) {
     } catch (e) { await client.query('ROLLBACK'); console.error('sweepLoans forfeit', id, e.message); }
     finally { client.release(); }
   }
-  return { refunded, welshed, forfeited, offers: stale.length };
+  return { refunded, welshed, forfeited, houseCollected, offers: stale.length };
 }

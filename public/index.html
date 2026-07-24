@@ -1756,10 +1756,13 @@
       <div class="d" style="color:var(--dim);font-size:12.5px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
       <div class="grid" style="margin-top:4px">${(com.seats || []).map((s, i) => `
         <div class="card"><span class="t">#${i + 1} [${s.tag}] ${s.name}</span><div class="d">standing ${fmt(s.standing)} · weight ${s.weight}</div></div>`).join('')}</div>
+      ${(com.proposals || []).length ? `<div class="d" style="margin-top:4px">motions on the table (ONLY these are votable this week): ${com.proposals.map((p) => `<span class="chip">${p.decree} — ${p.tag ? '[' + p.tag + '] ' : ''}${p.family}</span>`).join(' ')}</div>` : ''}
       ${boss && mySeat ? `<div style="margin-top:6px">
         <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
         <button class="act" id="com-vote">cast the family's vote</button>
-        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>` : ''}`,
+        <button class="act" id="com-propose">table a motion ($${fmt(com.proposalDeposit || 100000)} deposit)</button>
+        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>
+        <div class="d" style="color:var(--dim);font-size:12px">a motion stakes a treasury deposit — it refunds if your decree is enacted, forfeits if the chamber goes another way</div>` : ''}`,
         !!(boss && mySeat))}
 
       ${sect('fam-foundation', `The Foundation ${g.foundation ? '· ' + g.foundation : ''}`, 'the family charity — public philanthropy that softens every member\'s RICO odds', `
@@ -1820,6 +1823,9 @@
     const warBtn = t.querySelector('#war-go');
     if (warBtn) warBtn.onclick = () =>
       act('POST', `/v1/gangs/war/${t.querySelector('#war-gang').value.trim()}`, {}).then(() => renderFamily());
+    const propBtn = t.querySelector('#com-propose');
+    if (propBtn) propBtn.onclick = () =>
+      act('POST', '/v1/commission/propose', { decree: t.querySelector('#com-decree').value }).then(() => renderFamily());
     const voteBtn = t.querySelector('#com-vote');
     if (voteBtn) voteBtn.onclick = () =>
       act('POST', '/v1/commission/vote', { decree: t.querySelector('#com-decree').value }).then(() => renderFamily());
@@ -2229,6 +2235,51 @@
   }
 
   // The Den
+  // ── RING POKER (casino step five): the lobby / the live table, painted into #ring-area ──
+  const cardTxt = (c) => '23456789TJQKA'[c.rank - 2] + ['\u2660', '\u2665', '\u2666', '\u2663'][c.suit];
+  async function renderRing() {
+    const area = $('#ring-area'); if (!area) return;
+    const lob = (await api('GET', '/v1/casino/ring')).body || {};
+    const rr = () => renderRing();
+    if (!lob.yourTable) {
+      area.innerHTML = `
+        ${(lob.tables || []).length ? `<div class="grid">${lob.tables.map((tb) => `
+          <div class="card"><span class="t">$${fmt(tb.bb)} table ${tb.live ? '<span class="chip good">HAND LIVE</span>' : ''}</span>
+            <div class="d">${tb.players.map((p) => `${p.name} ($${fmt(p.stack)})`).join(' · ') || 'empty'}</div>
+            ${tb.players.length < (lob.seats || 6) ? `<input data-ringbuy="${tb.id}" type="number" placeholder="buy-in" style="width:100px" value="${tb.bb * (lob.buyinMinBb || 20)}"> <button class="act" data-ringsit="${tb.id}">sit down</button>` : '<span class="chip">full</span>'}</div>`).join('')}</div>` : '<div class="d" style="color:var(--dim)">no tables running — open one.</div>'}
+        <div style="margin-top:6px"><select id="ring-bb">${(lob.blinds || []).map((b) => `<option value="${b}">$${fmt(b)} a hand</option>`).join('')}</select>
+          <input id="ring-buyin" type="number" placeholder="buy-in" style="width:110px"> <button class="act" id="ring-open">open a table</button>
+          <span class="d" style="font-size:11px">buy in ${lob.buyinMinBb}–${lob.buyinMaxBb}\u00d7 the stake · rake ${(lob.rakeBps || 300) / 100}% capped</span></div>`;
+      const ob = area.querySelector('#ring-open');
+      if (ob) ob.onclick = () => act('POST', '/v1/casino/ring/open', { bb: Number(area.querySelector('#ring-bb').value), buyin: Number(area.querySelector('#ring-buyin').value) }).then(rr);
+      area.querySelectorAll('[data-ringsit]').forEach((b) => b.onclick = () =>
+        act('POST', `/v1/casino/ring/${b.dataset.ringsit}/sit`, { buyin: Number(area.querySelector(`[data-ringbuy="${b.dataset.ringsit}"]`).value) }).then(rr));
+      return;
+    }
+    const v = (await api('GET', `/v1/casino/ring/${lob.yourTable}`)).body || {};
+    const tb = v.table || {}, ys = v.yourSeat;
+    area.innerHTML = `
+      <div class="card"><span class="t">$${fmt(tb.bb)} table · ${tb.street ? `${tb.street.toUpperCase()} · pot $${fmt(tb.pot)}` : 'between hands'}</span>
+        ${tb.board && tb.board.length ? `<div class="d" style="font-size:16px;letter-spacing:2px">${tb.board.map(cardTxt).join(' ')}</div>` : ''}
+        <div class="d">${(v.seats || []).map((s) => `${s.you ? '<b>' : ''}${s.name} $${fmt(s.stack)}${s.inHand ? '' : ' (out)'}${tb.actingSeat === s.seat && tb.street ? ' \u23f1' : ''}${s.you ? '</b>' : ''}`).join(' · ')}</div>
+        ${ys && ys.hole.length ? `<div class="d">your hand: <b style="font-size:15px">${ys.hole.map(cardTxt).join(' ')}</b>${ys.toCall ? ` · $${fmt(ys.toCall)} to you` : ''}${tb.actSeconds != null && tb.street ? ` · clock ${tb.actSeconds}s` : ''}</div>` : ''}
+        ${tb.lastResult ? `<div class="d" style="color:var(--dim);font-size:11.5px">last hand: ${tb.lastResult.winners.map((w) => `${w.name}${w.hand ? ` (${w.hand})` : ''}`).join(' + ')} took $${fmt(tb.lastResult.pot - tb.lastResult.rake)}</div>` : ''}
+        <div style="margin-top:6px">
+          ${ys && ys.yourTurn ? `
+            <button class="act" data-ringact="check">check</button>
+            <button class="act" data-ringact="call">call${ys.toCall ? ` $${fmt(ys.toCall)}` : ''}</button>
+            <input id="ring-raise" type="number" placeholder="raise to" style="width:100px"> <button class="act" data-ringact="raise">raise</button>
+            <button class="act" data-ringact="fold" style="border-color:var(--blood)">fold</button>` : ''}
+          ${!tb.street ? `<button class="act" id="ring-deal">deal the next hand</button>` : ''}
+          <button class="act" id="ring-refresh">refresh</button>
+          <button class="act" id="ring-leave" style="border-color:var(--blood)">stand up (cash out${ys ? ` $${fmt(ys.stack)}` : ''})</button>
+        </div></div>`;
+    area.querySelectorAll('[data-ringact]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/casino/ring/${lob.yourTable}/act`, { action: b.dataset.ringact, amount: Number(area.querySelector('#ring-raise')?.value || 0) }).then(rr));
+    { const d = area.querySelector('#ring-deal'); if (d) d.onclick = () => act('POST', `/v1/casino/ring/${lob.yourTable}/deal`, {}).then(rr); }
+    { const rf = area.querySelector('#ring-refresh'); if (rf) rf.onclick = rr; }
+    { const lv = area.querySelector('#ring-leave'); if (lv) lv.onclick = () => act('POST', `/v1/casino/ring/${lob.yourTable}/leave`, {}).then(rr); }
+  }
   async function renderDen() {
     const t = $('#tab-den');
     const r = await api('GET', '/v1/casino');
@@ -2271,11 +2322,14 @@
       <div style="margin-top:4px"><input id="pk-amt" placeholder="stake" size="8" value="1000"> <span class="d" style="font-size:11px">click a table above to play for this stake</span></div>
       <input id="pk-limit" placeholder="open your own table (limit)" size="20">
       <button class="act" id="pk-set">deal from your table</button>
-      <h2 style="margin-top:14px">The Tournament <span class="d" style="font-size:11px">(buy in, best hand takes the pool)</span></h2>
+      <h2 style="margin-top:14px">Ring Poker <span class="t" style="font-size:11px;color:var(--gold)">THE SKILL GAME</span> <span class="d" style="font-size:11px">(real streets, real raises — the table holds the money, you cash out when you stand up)</span></h2>
+      <div id="ring-area" class="d" style="color:var(--dim);font-size:12.5px">loading the back room…</div>
+      <h2 style="margin-top:14px">The Tournament <span class="d" style="font-size:11px">(buy in, best hand takes the pool — or open a BRACKET and play it in rounds)</span></h2>
       ${(() => { const tr = den.tournament || {};
         if (tr.open === false) return `<div class="d" style="color:var(--dim);font-size:12.5px">No tournament running. Buy in ($${fmt(tr.buyin)}) to open one — the top ${(tr.payouts || []).length} split the pool.</div>
-          <button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`;
-        return `<div class="d" style="color:var(--dim);font-size:12.5px">pool <b>$${fmt(tr.pool)}</b> · ${tr.entrants} seated · closes in ${Math.ceil((tr.closesSeconds || 0) / 60)}m${tr.seated ? ' · <b style="color:var(--gold)">you\'re in</b>' : ''}</div>
+          <button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>
+          <button class="act" id="trn-bracket">open a BRACKET ($${fmt(tr.buyin)})</button>`;
+        return `<div class="d" style="color:var(--dim);font-size:12.5px">${tr.format === 'bracket' ? '<span class="chip">BRACKET</span> ' : ''}pool <b>$${fmt(tr.pool)}</b> · ${tr.entrants} seated${tr.format === 'bracket' && tr.round > 0 ? ` · round ${tr.round}${tr.remaining != null ? `, ${tr.remaining} still standing` : ''}` : ` · closes in ${Math.ceil((tr.closesSeconds || 0) / 60)}m`}${tr.seated ? ' · <b style="color:var(--gold)">you\'re in</b>' : ''}</div>
           ${tr.seated ? '' : `<button class="act" data-do="POST /v1/casino/tournament">buy in ($${fmt(tr.buyin)})</button>`}`; })()}
       <h2 style="margin-top:14px">The Futurity <span class="d" style="font-size:11px">(nominate a racer — the whole town bets on the field)</span></h2>
       ${(() => { const fu = den.futurity || {};
@@ -2302,6 +2356,9 @@
     t.querySelector('#fade-set').onclick = () => act('POST', '/v1/casino/fade', { limit: Number(t.querySelector('#fade-limit').value) });
     if (t.querySelector('#bj-go')) t.querySelector('#bj-go').onclick = () => act('POST', '/v1/casino/blackjack', { amount: Number(t.querySelector('#bj-amt').value) });
     t.querySelector('#pk-set').onclick = () => act('POST', '/v1/casino/poker/deal', { limit: Number(t.querySelector('#pk-limit').value) });
+    { const tb = t.querySelector('#trn-bracket');
+      if (tb) tb.onclick = () => act('POST', '/v1/casino/tournament', { bracket: true }).then(() => renderDen()); }
+    renderRing(); // the back room paints itself (and repaints on every action)
     t.querySelectorAll('.pk-play').forEach((a) => a.onclick = (e) => { e.preventDefault(); act('POST', `/v1/casino/poker/${a.dataset.id}`, { amount: Number(t.querySelector('#pk-amt').value) }); });
   }
 
@@ -3457,7 +3514,14 @@
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
     t.innerHTML = `
       ${!(b.offers || []).length && !(b.book || []).length ? coachCard('The Shylock — predatory lending', 'Lend cash at a rate for a fixed term and collect the vig — or default and get leg-broken and marked a welsher. High trust, high risk. Nothing on the wire right now; post an offer below or wait for borrowers.') : ''}
-      <h2>Open Offers <span class="d" style="font-size:11px">(vig ${(b.terms?.vigBps || 500) / 100}% of every settle → the pool)</span></h2>
+      ${b.house ? `<h2>The House Window <span class="d" style="font-size:11px">(the lender of last resort — bad terms, always open, lends only what it holds)</span></h2>
+      <div class="card">${b.house.yourMarker
+        ? `<span class="t">Your marker: $${fmt(b.house.yourMarker.owed)} owed</span> ${b.house.yourMarker.overdue ? '<span class="chip bad">OVERDUE — the house ALWAYS collects</span>' : `<span class="d">due in ${Math.ceil(b.house.yourMarker.dueSeconds / 3600)}h</span>`}
+           <button class="act" data-do="POST /v1/loans/house/repay">square the marker ($${fmt(b.house.yourMarker.owed)})</button>`
+        : `<span class="t">${Math.round(b.house.rate * 100)}% for ${b.house.termHours}h · window: $${fmt(b.house.available)}</span>
+           <div class="d">your line: $${fmt(b.house.min)}–$${fmt(b.house.cap)}${b.house.eligible ? '' : ' · <b>the window is closed to you</b> (level or the welsher mark)'}</div>
+           ${b.house.eligible && b.house.available >= b.house.min ? `<div style="margin-top:4px"><input id="house-amt" type="number" placeholder="amount" style="width:110px"> <button class="act" id="house-take">take a marker</button></div>` : ''}`}</div>` : ''}
+      <h2 style="margin-top:12px">Open Offers <span class="d" style="font-size:11px">(vig ${(b.terms?.vigBps || 500) / 100}% of every settle → the pool)</span></h2>
       ${(b.offers || []).length ? `<div class="grid">${b.offers.map((o) => `
         <div class="card"><span class="t">$${fmt(o.principal)} at ${Math.round(o.rate * 100)}%</span>
           ${o.mine ? '<span class="chip">your paper</span>' : ''}${o.forMe ? '<span class="chip good">FOR YOU</span>' : ''}${o.directed && !o.forMe && !o.mine ? '<span class="chip cold">spoken for</span>' : ''}
@@ -3501,6 +3565,9 @@
       const coll = Number(t.querySelector('#ln-coll').value); if (coll) body.collateral = coll;
       act('POST', '/v1/loans', body).then(() => renderLoans());
     };
+    const houseTake = t.querySelector('#house-take');
+    if (houseTake) houseTake.onclick = () =>
+      act('POST', '/v1/loans/house', { amount: Number(t.querySelector('#house-amt').value) }).then(() => renderLoans());
     t.querySelectorAll('[data-loantake]').forEach((btn) => btn.onclick = () => {
       const carInp = t.querySelector(`[data-loancar="${btn.dataset.loantake}"]`);
       const body = carInp && carInp.value.trim() ? { carId: carInp.value.trim() } : {};
@@ -3698,6 +3765,30 @@
         ${e.nextTier ? `<button class="act" id="est-up">move up → ${e.nextTier.name} (${fmt(e.nextTier.omr)} $OMR)</button> <span class="d">${e.nextTier.blurb}</span>` : '<span class="chip good">THE COMPOUND — top of the world</span>'}
         ${e.tier > 0 ? `<div style="margin-top:6px"><input id="est-name" placeholder="name the place" size="18"> <button class="act" id="est-name-go">name it (${fmt(rules?.estate?.nameOmr ?? 3)} $OMR)</button></div>` : ''}</div>
 
+      ${(() => { const hh = e.household, ga = e.gala; if (!hh) return ''; return `
+      <h2 style="margin-top:12px">The Household <span class="d" style="font-size:11px">(staff draw $OMR wages — stiff them a week and they walk)</span></h2>
+      <div class="card">
+        ${hh.walked ? '<span class="chip bad">THE STAFF WALKED — back wages went unpaid. Rehire from scratch.</span>' : ''}
+        ${hh.staff.length ? `<div class="d">on the payroll: ${hh.staff.map((s) => `${s.name} (${s.wageOmrDay}/day)`).join(' · ')}</div>
+          <div class="d">wages: ${hh.wagePerDay} $OMR/day · owed <b>${hh.owed}</b> $OMR${hh.walkInSeconds != null ? ` · they walk in ${Math.ceil(hh.walkInSeconds / 3600)}h if unpaid` : ''}</div>
+          ${hh.owed > 0 ? `<button class="act" data-do="POST /v1/estate/wages">pay the household (${hh.owed} $OMR)</button>` : '<span class="chip good">the book is square</span>'}`
+          : '<div class="d" style="color:var(--dim)">nobody on the payroll — a great house needs help.</div>'}
+        <div class="grid" style="margin-top:6px">${hh.catalog.filter((s) => !s.hired).map((s) => `
+          <div class="card"><span class="t">${s.name} — ${s.hireOmr} $OMR</span>
+            <div class="d">${s.blurb} · ${s.wageOmrDay} $OMR/day${s.locked ? ` · needs tier ${s.minTier}` : ''}</div>
+            ${!s.locked ? `<button class="act" data-esthire="${s.id}">hire</button>` : ''}</div>`).join('')}</div>
+      </div>
+      <h2 style="margin-top:12px">The Gala <span class="d" style="font-size:11px">(open the doors — the whole city can come be seen)</span></h2>
+      <div class="card">
+        ${ga.live ? `<span class="chip good">THE PARTY IS ON</span> <span class="d">guests: ${ga.guests.length ? ga.guests.join(', ') : 'the doors just opened'}</span>`
+          : `${ga.canThrow ? `<button class="act" data-do="POST /v1/estate/gala">throw a gala (${ga.cost} $OMR)</button>` : `<span class="d" style="color:var(--dim)">a gala takes a tier-${ga.minTier}+ house, a Butler on staff, and a square wage book.</span>`}`}
+        <div class="d">hosted: ${ga.hosted} · best turnout: ${ga.best}</div>
+        ${(ga.parties || []).filter((p) => !p.mine).length ? `<div style="margin-top:6px"><span class="t" style="font-size:12.5px">Parties on tonight</span>
+          ${ga.parties.filter((p) => !p.mine).map((p) => `<div class="d">${p.estate} — ${p.host}'s place · ${Math.ceil(p.untilSeconds / 3600)}h left
+            <button class="act" data-galago="${p.hostId}">make an entrance</button></div>`).join('')}</div>` : ''}
+      </div>
+      <div class="d" style="margin-top:4px"><a href="#" id="estate-lb-link">the great houses of the city →</a></div>
+      <div id="estate-lb"></div>`; })()}
       <h2 style="margin-top:12px">The Legend <span class="d" style="font-size:11px">(what the place shows off)</span></h2>
       <div class="card">
         <div class="d">fleet: ${tr.fleet || 0}${tr.rarestCar ? ` · finest: ${tr.rarestCar}` : ''}</div>
@@ -3734,6 +3825,14 @@
     if (nb) nb.onclick = () => act('POST', '/v1/estate/name', { name: $('#est-name').value }).then(() => renderEstate());
     t.querySelectorAll('[data-estfeat]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/estate/feature/${b.dataset.estfeat}`, {}).then(() => renderEstate()));
+    t.querySelectorAll('[data-esthire]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/estate/staff/${b.dataset.esthire}`, {}).then(() => renderEstate()));
+    t.querySelectorAll('[data-galago]').forEach((b) => b.onclick = () =>
+      act('POST', '/v1/estate/gala/attend', { hostId: b.dataset.galago }).then(() => renderEstate()));
+    { const el = $('#estate-lb-link'); if (el) el.onclick = async (ev) => { ev.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/estates')).body || {};
+      $('#estate-lb').innerHTML = `<div class="grid" style="margin-top:4px">${(b.houses || []).map((hh) => `
+        <div class="card"><span class="t">#${hh.pos} ${hh.estate}</span><div class="d">${hh.steward} · ${hh.tierName || ''} · ${fmt(hh.value)} $OMR sunk · staff ${hh.staff} · galas ${hh.galas}${hh.bestGala ? ` (best ${hh.bestGala})` : ''}</div></div>`).join('') || '<span class="d">no great houses yet</span>'}</div>`; }; }
     t.querySelectorAll('[data-aucbid]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/auction/${b.dataset.aucbid}/bid`, { amount: Number(t.querySelector(`[data-aucamt="${b.dataset.aucbid}"]`).value) }).then(() => renderEstate()));
     { const cl = $('#col-lb-link'); if (cl) cl.onclick = async (ev) => { ev.preventDefault();
@@ -4021,6 +4120,12 @@
       heist_bust: () => `a crew of ${d.crew} went down on a ${d.job} job`,
       highroller: () => `${d.who} is betting big at the den${d.amount ? ` — ${$c(d.amount)}` : ''}`,
       market_sale: () => `a ${d.kind === 'car' ? 'car' : d.kind === 'order' ? 'buy order' : 'shipment'} moved on the Black Market`,
+      gala: () => `${d.host} threw open the doors${d.estate ? ` at ${d.estate}` : ''} — a gala is ON tonight`,
+      gala_guest: () => `${d.guest} made an entrance at your gala (${d.guests} on the list)`,
+      commission_proposal: () => `${d.family || 'a seated family'} tabled a motion before the Commission: ${d.decree}`,
+      bracket_round: () => `the bracket cut the field — round ${d.round}, ${d.remaining} still standing`,
+      ring_folded_up: () => `the ring table folded up — your $${fmt(d.cashedOut)} came home`,
+      loan_forfeited: () => d.lost ? 'your pledged car was forfeited to the lender' : 'a pledged car was forfeited to you',
       gp_entry: () => `${d.who} entered the Grand Prix (${d.entrants} on the grid)`,
       gp_result: () => `${d.winner} won the Grand Prix — ${$c(d.pool)} pool, ${d.runners} ran`,
       futurity_result: () => `${d.winner} won the Futurity (${d.runners} ran)`,

@@ -35,7 +35,11 @@ const KNOWN_REASONS = {
     'duel:',
     // CLUE SCROLLS: `clue:casket` — the treasure-trail faucet (character_id'd; bounded by the
     // 2% drop × one-active-hunt × the 8h post-casket cooldown — sim P9.19)
-    'clue:'],
+    'clue:',
+    // COMMISSION step three: proposal deposits — treasury→escrow (`commission:proposal`, NULL char),
+    // refunded on an enacted motion (`commission:refund`) or forfeited to the confiscation pool
+    // (`commission:forfeit`) — reconciled by the treasury check (b) + the commission-escrow check
+    'commission:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
     'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:'],
@@ -96,6 +100,11 @@ async function collectLedgerChecks(pool) {
   // (character refunds carry a character_id, so the split is exact).
   const contractOut = -(await sum(pool, "currency='cash' AND reason LIKE 'gang:contract%'"));
   const treasuryRefunds = await sum(pool, "currency='cash' AND reason='bounty:refund' AND character_id IS NULL");
+  // COMMISSION step three: a proposal deposit is treasury→escrow (out); an enacted motion's refund
+  // comes home (in). Forfeits go to the confiscation pool, never a treasury — excluded here, counted
+  // in the commission-escrow check below.
+  const proposalOut = -(await sum(pool, "currency='cash' AND reason='commission:proposal'"));
+  const proposalRefund = await sum(pool, "currency='cash' AND reason='commission:refund'");
   // Phase 3 territory rackets: `territory:income` is a treasury FAUCET, `territory:establish` a SINK,
   // and (recurring sinks) `territory:upkeep` a treasury SINK too — all character_id NULL (gang-level).
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
@@ -122,7 +131,13 @@ async function collectLedgerChecks(pool) {
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund);
+
+  // COMMISSION ESCROW (step three): open proposal deposits == posted − refunded − forfeited
+  // (the bounty-escrow twin on the chamber's table; a dissolved family's deposit forfeits at settle).
+  const commissionEscrow = await one(pool, "SELECT COALESCE(SUM(deposit),0) s FROM commission_proposals WHERE status='open'");
+  const commissionForfeited = -(await sum(pool, "currency='cash' AND reason='commission:forfeit'"));
+  push('commission escrow', commissionEscrow, proposalOut - proposalRefund - commissionForfeited);
 
   // (c) BOUNTY/CONTRACT ESCROW: posted (escrow rows, player 'bounty:post' + family 'gang:contract')
   // − claimed − refunded (cancel/expiry) − cleared at death.
@@ -261,6 +276,18 @@ async function collectLedgerChecks(pool) {
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
 
+  // (f4b) THE LOAN HOUSE (step 5 — the backed NPC lender): the window's pool == funded (mod, from the
+  // confiscation pool) + the vig share + repayments + seizures − principal lent. Every flow is a
+  // ledgered `loan:house:*` row; the house lends only what the pool holds (full-reserve — a dead
+  // borrower's shortfall is eaten by the pool, bounded by what sinks already funded, NEVER a mint).
+  const housePool = await one(pool, 'SELECT COALESCE(SUM(pool),0) s FROM loan_house');
+  const houseFund = await sum(pool, "currency='cash' AND reason='loan:house:fund'");
+  const houseVig = await sum(pool, "currency='cash' AND reason='loan:house:vig'");
+  const houseRepay = -(await sum(pool, "currency='cash' AND reason='loan:house:repay'"));
+  const houseSeize = -(await sum(pool, "currency='cash' AND reason='loan:house:seize'"));
+  const houseTake = await sum(pool, "currency='cash' AND reason='loan:house:take'");
+  push('loan house pool', housePool, houseFund + houseVig + houseRepay + houseSeize - houseTake);
+
   // (f6) BOXING BET ESCROW (the Fight Circuit step three — THE MAIN EVENT): CASH bets on a booked card sit
   // in escrow (the bounty/market/loan-escrow twin). escrow == posted ('boxing:bet') − winner payouts
   // ('boxing:bet:win': stake back + pro-rata cut) − refunds ('boxing:bet:refund': one-sided book / cancel)
@@ -306,6 +333,17 @@ async function collectLedgerChecks(pool) {
   const trTake = -(await sum(pool, "currency='cash' AND reason='casino:tourney:take'"));
   const trDeath = -(await sum(pool, "currency='cash' AND reason='casino:tourney:death'"));
   push('poker tourney escrow', trEscrow, trPosted - trWins - trRefunds - trTake - trDeath);
+
+  // RING POKER ESCROW (casino step five): THE TABLE IS AN ESCROW — cash crosses the boundary only
+  // at sit (in), leave (out), the rake (out, half → street tax / half burns), and a dead player's
+  // stack burn (out). Pots pay seat STACKS internally, so Σ stacks + Σ live pots reconciles exactly.
+  const ringEscrow = await one(pool, 'SELECT COALESCE(SUM(stack),0) s FROM poker_ring_seats')
+    + await one(pool, 'SELECT COALESCE(SUM(pot),0) s FROM poker_tables');
+  const ringSit = -(await sum(pool, "currency='cash' AND reason='casino:ring:sit'"));
+  const ringLeave = await sum(pool, "currency='cash' AND reason='casino:ring:leave'");
+  const ringTake = -(await sum(pool, "currency='cash' AND reason='casino:ring:take'"));
+  const ringDeath = -(await sum(pool, "currency='cash' AND reason='casino:ring:death'"));
+  push('ring poker escrow', ringEscrow, ringSit - ringLeave - ringTake - ringDeath);
 
   // (f7) THE GRAND PRIX escrow (the poker-tourney twin, street-races step three): the pool held on OPEN
   // grand prix == buy-ins posted − prizes won − refunds (a short grid) − the house take (NULL

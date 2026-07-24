@@ -43,7 +43,7 @@ assert.equal(r.code, 200, 'the chamber is public');
 assert.equal(r.body.seats.length, 5, 'five seats');
 assert.equal(r.body.seats[0].name, 'Family Number 1', 'the strongest family sits at the head');
 assert(!r.body.seats.some((s) => s.name === 'Family Number 6'), 'the sixth has no seat');
-assert(r.body.book.length === 4, 'the decree book is published');
+assert(r.body.book.length === COMMISSION.DECREES.length, 'the decree book is published (incl. THE LEVY)');
 
 // ── vote gates + cast + change ──
 assert.equal((await call('POST', '/v1/commission/vote', { token: civilian.token, body: { decree: 'pax' } })).body.error, 'rank', 'no family, no voice');
@@ -157,6 +157,79 @@ assert.equal(r.code, 200, 'laid low under the veto');
 assert(!r.body.amnesty && r.body.cost === M4.LAYLOW_CASH, 'FULL price — the touchpoint died with the decree');
 assert.equal((await call('POST', '/v1/commission/veto', { token: bosses[0].token })).body.error, 'vetoed', 'one veto a week');
 
+// ══ STEP THREE — PROPOSALS WITH DEPOSITS + THE LEVY ══
+const { settleProposals } = await import('../src/commission.js');
+const { runBuyback } = await import('../src/worker.js');
+await pool.query('DELETE FROM commission_vetoes'); // clear the veto record — a fresh table for step three
+const treasuryOf = async (gid) => Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gid}'`)).rows[0].treasury);
+const poolOf = async () => Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+let seedTreasury = 0;
+await pool.query(`UPDATE gangs SET treasury=200000 WHERE id IN ('${bosses[0].gang}','${bosses[1].gang}')`);
+seedTreasury += 400000 - 0; // (both were ~0 after founding fees — the §10.4 treasury check isn't asserted here)
+
+// gates: rank / no seat / bad motion / a poor treasury. (F5 dissolved above, so F6 now sits —
+// a FRESH zero-standing family is the unseated probe.)
+const late = await mk('Latecomer Lou');
+await seedCh(late.id, 'respect=400, cash=60000');
+await call('POST', '/v1/gangs', { token: late.token, body: { name: 'The Latecomers', tag: 'LTE' } });
+assert.equal((await call('POST', '/v1/commission/propose', { token: civilian.token, body: { decree: 'pax' } })).body.error, 'rank', 'no family, no motion');
+assert.equal((await call('POST', '/v1/commission/propose', { token: late.token, body: { decree: 'pax' } })).body.error, 'no_seat', 'no seat, no motion');
+assert.equal((await call('POST', '/v1/commission/propose', { token: bosses[0].token, body: { decree: 'martial_law' } })).body.error, 'bad_decree', 'no such motion');
+assert.equal((await call('POST', '/v1/commission/propose', { token: bosses[2].token, body: { decree: 'pax' } })).body.error, 'treasury', 'a motion takes a real deposit');
+
+// the deposit escrows out of the treasury, ledgered; one motion per family per week
+r = await call('POST', '/v1/commission/propose', { token: bosses[0].token, body: { decree: 'the_levy' } });
+assert.equal(r.code, 200, 'the head family moves THE LEVY');
+assert.equal(r.body.deposit, COMMISSION.PROPOSAL_DEPOSIT, 'at the posted deposit');
+assert.equal(await treasuryOf(bosses[0].gang), 200000 - COMMISSION.PROPOSAL_DEPOSIT, 'the treasury fronted it');
+assert.equal((await call('POST', '/v1/commission/propose', { token: bosses[0].token, body: { decree: 'pax' } })).body.error, 'proposed', 'one motion per family per week');
+assert.equal((await call('POST', '/v1/commission/propose', { token: bosses[1].token, body: { decree: 'pax' } })).code, 200, 'the second family moves THE PAX');
+r = await call('GET', '/v1/commission');
+assert.equal(r.body.proposals.length, 2, 'the motions are public');
+assert.equal(r.body.proposalDeposit, COMMISSION.PROPOSAL_DEPOSIT, 'with the price of admission');
+
+// THE TALLY RESTRICTION: when motions exist, only PROPOSED decrees count — the head family's
+// heavier vote for an unproposed decree is DISCARDED and the pax carries.
+await pool.query(`DELETE FROM commission_votes`);
+await pool.query(`INSERT INTO commission_votes (week, gang_id, decree, standing) VALUES (${week - 1}, '${bosses[0].gang}', 'open_season', 600)`);
+await pool.query(`INSERT INTO commission_votes (week, gang_id, decree, standing) VALUES (${week - 1}, '${bosses[1].gang}', 'pax', 500)`);
+await pool.query(`UPDATE commission_proposals SET week=${week - 1}`); // freeze the voting week
+r = await call('GET', '/v1/commission');
+assert.equal(r.body.decree.id, 'pax', 'votes for unproposed decrees are discarded — the proposed pax carries');
+
+// SETTLE: the enacted motion refunds to its treasury; the losing motion forfeits to the pool
+const t0 = await treasuryOf(bosses[1].gang), p0 = await poolOf();
+r = await settleProposals(pool);
+assert.equal(r.refunded, 1, 'one motion enacted → refunded');
+assert.equal(r.forfeited, 1, 'one motion failed → forfeited');
+assert.equal(await treasuryOf(bosses[1].gang), t0 + COMMISSION.PROPOSAL_DEPOSIT, 'the pax deposit came home');
+assert.equal(await poolOf(), p0 + COMMISSION.PROPOSAL_DEPOSIT, "the levy deposit fell to the confiscation pool");
+assert.equal((await pool.query("SELECT COUNT(*) n FROM commission_proposals WHERE status='open'")).rows[0].n, '0', 'the table is clear');
+{ const inv = await runLedgerInvariants(pool);
+  const esc = inv.checks.find((c) => c.name === 'commission escrow');
+  assert.equal(esc.drift, 0, `the commission escrow reconciles (posted − refunded − forfeited): ${esc.drift}`); }
+
+// THE LEVY in force: the buyback's family split pays the SEATED CHAMBER by seat weight (5..1)
+// instead of the lifetime top-25 — a pure redirect (these families have ZERO lifetime standing,
+// so without the levy the whole clan share would roll to the event fund).
+await pool.query(`DELETE FROM commission_votes`);
+await pool.query(`DELETE FROM commission_proposals`); // no motions → the chamber votes freely
+for (const b of [bosses[0], bosses[1], bosses[2]])
+  await pool.query(`INSERT INTO commission_votes (week, gang_id, decree, standing) VALUES (${week - 1}, '${b.gang}', 'the_levy', 500)`);
+assert.equal((await call('GET', '/v1/commission')).body.decree.id, 'the_levy', 'THE LEVY is in force');
+const seatsNow = (await call('GET', '/v1/commission')).body.seats;
+const reservesBefore = {};
+for (const s of (await pool.query('SELECT id, omr_reserve FROM gangs')).rows) reservesBefore[s.id] = Number(s.omr_reserve);
+await pool.query(`UPDATE street_tax SET pool = pool + 100000`); // seed the tax pool for a cycle (buyback input)
+r = await runBuyback(pool, { force: true });
+assert(r && r.levy === true, 'the buyback ran under the levy');
+assert.equal(r.families, seatsNow.length, 'the chamber collects — exactly the seated families');
+const headGang = bosses[0].gang, lastGang = bosses[5].gang; // F1 heads the table; F6 holds the last seat (F5 dissolved)
+const headTake = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${headGang}'`)).rows[0].omr_reserve) - reservesBefore[headGang];
+const lastTake = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${lastGang}'`)).rows[0].omr_reserve) - reservesBefore[lastGang];
+assert(headTake > 0 && lastTake > 0, 'every seated family collected');
+assert(Math.abs(headTake / lastTake - 5) < 0.01, `the head seat takes 5× the last seat (${(headTake / lastTake).toFixed(2)})`);
+
 // ── no decree moves money: the vocabulary stays closed ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `no new reasons (${JSON.stringify(vocab.unknown || [])})`);
@@ -171,5 +244,5 @@ assert.equal(Number((await pool.query('SELECT COALESCE(SUM(season_tribute) + SUM
 r = await call('GET', '/v1/commission');
 assert.equal(r.body.seats.length, 0, 'the chamber is empty until someone earns a seat THIS season');
 
-console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed');
+console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed + STEP THREE: proposals with deposits (rank/no_seat/bad_decree/treasury gates, escrowed treasury deposit, one motion per family, public table, votes for unproposed decrees discarded, settle refunds the enacted motion + forfeits the rest to the pool, the commission-escrow §10.4 check exact) and THE LEVY (the buyback family split redirected to the seated chamber, head seat 5× the last)');
 await app.close();

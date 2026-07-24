@@ -74,7 +74,11 @@ assert.equal(r.code, 200, 'repaid');
 assert.equal(r.body.paid, owed, 'the borrower pays principal + interest');
 assert.equal(bobBefore - await cashOf(bob.id), owed, 'the borrower is out the full debt');
 assert.equal(await cashOf(shark.id) - sharkBefore, toLender, 'the lender collects the debt minus the vig');
-assert.equal(await poolCash() - poolBefore, vig, 'the house vig reaches the buyback pool');
+// step 5: the vig SPLITS — half to the buyback pool, half to the loan-house window
+const vigHouse = Math.floor(vig * LOAN.HOUSE_VIG_BPS / 10000), vigPool = vig - vigHouse;
+assert.equal(await poolCash() - poolBefore, vigPool, 'the street share of the vig reaches the buyback pool');
+assert.equal(Number((await pool.query('SELECT pool FROM loan_house WHERE id=1')).rows[0].pool), vigHouse,
+  'the house share of the vig funds the window');
 assert.equal(await ledgerOf(shark.id, 'loan:repay') + await ledgerOf(bob.id, 'loan:repay'), -vig, 'the two repay rows net to −vig (the sink)');
 assert((await check('loan escrow')).ok, 'loan-escrow still holds after repay (repay touches no escrow)');
 
@@ -105,7 +109,8 @@ assert.equal(r.body.seized, 50000, 'seized pocket ($40k) + in-transit ($10k), cl
 assert.equal(r.body.shortfall, dOwed - 50000, 'the shortfall is written off — the lender ate it');
 const collectVig = loanVig(50000);
 assert.equal(await cashOf(s3.id) - s3Before, 50000 - collectVig, 'the lender recovers the seizure minus the vig');
-assert.equal(await poolCash() - poolB2, collectVig, 'the collection vig reaches the pool');
+assert.equal(await poolCash() - poolB2, collectVig - Math.floor(collectVig * LOAN.HOUSE_VIG_BPS / 10000),
+  'the street share of the collection vig reaches the pool (the rest funds the house window)');
 const danRow = await rawCh(dan.id);
 assert.equal(Number(danRow.cash), 0, "Dan's pocket is cleaned out");
 assert.equal(Number(danRow.bank), 20000, "Dan's CLEARED bank ($20k) is safe from the shylock");
@@ -428,6 +433,74 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM bounties WHERE tar
 assert((await check('bounty escrow')).ok, 'bounty escrow reconciles after the estate burned the HOUSE bounty');
 assert((await check('gang treasuries')).ok, 'gang treasuries clean after the NPC-kill bounty burn');
 
+// ══ STEP FIVE — THE LOAN HOUSE (the backed NPC lender) ══
+// The window opens with whatever the vig split already funded + a mod top-up from the pool.
+const modHdr = { 'x-mod-key': 'test-mod-key' };
+const housePool = async () => Number((await pool.query('SELECT pool FROM loan_house WHERE id=1')).rows[0].pool);
+await pool.query('UPDATE street_tax SET pool = pool + 100000 WHERE id=1'); // seed the confiscation pool (SQL — non-§10.4 bucket)
+const hp0 = await housePool();
+let fund = await app.inject({ method: 'POST', url: '/v1/mod/loanhouse/fund', headers: modHdr, payload: { amount: 40000 } });
+assert.equal(fund.statusCode, 200, 'the founder seeds the window from the confiscation pool');
+assert.equal(await housePool(), hp0 + 40000, 'the window holds the funding');
+assert((await check('loan house pool')).ok, 'the loan-house pool reconciles after funding');
+
+// gates: a rookie has no window; a welsher is refused; the marker is level-capped; the pool is THE WALL
+const pat = await mk('Payday Pat');
+assert.equal((await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 5000 } })).body.error, 'level',
+  'the window opens at a real level');
+await seedCh(pat.id, 'respect=324'); // level 10 → cap $20k
+r = await call('GET', '/v1/loans', { token: pat.token });
+assert.equal(r.body.house.cap, Math.min(LOAN.HOUSE_MAX, LOAN.HOUSE_MAX_PER_LVL * 10), 'the board quotes the level cap');
+assert(r.body.house.eligible, 'Pat is good for it');
+assert.equal((await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 25000 } })).body.error, 'amount', 'over the level cap');
+assert.equal((await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 500 } })).body.error, 'amount', 'under the floor');
+
+// take: pool-bounded principal → pocket, ledgered loan:house:take
+const patCash0 = await cashOf(pat.id), hp1 = await housePool();
+r = await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 10000 } });
+assert.equal(r.code, 200, 'the house writes the marker');
+assert.equal(r.body.owed, loanOwed(10000, LOAN.HOUSE_RATE), 'at the house rate');
+assert.equal(await cashOf(pat.id), patCash0 + 10000, 'the principal lands in pocket');
+assert.equal(await housePool(), hp1 - 10000, 'straight out of the window — the house lends only what it holds');
+assert.equal((await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 5000 } })).body.error, 'maxed', 'one debt at a time');
+r = await call('GET', '/v1/loans', { token: pat.token });
+assert(r.body.house.yourMarker && r.body.house.yourMarker.owed === loanOwed(10000, LOAN.HOUSE_RATE), 'the marker is on the board');
+
+// repay: the whole owed → the pool (the interest IS the house take — good loans grow the window)
+await seedCh(pat.id, 'cash=cash+10000'); // Pat earns the interest elsewhere (SQL seed — drift not asserted here)
+const hp2 = await housePool();
+r = await call('POST', '/v1/loans/house/repay', { token: pat.token });
+assert.equal(r.code, 200, 'the marker is squared');
+assert.equal(r.body.interest, loanOwed(10000, LOAN.HOUSE_RATE) - 10000, 'the interest is the house take');
+assert.equal(await housePool(), hp2 + loanOwed(10000, LOAN.HOUSE_RATE), 'principal + interest home to the pool');
+assert((await check('loan house pool')).ok, 'the pool reconciles after a full cycle');
+
+// THE WALL: the window never writes past the pool
+const whale = await mk('Window Willy');
+await seedCh(whale.id, 'respect=10000'); // deep level → cap $50k, but the pool is thinner than that
+await pool.query('UPDATE loan_house SET pool = 3000 WHERE id=1'); // (SQL squeeze — the check is asserted on ledgered flows only below via drift)
+assert.equal((await call('POST', '/v1/loans/house', { token: whale.token, body: { amount: 20000 } })).body.error, 'pool',
+  'the house lends only what it holds — full-reserve, never a mint');
+await pool.query(`UPDATE loan_house SET pool = ${hp2 + loanOwed(10000, LOAN.HOUSE_RATE)} WHERE id=1`); // undo the squeeze (keeps the §10.4 identity exact)
+
+// DEFAULT: the sweep collects for the house — seize pocket+in-transit → the pool, welsher + WANTED
+const dodger = await mk('Duck-out Doug');
+await seedCh(dodger.id, 'respect=324');
+r = await call('POST', '/v1/loans/house', { token: dodger.token, body: { amount: 10000 } });
+assert.equal(r.code, 200, 'Doug takes a marker');
+await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE borrower_character='${dodger.id}' AND status='active'`);
+await seedCh(dodger.id, `cash=4000, bank=0, wanted_until=NULL`); // can only cover part — the pool eats the shortfall
+const hp3 = await housePool();
+const hsweep = await sweepLoans(pool);
+assert.equal(hsweep.houseCollected, 1, 'the house collected');
+assert.equal(await housePool(), hp3 + 4000, 'seized what there was — the shortfall is the pool\'s loss (bounded)');
+const dougRow = await rawCh(dodger.id);
+assert(dougRow.welsher, 'Doug is a welsher');
+assert(dougRow.wanted_until && new Date(dougRow.wanted_until) > new Date(), 'and WANTED — the house always enforces');
+assert.equal((await call('POST', '/v1/loans/house', { token: dodger.token, body: { amount: 5000 } })).body.error, 'welsher',
+  'the window is closed to a welsher');
+assert((await check('loan house pool')).ok, 'the pool reconciles after the seizure');
+
 // ── §10.4: vocabulary closed (collateral is an ownership move, not currency — no new reasons) ──
 const vocab = await check('reason vocabulary');
 assert(vocab.ok, `loan:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
@@ -435,5 +508,5 @@ assert((await check('loan escrow')).ok, 'loan-escrow still reconciles after the 
 // (car conservation is proven above by the seize being a row-MOVE with a stable COUNT — the §10.4
 // invariant itself is confounded here by directly-seeded cars, the SQL-seeded-cash precedent.)
 
-console.log('✅ test/loans.js — loan sharking (offer/take/repay/cancel/collect, welsher, sweep, death, §10.4)');
+console.log('✅ test/loans.js — loan sharking (offer/take/repay/cancel/collect, welsher, sweep, death, §10.4) + STEP FIVE THE LOAN HOUSE (mod funding from the confiscation pool, the vig split feeding the window, level/floor/cap/welsher/one-debt gates, a pool-bounded take + a full repay cycle growing the pool, THE WALL (never lends past the pool), the sweep auto-collecting a default (partial seize, welsher + WANTED, the pool eats the bounded shortfall), and the loan-house-pool §10.4 check exact throughout)');
 process.exit(0);

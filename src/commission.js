@@ -10,7 +10,7 @@
 // (social.js removeMember). The head seat's BOSS may VETO the sitting decree once per week, on
 // the public record. No decree moves money: effects are bounded one-week modifiers applied at
 // exactly one touchpoint each (safehouse / declareWar / laylow / convoy defense).
-import { GameError, bus } from './game.js';
+import { GameError, bus, ledger } from './game.js';
 import { COMMISSION, decreeOf, weekOf, dayOf } from './rules.js';
 
 // the CHAMBER's ladder — THIS SEASON's showing (tribute since rollover + 10k per war won this
@@ -38,17 +38,30 @@ async function rankedBallots(db, week) {
     .map((r, i) => ({ ...r, weight: COMMISSION.SEATS - i }));
 }
 
-// the decree in force for `week` = the weighted majority of week−1's top-ranked ballots (tie or
-// silence → deadlock) — unless the head of the table killed it (the veto keys the governed week)
-export async function activeDecree(db, week = weekOf()) {
-  const ballots = await rankedBallots(db, week - 1);
+// step three — the TALLY winner of voting-week `week` (the decree its ballots enact). When any
+// PROPOSALS exist for that week, only votes for PROPOSED decrees count (skin in the game sets the
+// ballot — omerta-deep-deferred-design.md §B); with none, the chamber votes freely (backward-
+// compatible). Tie or silence → deadlock (null). Shared by activeDecree (which adds the veto) and
+// settleProposals (which pays on the TALLY — a veto kills the decree, not the vote).
+export async function tallyWinner(db, week) {
+  let ballots = await rankedBallots(db, week);
+  const proposed = new Set((await db.query('SELECT decree FROM commission_proposals WHERE week=$1', [week])).rows.map((r) => r.decree));
+  if (proposed.size) ballots = ballots.filter((b) => proposed.has(b.decree));
   if (!ballots.length) return null;
   const tally = {};
   for (const b of ballots) tally[b.decree] = (tally[b.decree] || 0) + b.weight;
   const sorted = Object.entries(tally).map(([decree, n]) => ({ decree, n })).sort((a, b) => b.n - a.n);
   if (sorted.length > 1 && sorted[0].n === sorted[1].n) return null; // the Commission deadlocked
-  if ((await db.query('SELECT 1 FROM commission_vetoes WHERE week=$1', [week])).rows[0]) return null; // killed at the table
   return decreeOf(sorted[0].decree);
+}
+
+// the decree in force for `week` = the weighted majority of week−1's top-ranked ballots (tie or
+// silence → deadlock) — unless the head of the table killed it (the veto keys the governed week)
+export async function activeDecree(db, week = weekOf()) {
+  const winner = await tallyWinner(db, week - 1);
+  if (!winner) return null;
+  if ((await db.query('SELECT 1 FROM commission_vetoes WHERE week=$1', [week])).rows[0]) return null; // killed at the table
+  return winner;
 }
 
 // cast (or change) the family's vote — boss/underboss of a SEATED family only. The ballot stamps
@@ -77,6 +90,77 @@ export async function castVote(ch, decreeId, client, h) {
   bus.emit(`gang:${h.owned.gangId}`, { type: 'commission_vote', decree: decreeId });
   await h.track(client, ch.account_id, 'commission_vote', { decree: decreeId, week, standing });
   return { ok: true, week, decree: decreeId, weight: COMMISSION.SEATS - seatIdx, takesEffectWeek: week + 1 };
+}
+
+// step three — PROPOSE a decree for the week being voted, staking a treasury CASH deposit
+// (`commission:proposal` — treasury → escrow, character_id NULL + counterparty=gang, the
+// family-contract ledger pattern). One proposal per family per week; proposing sets the ballot
+// (see tallyWinner). Settlement is the worker's settleProposals once the voting week freezes.
+export async function proposeDecree(ch, decreeId, client, h) {
+  if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
+    throw new GameError('rank', 'Only the boss or underboss moves a motion for the family.');
+  if (!decreeOf(decreeId)) throw new GameError('bad_decree', 'No such motion before the Commission.');
+  const seats = await seatedGangs(client);
+  if (!seats.some((s) => s.id === h.owned.gangId))
+    throw new GameError('no_seat', `The Commission seats the top ${COMMISSION.SEATS} families. Earn the standing.`);
+  const week = weekOf();
+  const deposit = COMMISSION.PROPOSAL_DEPOSIT;
+  // lock the family row (the postFamilyContract order: char → gang; no other locks follow)
+  const g = (await client.query('SELECT id, treasury FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  if (!g) throw new GameError('no_gang', 'The family is gone.');
+  if (Number(g.treasury) < deposit)
+    throw new GameError('treasury', `A motion takes a $${deposit.toLocaleString()} deposit from the treasury.`);
+  try {
+    await client.query('INSERT INTO commission_proposals (week, gang_id, decree, deposit) VALUES ($1,$2,$3,$4)',
+      [week, h.owned.gangId, decreeId, deposit]);
+  } catch { throw new GameError('proposed', 'The family already has a motion on the table this week.'); }
+  await client.query('UPDATE gangs SET treasury = treasury - $2 WHERE id=$1', [h.owned.gangId, deposit]);
+  await h.ledger(client, { currency: 'cash', amount: -deposit, reason: 'commission:proposal', counterparty: h.owned.gangId });
+  bus.emit('streets', { type: 'commission_proposal', family: seats.find((s) => s.id === h.owned.gangId)?.name, decree: decreeId });
+  await h.track(client, ch.account_id, 'commission_proposal', { decree: decreeId, week, deposit });
+  return { ok: true, week, decree: decreeId, deposit, takesEffectWeek: week + 1 };
+}
+
+// worker sweep — settle every proposal whose voting week has FROZEN: the proposal matching the
+// TALLY-enacted decree refunds to its treasury (`commission:refund`); every other — including a
+// deadlocked week's and a dissolved family's (dead-funder precedent) — FORFEITS to the street-tax
+// pool (`commission:forfeit`, the confiscation pattern). Per-week txn; lock order gangs (sorted) →
+// street_tax singleton (the canonical gangs→singletons order).
+export async function settleProposals(pool, opts = {}) {
+  const now = opts.week ?? weekOf();
+  const dueWeeks = [...new Set((await pool.query(
+    "SELECT week FROM commission_proposals WHERE status='open' AND week < $1", [now])).rows.map((r) => Number(r.week)))].sort();
+  let refunded = 0, forfeited = 0;
+  for (const week of dueWeeks) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const winner = await tallyWinner(client, week);
+      const rows = (await client.query(
+        "SELECT p.week, p.gang_id, p.decree, p.deposit, g.id AS live_gang FROM commission_proposals p LEFT JOIN gangs g ON g.id = p.gang_id WHERE p.status='open' AND p.week=$1", [week])).rows;
+      for (const gid of rows.filter((r) => r.live_gang).map((r) => r.gang_id).sort())
+        await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [gid]);
+      await client.query('SELECT 1 FROM street_tax WHERE id=1 FOR UPDATE');
+      for (const p of rows) {
+        const dep = Number(p.deposit);
+        const won = p.live_gang && winner && p.decree === winner.id;
+        if (won) {
+          await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [p.gang_id, dep]);
+          await ledger(client, { currency: 'cash', amount: dep, reason: 'commission:refund', counterparty: p.gang_id });
+          refunded++;
+        } else {
+          await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [dep]);
+          await ledger(client, { currency: 'cash', amount: -dep, reason: 'commission:forfeit', counterparty: p.gang_id });
+          forfeited++;
+        }
+        await client.query("UPDATE commission_proposals SET status=$3 WHERE week=$1 AND gang_id=$2",
+          [p.week, p.gang_id, won ? 'refunded' : 'forfeited']);
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); console.error('[settleProposals]', week, e?.code || e?.message || e); }
+    finally { client.release(); }
+  }
+  return { refunded, forfeited };
 }
 
 // THE VETO — the head of the table (seat 1's BOSS, and nobody else) kills the decree in force,
@@ -112,6 +196,11 @@ export async function commissionBoard(pool) {
   const decree = await activeDecree(pool, week);
   const vetoRow = (await pool.query(
     'SELECT x.decree, g.name FROM commission_vetoes x LEFT JOIN gangs g ON g.id = x.gang_id WHERE x.week=$1', [week])).rows[0] || null;
+  // step three — the week's motions on the table (public; when any exist, ONLY they are votable)
+  const proposals = (await pool.query(
+    `SELECT p.decree, p.deposit, g.name, g.tag FROM commission_proposals p LEFT JOIN gangs g ON g.id = p.gang_id
+      WHERE p.week=$1 ORDER BY p.at`, [week])).rows
+    .map((p) => ({ family: p.name || '(a family now dissolved)', tag: p.tag || null, decree: p.decree, deposit: Number(p.deposit) }));
   // the decree lapses when the week does (weeks are 7-day windows off the day epoch)
   const lapsesMs = (week + 1) * 7 * 86400000 - dayOf() * 86400000 - (Date.now() % 86400000);
   return {
@@ -120,6 +209,7 @@ export async function commissionBoard(pool) {
       weight: provisional[v.gang_id] || 0 })), // public — politics is the content
     decree: decree ? { ...decree, lapsesSeconds: Math.max(0, Math.ceil(lapsesMs / 1000)) } : null,
     veto: vetoRow ? { family: vetoRow.name || '(a family now dissolved)', decree: vetoRow.decree } : null,
+    proposals, proposalDeposit: COMMISSION.PROPOSAL_DEPOSIT,
     book: COMMISSION.DECREES, seatsCount: COMMISSION.SEATS, week,
   };
 }
