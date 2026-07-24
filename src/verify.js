@@ -66,12 +66,6 @@ export async function verifySocial(taskId, acct) {
     if (!res.ok) throw new GameError('verify_failed', 'Discord could not confirm membership.');
     return true;
   }
-  if (taskId === 'ob_repo') {
-    if (!process.env.GITHUB_REPO) throw new GameError('verify_unavailable', 'GitHub verification not configured.');
-    // Stargazer check needs the player's GitHub login — collected at claim time in a
-    // future client build; until then live mode rejects rather than trusting.
-    throw new GameError('verify_unavailable', 'GitHub star verification needs a linked GitHub login.');
-  }
   throw new GameError('bad_task', 'Unknown social task.');
 }
 
