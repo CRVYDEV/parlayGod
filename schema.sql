@@ -2031,3 +2031,13 @@ ALTER TABLE poker_entries ADD COLUMN IF NOT EXISTS eliminated BOOLEAN NOT NULL D
 -- duel_titles: lifetime season championships (account-level → survives death, the boxing-belt legend).
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_style TEXT;   -- brawler | gunslinger | fencer (NULL = no stance yet)
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS duel_titles INT NOT NULL DEFAULT 0;
+
+-- ── CREW HEISTS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §2) ──
+-- cased: a member cased the job (bounds the casing success bonus); crew_heists.fenced: this plan banks
+-- a standard score as HOT LOOT (fenceable book value) instead of cash. heist_loot: a character's hot-loot
+-- book value (NOT a §10.4 currency — the Port contraband twin; fenced via heist:fence, loot-able on a
+-- fire-kill). heists_pulled: lifetime successful heists (account-level → survives death, the crew legend).
+ALTER TABLE crew_heist_members ADD COLUMN IF NOT EXISTS cased BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE crew_heists ADD COLUMN IF NOT EXISTS fenced BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS heist_loot NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NULL DEFAULT 0;

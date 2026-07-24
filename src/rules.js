@@ -1296,18 +1296,55 @@ export const carCollateralValue = (modelId, trimId, dmg = 0) =>
 // INSIDE JOB is the co-op raid on a PLAYER's business: the pot is rateBps of the front's PENDING
 // income redirected to the crew (the shakedown argument — bounded by incomePerHr either way, the
 // owner keeps the rest and the clock advances by only the stolen share). NOT a new faucet.
-export const HEIST_ROLES = { brains: 'cunning', muscle: 'muscle', wheelman: 'speed', gun: 'muscle' };
+// TIER-4: two more role kinds (lookout/hacker) let the biggest jobs field a 5-man crew of DISTINCT
+// roles (the UNIQUE(heist_id, role) seat rule). Each maps to a stat the success roll reads (x3).
+export const HEIST_ROLES = { brains: 'cunning', muscle: 'muscle', wheelman: 'speed', gun: 'muscle', lookout: 'speed', hacker: 'cunning' };
+// THE JOB LADDER (Tier-4 §A) — 4 → 12 on the SAME ROI curve as the original four (the car-catalog
+// precedent: executeHeist already handles any job, so extending the array is CONTENT not a rebalance;
+// the takePerLvl bands are the sim-signed faucet — flagged in BALANCE.md). `minPulled` is the notoriety
+// soft-gate on the marquee jobs (Tier-4 §D — you earn your way up to the Federal Reserve).
 export const HEIST_JOBS = [
-  { id: 'payroll',  name: 'The Payroll Office', crew: 2, lvl: 8,  base: 0.65, stake: 10000, takePerLvl: [4400, 7000],   jailS: 120, rep: 30,  roles: ['muscle', 'wheelman'] },
-  { id: 'inside',   name: 'The Inside Job',     crew: 2, lvl: 12, base: 0.55, stake: 15000, rateBps: 6000,              jailS: 180, rep: 40,  roles: ['brains', 'muscle'] },
-  { id: 'vault',    name: 'The Bank Vault',     crew: 3, lvl: 20, base: 0.50, stake: 30000, takePerLvl: [11000, 17000], jailS: 240, rep: 80,  roles: ['brains', 'muscle', 'wheelman'] },
-  { id: 'fedtrain', name: 'The Reserve Train',  crew: 4, lvl: 40, base: 0.38, stake: 80000, takePerLvl: [26000, 37000], jailS: 420, rep: 200, roles: ['brains', 'muscle', 'gun', 'wheelman'] },
+  { id: 'corner',    name: 'The Corner Store',    crew: 2, lvl: 4,  base: 0.70, stake: 4000,   takePerLvl: [2200, 3600],   jailS: 90,  rep: 15,  roles: ['muscle', 'wheelman'] },
+  { id: 'payroll',   name: 'The Payroll Office',  crew: 2, lvl: 8,  base: 0.65, stake: 10000,  takePerLvl: [4400, 7000],   jailS: 120, rep: 30,  roles: ['muscle', 'wheelman'] },
+  { id: 'inside',    name: 'The Inside Job',      crew: 2, lvl: 12, base: 0.55, stake: 15000,  rateBps: 6000,              jailS: 180, rep: 40,  roles: ['brains', 'muscle'] },
+  { id: 'jewel',     name: 'The Jewel Heist',     crew: 3, lvl: 15, base: 0.52, stake: 22000,  takePerLvl: [8000, 12500],  jailS: 210, rep: 60,  roles: ['brains', 'muscle', 'wheelman'] },
+  { id: 'vault',     name: 'The Bank Vault',      crew: 3, lvl: 20, base: 0.50, stake: 30000,  takePerLvl: [11000, 17000], jailS: 240, rep: 80,  roles: ['brains', 'muscle', 'wheelman'] },
+  { id: 'armored',   name: 'The Armored Car',     crew: 3, lvl: 26, base: 0.46, stake: 42000,  takePerLvl: [14000, 21000], jailS: 300, rep: 110, roles: ['gun', 'muscle', 'wheelman'] },
+  { id: 'casino',    name: 'The Casino Count Room', crew: 4, lvl: 33, base: 0.42, stake: 62000, takePerLvl: [20000, 29000], jailS: 360, rep: 160, roles: ['brains', 'hacker', 'muscle', 'wheelman'] },
+  { id: 'fedtrain',  name: 'The Reserve Train',   crew: 4, lvl: 40, base: 0.38, stake: 80000,  takePerLvl: [26000, 37000], jailS: 420, rep: 200, roles: ['brains', 'muscle', 'gun', 'wheelman'] },
+  { id: 'diamond',   name: 'The Diamond District', crew: 4, lvl: 48, base: 0.36, stake: 110000, takePerLvl: [32000, 45000], jailS: 480, rep: 260, roles: ['brains', 'hacker', 'gun', 'wheelman'] },
+  { id: 'museum',    name: 'The Art Museum',      crew: 5, lvl: 56, base: 0.34, stake: 150000, takePerLvl: [40000, 56000], jailS: 540, rep: 340, roles: ['brains', 'hacker', 'muscle', 'gun', 'wheelman'], minPulled: 5 },
+  { id: 'goldvault', name: 'The Gold Depository', crew: 5, lvl: 68, base: 0.31, stake: 220000, takePerLvl: [52000, 72000], jailS: 600, rep: 440, roles: ['brains', 'hacker', 'muscle', 'gun', 'lookout'], minPulled: 12 },
+  { id: 'thefed',    name: 'The Federal Reserve', crew: 5, lvl: 80, base: 0.28, stake: 320000, takePerLvl: [70000, 95000], jailS: 720, rep: 600, roles: ['brains', 'hacker', 'muscle', 'gun', 'wheelman'], minPulled: 25 },
 ];
 export const heistJobOf = (id) => HEIST_JOBS.find((j) => j.id === id) || null;
 export const HEIST_PLAN_TTL_MS = 6 * 3600 * 1000;  // a plan goes stale after 6h (sweep refunds a living leader)
 export const HEIST_RAT_BPS = 5000;                  // the informant's payout: 50% of the stake (self-rat is -EV)
 export const HEIST_LEADER_WEIGHT = 1.2;             // the leader's split weight (fronted the stake)
 export const HEIST_INSIDE_CD_MS = 24 * 3600 * 1000; // per-VENUE inside-job cooldown (win or lose)
+// TIER-4 §B — THE CASING PHASE: a crew member spends energy to case the job (once each), each casing
+// adds a bounded bump to the success roll — prep rewards patience, capped so it never guarantees a score.
+export const HEIST_CASE_ENERGY = 10;
+export const HEIST_CASE_STEP = 0.03;   // per cased member
+export const HEIST_CASE_MAX = 0.15;    // the ceiling on the total casing bonus to p
+// TIER-4 §C — THE FENCE: a standard score can be taken HOT (banked as fenceable book value instead of
+// cash) then moved through a fence at a DRIFTING daily rate. The band is centered BELOW 1.0 — taking it
+// hot is on average WORSE than cash (so it's never a net faucet increase, §10.4-safe) but a good fence
+// day beats the cash rate: a market-timing gamble. Hot loot draws heat + a marked man's stash is loot-able.
+export const HEIST_FENCE_LO = 0.80, HEIST_FENCE_SPAN = 0.30;   // rate ∈ [0.80, 1.10], mean ~0.95
+export const HEIST_FENCE_HEAT = 8;
+export const heistFenceMultOf = (day = dayOf()) => HEIST_FENCE_LO + hash01(`heistfence:${day}:${MARKET_SEED}`) * HEIST_FENCE_SPAN;
+export const HEIST_LOOT_RATE = 0.5;    // a fire-kill loots this much of the victim's HOT heist loot (P1.1 twin)
+// TIER-4 §D — CREW NOTORIETY: lifetime successful heists (account-level, survives death — the boxing/
+// hitman-rep legend twin). Ranks are status; the count also soft-gates the marquee jobs (minPulled).
+export const HEIST_RANKS = [
+  { pulled: 0,   name: 'Small-Timer' },
+  { pulled: 3,   name: 'Blagger' },
+  { pulled: 10,  name: 'Box Man' },
+  { pulled: 25,  name: 'Master Thief' },
+  { pulled: 60,  name: 'The Ghost' },
+];
+export const heistRankOf = (n) => [...HEIST_RANKS].reverse().find((r) => Number(n) >= r.pulled) || HEIST_RANKS[0];
 // SMUGGLING CONVOYS — bulk goods on a real clock: visible, ambushable, turf-sheltered. The only
 // new money flow is the guard fee (a cash sink); an ambush is a pure goods TRANSFER (trunk-capped)
 // and goods aren't a §10.4 currency. Numbers are founder sign-off levers. TEST-ONLY: CONVOY_MS

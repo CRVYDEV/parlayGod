@@ -10,7 +10,7 @@ import {
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
-  worldNpcOf, liberationCost, HONOR, DIPLOMACY,
+  worldNpcOf, liberationCost, HONOR, DIPLOMACY, HEIST_LOOT_RATE,
   seasonModOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -1082,6 +1082,18 @@ export async function fire(ch, victim, client, h, rounds) {
       if (contraLoot > 0) {
         await client.query('UPDATE characters SET contraband = contraband - $2 WHERE id=$1', [victim.id, contraLoot]);
         await client.query('UPDATE characters SET contraband = contraband + $2 WHERE id=$1', [ch.id, contraLoot]);
+      }
+    }
+    // HEIST TIER-4 — HOT LOOT LOOT (the same P1.1 twin): a marked thief risks the score he took HOT to
+    // fence later. heist_loot is a cash-book-value commodity, NOT a §10.4 currency (no ledger row); the
+    // remainder dies with the street. Absolute reads (NUMERIC, arith-safe).
+    let hotLoot = 0;
+    const vHot = Math.floor(Number(victim.heist_loot) || 0);
+    if (vHot > 0) {
+      hotLoot = Math.floor(vHot * HEIST_LOOT_RATE);
+      if (hotLoot > 0) {
+        await client.query('UPDATE characters SET heist_loot = heist_loot - $2 WHERE id=$1', [victim.id, hotLoot]);
+        await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [ch.id, hotLoot]);
       }
     }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both

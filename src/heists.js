@@ -16,7 +16,8 @@
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
-         HEIST_INSIDE_CD_MS, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
+         HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
+         HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
 import { accrued, decayedScrutiny } from './business.js';
 import { grantShares } from './portfolio.js';
 
@@ -34,13 +35,20 @@ async function activeMembership(client, characterId) {
       WHERE m.character_id=$1 AND ch.status='planning'`, [characterId])).rows[0] || null;
 }
 
-function gateJoiner(ch, job) {
+function gateJoiner(ch, job, pulled = 0) {
   if (jailed(ch)) throw new GameError('jailed', 'Nobody plans a score from lockup.');
   if (hospitalized(ch)) throw new GameError('hosp', "Not in your condition. See the Doc first.");
   // P1.3/D2 (audit H1): a safehouse is a shield, not a base of operations — no crew work from it
   if (safeHoused(ch)) throw new GameError('safe', "No jobs from a safehouse — a shield, not a bunker.");
   if (cooling(ch)) throw new GameError('cooldown', 'Your next job lines up later — one Score per window.');
   if (levelOf(Number(ch.respect)) < job.lvl) throw new GameError('level', `${job.name} wants made players — level ${job.lvl}.`);
+  // Tier-4 §D: the marquee jobs are notoriety-gated — you earn your way up to the big scores
+  if (job.minPulled && Number(pulled) < job.minPulled)
+    throw new GameError('notoriety', `${job.name} only takes proven crews — pull ${job.minPulled} scores first (you have ${pulled}).`);
+}
+// lifetime successful heists (account-level, survives death) — for the minPulled notoriety gate
+async function pulledOf(client, accountId) {
+  return Number((await client.query('SELECT heists_pulled FROM account_persistent WHERE account_id=$1', [accountId])).rows[0]?.heists_pulled || 0);
 }
 
 // step two: every slot is a ROLE — pick one or take the first open seat; each claimed once.
@@ -55,10 +63,10 @@ function pickRole(job, want, taken) {
 // PLAN — the leader picks the job and fronts the stake (tools & bribes; sunk once you go).
 // Step two: `role` claims the leader's seat; the INSIDE JOB takes a `businessId` mark.
 export async function planHeist(ch, jobId, opts, client, h) {
-  const { role: wantRole, businessId } = opts || {};
+  const { role: wantRole, businessId, fence } = opts || {};
   const job = heistJobOf(jobId);
   if (!job) throw new GameError('bad_job', 'No such job on the books.');
-  gateJoiner(ch, job);
+  gateJoiner(ch, job, await pulledOf(client, ch.account_id));
   if (await activeMembership(client, ch.id)) throw new GameError('busy', "You're already on a job.");
   if (Number(ch.cash) < job.stake) throw new GameError('cash', `${job.name} takes $${job.stake} up front — tools and bribes.`);
   let target = null;
@@ -70,13 +78,16 @@ export async function planHeist(ch, jobId, opts, client, h) {
     target = businessId;
   }
   const role = pickRole(job, wantRole, []);
+  // Tier-4 §C: the leader can elect to take a STANDARD score HOT (banked as fenceable loot, not cash) —
+  // never for an inside job (its pot is a shakedown of pending income, always cash)
+  const fenced = !!fence && !job.rateBps;
   ch.cash = Number(ch.cash) - job.stake;
   const id = uid();
-  await client.query('INSERT INTO crew_heists (id, job, leader_character, target_business) VALUES ($1,$2,$3,$4)', [id, job.id, ch.id, target]);
+  await client.query('INSERT INTO crew_heists (id, job, leader_character, target_business, fenced) VALUES ($1,$2,$3,$4,$5)', [id, job.id, ch.id, target, fenced]);
   await client.query('INSERT INTO crew_heist_members (heist_id, character_id, role) VALUES ($1,$2,$3)', [id, ch.id, role]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -job.stake, reason: 'heist:crew:stake' });
   await h.track(client, ch.account_id, 'heist_plan', { job: job.id });
-  return { ok: true, id, job: job.id, name: job.name, role, crewNeeded: job.crew - 1, stake: job.stake };
+  return { ok: true, id, job: job.id, name: job.name, role, crewNeeded: job.crew - 1, stake: job.stake, fenced };
 }
 
 // JOIN — off the open board; the job's gates apply to every member. `role` picks your seat.
@@ -85,7 +96,7 @@ export async function joinHeist(ch, heistId, wantRole, client, h) {
   if (!row) throw new GameError('no_heist', 'That job is gone.');
   if (stale(row)) throw new GameError('stale', 'That plan went cold.');
   const job = heistJobOf(row.job);
-  gateJoiner(ch, job);
+  gateJoiner(ch, job, await pulledOf(client, ch.account_id));
   if (await activeMembership(client, ch.id)) throw new GameError('busy', "You're already on a job.");
   const taken = (await client.query('SELECT role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows.map((r) => r.role);
   if (taken.length >= job.crew) throw new GameError('full', 'The crew is set.');
@@ -127,6 +138,38 @@ export async function ratHeist(ch, heistId, client, h) {
   return { ok: true }; // the response is as quiet as the act
 }
 
+// THE CASING PHASE (Tier-4 §B) — a crew member spends energy to case the job (once each); every
+// cased member raises the crew's success roll a notch, capped so casing never guarantees a score.
+export async function caseJob(ch, heistId, client, h) {
+  const row = (await client.query("SELECT id FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
+  if (!row) throw new GameError('no_heist', 'That job is gone.');
+  const mine = (await client.query('SELECT cased FROM crew_heist_members WHERE heist_id=$1 AND character_id=$2', [heistId, ch.id])).rows[0];
+  if (!mine) throw new GameError('not_crew', "You're not on that job.");
+  if (mine.cased) throw new GameError('cased', "You've already cased this one — you can't case it twice.");
+  if (Number(ch.energy) < HEIST_CASE_ENERGY) throw new GameError('energy', `Casing the joint takes ${HEIST_CASE_ENERGY} energy.`);
+  ch.energy = Number(ch.energy) - HEIST_CASE_ENERGY; // energy IS persisted positionally — no clobber
+  await client.query('UPDATE crew_heist_members SET cased=true WHERE heist_id=$1 AND character_id=$2', [heistId, ch.id]);
+  await h.track(client, ch.account_id, 'heist_case', { heist: heistId });
+  return { ok: true, cased: true, bonusStep: HEIST_CASE_STEP };
+}
+
+// THE FENCE (Tier-4 §C) — sell ALL warehoused HOT LOOT at today's drifting fence rate (a bounded cash
+// faucet centered below 1.0, so it's a variance play, never a net faucet increase). Draws heat — moving
+// hot goods is exposure. A marked man's stash can be looted on a fire-kill (P1.1 twin, in social.js).
+export async function fenceLoot(ch, client, h) {
+  const loot = Math.floor(Number(ch.heist_loot || 0));
+  if (loot <= 0) throw new GameError('nothing', "You've got no hot loot to move.");
+  const mult = heistFenceMultOf();
+  const paid = Math.floor(loot * mult);
+  ch.cash = Number(ch.cash) + paid;                    // cash + heat ARE persisted positionally
+  ch.heat = Math.min(100, Number(ch.heat) + HEIST_FENCE_HEAT);
+  ch.heist_loot = 0;                                    // keep the in-memory view honest (direct-SQL column)
+  await client.query('UPDATE characters SET heist_loot = 0 WHERE id=$1', [ch.id]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: paid, reason: 'heist:fence' });
+  await h.track(client, ch.account_id, 'heist_fence', { loot, paid });
+  return { ok: true, loot, mult: +mult.toFixed(3), paid };
+}
+
 // EXECUTE — leader-only, crew full, everyone ready. One roll for everyone.
 // Lock order (audit M1): leader (withCharacter) → member character rows SORTED → the heist row
 // → the target business row. The heist row is read UNLOCKED first to learn the crew, then
@@ -152,7 +195,7 @@ export async function executeHeist(ch, heistId, client, h) {
   // NOW the heist row — and verify the crew we locked is still the crew
   const row = (await client.query("SELECT * FROM crew_heists WHERE id=$1 AND status='planning' FOR UPDATE", [heistId])).rows[0];
   if (!row) throw new GameError('no_heist', 'That job is gone.');
-  const members = (await client.query('SELECT character_id, ratted, role FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
+  const members = (await client.query('SELECT character_id, ratted, role, cased FROM crew_heist_members WHERE heist_id=$1', [heistId])).rows;
   if (members.map((m) => m.character_id).sort().join() !== [...preIds].sort().join())
     throw new GameError('crew_changed', 'The crew shifted under you — call the go again.');
   if (members.length < job.crew) throw new GameError('crew_short', `${job.name} needs ${job.crew} — you have ${members.length}.`);
@@ -222,9 +265,11 @@ export async function executeHeist(ch, heistId, client, h) {
   // a crew of true specialists matches a crew of all-rounders — they just got there cheaper)
   const roleOf = Object.fromEntries(members.map((m) => [m.character_id, m.role]));
   const avgRoleStat = crewRows.reduce((a, m) => a + Number(m[HEIST_ROLES[roleOf[m.id]] || 'muscle']), 0) / crewRows.length;
-  const p = Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000));
+  // Tier-4 §B: every cased member raises the roll a notch, capped (casing never guarantees a score)
+  const caseBonus = Math.min(HEIST_CASE_MAX, members.filter((m) => m.cased).length * HEIST_CASE_STEP);
+  const p = Math.min(0.92, Math.max(0.15, job.base + (avgRoleStat * 3 - 30) / 1000 + caseBonus));
   const roll = Math.random();
-  await h.rngLog(client, ch.id, `heist:${job.id}`, roll, `${roll < p ? 'score' : 'bust'} (P ${p.toFixed(3)}, crew ${crewRows.length})`);
+  await h.rngLog(client, ch.id, `heist:${job.id}`, roll, `${roll < p ? 'score' : 'bust'} (P ${p.toFixed(3)}, crew ${crewRows.length}${caseBonus ? `, cased +${caseBonus.toFixed(2)}` : ''})`);
   // an INSIDE JOB marks the venue win or lose — the attempt is what locks the books down
   if (biz) await client.query('UPDATE businesses SET inside_at=now() WHERE id=$1', [biz.id]);
 
@@ -256,16 +301,31 @@ export async function executeHeist(ch, heistId, client, h) {
     // fixed cut of an earned, skill-influenced win, never a random draw for stock (the R3 rule).
     const cutOmr = biz ? 0 : Math.round(PORTFOLIO.SCORE_CUT_PER_LVL *
       (crewRows.reduce((a, m) => a + levelOf(Number(m.respect)), 0) / crewRows.length));
+    // Tier-4 §C: a standard score flagged HOT banks each share as fenceable loot (book value, NOT
+    // a §10.4 currency — no ledger row; the Port contraband twin) instead of cash. The clock/rep still
+    // apply; the crew fences it later at the drifting rate (a market-timing gamble, loot-able if marked).
+    const hot = row.fenced && !biz;
     let leaderCut = 0;
     for (const m of crewRows) {
-      if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
-      else {
-        // absolute writes off the locked row (the pg-mem arithmetic discipline)
-        await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
-          [Number(m.cash) + shares[m.id], Number(m.respect) + rep, doneAt]);
-        await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id], rwaCut: cutOmr || undefined });
+      if (hot) {
+        // hot loot is a direct-SQL column (not in the positional persist) → write it for EVERYONE incl. the leader
+        await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [m.id, shares[m.id]]);
+        if (m.id === ch.id) { ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
+        else { await setMember(m.id, 'respect=$2, heist_at=$3', [Number(m.respect) + rep, doneAt]);
+          await h.notify(client, m.id, 'heist_score', { job: job.name, hot: shares[m.id], rwaCut: cutOmr || undefined }); }
+      } else {
+        if (m.id === ch.id) { ch.cash = Number(ch.cash) + shares[m.id]; ch.respect = Number(ch.respect) + rep; ch.heist_at = doneAt; }
+        else {
+          // absolute writes off the locked row (the pg-mem arithmetic discipline)
+          await setMember(m.id, 'cash=$2, respect=$3, heist_at=$4',
+            [Number(m.cash) + shares[m.id], Number(m.respect) + rep, doneAt]);
+          await h.notify(client, m.id, 'heist_score', { job: job.name, share: shares[m.id], rwaCut: cutOmr || undefined });
+        }
+        await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
       }
-      await h.ledger(client, { characterId: m.id, currency: 'cash', amount: shares[m.id], reason });
+      // Tier-4 §D — THE CREW LEGEND: a successful heist banks a lifetime notch for every crewman
+      // (account-level, survives death — direct SQL, off the positional persist; the duel_wins twin)
+      await client.query('UPDATE account_persistent SET heists_pulled = heists_pulled + 1 WHERE account_id=$1', [m.account_id]);
       if (cutOmr > 0) { // the legit cut — a status grant (no §10.4 currency), account-level so it survives death
         const g = await grantShares(client, m.account_id, PORTFOLIO.SCORE_TICKER, cutOmr);
         if (m.id === ch.id && g) { // keep the leader's own returned view fresh (portfolio isn't persist-clobbered)
@@ -276,9 +336,9 @@ export async function executeHeist(ch, heistId, client, h) {
         }
       }
     }
-    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, rwaCut: cutOmr });
+    await h.track(client, ch.account_id, 'heist_score', { job: job.id, pot, crew: crewRows.length, rwaCut: cutOmr, hot });
     bus.emit('streets', { type: 'heist_score', job: job.name, pot, crew: crewRows.length });
-    return { ok: true, score: true, job: job.id, pot, share: shares[ch.id], rep: job.rep,
+    return { ok: true, score: true, job: job.id, pot, share: hot ? 0 : shares[ch.id], hot: hot ? shares[ch.id] : 0, rep: job.rep,
       ...(cutOmr > 0 ? { rwaCut: { ticker: PORTFOLIO.SCORE_TICKER, shares: leaderCut } } : {}) };
   }
 
@@ -316,14 +376,33 @@ export async function heistBoard(pool, characterId) {
   let my = null;
   if (mine) {
     const crew = (await pool.query(
-      'SELECT c.name, m.role FROM crew_heist_members m JOIN characters c ON c.id = m.character_id WHERE m.heist_id=$1', [mine.id])).rows;
+      'SELECT c.name, m.role, m.cased FROM crew_heist_members m JOIN characters c ON c.id = m.character_id WHERE m.heist_id=$1', [mine.id])).rows;
     const j = heistJobOf(mine.job);
-    my = { id: mine.id, job: mine.job, name: j.name, leader: mine.leader_character === characterId,
-      crew: crew.map((c) => ({ name: c.name, role: c.role })), crewNeeded: j.crew - crew.length };
+    const row = (await pool.query('SELECT fenced FROM crew_heists WHERE id=$1', [mine.id])).rows[0];
+    my = { id: mine.id, job: mine.job, name: j.name, leader: mine.leader_character === characterId, fenced: !!row?.fenced,
+      crew: crew.map((c) => ({ name: c.name, role: c.role, cased: !!c.cased })), crewNeeded: j.crew - crew.length };
   }
+  // Tier-4: the actor's hot loot + lifetime notoriety (account-level, survives death)
+  const meRow = (await pool.query(
+    `SELECT c.heist_loot, ap.heists_pulled FROM characters c JOIN account_persistent ap ON ap.account_id=c.account_id WHERE c.id=$1`, [characterId])).rows[0] || {};
+  const pulled = Number(meRow.heists_pulled || 0);
   return { jobs: HEIST_JOBS.map((j) => ({ id: j.id, name: j.name, crew: j.crew, lvl: j.lvl, stake: j.stake,
-    base: j.base, takePerLvl: j.takePerLvl || null, rateBps: j.rateBps || null, roles: j.roles, jailS: j.jailS })),
-    roleStats: HEIST_ROLES, open, mine: my };
+    base: j.base, takePerLvl: j.takePerLvl || null, rateBps: j.rateBps || null, roles: j.roles, jailS: j.jailS, minPulled: j.minPulled || 0,
+    locked: !!(j.minPulled && pulled < j.minPulled) })),
+    roleStats: HEIST_ROLES, open, mine: my,
+    you: { hotLoot: Math.floor(Number(meRow.heist_loot || 0)), pulled, rank: heistRankOf(pulled).name },
+    caseEnergy: HEIST_CASE_ENERGY, ranks: HEIST_RANKS };
+}
+
+// THE CREW LEADERBOARD (Tier-4 §D) — the most notorious thieves by lifetime scores (agents excluded).
+export async function heistLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT c.name, ap.heists_pulled FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.heists_pulled > 0
+      ORDER BY ap.heists_pulled DESC, c.name LIMIT 20`)).rows;
+  return { crews: rows.map((r, i) => ({ pos: i + 1, name: r.name, pulled: Number(r.heists_pulled),
+    rank: heistRankOf(r.heists_pulled).name })) };
 }
 
 // Worker sweep: stale plans are abandoned and a LIVING leader takes the stake back (per-heist

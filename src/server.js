@@ -1244,15 +1244,20 @@ export async function buildServer() {
   });
   app.post('/v1/heists/plan', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) =>
-      Heists.planHeist(ch, req.body?.job, { role: req.body?.role, businessId: req.body?.businessId }, client, h)));
+      Heists.planHeist(ch, req.body?.job, { role: req.body?.role, businessId: req.body?.businessId, fence: req.body?.fence }, client, h)));
   app.post('/v1/heists/:id/join', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, req.body?.role, client, h)));
   app.post('/v1/heists/:id/leave', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.leaveHeist(ch, req.params.id, client, h)));
+  app.post('/v1/heists/:id/case', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.caseJob(ch, req.params.id, client, h)));
   app.post('/v1/heists/:id/rat', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.ratHeist(ch, req.params.id, client, h)));
   app.post('/v1/heists/:id/execute', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.executeHeist(ch, req.params.id, client, h)));
+  app.post('/v1/heists/fence', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.fenceLoot(ch, client, h)));
+  app.get('/v1/leaderboard/heists', { preHandler: auth }, async () => Heists.heistLeaderboard(pool));
 
   // THE GAMBLING DEN (Neon Mile, cash only — never $OMR): street craps + the daily Numbers.
   app.post('/v1/casino/dice', { preHandler: auth }, async (req) =>

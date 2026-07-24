@@ -2414,9 +2414,10 @@
     'Convoys & Heists': [
       ['GET', '/v1/convoys'], ['POST', '/v1/convoy', { to: 'docks', goodId: 'gin', qty: 1 }], ['POST', '/v1/convoy/load', { goodId: 'gin', qty: 1 }],
       ['POST', '/v1/convoy/depart', { guards: 'none' }], ['POST', '/v1/convoy/:id/ambush', {}], ['POST', '/v1/convoy/:id/collect', {}],
-      ['GET', '/v1/heists'], ['POST', '/v1/heists/plan', { job: 'payroll', role: 'brains' }],
-      ['POST', '/v1/heists/:id/join', { role: 'muscle' }], ['POST', '/v1/heists/:id/execute', {}],
-      ['POST', '/v1/heists/:id/leave', {}], ['POST', '/v1/heists/:id/rat', {}], ['POST', '/v1/heist', {}],
+      ['GET', '/v1/heists'], ['POST', '/v1/heists/plan', { job: 'payroll', role: 'brains', fence: false }],
+      ['POST', '/v1/heists/:id/join', { role: 'muscle' }], ['POST', '/v1/heists/:id/case', {}], ['POST', '/v1/heists/:id/execute', {}],
+      ['POST', '/v1/heists/:id/leave', {}], ['POST', '/v1/heists/:id/rat', {}], ['POST', '/v1/heists/fence', {}],
+      ['GET', '/v1/leaderboard/heists'], ['POST', '/v1/heist', {}],
     ],
     'Business Empire': [
       ['GET', '/v1/catalog'], ['GET', '/v1/business'], ['POST', '/v1/business/:kind/buy', {}],
@@ -3442,17 +3443,24 @@
         ${me.heistSeconds > 0 ? `<span class="chip cold">cooling ${mins(me.heistSeconds)}</span>` : '<button class="act" data-do="POST /v1/heist">pull it</button>'}</div>
 
       <h2 style="margin-top:12px">Crew Heists</h2>
+      ${hb.you ? `<div class="card"><span class="t">YOUR JACKET</span>
+        <span class="chip">${esc(hb.you.rank)}</span> <span class="d">${hb.you.pulled} score${hb.you.pulled === 1 ? '' : 's'} pulled</span>
+        ${hb.you.hotLoot > 0 ? `<div style="margin-top:6px">🔥 <b>hot loot: $${fmt(hb.you.hotLoot)}</b> <span class="d">— fence it at today's rate (draws heat; a killer loots half if you're marked)</span>
+          <button class="act" data-do="POST /v1/heists/fence">fence it</button></div>` : ''}</div>` : ''}
       ${my ? `
-        <div class="card" style="border-color:var(--neon)"><span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>
-          <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
+        <div class="card" style="border-color:var(--neon)"><span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>${my.fenced ? ' <span class="chip" style="color:var(--warn)">🔥 HOT</span>' : ''}
+          <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})${c.cased ? ' ✓cased' : ''}`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
+          <button class="act" data-heistdo="case:${my.id}">case the joint (${hb.caseEnergy} energy — raises the odds)</button>
           ${my.leader ? `<button class="act" data-heistdo="execute:${my.id}" ${my.crewNeeded > 0 ? 'disabled' : ''}>EXECUTE</button>
             <button class="act" data-heistdo="leave:${my.id}">disband</button>` : `<button class="act" data-heistdo="leave:${my.id}">walk away</button>`}
           <button class="act" data-heistdo="rat:${my.id}" style="opacity:.55">…talk to the badges</button></div>` : `
         <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:4px">plan one (you front the stake) or crew up off the board:</div>
-        <select id="hj-job">${(hb.jobs || []).map((jb) => `<option value="${jb.id}">${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}</option>`).join('')}</select>
+        <select id="hj-job">${(hb.jobs || []).map((jb) => `<option value="${jb.id}"${jb.locked ? ' disabled' : ''}>${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}${jb.locked ? ` (needs ${jb.minPulled} scores)` : ''}</option>`).join('')}</select>
         <select id="hj-role">${(hb.jobs?.[0]?.roles || []).map((ro) => `<option>${ro}</option>`).join('')}</select>
         <input id="hj-biz" placeholder="mark's business id (inside job)" size="24" style="display:none">
-        <button class="act" id="hj-plan">plan it</button>`}
+        <label id="hj-fencelbl" style="font-size:12.5px;color:var(--dim)"><input type="checkbox" id="hj-fence"> 🔥 take it HOT (fence later — a gamble, loot-able)</label>
+        <button class="act" id="hj-plan">plan it</button>
+        <div class="d" style="font-size:11.5px;margin-top:2px">🏆 <a href="#" id="hj-lb">the most notorious crews →</a></div>`}
       ${(hb.open || []).length ? `<div class="grid" style="margin-top:6px">${hb.open.map((o) => `
         <div class="card"><span class="t">${o.name}</span>
           <div class="d">${o.leader}'s job · ${o.crew} in, ${o.crewNeeded} needed · lvl ${o.lvl}+</div>
@@ -3488,14 +3496,21 @@
       const syncRoles = () => {
         const jb = (hb.jobs || []).find((x) => x.id === jobSel.value);
         t.querySelector('#hj-role').innerHTML = (jb?.roles || []).map((ro) => `<option>${ro}</option>`).join('');
-        t.querySelector('#hj-biz').style.display = jobSel.value === 'inside' ? 'inline-block' : 'none';
+        const inside = jobSel.value === 'inside';
+        t.querySelector('#hj-biz').style.display = inside ? 'inline-block' : 'none';
+        t.querySelector('#hj-fencelbl').style.display = inside ? 'none' : 'inline-block'; // no fence on the shakedown
       };
       jobSel.onchange = syncRoles; syncRoles();
       t.querySelector('#hj-plan').onclick = () => {
         const body = { job: jobSel.value, role: t.querySelector('#hj-role').value };
         const biz = t.querySelector('#hj-biz').value.trim(); if (biz) body.businessId = biz;
+        if (t.querySelector('#hj-fence').checked) body.fence = true;
         act('POST', '/v1/heists/plan', body).then(() => renderScores());
       };
+      const lb = t.querySelector('#hj-lb');
+      if (lb) lb.onclick = async (e) => { e.preventDefault();
+        const b = (await api('GET', '/v1/leaderboard/heists')).body?.crews || [];
+        toast(b.slice(0, 5).map((c, i) => `${i + 1}. ${c.name} — ${c.rank} (${c.pulled})`).join('\n') || 'no notorious crews yet'); };
     }
     t.querySelectorAll('[data-heistdo]').forEach((b) => b.onclick = () => {
       const [what, id] = b.dataset.heistdo.split(':');
