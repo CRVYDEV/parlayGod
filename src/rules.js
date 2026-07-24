@@ -964,6 +964,23 @@ export const M3 = {
   // killer can only HOLD a front they could run (level + an empty kind slot). Set false to disable.
   // Founder sign-off lever (new/tunable — sim the concentration effect before production).
   SACK_ON_KILL: true,
+  // D6a — THE APPROACH (stakes/spine review #6: deepen the core crime verb). Every job now takes a
+  // risk/reward CHOICE — Case It (quiet), Standard, or Go Loud — a real per-job decision instead of a
+  // single click + RNG. The design constraint: the CASH faucet stays EV-NEUTRAL by construction
+  // (payMult = ~1/successMult), so the signed §7.2 crime cash curve is UNTOUCHED (the sim measures
+  // 'standard'; the default/omitted approach IS standard, byte-identical to the old behaviour). The
+  // choice is real because the SECONDARY axes shift: LOUD trades success for a bigger single score +
+  // more contraband/makings + rep, but draws LAW HEAT and a harsher bust; QUIET is the safe, low-heat,
+  // soft-bust play when you're near a RICO indictment or can't afford lockup. successMult is clamped to
+  // the same 0.97 ceiling, so quiet's edge tapers for a maxed street (it's a caution tool, not free EV).
+  // Materials (cb/makings) + rep + heat shifts are founder SIGN-OFF LEVERS (sim before production);
+  // CRIME_LOUD_CASH_PREMIUM (default 1.0 = EV-neutral) is the dial if loud should pay a real cash premium.
+  CRIME_APPROACHES: {
+    quiet:    { id: 'quiet',    name: 'Case It',  successMult: 1.12, payMult: 0.89, crateMult: 0.5, makingsMult: 0.5, repMult: 1.0,  heat: 0,  jailMult: 0.8 },
+    standard: { id: 'standard', name: 'Standard', successMult: 1.0,  payMult: 1.0,  crateMult: 1.0, makingsMult: 1.0, repMult: 1.0,  heat: 0,  jailMult: 1.0 },
+    loud:     { id: 'loud',     name: 'Go Loud',  successMult: 0.82, payMult: 1.22, crateMult: 1.6, makingsMult: 1.5, repMult: 1.15, heat: 6,  jailMult: 1.4 },
+  },
+  CRIME_LOUD_CASH_PREMIUM: 1.0, // multiplies loud's payMult; >1 makes Go Loud pay a genuine cash premium (a faucet change → sign-off)
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited

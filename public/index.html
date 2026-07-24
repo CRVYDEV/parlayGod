@@ -759,8 +759,8 @@
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
-    if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
-    if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways');
+    if (body.success === true) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
+    if (body.success === false) bits.push(body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -2143,10 +2143,18 @@
     const sq = (await api('GET', '/v1/soldiers')).body || {};
     // the density fix: don't wall a player with all 29 jobs — lead with the BEST ones they can
     // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
+    // D6a — THE APPROACH: every job takes a risk/reward choice. Case It = safer, low-heat, soft bust
+    // (play it when you're hot or can't afford lockup); Go Loud = bigger single score + more contraband,
+    // but draws law heat + a harder bust. Same cash EV — the choice is your risk appetite.
+    const dis = (c) => (me?.level || 1) < c.lvl ? ' disabled' : '';
     const crimeCard = (c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
-        <button class="act" data-do="POST /v1/crimes/${c.id}"${(me?.level || 1) < c.lvl ? ' disabled' : ''}>do it</button></div>`;
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+          <button class="act" style="opacity:.8" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"quiet"}'${dis(c)}>case it</button>
+          <button class="act" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"standard"}'${dis(c)}>do it</button>
+          <button class="act" style="color:#ff9a6a" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"loud"}'${dis(c)}>go loud</button>
+        </div></div>`;
     const allCrimes = [...(rules?.crimes || [])].sort((a, b) => a.lvl - b.lvl);
     const lvl = me?.level || 1;
     const unlocked = allCrimes.filter((c) => c.lvl <= lvl);

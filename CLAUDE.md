@@ -4875,3 +4875,30 @@ keeps 7→6 after loot→5 after the 25% duty). Remaining founder dials (NOT app
 side territory stack (L1d), and legend-decay/succession-friction (L2b/L2c). Suite 46/46 + sim drift-0. All
 numbers (`DEATH_DUTY_RATE`, `BUSINESS_UPKEEP_PROG_BPS`, the halved apex incomes) are founder sign-off levers
 (BALANCE.md).
+
+**THE APPROACH — deepening the core crime verb (stakes/spine review #6 / D6a) — BUILT** (`src/rules.js`
+`M3.CRIME_APPROACHES`, `src/game.js` `doCrime`, `src/server.js`, `public/index.html`, `test/smoke.js`;
+the review's last open finding). The core crime loop was one click + RNG; every job now takes a per-job
+risk/reward CHOICE — **Case It** (quiet: successMult 1.12 / payMult 0.89, no heat, jailMult 0.8 — the safe
+play when you're near a RICO indictment or can't afford lockup), **Standard** (the signed baseline), or
+**Go Loud** (successMult 0.82 / payMult 1.22, crateMult 1.6 / makingsMult 1.5, repMult 1.15, +6 law heat on
+the attempt, jailMult 1.4 — a bigger single score + more materials, but it draws the Law and a harder bust).
+**The CASH faucet is EV-NEUTRAL by construction** (`payMult ≈ 1/successMult`), so the sim-signed §7.2 crime
+cash curve is UNTOUCHED — and an omitted/unknown approach resolves to `standard`, byte-identical to the old
+one-click behaviour (the sim measures standard → drift-0; every existing crime test/harness passes unchanged).
+The decision bites on the SECONDARY axes (variance, contraband/makings, rep, heat, bust severity) and teaches
+the Law/RICO interaction — going loud is how a new player *feels* the heat system in the entry loop.
+`POST /v1/crimes/:id {approach}` (threaded through the existing route); `/v1/rules.crimeApproaches` surfaces
+the three-way picker; the console Streets tab renders **case it / do it / go loud** buttons per job (loud in
+a warning color) + `describe()` humanizes 🤫/🔊/BUSTED-went-loud. `M3.CRIME_APPROACHES` lives with the other
+stakes/spine levers (SACK_ON_KILL / DEATH_DUTY_RATE / SAFEHOUSE_DAILY_CAP_MS / CONTRACT_AMMO_REBATE);
+`CRIME_LOUD_CASH_PREMIUM` (default 1.0 = EV-neutral) is the dial if Go Loud should pay a real cash premium
+(>1 = a faucet change → its own sign-off). §10.4-clean (the take rides the same `crime:<id>` faucet,
+ledgered==credited; the cb crate shift stays fully ledgered so conservation holds). `test/smoke.js` proves
+the three approaches surface on `/v1/rules`, a loud job draws the exact law heat, an unknown approach falls
+back to standard (no 400) and adds no heat, and the response echoes the chosen approach. Suite 46/46 + sim
+drift-0. The materials/rep/heat/jail shifts are founder sign-off levers (BALANCE.md — sim the loud cb/makings
+emission delta, bounded by nerve + bust risk + heat, before production). **This closes the stakes/spine
+review** (#1 economy, #2 death, #3 PvP stakes, #4 the City Standing spine, #5 legibility, #6 the crime verb,
+#7 consistency — all addressed); D6b (the game is largely an idle/collection economy) remains the honest
+framing, so the endgame collect/bet verbs stay idle-shaped by design.

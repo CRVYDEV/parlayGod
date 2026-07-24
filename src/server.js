@@ -517,7 +517,7 @@ export async function buildServer() {
 
   // ── M1 actions (crimes/gym/doc/checkin/bank/travel) ──
   app.post('/v1/crimes/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h, req.body?.approach)));
   app.post('/v1/train/:stat', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.train(ch, req.params.stat, client, h)));
   app.post('/v1/heal', { preHandler: auth }, async (req) =>
@@ -678,6 +678,10 @@ export async function buildServer() {
   // authoritative — knowing the odds table doesn't move a single roll client-side.
   app.get('/v1/rules', async () => ({
     crimes: CRIMES.map((c) => ({ id: c.id, name: c.name, lvl: c.lvl, nerve: c.nerve, cash: c.cash, base: c.base, jail: c.jail })),
+    // D6a — THE APPROACH: the per-job risk/reward choice (Case It / Standard / Go Loud). Public so the
+    // client can render the three-way picker; the server stays the referee (the roll is server-side).
+    crimeApproaches: Object.values(M3.CRIME_APPROACHES).map((a) => ({ id: a.id, name: a.name,
+      successMult: a.successMult, payMult: a.payMult, heat: a.heat, jailMult: a.jailMult })),
     districts: DISTRICTS,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
