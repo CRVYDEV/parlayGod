@@ -2054,3 +2054,12 @@ ALTER TABLE sov_structures ADD COLUMN IF NOT EXISTS income_at TIMESTAMPTZ NOT NU
 -- soldiers_led: lifetime successful jobs led with an assigned soldier (account-level → survives death,
 -- the commander legend). Bumped in game.js soldierResult on a successful assist.
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS soldiers_led INT NOT NULL DEFAULT 0;
+
+-- ── THE KITCHEN TIER-4 DEEPENING (design omerta-tier2-deepening-design.md §1) ──
+-- LAB MODULES: a purity/yield/stealth upgrade axis layered on the lab tier (read off the character row
+-- in cook/collect/accrual; written by direct SQL → clobber-safe). product_moved: lifetime GROSS product
+-- moved (account-level → survives death, the KINGPIN legend — pure status, outside §10.4).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_purity INT NOT NULL DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_yield INT NOT NULL DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS lab_stealth INT NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS product_moved NUMERIC NOT NULL DEFAULT 0;

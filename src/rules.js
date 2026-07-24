@@ -786,6 +786,48 @@ export const crewWageOwed = (ch, now = Date.now()) => {
 };
 export const crewCold = (ch, now = Date.now()) =>
   Number(ch.crew || 0) > 0 && !!ch.crew_paid_at && now - new Date(ch.crew_paid_at).getTime() >= M4.CREW_WAGE_COLD_MS;
+
+// ═══ THE KITCHEN → Tier 4 (omerta-tier2-deepening-design.md) ═══
+// Orthogonal depth on the M4 drug loop: LAB MODULES (a purity/yield/stealth upgrade axis, cash+$OMR
+// sinks), CUTTING AGENTS (stretch a stash line — more units at a quality cost, the risk lever), and
+// THE KINGPIN LEGEND (account-level lifetime product moved, survives death → a status ladder + board).
+export const KITCHEN = {
+  // LAB MODULES — three leveled upgrades layered on the lab tier (each capped, cost climbs with level
+  // AND the lab tier; the top levels burn $OMR — the lab-ladder precedent). Fold into ONE touchpoint
+  // each: purity→cook quality, yield→batch cap, stealth→the accrual Bureau-raid probability.
+  MODULES: {
+    purity:  { name: 'Purity Rig',     step: 0.03, desc: 'Cleaner product — +3% cook quality per level.' },
+    yield:   { name: 'Yield Manifold', step: 0.15, desc: 'Bigger batches — +15% cook cap per level.' },
+    stealth: { name: 'Ghost Vents',    step: 0.14, desc: 'Quieter cook — −14% offline raid odds per level.' },
+  },
+  MODULE_MAX: 5,
+  MODULE_BASE_CASH: 60000,   // cash = BASE_CASH × (curLevel+1) × (labIdx+1)
+  MODULE_OMR_FROM: 3,        // module levels whose RESULT ≥ this also burn $OMR
+  MODULE_OMR_STEP: 4,        // omr = (resultLevel − MODULE_OMR_FROM + 1) × MODULE_OMR_STEP
+  // CUTTING AGENTS — stretch a stash line: +CUT_UNITS of its own qty at −CUT_QUALITY, floored at
+  // CUT_FLOOR (over-cut is near worthless — the deal price scales on quality). A cash sink.
+  CUT_COST: 8000, CUT_UNITS: 0.4, CUT_QUALITY: 0.15, CUT_FLOOR: 0.55,
+  // THE KINGPIN LEGEND — lifetime GROSS product moved (deal + offline crew sales), account-level,
+  // survives death (the boxing-wins/wheel precedent). Pure STATUS, outside §10.4.
+  KINGPIN_RANKS: [
+    { at: 0,         name: 'Nobody' },
+    { at: 250000,    name: 'Corner Fixture' },
+    { at: 2000000,   name: 'Block Captain' },
+    { at: 15000000,  name: 'The Connect' },
+    { at: 80000000,  name: 'Cartel Boss' },
+    { at: 400000000, name: 'The Kingpin of the City' },
+  ],
+};
+export const kingpinRankOf = (moved = 0) => {
+  const m = Number(moved) || 0;
+  return [...KITCHEN.KINGPIN_RANKS].reverse().find((r) => m >= r.at) || KITCHEN.KINGPIN_RANKS[0];
+};
+export const labModuleCost = (modId, curLevel, labIdx) => {
+  const cash = KITCHEN.MODULE_BASE_CASH * (curLevel + 1) * (Math.max(0, labIdx) + 1);
+  const result = curLevel + 1;
+  const omr = result >= KITCHEN.MODULE_OMR_FROM ? (result - KITCHEN.MODULE_OMR_FROM + 1) * KITCHEN.MODULE_OMR_STEP : 0;
+  return { cash, omr };
+};
 export const M3 = {
   GANG_FOUND_COST: 25000, GANG_FOUND_LEVEL: 5, GANG_MAX_MEMBERS: 20, TRIBUTE_MIN: 100,
   WAR_COST: 10000, WAR_MS: 30*60*1000, WAR_SPOILS: 0.20,      // §5.5 (30 min pending design call, spec §9)

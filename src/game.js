@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, seasonModOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, seasonModOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -374,8 +374,13 @@ async function accrueAndLedger(client, ch, acct, owned) {
   if (ch._bankInterest > 0)
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._bankInterest, reason: 'bank:interest' });
   // §7.1 crew sales are a faucet too; the raid is logged, notified, and telemetered
-  if (ch._crewSale?.proceeds > 0)
+  if (ch._crewSale?.proceeds > 0) {
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._crewSale.proceeds, reason: 'crew:sales' });
+    // THE KINGPIN LEGEND (Tier-4) — offline crew sales count toward lifetime product moved (status,
+    // account-level, survives death; NUMERIC arith → pg-mem-safe; off the persistAccount column list)
+    await client.query('UPDATE account_persistent SET product_moved = product_moved + $1 WHERE account_id=$2',
+      [Math.floor(ch._crewSale.proceeds), ch.account_id]);
+  }
   if (ch._raid) {
     await rngLog(client, ch.id, 'raid', ch._raid.roll, `raided (P ${ch._raid.pWindow.toFixed(4)}, kept ${ch._raid.keepPct}%)`);
     await notify(client, ch.id, 'raid', { lost: ch._raid.lost, keptPct: ch._raid.keepPct });
@@ -681,6 +686,10 @@ export function view(ch, acct = {}, owned = {}) {
       treasury: Math.floor(Number(owned.gang.treasury)), ammoBank: Number(owned.gang.ammo_bank),
       held: owned.held } : null,
     lab: ch.lab || null, crew: Number(ch.crew || 0),
+    // LAB MODULES (Tier-4) — the purity/yield/stealth upgrade axis
+    labModules: { purity: Number(ch.lab_purity || 0), yield: Number(ch.lab_yield || 0), stealth: Number(ch.lab_stealth || 0) },
+    // THE KINGPIN LEGEND (Tier-4) — lifetime product moved (account-level, survives death)
+    kingpin: { moved: Number(acct?.product_moved || 0), rank: kingpinRankOf(acct?.product_moved).name },
     // recurring sinks — the crew's nut: what's owed, the hourly rate, and whether they've downed tools
     crewWageOwed: crewWageOwed(ch), crewWagePerHr: Number(ch.crew || 0) * M4.CREW_WAGE_PER_HR, crewCold: crewCold(ch),
     makings: owned.makings || {},

@@ -69,7 +69,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -718,6 +718,10 @@ export async function buildServer() {
     goods: GOODS.map((g) => ({ id: g.id, name: g.name, base: g.base })),
     kitchens: KITCHENS.map((k) => ({ id: k.id, name: k.name, cost: k.cost, omr: k.omr, cap: k.cap, mins: k.mins, fire: k.fire, desc: k.desc })),
     tradeRanks: TRADE_RANKS,
+    // THE KITCHEN → Tier 4 — lab modules, cutting, the kingpin ladder
+    kitchen: { modules: Object.entries(KITCHEN.MODULES).map(([id, m]) => ({ id, name: m.name, desc: m.desc, step: m.step })),
+      moduleMax: KITCHEN.MODULE_MAX, cut: { cost: KITCHEN.CUT_COST, units: KITCHEN.CUT_UNITS, qualityHit: KITCHEN.CUT_QUALITY, floor: KITCHEN.CUT_FLOOR },
+      kingpinRanks: KITCHEN.KINGPIN_RANKS },
     family: { foundCost: M3.GANG_FOUND_COST, tributeMin: M3.TRIBUTE_MIN },
     crew: { costStep: M4.CREW_COST_STEP, max: M4.CREW_MAX },
     portfolio: { minInvest: PORTFOLIO.MIN_INVEST_OMR, scrutinyMin: PORTFOLIO.SCRUTINY_MIN_OMR,
@@ -1790,6 +1794,12 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layLow(ch, client, h)));
   app.post('/v1/kitchen/cleanpapers', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cleanPapers(ch, client, h)));
+  // ── THE KITCHEN → Tier 4 ──
+  app.post('/v1/kitchen/module/:mod', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.upgradeModule(ch, req.params.mod, client, h)));
+  app.post('/v1/kitchen/cut/:drugId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cutStash(ch, req.params.drugId, client, h)));
+  app.get('/v1/leaderboard/kingpins', async () => K.kingpinLeaderboard(pool));
 
   // ── M4: growth (§5.1) ──
   app.post('/v1/path', { preHandler: auth }, async (req) =>

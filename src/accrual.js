@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -119,7 +119,8 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   // §7.1 RAID — sustained heat past 60 draws the Bureau: one roll per accrued
   // window with P = 1 − (1−p)^minutes, p = (heat−60)/2000 per minute.
   if (Number(ch.heat) > 60 && stash.reduce((a, s) => a + Number(s.qty), 0) > 0) {
-    const p = (Number(ch.heat) - 60) / 2000;
+    // LAB MODULE (Tier-4) — Ghost Vents cut the per-minute raid probability
+    const p = ((Number(ch.heat) - 60) / 2000) * Math.max(0, 1 - Number(ch.lab_stealth || 0) * KITCHEN.MODULES.stealth.step);
     const pWindow = 1 - Math.pow(1 - p, Math.max(1, cappedMin));
     const roll = Math.random();
     if (roll < pWindow) {

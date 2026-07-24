@@ -1580,12 +1580,20 @@
       ${!me.lab ? coachCard('The Kitchen is the deepest money in the game', 'Cook product, hire a crew, and move weight while you\'re offline. You need a lab (buy one below) and it pays to declare The Kitchen as your Path first. Mind your heat and the crew\'s wages (the nut).') : ''}
       <h2>The Trade</h2>
       <div class="card"><span class="t">${rank.name}</span>
-        <div class="d">gross moved $${fmt(me.tradeRep || 0)} · rank bonus +${Math.round(rank.bonus * 100)}%${nextRank ? ` · next: ${nextRank.name} at $${fmt(nextRank.at)}` : ' · the top of the trade'}</div></div>
+        <div class="d">gross moved $${fmt(me.tradeRep || 0)} · rank bonus +${Math.round(rank.bonus * 100)}%${nextRank ? ` · next: ${nextRank.name} at $${fmt(nextRank.at)}` : ' · the top of the trade'}</div>
+        ${me.kingpin ? `<div class="d" style="color:var(--gold)">THE KINGPIN — <b>${me.kingpin.rank}</b> · lifetime empire $${fmt(me.kingpin.moved || 0)} <span style="color:var(--dim)">(survives death)</span> · <a href="#" id="kingpin-board">the biggest distributors →</a></div><div id="kingpin-lb"></div>` : ''}</div>
 
       <h2 style="margin-top:12px">The Lab</h2>
       <div class="card"><span class="t">${lab ? lab.name : 'no kitchen'}</span>
         <div class="d">${lab ? `batch cap ${lab.cap} · cook ~${lab.mins * 12}min · fire risk ${Math.round(lab.fire * 100)}%` : 'even a bathtub beats the corner'}</div>
         ${nextLab ? `<button class="act" data-do="POST /v1/kitchen/lab/upgrade">upgrade → ${nextLab.name} ($${fmt(nextLab.cost)}${nextLab.omr ? ` + ${nextLab.omr} $OMR` : ''})</button>` : ''}</div>
+
+      ${me.lab ? sect('kitchen-modules', 'Lab Modules', 'bench upgrades — purity, yield, stealth', `<div class="grid">${(rules?.kitchen?.modules || []).map((mod) => {
+        const lvl = me.labModules?.[mod.id] || 0; const maxed = lvl >= (rules?.kitchen?.moduleMax || 5);
+        return `<div class="card"><span class="t">${mod.name}</span> <span class="chip">lvl ${lvl}/${rules?.kitchen?.moduleMax || 5}</span>
+          <div class="d">${mod.desc}</div>
+          ${maxed ? '<span class="chip">maxed</span>' : `<button class="act" data-modup="${mod.id}">upgrade</button>`}</div>`; }).join('')}</div>`,
+        Object.values(me.labModules || {}).some((n) => n > 0)) : ''}
 
       ${sect('kitchen-supplier', 'The Supplier', 'makings — today\'s prices', `<div class="grid">${unlocked.map((d) => `
         <div class="card">${ico('drug', d.id)}<span class="t">${d.name}</span> <span class="d">${d.tag}</span>
@@ -1609,7 +1617,8 @@
       ${(me.stash || []).length ? `<div class="grid">${me.stash.map((s) => `
         <div class="card"><span class="t">${drugName(s.drug)}</span>
           <div class="d">${s.qty} units · quality ${s.quality} · demand here ×${demandHere[s.drug] ?? '?'}</div>
-          <input data-deal="${s.drug}" placeholder="qty" size="5"> <button class="act" data-dealgo="${s.drug}">deal</button></div>`).join('')}</div>`
+          <input data-deal="${s.drug}" placeholder="qty" size="5"> <button class="act" data-dealgo="${s.drug}">deal</button>
+          <button class="act" data-cut="${s.drug}" title="stretch the line — more units, weaker product">cut it ($${fmt(rules?.kitchen?.cut?.cost || 8000)})</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
 
       ${sect('kitchen-crew', 'The Crew', 'they move the cheapest lines while you sleep — mind the nut', `<div class="card"><span class="t">${me.crew || 0} hands${me.crewCold ? ' — DOWNED TOOLS' : ''}</span>
@@ -1630,6 +1639,14 @@
       act('POST', '/v1/kitchen/cook', { drugId: t.querySelector('#cook-drug').value, qty: Number(t.querySelector('#cook-qty').value) || undefined }).then(() => renderKitchen());
     t.querySelectorAll('[data-dealgo]').forEach((b) => b.onclick = () =>
       act('POST', '/v1/kitchen/deal', { drugId: b.dataset.dealgo, qty: Number(t.querySelector(`[data-deal="${b.dataset.dealgo}"]`).value) || 1 }).then(() => renderKitchen()));
+    t.querySelectorAll('[data-cut]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/kitchen/cut/${b.dataset.cut}`).then(() => renderKitchen()));
+    t.querySelectorAll('[data-modup]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/kitchen/module/${b.dataset.modup}`).then(() => renderKitchen()));
+    const kb = t.querySelector('#kingpin-board');
+    if (kb) kb.onclick = async (e) => { e.preventDefault();
+      const r = (await api('GET', '/v1/leaderboard/kingpins')).body?.kingpins || [];
+      t.querySelector('#kingpin-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} ${esc(k.name)}</span><div class="d">${k.rank} · $${fmt(k.moved)} moved</div></div>`).join('') || '<span class="d">no distributors ranked yet</span>'}</div>`; };
   }
 
   // ── THE FAMILY: your family's dashboard, or the boards to found/join one ──

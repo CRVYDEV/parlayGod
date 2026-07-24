@@ -138,6 +138,43 @@ assert.equal((await meOf(chef.token)).crewCold, false, 'the nut squared → the 
 await seedCh(chef.id, "last_accrued_at = now() - interval '30 minutes', heat=0");
 assert((((await meOf(chef.token)).stash.find((s) => s.drug === 'vim')?.qty) || 0) < coldStash, 'and they move product again');
 
+// ══ THE KITCHEN → Tier 4: lab modules, cutting agents, the kingpin legend ══
+await seedCh(chef.id, 'cash=5000000, jail_until=NULL');
+await pool.query(`UPDATE account_persistent SET omr=50 WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
+// (A) LAB MODULES — a bad module id is refused; a level-1 buy is a ledgered cash sink surfaced in the view
+assert.equal((await call('POST', '/v1/kitchen/module/nope', { token: chef.token })).body.error, 'bad_module', 'no such module');
+r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
+assert.equal(r.code, 200, 'bought the purity rig'); assert.equal(r.body.level, 1); assert.equal(r.body.omr, 0, 'level 1 is cash-only');
+assert.equal((await meOf(chef.token)).labModules.purity, 1, 'the view shows the module level');
+// climb to level 3 — the top levels also burn $OMR (the lab-ladder precedent)
+await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
+const omrPre = (await meOf(chef.token)).omr;
+r = await call('POST', '/v1/kitchen/module/purity', { token: chef.token });
+assert.equal(r.code, 200); assert.equal(r.body.level, 3); assert(r.body.omr > 0, 'level 3 burns $OMR');
+assert.equal((await meOf(chef.token)).omr, omrPre - r.body.omr, 'the $OMR left the account exactly');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='kitchen:module' AND currency='cash' AND character_id='${chef.id}'`)).rows[0].s) < 0, 'module cash sink ledgered');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='kitchen:module' AND currency='omr'`)).rows[0].s), -r.body.omr, 'module $OMR burn ledgered');
+// (B) CUTTING AGENTS — stretch a stash line: more units, weaker product; a ledgered cash sink
+await pool.query(`DELETE FROM stash WHERE character_id='${chef.id}'`);
+await pool.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ('${chef.id}','vim',100,1.0)`);
+assert.equal((await call('POST', '/v1/kitchen/cut/nope', { token: chef.token })).body.error, 'bad_drug', 'no such line to cut');
+const cutCashPre = (await meOf(chef.token)).cash;
+r = await call('POST', '/v1/kitchen/cut/vim', { token: chef.token });
+assert.equal(r.code, 200, 'cut the line'); assert(r.body.added >= 40, `+~40% units (got +${r.body.added})`);
+assert(r.body.quality < 1.0, 'the product is weaker after the cut');
+assert.equal((await meOf(chef.token)).cash, cutCashPre - r.body.cost, 'the cutting agent left the pocket');
+const cutStashNow = (await meOf(chef.token)).stash.find((s) => s.drug === 'vim');
+assert.equal(cutStashNow.qty, 140, 'the stash grew by the added units');
+assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='kitchen:cut' AND character_id='${chef.id}'`)).rows[0].s), -r.body.cost, 'kitchen:cut is a ledgered §10.4 cash sink');
+// (C) THE KINGPIN LEGEND — dealing bumped lifetime product moved (account-level, survives death)
+await seedCh(chef.id, 'nerve=200, jail_until=NULL, safe_until=NULL');
+await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20 } });
+me = await meOf(chef.token);
+assert(me.kingpin && me.kingpin.moved > 0, 'the kingpin ledger shows lifetime product moved');
+assert.equal(Number((await pool.query(`SELECT product_moved FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`)).rows[0].product_moved), me.kingpin.moved, 'the view matches the persisted legend');
+r = await call('GET', '/v1/leaderboard/kingpins', { token: chef.token });
+assert.equal(r.code, 200); assert(r.body.kingpins.some((k) => k.name === 'Stringer Bell' && k.moved > 0), 'the chef is on the kingpin board');
+
 // ── raid (§7.1): sustained heat past 60 draws the Bureau ──
 await call('POST', '/v1/kitchen/makings/vim', { token: chef.token, body: { qty: 60 } });
 await seedCh(chef.id, 'cb=20, energy=200, jail_until=NULL');
