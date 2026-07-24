@@ -722,7 +722,7 @@
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
     if (body.taken !== undefined) bits.push(`hijacked the load — took ${fmt(body.taken)} unit${body.taken === 1 ? '' : 's'}${body.trunkFull ? ' (trunk full — the rest rolled on)' : ''}`);
-    if (body.casket) bits.push(`⛏ THE CASKET — $${fmt(body.take)} dug up (${body.caskets} lifetime — ${body.rank})`);
+    if (body.casket) bits.push(`⛏ THE CASKET — $${fmt(body.take)} dug up${body.relic ? ` + ${body.relic.name}!` : ''} (${body.caskets} lifetime — ${body.rank})`);
     else if (body.cold) bits.push(body.hint || 'cold ground');
     else if (body.riddle && body.step) bits.push(`the trail continues — “${body.riddle}” (step ${body.step} of ${body.of})`);
     if (body.clue) bits.push(`🗺 a CLUE SCROLL fell out of the job — “${body.clue.riddle}”`);
@@ -2111,12 +2111,13 @@
         if (r.code >= 400 || !slot.isConnected) return;
         const c = r.body;
         slot.innerHTML = c.scroll ? `<div class="card" style="border-color:var(--gold,#c9a227);margin-top:8px">
-            <span class="t" style="color:var(--gold,#c9a227)">🗺 THE TREASURE TRAIL</span> <span class="d">step ${c.scroll.step} of ${c.scroll.of}</span>
+            <span class="t" style="color:var(--gold,#c9a227)">🗺 THE TREASURE TRAIL</span> <span class="chip">${esc(c.scroll.tierName || 'a Scroll')}</span> <span class="d">step ${c.scroll.step} of ${c.scroll.of}${c.scroll.kind && c.scroll.kind !== 'riddle' ? ` · ${c.scroll.kind}` : ''}</span>
             <div class="d" style="font-style:italic">“${esc(c.scroll.riddle)}”</div>
+            ${c.scroll.casketBand ? `<div class="d" style="font-size:11px">the casket at the end: $${fmt(c.scroll.casketBand[0])}–$${fmt(c.scroll.casketBand[1])}</div>` : ''}
             <button class="act" id="clue-dig" style="margin-top:6px">DIG HERE (${c.digEnergy} energy)</button>
-            <div class="d" style="font-size:11px">stand on the ground the riddle names — travel first if you have to</div>
+            <div class="d" style="font-size:11px">stand on the ground the riddle names — decode it, travel there, dig</div>
           </div>`
-          : (c.legend.caskets > 0 ? `<div class="card" style="margin-top:8px"><span class="t">🗺 ${c.legend.caskets} casket${c.legend.caskets > 1 ? 's' : ''} dug</span> <span class="d">${esc(c.legend.rank)} — the next scroll turns up on a job${c.cooldownSeconds > 0 ? ' (the streets are quiet a while yet)' : ''}</span></div>` : '');
+          : (c.legend.caskets > 0 ? `<div class="card" style="margin-top:8px"><span class="t">🗺 ${c.legend.caskets} casket${c.legend.caskets > 1 ? 's' : ''} dug</span> <span class="d">${esc(c.legend.rank)}${c.legend.relics ? ` · ${c.legend.relics}/${c.legend.relicsMax} relics` : ''} — the next scroll turns up on a job${c.cooldownSeconds > 0 ? ' (the streets are quiet a while yet)' : ''}</span></div>` : '');
         const dg = slot.querySelector('#clue-dig');
         if (dg) dg.onclick = () => act('POST', '/v1/clues/dig', {}).then(() => renderStreets());
       }); }

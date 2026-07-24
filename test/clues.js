@@ -86,8 +86,8 @@ r = await call('POST', '/v1/clues/dig', { token: digger.token, body: {} });
 assert.equal(r.body.cold, true, 'right ground, wrong hour');
 assert(/wrong hour/.test(r.body.hint), 'the hint names the window');
 
-// ── walk the full trail to THE CASKET ──
-await pool.query(`UPDATE clue_scrolls SET salt='${goodSalt}', step=1, steps=3 WHERE character_id='${digger.id}'`);
+// ── walk the full trail to THE CASKET (pin to the easy tier so the legacy band assert holds) ──
+await pool.query(`UPDATE clue_scrolls SET salt='${goodSalt}', step=1, steps=3, tier='easy' WHERE character_id='${digger.id}'`);
 const cash0 = (await meOf(digger.token)).cash;
 for (let n = 1; n <= 3; n++) {
   const st = clueStepOf(goodSalt, n);
@@ -117,6 +117,34 @@ r = await call('GET', '/v1/leaderboard/clues', { token: digger.token });
 assert.equal(r.body.diggers[0].name, 'Shovels McGee', 'the digger leads');
 assert.equal(r.body.diggers[0].caskets, 1, 'with one casket');
 
+// ═══ TIER-4: trail tiers, the puzzle kind, casket band scaling, relics ═══
+// clear the cooldown, force a fresh scroll, then pin it to the MASTER tier
+await pool.query(`UPDATE characters SET clue_at=NULL, nerve=50, energy=200 WHERE id='${digger.id}'`);
+r = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} });
+let ct = 0; while ((!r.body.clue || !r.body.success) && ct++ < 20) { await pool.query(`UPDATE characters SET nerve=50 WHERE id='${digger.id}'`); r = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} }); }
+assert(r.body.clue && r.body.clue.tier, 'the drop carries a trail tier');
+// pin a MASTER 1-step solvable hunt (goodSalt step 1 answers now)
+await pool.query(`UPDATE clue_scrolls SET salt='${goodSalt}', step=1, steps=1, tier='master' WHERE character_id='${digger.id}'`);
+r = (await call('GET', '/v1/clues', { token: digger.token })).body;
+assert.equal(r.scroll.tier, 'master', 'the board reads the tier');
+assert.equal(r.scroll.tierName, 'a Master Scroll', 'and its name');
+assert(['riddle', 'anagram', 'cipher'].includes(r.scroll.kind), 'the step carries a puzzle kind');
+assert(Array.isArray(r.tiers) && r.tiers.length === 5, 'the 5-tier ladder surfaces');
+assert('relics' in r.legend, 'the relic count is on the board');
+// walk the single master step to the casket with a FORCED relic
+process.env.CLUE_RELIC_P = '1';
+const st = clueStepOf(goodSalt, 1);
+await pool.query(`UPDATE characters SET loc='${st.district}' WHERE id='${digger.id}'`);
+r = (await call('POST', '/v1/clues/dig', { token: digger.token, body: {} })).body;
+assert.equal(r.casket, true, 'THE MASTER CASKET');
+assert.equal(r.tier, 'master', 'the casket knows its tier');
+assert(r.take >= 55000 && r.take <= 120000, `the take is in the MASTER band (saw $${r.take})`);
+assert(r.relic && r.relic.id, 'a rare casket yielded a RELIC (status collectible)');
+// the relic is logged to the Collection + surfaces on the board
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM collection_log WHERE account_id='${digger.aid}' AND category='relics'`)).rows[0].n), 1, 'the relic is in the Collection');
+assert.equal((await call('GET', '/v1/clues', { token: digger.token })).body.legend.relics, 1, 'the board shows one relic found');
+process.env.CLUE_RELIC_P = '';
+
 // ── DEATH: the scroll dies with the street; the legend survives to the heir ──
 await pool.query(`UPDATE characters SET clue_at=NULL WHERE id='${digger.id}'`);
 await pool.query(`UPDATE characters SET nerve=50 WHERE id='${digger.id}'`);
@@ -126,7 +154,7 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 
 assert.equal((await pool.query(`SELECT 1 FROM clue_scrolls WHERE character_id='${digger.id}'`)).rows.length, 0,
   'the scroll died with the street');
 assert.equal(Number((await pool.query(`SELECT caskets FROM account_persistent WHERE account_id='${digger.aid}'`)).rows[0].caskets),
-  1, 'the lifetime legend survives to the heir');
+  2, 'the lifetime legend survives to the heir (1 easy + 1 master casket)');
 
 // ── §10.4: clue: vocabulary + the faucet reconciles per character ──
 const inv = await runLedgerInvariants(pool);

@@ -2041,3 +2041,7 @@ ALTER TABLE crew_heist_members ADD COLUMN IF NOT EXISTS cased BOOLEAN NOT NULL D
 ALTER TABLE crew_heists ADD COLUMN IF NOT EXISTS fenced BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS heist_loot NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NULL DEFAULT 0;
+
+-- ── CLUE SCROLLS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §3) ──
+-- tier: the trail tier rolled at drop (easy→master) — sets the step count, casket band, relic rarity.
+ALTER TABLE clue_scrolls ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'easy';

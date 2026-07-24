@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf, seasonModOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, seasonModOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -791,11 +791,13 @@ export function doCrime(ch, crimeId, client, h) {
             const held = (await client.query('SELECT 1 FROM clue_scrolls WHERE character_id=$1', [ch.id])).rows[0];
             if (!held) {
               const salt = crypto.randomUUID();
-              const nSteps = CLUES.STEPS_MIN + Math.floor(Math.random() * (CLUES.STEPS_MAX - CLUES.STEPS_MIN + 1));
-              await client.query('INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ($1,$2,1,$3)', [ch.id, salt, nSteps]);
+              // TIER-4 §A: roll the trail TIER (weighted — harder is rarer); it sets the step count
+              const tier = rollClueTier(Math.random());
+              const nSteps = tier.steps;
+              await client.query('INSERT INTO clue_scrolls (character_id, salt, step, steps, tier) VALUES ($1,$2,1,$3,$4)', [ch.id, salt, nSteps, tier.id]);
               // (red-team flag) the entry ticket to a cash faucet is audited randomness
-              await h.rngLog(client, ch.id, 'clue:drop', clueRoll, `scroll dropped (${nSteps} steps)`);
-              clue = { steps: nSteps, riddle: clueStepOf(salt, 1).riddle };
+              await h.rngLog(client, ch.id, 'clue:drop', clueRoll, `${tier.id} scroll dropped (${nSteps} steps)`);
+              clue = { steps: nSteps, tier: tier.id, tierName: tier.name, riddle: clueStepOf(salt, 1).riddle };
               await notify(client, ch.id, 'clue_found', clue);
             }
             if (clueSavepoints) await client.query('RELEASE SAVEPOINT clue_drop');
