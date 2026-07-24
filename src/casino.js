@@ -1029,14 +1029,25 @@ async function resolveBracketRound(client, t, entries) {
   const tid = t.id;
   if (t.next_round_at && new Date(t.next_round_at) > new Date()) return null; // the round clock paces the spectacle
   const clearCurrent = async () => { await client.query('UPDATE poker_state SET current=NULL WHERE id=1 AND current=$1', [tid]); };
-  // newly-dead, un-eliminated runners scratch — their stake burns ONCE (eliminated is the latch)
+  // newly-dead, un-eliminated runners scratch — their stake burns ONCE (eliminated is the latch).
+  // (red-team HIGH) REDUCE the tournament pool by each burned stake — a bracket COMMITS between rounds
+  // with status still 'open', so its pool stays counted by the 'poker tourney escrow' §10.4 check; if
+  // the burn (casino:tourney:death) isn't matched by a pool reduction, the identity drifts by the
+  // burned amount for the whole life of the bracket. (The showdown resolver burns+resolves atomically
+  // at the terminal, where the pool is no longer counted, so it needs no reduction.)
   const live = [];
+  let roundDead = 0;
   for (const e of entries) {
     if (e.eliminated) continue;
     if (e.alive) { live.push(e); continue; }
     await ledger(client, { currency: 'cash', amount: -Number(e.buyin), reason: 'casino:tourney:death', counterparty: tid });
+    roundDead += Number(e.buyin);
     await client.query('UPDATE poker_entries SET eliminated=true WHERE tournament_id=$1 AND character_id=$2', [tid, e.character_id]);
   }
+  const poolNow = Number(t.pool) - roundDead; // t.pool read at round start; deaths this round reduce it
+  // ABSOLUTE write (the pg-mem arithmetic-UPDATE quirk — `pool = pool - $n` mis-evaluates) so the
+  // committed 'open' pool matches the burns, keeping the tourney-escrow §10.4 identity exact.
+  if (roundDead > 0) await client.query('UPDATE poker_tournaments SET pool = $2 WHERE id=$1', [tid, poolNow]);
   if (Number(t.round) === 0 && live.length < CASINO.TOURNEY.MIN_ENTRANTS) { // a short field refunds (round 0 only)
     for (const e of live) {
       await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [e.character_id, Number(e.buyin)]);
@@ -1048,14 +1059,18 @@ async function resolveBracketRound(client, t, entries) {
     return { tournament: tid, refunded: live.length };
   }
   if (live.length <= CASINO.BRACKET.HEAT_SIZE) {
-    // ═ THE FINAL ═ rank everyone left; the live pool (Σ surviving buy-ins — dead stakes burned,
+    // (red-team MED) every runner died — no finalist to pay. The pool was fully burned by the death
+    // reductions above (poolNow == 0), so the escrow identity holds; just settle the empty bracket.
+    if (live.length === 0) {
+      await client.query("UPDATE poker_tournaments SET status='resolved' WHERE id=$1", [tid]);
+      await clearCurrent();
+      return { tournament: tid, round: Number(t.round), finalists: 0 };
+    }
+    // ═ THE FINAL ═ rank everyone left; the live pool (poolNow — dead stakes already burned + subtracted,
     // eliminated stakes stay in the pot the finalists play for) pays PAYOUTS net of the rake.
     const ranked = live.map((e) => { const cards = deal7(); const score = best7(cards); return { ...e, score, hand: handName(score) }; })
       .sort((a, b) => cmpHand(b.score, a.score));
-    const alreadyBurned = entries.filter((e) => e.eliminated && !e.alive).length; // informational only
-    const deadTotal = -(Number((await client.query(
-      "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:tourney:death' AND counterparty=$1", [tid])).rows[0].s));
-    const livePool = Number(t.pool) - deadTotal; // everything not burned rides to the final
+    const livePool = poolNow; // pool net of every burned stake (this round + carried from prior rounds)
     const rake = Math.floor(livePool * CASINO.TOURNEY.RAKE_BPS / 10000);
     const net = livePool - rake;
     const frac = CASINO.TOURNEY.PAYOUTS.slice(0, ranked.length);
@@ -1088,9 +1103,9 @@ async function resolveBracketRound(client, t, entries) {
     await client.query("UPDATE poker_tournaments SET status='resolved' WHERE id=$1", [tid]);
     await clearCurrent();
     await rngLog(client, ranked[0].character_id, `casino:bracket:${tid}`, ranked[0].score[0],
-      `champion ${ranked[0].name} ${ranked[0].hand} · round ${t.round} final · pool $${Number(t.pool)}`);
-    bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool: Number(t.pool), runners: entries.length, bracket: true });
-    return { tournament: tid, round: Number(t.round), finalists: ranked.length, winner: ranked[0].name, take: totalTake, scratchedEarlier: alreadyBurned };
+      `champion ${ranked[0].name} ${ranked[0].hand} · round ${t.round} final · pool $${livePool}`);
+    bus.emit('streets', { type: 'tourney_result', winner: ranked[0].name, hand: ranked[0].hand, pool: livePool, runners: entries.length, bracket: true });
+    return { tournament: tid, round: Number(t.round), finalists: ranked.length, winner: ranked[0].name, take: totalTake };
   }
   // ═ A ROUND ═ shuffle the field into heats; each heat deals + ranks; the top ADVANCE go through
   const shuffled = [...live];

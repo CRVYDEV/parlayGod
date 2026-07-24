@@ -17,13 +17,13 @@ $OMR drain the founder asked for, plus the social event that makes the compound 
 House; each `{ id, name, wageOmrDay, minTier, blurb }`). Hire a staff member (`estate:staff:hire`,
 one-time $OMR burn, tier-gated); from then on the household owes wages — `wageOmrDay` per staffer,
 accrued LAZILY on the estate's own clock (`estates.staff_paid_at`, the business-pad/crew-nut pattern)
-up to `STAFF_CAP_MS` (14d). `payStaffWages` (POST /v1/estate/wages) settles the whole household
+up to `STAFF_WALK_MS` (7d — the walk window bounds arrears). `payStaffWages` (POST /v1/estate/wages) settles the whole household
 ALL-OR-NOTHING (`estate:staff` burn — rides the existing `estate:%` omr vocabulary, ZERO invariant
 change). Unpaid past `STAFF_WALK_MS` (7d of arrears), the staff WALK (rows deleted — rehire from
 scratch, the hire fee again). Staff are PURE STATUS (household prestige on the board; the Butler is
 the gala prerequisite) — zero gameplay power, the vanity/seal posture. Account-level
 (`estate_staff (account_id, staff_id)` PK) → survives death with the compound; wages keep accruing
-(the heir inherits the payroll, capped at 14d like everyone).
+(the heir inherits the payroll; arrears are bounded by the 7d walk window like everyone's).
 
 **The gala** (`throwGala`, POST /v1/estate/gala): tier ≥ `GALA_MIN_TIER` (2) + a hired Butler; burns
 `ESTATE.GALA_OMR × tier` (`estate:gala`) and opens a `GALA_MS` (4h) window announced on the streets.
