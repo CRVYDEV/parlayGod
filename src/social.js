@@ -319,7 +319,7 @@ export async function seizeDistrict(ch, districtId, client, h) {
 }
 
 // ═══════════════════ JUMPS (§7.6) ═══════════════════
-export async function jump(ch, victim, client, h) {
+export async function jump(ch, victim, client, h, intent) {
   if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "Can't throw hands while you're to ground — a safehouse is a shield, not a bunker.");
   if (witproActive(ch)) throw new GameError('witpro', "You're in protective custody — the marshals didn't relocate you to work rivals. (witpro is a shield, not a free-kill window.)");
@@ -345,8 +345,14 @@ export async function jump(ch, victim, client, h) {
   // matching fire/npcHit/postBounty/startSearch so a fugitive forfeits protection on EVERY PvP path (the
   // non-lethal jump was the one gap; a hunted man's own family can lay hands on him too).
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà.");
+  // D6a step two — THE MESSAGE: what you came for (money vs reputation). An omitted/unknown intent
+  // resolves to 'standard' (all mults 1.0), byte-identical to the pre-choice jump.
+  const it = M3.JUMP_INTENTS[intent] || M3.JUMP_INTENTS.standard;
   ch.energy = Number(ch.energy) - M3.JUMP_ENERGY;
   ch.ammo = Number(ch.ammo) - M3.JUMP_AMMO;
+  // a public beating is noisy whether you win or lose — the Law hears about it either way (the
+  // Go Loud precedent). Clamped [0,100] like every other heat bump.
+  if (it.heat) ch.heat = Math.min(100, Number(ch.heat || 0) + it.heat);
   await h.ledger(client, { characterId: ch.id, currency: 'ammo', amount: -M3.JUMP_AMMO, reason: 'jump' });
 
   if (h.owned.gangId) await resolveWarIfDue(client, h.owned.gangId);
@@ -364,19 +370,24 @@ export async function jump(ch, victim, client, h) {
   await h.rngLog(client, ch.id, `jump:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
   if (atk > def) {
-    const stealPct = (war ? 0.25 : 0.15) + (ev.stealAdd || 0);
+    // THE MESSAGE folds in here: the steal is a pure TRANSFER (still capped by JUMP_STEAL_CAP, so
+    // rolling them can never mint), rep is status, damage/hospital is pacing — zero §10.4 surface.
+    const stealPct = ((war ? 0.25 : 0.15) + (ev.stealAdd || 0)) * it.stealMult;
     const stolen = Math.min(Math.floor(Number(victim.cash) * stealPct), M3.JUMP_STEAL_CAP);
     const crates = Math.min(Number(victim.cb) || 0, rand(1, 3));
     const rival = !!(h.victimOwned.gangId && h.owned.gangId && h.victimOwned.gangId !== h.owned.gangId);
     let rep = Math.max(3, Math.floor(Number(victim.respect) * 0.01 * (rival ? 1.5 : 1))) + (rival ? 2 : 0);
     if (war) rep *= 2;
-    rep = Math.floor(rep * (ev.jumpRep || 1));
-    const dmg = rand(20, 40);
+    rep = Math.max(1, Math.floor(rep * (ev.jumpRep || 1) * it.repMult));
+    const dmg = Math.max(1, Math.round(rand(20, 40) * it.dmgMult));
 
     ch.cash = Number(ch.cash) + stolen; ch.cb = (Number(ch.cb) || 0) + crates; ch.respect = Number(ch.respect) + rep;
     victim.cash = Number(victim.cash) - stolen; victim.cb = (Number(victim.cb) || 0) - crates;
     victim.health = Math.max(1, Number(victim.health) - dmg);
-    victim.hosp_until = new Date(Date.now() + M3.JUMP_HOSP_MS);
+    // NOTE the hospital is PROTECTION in this game (a laid-up mark is untargetable), so a longer
+    // stay from 'message' shields them from you too — the flex is self-limiting by design.
+    const hospMs = Math.round(M3.JUMP_HOSP_MS * it.hospMult);
+    victim.hosp_until = new Date(Date.now() + hospMs);
     if (stolen > 0) {
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: stolen, reason: 'jump:steal', counterparty: victim.id });
       await h.ledger(client, { characterId: victim.id, currency: 'cash', amount: -stolen, reason: 'jump:stolen', counterparty: ch.id });
@@ -399,15 +410,15 @@ export async function jump(ch, victim, client, h) {
                           war_score_them = war_score_them + CASE WHEN id=$2 THEN 1 ELSE 0 END
           WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
-    await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs: M3.JUMP_HOSP_MS });
+    await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
-    return { ok: true, win: true, stolen, crates, rep, bounty, war: !!war };
+    return { ok: true, win: true, intent: it.id, stolen, crates, rep, bounty, war: !!war };
   }
   const dmg = rand(10, 25);
   ch.health = Math.max(1, Number(ch.health) - dmg);
-  return { ok: true, win: false, dmg };
+  return { ok: true, win: false, intent: it.id, dmg };
 }
 
 // ═══════════════════ BOUNTIES / THE CONTRACT BOARD (§5.2, M7 Phase 1) ═══════════════════

@@ -88,6 +88,47 @@ assert(me.heat >= heatBefore, 'heat follows product');
 const dealLedger = await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='deal:vim' AND character_id='${chef.id}'`);
 assert(Number(dealLedger.rows[0].n) >= 1, 'deal ledgered');
 
+// ── D6a step two — THE PLAY (the corner's decision axis: throughput vs the Law) ──
+// The deal above carried no play → 'standard', the identity (all mults 1.0), so the assertions
+// above ARE the regression that the pre-choice behaviour is byte-identical. The axis is deliberately
+// NOT price: the §7.10 CASH curve is sim-audited and must pay THE SAME on every play.
+{
+  const plays = (await call('GET', '/v1/rules', { token: chef.token })).body.dealPlays;
+  assert.deepEqual(plays.map((p) => p.id), ['careful', 'standard', 'flood'], 'the three deal plays surface on /v1/rules');
+  // hold everything the price depends on constant (stash/quality/loc/trade rank) and reset the meters
+  const stock = () => pool.query(`INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ('${chef.id}','vim',200,1)
+    ON CONFLICT (character_id, drug_id) DO UPDATE SET qty=200, quality=1`);
+  const reset = () => seedCh(chef.id, 'nerve=100, heat=0, trade_rep=0');
+  const run = async (play) => { await stock(); await reset();
+    const res = await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20, play } });
+    assert.equal(res.code, 200, `the ${play || 'default'} play runs`);
+    return { ...res.body, nerveLeft: (await meOf(chef.token)).nerve };
+  };
+  const careful = await run('careful'), std = await run('standard'), flood = await run('flood');
+  // (1) THE CASH IS IDENTICAL — the signed §7.10 curve is untouched on every play
+  assert.equal(careful.earned, std.earned, 'working the regulars pays exactly the signed price');
+  assert.equal(flood.earned, std.earned, 'moving weight pays exactly the signed price — the axis is not price');
+  // (2) what you trade is THE LAW: half the heat quiet, double the heat flooding
+  assert(careful.heat < std.heat, `quiet draws less heat (${careful.heat} < ${std.heat})`);
+  assert(flood.heat > std.heat, `weight draws more heat (${flood.heat} > ${std.heat})`);
+  // (3) ...against THROUGHPUT: nerve is the corner's real throttle
+  assert(careful.nerve > std.nerve, `patience costs nerve (${careful.nerve} > ${std.nerve})`);
+  assert(flood.nerve < std.nerve, `weight moves fast (${flood.nerve} < ${std.nerve})`);
+  // (4) churn burns your name — the fast play can only SLOW rank progression, never accelerate it
+  const repOf = async () => (await meOf(chef.token)).tradeRep;
+  await stock(); await reset(); await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20, play: 'careful' } });
+  const carefulRep = await repOf();
+  await stock(); await reset(); await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20, play: 'flood' } });
+  assert(await repOf() < carefulRep, 'flooding the corner builds less of a name than working the regulars');
+  // (5) an unknown play falls back to standard — no 400 (the crime-approach precedent)
+  await stock(); await reset();
+  const junk = await call('POST', '/v1/kitchen/deal', { token: chef.token, body: { drugId: 'vim', qty: 20, play: 'nonsense' } });
+  assert.equal(junk.code, 200, 'an unknown play is not a 400');
+  assert.equal(junk.body.play, 'standard', 'an unknown play resolves to standard');
+  assert.equal(junk.body.earned, std.earned, 'the fallback pays the signed price');
+  await stock(); await seedCh(chef.id, 'nerve=100, heat=0');
+}
+
 // ── crew (§5.3 + §7.1): hire, then lazy offline sales ──
 r = await call('POST', '/v1/kitchen/crew/hire', { token: chef.token });
 assert.equal(r.code, 200); assert.equal(r.body.crew, 1); assert.equal(r.body.cost, 50000);

@@ -156,10 +156,22 @@ This isn't a bug to fix; it's a **direction call**. The honest options:
   the Law/RICO interaction (loud is how you *feel* the heat system in the early loop). `M3.CRIME_APPROACHES`
   + `CRIME_LOUD_CASH_PREMIUM` (the dial if loud should pay a real cash premium); `POST /v1/crimes/:id
   {approach}`; three-way console picker; smoke-test coverage. **DONE.**
+  **Step two — THE MESSAGE + THE PLAY (the other two entry verbs).** The same treatment, but each verb
+  got its OWN thematic axis rather than a copy of the crime picker:
+  - **JUMP → THE MESSAGE** (`M3.JUMP_INTENTS`): what you came for. *Roll Them* takes a bigger cut but
+    nobody's impressed; *Send a Message* is big respect + a real beating, but you're not there to rob
+    them, it draws law heat, and the longer hospital stay shields the mark **from you** — a
+    self-limiting flex. §10.4-free: the steal is a pure TRANSFER (still `JUMP_STEAL_CAP`-bounded), rep
+    is status, damage/hospital is pacing.
+  - **DEAL → THE PLAY** (`M4.DEAL_PLAYS`): how you move it. Deliberately **not** a price axis — the
+    §7.10 deal cash curve is sim-audited, so **the cash paid is identical on every play** (the test
+    asserts it). What you trade is THROUGHPUT (nerve, the corner's real throttle) against THE LAW
+    (heat → the RICO meter + the Bureau's kitchen raid), plus a small trade-rep tilt where the fast
+    play can only *slow* rank progression.
 - **D6b — accept it as an idle/collection game** and lean in (the systems ARE the content; the loop is
   collection + status). Then #1/#2/#3 matter *more*, because collection-game economies live or die on
   their sink/faucet balance and their status spine. *(Still the honest framing of what the game largely
-  is — THE APPROACH adds decision depth to the entry verb without pretending the whole game is twitch.)*
+  is — the three entry verbs now carry real decisions without pretending the whole game is twitch.)*
 
 Recommendation: **D6b is what the game actually is** — so #1 (economy) and #4 (the spine) were the
 priority (both now built). D6a on the crime loop was the highest-leverage single *game* addition, so it
@@ -195,7 +207,7 @@ shipped too (THE APPROACH). The other verbs (endgame collect/bet) stay idle-shap
 | 3 | PvP is −EV and opt-out-able | **L3a/L3b/L3c ALL BUILT** | the Sacking + the Shield Cap + the Contract's Bullets — done |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
-| 6 | breadth ≫ depth | **D6a BUILT** | THE APPROACH — a per-job risk/reward choice, cash-EV-neutral; D6b remains the honest framing |
+| 6 | breadth ≫ depth | **D6a BUILT (both steps)** | THE APPROACH (crime) + THE MESSAGE (jump) + THE PLAY (deal) — all three entry verbs carry a real decision, none touches a signed cash curve; D6b remains the honest framing |
 | 7 | consistency snags | **VERIFIED / shipped** | (cooldown-window rhythm = a tuning call) |
 
 **The one thing to take away:** #1, #2, #3 are the same problem, and **L3a — make passive wealth

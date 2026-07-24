@@ -153,6 +153,42 @@ await seedCh(don.id, `hosp_until='${new Date(Date.now() + 3600000).toISOString()
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).body.error, 'hosp_self', 'a hospitalized attacker cannot jump');
 assert.equal((await call('POST', `/v1/streets/${rocco.id}/npchit`, { token: don.token, body: { tier: 'legbreaker' } })).body.error, 'hosp_self', 'a hospitalized attacker cannot arrange an NPC hit');
 await seedCh(don.id, 'hosp_until=NULL'); // heal the boss up for the rest of the suite
+
+// ── D6a step two — THE MESSAGE (the jump's decision axis: money vs reputation) ──
+// The jump above carried no intent → 'standard', which is the identity (all mults 1.0), so the
+// assertions before this block ARE the regression that the pre-choice behaviour is byte-identical.
+{
+  const intents = (await call('GET', '/v1/rules', { token: don.token })).body.jumpIntents;
+  assert.deepEqual(intents.map((i) => i.id), ['rob', 'standard', 'message'], 'the three jump intents surface on /v1/rules');
+  // NB deliberately does NOT touch ammo — the suite provisions rounds through the armory (ledgered),
+  // and a later test fires 2200 of them; a jump only costs JUMP_AMMO 5, so the stock stands.
+  const ready = () => seedCh(don.id, 'energy=100, health=100, hosp_until=NULL, heat=0');
+  const freshMark = () => seedCh(rocco.id, 'cash=40000, hosp_until=NULL, health=100');
+  // ROLL THEM — you're there for the wallet: a bigger cut, but nobody's impressed
+  await ready(); await freshMark();
+  const rob = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token, body: { intent: 'rob' } });
+  assert.equal(rob.code, 200, 'the stick-up runs'); assert(rob.body.win, 'the bruiser wins');
+  assert.equal(rob.body.intent, 'rob', 'the response echoes the intent');
+  assert.equal((await meOf(don.token)).heat, 0, 'rolling them is quiet — no law heat');
+  // SEND A MESSAGE — you're there to be SEEN: big respect, a fraction of the cash, and the Law hears
+  await ready(); await freshMark();
+  const msg = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token, body: { intent: 'message' } });
+  assert.equal(msg.code, 200, 'the beating runs'); assert(msg.body.win, 'the bruiser wins again');
+  assert.equal(msg.body.intent, 'message', 'the response echoes the intent');
+  assert(msg.body.stolen < rob.body.stolen, `a message takes less cash than a stick-up (${msg.body.stolen} < ${rob.body.stolen})`);
+  assert(msg.body.rep > rob.body.rep, `a message earns more respect than a stick-up (${msg.body.rep} > ${rob.body.rep})`);
+  assert.equal((await meOf(don.token)).heat, intents.find((i) => i.id === 'message').heat, 'a public beating draws the exact law heat');
+  // the mark is laid up LONGER — which also shields them from you (the flex is self-limiting)
+  const robHosp = 3 * 60 * 0.7, msgHosp = 3 * 60 * 1.5;
+  assert((await meOf(rocco.token)).hospSeconds > robHosp, `the message keeps them down longer (>${robHosp}s, cap ${msgHosp}s)`);
+  // an unknown intent falls back to standard — no 400, no heat (the crime-approach precedent)
+  await ready(); await freshMark();
+  const junk = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token, body: { intent: 'nonsense' } });
+  assert.equal(junk.code, 200, 'an unknown intent is not a 400');
+  assert.equal(junk.body.intent, 'standard', 'an unknown intent resolves to standard');
+  assert.equal((await meOf(don.token)).heat, 0, 'standard/fallback draws no heat');
+  await seedCh(rocco.id, 'hosp_until=NULL, health=100'); await ready();
+}
 // full-system v3 (death lens): a JAILED target is out of reach — jump must gate it like fire/npcHit/shank
 // (jail can't be strictly more dangerous than the street). Restore Rocco's health, jail him, confirm the gate.
 await seedCh(rocco.id, `health=100, hosp_until=NULL, jail_until='${new Date(Date.now() + 3600000).toISOString()}'`);

@@ -115,7 +115,7 @@ export async function collect(ch, client, h) {
 }
 
 // ── DEAL (§7.10): demand × quality × event × trade-rank bonus; heat; nerve 1/10 ──
-export async function deal(ch, drugId, qty, client, h) {
+export async function deal(ch, drugId, qty, client, h, play) {
   const d = drugOf(drugId);
   if (!d) throw new GameError('bad_drug', 'No such line.');
   if (jailed(ch)) throw new GameError('jailed', 'No dealing from a cell.');
@@ -123,8 +123,13 @@ export async function deal(ch, drugId, qty, client, h) {
   const s = h.owned.stash.find((x) => x.drug_id === drugId);
   if (!s || Number(s.qty) < 1) throw new GameError('stash', `No ${d.name} in the stash.`);
   const n = Math.max(1, Math.min(Math.floor(Number(qty) || 0) || 1, Number(s.qty)));
-  const nerveCost = Math.max(1, Math.ceil(n / 10));
-  if (Number(ch.nerve) < nerveCost) throw new GameError('nerve', `Moving ${n} units takes ${nerveCost} nerve.`);
+  // D6a step two — THE PLAY: how you move it. Deliberately NOT a price axis — the deal CASH curve is
+  // sim-audited (§7.10) and untouched on every play; what you trade is THROUGHPUT (nerve, the corner's
+  // real throttle) against THE LAW (heat, which feeds the RICO meter + the Bureau's kitchen raid), plus
+  // a small trade-rep tilt. An omitted/unknown play resolves to 'standard' (all 1.0) — byte-identical.
+  const pl = M4.DEAL_PLAYS[play] || M4.DEAL_PLAYS.standard;
+  const nerveCost = Math.max(1, Math.ceil(n / 10 * pl.nerveMult));
+  if (Number(ch.nerve) < nerveCost) throw new GameError('nerve', `Moving ${n} units ${pl.id === 'careful' ? 'quietly ' : ''}takes ${nerveCost} nerve.`);
   const ev = cityEventOf(dayOf());
   // sim-audit KITCHEN ON-RAMP: rank-0 dealers earn the CORNER PREMIUM on gross (+50%) — small
   // quantities move at street prices, so the first risky loop beats petty crime. Phases out
@@ -136,10 +141,12 @@ export async function deal(ch, drugId, qty, client, h) {
   const gross = Math.floor(unit * n);
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
-  const heatGain = d.heat * n * 0.1 * (ev.drugHeat || 1) * (ch.path === 'kitchen' ? 0.75 : 1);
+  const heatGain = d.heat * n * 0.1 * (ev.drugHeat || 1) * (ch.path === 'kitchen' ? 0.75 : 1) * pl.heatMult;
   ch.nerve = Number(ch.nerve) - nerveCost;
   ch.cash = Number(ch.cash) + net;
-  ch.trade_rep = Number(ch.trade_rep || 0) + gross;   // rank climbs on GROSS
+  // rank climbs on GROSS — the PLAY tilts it (regulars build a book, churn burns your name). The
+  // fast play can only SLOW rank progression, so it never accelerates access to the rank price bonus.
+  ch.trade_rep = Number(ch.trade_rep || 0) + Math.floor(gross * pl.repMult);
   ch.heat = Math.min(100, Number(ch.heat || 0) + heatGain);
   s.qty = Number(s.qty) - n;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `deal:${drugId}` });
@@ -156,6 +163,7 @@ export async function deal(ch, drugId, qty, client, h) {
   await h.track(client, ch.account_id, 'deal', { drug: drugId, units: n, heat: Math.round(heatGain * 10) / 10 });
   await h.bumpDaily(client, ch.id, 'deal');
   return { ok: true, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
+    play: pl.id, nerve: nerveCost,
     cornerPremium: cornerPremium > 0,
     tradeRank: tradeRankIdx(Number(ch.trade_rep)) };
 }

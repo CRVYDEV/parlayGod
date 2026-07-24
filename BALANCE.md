@@ -1896,3 +1896,27 @@ attempt → feeds the RICO meter — an opt-in downside the player chose); **bus
 cash premium (>1 makes it a genuine faucet change → needs its own sim + sign-off). Recommendation: KEEP the
 EV-neutral default; sim the cb/makings emission delta from loud-spamming (bounded by nerve + the bust risk +
 the heat it draws) before production.
+
+## THE MESSAGE + THE PLAY (D6a step two — the other two entry verbs) — founder sign-off flags
+The crime picker's treatment extended to the game's other two shallow entry verbs, each with its OWN
+thematic axis. Neither touches a signed CASH curve.
+
+**THE MESSAGE** (`M3.JUMP_INTENTS` — the jump: money vs reputation). *Roll Them* `stealMult` 1.35 /
+`repMult` 0.6 / `dmgMult` 0.7 / `hospMult` 0.7; *Send a Message* `stealMult` 0.4 / `repMult` 1.5 /
+`dmgMult` 1.4 / `hospMult` 1.5 / +5 law heat; *standard* is the identity (an omitted intent is
+byte-identical to the pre-choice jump). **§10.4-free**: the steal is a pure zero-sum TRANSFER
+(`jump:steal`/`jump:stolen`), still bounded by `JUMP_STEAL_CAP`, so scaling it moves who holds the cash
+and can never create any; rep is a status axis; damage/hospital is pacing. SIGN-OFF: `rob`'s 1.35× is a
+larger PvP transfer (capped, and paid for with 40% of the rep) and `message`'s +5 heat is a new Law
+touchpoint. Note the built-in self-limiter: the hospital is PROTECTION in this game, so a longer stay
+from `message` shields the mark from the attacker too.
+
+**THE PLAY** (`M4.DEAL_PLAYS` — the corner: throughput vs the Law). *careful* `heatMult` 0.5 /
+`nerveMult` 2.0 / `repMult` 1.10; *flood* `heatMult` 2.0 / `nerveMult` 0.5 / `repMult` 0.90; *standard*
+the identity. **The CASH is IDENTICAL on every play** — the sim-audited §7.10 deal curve is untouched by
+construction (a regression asserts `careful.earned == standard.earned == flood.earned`), because the axis
+is deliberately not price. What moves is nerve (the corner's real throttle), heat (feeding the RICO meter
++ the Bureau's kitchen raid), and trade rep — and the `repMult` is arranged so the FAST play can only
+*slow* rank progression, never accelerate access to the rank price bonus. SIGN-OFF: the heat/nerve/rep
+multipliers are new levers; sim whether `flood`'s doubled heat is a real deterrent at endgame laylow
+prices before production.
