@@ -5029,3 +5029,30 @@ cooldown gate + the sheet's next-job timer (`test/growth.js`). **Suite 45/45 + s
 existing characters keep their respect so their displayed LEVEL drops (the intended correction). All
 `PACING.*` numbers are founder sign-off levers (BALANCE.md § THE PACING PASS, with the follow-on levers if
 it still runs hot or cold).
+
+**THE PROGRESSION HARNESS — `tools/playthrough.js` (`npm run playthrough`, the 2nd harness).** The
+PLAYER-EXPERIENCE twin of `tools/sim.js`: the sim answers "does the economy conserve and how big is
+each faucet", the harness answers "what does a person actually experience" — what they can do in a
+sitting, what gates them, where they stall, how long a level takes. Same discipline (PUBLIC API ONLY,
+**no value seeded**; the only SQL is the CLOCK — this character's timestamps pulled back N minutes,
+the §7.1 lazy-accrual contract). The simulated player is **plausible, not optimal**: a fixed priority
+ladder (checklist → Path → bank → boost+melt → the Score → the mission ladder → arm up at the armory
+when an `fp` gate blocks → the gym, training the biggest deficit on the mission being chased → grind
+the best crime the nerve pool covers → claim dailies). Built because the level-240 alpha speedrun was
+a **progression** bug that the §10.4 sweep was structurally blind to (drift-0 throughout). **Measured
+result: the speedrun is closed** — 3 hours straight in ONE sitting now reaches **level 17** (was 240);
+2h ≈ level 14–16, 10.5h ≈ 44 (the earlier analytic "~11 at 2h" is corrected upward by the sim — it had
+omitted the Score + mission ladder + checklist). **What throttles a sitting, measured:** NERVE is the
+real limiter (pool at 21% of cap on average, full only 3% of minutes, funding ~60 crimes/hr — a
+continuous drip, never burst-then-wait); the GYM is hard-capped at 15 sessions/sitting by the 3-min
+cooldown; the MISSION ladder's 4h cooldown is LONGER than a sitting so it advances ~once per session
+no matter how long you play (the cascade is now structurally impossible); lockup is 0% of played
+minutes. Two founder calls flagged (NOT patched, ground rule #1, in BALANCE.md): **(1)** ENERGY is
+vestigial for a street player — full 94% of minutes, since only the gym and the garage spend it
+against 12/min regen (a resource bar with no bite on the core loop); **(2)** CASH OUTRUNS PROGRESSION
+— a solo grinder nets $11k in session 1 and $360k in session 14 (30× in a week), holding $1.9M by day
+7 at level 44, far past the level-15 business-front entry, so the passive stack is affordable long
+before the content gating it (couples to the L1a/L1b front-curve levers). The **solo ceiling** (crime
++ gym + garage + Score + missions ONLY, zero contact with another player) is level 44 / $1.9M / 14 of
+28 missions in 7 days. **Re-run it after ANY pacing, cooldown, regen, mission or level-curve change** —
+it's the only tool that measures what a player feels rather than what the ledger conserves.
