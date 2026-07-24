@@ -2848,6 +2848,15 @@ export const MEGAPROJECT = {
       target: 150_000_000, blurb: 'Steel across the bay — every crate in the city will roll over it, forever.' },
     { id: 'colossus', name: 'The Colossus of the Docks', district: 'docks',
       target: 400_000_000, blurb: 'A statue taller than the cranes, facing the sea. Let the next boat in know whose town this is.' },
+    // ── Tier-4 catalog expansion (on-curve; the city keeps growing) ──
+    { id: 'opera_house', name: 'The Grand Opera House', district: 'cathedral',
+      target: 900_000_000, blurb: 'A thousand seats under a painted heaven. The city will finally have somewhere to be seen.' },
+    { id: 'skyway', name: 'The Elevated Skyway', district: 'canal',
+      target: 2_000_000_000, blurb: 'A rail line above the flood — the whole town rides over the water your grandfather drowned in.' },
+    { id: 'central_tower', name: 'Central Tower', district: 'neon',
+      target: 5_000_000_000, blurb: 'A hundred floors of glass and money. From the top you can see every corner you own.' },
+    { id: 'eternal_flame', name: 'The Eternal Flame', district: 'cathedral',
+      target: 12_000_000_000, blurb: "A fire that never goes out, for the ones who built this city and never got their names in stone. Now they will." },
   ],
   MIN_CASH: 100,          // smallest cash brick
   MIN_OMR: 1,             // smallest $OMR brick
@@ -2859,9 +2868,23 @@ export const MEGAPROJECT = {
     { rank: 10, title: 'Patron' },
     { rank: Infinity, title: 'Builder' },
   ],
+  // Tier-4 — THE BUILDER LEGEND: lifetime $-value contributed to monuments (account-level, survives
+  // death — the plaque records a single monument; this is the dynasty's whole-city legacy). Status.
+  BUILDER_RANKS: [
+    { at: 0,             name: 'Bystander' },
+    { at: 100000,        name: 'Bricklayer' },
+    { at: 5000000,       name: 'Mason' },
+    { at: 50000000,      name: 'Builder' },
+    { at: 500000000,     name: 'City Father' },
+    { at: 5000000000,    name: 'The Founder' },
+  ],
 };
 export const megaMonumentAt = (seq) => MEGAPROJECT.MONUMENTS[seq] || null;
 export const megaTierOf = (rank) => (MEGAPROJECT.TIERS.find((t) => rank <= t.rank) || MEGAPROJECT.TIERS.at(-1)).title;
+export const builderRankOf = (built = 0) => {
+  const b = Number(built) || 0;
+  return [...MEGAPROJECT.BUILDER_RANKS].reverse().find((r) => b >= r.at) || MEGAPROJECT.BUILDER_RANKS[0];
+};
 
 // ═══ THE DUELING LADDER (slate #5 — ranked ELO). ALL numbers are founder sign-off levers.
 // The money is the audited casino:pvp taxed transfer (zero new emission); the rating is pure

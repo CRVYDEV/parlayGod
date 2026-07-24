@@ -743,7 +743,7 @@ export async function buildServer() {
     duels: { stakeMin: DUELS.STAKE_MIN, rakeBps: DUELS.RAKE_BPS, minLevel: DUELS.MIN_LVL, ranks: DUELS.RANKS,
       divisions: DUELS.DIVISIONS, styles: DUELS.STYLES, styleEdge: DUELS.STYLE_EDGE, titleRanks: DUEL_TITLE_RANKS },
     megaproject: { monuments: MEGAPROJECT.MONUMENTS, minCash: MEGAPROJECT.MIN_CASH,
-      minOmr: MEGAPROJECT.MIN_OMR, omrRate: MEGAPROJECT.OMR_RATE,
+      minOmr: MEGAPROJECT.MIN_OMR, omrRate: MEGAPROJECT.OMR_RATE, builderRanks: MEGAPROJECT.BUILDER_RANKS,
       note: 'the collective monument — every contribution is a burn; the plaque is forever' },
     speakeasy: { minLevel: SPEAKEASY.MIN_LEVEL, openCost: SPEAKEASY.OPEN_COST, nameOmr: SPEAKEASY.NAME_OMR,
       tiers: SPEAKEASY.TIERS, rounds: SPEAKEASY.ROUNDS, bottles: SPEAKEASY.BOTTLES,
@@ -2247,6 +2247,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveGoods(ch, req.body?.goodId, req.body?.qty, client, h)));
   app.post('/v1/megaproject/omr', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveOmr(ch, req.body?.amount, client, h)));
+  // ── THE MEGAPROJECT → Tier 4 ──
+  app.get('/v1/leaderboard/builders', async () => Mega.builderLeaderboard(pool));
+  app.get('/v1/leaderboard/family-build', async () => Mega.familyBuildLeaderboard(pool));
 
   // ── THE DUELING LADDER (slate #5) — ranked ELO PvP on the audited casino:pvp transfer ──
   app.get('/v1/duels', { preHandler: auth }, async (req) =>
