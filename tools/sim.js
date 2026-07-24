@@ -656,7 +656,9 @@ phase('P9.19 clue scrolls — the casket faucet (bounded)');
 phase('P9.20 the passive stack — parallel energy-free income vs the active grind (the balance gap)');
 {
   const bizCapH = CONSTANTS.BUSINESS_CAP_MS / 3600000;
-  const bizKeep = 1 - CONSTANTS.BUSINESS_UPKEEP_BPS / 10000;
+  // L1b — the PROGRESSIVE pad: a 5-front stack pays BUSINESS_UPKEEP_BPS + 4×PROG_BPS of gross
+  const padBps5 = CONSTANTS.BUSINESS_UPKEEP_BPS + CONSTANTS.BUSINESS_UPKEEP_PROG_BPS * 4;
+  const bizKeep = 1 - padBps5 / 10000;
   // PERSONAL FRONTS: one of each kind at top tier (UNIQUE(character_id,kind)) — uncontestable, 5 collect clicks
   let frontGross = 0, frontCapital = 0;
   for (const b of BUSINESSES) {
@@ -666,7 +668,7 @@ phase('P9.20 the passive stack — parallel energy-free income vs the active gri
   }
   const frontNet = frontGross * bizKeep;
   note('stack', 'personal front stack (5 kinds, top tier, NET of pad)', `$${fmt(Math.round(frontNet))}/day`,
-    `gross $${fmt(Math.round(frontGross))}/day − ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% pad; ${bizCapH}h collect cap; build-to-here $${fmt(Math.round(frontCapital))} → payback ~${(frontCapital / frontNet).toFixed(1)}d; ENERGY-FREE (5 collect clicks/day)`);
+    `gross $${fmt(Math.round(frontGross))}/day − ${padBps5 / 100}% progressive pad (L1b: ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% base + 4×${CONSTANTS.BUSINESS_UPKEEP_PROG_BPS / 100}% per extra front); ${bizCapH}h collect cap; build-to-here $${fmt(Math.round(frontCapital))} → payback ~${(frontCapital / frontNet).toFixed(1)}d; ENERGY-FREE (5 collect clicks/day)`);
 
   // SPEAKEASY: one club per district, top tier, net of the sign-off upkeep — personal, additive to the fronts
   const seTop = SPEAKEASY.TIERS[SPEAKEASY.TIERS.length - 1];
@@ -685,10 +687,10 @@ phase('P9.20 the passive stack — parallel energy-free income vs the active gri
 
   // THE VERDICT: the personal stack alone vs the measured active-grind ceiling
   const ratio = frontNet / grindDay;
-  note('stack', 'PERSONAL passive : ACTIVE grind', `${ratio.toFixed(0)}×`,
-    `the 5-front stack ($${fmt(Math.round(frontNet))}/day, energy-free) vs the top-tier crime grind ($${fmt(Math.round(grindDay))}/day, ~200 energy-bounded attempts) — before speakeasy/territory/frontier/sov add more; the active loop is economically irrelevant at the top`);
-  note('stack', 'FLAG (founder sign-off, ground rule #1)', 'the front income CURVE is the dial, not §10.4',
-    `every front is a ledgered faucet (sweep stays drift-0), but the STACK is ~${ratio.toFixed(0)}× the active loop — recommend flattening the top-tier front incomePerHr and/or a wealth-scaled pad; NOT retuned here (BALANCE.md)`);
+  note('stack', 'PERSONAL passive : ACTIVE grind', `${ratio.toFixed(1)}×`,
+    `the 5-front stack ($${fmt(Math.round(frontNet))}/day, energy-free) vs the top-tier crime grind ($${fmt(Math.round(grindDay))}/day, ~200 energy-bounded attempts) — before speakeasy/territory/frontier/sov add more`);
+  note('stack', 'APPLIED (founder-directed L1a+L1b balance package)', 'front curve flattened + progressive pad',
+    `L1a halved the apex hotel/casino incomePerHr; L1b makes a 5-front stack pay ${padBps5 / 100}% pad vs a 1-front's ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% — the personal stack dropped ~$48.96M→$${fmt(Math.round(frontNet))}/day (ratio ~6×→${ratio.toFixed(1)}×), still passive-favoured but no longer dwarfing the active loop; §10.4 stays drift-0 (every front a ledgered faucet). Remaining dial: the full front incomePerHr curve (BALANCE.md)`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
