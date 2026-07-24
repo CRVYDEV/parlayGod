@@ -9,9 +9,18 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { PORT, COMMISSION, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf } from './rules.js';
+import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
+import { laneHeat, heatLane } from './notoriety.js';
+
+// TIER C — the runner's smuggling reputation (from THE SMUGGLER'S LEGEND rank tier): manages route
+// notoriety (faster decay / lower gain) + a docks-toll break. Pure status→access, off every faucet curve.
+async function smugglerRep(client, accountId) {
+  const smuggled = Number((await client.query('SELECT smuggled FROM account_persistent WHERE account_id=$1', [accountId])).rows[0]?.smuggled || 0);
+  return smuggleRepPerks(smugglerTierOf(smuggled));
+}
+const portLaneKey = (routeId) => 'port:' + routeId;
 
 // THE SMUGGLER'S LEGEND — lifetime contraband value landed, account-level (survives death — the boxing/
 // wheel/war-effort precedent). Direct SQL on the account (NUMERIC, arith-safe); status only, no §10.4.
@@ -22,10 +31,12 @@ const fleetCapOf = (ch) => PORT.FLEET_MAX + (Number(ch.berths) || 0);   // step 
 // THE HARBORMASTER: the family holding the docks tolls a clean landing (a §10.4 TRANSFER to their treasury).
 // Returns the toll charged (0 when NPC-held / your own family / dissolution race); mutates ch.cash/ch.bank.
 // Shared by the immediate collect-fence AND the warehouse fence (cash realized at the docks either way).
-async function harborToll(client, h, ch, sale) {
+async function harborToll(client, h, ch, sale, tollMult = 1) {
   const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [PORT.DISTRICT])).rows[0]?.holder_gang;
   if (!holder || holder === h.owned.gangId || sale <= 0) return 0;
-  const toll = Math.min(Math.floor(sale * PORT.STEP3.TOLL_BPS / 10000), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
+  // TIER C: a known smuggler (rep T2) is tolled at half — a transfer discount (§10.4-neutral: the docks-holder
+  // treasury just receives less; no value is created). The discounted amount is what's ledgered.
+  const toll = Math.min(Math.floor(sale * PORT.STEP3.TOLL_BPS / 10000 * tollMult), Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
   if (toll <= 0) return 0;
   const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
   if (!upd.rowCount) return 0;   // holder dissolved between the read and the credit — no charge, no orphan
@@ -138,8 +149,12 @@ export async function launchRun(ch, boatId, routeId, escort, client, h) {
   await clearIntercepts(client, boat.id);   // a fresh run — a new gauntlet for pirates
   // the supply token bucket — DIRECT SQL (outside persist, the wash/active_at pattern)
   await client.query('UPDATE characters SET port_used=$2, port_at=$3 WHERE id=$1', [ch.id, used + cost, new Date(now)]);
+  // TIER C: running the same sea lane raises its NOTORIETY — the Coast Guard learns the route, so each
+  // repeat run's collect faces more interdiction (emission-safe: fewer landings). Reputation cools/quiets it.
+  const rep = await smugglerRep(client, ch.account_id);
+  const heat = await heatLane(client, ch.id, portLaneKey(route.id), rep.decayMult, rep.gainMult);
   await h.track(client, ch.account_id, 'port', { act: 'launch', route: route.id, hold });
-  return { ok: true, boat: boat.id, route: route.id, hold, cost, escort: !!escort, arrivesSeconds: Math.ceil(runMsOf(route) / 1000) };
+  return { ok: true, boat: boat.id, route: route.id, hold, cost, escort: !!escort, notoriety: Math.round(heat), arrivesSeconds: Math.ceil(runMsOf(route) / 1000) };
 }
 
 // POST /v1/port/collect/:boatId {warehouse} — the boat's home: roll the Coast Guard, then land the cargo
@@ -164,6 +179,14 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   // this week (one touchpoint; the test-pinned p is left alone so the roll knob stays deterministic).
   if (process.env.PORT_INTERDICT_P == null && (await activeDecree(client))?.id === 'smugglers_moon')
     p *= COMMISSION.PORT_INTERDICT_MULT;
+  const rep = await smugglerRep(client, ch.account_id);
+  if (process.env.PORT_INTERDICT_P == null) {
+    // TIER C: a hot sea lane draws the Coast Guard — add the lane's NOTORIETY as extra interdiction (capped),
+    // then re-clamp to the signed ceiling. A cooled reputation (decayMult) keeps a legend's lanes quieter.
+    // Left alone when the test knob pins p, so the roll knob stays deterministic (the smugglers_moon guard).
+    const heat = await laneHeat(client, ch.id, portLaneKey(route.id), rep.decayMult);
+    p = Math.min(PORT.INTERDICT_MAX, p + Math.min(NOTORIETY.PORT_P_CAP, heat * NOTORIETY.PORT_P_PER));
+  }
   const roll = Math.random();
   await h.rngLog(client, ch.id, `port:${route.id}`, roll, roll < p ? 'interdicted' : 'clean');
   const clearRun = async () => {
@@ -185,7 +208,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
     ch.cash = Number(ch.cash) + sale;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: sale, reason: 'port:sale' });
     await bumpSmuggled(client, ch.account_id, sale);   // THE SMUGGLER'S LEGEND (status, survives death)
-    const toll = await harborToll(client, h, ch, sale); // THE HARBORMASTER (step three): docks-holder toll
+    const toll = await harborToll(client, h, ch, sale, rep.tollMult); // THE HARBORMASTER (step three): docks-holder toll (rep T2 halves it)
     await clearRun();
     if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.name, value: sale });
     await h.track(client, ch.account_id, 'port', { act: 'land', route: route.id, sale, toll });
@@ -227,7 +250,8 @@ export async function fenceContraband(ch, client, h) {
   ch.cash = Number(ch.cash) + proceeds;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: proceeds, reason: 'port:fence' });
   await bumpSmuggled(client, ch.account_id, proceeds);
-  const toll = await harborToll(client, h, ch, proceeds);
+  const rep = await smugglerRep(client, ch.account_id);
+  const toll = await harborToll(client, h, ch, proceeds, rep.tollMult); // TIER C: rep T2 halves the docks toll
   await client.query('UPDATE characters SET contraband = 0 WHERE id=$1', [ch.id]);
   if (proceeds >= 250000) bus.emit('streets', { type: 'port_fence', by: ch.name, value: proceeds });
   await h.track(client, ch.account_id, 'port', { act: 'fence', book, proceeds, mult: Math.round(mult * 100) / 100 });
@@ -361,6 +385,12 @@ export async function portBoard(ch, client, h) {
   const now = Date.now();
   const rows = (await client.query('SELECT * FROM boats WHERE character_id=$1 ORDER BY created_at', [ch.id])).rows;
   const patrolMod = cityHourOf(now).patrol ? 15 : -10;
+  // TIER C: the runner's smuggling reputation + their per-lane notoriety (so the board shows the REAL odds
+  // including the lane heat, and which sea lanes have gone hot). One query for all this character's port lanes.
+  const smuggled = Number((await client.query('SELECT smuggled FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.smuggled || 0);
+  const rep = smuggleRepPerks(smugglerTierOf(smuggled));
+  const notoRows = (await client.query("SELECT route_key, notoriety, noted_at FROM route_notoriety WHERE character_id=$1 AND route_key LIKE 'port:%'", [ch.id])).rows;
+  const laneHeatFor = (routeId) => { const r = notoRows.find((x) => x.route_key === portLaneKey(routeId)); return r ? notorietyNow(r.notoriety, r.noted_at, rep.decayMult) : 0; };
   const fleet = rows.map((b) => {
     const spec = boatOf(b.kind);
     const out = atSea(b);
@@ -376,11 +406,14 @@ export async function portBoard(ch, client, h) {
       etaSeconds: out && !arrived ? Math.ceil((new Date(b.run_until).getTime() - now) / 1000) : 0,
     };
   });
-  const routes = PORT.ROUTES.map((r) => ({
-    id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell, margin: r.sell - r.buy,
-    patrol: r.patrol,
-    interdictPct: Math.round(interdictChance(r, { speed: Math.max(0, ...rows.filter((b) => !atSea(b)).map((b) => effSpeed(b, boatOf(b.kind)))) }, false, patrolMod) * 100),
-  }));
+  const routes = PORT.ROUTES.map((r) => {
+    const baseP = interdictChance(r, { speed: Math.max(0, ...rows.filter((b) => !atSea(b)).map((b) => effSpeed(b, boatOf(b.kind)))) }, false, patrolMod);
+    const heat = laneHeatFor(r.id);
+    const p = Math.min(PORT.INTERDICT_MAX, baseP + Math.min(NOTORIETY.PORT_P_CAP, heat * NOTORIETY.PORT_P_PER));
+    return { id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell, margin: r.sell - r.buy,
+      patrol: r.patrol, interdictPct: Math.round(p * 100),
+      notoriety: Math.round(heat), notorietyMax: NOTORIETY.MAX, hot: heat >= NOTORIETY.MAX * 0.5 };
+  });
   // THE SEAS — other players' runs genuinely at sea right now (piracy targets); route + value band, never the manifest
   const canPirate = levelOf(Number(ch.respect)) >= PORT.STEP2.PIRATE_MIN_LEVEL;
   const seaRows = canPirate ? (await client.query(
@@ -393,8 +426,7 @@ export async function portBoard(ch, client, h) {
     return { boatId: s.id, runner: s.runner, route: s.run_route, routeName: r?.name,
       band: valueBand(Number(s.run_hold) * (r?.sell || 0)), etaSeconds: Math.ceil((new Date(s.run_until).getTime() - now) / 1000) };
   });
-  // THE SMUGGLER'S LEGEND (step three) + THE HARBORMASTER: who holds the docks (a toll on a clean landing)
-  const smuggled = Number((await client.query('SELECT smuggled FROM account_persistent WHERE account_id=$1', [ch.account_id])).rows[0]?.smuggled || 0);
+  // THE HARBORMASTER: who holds the docks (a toll on a clean landing) — smuggled/rep fetched at the top (Tier C)
   const holderRow = (await client.query(
     `SELECT g.name, g.tag, d.holder_gang FROM districts d LEFT JOIN gangs g ON g.id = d.holder_gang WHERE d.id=$1`, [PORT.DISTRICT])).rows[0];
   const tolled = holderRow?.holder_gang && holderRow.holder_gang !== h.owned.gangId;
@@ -411,6 +443,10 @@ export async function portBoard(ch, client, h) {
     upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP },
     legend: { smuggled, rank: portRankOf(smuggled).title },
     harbormaster: { holder: holderRow?.holder_gang ? { name: holderRow.name, tag: holderRow.tag } : null, tollBps: PORT.STEP3.TOLL_BPS, tolled: !!tolled },
+    // TIER C — the smuggler's reputation: perks earned off the legend that MANAGE route notoriety + the toll
+    reputation: { tier: rep.tier, coolsFaster: rep.decayMult > 1, tollBreak: rep.tollMult < 1, quieter: rep.gainMult < 1,
+      next: [{ tier: NOTORIETY.REP_DECAY_TIER, perk: 'lanes cool 2× faster' }, { tier: NOTORIETY.REP_TOLL_TIER, perk: 'docks toll halved' }, { tier: NOTORIETY.REP_GAIN_TIER, perk: 'lanes heat half as fast' }] },
+    notoriety: { gain: NOTORIETY.GAIN, max: NOTORIETY.MAX, decayPerHr: NOTORIETY.DECAY_PER_HR },
   };
 }
 

@@ -2111,6 +2111,18 @@ CREATE TABLE IF NOT EXISTS convoy_hauls (
 CREATE INDEX IF NOT EXISTS ix_convoy_hauls_win ON convoy_hauls (kind, at);
 CREATE INDEX IF NOT EXISTS ix_convoy_hauls_acct ON convoy_hauls (account_id, at);
 
+-- TIER C (omerta-transport-depth-design.md): per-(character, lane) ROUTE NOTORIETY — a heat that grows
+-- each run of the same lane and decays lazily (the business-scrutiny pattern), pushing route variety.
+-- route_key namespaces the loop: 'convoy:<origin>:<dest>' (a directional land lane) / 'port:<routeId>'
+-- (a sea route). EMISSION-SAFE (raises convoy ambush exposure / port interdiction only). Dies with the street.
+CREATE TABLE IF NOT EXISTS route_notoriety (
+  character_id TEXT NOT NULL,
+  route_key TEXT NOT NULL,
+  notoriety NUMERIC NOT NULL DEFAULT 0,
+  noted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (character_id, route_key)
+);
+
 -- THE UNDERWRITER (Reserve Bond Tier-4): the earn-in-game backer-prestige axis. pledged_omr is a
 -- $OMR-burn-fed account legend (survives death, ranked); bond_charter is the sequential cosmetic seal.
 -- Both written by DIRECT SQL only (OFF persistAccount's positional list — the pledged-columns discipline).

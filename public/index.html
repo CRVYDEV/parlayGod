@@ -3457,13 +3457,19 @@
     await refresh();
     const b = (await api('GET', '/v1/port')).body || {};
     const fleet = b.fleet || [], routes = b.routes || [], cat = b.catalog || [];
-    const routeOpts = routes.map((r) => `<option value="${r.id}">${r.name} — buy $${fmt(r.buy)}/u · sell $${fmt(r.sell)}/u · ~${r.interdictPct}% caught</option>`).join('');
+    const routeOpts = routes.map((r) => `<option value="${r.id}">${r.name} — buy $${fmt(r.buy)}/u · sell $${fmt(r.sell)}/u · ~${r.interdictPct}% caught${r.hot ? ' · 🔥HOT LANE' : ''}</option>`).join('');
+    const rep = b.reputation || {};
+    const repLine = (rep.coolsFaster || rep.tollBreak || rep.quieter)
+      ? `<span class="chip" style="color:var(--gold)">reputation: ${[rep.coolsFaster && 'lanes cool 2× faster', rep.tollBreak && 'docks toll halved', rep.quieter && 'low profile — lanes heat half as fast'].filter(Boolean).join(' · ')}</span>`
+      : `<span class="chip">earn the Smuggler ranks to manage your notoriety</span>`;
     t.innerHTML = `
       ${!fleet.length ? coachCard('Buy a boat, run the coast', 'The Port brings contraband in from offshore. Buy a boat at the docks (a hold for cargo, speed to slip the Coast Guard), load a run, and — if you make it home clean — fence the haul for the smuggling margin. Get caught and you lose the cargo, eat a fine, and might lose the boat. Distinct from convoys: this is the SEA, and the risk is the law, not other players.') : ''}
       <h2>The Port ${b.atDocks ? '' : '<span class="chip" style="color:var(--bad)">travel to the docks to trade</span>'}</h2>
       ${b.legend ? `<div class="card" style="border-color:var(--gold)"><span class="t">The Smuggler's Legend</span><div class="d"><b style="color:var(--gold)">${b.legend.rank}</b> — $${fmt(b.legend.smuggled)} landed for life <span class="chip">survives death</span> · <a href="#" id="pt-lb">the leaderboard →</a></div></div>` : ''}
       <div class="card"><span class="t">The Supplier</span><div class="d">Contraband headroom today: <b>$${fmt(b.supplyLeft || 0)}</b> of $${fmt(b.supplyCap || 0)} — the offshore supplier only moves so much per day.
         ${(b.harbormaster && b.harbormaster.tolled) ? `<br><span class="chip" style="color:var(--bad)">the ${b.harbormaster.holder.name} [${b.harbormaster.holder.tag}] hold the docks — a ${(b.harbormaster.tollBps/100)}% toll on every clean landing</span>` : ''}</div></div>
+      ${routes.length ? `<div class="card"><span class="t">Sea Lanes <span class="chip">route notoriety</span></span><div class="d">Run the same lane and the Coast Guard learns it — interdiction climbs. Vary your lanes to stay cool (they cool on their own).<br>
+        ${routes.map((r) => `${r.name}: ~${r.interdictPct}% caught ${r.notoriety > 0 ? `<span class="chip ${r.hot ? 'bad' : ''}">heat ${r.notoriety}/${r.notorietyMax}${r.hot ? ' 🔥' : ''}</span>` : '<span class="chip good">cold</span>'}`).join(' · ')}<br>${repLine}</div></div>` : ''}
       ${b.contraband ? `<div class="card"><span class="t">The Warehouse & Fence</span><div class="d">Warehoused contraband: <b>$${fmt(b.contraband.book)}</b> book value · today's fence rate <b>${b.contraband.fenceRate}×</b> → ~$${fmt(b.contraband.estimate)} <span class="chip">time the market — warehouse a landing, fence high</span>${b.contraband.book > 0 ? ' <span class="chip bad">at risk — a killer loots half your stash, so don\'t sit on it marked</span>' : ''}
         ${b.contraband.book > 0 ? `<button class="act" data-fence="1"${b.atDocks ? '' : ' disabled'}>fence it all</button>` : ''}</div></div>` : ''}
       <div class="grid">
@@ -3552,6 +3558,7 @@
       ${cb.legend ? `<div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">🚚 ${cb.legend.hauler} · 🔫 ${cb.legend.bandit}</span>
         <div class="d">delivered clean $${fmt(cb.legend.delivered || 0)} · hijacked off the roads $${fmt(cb.legend.hijacked || 0)} <span style="color:var(--dim)">(survives death)</span> · <a href="#" id="cv-lb">🏆 the roads →</a></div>
         ${cb.roadBoss || cb.teamsterOfWeek ? `<div class="d">${cb.roadBoss ? `👑 ROAD BOSS this week: <b>${esc(cb.roadBoss.name)}</b> ($${fmt(cb.roadBoss.value)})` : ''}${cb.roadBoss && cb.teamsterOfWeek ? ' · ' : ''}${cb.teamsterOfWeek ? `🏅 TEAMSTER OF THE WEEK: <b>${esc(cb.teamsterOfWeek.name)}</b> ($${fmt(cb.teamsterOfWeek.value)})` : ''}</div>` : ''}
+        ${cb.reputation ? `<div class="d">running the same lane heats it (bandits case it → weaker guards) — vary lanes to stay cool. ${(cb.reputation.coolsFaster || cb.reputation.tollBreak || cb.reputation.quieter) ? `<span class="chip" style="color:var(--gold)">reputation: ${[cb.reputation.coolsFaster && 'lanes cool 2× faster', cb.reputation.tollBreak && 'toll halved', cb.reputation.quieter && 'low profile'].filter(Boolean).join(' · ')}</span>` : '<span class="chip">earn the Teamster ranks to manage lane heat</span>'}</div>` : ''}
         <div id="cv-lbout"></div></div>` : ''}
       ${cb.rig ? `<div class="card"><span class="t">THE RIG — ${cb.rig.name}</span> <span class="chip">🛡 armor ${cb.rig.armorLvl}/${cb.rig.max}</span> <span class="chip">⚙ engine ${cb.rig.engineLvl}/${cb.rig.max}</span>
         <div class="d">+${cb.rig.armorDef} guard defense · −${(cb.rig.speedBps / 100).toFixed(0)}% transit</div>
@@ -3560,7 +3567,7 @@
         : `<div class="card"><span class="t">THE RIG</span><div class="d">a built hauler adds armor (defense) + engine (speed) to your runs. Buy one:</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap">${(cb.rigs || []).filter((r) => (me.level || 0) >= r.minLvl).map((r) => `<button class="act" data-rigbuy="${r.id}">${r.name} ($${fmt(r.cost)})</button>`).join('') || '<span class="d" style="color:var(--dim)">level up to unlock a rig</span>'}</div></div>`}
       ${cv ? `
-        <div class="card" style="border-color:var(--neon)"><span class="t">your shipment · ${cv.from} → ${cv.to || '?'}</span> <span class="chip">${cv.status.toUpperCase()}</span>
+        <div class="card" style="border-color:var(--neon)"><span class="t">your shipment · ${cv.from} → ${cv.to || '?'}</span> <span class="chip">${cv.status.toUpperCase()}</span>${cv.notoriety > 0 ? ` <span class="chip ${cv.notoriety >= ((cb.notoriety||{}).max||40) * 0.5 ? 'bad' : ''}">lane heat ${cv.notoriety}${cv.guardCut ? ` · −${cv.guardCut} guards` : ''}${cv.notoriety >= ((cb.notoriety||{}).max||40) * 0.5 ? ' 🔥' : ''}</span>` : ''}
           <div class="d">manifest: ${cv.manifest.map((x) => `${goodName(x.good)} ×${x.qty}`).join(', ') || 'empty'}${cv.insured ? ' · INSURED' : ''}${cv.ambushes ? ` · hit ${cv.ambushes}×` : ''}${cv.insuranceDue ? ` · claim due $${fmt(cv.insuranceDue)}` : ''}</div>
           ${cv.status === 'loading' ? `
             <select id="cv-good">${Object.entries(me.cargo || {}).filter(([, q]) => q > 0).map(([id, q]) => `<option value="${id}">${goodName(id)} (${q})</option>`).join('')}</select>

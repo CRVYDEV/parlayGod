@@ -6,7 +6,7 @@
 process.env.PORT_RUN_MS = '0'; // TEST-ONLY: runs arrive instantly
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PORT, boatOf, boatResale, fenceMultOf } from '../src/rules.js';
+import { PORT, NOTORIETY, boatOf, boatResale, fenceMultOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -237,6 +237,45 @@ const expToll = Math.floor(cr.landed * PORT.STEP3.TOLL_BPS / 10000);
 assert(expToll > 0 && cr.toll === expToll, 'a clean landing pays the docks-holder a 5% toll');
 assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${gid}'`)).rows[0].treasury), treBefore + expToll, 'the toll credited the harbormaster treasury');
 assert.equal(cr.net, cr.landed - cr.cost - expToll, 'the net reflects the toll');
+delete process.env.PORT_RUN_MS; delete process.env.PORT_INTERDICT_P;
+
+// ════════════════════ TIER C — ROUTE NOTORIETY + THE SMUGGLER'S REPUTATION ════════════════════
+// running the SAME sea lane heats it (the Coast Guard learns the route → interdiction climbs); reputation
+// from the legend manages it (faster decay / lower gain) + a docks-toll break. EMISSION-SAFE (only raises risk).
+process.env.PORT_RUN_MS = '0'; process.env.PORT_INTERDICT_P = '0';
+await pool.query(`DELETE FROM route_notoriety WHERE character_id='${cap.id}'`);
+await pool.query(`UPDATE characters SET port_used=0, port_at=now() WHERE id='${cap.id}'`);
+const ncBoat = (await call('POST', '/v1/port/boat/skiff', { token: cap.token })).body.boat.id;
+// a run HEATS the lane; the board surfaces it
+const nc1 = (await call('POST', `/v1/port/run/${ncBoat}`, { token: cap.token, body: { route: 'coastal' } })).body;
+assert(nc1.notoriety > 0, 'a run heats the sea lane (route notoriety accrues)');
+const brd1 = (await call('GET', '/v1/port', { token: cap.token })).body.routes.find((r) => r.id === 'coastal');
+assert.equal(brd1.notoriety, nc1.notoriety, 'the board surfaces the lane notoriety');
+// collect + run the SAME lane again: notoriety climbs
+await pool.query(`UPDATE characters SET port_used=0, port_at=now() WHERE id='${cap.id}'`);
+await call('POST', `/v1/port/collect/${ncBoat}`, { token: cap.token });
+const nc2 = (await call('POST', `/v1/port/run/${ncBoat}`, { token: cap.token, body: { route: 'coastal' } })).body;
+assert(nc2.notoriety > nc1.notoriety, 'hammering the same lane climbs its notoriety');
+const brdHot = (await call('GET', '/v1/port', { token: cap.token })).body.routes;
+assert(brdHot.find((r) => r.id === 'coastal').notoriety > brd1.notoriety, 'the board shows the lane heating up');
+assert(brdHot.find((r) => r.id === 'coastal').interdictPct > Math.round(PORT.INTERDICT_MIN * 100), 'the hot lane draws more Coast Guard than the cold floor (notoriety adds interdiction)');
+// a DIFFERENT lane stays cold — the incentive to rotate
+assert.equal(brdHot.find((r) => r.id === 'openwater').notoriety, 0, 'a lane you leave alone stays cold');
+await pool.query(`UPDATE characters SET port_used=0, port_at=now() WHERE id='${cap.id}'`);
+await call('POST', `/v1/port/collect/${ncBoat}`, { token: cap.token });
+// THE SMUGGLER'S REPUTATION — rep T2 (Smuggler rank, ≥$2M landed): the docks toll is HALVED (a transfer break;
+// a fresh legend so cap's lifetime-identity check below is untouched — smuggled is a status counter, not §10.4)
+const legend = await mk('El Padrino'); await pool.query(`UPDATE characters SET respect=6000, loc='docks' WHERE id='${legend.id}'`); await seedCash(legend.id, 3000000);
+const legAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${legend.id}'`)).rows[0].a;
+await pool.query(`UPDATE account_persistent SET smuggled=2500000 WHERE account_id='${legAcct}'`); // Smuggler rank → rep tier 2
+const legBoat = (await call('POST', '/v1/port/boat/skiff', { token: legend.token })).body.boat.id;
+await call('POST', `/v1/port/run/${legBoat}`, { token: legend.token, body: { route: 'coastal' } });
+const legCollect = (await call('POST', `/v1/port/collect/${legBoat}`, { token: legend.token })).body;
+const fullToll = Math.floor(legCollect.landed * PORT.STEP3.TOLL_BPS / 10000);
+assert.equal(legCollect.toll, Math.floor(legCollect.landed * PORT.STEP3.TOLL_BPS / 10000 * NOTORIETY.REP_TOLL_MULT), 'a Smuggler-rank runner (rep T2) is tolled at HALF (the reputation transfer break)');
+assert(legCollect.toll > 0 && legCollect.toll < fullToll, 'the reputation toll break is a real discount');
+const legRepBoard = (await call('GET', '/v1/port', { token: legend.token })).body.reputation;
+assert(legRepBoard && legRepBoard.tollBreak && legRepBoard.coolsFaster, 'the board surfaces the earned reputation perks');
 delete process.env.PORT_RUN_MS; delete process.env.PORT_INTERDICT_P;
 
 // ── boats die with the street ──
