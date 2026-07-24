@@ -8,7 +8,7 @@ import { EMISSION } from './rules.js';
 // The complete reason vocabulary, by currency. A row whose reason matches no
 // prefix here is an unenumerated faucet/sink — the loudest possible §10.4 alarm.
 const KNOWN_REASONS = {
-  cash: ['crime:', 'racket:income', 'bank:interest', 'bank:', 'heal', 'checkin', 'travel', 'heist',
+  cash: ['crime:', 'racket:income', 'racket:upgrade', 'bank:interest', 'bank:', 'heal', 'checkin', 'travel', 'heist',
     'melt:tithe', 'fence', 'repair', 'craft:', 'goods:', 'racket:buy:', 'asset:', 'swap:', 'gun:buy:',
     'ammo:buy', 'gang:found', 'gang:tribute', 'gang:war', 'gang:dissolved', 'turf:seize:', 'jump:',
     'bounty:', 'bust:reward', 'whack:chop', 'whack:loot', 'death:', 'exchange:', 'crew:sales', 'deal:', 'makings:',

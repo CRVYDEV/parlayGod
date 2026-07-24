@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, seasonModOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, seasonModOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -109,7 +109,7 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
   const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf, est] = await Promise.all([
-    client.query('SELECT racket_id FROM character_rackets WHERE character_id=$1', [ch.id]),
+    client.query('SELECT racket_id, level FROM character_rackets WHERE character_id=$1', [ch.id]),
     client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
     client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
     client.query('SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', [ch.id]),
@@ -148,6 +148,8 @@ export async function loadOwned(client, ch) {
     fighters,
     vendettas,
     rackets: idList(rk.rows, 'racket_id'), assets: idList(as.rows, 'asset_id'),
+    // ASSETS & RACKETS → Tier 4 — per-racket upgrade levels (folded into accrual income)
+    racketLevels: Object.fromEntries(rk.rows.map((r) => [r.racket_id, Number(r.level || 0)])),
     cars: cars.rows, cargo: cargoMap(cargo.rows), items: itemMap(items.rows),
     gear: idList(gear.rows, 'gear_id'), guns: idList(guns.rows, 'gun_id'),
     gangId, gangRole: gm.rows[0]?.role || null, gangJoinedAt: gm.rows[0]?.joined_at || null, gang, held,
@@ -365,10 +367,16 @@ export const trunkCap = (h) => cargoCapacity(h.owned.assets)
 
 async function accrueAndLedger(client, ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,
+    racketLevels: owned.racketLevels, // Tier-4 — per-racket upgrade levels multiply the drip
     foundationTier: owned.gang?.foundation || 0 }); // THE FOUNDATION step two: the family charity speeds the exposure bleed
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
-  if (ch._accruedIncome > 0)
+  if (ch._accruedIncome > 0) {
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
+    // THE TYCOON LEGEND (Tier-4) — lifetime racket + front income (account-level, survives death;
+    // NUMERIC arith → pg-mem-safe; off the persistAccount column list, so clobber-safe)
+    await client.query('UPDATE account_persistent SET tycoon_earned = tycoon_earned + $1 WHERE account_id=$2',
+      [ch._accruedIncome, ch.account_id]);
+  }
   // ledger the EXACT interest applied (any positive delta) — gating at ≥ $0.01 left
   // sub-cent interest on the bank balance with no matching row, a slow §10.4 drift
   if (ch._bankInterest > 0)
@@ -679,6 +687,10 @@ export function view(ch, acct = {}, owned = {}) {
       const spent = [...(owned.skills || [])].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
       return { total, spent, available: Math.max(0, total - spent) }; })(),
     rackets: owned.rackets || [], assets, businesses: owned.businesses || [], speakeasy: owned.speakeasy || null, fighters: owned.fighters || [], cargo: owned.cargo || {}, items: owned.items || {}, gear,
+    // ASSETS & RACKETS → Tier 4 — per-racket upgrade levels, THE TYCOON legend, the EMPIRE-SET titles
+    racketLevels: owned.racketLevels || {},
+    tycoon: { earned: Number(acct?.tycoon_earned || 0), rank: tycoonRankOf(acct?.tycoon_earned).name },
+    empireTitles: empireTitles(owned.rackets || [], assets),
     cars: (owned.cars || []).map((c) => ({ id: c.id, model: c.model_id, trim: c.trim_id, dmg: c.dmg, plate: c.plate || null, listed: !!c.listed, pledged: !!c.pledged, tune: Number(c.tune || 0), raceLimit: c.race_limit != null ? Math.floor(Number(c.race_limit)) : null })),
     gang: owned.gang ? { id: owned.gang.id, name: owned.gang.name, tag: owned.gang.tag, role: owned.gangRole,
       color: owned.gang.color || null, seal: sealOf(owned.gang.seal)?.name || null,
