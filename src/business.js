@@ -370,10 +370,16 @@ export async function specializeBusiness(ch, businessId, spec, client, h) {
 // pending-full/specialized (the speakeasy resetClubToNewOwner precedent). takeover_cd_until is set by the
 // caller BEFORE this (win OR lose) and is deliberately NOT reset here so it survives the handover.
 async function resetFrontToNewOwner(client, businessId, newOwnerId) {
+  // (red-team) Den rakeback: the cursor moves to TODAY's volume on a change of hands — the SAME rule
+  // buyBusiness states ("a new owner earns against future action, not history"). Leaving it at 0 handed
+  // the new owner a claim on the ENTIRE lifetime den volume: not a mint (denAvailable caps every payout
+  // at realized profit) but a queue-jump that drains the shared, profit-bounded rakeback pool at the
+  // expense of every honest casino-front owner, whose claims then wait for the book to recover.
+  const vol = Number((await client.query('SELECT total FROM den_volume WHERE id=1')).rows[0]?.total || 0);
   await client.query(
     `UPDATE businesses SET character_id=$2, tier=tier, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(),
-       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=0
-     WHERE id=$1`, [businessId, newOwnerId]);
+       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=$3
+     WHERE id=$1`, [businessId, newOwnerId, vol]);
 }
 
 // ── Tier-4: THE HOSTILE TAKEOVER — the speakeasy-standover twin, applied to fronts (they change hands,
