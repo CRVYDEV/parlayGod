@@ -40,6 +40,7 @@ import * as Skills from './skills.js';
 import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
+import * as Standing from './standing.js';
 import * as Pen from './pen.js';
 import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
@@ -1477,6 +1478,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
   // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
   app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
+  // THE CITY STANDING — the unifying "who's winning" spine over the 35 status axes. One aggregate metric
+  // (six pillars, log-share of the population) so the endgame finally has a single answer. Status only, §10.4-free.
+  app.get('/v1/leaderboard/city', { preHandler: auth }, async (req) => ({
+    board: await Standing.cityStanding(pool), you: await Standing.myStanding(pool, req.user.sub) }));
   // The RECRUITERS (§7.13): the organic-growth hall of fame + the family recruitment board. Status only.
   app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
     recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool),

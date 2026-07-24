@@ -4754,3 +4754,35 @@ toast haptic; instant under reduced-motion). **(5) LIVING DETAILS** — a breath
 re-renders don't re-flash). Screenshot-verified in Chromium (main + a forced danger/night state: the
 health bar goes red-throb, the money counts to $1.28M, layout intact, zero page errors). Client script
 parses clean; suite untouched (UI-only). Deferred: nothing — the pass is a self-contained polish layer.
+
+**CRITICAL-READ REVIEW — stakes/spine/economy (founder-directed "address all of these") — MEASURE +
+BUILD + PROPOSE.** A structural read of the whole game after the content-accretion phase surfaced seven
+gaps; the response split by ground rule #1 into diagnostic MEASUREMENT, additive §10.4-free BUILDS, and
+founder-gated PROPOSALS (never a unilateral retune of signed numbers). **MEASURED (#1 — the headline):**
+`tools/sim.js` gained **P9.20 THE PASSIVE STACK** — the prior probes measure faucets one at a time, but
+the passive earners DON'T compete for energy (the active-loop bound), so P9.20 sums what a single maxed
+operator collects in parallel. Result (analytic, from the signed constants, sweep still drift-0): the
+**5-front personal business stack is $48.96M/day NET** (gross $61.2M − the 20% pad, ~$110M to build,
+**~2.2-day payback**), **ENERGY-FREE from 5 collect clicks**, ~6× the top-tier crime grind ($7.9M/day,
+~200 energy-bounded attempts); territory adds ~$20.9M/day per district (family-side, up to 6). §10.4 is
+CLEAN (every front is a ledgered faucet) — this is a **balance dial** (the front `incomePerHr` curve),
+not a leak. `omerta-stakes-and-spine-review.md` is the founder decision sheet: **#1** the passive stack
+(levers L1a flatten the top-tier curve / L1b wealth-scaled pad / L1c income cap / L1d territory), **#2**
+death costs nothing for the established (~35 tables wiped vs 25+ account-level legends + portfolio/estate/
+dynasty/marriages/honor-echo/collection survive → lever L2a an **inheritance/estate death-tax**), **#3**
+PvP is −EV (−$72k standalone) AND has EIGHT untouchable states → **the keystone L3a: make passive wealth
+PvP-LOSABLE** (the territory-seizure precedent extended to personal fronts), which converges #1/#2/#3 into
+one fix, and **#6** breadth ≫ depth (D6a deepen the crime verb / D6b embrace the collection game). All
+proposals are levers for Jorge to accept/decline — NOT applied. **BUILT (#4 — the spine):** `src/standing.js`
++ `GET /v1/leaderboard/city` — **THE CITY STANDING**, one aggregate "who's winning" metric over the 35
+scattered leaderboards. Six PILLARS (Blood/Empire/Power/Legit/Hustle/Honor), each summing its
+account-level survives-death legends then scored LOG-SHARE vs the population max (so BREADTH across pillars
+beats maxing one axis, and a linear whale can't swamp the board); City Standing = the sum (0–600),
+RELATIVE + recomputed on every read, nothing stored. PURE STATUS — read-only SELECTs over
+`account_persistent`, **ZERO §10.4** (no currency/faucet/ledger — the hitman-rep/portfolio-board
+precedent); agents + banned excluded. `myStanding` gives a player their own score + pillar breakdown + real
+rank; the console Start Here tab now LEADS with a City Standing card (your score + pillar bars + the top of
+the board) so the endgame finally has a single legible goal. `test/standing.js` (the 44th suite) proves the
+board rank order, breadth>depth, the pillar breakdown, agent+banned exclusion, the personal rank, and a
+no-legend account reading 0-but-ranked. Suite 44/44 + sim drift-0. (#5 free-path legibility + #7 consistency
+snags: in progress.)
