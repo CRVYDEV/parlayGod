@@ -4523,3 +4523,54 @@ LOWs (attendGala jail gate + 23505-only catch, the veto-forfeits-all rule, the l
 for founder sign-off (NOT patched): estate walk economics (the recurring sink floors at the rehire fee), the
 levy self-deal + proposal agenda-control, last-second proposal sniping, the loan-house death cycle,
 ring soft-play collusion (all bounded/status-posture or ground-rule-#1 balance calls).
+
+**TIER-1 → TIER-4 DEEPENING PROGRAM (founder-directed 2026-07-24: "expand every single tier 1 system into
+tier 4 level systems") — ALL SIX BUILT** (`omerta-tier1-deepening-design.md`; red-team `AUDIT-tier1-deepening.md`
+— no CRITICAL/HIGH; BALANCE.md sign-off flags; §10.4 drift-0 + the 43-suite green after every drop). The six
+thinnest systems, each deepened to the depth bar (multiple orthogonal mechanics + a scaling catalog + a
+competitive/meta layer + a status legend + a console screen), all on already-audited patterns.
+**(1) THE DUELING LADDER** (`src/duels.js`, `test/duels.js`) — DIVISIONS (Bronze→Master, a ladder over raw
+ELO), WEAPON STYLES (Brawler>Gunslinger>Fencer, a rock-paper-scissors `DUELS.STYLE_EDGE` +15% combat mult so
+the BUILD isn't the only axis; `pickStyle`, direct-SQL `duel_style`), THE SEASON BELT (highest-ELO listed
+duelist, recomputed on read — the Commission-seats precedent) crowned at rollover into account-level
+`duel_titles` (survives death, the boxing-belt legend) ranked `DUEL_TITLE_RANKS`, and GRUDGE REMATCHES
+(challenging whoever last beat you cools ~⅓ as long). Status/combat only — the wager stays the audited
+casino:pvp transfer, §10.4 UNTOUCHED. `POST /v1/duels/style`; the leaderboard gained divisions + a death-proof
+champions board. **(2) CREW HEISTS** (`src/heists.js`, `test/heists.js`) — the JOB LADDER 4→12 (corner-store
+$4k lvl4 → the Federal Reserve $320k lvl80 5-man, on the sim-signed ROI curve; two new roles lookout/hacker
+for the 5-man crews; the marquee jobs `minPulled`-gated), THE CASING PHASE (`caseJob` — energy for a bounded
+success bonus, capped), THE FENCE (a standard score taken HOT banks fenceable `heist_loot` book value — NOT a
+§10.4 currency, the Port contraband twin — fenced at a drifting rate centered BELOW 1.0, so a variance play
+never a net faucet increase; `heist:fence` rides the `heist` prefix; loot-able on a fire-kill via
+`HEIST_LOOT_RATE`, the P1.1 twin), and CREW NOTORIETY (`account_persistent.heists_pulled`, survives death,
+`HEIST_RANKS` + `/v1/leaderboard/heists`; the count soft-gates the marquee jobs). **(3) CLUE SCROLLS**
+(`src/clues.js`, `src/rules.js`, `test/clues.js`) — TRAIL TIERS (`CLUES.TIERS` easy→master, rolled at drop by
+weight, sets step count + casket band + relic rarity; the master casket $55k–120k is the one flagged faucet,
+≤3/day-capped), PUZZLE VARIETY (`clueStepOf` gains anagram/cipher KINDS — the same answer dressed richer, zero
+dig-logic change), CASKET RELICS (a rare casket yields a status Collection trophy via `logCollect` to a new
+`relics` category — never $OMR-by-chance, the RWA rule), and a deeper `Master of the Trail` rank +
+per-digger relic tally. `CLUE_RELIC_P` is a TEST-ONLY roll knob. §10.4 unchanged (the casket still rides
+`clue:casket`, tiered band). **(4) TERRITORY RACKETS** (`src/territory.js`, `src/rules.js`, `test/social.js`)
+— the TYPE catalog 3→6 (loansharking ×1.20 / chop-shop ×1.25 / counterfeiting ×1.45, zero territory.js code —
+the type is data, riding the existing `incomeMult`/scrutiny; the income mults flagged for sim) + THE SYNDICATE
+(`syndicateOf` — a family running ≥`TERRITORY_SYNDICATE_MIN` (3) operations of ONE type earns that type's
+syndicate title, PURE STATUS on `GET /v1/territory` + the public family view — the Empire precedent).
+**(5) SOVEREIGNTY** (`src/sov.js`, `src/rules.js`, `src/invariants.js`, `test/expansion.js`) — the stronghold
+ladder 3→6 (Outpost→The Iron Capital, on the cost/garrison/upkeep curve; `SOV_POINTS`/RANKS extended) + SOV
+INCOME (each tier yields a lazy `incomePerDay` to the treasury — a held stronghold is now a PRODUCTIVE,
+defensible asset; `collectSov`, `POST /v1/sov/collect`, any member, D2 safehouse-gated, 24h-capped,
+crumbling-gated). §10.4: `sov:income` is a treasury FAUCET EXCLUDED from the `sov:%` sink sum + carried as its
+own `sovIncomeIn` IN term in the gang-treasuries check — proven neutral by a before/after drift-delta in the
+test (the territory:income precedent). **(6) SOLDIERS** (`src/soldiers.js`, `src/game.js`, `src/rules.js`,
+`test/dynasty.js`; the thin sub-system of the Marriages/Soldiers/Secrets trio) — the recruit→capo RANK ladder
+(`SOLDIERS.RANKS`, `soldierRankOf`, derived status on the roster + memorial) + THE COMMANDER LEGEND
+(`account_persistent.soldiers_led`, lifetime successful assisted jobs bumped in `soldierResult`, survives
+death, `COMMANDER_RANKS` + `/v1/leaderboard/commanders`). Zero §10.4 (a status counter). Persist-clobber
+verified clean across all six (every new direct-SQL column absent from the persist positional UPDATEs); lock
+order acyclic (belt/grudge/syndicate/strength are unlocked reads; collectSov = gang→structures matching
+upgradeSov/siege; the crown/legend bumps run under the actor's char lock). Each drop: schema → rules → module
+→ routes → console → tests → suite+sim → commit. Deferred (flagged): the duel bracket-tournament + spectator
+betting (§C), the sov multi-stage siege + coalition co-defence (§B/§D), and Marriages (dowries/betrothal) +
+Secrets (types/network/market) — the two already feature-complete for their role. All numbers are founder
+sign-off levers; the new faucets (heist fence, master casket, sov income, territory hot-type mults) are
+sim-before-production flagged in BALANCE.md.

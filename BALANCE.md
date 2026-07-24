@@ -1704,3 +1704,42 @@ tournament rake; alt-stuffing stays −rake/N per head (renormalized payouts).
 - **Ring soft-play / chip-dumping** — dumping via fold-to-raise is NOT a cheaper transfer rail
   (raked ≥3%, worse than the 2% audited rails), but out-of-band soft-play collusion against a
   non-colluding mark is unpreventable server-side (the poker reality; the rake taxes it).
+
+---
+
+## TIER-1 → TIER-4 DEEPENING PROGRAM (2026-07-24) — new sign-off levers
+
+Six thin systems expanded to Tier-4. All new numbers are founder sign-off levers; §10.4 stayed
+drift-0 throughout (sim + 43-suite green after every drop). Red-team: `AUDIT-tier1-deepening.md`
+(no CRITICAL/HIGH).
+
+**Dueling Ladder** — `DUELS.DIVISIONS` (6 divisions), `STYLES` (Brawler>Gunslinger>Fencer),
+`STYLE_EDGE` (1.15 combat mult), `GRUDGE_CD_MULT` (0.34 rematch cooldown), `DUEL_TITLE_RANKS`.
+All status/combat — the wager stays the audited casino:pvp transfer (no faucet). KEEP.
+
+**Crew Heists** — the job ladder 4→12 (`HEIST_JOBS` takePerLvl bands are the sim-signed faucet,
+on the existing ROI curve — the marquee jobs `minPulled`-gated); `HEIST_CASE_*` (casing bonus,
+capped 0.15); `HEIST_FENCE_LO/SPAN` (fence band 0.80–1.10, mean ~0.95 — a variance play, never a
+net faucet increase since it REPLACES the cash payout); `HEIST_LOOT_RATE` (0.5, the P1.1 hot-loot
+loot); `HEIST_RANKS`. **Flag:** the new job bands + the fence — sim the 12-job curve; the fence is
+safehouse-UNGATED (Port parity — a founder call, one line for D2-parity).
+
+**Clue Scrolls** — `CLUES.TIERS` (easy→master; the **master casket band $55k–120k** is the one
+flagged faucet, ≤3/day-capped); puzzle KINDS (anagram/cipher, zero dig-logic change); `RELICS` +
+`relicP` (status Collection trophies, never $OMR); a deeper `Master of the Trail` rank. **Flag:**
+sim the master casket $/day.
+
+**Territory Rackets** — the TYPE catalog 3→6 (loansharking ×1.20 / chop_shop ×1.25 /
+counterfeiting ×1.45 — the income mults INCREASE the ledgered `territory:income` faucet for the hot
+types, offset by scrutiny/raid risk; numbers ×1.0 preserves the signed baseline); `TERRITORY_SYNDICATE_MIN`
+(3, the same-type meta — PURE STATUS, no income bonus this drop). **Flag:** sim the net EV per new type.
+
+**Sovereignty** — the stronghold ladder 3→6 (`SOV.TIERS` Bastion/Fortress-City/The Iron Capital —
+cost/garrison/upkeep sinks); **`incomePerDay` per tier** (the one new treasury FAUCET — a held
+stronghold's lazy tribute, `INCOME_CAP_MS` 24h-capped, crumbling-gated, overextension-taxed;
+§10.4-neutral to the gang-treasuries check, proven by a before/after drift delta); deeper
+SOV_POINTS/RANKS. **Flag:** sim the sov:income curve (base-wide bounded by ≤6 districts × the taxed rate).
+
+**Soldiers** — `SOLDIERS.RANKS` (Associate→Caporegime, derived status) + the COMMANDER LEGEND
+(`account_persistent.soldiers_led`, survives death) + `COMMANDER_RANKS` + `/v1/leaderboard/commanders`.
+Zero §10.4 (a status counter). KEEP.
