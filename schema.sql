@@ -2045,3 +2045,7 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS heists_pulled INT NOT NU
 -- ── CLUE SCROLLS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §3) ──
 -- tier: the trail tier rolled at drop (easy→master) — sets the step count, casket band, relic rarity.
 ALTER TABLE clue_scrolls ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'easy';
+
+-- ── SOVEREIGNTY TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §5) ──
+-- income_at: the lazy income clock (a held stronghold yields tribute to the treasury, the territory pattern).
+ALTER TABLE sov_structures ADD COLUMN IF NOT EXISTS income_at TIMESTAMPTZ NOT NULL DEFAULT now();

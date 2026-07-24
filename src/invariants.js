@@ -109,9 +109,11 @@ async function collectLedgerChecks(pool) {
   // and (recurring sinks) `territory:upkeep` a treasury SINK too — all character_id NULL (gang-level).
   const territoryIncome = await sum(pool, "currency='cash' AND reason='territory:income'");
   const territoryOut = -(await sum(pool, "currency='cash' AND reason IN ('territory:establish','territory:upkeep','territory:raid','territory:fortify')"));
-  // FIVE PILLARS #3: sovereignty is a pure treasury DRAIN (build/upgrade/upkeep/siege — no faucet
-  // anywhere in the pillar, the anti-snowball posture). All character_id NULL, counterparty = gang.
-  const sovOut = -(await sum(pool, "currency='cash' AND reason LIKE 'sov:%'"));
+  // FIVE PILLARS #3: sovereignty's sinks (build/upgrade/upkeep/siege). TIER-4 §C added `sov:income` —
+  // a held stronghold's lazy tribute, a treasury FAUCET (the territory:income precedent) — so it's
+  // EXCLUDED from the sink sum and carried as its own IN term below. All character_id NULL, counterparty = gang.
+  const sovOut = -(await sum(pool, "currency='cash' AND reason LIKE 'sov:%' AND reason <> 'sov:income'"));
+  const sovIncomeIn = await sum(pool, "currency='cash' AND reason='sov:income'");
   // STEP FOUR — a RIVAL raid muscles a held operation for a CUT of its pending income: `territory:muscle`
   // is a treasury FAUCET (character_id NULL, counterparty = the RAIDER's gang) that REDIRECTS uncollected
   // income (the owner's clock advances so they collect that much less — the business-shakedown pattern),
@@ -131,7 +133,7 @@ async function collectLedgerChecks(pool) {
   const worldInvadeOut = -(await sum(pool, "currency='cash' AND reason='world:invade'"));
   const worldReinforceOut = -(await sum(pool, "currency='cash' AND reason='world:reinforce'")); // step six: garrison-stiffen treasury SINK
   push('gang treasuries', treasuries,
-    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund);
+    tributeIn + titheIn + territoryIncome + territoryMuscleIn + tollIn + portTollIn + worldTributeIn + sovIncomeIn - warOut - seizeOut - dissolvedCash - contractOut - territoryOut - sovOut - fixOut - worldInvadeOut - worldReinforceOut + treasuryRefunds - proposalOut + proposalRefund);
 
   // COMMISSION ESCROW (step three): open proposal deposits == posted − refunded − forfeited
   // (the bounty-escrow twin on the chamber's table; a dissolved family's deposit forfeits at settle).

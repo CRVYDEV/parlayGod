@@ -1736,10 +1736,11 @@
       ${sov.family ? `<div class="d" style="color:var(--dim);font-size:12px">your family holds <b>${fmt(sov.family.points || 0)} sov points</b> (${sov.family.rank || ''})</div>` : ''}
       <div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => s.mine).map((s) => `
         <div class="card"><span class="t">${s.district} — ${s.tierName || 'Outpost'} (t${s.tier})</span> <span class="chip ${s.vulnerable ? 'bad' : 'good'}">${s.vulnerable ? 'VULNERABLE NOW' : `safe — window ${String(s.windowHour).padStart(2, '0')}:00 UTC`}</span>
-          <div class="d">garrison bonus +${s.garrisonBonus ?? 0}${s.upkeepOwed ? ` · upkeep owed $${fmt(s.upkeepOwed)}` : ''}</div>
-          ${boss ? `${s.nextTier ? `<button class="act" data-sovup="${s.district}">upgrade to ${s.nextTier.name} ($${fmt(s.nextTier.cost)})</button>` : '<span class="chip good">Citadel — the strongest hold</span>'}
+          <div class="d">garrison bonus +${s.garrisonBonus ?? 0} · income $${fmt(s.incomePerDay || 0)}/day${s.incomeOwed ? ` · tribute due $${fmt(s.incomeOwed)}` : ''}${s.upkeepOwed ? ` · upkeep owed $${fmt(s.upkeepOwed)}` : ''}</div>
+          ${boss ? `${s.nextTier ? `<button class="act" data-sovup="${s.district}">upgrade to ${s.nextTier.name} ($${fmt(s.nextTier.cost)})</button>` : '<span class="chip good">The Iron Capital — the strongest hold</span>'}
             ${s.upkeepOwed ? `<button class="act" data-sovkeep="${s.district}">pay upkeep ($${fmt(s.upkeepOwed)})</button>` : ''}` : ''}</div>`).join('')
-        || '<span class="d" style="color:var(--dim)">no strongholds. Build one on turf you hold to make it costly to take.</span>'}</div>
+        || '<span class="d" style="color:var(--dim)">no strongholds. Build one on turf you hold to make it costly to take — and to draw tribute.</span>'}</div>
+      ${(sov.structures || []).some((s) => s.mine && s.incomeOwed) ? `<button class="act" data-do="POST /v1/sov/collect" style="margin-top:4px">collect tribute → treasury</button>` : ''}
       ${(sov.structures || []).some((s) => !s.mine && s.vulnerable) ? `<div class="grid" style="margin-top:4px">${(sov.structures || []).filter((s) => !s.mine && s.vulnerable).map((s) => `
         <div class="card" style="border-color:var(--blood)"><span class="t">${s.district} — ${s.holderTag ? `[${s.holderTag}]` : 'a rival'}'s ${s.tierName} <span class="chip bad">VULNERABLE</span></span>
           <div class="d">stand at ${s.district} and lay siege ($${fmt(sov.siegeCost || 50000)}) — a win knocks a tier off</div>
