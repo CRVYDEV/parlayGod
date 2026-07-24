@@ -10,7 +10,11 @@
 process.env.MOD_KEY = 'test-mod-key';
 process.env.RING_TURN_MS = '200';       // TEST-ONLY turn clock (boot-guard rejects it in production)
 process.env.BRACKET_ROUND_MS = '1';     // TEST-ONLY round pacing
-process.env.TOURNEY_MS = '300';         // registration window (existing test-only knob)
+process.env.TOURNEY_MS = '5000';        // GENEROUS registration window (test-only): the 8 sequential
+// registration round-trips must all land before the window closes — a tight 300ms raced pg-mem load
+// and intermittently rejected a late runner ('closed'), which cascaded the bracket into resolving a
+// round early. With a wide window the field always fills; the window is then CLOSED DETERMINISTICALLY
+// via SQL (closeReg below) instead of a wall-clock sleep, so the sweep timing can't flake either.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { CASINO } from '../src/rules.js';
@@ -37,6 +41,9 @@ const escrowOk = async (label) => {
   assert.equal(c.drift, 0, `${label}: ring escrow reconciles (${c.drift})`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// deterministically CLOSE a tournament's registration window (no wall-clock race): the sweep picks up
+// any tournament whose resolves_at <= now(), so backdating it forces registration closed on the spot.
+const closeReg = (tid) => pool.query(`UPDATE poker_tournaments SET resolves_at = now() - interval '1 second' WHERE id='${tid}'`);
 
 const al = await mk('Ante Al');
 const bo = await mk('Bluff Bo');
@@ -192,7 +199,7 @@ assert.equal(r.body.format, 'bracket', 'in bracket format');
 const btid = r.body.tournament;
 for (let i = 1; i < 8; i++)
   assert.equal((await call('POST', '/v1/casino/tournament', { token: runners[i].token, body: {} })).code, 200, `runner ${i} seats`);
-await sleep(350); // TOURNEY_MS=300 — registration closes
+await closeReg(btid); // registration closes deterministically (was a flaky sleep vs a 300ms window)
 // round 1: 8 runners → 2 heats of 4… (HEAT_SIZE 6 → heats of 6+2; ADVANCE 2 per heat → 4 remain)
 let s1 = await sweepTournaments(pool);
 assert.equal(s1.resolved, 1, 'round one ran');
@@ -229,7 +236,7 @@ assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the br
   const dbid = (await call('POST', '/v1/casino/tournament', { token: R[0].token, body: { bracket: true } })).body.tournament;
   for (let i = 1; i < 8; i++) await call('POST', '/v1/casino/tournament', { token: R[i].token, body: {} });
   await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: R[3].id } });
-  await sleep(350); // registration closes
+  await closeReg(dbid); // registration closes deterministically (the kill already landed → R[3] burns in round 0)
   const s = await sweepTournaments(pool);
   assert.equal(s.resolved, 1, 'the death round ran');
   const st = (await pool.query(`SELECT status, pool FROM poker_tournaments WHERE id='${dbid}'`)).rows[0];
