@@ -2061,9 +2061,9 @@
         <div class="d">${me?.heistSeconds ? `cooling down (${mins(me.heistSeconds)})` : 'ready — a big score, level-scaled'}</div>
         ${me?.heistSeconds ? '' : '<button class="act" data-do="POST /v1/heist">pull the score</button>'}</div>`;
     const dailyReady = (daily.jobs || []).some((j) => !j.claimed && j.progress >= j.goal);
-    const soldierBlock = `<div class="grid">
+    const soldierBlock = `${sq.commander && sq.commander.led > 0 ? `<div class="d" style="color:var(--gold,#c9a227);font-size:12px;margin-bottom:4px">🎖 ${esc(sq.commander.rank)} — ${sq.commander.led} job${sq.commander.led === 1 ? '' : 's'} led</div>` : ''}<div class="grid">
         ${(sq.roster || []).map((s) => `
-        <div class="card"><span class="t">${s.name}</span> <span class="chip ${s.onJob ? 'good' : ''}">${s.injuredSeconds > 0 ? `laid up ${mins(s.injuredSeconds)}` : s.onJob ? 'ON THE JOB' : 'benched'}</span>
+        <div class="card"><span class="t">${s.name}</span> <span class="chip">${esc(s.rank || '')}</span> <span class="chip ${s.onJob ? 'good' : ''}">${s.injuredSeconds > 0 ? `laid up ${mins(s.injuredSeconds)}` : s.onJob ? 'ON THE JOB' : 'benched'}</span>
           <div class="d">${s.traitName} — ${s.desc} · lvl ${s.level} (${s.xp} xp)</div>
           ${s.onJob ? '<button class="act" data-do="POST /v1/soldiers/unassign">bench him</button>'
             : s.injuredSeconds > 0 ? '' : `<button class="act" data-soldassign="${s.id}">take him along</button>`}
@@ -2072,7 +2072,7 @@
           <div class="d">$${fmt(sq.hireCost || 25000)} — a name, one talent, no guarantees they come home</div>
           <button class="act" data-do="POST /v1/soldiers/hire">put the word out</button></div>` : ''}
       </div>
-      ${(sq.memorial || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim)">⚰ The wall: ${sq.memorial.map((m) => `<b>${m.name}</b> (${m.trait}, lvl ${m.level}) — ${m.cause}`).join(' · ')}</div>` : ''}`;
+      ${(sq.memorial || []).length ? `<div class="d" style="margin-top:6px;color:var(--dim)">⚰ The wall: ${sq.memorial.map((m) => `<b>${m.name}</b> (${m.rank || m.trait}) — ${m.cause}`).join(' · ')}</div>` : ''}`;
     // the density fix (tester: "you have to scroll a while between disparate functions"): the best
     // jobs + the bank/map lead the screen; everything else is a labeled drawer that stays how you
     // left it. One glance = act; the depth is a click away, not a scroll away.

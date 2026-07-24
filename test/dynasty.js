@@ -213,6 +213,14 @@ let a, b;
   board = (await call('GET', '/v1/soldiers', { token: s.token })).body;
   const vet = board.roster.find((x) => x.id === soldierId);
   assert.ok(vet.xp >= 1, 'the soldier earned xp');
+  // ── TIER-4: the soldier carries a RANK (recruit→capo), and THE COMMANDER LEGEND banked a lifetime job ──
+  assert.ok(vet.rank, 'the soldier has a rank');
+  assert.ok(board.commander && board.commander.led >= 1, 'the commander legend banked a successful assisted job');
+  assert.ok(board.commander.rank, 'and carries a commander rank');
+  const cled = Number((await pool.query(`SELECT soldiers_led FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${s.id}')`)).rows[0].soldiers_led);
+  assert.ok(cled >= 1, 'soldiers_led is persisted (survives death)');
+  const clb = (await call('GET', '/v1/leaderboard/commanders', { token: s.token })).body;
+  assert.ok(clb.commanders.length >= 1 && clb.commanders[0].led >= 1, 'the commanders board lists the decorated');
   // audit regression: every assisted job pays the cut — the Score included (the safecracker was
   // the one pure-upside trait; the pre-ledger shave makes assignment a real tradeoff, §10.4-safe)
   await pool.query(`UPDATE characters SET heist_at=NULL, health=100, jail_until=NULL WHERE id='${s.id}'`);

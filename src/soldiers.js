@@ -9,7 +9,7 @@
 // char lock serializes everything (no second lock, no AB-BA surface).
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
-import { SOLDIERS, soldierLevelOf, soldierFxOf, rollSoldierName } from './rules.js';
+import { SOLDIERS, soldierLevelOf, soldierFxOf, soldierRankOf, commanderRankOf, rollSoldierName } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const fit = (s) => s.alive && (!s.injured_until || new Date(s.injured_until) <= new Date());
@@ -59,17 +59,20 @@ export async function dismissSoldier(ch, soldierId, client) {
   return { ok: true };
 }
 
-export async function soldierBoard(ch, client) {
+export async function soldierBoard(ch, client, acct) {
   const rows = (await client.query(
     'SELECT * FROM soldiers WHERE character_id=$1 ORDER BY hired_at', [ch.id])).rows;
   const now = Date.now();
+  const led = Number(acct?.soldiers_led || 0);
   return {
     max: SOLDIERS.MAX, hireCost: SOLDIERS.HIRE_COST, cutBps: SOLDIERS.CUT_BPS,
+    // TIER-4 — THE COMMANDER LEGEND (lifetime jobs led, survives death)
+    commander: { led, rank: commanderRankOf(led).name },
     roster: rows.filter((s) => s.alive).map((s) => ({
       id: s.id, name: s.name, trait: s.trait,
       traitName: SOLDIERS.TRAITS[s.trait]?.name || s.trait,
       desc: SOLDIERS.TRAITS[s.trait]?.desc || '',
-      level: soldierLevelOf(s.xp), xp: Number(s.xp),
+      level: soldierLevelOf(s.xp), xp: Number(s.xp), rank: soldierRankOf(s.xp).name, // Tier-4 — the recruit→capo grade
       onJob: s.on_job,
       injuredSeconds: s.injured_until && new Date(s.injured_until) > now
         ? Math.floor((new Date(s.injured_until) - now) / 1000) : 0,
@@ -77,9 +80,20 @@ export async function soldierBoard(ch, client) {
     // THE MEMORIAL — the fallen stay on the wall until the street itself dies
     memorial: rows.filter((s) => !s.alive).map((s) => ({
       name: s.name, trait: SOLDIERS.TRAITS[s.trait]?.name || s.trait,
-      level: soldierLevelOf(s.xp), cause: s.cause || 'a job gone wrong', diedAt: s.died_at,
+      level: soldierLevelOf(s.xp), rank: soldierRankOf(s.xp).name, cause: s.cause || 'a job gone wrong', diedAt: s.died_at,
     })),
   };
+}
+
+// THE COMMANDERS' BOARD (Tier-4) — the most decorated commanders by lifetime jobs led (agents excluded).
+export async function commanderLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT c.name, ap.soldiers_led FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.soldiers_led > 0
+      ORDER BY ap.soldiers_led DESC, c.name LIMIT 20`)).rows;
+  return { commanders: rows.map((r, i) => ({ pos: i + 1, name: r.name, led: Number(r.soldiers_led),
+    rank: commanderRankOf(r.soldiers_led).name })) };
 }
 
 export { soldierLevelOf, soldierFxOf };
