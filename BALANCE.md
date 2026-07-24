@@ -1765,3 +1765,36 @@ Builder/architect/family-build = pure status; the contribution is still a pure S
 
 **Five Pillars (`HONOR` block).** The ladder 5→7 + the honor peak/low legend + the reputation boards =
 pure status; the teeth (DREADED −60 / TRUSTED 60) are unchanged. **Zero faucet — KEEP.**
+
+## TIER-3 → TIER-4 DEEPENING PROGRAM (2026-07-24) — new sign-off levers
+
+Six mid-depth systems deepened (Business Empire, Convoys, Commission, Reserve Bond, Store/Ledger,
+Estate & Auction). Red-team `AUDIT-tier3-deepening.md`: no CRITICAL/HIGH/MED; §10.4 drift-0; 45/45.
+The Tier-4 work is overwhelmingly **status legends** (zero §10.4) + **deflationary $OMR sinks**. The
+levers/flags below are the only balance surfaces — none is a bug.
+
+- **Player consignment (`AUCTION.CONSIGN`) — a NEW P2P $OMR TRANSFER rail. NET-DEFLATIONARY, WATCH.**
+  A bidder→seller $OMR transfer with a house TAKE (`TAKE_BPS` 5%, burns) + a listing FEE (`FEE_OMR` 2,
+  burns), so it can only SHRINK supply; collusion is −EV by the take (the market/loan/bodyguard rake
+  precedent). But it IS a new $OMR movement path — sim the volume before production. Dials:
+  `TAKE_BPS`, `FEE_OMR`, `MIN_RESERVE`/`MAX_RESERVE`, `MAX_LIVE` 3, `MS` 48h.
+- **`blood_oath` decree ×`BLOOD_OATH_LOOT_MULT` (1.25) on the signed `CASH_LOOT_RATE` — WATCH.** A
+  temporary ONE-WEEK Commission decree modifier on a signed lever, applied at both fire-kill cash-loot
+  sites and clamped at the existing `Math.min(0.5, …)` ceiling (the open_season/amnesty precedent — a
+  decree modifying a signed surface is the established pattern). Cash-only (the $OMR loot is
+  untouched). The mult is a sign-off lever; it never breaches the 0.5 cap.
+- **`smugglers_moon` (port interdiction ×0.75) / `open_roads` (convoy arrival ×0.8) decrees — KEEP.**
+  Bounded one-week modifiers, one touchpoint each; open_roads was already wired at convoy depart.
+- **The deeper $OMR sinks help extraction ≤ inflow — KEEP (favored).** Estate tier-6 Palazzo (6000),
+  the legendary rare auction lots (400–1000 min bids that burn), `business:spec`, `bond:pledge`/
+  `bond:charter` — all deflationary; a stronger sink is favored.
+- **The status boards (Collector/Statesman/Patron/Benefactor/Underwriter/Teamster) are
+  Sybil-inflatable — ACCEPT.** A self-funded whale can inflate them, but NO payout attaches (status
+  only — the referral/hitman-rep accepted posture). Agents excluded.
+- **`season_sunk` boundary edge — ACCEPT (LOW).** An account whose character dies exactly at a 28-day
+  season boundary keeps last season's `season_sunk` one extra season (a cosmetic Patron-crown
+  inaccuracy, no §10.4, no payout) — consistent with the codebase's per-char lazy season markers.
+
+All `AUCTION.CONSIGN.*`, `BLOOD_OATH_LOOT_MULT`, `PORT_INTERDICT_MULT`, `OPEN_ROADS_MULT`,
+`COMMISSION.STATECRAFT_*`/`OVERRIDE_WEIGHT`, `BONDS.PLEDGE_MIN`/charter costs, and the Tier-6/rare-lot
+catalog numbers are founder sign-off levers.
