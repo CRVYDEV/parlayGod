@@ -2184,6 +2184,7 @@
           </div>
           <div class="d" style="font-size:11px;margin-top:4px">every brick BURNS (cash 1:1 · goods at base value · $OMR at $${fmt(M.omrRate)} each) — this buys glory, not power</div>
           ${(M.plaque || []).length ? `<div class="d" style="margin-top:6px"><b>THE PLAQUE</b> — ${M.plaque.slice(0, 8).map((pl, i) => `${i + 1}. ${esc(pl.name)} $${fmt(pl.contributed)} <span style="color:var(--gold,#c9a227)">${pl.tier}</span>`).join(' · ')}</div>` : '<div class="d" style="margin-top:6px">no bricks laid yet — be the first name on the plaque</div>'}
+          ${mega.builder ? `<div class="d" style="margin-top:6px;color:var(--gold,#c9a227)">THE BUILDER — <b>${mega.builder.rank}</b> · $${fmt(mega.builder.built || 0)} laid across the city${mega.builder.architected ? ` · ${mega.builder.architected}× Architect` : ''} <span style="color:var(--dim)">(survives death)</span> · <a href="#" id="builder-board">the great builders →</a> · <a href="#" id="fambuild-board">the families →</a></div><div id="builder-lb"></div>` : ''}
         </div>` : '<div class="card"><span class="t">THE SKYLINE IS COMPLETE</span><div class="d">Every monument stands. The city rests — for now.</div></div>'}
         ${(mega.skyline || []).length ? `<div class="card" style="margin-top:8px"><span class="t">THE SKYLINE</span>
           ${mega.skyline.map((sk) => `<div class="d">🏛 <b>${esc(sk.name)}</b> in ${esc(sk.district)} — raised by the city, Architect: <span style="color:var(--gold,#c9a227)">${esc(sk.architect || 'unknown')}</span>${(sk.plaque || []).length > 1 ? `<br><span style="font-size:11px">the plaque: ${sk.plaque.map((pl, i) => `${i + 1}. ${esc(pl.name)} (${pl.tier})`).join(' · ')}</span>` : ''}</div>`).join('')}
@@ -2228,7 +2229,15 @@
       const gg = t.querySelector('#mg-give-goods');
       if (gg) gg.onclick = () => act('POST', '/v1/megaproject/goods', { goodId: t.querySelector('#mg-good').value, qty: Number(t.querySelector('#mg-qty').value) || 1 }).then(() => renderCity());
       const go = t.querySelector('#mg-give-omr');
-      if (go) go.onclick = () => act('POST', '/v1/megaproject/omr', { amount: Number(t.querySelector('#mg-omr').value) }).then(() => renderCity()); }
+      if (go) go.onclick = () => act('POST', '/v1/megaproject/omr', { amount: Number(t.querySelector('#mg-omr').value) }).then(() => renderCity());
+      const bb = t.querySelector('#builder-board');
+      if (bb) bb.onclick = async (e) => { e.preventDefault();
+        const r = (await api('GET', '/v1/leaderboard/builders')).body?.builders || [];
+        t.querySelector('#builder-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} ${esc(k.name)}</span><div class="d">${k.rank} · $${fmt(k.built)}${k.architected ? ` · ${k.architected}× Architect` : ''}</div></div>`).join('') || '<span class="d">no builders yet</span>'}</div>`; };
+      const fb = t.querySelector('#fambuild-board');
+      if (fb) fb.onclick = async (e) => { e.preventDefault();
+        const r = (await api('GET', '/v1/leaderboard/family-build')).body?.families || [];
+        t.querySelector('#builder-lb').innerHTML = `<div class="grid" style="margin-top:4px">${r.map((k) => `<div class="card"><span class="t">#${k.pos} [${esc(k.tag)}] ${esc(k.name)}</span><div class="d">$${fmt(k.built)} for the city</div></div>`).join('') || '<span class="d">no families ranked yet</span>'}</div>`; }; }
     t.querySelectorAll('[data-raid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.raid}/raid`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-plan]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.plan}/plan`, {}).then(() => renderCity()));
     t.querySelectorAll('[data-joinraid]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.joinraid}/join`, {}).then(() => renderCity()));

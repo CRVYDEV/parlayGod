@@ -125,6 +125,23 @@ r = await call('POST', '/v1/megaproject/cash', { token: don.token, body: { amoun
 assert.equal(r.code, 200, 'a brick lands on the NEW monument');
 assert.equal(r.body.monument, MEGAPROJECT.MONUMENTS[1].name, 'it went into the new wall');
 
+// ══ THE MEGAPROJECT → Tier 4: the builder legend, the architect crown, the boards ══
+r = await call('GET', '/v1/megaproject', { token: don.token });
+assert(r.body.builder && r.body.builder.built > 0, 'the builder legend records lifetime value laid');
+assert.equal(Number((await pool.query(`SELECT monument_built FROM account_persistent WHERE account_id='${don.aid}'`)).rows[0].monument_built), r.body.builder.built, 'the view matches the persisted legend');
+// the widow ARCHITECTED the first monument (top contributor on the completed wall) — a read-derived crown
+r = await call('GET', '/v1/megaproject', { token: widow.token });
+assert.equal(r.body.builder.architected, 1, "the widow's dynasty holds one Architect crown");
+// THE BUILDERS' BOARD — both dynasties ranked by lifetime value, the widow's crown surfaced
+r = await call('GET', '/v1/leaderboard/builders', { token: don.token });
+assert.equal(r.code, 200);
+assert(r.body.builders.some((b) => b.name === 'Enzo the Mason' && b.built > 0), 'the mason is on the builders board');
+const widowRow = r.body.builders.find((b) => b.name === 'The Widow Bellamy');
+assert(widowRow && widowRow.architected === 1, "the widow's Architect crown shows on the board");
+// THE FAMILY-BUILD BOARD — no families in this test, so it's empty (proves the gang bump never mis-fired)
+r = await call('GET', '/v1/leaderboard/family-build', { token: don.token });
+assert.equal(r.code, 200); assert.equal(r.body.families.length, 0, 'no family put up money — the family-build board is clean');
+
 // ── DEATH SURVIVAL: the plaque is account-level — the heir keeps the dynasty's glory ──
 await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: don.id } });
 const rows = (await pool.query(

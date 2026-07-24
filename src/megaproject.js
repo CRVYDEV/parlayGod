@@ -29,7 +29,7 @@
 // singleton-class row, locked LAST — the canonical characters → … → singletons order).
 import { GameError, bus, notify } from './game.js';
 import { spendOmr } from './vanity.js';
-import { MEGAPROJECT, megaMonumentAt, megaTierOf, GOODS } from './rules.js';
+import { MEGAPROJECT, megaMonumentAt, megaTierOf, builderRankOf, GOODS } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
@@ -51,11 +51,19 @@ async function lockProject(client) {
   return (await client.query('SELECT * FROM megaprojects WHERE id=$1 FOR UPDATE', [id])).rows[0];
 }
 
-// credit a $-value to the locked project + the actor's plaque row; handles milestones + completion
-async function credit(client, ch, p, value) {
+// credit a $-value to the locked project + the actor's plaque row; handles milestones + completion.
+// gangId (Tier-4): the contributor's family at contribution time gets the FAMILY-BUILD credit.
+async function credit(client, ch, p, value, gangId) {
   const before = Number(p.progress);
   const after = Math.min(Number(p.target), before + value);
   await client.query('UPDATE megaprojects SET progress=$2 WHERE id=$1', [p.id, after]);
+  // THE BUILDER LEGEND (Tier-4) — lifetime $-value contributed (account-level, survives death; the
+  // contributor's own account is already locked by withCharacter → no new lock. NUMERIC arith-safe).
+  await client.query('UPDATE account_persistent SET monument_built = monument_built + $1 WHERE account_id=$2',
+    [value, ch.account_id]);
+  // THE FAMILY BUILD (Tier-4) — the family that put up the money (dies with the family). A plain
+  // UPDATE row-lock; nothing locks gangs-then-megaprojects, so holding the singleton here is cycle-free.
+  if (gangId) await client.query('UPDATE gangs SET monument_built = monument_built + $1 WHERE id=$2', [value, gangId]);
   // the plaque (account-level upsert under the project lock — concurrent donors serialize on it)
   const row = (await client.query(
     'SELECT contributed FROM megaproject_contributions WHERE project_id=$1 AND account_id=$2',
@@ -110,7 +118,7 @@ export async function giveCash(ch, amount, client, h) {
   ch.cash = Number(ch.cash) - give;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -give, reason: 'megaproject:cash' });
   await h.track(client, ch.account_id, 'megaproject_give', { kind: 'cash', value: give });
-  return credit(client, ch, p, give);
+  return credit(client, ch, p, give, h.owned.gang?.id);
 }
 
 export async function giveGoods(ch, goodId, qty, client, h) {
@@ -132,7 +140,7 @@ export async function giveGoods(ch, goodId, qty, client, h) {
   await client.query('DELETE FROM character_cargo WHERE character_id=$1 AND good_id=$2', [ch.id, goodId]);
   if (left > 0) await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)', [ch.id, goodId, left]);
   await h.track(client, ch.account_id, 'megaproject_give', { kind: 'goods', good: goodId, qty: n, value });
-  return { ...(await credit(client, ch, p, value)), qty: n, unit: g.base };
+  return { ...(await credit(client, ch, p, value, h.owned.gang?.id)), qty: n, unit: g.base };
 }
 
 export async function giveOmr(ch, amount, client, h) {
@@ -146,7 +154,7 @@ export async function giveOmr(ch, amount, client, h) {
   await spendOmr(client, h, give, 'megaproject:omr'); // the audited burn primitive (balance-gated)
   const value = Math.min(round6(give * MEGAPROJECT.OMR_RATE), Math.ceil(need));
   await h.track(client, ch.account_id, 'megaproject_give', { kind: 'omr', omr: give, value });
-  return { ...(await credit(client, ch, p, value)), omr: give };
+  return { ...(await credit(client, ch, p, value, h.owned.gang?.id)), omr: give };
 }
 
 // ── the board (authed read): the monument, the plaque, your share, the skyline ──
@@ -190,7 +198,48 @@ export async function megaBoard(pool, accountId) {
       started: !!cur, plaque, you,
       omrRate: MEGAPROJECT.OMR_RATE, minCash: MEGAPROJECT.MIN_CASH, minOmr: MEGAPROJECT.MIN_OMR };
   }
-  return { current, skyline: await skylineOf(pool) };
+  // Tier-4 — the caller's BUILDER legend + how many monuments this dynasty ARCHITECTED (read-derived)
+  const built = Number((await pool.query('SELECT monument_built FROM account_persistent WHERE account_id=$1', [accountId])).rows[0]?.monument_built || 0);
+  const architected = (await architectTally(pool)).get(accountId) || 0;
+  return { current, skyline: await skylineOf(pool),
+    builder: { built, rank: builderRankOf(built).name, architected } };
+}
+
+// THE ARCHITECT CROWN (Tier-4) — read-derived (no cross-account write under the singleton lock): for
+// every COMPLETED monument, the top contributor. Bounded by the (small) number of finished monuments.
+async function architectTally(pool) {
+  const done = (await pool.query(`SELECT id FROM megaprojects WHERE status='complete'`)).rows;
+  const tally = new Map();
+  for (const p of done) {
+    const top = (await pool.query(
+      'SELECT account_id FROM megaproject_contributions WHERE project_id=$1 ORDER BY contributed DESC, account_id LIMIT 1',
+      [p.id])).rows[0];
+    if (top) tally.set(top.account_id, (tally.get(top.account_id) || 0) + 1);
+  }
+  return tally;
+}
+
+// THE BUILDERS' BOARD (Tier-4) — the biggest lifetime monument builders (agents excluded), each with
+// how many monuments they architected. Pure STATUS — account-level, survives death.
+export async function builderLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT account_id, monument_built, dynasty_name FROM account_persistent
+      WHERE NOT agent_flag AND monument_built > 0
+      ORDER BY monument_built DESC, account_id LIMIT 20`)).rows;
+  const named = await nameAccounts(pool, rows.map((r) => r.account_id)); // living street / House / late-name
+  const crowns = await architectTally(pool);
+  return { builders: rows.map((r, i) => ({ pos: i + 1,
+    name: named.get(r.account_id) || (r.dynasty_name ? `House ${r.dynasty_name}` : 'a quiet benefactor'),
+    built: Number(r.monument_built), rank: builderRankOf(r.monument_built).name,
+    architected: crowns.get(r.account_id) || 0 })) };
+}
+
+// THE FAMILY-BUILD BOARD (Tier-4) — the families that put up the most for the city (dies with the family).
+export async function familyBuildLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT name, tag, monument_built FROM gangs WHERE monument_built > 0
+      ORDER BY monument_built DESC, name LIMIT 20`)).rows;
+  return { families: rows.map((r, i) => ({ pos: i + 1, name: r.name, tag: r.tag, built: Number(r.monument_built) })) };
 }
 
 // THE SKYLINE — every monument the city ever raised, with its Architect (permanent, public)

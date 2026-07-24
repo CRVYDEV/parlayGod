@@ -2070,3 +2070,12 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS product_moved NUMERIC NO
 -- legend — pure status, outside §10.4; the racket:income cash still rides its ledgered faucet).
 ALTER TABLE character_rackets ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS tycoon_earned NUMERIC NOT NULL DEFAULT 0;
+
+-- ── THE MEGAPROJECT TIER-4 DEEPENING (design omerta-tier2-deepening-design.md §3) ──
+-- monument_built: lifetime $-value contributed to monuments (account-level → survives death, THE
+-- BUILDER legend). gangs.monument_built: the FAMILY that put up the money (the competitive
+-- family-build meta; dies with the family). All pure STATUS — the contribution cash/goods/$OMR still
+-- rides its §10.4 sink. (The Architect crown is derived at read from the skyline — no cross-account
+-- write under the megaprojects singleton lock, so no deadlock surface.)
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS monument_built NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE gangs ADD COLUMN IF NOT EXISTS monument_built NUMERIC NOT NULL DEFAULT 0;
