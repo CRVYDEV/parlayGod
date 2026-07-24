@@ -140,6 +140,11 @@ CREATE TABLE IF NOT EXISTS characters (
   -- launderCapDay — heat was the only brake and it decays in minutes)
   wash_used NUMERIC NOT NULL DEFAULT 0,
   wash_at TIMESTAMPTZ,
+  -- L3b — THE SHIELD CAP: a rolling-window token bucket on total safehouse TIME per day (the wash-bucket
+  -- twin), so the earned survival shield can't keep a whale permanently off-grid. Refills
+  -- SAFEHOUSE_DAILY_CAP_MS per day; entering a safehouse charges the granted stay against it.
+  safehouse_used NUMERIC NOT NULL DEFAULT 0,
+  safehouse_at TIMESTAMPTZ,
   -- R1 audit F1: rolling-window cumulative $OMR invested into the Portfolio (the wash-bucket twin),
   -- so structuring (many sub-threshold buys) still draws RICO scrutiny once the window sum crosses.
   rwa_used NUMERIC NOT NULL DEFAULT 0,

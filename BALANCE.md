@@ -1832,3 +1832,17 @@ CONCENTRATES the passive stack in fewer hands over time. Sim the concentration +
 before production. Dial: `M3.SACK_ON_KILL=false` disables it entirely; a future refinement could seize a
 tier-DROP instead of the whole front, or cap seizes-per-victim. Deferred sibling levers (#3): L3b (cap the
 eight untouchable states) and L3c (a cheaper contracted-kill ammo floor).
+
+## THE SHIELDS (L3b + L3c) — founder sign-off flags
+**L3b — THE SHIELD CAP** (`M3.SAFEHOUSE_DAILY_CAP_MS` 12h): the safehouse is a rolling-window token
+bucket (the wash-cap twin) on total off-grid time per day. With a 4h stay, three stays fill the bucket
+and the fourth is refused (`safe_cap`) — so a whale can't live permanently unreachable and the rich must
+surface. §10.4-untouched (a gate on a cash sink, moves no value). Closes the "eight untouchable states"
+gap from the review's #3. Dial: raise/lower the cap; 0 disables (uncapped as before).
+**L3c — THE CONTRACT'S BULLETS** (`M3.CONTRACT_AMMO_REBATE` 0.5): ammo is the −EV driver on a hit; a kill
+that fulfils a PAID contract (bounty > 0) rebates half the rounds spent as a bounded, ledgered ammo
+FAUCET (`contract:rebate`, in the ammo §10.4 vocabulary), so the pot doesn't have to carry the whole
+loss and a smaller contract turns a hit +EV. Only on a contracted kill (a standalone kill keeps its
+−$72k standalone EV — the D1 anchor is untouched). SIGN-OFF: sim the contract break-even shift (a paid
+kill now costs ~half the ammo) before production; dial `CONTRACT_AMMO_REBATE` (0 disables). Both close
+review #3 alongside L3a (the Sacking).

@@ -788,7 +788,7 @@
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
-    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}${body.ammoBack ? ` · the contract covered ${fmt(body.ammoBack)} rounds` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
@@ -2717,6 +2717,7 @@
       <div class="grid">
         <div class="card"><span class="t">Safehouse</span>
           <div class="d">${me.safeSeconds > 0 ? `to ground for ${mins(me.safeSeconds)} more` : `$${fmt(me.safehouseCost)} for 4h — untargetable by fire + NPC hits (still jumpable; no offense/extraction inside)`}</div>
+          ${typeof me.safeCapSeconds === 'number' ? `<div class="d" style="color:var(--dim);font-size:11px">daily allowance left: ${mins(me.safeCapSeconds)} off-grid — you can't live in here (it refills over the day)</div>` : ''}
           ${me.safeSeconds > 0 ? '' : '<button class="act" data-do="POST /v1/safehouse">go to ground</button>'}</div>
         <div class="card"><span class="t">Bodyguard</span>
           <div class="d">${me.guardedBy ? `guarded — one lethal shot absorbed (${mins(me.guardSeconds)})` : me.guardPrice != null ? `you're for hire at $${fmt(me.guardPrice)}` : 'list yourself, or hire off the roster below'}</div>

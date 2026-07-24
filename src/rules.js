@@ -934,6 +934,17 @@ export const M3 = {
   // tradeoff: keep it in-game to use it (losable) or extract it on-chain (safe + tradeable, but
   // it leaves play). New/tunable — sim + sign-off.
   GEAR_LOOT_CHANCE: 0.15,
+  // L3b — THE SHIELD CAP (stakes/spine review). The earned safehouse is capped at SAFEHOUSE_DAILY_CAP_MS
+  // of off-grid time per rolling day (a token bucket, the wash-cap twin) — you can shelter to weather a
+  // specific contract, but you can't live permanently unreachable. Closes the "eight untouchable states"
+  // gap: the rich must surface. Founder sign-off lever (tune the cap; 0 to disable = uncapped as before).
+  SAFEHOUSE_DAILY_CAP_MS: 12 * 3600 * 1000,
+  // L3c — THE CONTRACT'S BULLETS (stakes/spine review). Ammo is the −EV driver on a kill; when a kill
+  // fulfils a PAID contract (any pool/directed/family/WANTED bounty), the contract covers CONTRACT_AMMO_REBATE
+  // of the rounds spent (a bounded ammo faucet `contract:rebate`) — so the pot doesn't have to carry the
+  // whole loss and a smaller contract turns a hit +EV. Only on a contracted kill; a standalone kill pays no
+  // rebate (the standalone −EV stays). Founder sign-off lever (0 to disable).
+  CONTRACT_AMMO_REBATE: 0.5,
   // L3a — THE SACKING (stakes/spine review, the keystone lever). On a PLAYER fire-kill the killer SEIZES
   // one of the victim's business fronts (the endgame passive-income engine) instead of it dying with the
   // street — making the passive empire genuine PvP RISK CAPITAL and giving the kill a prize worth the ammo.
