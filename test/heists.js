@@ -26,8 +26,8 @@ const seedCh = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id=
 const hank = await mk('Heist Hank');   // the leader
 const cara = await mk('Crew Cara');    // the crew
 const ray = await mk('Rookie Ray');    // level 1 — below every gate
-await seedCh(hank.id, 'respect=2304, cash=100000, muscle=400, cunning=400, speed=100'); // lvl 25
-await seedCh(cara.id, 'respect=2304, cash=1000, muscle=400, cunning=400, speed=100');
+await seedCh(hank.id, 'respect=5760, cash=100000, muscle=400, cunning=400, speed=100'); // lvl 25
+await seedCh(cara.id, 'respect=5760, cash=1000, muscle=400, cunning=400, speed=100');
 const payroll = HEIST_JOBS.find((j) => j.id === 'payroll');
 
 // ── the board + the gates ──
@@ -143,7 +143,7 @@ assert(r.body.jobs.every((j) => Array.isArray(j.roles) && j.roles.length === j.c
 
 // ── STEP TWO: the INSIDE JOB — a crew raids a player's front for its pending income ──
 const marco = await mk('Mark Marco');
-await seedCh(marco.id, 'respect=2304, cash=1000000');
+await seedCh(marco.id, 'respect=5760, cash=1000000');
 r = await call('POST', '/v1/business/laundromat/buy', { token: marco.token });
 assert.equal(r.code, 200, 'marco opened a laundromat'); const frontId = r.body.id;
 await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '25 hours' WHERE id='${frontId}'`);
@@ -263,7 +263,7 @@ assert.equal((await call('POST', '/v1/heists/fence', { token: hank.token })).bod
 
 // ── NOTORIETY GATE: a fresh high-level thief can't touch the marquee jobs until they earn it ──
 const boss = await mk('High Roller');
-await seedCh(boss.id, 'respect=200000, cash=2000000, energy=100');   // well past museum lvl 56
+await seedCh(boss.id, 'respect=500000, cash=2000000, energy=100');   // well past museum lvl 56
 await pool.query(`UPDATE account_persistent SET heists_pulled=0 WHERE account_id=(SELECT account_id FROM characters WHERE id='${boss.id}')`);
 assert.equal((await call('POST', '/v1/heists/plan', { token: boss.token, body: { job: 'museum' } })).body.error, 'notoriety', 'the marquee jobs are notoriety-gated');
 

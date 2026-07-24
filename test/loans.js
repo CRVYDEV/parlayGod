@@ -369,7 +369,7 @@ await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1'); // the pool ca
 const wLoan = (await call('POST', '/v1/loans', { token: wShark.token, body: { amount: 30000, rate: 0.2, hours: 1 } })).body.id;
 await call('POST', `/v1/loans/${wLoan}/take`, { token: welch.token });
 await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${wLoan}'`);
-await seedCh(welch.id, 'cash=0, bank=0, bank_intransit=0, respect=5000'); // broke, but a real (lvl 36) mark — worth a price
+await seedCh(welch.id, 'cash=0, bank=0, bank_intransit=0, respect=12500'); // broke, but a real (lvl 36) mark — worth a price
 const wPoolBefore = await poolCash();
 r = await call('POST', `/v1/loans/${wLoan}/collect`, { token: wShark.token });
 assert.equal(r.body.wanted, true, 'the default marks them WANTED');
@@ -420,7 +420,7 @@ await pool.query('UPDATE street_tax SET pool=500000 WHERE id=1');
 const hLoan = (await call('POST', '/v1/loans', { token: hShark.token, body: { amount: 20000, rate: 0.2, hours: 1 } })).body.id;
 await call('POST', `/v1/loans/${hLoan}/take`, { token: doomed.token });
 await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE id='${hLoan}'`);
-await seedCh(doomed.id, 'cash=0, bank=0, bank_intransit=0, respect=5000'); // a real (lvl 36) mark
+await seedCh(doomed.id, 'cash=0, bank=0, bank_intransit=0, respect=12500'); // a real (lvl 36) mark
 await call('POST', `/v1/loans/${hLoan}/collect`, { token: hShark.token }); // → wanted + a HOUSE bounty
 assert.equal(Number((await pool.query(`SELECT amount FROM bounties WHERE target_character='${doomed.id}' AND kind='kill'`)).rows[0].amount), LOAN.WANTED_BOUNTY, 'the HOUSE bounty is live on the deadbeat');
 await pool.query(`UPDATE characters SET wanted_until=NULL WHERE id <> '${doomed.id}'`); // isolate: only the doomed mark is hunted
@@ -448,7 +448,7 @@ assert((await check('loan house pool')).ok, 'the loan-house pool reconciles afte
 const pat = await mk('Payday Pat');
 assert.equal((await call('POST', '/v1/loans/house', { token: pat.token, body: { amount: 5000 } })).body.error, 'level',
   'the window opens at a real level');
-await seedCh(pat.id, 'respect=324'); // level 10 → cap $20k
+await seedCh(pat.id, 'respect=810'); // level 10 → cap $20k
 r = await call('GET', '/v1/loans', { token: pat.token });
 assert.equal(r.body.house.cap, Math.min(LOAN.HOUSE_MAX, LOAN.HOUSE_MAX_PER_LVL * 10), 'the board quotes the level cap');
 assert(r.body.house.eligible, 'Pat is good for it');
@@ -477,7 +477,7 @@ assert((await check('loan house pool')).ok, 'the pool reconciles after a full cy
 
 // THE WALL: the window never writes past the pool
 const whale = await mk('Window Willy');
-await seedCh(whale.id, 'respect=10000'); // deep level → cap $50k, but the pool is thinner than that
+await seedCh(whale.id, 'respect=25000'); // deep level → cap $50k, but the pool is thinner than that
 await pool.query('UPDATE loan_house SET pool = 3000 WHERE id=1'); // (SQL squeeze — the check is asserted on ledgered flows only below via drift)
 assert.equal((await call('POST', '/v1/loans/house', { token: whale.token, body: { amount: 20000 } })).body.error, 'pool',
   'the house lends only what it holds — full-reserve, never a mint');
@@ -485,7 +485,7 @@ await pool.query(`UPDATE loan_house SET pool = ${hp2 + loanOwed(10000, LOAN.HOUS
 
 // DEFAULT: the sweep collects for the house — seize pocket+in-transit → the pool, welsher + WANTED
 const dodger = await mk('Duck-out Doug');
-await seedCh(dodger.id, 'respect=324');
+await seedCh(dodger.id, 'respect=810');
 r = await call('POST', '/v1/loans/house', { token: dodger.token, body: { amount: 10000 } });
 assert.equal(r.code, 200, 'Doug takes a marker');
 await pool.query(`UPDATE loans SET due_at = now() - interval '1 hour' WHERE borrower_character='${dodger.id}' AND status='active'`);

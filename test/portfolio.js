@@ -83,8 +83,8 @@ assert.equal((await call('POST', '/v1/portfolio/invest', { token: boss.token, bo
 assert.equal((await call('POST', '/v1/portfolio/invest', { token: nobody.token, body: { ticker: 'AAPL', omr: 100 } })).body.error, 'omr', 'no $OMR, no shares');
 
 // ── the family book: rank gate, empty-reserve rejection, reserve debit + ledger ──
-await pool.query(`UPDATE characters SET respect=2304, cash=100000 WHERE id='${boss.id}'`); // lvl 25 + founding cash
-await pool.query(`UPDATE characters SET respect=2304 WHERE id='${soldier.id}'`);
+await pool.query(`UPDATE characters SET respect=5760, cash=100000 WHERE id='${boss.id}'`); // lvl 25 + founding cash
+await pool.query(`UPDATE characters SET respect=5760 WHERE id='${soldier.id}'`);
 const gangId = (await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'The Blue Chips', tag: 'CHIP' } })).body.gangId;
 assert(gangId, 'family founded');
 await call('POST', `/v1/gangs/${gangId}/join`, { token: soldier.token });
@@ -196,7 +196,7 @@ assert.equal((await call('POST', '/v1/portfolio/invest', { token: bigshot.token,
 // ── STEP TWO (2) — the SEASON PRIZE: the top season grinder earns the champion's moonshot (SPCX) ──
 const champ = await mk('Season King Sal');
 const cur = Math.floor(dayOf() / 28);
-await pool.query(`UPDATE characters SET respect=9999, season=${cur - 1} WHERE id='${champ.id}'`);
+await pool.query(`UPDATE characters SET respect=24998, season=${cur - 1} WHERE id='${champ.id}'`);
 const before = (await pool.query(`SELECT COALESCE(SUM(shares),0) s FROM portfolios p JOIN characters c ON c.account_id=p.account_id WHERE c.id='${champ.id}' AND p.ticker='SPCX'`)).rows[0].s;
 await runSeasonRollover(pool, { season: cur });
 const spcx = Number((await pool.query(`SELECT COALESCE(SUM(shares),0) s FROM portfolios p JOIN characters c ON c.account_id=p.account_id WHERE c.id='${champ.id}' AND p.ticker='SPCX'`)).rows[0].s);

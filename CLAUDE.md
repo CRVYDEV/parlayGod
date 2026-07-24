@@ -4998,3 +4998,34 @@ the whole previously-WATCHed Tier 5. Left on the separate track: the third-party
 legal counsel (`forge test` is GREEN 73/73 since 2026-07-23, so gate 1 is closed), and the RWA float's
 stale-oracle free option (#1 — the single most important economics decision before the real buy bot ships).
 Regressions per fix across social/pen/portfolio/seasons. All moved numbers remain founder sign-off levers.
+
+**THE PACING PASS — "level 240 in two hours" (founder-directed 2026-07-24, from live alpha).** An alpha
+tester hit **level 240 in a couple of hours**. Measured, not guessed — one chain, not a broadly-fast
+curve: **(1)** `train` had NO cooldown and no cash cost (10 energy vs a 40/min regen = ~240 sessions/hr),
+so every mission STAT gate (up to 155 in three stats) fell in one sitting; **(2)** MISSIONS had no
+cooldown and the ladder **SELF-UNLOCKS** — from ~m6 each reward overshoots the NEXT mission's level gate
+by 30–100 levels; **(3)** the ladder pays **239,200 respect** and `levelOf` needed only 228,484 for L240,
+so **the mission chain alone was levels 1→245** (the best sustained crime grind is ~3,257 respect/hr —
+the ladder handed over ~3 days of grinding in one sitting). Fixed with a single **`PACING` block**
+(`src/rules.js`) holding every dial: **`LEVEL_DIVISOR` 4→10** (respect(L)=D×(L−1)², so every level costs
+2.5× more — `levelOf` lives in the AUTO-GENERATED section and now reads it, a deliberate founder override
+of the prototype's `/4` like the D5 bank taper; **re-apply that one line after any extract-rules run**),
+**`ENERGY_REGEN_PER_MIN` 40→12 / `_RANK_BONUS` 20→4 / `NERVE_REGEN_PER_MIN` 20→6** (the master clock — a
+tank refilled in ~75s and paced nothing; now ~15-20 min, so you play in bursts), **`MISSION_CD_MS` 4h** +
+**`MISSION_RESPECT_MULT` 0.25** (the ladder can't cascade — 28 jobs ≈ 4.7 days minimum — and is worth a
+level ~78 character instead of the whole game; **cash/$OMR/titles UNTOUCHED**, the story still pays), and
+**`TRAIN_CD_MS` 3 min** (~240→~20 sessions/hr; the ~500 sessions the top gates need is now ~25h). New
+direct-SQL columns `characters.train_at`/`mission_at` (outside persistCharacter's positional UPDATE — the
+active_at pattern), surfaced as `trainSeconds`/`missionSeconds` on the view + live timers in the console
+(the gym button disables with "gym reopens in…", the mission button reads "next job in…") + a public
+`rules.pacing` block. **Measured: 2 hours of play now reaches level ~11 (was 245); level 40 ≈ 16-28h,
+level 100 ≈ 100-180h, level 240 ≈ 600-1,000h.** §10.4 untouched (no value moves — this changes how fast a
+player may act and what a level costs). Test fallout was handled by a **provably level-preserving**
+transform: every seeded `respect=N` in the suites/sim scaled ×2.5 (since `2.5r/10 == r/4`, each seeded
+character's level is identical), plus four hardcoded copies of the old inverse (`tools/sim.js` +
+test/boxing|speakeasy|stable `lvlRespect`) now read `PACING.LEVEL_DIVISOR` instead of a stale `4` — that
+duplication is what silently under-seeded the probes when the curve moved. Regressions: the mission
+cooldown gate + the sheet's next-job timer (`test/growth.js`). **Suite 45/45 + sim drift-0.** Deploy note:
+existing characters keep their respect so their displayed LEVEL drops (the intended correction). All
+`PACING.*` numbers are founder sign-off levers (BALANCE.md § THE PACING PASS, with the follow-on levers if
+it still runs hot or cold).

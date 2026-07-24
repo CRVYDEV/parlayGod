@@ -5,7 +5,7 @@
 // and the vocabulary knows the new reasons. Runs on pg-mem — zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED } from '../src/rules.js';
+import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, hash01, MARKET_SEED, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepTournaments, trackFieldOf, sweepTrackEntries, sweepFuturity } from '../src/casino.js';
 
@@ -156,7 +156,7 @@ const { body: { token: rookieTok } } = await call('POST', '/v1/auth/guest');
 await call('POST', '/v1/character', { token: rookieTok, body: { name: 'Rookie Ricky' } });
 await pool.query(`UPDATE characters SET cash=100000, loc='neon' WHERE id='${(await meOf(rookieTok)).id}'`);
 assert.equal((await call('POST', '/v1/casino/fight', { token: rookieTok, body: { side: 'a', amount: 500 } })).body.error, 'rookie', 'a fresh alt (level 1) is refused a fight bet');
-await seed('respect=200'); // Lou is level 7 — clears the fight-bet floor
+await seed('respect=500'); // Lou is level 7 — clears the fight-bet floor
 assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'x', amount: 500 } })).body.error, 'side', "back 'a' or 'b'");
 assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 50000 } })).body.error, 'max', 'fight bets cap small — the fix stays bounded');
 rr = await call('POST', '/v1/casino/fight', { token, body: { side: 'b', amount: 5000 } });
@@ -165,7 +165,7 @@ assert.equal((await call('POST', '/v1/casino/fight', { token, body: { side: 'a',
 assert.equal((await call('POST', '/v1/casino/fight/claim', { token })).body.settled, 0, 'the bout has not gone off yet');
 // the fix: boss-only, neon-holders-only, once, treasury-funded
 assert.equal((await call('POST', '/v1/casino/fight/fix', { token, body: { winner: 'b' } })).body.error, 'rank', 'no family, no fix');
-await seed(`respect=${4 * 57 * 57}`); // level 58 — founding, the high-stakes room, and the casino front below
+await seed(`respect=${PACING.LEVEL_DIVISOR * 57 * 57}`); // level 58 — founding, the high-stakes room, and the casino front below
 const gangId = (await call('POST', '/v1/gangs', { token, body: { name: 'Neon Kings', tag: 'NKG' } })).body.gangId;
 assert(gangId, 'lou founded a family'); seededCash -= 0; // founding is ledgered, not seeded
 assert.equal((await call('POST', '/v1/gangs/tribute', { token, body: { amount: 100000 } })).code, 200, 'war chest funded');
@@ -455,7 +455,7 @@ assert.equal(-(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM t
 const { body: { token: ownTok } } = await call('POST', '/v1/auth/guest');
 await call('POST', '/v1/character', { token: ownTok, body: { name: 'Owner Otto' } });
 const oid = (await meOf(ownTok)).id;
-await pool.query(`UPDATE characters SET respect=400, cash=300000, loc='neon', energy=200 WHERE id='${oid}'`);
+await pool.query(`UPDATE characters SET respect=1000, cash=300000, loc='neon', energy=200 WHERE id='${oid}'`);
 const oAid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${oid}'`)).rows[0].a;
 // buy a greyhound + max its form (25/25/25 → form 75, the class of the field)
 const buyR = await call('POST', '/v1/stable/buy', { token: ownTok, body: { kind: 'dog', name: 'Rocket Dog' } });
@@ -511,7 +511,7 @@ for (const nm of ['Post A', 'Post B', 'Post C']) {
   const { body: { token: t } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: t, body: { name: nm } });
   const id = (await meOf(t)).id;
-  await pool.query(`UPDATE characters SET respect=400, cash=200000, loc='neon' WHERE id='${id}'`);
+  await pool.query(`UPDATE characters SET respect=1000, cash=200000, loc='neon' WHERE id='${id}'`);
   const b = await call('POST', '/v1/stable/buy', { token: t, body: { kind: 'dog', name: `${nm} Dog` } });
   owners.push({ t, id, racer: b.body.id });
 }
@@ -536,7 +536,7 @@ await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].
   const { body: { token: bTok } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: bTok, body: { name: 'Scratch Sam' } });
   const bId = (await meOf(bTok)).id;
-  await pool.query(`UPDATE characters SET respect=400, cash=200000, loc='neon' WHERE id='${bId}'`);
+  await pool.query(`UPDATE characters SET respect=1000, cash=200000, loc='neon' WHERE id='${bId}'`);
   // bet the OUTSIDE post (the last slot, index FIELD-1) while it's still a plain NPC → bet_racer_id NULL
   const scratchBet = await call('POST', '/v1/casino/track', { token: bTok, body: { race: 'horses', runner: CASINO.TRACK.FIELD - 1, amount: 500 } });
   assert.equal(scratchBet.code, 200, 'the scratch bet placed on the NPC outside post');
@@ -545,7 +545,7 @@ await pool.query(`DELETE FROM track_entries WHERE character_id IN ('${owners[0].
   const { body: { token: sTok } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: sTok, body: { name: 'Strong Steve' } });
   const sId = (await meOf(sTok)).id;
-  await pool.query(`UPDATE characters SET respect=400, cash=300000, loc='neon' WHERE id='${sId}'`);
+  await pool.query(`UPDATE characters SET respect=1000, cash=300000, loc='neon' WHERE id='${sId}'`);
   const sBuy = await call('POST', '/v1/stable/buy', { token: sTok, body: { kind: 'horse', name: 'Steve Horse' } });
   const sRacer = sBuy.body.id;
   await pool.query(`UPDATE racers SET speed=25, stamina=25, heart=25 WHERE id='${sRacer}'`);
@@ -576,7 +576,7 @@ for (const [nm, spd] of [['Fav', 25], ['Long A', 1], ['Long B', 1]]) {
   const { body: { token: t } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: t, body: { name: `Fut ${nm}` } });
   const id = (await meOf(t)).id;
-  await pool.query(`UPDATE characters SET respect=400, cash=300000, loc='neon' WHERE id='${id}'`);
+  await pool.query(`UPDATE characters SET respect=1000, cash=300000, loc='neon' WHERE id='${id}'`);
   const aid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a;
   const b = await call('POST', '/v1/stable/buy', { token: t, body: { kind: 'dog', name: `${nm} Dog` } });
   const racer = b.body.id;
@@ -604,7 +604,7 @@ for (const nm of ['Punter A', 'Punter B']) {
   const { body: { token: t } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token: t, body: { name: nm } });
   const id = (await meOf(t)).id;
-  await pool.query(`UPDATE characters SET respect=400, cash=100000, loc='neon' WHERE id='${id}'`);
+  await pool.query(`UPDATE characters SET respect=1000, cash=100000, loc='neon' WHERE id='${id}'`);
   spec.push({ t, id, nm });
 }
 assert.equal((await call('POST', '/v1/casino/futurity/bet', { token: spec[0].t, body: { racerId: 'nope', amount: 1000 } })).body.error, 'bad_runner', 'bet on a real runner');

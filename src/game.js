@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -725,6 +725,10 @@ export function view(ch, acct = {}, owned = {}) {
       readySeconds: Math.max(0, Math.ceil((new Date(owned.batch.done_at) - Date.now()) / 1000)) } : null,
     tradeRank: tradeRankIdx(Number(ch.trade_rep || 0)),
     heistSeconds: ch.heist_at ? Math.max(0, Math.ceil((new Date(ch.heist_at) - Date.now()) / 1000)) : 0,
+    // PACING: the two new activity cooldowns, so the client can show a live timer instead of
+    // surfacing a bare `cooldown` error when a player hits the gym or the family's next job.
+    trainSeconds: ch.train_at ? Math.max(0, Math.ceil((new Date(ch.train_at) - Date.now()) / 1000)) : 0,
+    missionSeconds: ch.mission_at ? Math.max(0, Math.ceil((new Date(ch.mission_at) - Date.now()) / 1000)) : 0,
     prestige: Number(acct.prestige || 0), recruits: Number(acct.recruits || 0),
     // R1 — THE PORTFOLIO: your legit book at a glance (GET /v1/portfolio is the full board). Pure
     // status — the price values a collectible; it survives death (account-level), so it's the one
@@ -880,11 +884,22 @@ export async function train(ch, stat, client, h) {
   if (!['muscle', 'cunning', 'speed'].includes(stat)) throw new GameError('bad_stat', 'No such stat.');
   if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup.');
   if (Number(ch.energy) < 10) throw new GameError('energy', 'Too tired to train.');
+  // PACING (founder-directed, from live alpha): the gym had NO cooldown and no cash cost, so at the
+  // old 40/min energy regen it ran ~240 sessions an hour — which is how a tester cleared every
+  // mission STAT gate (up to 155 in three stats) in one sitting and cascaded the whole ladder.
+  // A per-session cooldown makes stat gates a multi-day investment. TRAIN_CD_MS = 0 disables it;
+  // `train_at` is direct-SQL (outside persistCharacter's positional UPDATE — the active_at pattern).
+  const trainCd = Number(process.env.TRAIN_CD_MS ?? PACING.TRAIN_CD_MS);
+  if (trainCd > 0 && ch.train_at && new Date(ch.train_at) > new Date())
+    throw new GameError('cooldown', `The body needs a minute. Back to the gym in ${Math.max(1, Math.ceil((new Date(ch.train_at) - Date.now()) / 60000))}m.`);
   ch.energy = Number(ch.energy) - 10;
+  const trainAt = new Date(Date.now() + trainCd);
+  await client.query('UPDATE characters SET train_at=$2 WHERE id=$1', [ch.id, trainAt]);
+  ch.train_at = trainAt;
   const gain = Math.max(1, Math.round((1 + Math.random() * 2) * (200 / (200 + ch[stat]))));
   ch[stat] += gain;
   await h.bumpDaily(client, ch.id, 'train');
-  return { ok: true, stat, gain };
+  return { ok: true, stat, gain, nextTrainSeconds: trainCd > 0 ? Math.ceil(trainCd / 1000) : 0 };
 }
 
 // ── §5.1 HEAL ──

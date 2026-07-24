@@ -1952,3 +1952,50 @@ credits only the first duel against a bloodline each day.
 **All of the above are still founder sign-off levers** — every one is a single constant or a one-line gate,
 reversible by setting it back. The three faucet-touching rows (deeprun sell ↑, stable cap ↓, gold rush ↓)
 should be re-measured in `tools/sim.js` alongside the existing P9 probes before production.
+
+---
+
+## THE PACING PASS — "level 240 in two hours" (founder-directed 2026-07-24, from live alpha)
+
+An alpha tester reached **level 240 in a couple of hours**. Diagnosed by measurement, not guesswork —
+the cause was one chain, not a broadly-too-fast curve:
+
+1. **`train` had no cooldown and no cash cost.** 10 energy against a 40/min regen = **~240 sessions an
+   hour**, so every mission STAT gate (muscle/cunning/speed up to 155) fell in a single sitting.
+2. **Missions had no cooldown, and the ladder SELF-UNLOCKS.** From ~m6 on, each mission's respect reward
+   overshoots the *next* mission's level gate by 30–100 levels — the gates stop gating.
+3. **The ladder paid 239,200 respect**, and `levelOf` needed only 228,484 for L240. **The mission chain
+   alone was levels 1→245.** For scale, the best sustained crime grind is ~3,257 respect/hr — the ladder
+   handed over about three days of hard grinding in one uninterrupted sitting.
+
+Everything is now in one `PACING` block in `src/rules.js` so the whole curve is one place to tune.
+
+| Lever | Was | Now | Effect |
+|---|---|---|---|
+| `PACING.LEVEL_DIVISOR` (respect(L) = D×(L−1)²) | 4 | **10** | every level costs 2.5× more respect — same shape, stretched |
+| `PACING.ENERGY_REGEN_PER_MIN` | 40 (+20 Runner) | **12 (+4)** | a tank refilled in ~75s and paced nothing; now ~15–20 min |
+| `PACING.NERVE_REGEN_PER_MIN` | 20 | **6** | the crime clock — 1200 → 360 nerve/hr |
+| `PACING.MISSION_CD_MS` | *(none)* | **4h** | the ladder can't cascade — 28 jobs ≈ 4.7 days minimum |
+| `PACING.MISSION_RESPECT_MULT` | 1.0 | **0.25** | the full ladder is worth a level ~78 character, not the whole game. **Cash / $OMR / titles UNTOUCHED** — the story still pays |
+| `PACING.TRAIN_CD_MS` | *(none)* | **3 min** | ~240 → ~20 sessions/hr; the ~500 sessions the top gates need is a ~25h investment |
+
+**Measured result** (crime grind at the new nerve rate, early ~540 → top-tier ~977 respect/hr):
+
+| | old | new |
+|---|---|---|
+| 2 hours of play | **level 245** | **level ~11** |
+| level 20 | minutes | ~4–7 h |
+| level 40 | minutes | ~16–28 h |
+| level 100 | minutes | ~100–180 h |
+| level 240 | 2 h | **~600–1,000 h** |
+
+§10.4 is untouched — none of this moves value; it changes how fast a player may act and what a level
+costs. **Suite 45/45 + sim drift-0.**
+
+**Deploy note:** existing alpha characters keep their respect, so their displayed **level drops** on the
+new curve (that is the intended correction). `PACING` is env-free — set `MISSION_CD_MS` / `TRAIN_CD_MS`
+to `0` (test knobs) to disable either cooldown; the divisor and regen rates are plain constants.
+
+**Follow-on levers if the alpha still runs hot/cold:** the crime `respect` table itself (untouched — it's
+sim-signed), the daily-contract `5×lvl` / Score `8×lvl` level-scaled respect, and jump rep (1% of the
+victim's respect — the one *compounding* source, currently bounded by the 3-min hospital window).

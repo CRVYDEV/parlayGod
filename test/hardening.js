@@ -47,8 +47,8 @@ const mk = async (name, body = {}) => {
 // Stats/respect/energy get seeded (they aren't currency); cash/cb/ammo/$OMR never are.
 const boss = await mk('Avon B');
 const rival = await mk('Marlo S');
-await seedCh(boss.id, "respect=10000, muscle=100, cunning=50, speed=50, energy=200, nerve=60, loc='docks'");
-await seedCh(rival.id, "respect=400, energy=200, nerve=60, loc='docks'");
+await seedCh(boss.id, "respect=25000, muscle=100, cunning=50, speed=50, energy=200, nerve=60, loc='docks'");
+await seedCh(rival.id, "respect=1000, energy=200, nerve=60, loc='docks'");
 
 let r = await call('POST', '/v1/heist', { token: boss.token });
 assert.equal(r.code, 200, 'boss heist');
@@ -307,7 +307,7 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const bGuest = (await call('POST', '/v1/auth/guest')).body.token;
   await call('POST', '/v1/character', { token: bGuest, body: { name: 'Broadcast Bruno' } });
   const me = await meOf(bGuest);
-  await seedCh(me.id, "respect=680, season_kills=3, wanted_until=NOW()+interval '1 day'");
+  await seedCh(me.id, "respect=1700, season_kills=3, wanted_until=NOW()+interval '1 day'");
   // (1) the safe public dossier — real fields, NEVER an exact wealth number
   const dj = await call('GET', '/v1/u/Broadcast%20Bruno');
   assert.equal(dj.code, 200, 'dossier → 200');

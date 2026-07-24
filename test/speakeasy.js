@@ -9,7 +9,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SPEAKEASY, speakeasyTierOf } from '../src/rules.js';
+import { SPEAKEASY, speakeasyTierOf, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -29,7 +29,7 @@ const seed = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='$
 let cashDrift = 0, omrDrift = 0;
 const grantCash = async (id, n) => { await pool.query(`UPDATE characters SET cash = cash + ${n} WHERE id='${id}'`); cashDrift += n; };
 const grantOmr = async (aid, n) => { await pool.query(`UPDATE account_persistent SET omr = omr + ${n} WHERE account_id='${aid}'`); omrDrift += n; };
-const lvlRespect = (lvl) => 4 * (lvl - 1) * (lvl - 1);
+const lvlRespect = (lvl) => PACING.LEVEL_DIVISOR * (lvl - 1) * (lvl - 1); // reads the live curve, not a copy
 
 const owner = await mk('Nucky Thompson');
 const patron = await mk('Arnold Rothstein');

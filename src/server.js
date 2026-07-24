@@ -71,7 +71,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -680,6 +680,14 @@ export async function buildServer() {
     crimes: CRIMES.map((c) => ({ id: c.id, name: c.name, lvl: c.lvl, nerve: c.nerve, cash: c.cash, base: c.base, jail: c.jail })),
     // D6a — THE APPROACH: the per-job risk/reward choice (Case It / Standard / Go Loud). Public so the
     // client can render the three-way picker; the server stays the referee (the roll is server-side).
+    // PACING — published so a player can see the clock they're playing against (and so the console
+    // can render live cooldown timers instead of a bare error).
+    pacing: { levelDivisor: PACING.LEVEL_DIVISOR,
+      energyRegenPerMin: PACING.ENERGY_REGEN_PER_MIN, nerveRegenPerMin: PACING.NERVE_REGEN_PER_MIN,
+      trainCooldownSeconds: Math.round(PACING.TRAIN_CD_MS / 1000),
+      missionCooldownSeconds: Math.round(PACING.MISSION_CD_MS / 1000),
+      // respect(L) = levelDivisor × (L−1)² — published so the client can draw a progress bar
+      respectFormula: 'levelDivisor * (level - 1)^2' },
     crimeApproaches: Object.values(M3.CRIME_APPROACHES).map((a) => ({ id: a.id, name: a.name,
       successMult: a.successMult, payMult: a.payMult, heat: a.heat, jailMult: a.jailMult })),
     // D6a step two — the other two entry verbs' decision axes (each its own, not a copy of the crime picker)

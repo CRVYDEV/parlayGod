@@ -28,7 +28,7 @@ const week = weekOf();
 const bosses = [];
 for (let i = 1; i <= 6; i++) {
   const b = await mk(`Boss Number ${i}`);
-  await seedCh(b.id, 'respect=400, cash=60000');
+  await seedCh(b.id, 'respect=1000, cash=60000');
   const g = await call('POST', '/v1/gangs', { token: b.token, body: { name: `Family Number ${i}`, tag: `F${i}A` } });
   assert(g.body.gangId, `family ${i} founded`);
   // econ pass: the chamber ranks by the SEASON ladder (lifetime standing feeds only the buyback)
@@ -170,7 +170,7 @@ seedTreasury += 400000 - 0; // (both were ~0 after founding fees — the §10.4 
 // gates: rank / no seat / bad motion / a poor treasury. (F5 dissolved above, so F6 now sits —
 // a FRESH zero-standing family is the unseated probe.)
 const late = await mk('Latecomer Lou');
-await seedCh(late.id, 'respect=400, cash=60000');
+await seedCh(late.id, 'respect=1000, cash=60000');
 await call('POST', '/v1/gangs', { token: late.token, body: { name: 'The Latecomers', tag: 'LTE' } });
 assert.equal((await call('POST', '/v1/commission/propose', { token: civilian.token, body: { decree: 'pax' } })).body.error, 'rank', 'no family, no motion');
 assert.equal((await call('POST', '/v1/commission/propose', { token: late.token, body: { decree: 'pax' } })).body.error, 'no_seat', 'no seat, no motion');

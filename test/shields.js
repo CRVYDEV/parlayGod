@@ -46,21 +46,21 @@ assert.equal(fm.safeCapSeconds, Math.floor(M3.SAFEHOUSE_DAILY_CAP_MS / 1000), 'a
 
 // ════════ L3c — THE CONTRACT'S BULLETS ════════
 const don = await mk('Don Trigger');
-await seedCh(don.id, "respect=20000, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
+await seedCh(don.id, "respect=50000, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: don.token })).code, 200, 'the shooter arms up');
 const funder = await mk('Paying Paulie');
 await seedCh(funder.id, 'cash=200000');
 
 const whack = async (tid, rounds) => {
   await seedCh(don.id, "energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
-  await seedCh(tid, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks', respect=400");
+  await seedCh(tid, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks', respect=1000");
   await call('POST', `/v1/streets/${tid}/search`, { token: don.token });
   return (await call('POST', `/v1/streets/${tid}/fire`, { token: don.token, body: { rounds } })).body;
 };
 
 // a PAID contract: Paulie posts a kill pot on the mark; Don collects it on the kill → the contract's bullets
 const mark = await mk('Contracted Carl');
-await seedCh(mark.id, 'respect=400');
+await seedCh(mark.id, 'respect=1000');
 assert.equal((await call('POST', `/v1/streets/${mark.id}/bounty`, { token: funder.token, body: { amount: 5000, kind: 'kill' } })).code, 200, 'a kill contract is posted');
 const rounds = 6000;
 const k = await whack(mark.id, rounds);
@@ -74,7 +74,7 @@ assert.equal(Number(reb[0].amount), k.ammoBack, 'the ledgered rebate equals the 
 
 // a STANDALONE kill (no contract on the head) pays NO rebate — the standalone −EV stays
 const nobody = await mk('Unwanted Ugo');
-await seedCh(nobody.id, 'respect=400');
+await seedCh(nobody.id, 'respect=1000');
 const k2 = await whack(nobody.id, rounds);
 assert.ok(k2.kill, 'the standalone mark is dead');
 assert.equal(k2.bounty, 0, 'no contract paid');

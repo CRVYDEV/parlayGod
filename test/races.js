@@ -35,8 +35,8 @@ const seedCash = async (id, amt) => { await pool.query(`UPDATE characters SET ca
 // ── two racers. Speed 200 makes the pigeon a monster (carPower ~144); the rival's junker is a runabout. ──
 const racer = await mk('Speed Demon');
 const rival = await mk('Slow Sammy');
-await pool.query(`UPDATE characters SET respect=3600, speed=200 WHERE id='${racer.id}'`); // level 30 — every tier open
-await pool.query(`UPDATE characters SET respect=3600, speed=5 WHERE id='${rival.id}'`);
+await pool.query(`UPDATE characters SET respect=9000, speed=200 WHERE id='${racer.id}'`); // level 30 — every tier open
+await pool.query(`UPDATE characters SET respect=9000, speed=5 WHERE id='${rival.id}'`);
 await seedCash(racer.id, 2000000);
 await seedCash(rival.id, 500000);
 const myCar = await mkCar(racer.id, 'pigeon', 'stock', 0);   // carVal 2000
@@ -107,8 +107,8 @@ assert.equal((await pool.query(`SELECT dmg FROM cars WHERE id='${rivalCar}'`)).r
 // ── AUDIT LOW-1: the WINNER is cooled down too (an owner can't be fed WHEEL wins by alt challengers) ──
 process.env.RACE_CD_MS = '3600000'; // a real 1h cooldown for this one race
 const champ = await mk('Champ Owner'); const chump = await mk('Chump Challenger');
-await pool.query(`UPDATE characters SET respect=3600, speed=200 WHERE id='${champ.id}'`); // strong wheelman
-await pool.query(`UPDATE characters SET respect=3600, speed=5 WHERE id='${chump.id}'`);   // weak
+await pool.query(`UPDATE characters SET respect=9000, speed=200 WHERE id='${champ.id}'`); // strong wheelman
+await pool.query(`UPDATE characters SET respect=9000, speed=5 WHERE id='${chump.id}'`);   // weak
 await seedCash(champ.id, 200000); await seedCash(chump.id, 200000);
 const champCar = await mkCar(champ.id, 'pigeon', 'stock', 0); // power ~144
 await mkCar(chump.id, 'junker', 'stock', 0);
@@ -123,7 +123,7 @@ assert((await pool.query(`SELECT race_at FROM characters WHERE id='${chump.id}' 
 const wheelWins = async () => Number((await pool.query(`SELECT race_wins FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${champ.id}')`)).rows[0].race_wins);
 const winsBefore = await wheelWins();
 const rkRacer = await mk('Rookie Racer');
-await pool.query(`UPDATE characters SET respect=100, speed=5 WHERE id='${rkRacer.id}'`); // level ~6, below WHEEL_MIN_LVL (10)
+await pool.query(`UPDATE characters SET respect=250, speed=5 WHERE id='${rkRacer.id}'`); // level ~6, below WHEEL_MIN_LVL (10)
 await seedCash(rkRacer.id, 200000);
 await mkCar(rkRacer.id, 'junker', 'stock', 0);
 const rkCar = (await pool.query(`SELECT id FROM cars WHERE character_id='${rkRacer.id}'`)).rows[0].id;
@@ -151,8 +151,8 @@ assert.equal((await pool.query(`SELECT nos FROM cars WHERE id='${myCar}'`)).rows
 // ── STEP TWO — PINK SLIPS: race for the car itself (a §10.4-neutral ownership transfer) ──
 // a fresh pair — the shark (monster) vs the mark (junker); the mark puts his junker up for pinks
 const shark = await mk('Pink Shark'); const mark = await mk('Pinkslip Mark');
-await pool.query(`UPDATE characters SET respect=3600, speed=200 WHERE id='${shark.id}'`);
-await pool.query(`UPDATE characters SET respect=3600, speed=5 WHERE id='${mark.id}'`);
+await pool.query(`UPDATE characters SET respect=9000, speed=200 WHERE id='${shark.id}'`);
+await pool.query(`UPDATE characters SET respect=9000, speed=5 WHERE id='${mark.id}'`);
 await seedCash(shark.id, 100000); await seedCash(mark.id, 100000);
 const sharkCar = await mkCar(shark.id, 'pigeon', 'stock', 0);
 const markCar = await mkCar(mark.id, 'junker', 'stock', 0);
@@ -180,8 +180,8 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) s FROM cars WHERE charact
 // arrive at the BUYER with the race flags CLEARED — else it's on the strip (raceable / cash-exposed)
 // without the new owner's consent. The four ownership-transfer sites now reset race_limit + pink_slip. ──
 const seller = await mk('Flag Seller'); const buyer = await mk('Clean Buyer');
-await pool.query(`UPDATE characters SET respect=3600 WHERE id='${seller.id}'`);
-await pool.query(`UPDATE characters SET respect=3600 WHERE id='${buyer.id}'`);
+await pool.query(`UPDATE characters SET respect=9000 WHERE id='${seller.id}'`);
+await pool.query(`UPDATE characters SET respect=9000 WHERE id='${buyer.id}'`);
 await seedCash(seller.id, 200000); await seedCash(buyer.id, 200000);
 const flagCar = await mkCar(seller.id, 'pigeon', 'stock', 0);
 // the seller flags it for a $50k wager AND for pinks, THEN lists it on the Black Market with a buy-now
@@ -206,12 +206,12 @@ const gpSum = async (reason) => Number((await pool.query(`SELECT COALESCE(SUM(am
 const gpd = [];
 for (let i = 0; i < 4; i++) {
   const d = await mk(`GP Driver ${i}`);
-  await pool.query(`UPDATE characters SET respect=3600, speed=${200 - i * 30} WHERE id='${d.id}'`);
+  await pool.query(`UPDATE characters SET respect=9000, speed=${200 - i * 30} WHERE id='${d.id}'`);
   await seedCash(d.id, 200000);
   gpd.push({ ...d, car: await mkCar(d.id, 'pigeon', 'stock', 0) });
 }
 // gates: a rookie is under the level floor; you must enter with a car you own
-const gpRk = await mk('GP Rookie'); await pool.query(`UPDATE characters SET respect=100 WHERE id='${gpRk.id}'`); await seedCash(gpRk.id, 200000);
+const gpRk = await mk('GP Rookie'); await pool.query(`UPDATE characters SET respect=250 WHERE id='${gpRk.id}'`); await seedCash(gpRk.id, 200000);
 const gpRkCar = await mkCar(gpRk.id, 'junker', 'stock', 0);
 assert.equal((await call('POST', '/v1/races/gp', { token: gpRk.token, body: { car: gpRkCar } })).body.error, 'level', `the Grand Prix has a level ${GP.MIN_LEVEL} floor`);
 assert.equal((await call('POST', '/v1/races/gp', { token: gpd[0].token, body: { car: 'nope' } })).body.error, 'no_car', 'must enter with a car you own');
@@ -237,7 +237,7 @@ assert((await pool.query('SELECT current FROM grand_prix_state WHERE id=1')).row
 assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow holds after settle');
 // a SHORT grid (< MIN_ENTRANTS) is refunded, not raced
 const sf1 = await mk('Short Grid 1'); const sf2 = await mk('Short Grid 2');
-for (const d of [sf1, sf2]) { await pool.query(`UPDATE characters SET respect=3600 WHERE id='${d.id}'`); await seedCash(d.id, 100000); }
+for (const d of [sf1, sf2]) { await pool.query(`UPDATE characters SET respect=9000 WHERE id='${d.id}'`); await seedCash(d.id, 100000); }
 await call('POST', '/v1/races/gp', { token: sf1.token, body: { car: await mkCar(sf1.id, 'junker', 'stock', 0) } });
 await call('POST', '/v1/races/gp', { token: sf2.token, body: { car: await mkCar(sf2.id, 'junker', 'stock', 0) } });
 const sfId = (await pool.query("SELECT id FROM grand_prix WHERE status='open'")).rows[0].id;
