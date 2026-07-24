@@ -2719,6 +2719,7 @@ export const collectionCatalog = () => ({
   boats:     { name: 'The Marina',         items: Object.entries(PORT.BOATS).map(([id, b]) => ({ id, name: b.name })) },
   goods:     { name: 'The Trade',          items: GOODS.map((g) => ({ id: g.id, name: g.name })) },
   fixtures:  { name: 'The Underworld',     items: Object.entries(UNDERWORLD.NPCS).map(([id, n]) => ({ id, name: n.name })) },
+  relics:    { name: 'The Relics',         items: CLUES.RELICS.map((r) => ({ id: r.id, name: r.name })) }, // Tier-4 §C — casket trophies
 })
 
 // ═══ THE MEGAPROJECT (founder pick #1 — the collective monument). ALL numbers are founder
@@ -2832,17 +2833,56 @@ export const CLUES = {
     { caskets: 5, title: 'Digger' },
     { caskets: 20, title: 'Treasure Hunter' },
     { caskets: 60, title: 'The Cartographer' },
+    { caskets: 150, title: 'Master of the Trail' },   // Tier-4 §D — the deep-legend rung
   ],
 };
 export const clueRankOf = (n) => [...CLUES.RANKS].reverse().find((r) => Number(n) >= r.caskets) || CLUES.RANKS[0];
+// ── TIER-4 §A — TRAIL TIERS: longer trails, bigger caskets, rarer drops. The tier is rolled at drop
+// (weighted — harder is rarer) and stored on the scroll; it sets the step count, the casket band
+// (the FAUCET — flag master for sim), and the relic rarity. numbers keeps the entry hook cheap. ──
+CLUES.TIERS = [
+  { id: 'easy',   name: 'a Sealed Scroll',    steps: 3, casketMin: 3000,  casketMax: 9000,   weight: 45, relicP: 0.02 },
+  { id: 'medium', name: 'a Coded Scroll',     steps: 4, casketMin: 7000,  casketMax: 18000,  weight: 30, relicP: 0.04 },
+  { id: 'hard',   name: 'a Cryptic Scroll',   steps: 5, casketMin: 14000, casketMax: 34000,  weight: 16, relicP: 0.08 },
+  { id: 'elite',  name: 'a Sovereign Scroll', steps: 6, casketMin: 28000, casketMax: 62000,  weight: 7,  relicP: 0.15 },
+  { id: 'master', name: 'a Master Scroll',    steps: 7, casketMin: 55000, casketMax: 120000, weight: 2,  relicP: 0.30 },
+];
+export const clueTierOf = (id) => CLUES.TIERS.find((t) => t.id === id) || CLUES.TIERS[0];
+export const rollClueTier = (r) => {   // r ∈ [0,1) from the caller (game.js) — weighted pick
+  const total = CLUES.TIERS.reduce((a, t) => a + t.weight, 0);
+  let x = r * total;
+  for (const t of CLUES.TIERS) { if (x < t.weight) return t; x -= t.weight; }
+  return CLUES.TIERS[0];
+};
+// §C — RELICS: status collectibles a casket can yield (rarity scaled by tier). NEVER $OMR (the RWA
+// rule) — logged to the Collection ('relics' category), the rare-drop chase off the sim economy.
+CLUES.RELICS = [
+  { id: 'brass_compass', name: 'A Brass Compass' }, { id: 'smugglers_map', name: "A Smuggler's Map" },
+  { id: 'silver_doubloon', name: 'A Silver Doubloon' }, { id: 'jade_idol', name: 'A Jade Idol' },
+  { id: 'crown_shard', name: 'A Shard of the Old Crown' }, { id: 'ledger_page', name: "A Page of the Founder's Ledger" },
+  { id: 'ivory_die', name: 'A Loaded Ivory Die' }, { id: 'blood_ruby', name: 'The Blood Ruby' },
+];
+export const clueRelicOf = (id) => CLUES.RELICS.find((r) => r.id === id) || null;
+// §B — the PUZZLE KIND: the same ANSWER (stand in district d) dressed as a richer riddle. The dig
+// check is unchanged; only the riddle TEXT decodes to the district. Deterministic off the salt.
+const clueScramble = (s, salt) => {   // a deterministic anagram of the district name
+  const a = s.split('');
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(hash01(`clue:scr:${salt}:${s}:${i}`) * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a.join('').toUpperCase();
+};
+const clueCaesar = (s, k) => s.toUpperCase().replace(/[A-Z]/g, (c) => String.fromCharCode((c.charCodeAt(0) - 65 + k) % 26 + 65));
 // the deterministic hunt: every step of a scroll derives from its stored salt (server-verifiable,
-// no stored answers — the §7.11 machinery). Returns {district, window|null, riddle}.
+// no stored answers — the §7.11 machinery). Returns {district, window|null, kind, riddle}.
 export const clueStepOf = (salt, step) => {
   const d = DISTRICTS[Math.floor(hash01(`clue:${salt}:${step}:d`) * DISTRICTS.length)].id;
   const timed = hash01(`clue:${salt}:${step}:t`) < CLUES.TIMED_P;
   const w = timed ? CLUES.WINDOWS[Math.floor(hash01(`clue:${salt}:${step}:w`) * CLUES.WINDOWS.length)] : null;
-  return { district: d, window: w,
-    riddle: (CLUES.RIDDLES[d] || `Dig in ${d}.`) + (w ? ` Come ${w.text}.` : '') };
+  const k = hash01(`clue:${salt}:${step}:k`);
+  let kind = 'riddle', riddle;
+  if (k < 0.30) { kind = 'anagram'; riddle = `Unscramble the ground — "${clueScramble(d, salt)}" — and dig there.`; }
+  else if (k < 0.55) { const sh = 1 + Math.floor(hash01(`clue:${salt}:${step}:cs`) * 24); kind = 'cipher'; riddle = `A word shifted (Caesar +${sh}): "${clueCaesar(d, sh)}". Decode it and dig.`; }
+  else { riddle = CLUES.RIDDLES[d] || `Dig in ${d}.`; }
+  return { district: d, window: w, kind, riddle: riddle + (w ? ` Come ${w.text}.` : '') };
 };
 
 // ═══ SEASONAL LEAGUE MODIFIERS (slate #6 — the PoE league twist). THE ONE DROP THAT TOUCHES
