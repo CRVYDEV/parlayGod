@@ -4,11 +4,20 @@
 // the vanity `spendOmr` till (account bucket) so the burn discipline lives in one place. Account-level
 // (keyed on account_id) → SURVIVES DEATH: the heir inherits the compound (never in the runEstate wipe).
 import { GameError, cleanText, bus } from './game.js';
-import { ESTATE, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf } from './rules.js';
+import { ESTATE, AUCTION, estateTierOf, estateFeatureOf, estateStaffOf, carVal, tickerPriceOf, hitmanRankOf, sealOf,
+  collectorRankOf, collectionSetsOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 
 const featureSet = (features) => new Set(String(features || '').split(',').filter(Boolean));
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
+
+// THE COLLECTOR legend (Tier-4) — bump the account's lifetime + this-season $OMR sunk into prestige
+// by DIRECT SQL (NUMERIC += → pg-mem-safe; OFF persistAccount's positional list → clobber-safe, the
+// tycoon_earned precedent). Called right after every estate/auction $OMR sink, on the OWN already-locked
+// account (no new lock). season_sunk feeds the Patron crown (reset at rollover). Exported for auction.js.
+export const bumpPrestige = (client, accountId, omr) =>
+  client.query('UPDATE account_persistent SET prestige_sunk = prestige_sunk + $2, season_sunk = season_sunk + $2 WHERE account_id=$1',
+    [accountId, Number(omr)]);
 
 async function loadEstate(client, accountId) {
   return (await client.query('SELECT * FROM estates WHERE account_id=$1', [accountId])).rows[0]
@@ -74,6 +83,10 @@ export async function estateBoard(ch, client, h) {
   // at the mutating touches; the board honestly shows a walked-out house as empty-with-a-warning)
   const staff = await staffRows(client, ch.account_id);
   const w = wageState(e, staff);
+  // Tier-4 — THE COLLECTOR legend (this account's lifetime/season prestige spend + rank) + the read-derived
+  // COLLECTION SETS over the archetypes you've won (h.acct carries prestige_sunk/season_sunk from the account row)
+  const winArch = (await client.query('SELECT archetype FROM auction_wins WHERE account_id=$1', [ch.account_id])).rows;
+  const sunk = Number(h.acct?.prestige_sunk || 0);
   const galaLive = e.gala_until && new Date(e.gala_until) > new Date();
   const guests = galaLive ? (await client.query(
     'SELECT guest_name FROM gala_guests WHERE host_account=$1 AND gala_key=$2 ORDER BY at', [ch.account_id, e.gala_until])).rows
@@ -110,8 +123,35 @@ export async function estateBoard(ch, client, h) {
     features: ESTATE.FEATURES.map((f) => ({ id: f.id, name: f.name, omr: f.omr, minTier: f.minTier, blurb: f.blurb,
       owned: owned.has(f.id), locked: tier < f.minTier })),
     trophies: trophies(h),
+    collector: { sunk: Math.floor(sunk), rank: collectorRankOf(sunk).name, seasonSunk: Math.floor(Number(h.acct?.season_sunk || 0)),
+      ranks: AUCTION.COLLECTOR_RANKS },
+    sets: collectionSetsOf(winArch),
     omr: Number(h.acct.omr || 0),
   };
+}
+
+// THE COLLECTORS OF THE CITY — the survives-death Collector legend board (lifetime $OMR sunk into
+// prestige), plus the Patron of the Season (top this-season spend). Agents excluded (leaderboard posture).
+export async function collectorLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT ap.prestige_sunk, ap.season_sunk, c.name AS steward FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.prestige_sunk > 0 ORDER BY ap.prestige_sunk DESC LIMIT 15`)).rows;
+  return {
+    collectors: rows.map((r, i) => ({ pos: i + 1, steward: r.steward, sunk: Math.floor(Number(r.prestige_sunk)),
+      rank: collectorRankOf(r.prestige_sunk).name })),
+    patron: await patronOfSeason(pool),
+  };
+}
+
+// THE PATRON OF THE SEASON — a pure READ (no cross-account write, the architect-crown precedent):
+// the account that has sunk the most $OMR into the pillar THIS season.
+export async function patronOfSeason(pool) {
+  const r = (await pool.query(
+    `SELECT ap.season_sunk, c.name AS steward FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.season_sunk > 0 ORDER BY ap.season_sunk DESC LIMIT 1`)).rows[0];
+  return r ? { name: r.steward, sunk: Math.floor(Number(r.season_sunk)) } : null;
 }
 
 // Buy the next tier (sequential, the seal ladder). A §10.4 $OMR burn `estate:tier`.
@@ -120,6 +160,7 @@ export async function upgradeEstate(ch, client, h) {
   const next = estateTierOf(Number(cur.tier || 0) + 1);
   if (!next) throw new GameError('maxed', "The Compound is the top of the world — there's nowhere higher.");
   await spendOmr(client, h, next.omr, 'estate:tier');
+  await bumpPrestige(client, ch.account_id, next.omr); // THE COLLECTOR legend
   const spent = Number(cur.spent_omr || 0) + next.omr;
   await upsertEstate(client, ch.account_id, { tier: next.tier, spent_omr: spent });
   await h.track(client, ch.account_id, 'estate_tier', { tier: next.tier, omr: next.omr });
@@ -136,6 +177,7 @@ export async function unlockFeature(ch, featureId, client, h) {
   if (set.has(f.id)) throw new GameError('owned', 'That wing is already built.');
   if (Number(cur.tier || 0) < f.minTier) throw new GameError('tier', `The ${f.name} needs a ${estateTierOf(f.minTier).name} first.`);
   await spendOmr(client, h, f.omr, 'estate:feature');
+  await bumpPrestige(client, ch.account_id, f.omr);
   set.add(f.id);
   await upsertEstate(client, ch.account_id, { features: [...set].join(','), spent_omr: Number(cur.spent_omr || 0) + f.omr });
   await h.track(client, ch.account_id, 'estate_feature', { feature: f.id, omr: f.omr });
@@ -149,6 +191,7 @@ export async function nameEstate(ch, name, client, h) {
   const n = cleanText(name).replace(/\s+/g, ' ').trim().slice(0, 32); // strip HTML-injection chars (stored-XSS fix, R6)
   if (n.length < 2) throw new GameError('name', 'Give the place a name (2–32 characters, no < > " markup).');
   await spendOmr(client, h, ESTATE.NAME_OMR, 'estate:name');
+  await bumpPrestige(client, ch.account_id, ESTATE.NAME_OMR);
   await upsertEstate(client, ch.account_id, { name: n, spent_omr: Number(cur.spent_omr || 0) + ESTATE.NAME_OMR });
   return { ok: true, name: n };
 }
@@ -194,6 +237,7 @@ export async function hireStaff(ch, staffId, client, h) {
   const w = wageState(r.estate, r.staff);
   if (w.owed > 0) throw new GameError('wages', 'Settle the household wages before hiring anyone new.');
   await spendOmr(client, h, s.hireOmr, 'estate:staff:hire');
+  await bumpPrestige(client, ch.account_id, s.hireOmr);
   await client.query('INSERT INTO estate_staff (account_id, staff_id) VALUES ($1,$2)', [ch.account_id, s.id]);
   // first hire starts the clock; later hires join the current (settled) cycle
   await upsertEstate(client, ch.account_id, {
@@ -230,6 +274,7 @@ export async function payStaffWages(ch, client, h) {
   const w = wageState(r.estate, r.staff);
   if (!(w.owed > 0)) return { ok: true, paid: 0, perDay: w.perDay };
   await spendOmr(client, h, w.owed, 'estate:staff');
+  await bumpPrestige(client, ch.account_id, w.owed);
   await upsertEstate(client, ch.account_id, { staff_paid_at: new Date(),
     spent_omr: Number(r.estate.spent_omr || 0) + w.owed });
   await h.track(client, ch.account_id, 'estate_wages', { omr: w.owed, staff: r.staff.length });
@@ -252,6 +297,7 @@ export async function throwGala(ch, client, h) {
     throw new GameError('already', 'The party is already on — the doors are open.');
   const cost = ESTATE.GALA_OMR * tier;
   await spendOmr(client, h, cost, 'estate:gala');
+  await bumpPrestige(client, ch.account_id, cost);
   const until = new Date(Date.now() + ESTATE.GALA_MS);
   await upsertEstate(client, ch.account_id, { gala_until: until,
     galas_hosted: Number(r.estate.galas_hosted || 0) + 1,

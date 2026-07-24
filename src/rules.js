@@ -2637,6 +2637,15 @@ ESTATE.GALA_OMR = 15;                           // × the estate tier — the ho
 ESTATE.GALA_MIN_TIER = 2;                       // a Row House can host; a Safe House can't
 ESTATE.GALA_MS = 4 * 3600 * 1000;               // the open-doors window
 export const estateStaffOf = (id) => ESTATE.STAFF.find((s) => s.id === id) || null;
+// ── ESTATE Tier-4 catalog growth (content only — estateTierOf/upgradeEstate/unlockFeature/hireStaff
+// already iterate the catalog, so the additions are zero-logic; the gala cost = GALA_OMR×tier scales
+// itself). A 6th tier, 2 tier-gated features (the home of the collection), 1 staff. Sign-off levers.
+ESTATE.TIERS.push({ tier: 6, name: 'The Palazzo', omr: 6000, blurb: 'A city block that answers to your name.' });
+ESTATE.FEATURES.push(
+  { id: 'gallery',     name: 'The Gallery',     omr: 300, minTier: 5, blurb: 'Your auction trophies, lit and labelled.' },
+  { id: 'observatory', name: 'The Observatory', omr: 350, minTier: 6, blurb: 'You watch the whole city from up here.' });
+ESTATE.STAFF.push(
+  { id: 'archivist', name: 'The Archivist', wageOmrDay: 4, hireOmr: 40, minTier: 5, blurb: 'Keeps the provenance and the collection catalog.' });
 
 // ── THE AUCTION HOUSE ("the sit-down"): the COMPETITIVE, RECURRING $OMR sink ──
 // Server-run weekly auctions of UNIQUE, numbered prestige items — highest $OMR bid wins, the winning
@@ -2659,6 +2668,46 @@ export const AUCTION = {
   ],
 };
 export const auctionArchetypeOf = (id) => AUCTION.ARCHETYPES.find((a) => a.id === id) || null;
+// ── THE AUCTION HOUSE Tier-4 (the deepening) ──
+// (1) 3 LEGENDARY rare archetypes + a weekly MARQUEE lot drawn from them (bigger auction:bid/win burns
+// — a deeper sink, existing reasons). (2) THE COLLECTOR legend: lifetime $OMR sunk, ranked. (3) COLLECTION
+// SETS: read-derived completion goals over the archetypes you've won. (4) player CONSIGNMENT: resell a
+// won trophy for a $OMR bidder→seller transfer with a house TAKE that BURNS (deflationary — the house vig).
+AUCTION.RARE_ARCHETYPES = [
+  { id: 'crown',  name: "A Deposed King's Crown", min: 400,  rarity: 'legendary', blurb: 'It sat on a real head, once.' },
+  { id: 'ledger', name: 'The Original Ledger',    min: 600,  rarity: 'legendary', blurb: 'Every debt the old city owed, in one book.' },
+  { id: 'idol',   name: 'The Golden Idol',        min: 1000, rarity: 'legendary', blurb: 'Solid. Cursed, they say. You keep it anyway.' },
+];
+AUCTION.CONSIGN = {
+  FEE_OMR: 2,             // the anti-spam listing fee (BURNS — auction:consign:fee)
+  TAKE_BPS: 500,          // the house cut on a sale (5%, BURNS — auction:take)
+  MIN_RESERVE: 10, MAX_RESERVE: 100000,
+  MAX_LIVE: 3,            // concurrent live consignments per seller (the MAX_LISTINGS precedent)
+  MS: 48 * 3600 * 1000,   // the block window
+  MIN_RAISE_BPS: AUCTION.MIN_RAISE_BPS,
+};
+AUCTION.SETS = [
+  { id: 'full_house', name: 'The Full House',         need: ['plate', 'watch', 'pistol', 'ring', 'painting', 'car'] },
+  { id: 'trove',      name: "The Collector's Trove",  need: ['crown', 'ledger', 'idol'] },
+];
+AUCTION.COLLECTOR_RANKS = [
+  { min: 0, name: 'Onlooker' }, { min: 100, name: 'Aficionado' }, { min: 500, name: 'Connoisseur' },
+  { min: 2000, name: 'The Curator' }, { min: 8000, name: 'The Grandee' }, { min: 25000, name: 'The Medici' },
+];
+export const collectorRankOf = (sunk) => {
+  let r = AUCTION.COLLECTOR_RANKS[0];
+  for (const t of AUCTION.COLLECTOR_RANKS) if (Number(sunk || 0) >= t.min) r = t; return r;
+};
+// Read-derived collection sets from the DISTINCT archetypes an account has won (rows: [{archetype}]).
+export const collectionSetsOf = (winRows) => {
+  const have = new Set((winRows || []).map((w) => w.archetype));
+  return AUCTION.SETS.map((s) => {
+    const got = s.need.filter((a) => have.has(a));
+    return { id: s.id, name: s.name, have: got.length, total: s.need.length, complete: got.length === s.need.length,
+      missing: s.need.filter((a) => !have.has(a)) };
+  });
+};
+export const auctionRareOf = (id) => AUCTION.RARE_ARCHETYPES.find((a) => a.id === id) || null;
 // This week's block: LOTS_PER_WEEK lots drawn deterministically off the §7.11 seed (the same set
 // town-wide, verifiable after). Each lot is a unique NUMBERED instance (id '<week>:<slot>', serial
 // 'W<week>-<n>') — duplicate archetypes across a week are fine, the serial keeps each one distinct.
@@ -2667,6 +2716,13 @@ export const auctionLotsOf = (week = weekOf()) => {
   for (let slot = 0; slot < AUCTION.LOTS_PER_WEEK; slot++) {
     const a = AUCTION.ARCHETYPES[Math.floor(hash01(`auction:${week}:${slot}:${MARKET_SEED}`) * AUCTION.ARCHETYPES.length) % AUCTION.ARCHETYPES.length];
     lots.push({ id: `${week}:${slot}`, week, slot, archetype: a.id, name: a.name, serial: `W${week}-${slot + 1}`, min: a.min, blurb: a.blurb });
+  }
+  // Tier-4 — THE MARQUEE: one always-legendary lot appended each week, drawn from RARE_ARCHETYPES off the
+  // same §7.11 seed (deterministic town-wide). A bigger auction:bid/win sink + the target of the Trove set.
+  const rare = AUCTION.RARE_ARCHETYPES;
+  if (rare && rare.length) {
+    const m = rare[Math.floor(hash01(`auction:${week}:marquee:${MARKET_SEED}`) * rare.length) % rare.length];
+    lots.push({ id: `${week}:m`, week, slot: 'm', archetype: m.id, name: m.name, serial: `W${week}-M`, min: m.min, blurb: m.blurb, rarity: 'legendary' });
   }
   return lots;
 };

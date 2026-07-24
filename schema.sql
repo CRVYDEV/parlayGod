@@ -2138,3 +2138,26 @@ ALTER TABLE commission_proposals ADD COLUMN IF NOT EXISTS proposer_account TEXT;
 CREATE TABLE IF NOT EXISTS commission_overrides (
   week INT NOT NULL, gang_id TEXT NOT NULL, PRIMARY KEY (week, gang_id)
 );
+
+-- THE ESTATE & AUCTION HOUSE Tier-4: THE COLLECTOR legend (lifetime + this-season $OMR sunk into
+-- prestige — status, survives death; DIRECT SQL only, OFF persistAccount → clobber-safe; NUMERIC += pg-mem-safe)
+-- + the PLAYER-CONSIGNMENT resale market (a $OMR bidder→seller transfer with a house TAKE that BURNS).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS prestige_sunk NUMERIC NOT NULL DEFAULT 0; -- lifetime $OMR sunk into estate+auction prestige (Collector legend)
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS season_sunk NUMERIC NOT NULL DEFAULT 0;   -- this-season prestige spend (Patron crown; reset in runSeasonRollover)
+ALTER TABLE auction_wins ADD COLUMN IF NOT EXISTS listed BOOLEAN NOT NULL DEFAULT false;           -- the trophy is on the block (no double-list; the consignment escrow discipline)
+CREATE TABLE IF NOT EXISTS auction_consignments (
+  id TEXT PRIMARY KEY,                       -- app-generated (crypto.randomUUID)
+  seller_account TEXT NOT NULL,
+  trophy_lot_id TEXT NOT NULL,               -- the auction_wins.lot_id being resold (unique per historical lot)
+  archetype TEXT NOT NULL,
+  name TEXT NOT NULL,
+  serial TEXT NOT NULL,
+  reserve NUMERIC NOT NULL,
+  current_bid NUMERIC NOT NULL DEFAULT 0,    -- on status='live' rows this IS the $OMR escrow (added to omrBuckets)
+  bidder TEXT,                               -- account_id of the standing top bidder
+  status TEXT NOT NULL DEFAULT 'live',       -- 'live' | 'sold' | 'unsold' | 'cancelled'
+  closes_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_consign_live ON auction_consignments (status, closes_at);
+CREATE INDEX IF NOT EXISTS ix_consign_seller ON auction_consignments (seller_account);

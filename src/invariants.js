@@ -168,7 +168,10 @@ async function collectLedgerChecks(pool) {
   // THE AUCTION HOUSE: live $OMR bids sit in escrow (the bounty/loan/market-escrow twin, on $OMR).
   // The escrow is a genuine bucket — add it so conservation stays exact (bid = account→escrow and
   // refund = escrow→account are TRANSFERS inside omrBuckets; only auction:win escapes as a burn).
-  const auctionEscrow = await one(pool, "SELECT COALESCE(SUM(current_bid),0) s FROM auctions WHERE status='live'");
+  // Tier-4 — the escrow now spans BOTH the server weekly auctions AND live player CONSIGNMENTS (a
+  // resale bid escrows $OMR the same way; miss the consignments term and every live consignment bid drifts).
+  const auctionEscrow = await one(pool, "SELECT COALESCE(SUM(current_bid),0) s FROM auctions WHERE status='live'")
+    + await one(pool, "SELECT COALESCE(SUM(current_bid),0) s FROM auction_consignments WHERE status='live'");
   const omrBuckets = await one(pool, 'SELECT COALESCE(SUM(omr+staked+unbonding),0) s FROM account_persistent')
     + await one(pool, 'SELECT COALESCE(SUM(omr_reserve),0) s FROM amm_pool')
     + await one(pool, 'SELECT COALESCE(SUM(fund),0) s FROM street_tax')
@@ -198,7 +201,10 @@ async function collectLedgerChecks(pool) {
   // law:envelope (THE ENVELOPE) is a $OMR BURN — the standing graft (account bucket, the law:jury twin).
   // foundation:tier (THE FOUNDATION) is a $OMR BURN — the family charity, against the gang reserve bucket
   // (the vanity:gang:seal precedent; the reserve is already in omrBuckets, so only the burn term is new).
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='megaproject:omr' OR reason LIKE 'bond:%' OR reason LIKE 'business:spec%')"));
+  // Tier-4 consignment: auction:take (the house cut) + auction:consign:fee (the listing fee) are $OMR
+  // BURNS — added as EXACT matches. Do NOT widen reason='auction:win' to LIKE 'auction:%': that would
+  // wrongly classify auction:bid/auction:refund/auction:consign (transfers) as burns and break conservation.
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='auction:take' OR reason='auction:consign:fee' OR reason='megaproject:omr' OR reason LIKE 'bond:%' OR reason LIKE 'business:spec%')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // THE STREET WAGE — lifetime emission may NEVER exceed the fixed Emission Endowment
@@ -209,10 +215,16 @@ async function collectLedgerChecks(pool) {
   // (d2) AUCTION ESCROW ($OMR): live standing bids == bid − refunded − won (the bounty-escrow twin,
   // on the $OMR side). bid rows are negative (escrowed in); refund rows positive (out); auction:win
   // negative (burned out of escrow). No death term — $OMR is account-level and survives death.
+  // Tier-4 — the escrow identity now also drains at a CONSIGNMENT settle: auction:consign is the
+  // escrow→seller TRANSFER (a positive seller credit, subtracted here, NOT a burn), auction:take the
+  // escrow→burn house cut (subtracted here AND in omrBurns). aucBids/aucRefunds already span both
+  // tables (they sum by reason). auction:consign:fee is a DIRECT seller burn, never in escrow — absent here.
   const aucBids = -(await sum(pool, "currency='omr' AND reason='auction:bid'"));
   const aucRefunds = await sum(pool, "currency='omr' AND reason='auction:refund'");
   const aucWins = -(await sum(pool, "currency='omr' AND reason='auction:win'"));
-  push('auction escrow', auctionEscrow, aucBids - aucRefunds - aucWins, 0.001);
+  const aucConsign = await sum(pool, "currency='omr' AND reason='auction:consign'");
+  const aucTake = -(await sum(pool, "currency='omr' AND reason='auction:take'"));
+  push('auction escrow', auctionEscrow, aucBids - aucRefunds - aucWins - aucConsign - aucTake, 0.001);
 
   // (e) CAR CONSERVATION: boost is the only faucet; melt, fence, and death the only
   // sinks (death events carry the destroyed fleet size in telemetry).

@@ -174,6 +174,23 @@ const burned2 = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM
 assert(Math.abs(burned2 - (await call('GET', '/v1/estate', { token: don.token })).body.spent) < 0.02,
   'every dollar sunk is a ledgered estate:* burn — step two included');
 
+// ══════════ TIER-4 — THE COLLECTOR legend + the catalog growth ══════════
+// the tier-6 / features / staff additions are on the ladder + catalog (content-only)
+assert(ESTATE.TIERS.some((t) => t.tier === 6 && t.name === 'The Palazzo'), 'the Palazzo is a 6th tier');
+r = await call('GET', '/v1/estate', { token: don.token });
+assert(r.body.tiers.some((t) => t.tier === 6), 'the tier-6 rung is on the board');
+assert(r.body.features.some((f) => f.id === 'gallery') && r.body.features.some((f) => f.id === 'observatory'), 'the Gallery + Observatory are on the catalog');
+assert(r.body.household.catalog.some((s) => s.id === 'archivist'), 'the Archivist joins the staff catalog');
+// THE COLLECTOR — the account's prestige spend accrued by the SAME estate:* burns (survives death, on the heir)
+assert(r.body.collector && r.body.collector.sunk > 0, 'the Collector legend has banked the lifetime $OMR sunk');
+assert.equal(r.body.collector.sunk, r.body.spent, 'the Collector legend == every $OMR the estate sank (bumped in lockstep)');
+assert(r.body.collector.rank, 'with a derived Collector rank');
+// the collectors board (survives-death legend) ranks the account + crowns the Patron
+const { collectorLeaderboard } = await import('../src/estate.js');
+const clb = await collectorLeaderboard(pool);
+assert(clb.collectors.some((c) => c.steward === heir.name && c.sunk > 0 && c.rank), 'the heir tops the collectors board with a rank — the legend survived the estate\'s death');
+assert(clb.patron && clb.patron.sunk > 0, 'the Patron of the Season is crowned by this-season spend');
+
 // ── §10.4: estate:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -181,5 +198,5 @@ assert(vocab.ok, `estate: rides the omr vocabulary (${JSON.stringify(vocab.unkno
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.equal(omrCheck.drift, grantDrift, `the only $OMR drift is the test grant (${grantDrift}) — estate:* reconciles as a burn`);
 
-console.log('✅ Estate ("the compound") test passed — the board + tier ladder + feature catalog, sequential tier upgrades (exact ledgered estate:tier burns), feature tier-gates + no-double-buy, naming (needs a place first), trophies from real holdings, the sheet summary, estate value = every $OMR sunk, DEATH SURVIVAL (the heir inherits the compound), spends == ledgered estate:* burns, and §10.4 (estate: vocabulary + $OMR conservation — drift == the test grant only)');
+console.log('✅ Estate ("the compound") test passed — the board + tier ladder + feature catalog, sequential tier upgrades (exact ledgered estate:tier burns), feature tier-gates + no-double-buy, naming (needs a place first), trophies from real holdings, the sheet summary, estate value = every $OMR sunk, DEATH SURVIVAL (the heir inherits the compound), spends == ledgered estate:* burns, and §10.4 (estate: vocabulary + $OMR conservation — drift == the test grant only) + TIER-4: the Palazzo tier-6 + Gallery/Observatory/Archivist catalog growth, and THE COLLECTOR legend (lifetime $OMR sunk == the estate burns, a derived rank, the survives-death collectors leaderboard + the Patron of the Season)');
 await app.close();
