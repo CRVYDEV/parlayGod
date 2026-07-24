@@ -4617,3 +4617,50 @@ distribution/corner network, a per-racket PvP shakedown (rackets feed the global
 per-instance clock — a rearchitecture), monument wings + completion district perks, and honor decay +
 deeper diplomacy. All numbers are founder sign-off levers; the faucet-widening levers (racket upgrades,
 the kitchen lab modules/cut) are sim-before-production flagged in BALANCE.md.
+
+**TIER-3 → TIER-4 DEEPENING PROGRAM (founder-directed 2026-07-24: "build everything in the tier 3
+system into tier 4") — ALL SIX BUILT** (red-team `AUDIT-tier3-deepening.md` — no CRITICAL/HIGH/MED;
+BALANCE.md sign-off flags; §10.4 drift-0 + the 45-suite green after each drop). The six mid-depth
+systems deepened to the depth bar (multiple orthogonal mechanics + a scaling catalog + a competitive/
+meta layer + a SURVIVES-DEATH status legend on a new `/v1/leaderboard/*` + a console screen), all on
+already-audited patterns. **(1) BUSINESS EMPIRE** (`src/business.js`) — THE LAUNDERER legend
+(`account_persistent.laundered_lifetime`, bumped in launderAtBusiness), THE ACCOUNTANT front
+specialization (`businesses.spec`, a `business:spec` $OMR burn halving scrutiny), the TYCOON fold-in
+on collect, read-derived front-set titles, and THE HOSTILE TAKEOVER (`takeoverBusiness`, two-party —
+a `business:takeover` fee SINK that burns win/lose + the audited taxed buyout transfer, `p`-pinned
+roll knob, reset-to-new-owner handover). **(2) CONVOYS** (`src/convoy.js`) — THE TEAMSTER / THE
+HIGHWAYMAN survives-death legends (`freight_delivered`/`freight_hijacked`, direct-SQL) + a
+`convoy_hauls` weekly-contest log (worker-swept) + the read-derived Teamster/Road-Boss-of-the-Week +
+`GET /v1/leaderboard/convoy`. **(3) THE COMMISSION** (`src/commission.js`) — THE STATESMAN legend
+(`account_persistent.statecraft`, earned by vote/propose/veto/override + the post-commit ENACTED
+prize), THE OVERRIDE (a seated FLOOR family musters `OVERRIDE_WEIGHT` 7 seat-weight to overrule the
+head veto; `commission_overrides` table; settleProposals single-sourced through `activeDecree(week+1)`
+so a vetoed-then-overridden motion enacts), THE RECORD (chamber history), + 3 new one-touchpoint
+decrees (`smugglers_moon` port interdiction ×0.75, `open_roads` convoy arrival ×0.8, `blood_oath`
+fire-kill CASH loot ×1.25 threaded into BOTH loot sites clamped ≤0.5). `GET /v1/leaderboard/statesmen`.
+**(4) THE RESERVE BOND** (`src/bonds.js`) — THE PLEDGE (`pledgeTreasury`, a `bond:pledge` $OMR BURN +
+a `pledged_omr` status score — NOT a reserve fund, so no unbacked extraction path), THE CHARTER
+(`commissionCharter`, a sequential `bond:charter` $OMR seal), the read-derived Underwriters' League +
+backer tiers + THE FINANCIER crown. **(5) THE STORE & THE LEDGER** (`src/store.js`/`src/pass.js`) —
+THE BENEFACTOR legend (`patron_spent`), the PATRON ladder + prestige ranks, `pass_seasons`, the
+benefactors board — all off the ETH-revenue rail (zero new §10.4 surface). **(6) THE ESTATE & AUCTION
+HOUSE** (`src/estate.js`/`src/auction.js`) — THE COLLECTOR legend (`prestige_sunk`/`season_sunk`
+direct-SQL bumpPrestige at every estate/auction sink, ranked + the PATRON OF THE SEASON read-crown),
+PLAYER CONSIGNMENT (the flagship resale market — `auction_consignments`, a $OMR bidder→seller TRANSFER
+with a house TAKE that burns; the batch's §10.4-riskiest change), read-derived COLLECTION SETS, and
+catalog growth (a LEGENDARY weekly MARQUEE lot, 3 rare archetypes, the Palazzo tier-6, Gallery/
+Observatory/Archivist). **§10.4 — the escrow extension (invariants.js):** `auctionEscrow` now spans
+BOTH `auctions` + `auction_consignments` live bids; `omrBurns` gained EXACT `auction:take` +
+`auction:consign:fee` matches (never a blanket `auction:%` — the trap that would misclassify the
+bid/refund/consign transfers); the `auction escrow` check became `bids − refunds − wins − consign −
+take`. `season_sunk` resets in `runSeasonRollover`'s per-char txn (gated `season<current`, the
+duel-elo precedent). All ten new `account_persistent` legend columns are direct-SQL + NUMERIC +
+ABSENT from `persistAccount`'s positional list (clobber-safe). **The combined red-team**
+(`AUDIT-tier3-deepening.md`, six lenses, source-verified) returned **no CRITICAL/HIGH/MED** — the
+consignment escrow is exact (proven mid-listing + post-settle in `test/auction.js`), the Bond pledge
+touches no reserve (the flagged high-risk item is a non-issue), every legend survives death by
+construction, and the touchpoints (blood_oath dual-site clamped, business-takeover `p`-pinned) are
+sound. Founder sign-off flags (BALANCE.md, not defects): the `blood_oath` ×1.25 decree modifier on the
+signed loot rate (clamped, the open_season precedent), the new net-deflationary consignment P2P $OMR
+rail (collusion −EV by the take), and the Sybil-inflatable status boards (no payout — the hitman-rep
+posture). Suite 45/45 + sim drift-0. All Tier-4 numbers are founder sign-off levers.
