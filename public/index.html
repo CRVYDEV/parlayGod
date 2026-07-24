@@ -1677,7 +1677,7 @@
         <div class="card"><span class="t">${m.name}</span><div class="d">${m.role}</div></div>`).join('')}</div>`)}
 
       <h2 style="margin-top:12px">Territory Operations</h2>
-      ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span></div>` : ''}
+      ${g.empire ? `<div class="card" style="border-color:var(--neon)"><span class="t">🏙️ ${g.empire.rank}</span> <span class="d">$${fmt(g.empire.earned)} lifetime territory income — <a href="#" id="terr-lb">the Empire board →</a></span>${g.syndicate ? `<div style="margin-top:4px">🃏 <b>${esc(g.syndicate.name)}</b> <span class="d">— ${g.syndicate.count} ${esc(g.syndicate.kind)} operations. Specialization pays in prestige.</span></div>` : ''}</div>` : ''}
       ${(g.territory || []).length ? `<div class="grid">${g.territory.map((op) => `
         <div class="card"><span class="t">${op.district}: ${op.name || op.tier}</span>${op.raidRisk ? ' <span class="chip bad">FEDS WATCHING</span>' : ''}${op.fortitude ? ` <span class="chip">🛡️ ${op.fortitude}/${op.fortMax}</span>` : ''}${op.specialist ? ` <span class="chip good">specialist +${op.specFortBonus}🛡️</span>` : ''}${op.ghostSeconds > 0 ? ' <span class="chip">👻 ghosted</span>' : ''}
           <div class="d">$${fmt(op.incomePerHr || 0)}/hr · pending $${fmt(op.pending || 0)}${op.cold ? ' · COLD (pay the upkeep)' : ''}${op.upkeepOwed ? ` · upkeep owed $${fmt(op.upkeepOwed)}` : ''}</div>
@@ -1693,7 +1693,7 @@
       ${boss ? `<div style="margin-top:6px">
         <button class="act" data-do="POST /v1/territory/collect">collect income → treasury</button>
         <button class="act" data-do="POST /v1/territory/upkeep">pay upkeep (treasury)</button>
-        <select id="terr-kind"><option value="numbers">Numbers Game (safe ×1.0)</option><option value="protection">Protection Racket (×1.15, some heat)</option><option value="smuggling">Smuggling Ring (×1.35, hot)</option></select>
+        <select id="terr-kind"><option value="numbers">Numbers Game (safe ×1.0)</option><option value="protection">Protection Racket (×1.15)</option><option value="loansharking">Loansharking Book (×1.20)</option><option value="chop_shop">Chop Shop (×1.25)</option><option value="smuggling">Smuggling Ring (×1.35, hot)</option><option value="counterfeiting">Counterfeiting Plant (×1.45, hottest)</option></select>
         <button class="act" id="terr-establish">establish here (${me.loc})</button></div>` : ''}
       <div style="margin-top:6px"><span class="d" style="color:var(--dim);font-size:12.5px">Muscle a RIVAL family's operation for a cut of its pending income (you must be at their district):</span><br>
         <input id="terr-raid-dist" placeholder="district (e.g. canal)" size="14">

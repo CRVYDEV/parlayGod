@@ -1601,12 +1601,37 @@ export const territoryTierOf = (tier = 0) => TERRITORY_RACKETS.find((t) => t.tie
 // risk/reward choice orthogonal to scale — a hotter type earns MORE but draws Bureau crackdowns
 // (scrutinyPerHr net of the decay below). numbers is the safe baseline (×1.0, never raided); the
 // income mults + risk are NEW founder sign-off levers (numbers keeps parity with the signed curve).
+// TIER-4 §B — the TYPE catalog 3 → 6: three more businesses on the risk/income curve (loansharking,
+// chop-shop, counterfeiting — the hottest). All ride the existing incomeMult/scrutinyPerHr mechanism
+// (zero territory.js code — the type is data), so it's content, not a rebalance; the income mults +
+// scrutiny are NEW founder sign-off levers (numbers keeps parity with the signed curve). `syndicate`
+// is the same-type meta title (Tier-4 §D).
 export const TERRITORY_TYPES = [
-  { id: 'numbers',    name: 'Numbers Game',     incomeMult: 1.0,  scrutinyPerHr: 0,  desc: 'Bookmaking — steady and quiet. The Bureau never comes.' },
-  { id: 'protection', name: 'Protection Racket', incomeMult: 1.15, scrutinyPerHr: 10, desc: 'Muscle on the block — more take, more heat.' },
-  { id: 'smuggling',  name: 'Smuggling Ring',    incomeMult: 1.35, scrutinyPerHr: 14, desc: 'Contraband moves big money — and brings the Feds.' },
+  { id: 'numbers',        name: 'Numbers Game',       incomeMult: 1.0,  scrutinyPerHr: 0,  syndicate: 'The Numbers Syndicate',   desc: 'Bookmaking — steady and quiet. The Bureau never comes.' },
+  { id: 'protection',     name: 'Protection Racket',   incomeMult: 1.15, scrutinyPerHr: 10, syndicate: 'The Protection Combine',   desc: 'Muscle on the block — more take, more heat.' },
+  { id: 'loansharking',   name: 'Loansharking Book',   incomeMult: 1.20, scrutinyPerHr: 11, syndicate: 'The Shylock Ring',         desc: 'Vig on the street — good money, watched books.' },
+  { id: 'chop_shop',      name: 'Chop Shop',           incomeMult: 1.25, scrutinyPerHr: 12, syndicate: 'The Chop Cartel',          desc: 'Stolen iron parted out — fast cash, hot plates.' },
+  { id: 'smuggling',      name: 'Smuggling Ring',      incomeMult: 1.35, scrutinyPerHr: 14, syndicate: 'The Smuggling Syndicate',   desc: 'Contraband moves big money — and brings the Feds.' },
+  { id: 'counterfeiting', name: 'Counterfeiting Plant', incomeMult: 1.45, scrutinyPerHr: 18, syndicate: 'The Forgers Guild',        desc: 'Printing money is the biggest take — and the biggest heat.' },
 ];
 export const territoryTypeOf = (id) => TERRITORY_TYPES.find((t) => t.id === id) || TERRITORY_TYPES[0];
+// TIER-4 §D — THE SYNDICATE: a family running ≥ TERRITORY_SYNDICATE_MIN operations of ONE type earns
+// that type's syndicate title (pure STATUS — specialization prestige, no §10.4/income change; the
+// Empire precedent). syndicateOf reads the family's held rackets and returns the dominant type if it
+// clears the floor (ties → the higher-income type, so the deepest specialization wins).
+export const TERRITORY_SYNDICATE_MIN = 3;
+export const syndicateOf = (rackets = []) => {
+  const by = {};
+  for (const r of rackets) by[r.kind] = (by[r.kind] || 0) + 1;
+  let best = null;
+  for (const [kind, n] of Object.entries(by)) {
+    if (n < TERRITORY_SYNDICATE_MIN) continue;
+    const t = territoryTypeOf(kind);
+    if (!best || n > best.count || (n === best.count && t.incomeMult > best.incomeMult))
+      best = { kind, count: n, name: t.syndicate, incomeMult: t.incomeMult };
+  }
+  return best ? { kind: best.kind, count: best.count, name: best.name } : null;
+};
 // THE EMPIRE (step two) — a gang-level status axis off lifetime territory income (dies with the family).
 // Pure status: no §10.4 surface (the income still rides territory:income; this is a separate counter).
 export const TERRITORY_RANKS = [
