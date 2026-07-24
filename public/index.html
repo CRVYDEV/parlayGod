@@ -1997,9 +1997,10 @@
             : s.state === 'pending' ? `<span class="chip">standing — pays in ${mins(s.matureSeconds)}</span>` : ''}
           <div class="d">${s.desc} · pays $${fmt(s.cash)} <span style="color:var(--dim)">(the post must stand ${sw.matureHours || 4}h)</span></div>
           <a href="${s.share}" target="_blank" rel="noopener noreferrer"><button class="act">share ↗</button></a>
-          ${s.state === 'claimed' ? '' : s.state === 'todo'
-            ? `<button class="act" data-swclaim="${s.id}">I posted — start the clock</button>`
-            : `<button class="act" data-swclaim="${s.id}"${s.state === 'pending' ? ' disabled' : ''}>${s.state === 'ready' ? 'collect' : 'standing…'}</button>`}</div>`).join('')}</div>
+          ${s.state === 'claimed' ? '' : (s.state === 'todo' || s.state === 'ready')
+            ? `<div class="row" style="margin-top:4px"><input class="sw-proof" data-for="${s.id}" placeholder="paste the link to your post${sw.enabled ? ' — needed to pay' : ''}" style="flex:1;min-width:0">
+              <button class="act" data-swclaim="${s.id}">${s.state === 'ready' ? 'collect' : 'I posted — start the clock'}</button></div>`
+            : `<button class="act" data-swclaim="${s.id}" disabled>standing…</button>`}</div>`).join('')}</div>
       ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus. A share pays after it stands ${sw.matureHours || 4} hours — post-and-delete pays nothing.</div>` : ''}
 
       <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks pays real cash + $OMR + milestone bonuses</span></h2>
@@ -2032,7 +2033,11 @@
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
     t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
-    t.querySelectorAll('[data-swclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/social/${b.dataset.swclaim}/claim`, {}).then(() => renderStart()));
+    t.querySelectorAll('[data-swclaim]').forEach((b) => b.onclick = () => {
+      const inp = t.querySelector(`.sw-proof[data-for="${b.dataset.swclaim}"]`);
+      const proof = inp ? inp.value.trim() : '';
+      act('POST', `/v1/social/${b.dataset.swclaim}/claim`, proof ? { proof } : {}).then(() => renderStart());
+    });
   }
 
   // Streets: crimes, train, path, bank, trade goods, travel

@@ -4696,3 +4696,31 @@ board reputation/lane-heat surface + the discounted `convoy:toll` transfer recon
 check. All `NOTORIETY.*` numbers are founder sign-off levers (risk/status modifiers, off every signed faucet curve —
 the toll discount reduces family toll income, flagged). Deferred (Tier A/B, founder call): the surface hot-markets
 board + daily directed orders (Tier A), and the per-run seed-drawn EVENT + pre-committed choice (Tier B).
+
+**REFERRAL + X-RECRUITMENT FIXES (founder-directed "fix the referral and Twitter recruitment system")** —
+an inventory pass (Explore agent) over §7.13 referrals + Spread-the-Word + THE BROADCAST + X OAuth surfaced
+five real bugs/gaps behind the mature, audited machinery; all fixed + regression-tested (suite 45/45 + sim
+drift-0). **HIGH — Spread-the-Word was silently DEAD in production**: the console posted the claim with an
+EMPTY body (no post link), so in the production-mandated `SOCIAL_VERIFY_MODE=live` the matured claim called
+`verifyPostUp(null)` → `need_proof` and NOBODY was ever paid (untested — the suite only ran `trust`). And
+the D2 author-binding (`not_your_post`, bind the tweet to the player's linked X handle) was DEAD CODE off the
+real path — `claimSocial` called `verifyPostUp` with no `ctx`. **Fixed**: the client now captures the tweet
+URL (a `sw-proof` input on the register/collect card) and sends `{proof}`; `growth.js:claimSocial` passes
+`{client, accountId}` so author-binding activates on the real path. `test/growth.js` proves it with a
+stubbed X API: a proof-less share can never pay (`need_proof`), a matured post from the linked X account
+pays, and registering a celebrity's tweet earns `not_your_post`. **MED — attribution leak**: the
+Spread-the-Word share URLs carried the bare domain (recruit had to TYPE the code) while THE BROADCAST used
+the auto-crediting `/u/<name>?ref=<name>` deep link; `socialShareUrl` now emits the frictionless `?ref`
+link (a tapped daily-task tweet auto-credits the sharer, feeding the §7.13 loop). **MED — lost tier-2 fee**:
+`maybeGrandReferral` fires ONCE from the post-commit hook, so a grandrecruiter with no living street at the
+qualifying instant lost the "family tree" fee forever; new worker `sweepGrandReferrals` reconciles it
+idempotently (pays the moment they have a living heir — a regression proves the dead-at-qualify → sweep-pays
+→ once path). **LOW — First-Week links**: `ob_x`/discord/repo pointed at bare `x.com`/`discord.com`/
+`github.com` homepages; new `SOCIAL_LINKS` (rules.js) resolves `ob_x` to the OMERTÀ handle (discord/repo
+deploy-configurable via `SOCIAL_DISCORD_URL`/`GITHUB_REPO`). **LOW — housekeeping**: `sweepSocialClaims`
+worker sweep drops spent `social_claims` rows (paid > 7d, unpaid > the 48h pending TTL). Accepted as-is
+(env-gated-dormant, working-as-designed, or deferred): X OAuth PKCE (fail-safe until `X_CLIENT_ID`+
+`PUBLIC_URL`), the paste-token X path (already demoted to a collapsed "Developers only" affordance with a
+clear FAQ), `ob_repo` GitHub-star (needs a linked GitHub login — a deferred client feature), the recruitment
+DRIVE (mod-armed), and the broadcast beacon's unused `wanted`/`whacked` kinds. All numbers unchanged
+(§10.4-untouched — the fixes are plumbing/attribution/reconcile, no new faucet).

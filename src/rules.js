@@ -2785,12 +2785,26 @@ export const SOCIAL_TASKS = {
   ],
 }
 // Prefilled share intents (client opens these in a new tab). code = the player's living name.
+// The share URL is the FRICTIONLESS profile deep link `/u/<code>?ref=<code>` (the BROADCAST rail) —
+// a recruit who taps it lands on the profile page whose "ENTER THE CITY →" CTA carries ?ref, so the
+// console auto-fills the referral code at sign-up (they type NOTHING). Was the bare domain, which made
+// a daily-task tweet require the recruit to manually type the code — the attribution leak this closes.
 export const socialShareUrl = (kind, code = '') => {
-  const url = SOCIAL_GAME_URL, h = SOCIAL_X_HANDLE
-  const tweet = (text) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
-  if (kind === 'tweet') return tweet(`I'm running the streets in OMERTÀ — a noir mob RPG. Use my code "${code}" when you sign up. @${h}`)
-  if (kind === 'referral') return tweet(`Come earn with me in OMERTÀ. Referral code: ${code}`)
+  const h = SOCIAL_X_HANDLE
+  const c = String(code || '').trim()
+  const link = c ? `${SOCIAL_GAME_URL}/u/${encodeURIComponent(c)}?ref=${encodeURIComponent(c)}` : SOCIAL_GAME_URL
+  const tweet = (text) => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`
+  if (kind === 'tweet') return tweet(`I'm running the streets in OMERTÀ — a noir mob RPG. Come take the city with me. @${h}`)
+  if (kind === 'referral') return tweet(`Come earn with me in OMERTÀ — tap in and I get the credit for bringing you in. @${h}`)
   return `https://x.com/${h}` // boost: the profile / pinned post
+}
+// The real First-Week social DESTINATIONS (deploy-configurable) — the OMERTÀ handle / community /
+// repo, not the bare platform homepages (the L1 fix). ob_x always resolves to the known handle;
+// discord/repo use env when set (else the static ONBOARD_TASKS fallback stands).
+export const SOCIAL_LINKS = {
+  ob_x: `https://x.com/${SOCIAL_X_HANDLE}`,
+  ob_discord: process.env.SOCIAL_DISCORD_URL || null,
+  ob_repo: process.env.GITHUB_REPO ? `https://github.com/${process.env.GITHUB_REPO}` : null,
 }
 
 // ═══ EMISSION — THE STREET WAGE (the value-creation pivot, founder-directed 2026-07-23;

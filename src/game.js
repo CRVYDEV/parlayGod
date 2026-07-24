@@ -1162,3 +1162,26 @@ export async function maybeGrandReferral(pool, r2AccountId) {
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
+
+// RECONCILE the tier-2 "family tree" fee (the worker sweep). maybeGrandReferral fires ONCE, from the
+// post-commit hook, on the same action that qualified R2 — and that hook never runs again for R2
+// (it's gated on `!ref_paid`). So if the grandrecruiter A had NO living character at that instant
+// (dead / between heirs), maybeGrandReferral returned null WITHOUT setting the ref_l2_paid latch, and
+// the $5k finder's fee was lost forever. This sweep finds every qualified recruit whose whole 2-level
+// chain is qualified but ref_l2_paid is still unset, and retries maybeGrandReferral — which pays A the
+// moment A next has a living heir, idempotently (the latch + the re-verified gates under lock). The
+// candidate set is small (only ref_paid && !ref_l2_paid recruits with a qualified middle link).
+export async function sweepGrandReferrals(pool) {
+  const cand = (await pool.query(
+    `SELECT r2.account_id AS r2 FROM account_persistent r2
+       JOIN account_persistent r ON r.account_id = r2.referred_by
+      WHERE r2.ref_paid AND NOT r2.ref_l2_paid AND NOT r2.agent_flag AND r2.referred_by IS NOT NULL
+        AND r.ref_paid AND NOT r.agent_flag AND r.referred_by IS NOT NULL
+      LIMIT 1000`)).rows;
+  let paid = 0;
+  for (const { r2 } of cand) {
+    try { if (await maybeGrandReferral(pool, r2)) paid++; }
+    catch (e) { console.error('[sweepGrandReferrals]', r2, e?.code || e?.message || e); }
+  }
+  return { candidates: cand.length, paid };
+}
