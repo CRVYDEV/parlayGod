@@ -1819,3 +1819,16 @@ Addresses the tester "transport farming is repetitive" feedback (`omerta-transpo
   is untouched — the intended "vary your lanes" pressure. Dials if it bites: `GAIN`/`DECAY_PER_HR`/`MAX` for
   the pressure magnitude, `PORT_P_PER`/`CONVOY_DEF_PER` for the per-point severity, the `REP_*_TIER` thresholds
   for how quickly reputation earns relief.
+
+## THE SACKING (L3a — passive wealth is PvP-losable) — founder sign-off flag
+`M3.SACK_ON_KILL` (default on): a PLAYER fire-kill lets the killer SEIZE one of the victim's business
+fronts (the most valuable one they can HOLD — level gate + an empty kind slot) instead of it dying with
+the street. §10.4-NEUTRAL (a front is an ownership object, not a currency — no ledger row, sim drift-0;
+the territory-seize precedent). It's the keystone lever from the stakes/spine review: it makes the
+passive-front stack (measured at ~$49M/day NET in sim P9.20) genuine RISK CAPITAL and gives the kill
+economy (measured −$72k standalone) a prize worth the ammo — converging findings #1/#2/#3.
+**SIGN-OFF:** a seized front is a ZERO-SUM transfer between players (no new base-wide emission), but it
+CONCENTRATES the passive stack in fewer hands over time. Sim the concentration + defense-spend response
+before production. Dial: `M3.SACK_ON_KILL=false` disables it entirely; a future refinement could seize a
+tier-DROP instead of the whole front, or cap seizes-per-victim. Deferred sibling levers (#3): L3b (cap the
+eight untouchable states) and L3c (a cheaper contracted-kill ammo floor).

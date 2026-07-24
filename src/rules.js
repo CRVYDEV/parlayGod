@@ -934,6 +934,13 @@ export const M3 = {
   // tradeoff: keep it in-game to use it (losable) or extract it on-chain (safe + tradeable, but
   // it leaves play). New/tunable — sim + sign-off.
   GEAR_LOOT_CHANCE: 0.15,
+  // L3a — THE SACKING (stakes/spine review, the keystone lever). On a PLAYER fire-kill the killer SEIZES
+  // one of the victim's business fronts (the endgame passive-income engine) instead of it dying with the
+  // street — making the passive empire genuine PvP RISK CAPITAL and giving the kill a prize worth the ammo.
+  // A pure OWNERSHIP move (a front is NOT a §10.4 currency; the territory-seize precedent), gated so the
+  // killer can only HOLD a front they could run (level + an empty kind slot). Set false to disable.
+  // Founder sign-off lever (new/tunable — sim the concentration effect before production).
+  SACK_ON_KILL: true,
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited
