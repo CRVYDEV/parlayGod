@@ -711,7 +711,7 @@
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true) bits.push(`clean job — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}`);
-    if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${Math.ceil(body.jailSeconds / 60)}m in lockup` : 'it went sideways');
+    if (body.success === false) bits.push(body.jailSeconds ? `BUSTED — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways');
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -1319,10 +1319,11 @@
     $('#whoami').innerHTML = `<b>${me.name}</b> · gen ${me.generation} · lvl ${me.level} · ${me.loc}` +
       (me.gang ? ` · <span style="color:${me.gang.color || 'var(--dim)'}">${me.gang.tag}</span>` : '');
     const chips = [];
-    if (me.jailSeconds > 0) chips.push(['bad', `LOCKUP ${Math.ceil(me.jailSeconds / 60)}m`]);
+    // LIVE countdowns (mins() ticks in place) — a short jail reads "0:08" and drains, not a static, wrong "1m"
+    if (me.jailSeconds > 0) chips.push(['bad', `LOCKUP ${mins(me.jailSeconds)}`]);
     // the Doc's care is PROTECTION, not lockup — you still work jobs; only fighting is off (v24 rule)
-    if (me.hospSeconds > 0) chips.push(['cold', `DOC'S CARE ${Math.ceil(me.hospSeconds / 60)}m`]);
-    if (me.safeSeconds > 0) chips.push(['cold', `SAFEHOUSE ${Math.ceil(me.safeSeconds / 60)}m`]);
+    if (me.hospSeconds > 0) chips.push(['cold', `DOC'S CARE ${mins(me.hospSeconds)}`]);
+    if (me.safeSeconds > 0) chips.push(['cold', `SAFEHOUSE ${mins(me.safeSeconds)}`]);
     if (me.wanted) chips.push(['bad', 'WANTED']);
     if (me.welsher) chips.push(['bad', 'WELSHER']);
     if (me.law?.indicted) chips.push(['bad', 'INDICTED']);
@@ -1541,7 +1542,8 @@
   // a LIVE countdown (founder: dynamic cooldown timers) — every `mins(seconds)` render site ticks
   // down in place via the 1s ticker; at zero it reads 0:00 and the next poll/render flips the state.
   // minsTxt is the plain-text variant for non-HTML contexts (alerts, titles).
-  const minsTxt = (s) => s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
+  const minsTxt = (s) => s <= 0 ? '0s' : s < 60 ? Math.ceil(s) + 's' // sub-minute reads in SECONDS (a 10s jail is "10s", not a misleading "1m")
+    : s > 3600 ? Math.floor(s / 3600) + 'h' + Math.ceil((s % 3600) / 60) + 'm' : Math.ceil(s / 60) + 'm';
   const mins = (s) => cd(s, '0:00');
   // empty-state coaching: a friendly "what this is / do this first" card instead of a blank grid
   // the Street Wage status line (Going Legit card) — reads the /v1/wage board, never re-derives
@@ -2123,7 +2125,9 @@
       <div id="clue-slot"></div>
       ${sect('streets-daily', 'Daily Work', '3 contracts a day (all three pays a $OMR bonus) + the Daily Score', `<div class="grid">${dailyCards}</div>`, dailyReady)}
       ${sect('streets-train', 'Train', 'raise muscle / cunning / speed', train)}
-      ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `<div class="grid">${goodsCards}</div>`)}
+      ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `
+        <div class="d" style="color:var(--dim);font-size:12px;margin-bottom:4px">🚚 your trunk holds <b>${me.cargoCap ?? 0}</b> weight of cargo. Your <b>cars</b> are for muscle &amp; melt value — to <b>haul more</b>, buy a bigger set of <b>Wheels</b> (a truck / muscle car) in <b>The Empire ▸ Assets</b>.</div>
+        <div class="grid">${goodsCards}</div>`)}
       ${sect('streets-second', 'Your Second', `named muscle who rides along on jobs, takes ${(sq.cutBps || 500) / 100}% of the take… and can DIE for good`, soldierBlock, (sq.roster || []).length > 0)}`;
     wireSects(t);
     t.querySelectorAll('[data-soldassign]').forEach((b) => b.onclick = () =>
