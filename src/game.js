@@ -333,6 +333,9 @@ export async function soldierResult(client, h, ch, s, { success, cause = 'a job 
   if (!s) return null;
   if (success) {
     await client.query('UPDATE soldiers SET xp=$2 WHERE id=$1', [s.id, Number(s.xp) + SOLDIERS.XP_PER_JOB]);
+    // TIER-4 — THE COMMANDER LEGEND: a successful assisted job banks a lifetime notch (account-level,
+    // survives death; direct SQL off the positional persist — the duel_wins/heists_pulled twin)
+    await client.query('UPDATE account_persistent SET soldiers_led = soldiers_led + 1 WHERE account_id=$1', [ch.account_id]);
     return { name: s.name, xp: SOLDIERS.XP_PER_JOB };
   }
   const roll = Math.random();

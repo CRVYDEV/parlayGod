@@ -2686,6 +2686,19 @@ export const SOLDIERS = {
          'the Ghost', 'from the Docks', 'Butterbean', 'the Wrench', 'Half-Pint', 'the Undertow'],
 }
 export const soldierLevelOf = (xp) => Math.min(SOLDIERS.LVL_CAP, 1 + Math.floor(Number(xp || 0) / SOLDIERS.LVL_XP))
+// TIER-4 §soldiers — RANKS (a soldier's grade grows with jobs, the recruit→capo ladder; status only,
+// derived from level) + THE COMMANDER LEGEND (lifetime jobs led with a soldier, account-level → survives
+// death, the boxing-legend twin; bumped in game.js soldierResult on a successful assist).
+SOLDIERS.RANKS = [
+  { lvl: 1, name: 'Associate' }, { lvl: 3, name: 'Soldier' }, { lvl: 5, name: 'Enforcer' },
+  { lvl: 7, name: 'Capo' }, { lvl: 10, name: 'Caporegime' },
+]
+export const soldierRankOf = (xp) => { const l = soldierLevelOf(xp); return [...SOLDIERS.RANKS].reverse().find((r) => l >= r.lvl) || SOLDIERS.RANKS[0] }
+SOLDIERS.COMMANDER_RANKS = [
+  { led: 0, name: 'Street Boss' }, { led: 25, name: 'Field Commander' }, { led: 100, name: 'The General' },
+  { led: 300, name: 'The Warlord' },
+]
+export const commanderRankOf = (led) => [...SOLDIERS.COMMANDER_RANKS].reverse().find((r) => Number(led) >= r.led) || SOLDIERS.COMMANDER_RANKS[0]
 // trait strength at a level — linear growth, capped; multiplicative fx (wheelman/safecracker/lucky/
 // lookout) scale the REDUCTION, additive fx (gunner) scale the bonus
 export const soldierFxOf = (s) => {

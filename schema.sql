@@ -2049,3 +2049,8 @@ ALTER TABLE clue_scrolls ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'ea
 -- ── SOVEREIGNTY TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §5) ──
 -- income_at: the lazy income clock (a held stronghold yields tribute to the treasury, the territory pattern).
 ALTER TABLE sov_structures ADD COLUMN IF NOT EXISTS income_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- ── SOLDIERS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §6) ──
+-- soldiers_led: lifetime successful jobs led with an assigned soldier (account-level → survives death,
+-- the commander legend). Bumped in game.js soldierResult on a successful assist.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS soldiers_led INT NOT NULL DEFAULT 0;
