@@ -4934,3 +4934,30 @@ surface, **the cash is identical across all three**, the heat/nerve tradeoffs bo
 flooding builds less of a name, and the unknown-play fallback. Suite 46/46 + sim drift-0. All
 `JUMP_INTENTS`/`DEAL_PLAYS` numbers are founder sign-off levers (BALANCE.md). **All three entry verbs
 now carry a real decision** — the review's #6/D6a is complete in both steps.
+
+**RED-TEAM over the stakes/spine session (`AUDIT-stakes-spine-session.md`)** — a focused four-lens pass
+(§10.4/economy, concurrency/locks/persist-clobber, death/estate/PvP, exploit/grief/Sybil) over the nine
+drops built after the review doc was written and never adversarially checked (L3a Sacking, L3b Shield Cap,
+L3c Contract's Bullets, L2a Death Duty, L1a/L1b economy, THE APPROACH/MESSAGE/PLAY, City Standing). Every
+finding re-verified against source before any change. **No CRITICAL, no HIGH.** Fixed in-commit
+(regression added): **F1 (MED)** — a seized business front claimed den rakeback on the **entire lifetime**
+den volume. `buyBusiness` stamps `rake_cursor` at today's volume precisely so "a new owner earns against
+future action, not history", but BOTH ownership-transfer sites set it to `0`: `social.js:sackEmpire` (this
+session) and `business.js:resetFrontToNewOwner` (pre-existing Tier-3 takeover, whose reset block sackEmpire
+had copied). Not a mint and no §10.4 drift (every payout is `denAvailable()`-capped at realized profit and
+`casino:rakeback` is ledgered), but a **queue-jump that drains the shared profit-bounded rakeback pool**
+ahead of every honest casino-front owner. Both sites now stamp the current den volume (read in JS, passed
+as a param — pg-mem-safe); `test/economy.js` seeds a $5M lifetime volume before the hostile takeover and
+asserts the seized front's cursor is the volume, not 0. **Verified CLEAN:** the L1b pad is per-owner (all
+`businesses` reads are `character_id`-scoped and both `upkeepOwed(row,count)` callers pass `rows.length`);
+death-duty persist coverage is complete across all five `runEstate` sites (`worker.js:210` checked — a
+season conversion, not a death); the sack runs before the estate wipe with both character rows locked; the
+L3c ammo rebate is provably net-negative (`fired` is ammo-gated and fully consumed, rebate is half); the
+shield-cap bucket charges before the cash spend and persists; and all three verb axes are §10.4-clean with
+`standard` proven to be the exact identity. Flagged for founder sign-off (NOT patched): the death duty
+spares `unbonding` $OMR while the sibling P1.1 loot takes it (a narrow inconsistency; fixing it *raises*
+what death costs → a signed-lever change), "jump-to-shield" being 50% more effective under THE MESSAGE
+(design-consistent with the signed "hospital = protection" rule), and THE MESSAGE's rep being rate-neutral
+per-mark but ~1.5× per-energy across many marks (paid for in law heat). Process note: sackEmpire
+reproduced F1 by copying a column list instead of calling the helper — the two reset blocks should be
+collapsed into one exported helper next time either is touched. Suite 46/46 + sim drift-0.

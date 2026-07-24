@@ -573,6 +573,8 @@ assert(Array.isArray((await meOf(token)).frontTitles), 'the view exposes frontTi
 // (E) THE HOSTILE TAKEOVER — c2 (a strong, ungangled rival ≥ MIN_LEVEL who runs no laundromat) takes bizId
 await seed2(`respect=1000000, cash=200000000, loc='docks', muscle=800, cunning=800, energy=200, safe_until=NULL, hosp_until=NULL, jail_until=NULL`);
 await pool.query(`UPDATE businesses SET spec='fortress', spec_at=now(), takeover_cd_until=NULL, last_collect_at=now() WHERE id='${bizId}'`);
+// (red-team) seed a lifetime den volume so the rakeback-cursor handover below is a real assertion
+await pool.query('INSERT INTO den_volume (id, total) VALUES (1, 5000000) ON CONFLICT (id) DO UPDATE SET total=5000000');
 const ownerCash0 = (await meOf(token)).cash;
 r = await call('POST', `/v1/business/${bizId}/takeover`, { token: t2 });
 assert.equal(r.code, 200, `takeover resolved: ${JSON.stringify(r.body).slice(0, 160)}`);
@@ -581,6 +583,12 @@ assert.equal(r.body.feeBurned, BUSINESS_EMPIRE.TAKEOVER.FEE, 'the takeover fee b
 assert.equal(Number((await pool.query(`SELECT character_id c FROM businesses WHERE id='${bizId}'`)).rows[0].c === c2), 1, 'the front changed hands to the raider');
 assert.equal((await meOf(token)).cash - ownerCash0, r.body.net, 'the forced-out owner was PAID the taxed net');
 assert.equal((await pool.query(`SELECT spec FROM businesses WHERE id='${bizId}'`)).rows[0].spec, null, 'the seized front is reset (spec cleared — never born specialized)');
+// (red-team) the den-rakeback cursor moves to TODAY's volume on a change of hands — the SAME rule
+// buyBusiness states ("a new owner earns against future action, not history"). A 0 cursor handed the
+// new owner a claim on the ENTIRE lifetime den volume: capped by denAvailable so never a mint, but a
+// queue-jump that drains the shared, profit-bounded rakeback pool ahead of every honest owner.
+assert.equal(Number((await pool.query(`SELECT rake_cursor FROM businesses WHERE id='${bizId}'`)).rows[0].rake_cursor), 5000000,
+  'the seized front’s rakeback cursor is stamped at the CURRENT den volume, not 0 (no claim on history)');
 assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:takeover' AND character_id=$1", [c2])).rows[0].s) === -BUSINESS_EMPIRE.TAKEOVER.FEE, 'the fee is a ledgered §10.4 cash sink');
 // gates: the raider now runs a laundromat → a takeover of ANOTHER laundromat is have_kind.
 // (a fresh third owner opens a laundromat; c2 — who now runs one — is refused before the roll.)

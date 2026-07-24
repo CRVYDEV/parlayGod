@@ -971,10 +971,14 @@ async function sackEmpire(client, ch, victim, h) {
   if (!best) return null;
   // reset ALL mutable front state on the change of hands (the takeover resetFrontToNewOwner columns) — a
   // seized front is never born hot/pending-full/specialized; pending income forfeits (clock reset).
+  // (red-team) rake_cursor moves to TODAY's den volume, NOT 0 — the buyBusiness rule ("a new owner earns
+  // against future action, not history"); a 0 cursor let a killer claim rakeback on the ENTIRE lifetime
+  // den volume, draining the shared profit-capped pool ahead of every honest casino-front owner.
+  const denVol = Number((await client.query('SELECT total FROM den_volume WHERE id=1')).rows[0]?.total || 0);
   await client.query(
     `UPDATE businesses SET character_id=$2, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(),
-       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=0
-     WHERE id=$1`, [best.id, ch.id]);
+       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=$3
+     WHERE id=$1`, [best.id, ch.id, denVol]);
   // keep the victim's loaded fronts honest so the estate report doesn't double-count the seized one
   if (h.victimOwned?.businesses) h.victimOwned.businesses = h.victimOwned.businesses.filter((b) => b.id !== best.id);
   return { kind: best.kind, tier: best.tier, name: best.name };
