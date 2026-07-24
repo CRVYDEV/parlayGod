@@ -3,10 +3,10 @@
 import crypto from 'node:crypto';
 import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
 import {
-  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS,
+  DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, HONOR,
-  seasonModOf } from './rules.js';
+  labModuleCost, kingpinRankOf, seasonModOf } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -63,7 +63,9 @@ export async function cook(ch, drugId, qty, client, h) {
     throw new GameError('rank', `You don't have the standing to move ${d.name} yet.`);
   const have = h.owned.makings[drugId] || 0;
   if (have < 1) throw new GameError('makings', `No ${d.name} makings on the shelf. See The Supplier.`);
-  const n = Math.max(1, Math.min(Math.floor(Number(qty) || 0) || k.cap, k.cap, have));
+  // LAB MODULE (Tier-4) — the Yield Manifold stretches the batch cap
+  const cap = Math.floor(k.cap * (1 + Number(ch.lab_yield || 0) * KITCHEN.MODULES.yield.step));
+  const n = Math.max(1, Math.min(Math.floor(Number(qty) || 0) || cap, cap, have));
   const crates = Math.ceil(n / M4.BATCH_CRATE_UNITS);
   if ((Number(ch.cb) || 0) < crates) throw new GameError('cb', `Packaging a batch of ${n} takes ${crates} crates.`);
   ch.cb = Number(ch.cb) - crates;
@@ -95,8 +97,10 @@ export async function collect(ch, client, h) {
     return { ok: true, fire: true, qty: 0 };
   }
   const cunning = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
+  // LAB MODULE (Tier-4) — the Purity Rig lifts the quality floor
   const q = Math.min(1.6, Math.max(0.6,
-    0.7 + cunning * 0.004 + k.q + (ch.path === 'kitchen' ? 0.15 : 0) + (Math.random() * 0.2 - 0.1)));
+    0.7 + cunning * 0.004 + k.q + Number(ch.lab_purity || 0) * KITCHEN.MODULES.purity.step
+    + (ch.path === 'kitchen' ? 0.15 : 0) + (Math.random() * 0.2 - 0.1)));
   const cur = h.owned.stash.find((s) => s.drug_id === b.drug_id);
   if (cur) {
     const total = Number(cur.qty) + Number(b.qty);
@@ -139,6 +143,10 @@ export async function deal(ch, drugId, qty, client, h) {
   ch.heat = Math.min(100, Number(ch.heat || 0) + heatGain);
   s.qty = Number(s.qty) - n;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `deal:${drugId}` });
+  // THE KINGPIN LEGEND (Tier-4) — every dollar of gross moved counts toward the account's lifetime
+  // empire (status, survives death; NUMERIC arith → pg-mem-safe; off the persistAccount column list)
+  await client.query('UPDATE account_persistent SET product_moved = product_moved + $1 WHERE account_id=$2', [gross, ch.account_id]);
+  if (h.acct) h.acct.product_moved = Number(h.acct.product_moved || 0) + gross;
   // Global lock order is characters → accounts → gangs → singletons: bumpFamilyTask (gang, then
   // street_tax on weekly completion) MUST precede takeHouse (the street_tax singleton). The old
   // order locked street_tax first, AB-BA deadlocking a deal-week against the 12h buyback (which
@@ -211,4 +219,64 @@ export async function cleanPapers(ch, client, h) {
   ch.heat = 0;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -M4.CLEANPAPERS_OMR, reason: 'cleanpapers' });
   return { ok: true, heat: 0 };
+}
+
+// ═══ THE KITCHEN → Tier 4 ═══
+
+// LAB MODULES (Tier-4) — buy the next level of a purity/yield/stealth module. Cost climbs with the
+// module level AND the lab tier; the top levels also burn $OMR (the lab-ladder precedent). Written by
+// direct SQL (the column is off the persistCharacter positional UPDATE → clobber-safe). One touchpoint
+// each: purity→collect quality, yield→cook cap, stealth→the accrual raid probability.
+export async function upgradeModule(ch, modId, client, h) {
+  const mod = KITCHEN.MODULES[modId];
+  if (!mod) throw new GameError('bad_module', 'No such lab module.');
+  if (!ch.lab) throw new GameError('no_lab', 'Fit a Kitchen before you soup it up.');
+  const col = `lab_${modId}`;
+  const level = Number(ch[col] || 0);
+  if (level >= KITCHEN.MODULE_MAX) throw new GameError('maxed', `The ${mod.name} is as far as it goes.`);
+  const labIdx = KITCHENS.findIndex((k) => k.id === ch.lab);
+  const { cash, omr } = labModuleCost(modId, level, labIdx);
+  if (Number(ch.cash) < cash) throw new GameError('cash', `The next ${mod.name} level runs $${cash}.`);
+  if (omr > 0 && Number(h.acct.omr) < omr) throw new GameError('omr', `It also takes ${omr} $OMR — bench chemistry isn't cheap.`);
+  ch.cash = Number(ch.cash) - cash;
+  ch[col] = level + 1;
+  await client.query(`UPDATE characters SET ${col}=$1 WHERE id=$2`, [level + 1, ch.id]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cash, reason: 'kitchen:module' });
+  if (omr > 0) {
+    h.acct.omr = Number(h.acct.omr) - omr;
+    await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -omr, reason: 'kitchen:module' });
+  }
+  return { ok: true, module: modId, name: mod.name, level: level + 1, cash, omr };
+}
+
+// CUTTING AGENTS (Tier-4) — stretch a stash line: +CUT_UNITS of its own qty at a −CUT_QUALITY hit
+// (floored at CUT_FLOOR; over-cut is near worthless since the deal price scales on quality). A cash
+// SINK for the agent; the extra units are ownership, not a §10.4 currency (the stash isn't ledgered).
+export async function cutStash(ch, drugId, client, h) {
+  const d = drugOf(drugId);
+  if (!d) throw new GameError('bad_drug', 'No such line.');
+  if (jailed(ch)) throw new GameError('jailed', "You can't cut product from a cell.");
+  const s = h.owned.stash.find((x) => x.drug_id === drugId);
+  if (!s || Number(s.qty) < 1) throw new GameError('stash', `No ${d.name} in the stash to cut.`);
+  if (Number(s.quality) <= KITCHEN.CUT_FLOOR)
+    throw new GameError('too_weak', `That ${d.name} is already cut to nothing — step on it more and it's baby powder.`);
+  if (Number(ch.cash) < KITCHEN.CUT_COST) throw new GameError('cash', `A cutting agent runs $${KITCHEN.CUT_COST}.`);
+  ch.cash = Number(ch.cash) - KITCHEN.CUT_COST;
+  const added = Math.max(1, Math.floor(Number(s.qty) * KITCHEN.CUT_UNITS));
+  s.qty = Number(s.qty) + added;
+  s.quality = Math.max(KITCHEN.CUT_FLOOR, Number(s.quality) * (1 - KITCHEN.CUT_QUALITY));
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -KITCHEN.CUT_COST, reason: 'kitchen:cut' });
+  return { ok: true, drug: drugId, added, qty: Number(s.qty), quality: Math.round(s.quality * 100) / 100, cost: KITCHEN.CUT_COST };
+}
+
+// THE KINGPIN LEADERBOARD (Tier-4) — the biggest lifetime distributors by product moved (agents
+// excluded, the hitmen-board precedent). Pure STATUS — account-level, survives death.
+export async function kingpinLeaderboard(pool) {
+  const rows = (await pool.query(
+    `SELECT c.name, ap.product_moved FROM account_persistent ap
+       JOIN characters c ON c.account_id = ap.account_id AND c.alive
+      WHERE NOT ap.agent_flag AND ap.product_moved > 0
+      ORDER BY ap.product_moved DESC, c.name LIMIT 20`)).rows;
+  return { kingpins: rows.map((r, i) => ({ pos: i + 1, name: r.name, moved: Number(r.product_moved),
+    rank: kingpinRankOf(r.product_moved).name })) };
 }
