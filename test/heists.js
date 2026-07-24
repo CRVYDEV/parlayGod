@@ -4,7 +4,7 @@
 // disband/leave refunds, the stale sweep, and the reason-vocabulary check. pg-mem, zero infra.
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { HEIST_JOBS } from '../src/rules.js';
+import { HEIST_JOBS, HEIST_CASE_ENERGY } from '../src/rules.js';
 import { sweepStaleHeists } from '../src/heists.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -214,9 +214,66 @@ assert(famId, 'hank founded a family');
 assert.equal((await call('POST', `/v1/gangs/${famId}/join`, { token: marco.token })).code, 200, 'marco joined it');
 assert.equal((await call('POST', `/v1/heists/${h6}/execute`, { token: hank.token })).body.error, 'family', "the crew doesn't raid its own flag");
 
-// ── §10.4: the vocabulary knows every heist reason ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
-assert(vocab.ok, `heist:crew*/heist:inside ride the 'heist' prefix (${JSON.stringify(vocab.unknown || [])})`);
+// ═══ TIER-4: casing, the fence (hot loot), notoriety + the crew leaderboard ═══
+// clear any lingering plan from the earlier flow (h6 was left mid-gate) so hank isn't 'busy'
+await pool.query("UPDATE crew_heists SET status='abandoned' WHERE status='planning'");
+await pool.query('DELETE FROM crew_heist_members');
+const enOf = async (id) => Number((await pool.query(`SELECT energy FROM characters WHERE id='${id}'`)).rows[0].energy);
+const reset = async () => { await seedCh(hank.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=100000, heist_loot=0");
+  await seedCh(cara.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=1000"); };
 
-console.log('✅ Crew heists test passed — board/gates (job, level, cash, busy, full, not-leader, not-ready), scored job (weighted split, exact ledgered shares, shared cooldown), shared-jail bust, THE RAT (informant paid half the stake, crew doubled, never named), member leave + leader disband refund, stale sweep refund + STEP TWO: roles (bad/taken seats, per-role stats), the INSIDE JOB (mark gates, pot = 60% of pending income redirected, owner keeps the rest, venue lockdown, family off-limits), §10.4 vocabulary');
+// ── CASING PHASE: spend energy to case (once each), the board reflects it, no double-case ──
+await reset();
+r = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll' } });
+const hc = r.body.id;
+await call('POST', `/v1/heists/${hc}/join`, { token: cara.token, body: { role: 'wheelman' } });
+const en0 = await enOf(hank.id);
+r = await call('POST', `/v1/heists/${hc}/case`, { token: hank.token });
+assert(r.code === 200 && r.body.cased, 'the leader cases the joint');
+assert.equal(await enOf(hank.id), en0 - HEIST_CASE_ENERGY, 'casing spent energy');
+assert.equal((await call('POST', `/v1/heists/${hc}/case`, { token: hank.token })).body.error, 'cased', 'no casing it twice');
+let board = (await call('GET', '/v1/heists', { token: hank.token })).body;
+assert(board.mine.crew.some((c) => c.cased), 'the board shows the cased crew');
+assert('pulled' in board.you && board.you.rank, 'the notoriety fields surface on the board');
+assert(board.jobs.length >= 12, 'the job ladder grew to 12');
+await call('POST', `/v1/heists/${hc}/leave`, { token: hank.token });   // disband, tidy up
+
+// ── THE FENCE: a fenced payroll banks HOT LOOT (no cash); fenceLoot converts it at the drifting rate ──
+let hotBanked = 0;
+for (let i = 0; i < 25 && hotBanked === 0; i++) {
+  await reset();
+  r = await call('POST', '/v1/heists/plan', { token: hank.token, body: { job: 'payroll', fence: true } });
+  assert.equal(r.body.fenced, true, 'the plan is flagged hot');
+  const hf = r.body.id;
+  await call('POST', `/v1/heists/${hf}/join`, { token: cara.token, body: { role: 'wheelman' } });
+  const ex = await call('POST', `/v1/heists/${hf}/execute`, { token: hank.token });
+  if (ex.body.score) { assert.equal(ex.body.share, 0, 'a hot score pays NO cash'); assert(ex.body.hot > 0, 'it banks hot loot instead'); hotBanked = ex.body.hot; }
+}
+assert(hotBanked > 0, 'a fenced payroll banked hot loot within the attempts');
+board = (await call('GET', '/v1/heists', { token: hank.token })).body;
+assert.equal(board.you.hotLoot, hotBanked, 'the hot loot is on the board');
+assert(board.you.pulled >= 1, 'the crew legend banked a score');
+const cashPre = (await meOf(hank.token)).cash;
+r = await call('POST', '/v1/heists/fence', { token: hank.token });
+assert(r.code === 200 && r.body.paid > 0, 'the fence converts hot loot to cash');
+assert.equal(r.body.loot, hotBanked, 'it fenced the whole stash');
+assert.equal((await meOf(hank.token)).cash, cashPre + r.body.paid, 'the fence cash landed');
+assert.equal((await call('GET', '/v1/heists', { token: hank.token })).body.you.hotLoot, 0, 'the stash is empty');
+assert.equal((await call('POST', '/v1/heists/fence', { token: hank.token })).body.error, 'nothing', 'nothing left to move');
+
+// ── NOTORIETY GATE: a fresh high-level thief can't touch the marquee jobs until they earn it ──
+const boss = await mk('High Roller');
+await seedCh(boss.id, 'respect=200000, cash=2000000, energy=100');   // well past museum lvl 56
+await pool.query(`UPDATE account_persistent SET heists_pulled=0 WHERE account_id=(SELECT account_id FROM characters WHERE id='${boss.id}')`);
+assert.equal((await call('POST', '/v1/heists/plan', { token: boss.token, body: { job: 'museum' } })).body.error, 'notoriety', 'the marquee jobs are notoriety-gated');
+
+// ── the crew leaderboard: the notorious rise ──
+const lb = (await call('GET', '/v1/leaderboard/heists', { token: hank.token })).body;
+assert(lb.crews.some((c) => c.name === 'Heist Hank'), 'the notorious crew is on the board');
+
+// ── §10.4: the vocabulary knows every heist reason (incl. heist:fence) ──
+const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+assert(vocab.ok, `heist:crew*/heist:inside/heist:fence ride the 'heist' prefix (${JSON.stringify(vocab.unknown || [])})`);
+
+console.log('✅ Crew heists test passed — board/gates, scored job (weighted split, exact ledgered shares, shared cooldown), shared-jail bust, THE RAT, disband/leave/stale refunds + STEP TWO: roles + the INSIDE JOB + TIER-4: the 12-job ladder, THE CASING phase (energy spent, board flag, no double-case), THE FENCE (a hot score banks loot not cash, fenced to cash at the drifting rate, hot loot on the board), the NOTORIETY gate on the marquee jobs + the crew leaderboard, and §10.4 (heist:fence rides the heist prefix)');
 await app.close();
