@@ -7,8 +7,8 @@
 // the character-cash check is untouched and the treasury check reconciles them. The on-chain
 // tradeable-NFT layer (minted_onchain) is dormant/deferred, the M6 pattern.
 import { GameError, bus } from './game.js';
-import { DISTRICTS, TERRITORY_RACKETS, territoryTierOf, territoryTypeOf, territoryBuildCost,
-         territoryFortCost, territoryRankOf, levelOf, CONSTANTS } from './rules.js';
+import { DISTRICTS, TERRITORY_RACKETS, TERRITORY_TYPES, territoryTierOf, territoryTypeOf, territoryBuildCost,
+         territoryFortCost, territoryRankOf, syndicateOf, TERRITORY_SYNDICATE_MIN, levelOf, CONSTANTS } from './rules.js';
 
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -105,7 +105,7 @@ export async function establishRacket(ch, districtId, kind, client, h) {
   if (!canCommand(h)) throw new GameError('rank', 'Only the boss or underboss runs the rackets.');
   if (!DISTRICTS.find((d) => d.id === districtId)) throw new GameError('bad_district', 'No such district.');
   const type = territoryTypeOf(kind);
-  if (kind && type.id !== kind) throw new GameError('bad_kind', 'Run a Numbers Game, a Protection Racket, or a Smuggling Ring.');
+  if (kind && type.id !== kind) throw new GameError('bad_kind', `Pick a business: ${TERRITORY_TYPES.map((t) => t.name).join(', ')}.`);
   // LOCK + re-read the district row (not the stale cached h.owned.held) FIRST, in the same
   // district → gang order seizeDistrict uses — otherwise a concurrent seizure of this turf could
   // land an operation owned by us on a district the rival now holds (an orphaned, unseizable racket).
@@ -407,4 +407,12 @@ export async function territoryOf(pool, gangId) {
       opCdSeconds: r.op_at ? Math.max(0, Math.ceil((new Date(r.op_at).getTime() + CONSTANTS.TERRITORY_OP_CD_MS - Date.now()) / 1000)) : 0,
       ghostSeconds: r.op_ghost_until ? Math.max(0, Math.ceil((new Date(r.op_ghost_until) - Date.now()) / 1000)) : 0 };
   });
+}
+
+// TIER-4 §D — THE SYNDICATE: the family's specialization meta (pure status, no §10.4). Reads the held
+// operations and returns the dominant same-type syndicate if it clears the floor. `syndicateMin` and
+// the TYPE catalog ride along for the console.
+export async function territorySyndicate(pool, gangId) {
+  const rows = (await pool.query('SELECT kind FROM territory_rackets WHERE owner_gang=$1', [gangId])).rows;
+  return { syndicate: syndicateOf(rows), syndicateMin: TERRITORY_SYNDICATE_MIN, types: TERRITORY_TYPES };
 }

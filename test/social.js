@@ -1033,6 +1033,27 @@ assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token 
 // §10.4: the raider's treasury reconciles to its ledger (tribute in − seize out + territory income in)
 assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 300000 - raiderSeize + 16000, 'territory income + seizure reconcile in the treasury');
 
+// ══ TIER-4 §B (the type catalog 3→6) + §D (THE SYNDICATE — the specialization meta) ══
+{
+  const sy = await mk('Forger Fred'); await seedCh(sy.id, 'respect=400, cash=500000');
+  const sg = (await call('POST', '/v1/gangs', { token: sy.token, body: { name: 'Forgers Inc', tag: 'FRG' } })).body.gangId;
+  // the 6-type catalog is the whitelist — a garbage type is refused (before any turf check)
+  assert.equal((await call('POST', '/v1/territory/cathedral/establish', { token: sy.token, body: { kind: 'casino_skim' } })).body.error, 'bad_kind', 'a garbage type is refused');
+  // SQL-seed the family's operations (isolated — no shared district state) → the syndicate is a same-type meta
+  await pool.query(`INSERT INTO territory_rackets (district_id, owner_gang, tier, kind) VALUES ('t4a','${sg}',1,'counterfeiting'),('t4b','${sg}',1,'counterfeiting')`);
+  let terr = (await call('GET', '/v1/territory', { token: sy.token })).body;
+  assert.equal(terr.syndicate, null, 'two of a type is not yet a syndicate (below the floor)');
+  assert(Array.isArray(terr.types) && terr.types.length === 6, 'the 6-type catalog surfaces (numbers→counterfeiting)');
+  await pool.query(`INSERT INTO territory_rackets (district_id, owner_gang, tier, kind) VALUES ('t4c','${sg}',1,'counterfeiting')`);
+  terr = (await call('GET', '/v1/territory', { token: sy.token })).body;
+  assert(terr.syndicate && terr.syndicate.kind === 'counterfeiting' && terr.syndicate.count === 3, 'three of a type forms THE SYNDICATE');
+  assert.equal(terr.syndicate.name, 'The Forgers Guild', 'the syndicate carries its title');
+  // the hot new type earns its incomeMult (counterfeiting ×1.45 over the tier-1 base $4k)
+  assert.equal(terr.territory.find((t) => t.district === 't4a').incomePerHr, Math.floor(4000 * 1.45), 'counterfeiting tilts income ×1.45');
+  // the public family view badges the syndicate (status, no §10.4)
+  assert.equal((await call('GET', `/v1/gangs/${sg}`, {})).body.gang.syndicate.name, 'The Forgers Guild', 'the family view carries the syndicate badge');
+}
+
 // ══ STEP TWO — the ladder extended 3→5 + THE EMPIRE (gang status) ══
 // the ladder grew 3→5 (content); upgradeRacket/territoryTierOf already handle any tier generically, so
 // the extension is zero-code — a tier-3 operation can now climb to Vice Empire → The Syndicate.

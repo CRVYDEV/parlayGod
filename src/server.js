@@ -66,7 +66,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
-         RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
+         RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS } from './rules.js';
@@ -658,7 +658,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.runTerritoryOp(ch, req.params.districtId, client, h)));
   app.get('/v1/territory', { preHandler: auth }, async (req) => {
     const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
-    return { territory: gid ? await Territory.territoryOf(pool, gid) : [] };
+    if (!gid) return { territory: [], syndicate: null };
+    return { territory: await Territory.territoryOf(pool, gid), ...(await Territory.territorySyndicate(pool, gid)) };
   });
   app.get('/v1/leaderboard/territory', { preHandler: auth }, async () => Territory.territoryLeaderboard(pool)); // THE EMPIRE board
 
@@ -1373,6 +1374,7 @@ export async function buildServer() {
         weekly: { week: g.weekly_week, progress: Number(g.weekly_progress), done: g.weekly_done },
         members: members.map((m) => ({ id: m.character_id, name: m.name, role: m.role })), held, territory,
         empire: { earned: Math.floor(Number(g.territory_earned || 0)), rank: territoryRankOf(g.territory_earned || 0).name }, // THE EMPIRE (territory step two)
+        syndicate: syndicateOf(territory), // TIER-4 §D — the specialization meta (same-type holding)
         portfolio: { holdings: famBook, bookValue: Math.round(famBook.reduce((a, r) => a + r.bookValue, 0) * 100) / 100 } } };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
