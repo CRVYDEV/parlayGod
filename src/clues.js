@@ -17,6 +17,7 @@ import { GameError, notify } from './game.js';
 import { CLUES, clueStepOf, clueRankOf, cityHourOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
+const safeHoused = (ch) => ch.safe_until && new Date(ch.safe_until) > new Date();
 
 // ── the board: your scroll + the riddle + the legend ──
 export async function clueBoard(pool, ch, acct) {
@@ -35,6 +36,8 @@ export async function clueBoard(pool, ch, acct) {
 // ── the dig — stand on the right ground (inside the window if timed), pay the shovel work ──
 export async function dig(ch, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No digging from lockup.');
+  // (red-team, D2 consistency) a casket is a collect-class faucet — no shovel work from a safehouse
+  if (safeHoused(ch)) throw new GameError('safe', 'No digging while you are off the grid — surface first.');
   const s = (await client.query('SELECT * FROM clue_scrolls WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
   if (!s) throw new GameError('no_scroll', 'No scroll in hand — clues turn up on jobs.');
   if (Number(ch.energy) < CLUES.DIG_ENERGY) throw new GameError('energy', `Digging takes ${CLUES.DIG_ENERGY} energy.`);

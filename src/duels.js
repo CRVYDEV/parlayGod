@@ -29,6 +29,7 @@ const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 export async function listDuel(ch, limit, client) {
   if (limit == null || limit === false) {
     await client.query('UPDATE characters SET duel_limit=NULL WHERE id=$1', [ch.id]);
+    ch.duel_limit = null; // (red-team) mirror the direct-SQL write — the same response renders the view
     return { ok: true, listed: false };
   }
   const cap = Math.floor(Number(limit));
@@ -37,6 +38,7 @@ export async function listDuel(ch, limit, client) {
   if (levelOf(Number(ch.respect)) < DUELS.MIN_LVL)
     throw new GameError('level', `The circuit takes duelists at level ${DUELS.MIN_LVL}.`);
   await client.query('UPDATE characters SET duel_limit=$2 WHERE id=$1', [ch.id, cap]);
+  ch.duel_limit = cap; // (red-team) mirror the direct-SQL write
   return { ok: true, listed: true, limit: cap };
 }
 
@@ -68,6 +70,10 @@ export async function challenge(ch, opponent, amount, client, h) {
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', 'No family matchups — spar off the books.');
   if (levelOf(Number(ch.respect)) < DUELS.MIN_LVL || levelOf(Number(opponent.respect)) < DUELS.MIN_LVL)
     throw new GameError('level', `The circuit takes duelists at level ${DUELS.MIN_LVL}.`);
+  // (red-team) the CHALLENGER cools between duels (the street-races precedent) — a strong build
+  // can't machine-gun a listed weaker duelist; DUEL_CD_MS is a TEST-ONLY knob (boot-guard listed)
+  const cdMs = process.env.DUEL_CD_MS != null ? Number(process.env.DUEL_CD_MS) : DUELS.CHALLENGE_CD_MS;
+  if (ch.duel_at && new Date(ch.duel_at) > new Date()) throw new GameError('cooldown', 'Catch your breath — the circuit takes its time between bouts.');
   const limit = opponent.duel_limit != null ? Math.floor(Number(opponent.duel_limit)) : 0;
   if (!(limit > 0)) throw new GameError('not_listed', "They're not taking duels.");
   const amt = Math.floor(Number(amount));
@@ -111,14 +117,19 @@ export async function challenge(ch, opponent, amount, client, h) {
   ch.duel_elo = win ? winnerNew : loserNew; opponent.duel_elo = win ? loserNew : winnerNew;
   await client.query('INSERT INTO duels (id, account_a, account_b, winner_account, day) VALUES ($1,$2,$3,$4,$5)',
     [crypto.randomUUID(), pa, pb, winner.account_id, day]);
+  await client.query('UPDATE characters SET duel_at=$2 WHERE id=$1', [ch.id, new Date(Date.now() + cdMs)]);
+  ch.duel_at = new Date(Date.now() + cdMs);
   // the lifetime legend — only vs a real opponent (the WHEEL anti-Sybil floor); absolute-safe increment
   if (levelOf(Number(loser.respect)) >= DUELS.LEGEND_MIN_LVL)
     await client.query('UPDATE account_persistent SET duel_wins = duel_wins + 1 WHERE account_id=$1', [winner.account_id]);
+  // (red-team) report the ACTUAL applied deltas — the floor clamp means the loser may move less
+  // than `delta` (or 0 at the floor); persisted values were always right, the report now matches
+  const loserApplied = loserNew - loserElo; // ≤ 0
   await notify(client, opponent.id, 'duel_result', { by: ch.name, win: !win, stake: amt,
-    elo: Number(opponent.duel_elo), delta: win ? -delta : delta });
+    elo: Number(opponent.duel_elo), delta: win ? loserApplied : delta });
   await h.track(client, ch.account_id, 'duel', { win, stake: amt, kEff: Math.round(kEff) });
   return { ok: true, win, stake: amt, rake, myScore: Math.round(mine), theirScore: Math.round(theirs),
-    elo: Number(ch.duel_elo), delta: win ? delta : -Math.min(delta, myElo - loserNew || delta),
+    elo: Number(ch.duel_elo), delta: win ? delta : loserApplied,
     rank: duelRankOf(ch.duel_elo).title, pairDuelsToday: prior + 1 };
 }
 

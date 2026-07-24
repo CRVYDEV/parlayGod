@@ -2644,6 +2644,7 @@ export const DUELS = {
   MIN_LVL: 5,              // both parties — the rating floor (anti-alt)
   LEGEND_MIN_LVL: 10,      // lifetime duel_wins credit needs a real opponent (the WHEEL floor)
   STAKE_MIN: 1000, RAKE_BPS: 500,
+  CHALLENGE_CD_MS: 10 * 60 * 1000,   // the challenger cools between duels (the races precedent)
   RANKS: [
     { elo: 0,    title: 'Street Fighter' },
     { elo: 1050, title: 'Contender' },
@@ -2711,6 +2712,8 @@ export const SEASON_MODS = [
   { id: 'the_gold_rush', name: 'The Gold Rush', blurb: 'Trade fever. Every good sells rich — move freight while it lasts.',
     tradeSellMult: 1.05 },
 ];
+// NOTE: this 28-day clock is textually duplicated in worker.js runSeasonRollover (`dayOf()/28`) —
+// they MUST agree; if the 28 ever becomes a lever, change BOTH (red-team flag, AUDIT-slate-drops.md).
 export const seasonIdxOf = (day = dayOf()) => Math.floor(day / 28);
 export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
   const ov = process.env.SEASON_MOD; // TEST-ONLY (boot-guard listed)

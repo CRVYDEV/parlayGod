@@ -62,6 +62,12 @@ r = await call('GET', '/v1/clues', { token: digger.token });
 assert.equal(r.body.scroll.step, 1, 'step one');
 assert.equal(r.body.scroll.riddle, clueStepOf(goodSalt, 1).riddle, 'the riddle derives from the salt');
 
+// ── (red-team K) D2: no digging from a safehouse — a casket is a collect-class faucet ──
+await pool.query(`UPDATE characters SET safe_until = now() + interval '1 hour' WHERE id='${digger.id}'`);
+r = await call('POST', '/v1/clues/dig', { token: digger.token, body: {} });
+assert.equal(r.body.error, 'safe', 'no shovel work while off the grid');
+await pool.query(`UPDATE characters SET safe_until = NULL WHERE id='${digger.id}'`);
+
 // ── the COLD dig: wrong district — energy spent, the step holds ──
 const step1 = clueStepOf(goodSalt, 1);
 const wrong = ['docks', 'canal', 'brick', 'neon', 'cathedral', 'foundry'].find((d) => d !== step1.district);

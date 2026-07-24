@@ -8,6 +8,7 @@
 // runSeasonRollover, and §10.4 (duel: vocabulary; per-character cash reconciles both sides —
 // drift == the SQL seeds only).
 process.env.MOD_KEY = 'test-mod-key';
+process.env.DUEL_CD_MS = '1'; // TEST-ONLY: the challenger cooldown (boot-guard rejects it in production)
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { DUELS } from '../src/rules.js';
@@ -88,12 +89,20 @@ assert.equal(r.code, 200, 'a rematch resolves');
 assert.equal(r.body.pairDuelsToday, 2, 'the pair log counts');
 assert(r.body.delta <= 8, `the rematch pays diminished elo (K/2 at a rating edge): +${r.body.delta}`);
 
-// ── the ELO floor: grind the pigeon down — the rating never goes below the floor ──
+// ── the ELO floor: grind the pigeon down — the rating never goes below the floor.
+// This duel runs with a REAL cooldown armed, so the NEXT challenge proves the throttle. ──
 await pool.query(`UPDATE characters SET duel_elo=${DUELS.ELO_FLOOR + 2} WHERE id='${pigeon.id}'`);
+process.env.DUEL_CD_MS = '60000';
 r = await call('POST', `/v1/duels/${pigeon.id}`, { token: bruiser.token, body: { amount: 2000 } });
 assert.equal(r.code, 200, 'the third duel resolves');
 const pigeonFloor = Number((await pool.query(`SELECT duel_elo FROM characters WHERE id='${pigeon.id}'`)).rows[0].duel_elo);
 assert(pigeonFloor >= DUELS.ELO_FLOOR, `the floor holds: ${pigeonFloor}`);
+
+// ── the challenger COOLDOWN (red-team G): the stamped clock refuses a back-to-back challenge ──
+r = await call('POST', `/v1/duels/${pigeon.id}`, { token: bruiser.token, body: { amount: 2000 } });
+assert.equal(r.body.error, 'cooldown', 'the challenger cools between duels (the races precedent)');
+process.env.DUEL_CD_MS = '1';
+await pool.query(`UPDATE characters SET duel_at=NULL WHERE id='${bruiser.id}'`);
 
 // ── the leaderboard: ranked, the bruiser on top ──
 r = await call('GET', '/v1/leaderboard/duels', { token: bruiser.token });

@@ -789,6 +789,23 @@ brick) → Foreman (top 3) → Patron (top 10) → Builder. The plaque is accoun
 keeps its glory through death. Monuments are raised in order (the Cathedral Restoration → the
 Grand Casino → the Founder's Bridge → the Colossus of the Docks).
 
+## 30a2. The Dueling Circuit, Clue Scrolls & the Season
+
+**The Dueling Circuit** (Wet Work tab; `GET /v1/duels`) — the game's ranked ladder. List yourself
+with a stake cap, challenge anyone listed: your BUILD fights (stats + gear), the stake changes
+hands minus the 5% rake, and your **ELO** moves. The rating is seasonal (resets every 28 days),
+dies with your street, and feeds `GET /v1/leaderboard/duels`. Lifetime wins are a dynasty legend.
+Rematch-farming the same opponent pays less and less each day.
+
+**Clue Scrolls** (the Streets tab) — a rare drop on any successful job starts a treasure trail:
+3–5 riddles, each naming a district (sometimes an hour of day). Travel there and DIG (5 energy).
+The last dig opens a **casket** ($3k–$12k) and counts on your lifetime diggers' legend. One hunt
+at a time; after a casket the streets go quiet for 8 hours.
+
+**The Season** (the City tab) — each 28-day season MAY carry one rule twist drawn from a public
+pool (The Crackdown, Blood in the Streets, The Gold Rush — or a vanilla Dead Quiet season). The
+banner on the City board tells you the season's law; it snaps back at rollover.
+
 ## 30b. The Cellphone & the Troll Box (talking)
 
 **The Cellphone** (the 📱 up top; `GET /v1/phone`, `GET /v1/phone/thread/:characterId`,

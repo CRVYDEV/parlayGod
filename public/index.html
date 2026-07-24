@@ -2480,7 +2480,8 @@
     const huntReadyS = hunt ? Math.ceil((new Date(hunt.placedAt) - Date.now()) / 1000) : 0;
     const npcs = [['legbreaker', 'Leg-Breaker $50k'], ['journeyman', 'Journeyman $250k'], ['professional', 'The Professional $1M']];
 
-    const duels = (await api('GET', '/v1/duels')).body || null;
+    const duelsRes = await api('GET', '/v1/duels');
+    const duels = duelsRes.code < 400 ? duelsRes.body : null; // (red-team MED) an error must not blank Wet Work
     t.innerHTML = `
       <h2>The Contract Board</h2>
       ${board.length ? `<div class="grid">${board.map((c) => `

@@ -72,7 +72,7 @@ assert(crackLaylow < baseLaylow, 'cheaper than the vanilla season');
 // ── THE GOLD RUSH: the same sale runs ×1.05 vs the dead-quiet baseline unit ──
 process.env.SEASON_MOD = 'the_gold_rush';
 r = await call('POST', '/v1/goods/sell', { token: vic.token, body: { goodId: 'gin', qty: 1 } });
-assert.equal(r.body.unit, Math.round(baseUnit * 1.05 / 1) === r.body.unit ? r.body.unit : r.body.unit, 'sale lands');
+assert.equal(r.code, 200, 'the gold-rush sale lands');
 assert(r.body.unit > baseUnit, `gold rush lifts the sale (${baseUnit} → ${r.body.unit})`);
 assert(Math.abs(r.body.unit - baseUnit * 1.05) <= 1, 'by ~5% (rounding-exact)');
 
@@ -86,6 +86,10 @@ const paid = Math.abs(Number((await cashRow(shelter.id, 'safehouse')).amount));
 const liquid = 100_500; // fresh $500 + the seed
 const expect = Math.floor(Math.max(M3.SAFEHOUSE_COST, Math.floor(liquid * 100 / 10000)) * 1.25);
 assert.equal(paid, expect, `shelter is priced up ×1.25, ledgered exactly (${paid})`);
+// (red-team B) the VIEW quote mirrors the armed charge — quoted price == charged price
+const quoteMark = await mk('Quote Quincy');
+const qView = await meOf(quoteMark.token);
+assert.equal(qView.safehouseCost, Math.floor(M3.SAFEHOUSE_COST * 1.25), 'the sheet quotes the season-armed price');
 // the kill loot: a full §9 hit on a cash-fat mark loots cashLootRate = min(.5, .25×1.15) = .2875
 const killer = await mk('Seasonal Sid');
 const mark = await mk('Marked Mel');
@@ -101,6 +105,25 @@ const lootRow = await cashRow(killer.id, 'whack:loot');
 assert(lootRow, 'the loot is ledgered');
 assert.equal(Number(lootRow.amount), Math.floor(markCash * Math.min(0.5, M3.CASH_LOOT_RATE * 1.15)),
   `blood in the streets loots deeper — ×1.15 on the rate, exact (${lootRow.amount})`);
+
+// ── (red-team H) THE CRACKDOWN's lawGainMult: the investigation meter builds ×1.25 (direct accrue) ──
+{ const { accrue } = await import('../src/accrual.js');
+  // the test/law.js direct-accrue mock, verbatim — the crew + hot stash PIN heat at 100 across the
+  // gap (accrue decays heat first; a bare mock cools below LAW.WATCH and builds nothing). The
+  // dead_quiet vs the_crackdown RATIO isolates lawGainMult: the event/crew terms cancel.
+  const hot = (await import('../src/rules.js')).DRUGS.slice(-1)[0].id;
+  const run = () => { const c = { respect: 2000, energy: 0, nerve: 0, health: 0, cash: 0, bank: 0, heat: 100,
+    heat_exposure: 0, crew: 5, crew_paid_at: new Date(Date.now() - 3600000), racket_credit_ms: 0, bank_credit_ms: 0,
+    last_accrued_at: new Date(Date.now() - 8 * 3600000), path: 'kitchen', loc: 'docks', indicted_at: null };
+    accrue(c, { staked: 0 }, { stash: [{ drug_id: hot, qty: 100000, quality: 1 }], rackets: [], assets: [], held: [] }); return c; };
+  process.env.SEASON_MOD = 'dead_quiet';
+  const quiet = run();
+  process.env.SEASON_MOD = 'the_crackdown';
+  const crack = run();
+  assert(quiet.heat_exposure > 0, 'the meter builds at heat 100');
+  const ratio = crack.heat_exposure / quiet.heat_exposure;
+  assert(Math.abs(ratio - 1.25) < 0.02, `THE CRACKDOWN builds the case ×1.25 (${ratio.toFixed(3)})`);
+  process.env.SEASON_MOD = 'blood_in_the_streets'; }
 
 // ── §10.4: every modified number rode the normal rails — the sweep stays exact ──
 const inv = await runLedgerInvariants(pool);

@@ -1615,7 +1615,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // his own standing BIDS burn (the dead-funder precedent) and those auctions reopen.
   // audit #1: a PLAYER fire-kill (opts.loot) loots CASH_LOOT_RATE of the victim's live order
   // escrow to the killer — parked liquid is no longer a loot-proof vault. NPC/mod kills pass 0.
-  const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0);
+  // (red-team) the seasonal lootMult covers EVERY fire-kill loot surface — escrow legs included
+  const estateLootRate = opts.loot ? Math.min(0.5, M3.CASH_LOOT_RATE * (seasonModOf().lootMult || 1)) : 0;
+  const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, estateLootRate);
   if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
   await burnBidsAtDeath(client, victim.id);
   // the heir id (generated early so the lender-death loan claim can pass to it below — the debt survives)
@@ -1624,7 +1626,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // escrow to the killer (parked capital is no longer a loot-proof vault, the market-order precedent);
   // the rest burns (loan:death). An active loan the DEAD LENDER made passes to the HEIR (the debt
   // survives — SIGN-OFF Tier 4, §10.4-neutral); a debt owed BY the dead borrower is uncollectable.
-  const ln = await voidLoansAtDeath(client, victim.id, h, opts.killerCh, opts.loot ? M3.CASH_LOOT_RATE : 0, heirId);
+  const ln = await voidLoansAtDeath(client, victim.id, h, opts.killerCh, estateLootRate, heirId);
   if (opts.killerCh && ln.looted) report.loanLoot = ln.looted;
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
