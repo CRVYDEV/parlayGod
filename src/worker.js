@@ -8,7 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
@@ -74,11 +74,18 @@ export async function runBuyback(pool, opts = {}) {
     // are locked sorted below either way, so the lock discipline is unchanged.
     const levy = (await activeDecree(client))?.id === 'the_levy';
     const chamber = levy ? await seatedGangs(client) : [];
-    const payees = levy && chamber.length
-      ? chamber.map((g, i) => ({ id: g.id, w: chamber.length - i }))
+    // THE LEVY weights use the CANONICAL seat formula (COMMISSION.SEATS − i, the castVote weight),
+    // not chamber.length − i — so a partial chamber keeps the same head/tail ratio the votes use.
+    const payees0 = levy && chamber.length
+      ? chamber.map((g, i) => ({ id: g.id, w: COMMISSION.SEATS - i }))
       : ranked.map((g) => ({ id: g.id, w: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) }));
-    for (const id of payees.map((p) => p.id).sort())
-      await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [id]);
+    // (red-team MED) a payee gang can be DISSOLVED between the unlocked ranking read and this lock —
+    // the FOR UPDATE then returns 0 rows and the later `omr_reserve +=` UPDATE affects nothing, but the
+    // `distributed` counter would still credit the vanished share, so `bought` $OMR silently leaves the
+    // buckets. Keep ONLY payees whose row still exists under the lock; a dropped share rolls to the fund.
+    const payees = [];
+    for (const p of payees0.slice().sort((a, b) => (a.id < b.id ? -1 : 1)))
+      if ((await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [p.id])).rows[0]) payees.push(p);
     // now the singleton — authoritative pool under lock
     const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
     const cashPool = Number(tax.pool);
@@ -241,6 +248,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 30 * 86400000)])); // 30-day DM retention — a phone, not an archive
     await safe('duel log retention', () => pool.query('DELETE FROM duels WHERE at < $1',
       [new Date(Date.now() - 60 * 86400000)])); // the pair K-decay reads only TODAY — old rows are noise
+    await safe('gala guest retention', () => pool.query('DELETE FROM gala_guests WHERE at < $1',
+      [new Date(Date.now() - 7 * 86400000)])); // (red-team LOW) a gala is a 4h window — old guest lists are noise
     await safe('oauth state sweep', () => pool.query('DELETE FROM oauth_states WHERE created_at < $1',
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)

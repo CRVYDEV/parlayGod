@@ -133,9 +133,13 @@ assert.equal((await call('GET', '/v1/estate', { token: don.token })).body.househ
 await pool.query(`UPDATE estates SET staff_paid_at = now() - interval '8 days' WHERE account_id='${aid}'`);
 r = await call('GET', '/v1/estate', { token: don.token });
 assert.equal(r.body.household.walked, true, 'the board warns the house has walked');
-assert.equal((await call('POST', '/v1/estate/wages', { token: don.token })).body.error, 'walked', 'too late to pay — they left');
+// (red-team MED) paying a walked house is a benign COMMITTING no-op — the walk (staff deleted) is
+// committed, not rolled back by a throw, so it holds on real Postgres too.
+r = await call('POST', '/v1/estate/wages', { token: don.token });
+assert.equal(r.code, 200, 'the pay call succeeds (nothing to pay — they left)');
+assert.equal(r.body.walked, true, 'and reports the walk');
 r = await call('GET', '/v1/estate', { token: don.token });
-assert.equal(r.body.household.staff.length, 0, 'the house is empty');
+assert.equal(r.body.household.staff.length, 0, 'the house is empty — the walk committed');
 assert.equal(r.body.household.owed, 0, 'and the debt died with the insult');
 
 // THE GALA: rehire the Butler, throw the party (tier-scaled burn), the city attends

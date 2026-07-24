@@ -1685,3 +1685,22 @@ Watch item: fold-to-raise chip-dumping is a transfer rail raked at up to 3% (vs 
 — dumping is strictly worse than the existing rails, so no new collusion surface, but flag for the
 ops feed. **The bracket** — `BRACKET.HEAT_SIZE` 6 / `ADVANCE` 2 / `ROUND_MS` 10min; the same 5%
 tournament rake; alt-stuffing stays −rake/N per head (renormalized payouts).
+
+## Deep-deferred four — red-team sign-off flags (AUDIT-deep-deferred.md, all NOT patched per ground rule #1)
+- **Estate walk economics** — letting the staff WALK (cost: one rehire fee ≈ 10× daily wage) beats
+  continuous wages beyond ~10 days, so the "recurring" $OMR sink floors at the rehire fee for a
+  player who only staffs up before a gala. Dials: the `hireOmr` multiple, arrears surviving as a
+  lien, or wages accruing while the house is listed on the leaderboard.
+- **Commission levy self-deal + agenda-control** — a $100k proposal is refunded on enactment (a
+  near-free lever) that LOCKS the ballot to proposed decrees AND, for `the_levy`, routes the buyback
+  family cut to the seated chamber including the proposer. Bounded by the public vote + the seasonal
+  seat formula; a levy-cadence cap is the dial if it becomes the permanent decree.
+- **Last-second proposal sniping** — a proposal landing just before the week freezes discards the
+  chamber majority's votes for unproposed decrees at ~zero net cost (refunded on enactment). Intended
+  leverage vs. abuse is a design call.
+- **Loan-house death cycle** — a lvl-3 alt borrows the per-level cap, extracts, dies; the heir
+  repeats. Pool-bounded (the house lends only what sinks funded) + welsher/WANTED-marked, but a
+  recurring net drain vs. vig inflow. `HOUSE_MIN_LVL` + the level-scaled cap are the dials.
+- **Ring soft-play / chip-dumping** — dumping via fold-to-raise is NOT a cheaper transfer rail
+  (raked ≥3%, worse than the 2% audited rails), but out-of-band soft-play collusion against a
+  non-colluding mark is unpreventable server-side (the poker reality; the rake taxes it).

@@ -191,6 +191,11 @@ export async function leaveTable(ch, tableId, client, h) {
   if (t.street && mine.in_hand) { // leaving mid-hand folds you (your street bets stay in the pot)
     mine.in_hand = false; mine.acted = true;
     if (t.acting_seat === mine.seat) advance(t, seats, mine.seat);
+    // (red-team MED) if the leaver was NOT the acting seat, advance() never ran — so a departure that
+    // drops the table to one live player wouldn't resolve the hand (the survivor's win stalls until
+    // the clock, which then folds THEM and burns their rightful pot as casino:ring:death). Mirror the
+    // last-man-standing catch wipeRingAtDeath already has.
+    else { const live = inHand(seats); if (live.length <= 1) finishHand(t, seats, live, null); }
   }
   const out = Math.floor(Number(mine.stack));
   mine._gone = true;
@@ -211,6 +216,11 @@ export async function dealHand(ch, tableId, client, h) {
   const seats = await seatsOf(client, tableId);
   if (!seats.some((s) => s.character_id === ch.id)) throw new GameError('not_seated', "You're not at that table.");
   enforceDeadline(t, seats);
+  // (red-team HIGH) if enforceDeadline just RESOLVED a prior stalled hand (t.street→null, t._rake set),
+  // ledger its rake/dead-pot NOW — before we deal a fresh hand that overwrites t._rake. Without this,
+  // the resolved hand's rake never hits casino:ring:take and the ring-escrow §10.4 identity drifts on
+  // COMMIT. A no-op when nothing resolved (t._rake/t._deadPot both 0).
+  await settleFinish(client, t);
   if (t.street) { await persist(client, t, seats); await settleFinish(client, t); throw new GameError('hand', 'A hand is live — play it out.'); }
   const players = seats.filter((s) => Number(s.stack) >= Number(t.bb));
   if (players.length < 2) throw new GameError('short', 'It takes two with the ante to deal.');

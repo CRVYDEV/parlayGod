@@ -4472,3 +4472,54 @@ round-trip (+~1%/cycle past the 4% fee wall — moot while unarmed), duel_wins f
 alt (the fight-fix posture), the latent sub-1 safehouseMult outside the max() floor, crackdown retroactivity
 at a boundary, and the two textually-duplicated 28-day season clocks (linking comments added). ALL
 `DUELS.*`/`CLUES.*`/`SEASON_MODS` numbers are founder sign-off levers. Suite 42/42 + sim drift-0.
+
+**THE DEEP-SYSTEM DEFERRED FOUR (founder-directed 2026-07-24) — BUILT** (`omerta-deep-deferred-design.md`;
+`src/estate.js`, `src/commission.js`, `src/loans.js`, `src/casino.js` + new `src/ring.js`; the 43rd suite
+`test/ring.js`). Integrated the four deferred items sitting on otherwise-deep systems — each rides an
+already-audited pattern, no new money surface invented. **(A) Estate step two — THE STAFF & THE GALA**:
+`ESTATE.STAFF` (5-trade catalog, daily $OMR wages accrued lazily on one household clock — the pad/nut
+pattern; unpaid past `STAFF_WALK_MS` 7d the staff WALK, arrears cleared) settled all-or-nothing via
+`payStaffWages` (`estate:staff` burn); `throwGala` (a tier-scaled `estate:gala` burn opening a 4h be-seen
+window anyone alive can `attendGala` once — guest lists, `galas_hosted`/`gala_best`); `GET /v1/leaderboard/
+estates` (great houses by lifetime $OMR sunk, agents excluded). PURE STATUS; all burns ride the existing
+`estate:%` omr vocabulary → zero invariant change. **(B) Commission step three — PROPOSALS + THE LEVY**: a
+seated boss stakes a `COMMISSION.PROPOSAL_DEPOSIT` ($100k) treasury deposit (`commission:proposal` escrow)
+to put a motion on the week's ballot (when motions exist, only proposed decrees tally); the worker
+`settleProposals` refunds the enacted motion (`commission:refund`) + forfeits the rest to the pool
+(`commission:forfeit`) — a NEW **commission escrow** §10.4 check + gang-treasuries terms. **THE LEVY** (a
+fifth decree) redirects the 12h buyback's existing family split to the seated chamber (weighted
+`COMMISSION.SEATS − i`) instead of the lifetime top-25 — a PURE REDIRECT in `runBuyback` (zero new money,
+seasonal-seat-gated). **(C) THE LOAN HOUSE (Shylock step five)**: the backed NPC lender — `loan_house`
+singleton fed by half of every P2P vig (`LOAN.HOUSE_VIG_BPS`) + mod funding from the confiscation pool;
+`takeHouseLoan` lends ONLY what the pool holds (full-reserve — never a mint; `HOUSE_RATE` 0.35 / 24h /
+level-scaled cap ≤ $50k / welsher-blocked / one-debt / `HOUSE_MIN_LVL` 3), `repayHouseLoan` grows the pool,
+the sweep auto-collects defaults (`loan:house:seize` → pool + welsher + WANTED). A NEW **loan house pool**
+§10.4 check; all `loan:house:*` ride the `loan:` prefix. **(D) Casino step five — RING POKER + THE
+BRACKET** (`src/ring.js`): true multi-way hold'em with betting streets, made atomic-architecture-native by
+one rule — **THE TABLE IS AN ESCROW** (cash moves only at sit/leave; stacks/bets/pots live in
+`poker_tables`/`poker_ring_seats` rows, so no action ever locks another player's character; the table row
+lock is the mutex). Ante-poker streets (preflop→river), raises CAPPED at the smallest live stack (no side
+pots), a 90s turn clock + never-wedge sweep, rake carved from the pot (half → street tax; `casino:ring:take`
+NULL), a dead player's stack burns (`casino:ring:death`, runEstate). A NEW **ring poker escrow** §10.4 check
+(`Σ stacks + Σ pots == sit − leave − take − death`); `casino:ring:*` rides the `casino:` prefix OUTSIDE the
+den-book LIKE patterns (the PvE house book never sees ring money). **THE BRACKET**: multi-table elimination
+on the EXISTING tournament escrow (`{bracket:true}` at materialization; the worker runs rounds of heats down
+to a final paying `TOURNEY.PAYOUTS` net of the same 5% rake — the escrow identity untouched). Console:
+household/gala/great-houses (Estate), motions (Family), the House Window (Shylock), a live ring room +
+bracket toggle (Den); feed lines. `RING_TURN_MS`/`BRACKET_ROUND_MS` env are TEST-ONLY. Suite 43/43 + sim
+drift-0. All numbers are founder sign-off levers (BALANCE.md). A **six-lens ultracode red-team**
+(`AUDIT-deep-deferred.md`; the 2-refuter verify phase aborted on a model-credit limit, so all
+crashed-unverified findings were re-verified BY HAND) returned **no CRITICAL** and fixed **2 HIGH §10.4
+drifts + 6 MED/LOW** (regression each): **HIGH** — `dealHand` dropped a resolved-stall's rake (missing
+`settleFinish` before dealing fresh → ring-escrow drift on commit); **HIGH** — a mid-bracket death burn
+didn't reduce the pool while the bracket stayed open (tourney-escrow drift; the pool reduction is an
+ABSOLUTE write — the pg-mem `pool = pool - $n` quirk mis-evaluated); **MED** — `leaveTable` didn't resolve
+the last-man-standing when the leaver wasn't acting (the survivor's pot could wrongly burn); a zero-runner
+bracket final crashed on `ranked[0]`; `settleProposals` refunded a dissolved winner (treasury drift) + the
+buyback credited a dissolved payee ($OMR drift) — both now re-verify existence under the lock; `payStaffWages`
+now COMMITS the walk (was rolled back by the throw); `gala_best` clobber → `GREATEST` in the upsert; plus
+LOWs (attendGala jail gate + 23505-only catch, the veto-forfeits-all rule, the levy weight formula →
+`COMMISSION.SEATS − i`, a `gala_guests` 7d retention sweep, the design-doc `STAFF_CAP_MS` drift). Flagged
+for founder sign-off (NOT patched): estate walk economics (the recurring sink floors at the rehire fee), the
+levy self-deal + proposal agenda-control, last-second proposal sniping, the loan-house death cycle,
+ring soft-play collusion (all bounded/status-posture or ground-rule-#1 balance calls).

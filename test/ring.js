@@ -165,6 +165,24 @@ await call('POST', `/v1/casino/ring/${tid}/leave`, { token: al.token }); // fold
 assert.equal((await call('GET', `/v1/casino/ring/${tid}`, { token: al.token })).body.error, 'no_table', 'an empty table folds up');
 await escrowOk('after the table folded');
 
+// ── (red-team HIGH) dealHand must LEDGER a prior stalled hand's rake before dealing the next one ──
+// A heads-up table: deal, let the acting player's clock expire, then poke DEAL (not the sweep). The
+// deal's enforceDeadline folds the staller → the survivor wins → dealHand must settleFinish that
+// rake before overwriting t._rake with the fresh hand, or the ring-escrow §10.4 identity drifts.
+{
+  const hx = await mk('Heads Hank'), hy = await mk('Heads Hattie');
+  const ht = (await call('POST', '/v1/casino/ring/open', { token: hx.token, body: { bb: 100, buyin: 10000 } })).body.tableId;
+  await call('POST', `/v1/casino/ring/${ht}/sit`, { token: hy.token, body: { buyin: 10000 } });
+  await call('POST', `/v1/casino/ring/${ht}/deal`, { token: hx.token });
+  const takesBefore = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:ring:take' AND counterparty='${ht}'`)).rows[0].s);
+  await sleep(300); // the acting player's 200ms clock expires — the hand is a full stall (folding the actor leaves one)
+  const dr = await call('POST', `/v1/casino/ring/${ht}/deal`, { token: hx.token });
+  assert.equal(dr.code, 200, 'the next deal resolves the stall AND deals fresh');
+  const takesAfter = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:ring:take' AND counterparty='${ht}'`)).rows[0].s);
+  assert(takesAfter < takesBefore, 'the stalled hand\'s rake got ledgered by the deal (not silently dropped)');
+  await escrowOk('after a deal resolved a prior stall (the HIGH regression)');
+}
+
 // ══ THE BRACKET — rounds of heats on the existing tournament escrow ══
 const runners = [];
 for (let i = 0; i < 8; i++) runners.push(await mk(`Bracket Runner ${i}`));
@@ -200,6 +218,29 @@ assert.equal(bBuyins, 8 * CASINO.TOURNEY.BUYIN, 'eight buy-ins escrowed');
 assert.equal(bWins + bTake, bBuyins, 'the final paid the whole pool: winners + the take == every buy-in');
 const trCheck = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'poker tourney escrow');
 assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the bracket (${trCheck.drift})`);
+
+// ── (red-team HIGH) a runner who DIES mid-bracket burns their stake in a NON-terminal round, and the
+// bracket COMMITS still 'open' — the pool must drop with the burn or the tourney-escrow §10.4 identity
+// drifts by the burned buy-in for the life of the bracket. Seed 8, kill one BEFORE round 1 (so 7 live →
+// heat 6+1 → 3 advance → still open), then assert the escrow check is exact at that open state. ──
+{
+  const R = [];
+  for (let i = 0; i < 8; i++) R.push(await mk(`Dead-Bracket ${i}`));
+  const dbid = (await call('POST', '/v1/casino/tournament', { token: R[0].token, body: { bracket: true } })).body.tournament;
+  for (let i = 1; i < 8; i++) await call('POST', '/v1/casino/tournament', { token: R[i].token, body: {} });
+  await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: R[3].id } });
+  await sleep(350); // registration closes
+  const s = await sweepTournaments(pool);
+  assert.equal(s.resolved, 1, 'the death round ran');
+  const st = (await pool.query(`SELECT status, pool FROM poker_tournaments WHERE id='${dbid}'`)).rows[0];
+  assert.equal(st.status, 'open', 'the bracket is STILL OPEN after the death round (a non-terminal round)');
+  const deadBurn = -Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:tourney:death' AND counterparty='${dbid}'`)).rows[0].s);
+  assert.equal(deadBurn, CASINO.TOURNEY.BUYIN, 'the dead runner\'s stake burned');
+  assert.equal(Number(st.pool), 7 * CASINO.TOURNEY.BUYIN, 'and the pool DROPPED by the burn (the drift fix)');
+  const dCheck = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'poker tourney escrow');
+  assert.equal(dCheck.drift, 0, `the escrow identity holds at the OPEN mid-bracket death state (${dCheck.drift})`);
+  await sleep(10); await sweepTournaments(pool); // settle the final so the one-open slot frees
+}
 
 await app.close();
 console.log('✅ RING POKER + THE BRACKET test passed — the lobby + stakes/buy-in/one-table gates, the ESCROW boundary (sit/leave ledgered, stacks+pots reconciling at every stage), a full 3-handed hand (antes, order enforcement, the raise CLAMPED to the smallest live stack so every call is affordable — no side pots, hole-card redaction, showdown paying the winner\'s STACK net of a capped ledgered rake), the fold-win, THE TURN CLOCK auto-folding a staller, cash-out, DEATH (the stack burns casino:ring:death + the hand resolves), an empty table folding up, and THE BRACKET (format locked at materialization, an 8-runner field cut by heats then settled by a final paying winners + take == every buy-in — the tourney escrow §10.4 identity intact)');

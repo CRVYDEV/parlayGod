@@ -135,15 +135,23 @@ export async function settleProposals(pool, opts = {}) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const winner = await tallyWinner(client, week);
+      let winner = await tallyWinner(client, week);
+      // (red-team LOW) the head of the table VETOED the decree this motion would have enacted (the
+      // veto keys the GOVERNED week = week+1) — the design says a vetoed week forfeits ALL deposits
+      // ("you moved the chamber and it hung — the deposit was the bet"). Null the winner so nothing refunds.
+      if (winner && (await client.query('SELECT 1 FROM commission_vetoes WHERE week=$1', [week + 1])).rows[0]) winner = null;
       const rows = (await client.query(
-        "SELECT p.week, p.gang_id, p.decree, p.deposit, g.id AS live_gang FROM commission_proposals p LEFT JOIN gangs g ON g.id = p.gang_id WHERE p.status='open' AND p.week=$1", [week])).rows;
-      for (const gid of rows.filter((r) => r.live_gang).map((r) => r.gang_id).sort())
-        await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [gid]);
+        "SELECT p.week, p.gang_id, p.decree, p.deposit FROM commission_proposals p WHERE p.status='open' AND p.week=$1", [week])).rows;
+      // lock every proposer gang under FOR UPDATE and record which still EXIST — a dissolved winner
+      // can't be refunded (the UPDATE would affect 0 rows while commission:refund credits a ghost →
+      // treasury §10.4 drift); its deposit forfeits instead (the dead-funder precedent, matching the doc).
+      const liveGang = new Set();
+      for (const gid of rows.map((r) => r.gang_id).sort())
+        if ((await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [gid])).rows[0]) liveGang.add(gid);
       await client.query('SELECT 1 FROM street_tax WHERE id=1 FOR UPDATE');
       for (const p of rows) {
         const dep = Number(p.deposit);
-        const won = p.live_gang && winner && p.decree === winner.id;
+        const won = liveGang.has(p.gang_id) && winner && p.decree === winner.id;
         if (won) {
           await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [p.gang_id, dep]);
           await ledger(client, { currency: 'cash', amount: dep, reason: 'commission:refund', counterparty: p.gang_id });

@@ -29,9 +29,12 @@ async function upsertEstate(client, accountId, patch) {
     galas_hosted: Number(pick('galas_hosted', 0)),
     gala_best: Number(pick('gala_best', 0)),
   };
+  // (red-team MED) gala_best is bumped by a DIFFERENT session (a guest's attendGala, a direct monotonic
+  // UPDATE) than this absolute row rewrite (the host's own estate mutations, from an unlocked snapshot).
+  // Use GREATEST so a concurrent guest's turnout isn't clobbered back to the host's stale snapshot value.
   const upd = await client.query(
     `UPDATE estates SET name=$2, tier=$3, features=$4, spent_omr=$5, staff_paid_at=$6, gala_until=$7,
-       galas_hosted=$8, gala_best=$9 WHERE account_id=$1`,
+       galas_hosted=$8, gala_best=GREATEST(estates.gala_best, $9) WHERE account_id=$1`,
     [accountId, next.name, next.tier, next.features, next.spent_omr, next.staff_paid_at, next.gala_until,
       next.galas_hosted, next.gala_best]);
   if (!upd.rowCount) await client.query(
@@ -219,8 +222,10 @@ export async function dismissStaff(ch, staffId, client, h) {
 export async function payStaffWages(ch, client, h) {
   const cur = await loadEstate(client, ch.account_id);
   const r = await resolveWalk(client, ch.account_id, cur, await staffRows(client, ch.account_id));
-  if (r.walked && !r.staff.length)
-    throw new GameError('walked', 'The house is empty — the staff walked over back wages. Rehire.');
+  // (red-team MED) if the staff WALKED, return a benign result so withCharacter COMMITS the walk
+  // (resolveWalk's DELETE) — throwing here would roll the walk back on real Postgres, leaving the
+  // house showing full staff + a payable-looking `owed` forever until some other action commits.
+  if (r.walked && !r.staff.length) return { ok: true, walked: true, paid: 0 };
   if (!r.staff.length) throw new GameError('no_staff', 'Nobody on the payroll.');
   const w = wageState(r.estate, r.staff);
   if (!(w.owed > 0)) return { ok: true, paid: 0, perDay: w.perDay };
@@ -260,6 +265,8 @@ export async function throwGala(ch, client, h) {
 // (the actor only); the host's estate row is written monotonically (gala_best converges under race).
 export async function attendGala(ch, hostCharacterId, client, h) {
   if (hostCharacterId === ch.id) throw new GameError('self', "You can't be a guest at your own party.");
+  if (ch.jail_until && new Date(ch.jail_until) > new Date())
+    throw new GameError('jailed', 'No parties from a cell.'); // (red-team LOW) the design's 'not in lockup' gate
   const host = (await client.query('SELECT id, name, account_id, alive FROM characters WHERE id=$1', [hostCharacterId])).rows[0];
   if (!host || !host.alive) throw new GameError('gone', 'That host is gone.');
   const e = await loadEstate(client, host.account_id);
@@ -268,7 +275,12 @@ export async function attendGala(ch, hostCharacterId, client, h) {
   try {
     await client.query('INSERT INTO gala_guests (host_account, guest_account, gala_key, guest_name) VALUES ($1,$2,$3,$4)',
       [host.account_id, ch.account_id, e.gala_until, ch.name]);
-  } catch { throw new GameError('attended', "You've already made your entrance."); }
+  } catch (err) {
+    // a genuine dup (already attended) is a clean 400; a transient serialization/deadlock must retry,
+    // not masquerade as 'attended' (the AUDIT-market-skills-underworld catch-all-swallow fix)
+    if (String(err?.code) === '23505') throw new GameError('attended', "You've already made your entrance.");
+    throw err;
+  }
   const n = Number((await client.query('SELECT COUNT(*) n FROM gala_guests WHERE host_account=$1 AND gala_key=$2',
     [host.account_id, e.gala_until])).rows[0].n);
   await client.query('UPDATE estates SET gala_best=$2 WHERE account_id=$1 AND gala_best < $2', [host.account_id, n]);
