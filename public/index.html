@@ -3834,7 +3834,9 @@
         <div class="d">the city pays its workers: a fixed, public $OMR schedule splits today’s pot among everyone who really played
           (respect earned today, level ${wage.you?.minLevel ?? 5}+, up to ${wage.you?.capOmr ?? 5} $OMR/day each). No claim button — the payout finds you at the day’s end.</div>
         <div class="d">today’s pot: <b style="color:var(--ink)">${fmt(wage.budget ?? 0)} $OMR</b> · endowment left: ${fmt(Math.round(wage.endowment?.remaining ?? 0))} $OMR</div>
-        <div class="d">you: ${wageLine(wage)}</div></div>
+        <div class="d">you: ${wageLine(wage)}</div>
+        ${wage.you?.mintedRequired && !wage.you?.minted ? `<div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px;border-top:1px solid rgba(255,255,255,.06);padding-top:5px">
+          <b>Free trial vs Made Man — straight facts, no promises:</b> a free account plays the <b>whole</b> game — every job, family, racket, kitchen, casino, PvP, all of it. Minting (the Store’s 0.01-ETH Made Man, or PLEX it with earned $OMR) unlocks two things: the Street-Wage payroll above, and moving $OMR / gear <b>on-chain out of the game</b>. Everything you build in-game, you build free.</div>` : ''}</div>
       <div class="card"><span class="t">${pf.dynasty?.name ? pf.dynasty.name : 'Your Book'} — $${fmt(pf.portfolio?.bookValue || 0)}</span>
         <div class="d">cost basis ${fmt(pf.portfolio?.costBasis || 0)} $OMR · liquid $OMR on hand: ${fmt(Math.floor(me.omr || 0))} · survives death (the heir keeps it)${pf.dynasty ? ` · generation ${pf.dynasty.generation}` : ''}</div>
         <div style="margin-top:4px"><input id="dyn-name" placeholder="${pf.dynasty?.name ? 'rename the dynasty' : 'name your dynasty'}" size="18" maxlength="24">
