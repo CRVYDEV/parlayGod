@@ -88,6 +88,7 @@ const DISPOSITION = {
   transactions: 'ledger', rng_audit: 'ledger', notifications: 'log',
   clue_scrolls: 'wiped', // the treasure trail dies with the street (the heir starts a fresh hunt)
   rigs: 'wiped', // CONVOY Tier-4: the hauler dies with the street (the cars/boats precedent)
+  route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)
   chat_messages: 'log', // troll-box lines keep their name snapshot — a dead man's words stand (7d worker retention)
 };

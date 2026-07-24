@@ -68,7 +68,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, PATRON, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
-         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
+         worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE } from './rules.js';
 import { readFileSync } from 'node:fs';
@@ -724,6 +724,9 @@ export async function buildServer() {
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
     races: { minLevel: RACES.MIN_LEVEL, tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse })), tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX }, nos: { cost: RACES.NOS_COST, max: RACES.NOS_MAX, power: RACES.NOS_POWER }, pinkSlips: true, grandPrix: { buyin: RACES.GP.BUYIN, minLevel: RACES.GP.MIN_LEVEL, minEntrants: RACES.GP.MIN_ENTRANTS, payouts: RACES.GP.PAYOUTS } },
     port: { minLevel: PORT.MIN_LEVEL, district: PORT.DISTRICT, boats: PORT.BOATS.map((b) => ({ id: b.id, name: b.name, cost: b.cost, hold: b.hold, speed: b.speed })), routes: PORT.ROUTES.map((r) => ({ id: r.id, name: r.name, minLvl: r.minLvl, minSpeed: r.minSpeed, buy: r.buy, sell: r.sell })), upgrade: { max: PORT.STEP2.UPGRADE_MAX, hullStep: PORT.STEP2.HULL_STEP, engineStep: PORT.STEP2.ENGINE_STEP }, piracy: { minLevel: PORT.STEP2.PIRATE_MIN_LEVEL, energy: PORT.STEP2.PIRATE_ENERGY, ammo: PORT.STEP2.PIRATE_AMMO } },
+    // TIER C — ROUTE NOTORIETY: running the same lane heats it (convoys shed guard def / sea lanes draw the Coast Guard); vary lanes to stay cool. The Teamster/Smuggler legends earn a reputation that manages it.
+    smuggling: { gain: NOTORIETY.GAIN, max: NOTORIETY.MAX, decayPerHr: NOTORIETY.DECAY_PER_HR,
+      reputation: [{ tier: NOTORIETY.REP_DECAY_TIER, perk: 'your lanes cool 2× faster' }, { tier: NOTORIETY.REP_TOLL_TIER, perk: 'docks toll halved' }, { tier: NOTORIETY.REP_GAIN_TIER, perk: 'your lanes heat half as fast' }] },
     vests: VESTS.map((v) => ({ id: v.id, name: v.name, mult: v.mult, omr: v.omr, desc: v.desc })),
     drugs: DRUGS.map((d) => ({ id: d.id, name: d.name, tag: d.tag, base: d.base, unlock: d.unlock })),
     goods: GOODS.map((g) => ({ id: g.id, name: g.name, base: g.base })),

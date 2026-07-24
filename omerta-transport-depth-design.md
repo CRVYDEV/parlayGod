@@ -1,8 +1,15 @@
 # Design sketch — making the transport loops less repetitive
 
-**Status:** proposal / founder sign-off. Nothing built. Prompted by tester feedback
-(odcpw): *"I find the farming of transporting bonds, watches, etc a bit repetitive …
-compared to doctor or drug cooking / boat driving."*
+**Status:** **Tier C BUILT** (founder-directed 2026-07-24; `src/notoriety.js`, the `NOTORIETY` rules
+block, `route_notoriety` table, port/convoy integration + tests). Tiers A + B remain proposals /
+founder sign-off (see §4–§6). Prompted by tester feedback (odcpw): *"I find the farming of transporting
+bonds, watches, etc a bit repetitive … compared to doctor or drug cooking / boat driving."*
+
+**Tier C as built** — ROUTE NOTORIETY (per-`(character, lane)` heat that grows each run and decays lazily:
+the port's heat raises interdiction, a convoy lane's heat sheds the shipper's guard defense — emission-safe,
+pushing route variety) + THE SMUGGLER'S REPUTATION (the existing Teamster/Smuggler legends grant tiered perks
+that MANAGE the heat — faster decay / lower gain — plus a §10.4-neutral docks-toll break). Zero new faucet;
+all numbers founder sign-off levers. See CLAUDE.md + BALANCE.md for the full record.
 
 ## 1. The problem, diagnosed
 

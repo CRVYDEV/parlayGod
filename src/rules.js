@@ -2577,6 +2577,40 @@ PORT.STEP5 = {
   CONTRA_LOOT_RATE: 0.5,
 };
 
+// ── TIER C — ROUTE NOTORIETY + THE SMUGGLER'S REPUTATION (omerta-transport-depth-design.md) ──
+// A per-(character, lane) heat that GROWS each run of the same lane and DECAYS lazily (the
+// business-scrutiny pattern), pushing route variety so the transport loops aren't "farm one optimal
+// lane forever." EMISSION-SAFE by construction: on the PORT the heat only RAISES interdiction (fewer
+// clean landings → LESS emission); on CONVOYS it only LOWERS the shipper's own guard defense (an ambush
+// is a pure ownership transfer, not a §10.4 faucet). The existing Teamster / Smuggler LEGENDS (pure
+// status until now) grant a REPUTATION that MANAGES the heat (faster decay / lower gain) plus a docks-toll
+// break (a redistribution, not a faucet) — the Underworld-tier status→access precedent. All numbers are
+// founder sign-off levers; nothing here touches a signed FAUCET curve (only risk + a transfer discount).
+export const NOTORIETY = {
+  GAIN: 8,             // +heat per depart (convoy) / launch (port) on that same lane
+  DECAY_PER_HR: 4,     // lazy cool-down toward 0 (a lane you leave alone goes quiet in ~10h from the cap)
+  MAX: 40,             // heat cap on one lane
+  CONVOY_DEF_PER: 0.6, CONVOY_DEF_CAP: 24,   // a hot land lane SHEDS guard def (bandits have it cased): −def per point, capped
+  PORT_P_PER: 0.004,   PORT_P_CAP: 0.16,     // a hot sea lane DRAWS the Coast Guard: +interdiction p per point, capped
+  // reputation perks, keyed off the existing legend rank TIER (index into the rank ladder):
+  REP_DECAY_TIER: 1, REP_DECAY_MULT: 2,      // T1 (Teamster/Runner, ≥$250k): your lanes cool 2× faster
+  REP_TOLL_TIER: 2,  REP_TOLL_MULT: 0.5,     // T2 (Dispatcher/Smuggler, ≥$2M): the docks toll you at half (a known face)
+  REP_GAIN_TIER: 3,  REP_GAIN_MULT: 0.5,     // T3 (Freight Boss/Blockade Runner, ≥$10M): low profile — lanes heat half as fast
+};
+// legend rank TIER = index into the ladder (0 = base … so ≥1 is the 2nd rank, etc.)
+export const haulerTierOf = (v) => CONVOY.HAULER_RANKS.reduce((t, r, i) => (Number(v || 0) >= r.at ? i : t), 0);
+export const smugglerTierOf = (v) => PORT.STEP3.LEGEND_RANKS.reduce((t, r, i) => (Number(v || 0) >= r.at ? i : t), 0);
+// the decayed heat on a lane RIGHT NOW (decayMult = REP_DECAY_MULT if the runner has the T1 rep, else 1)
+export const notorietyNow = (stored, notedAt, decayMult = 1) =>
+  Math.max(0, Number(stored || 0) - (notedAt ? Math.max(0, (Date.now() - new Date(notedAt).getTime()) / 3600000) : 0) * NOTORIETY.DECAY_PER_HR * decayMult);
+// the reputation perks a runner of the given legend tier enjoys (decay/gain manage the heat; toll is a transfer break)
+export const smuggleRepPerks = (tier) => ({
+  tier: Number(tier) || 0,
+  decayMult: (Number(tier) || 0) >= NOTORIETY.REP_DECAY_TIER ? NOTORIETY.REP_DECAY_MULT : 1,
+  tollMult:  (Number(tier) || 0) >= NOTORIETY.REP_TOLL_TIER  ? NOTORIETY.REP_TOLL_MULT  : 1,
+  gainMult:  (Number(tier) || 0) >= NOTORIETY.REP_GAIN_TIER  ? NOTORIETY.REP_GAIN_MULT  : 1,
+});
+
 export const tickerOf = (id) => PORTFOLIO.TICKERS.find((t) => t.id === id) || null;
 // The day's price: base × (1 ± drift·hash), deterministic per UTC day off the server-secret market
 // seed (§7.11 machinery — unpredictable without the seed, verifiable after). DISPLAY-ONLY — it

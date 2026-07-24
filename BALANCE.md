@@ -1798,3 +1798,24 @@ levers/flags below are the only balance surfaces — none is a bug.
 All `AUCTION.CONSIGN.*`, `BLOOD_OATH_LOOT_MULT`, `PORT_INTERDICT_MULT`, `OPEN_ROADS_MULT`,
 `COMMISSION.STATECRAFT_*`/`OVERRIDE_WEIGHT`, `BONDS.PLEDGE_MIN`/charter costs, and the Tier-6/rare-lot
 catalog numbers are founder sign-off levers.
+
+## TRANSPORT DEPTH — Tier C (ROUTE NOTORIETY + THE SMUGGLER'S REPUTATION), founder sign-off levers
+Addresses the tester "transport farming is repetitive" feedback (`omerta-transport-depth-design.md`). All
+`NOTORIETY.*` numbers are sign-off levers — pure RISK/STATUS modifiers, off every signed FAUCET curve.
+- **Route notoriety is EMISSION-SAFE.** Port: heat only RAISES interdiction (fewer clean landings → LESS
+  `port:sale` emission; capped `PORT_P_CAP` 0.16, re-clamped to the signed `INTERDICT_MAX`). Convoy: heat only
+  LOWERS the shipper's own guard defense (capped `CONVOY_DEF_CAP` 24) — an ambush is a pure ownership TRANSFER,
+  not a faucet, so total haul volume is unchanged; only WHO holds it shifts. Neither widens a faucet — both can
+  only reduce/redistribute. Sim stays drift-0.
+- **The reputation TOLL BREAK (rep T2, ≥$2M legend → `REP_TOLL_MULT` 0.5) is the one value-touching lever** — it
+  HALVES the harbormaster/destination `port:toll`/`convoy:toll`, a §10.4-neutral TRANSFER discount (the treasury
+  receives less; nothing is created — the ledger row is just smaller). Net effect: a small reduction in family
+  toll income from legend-rank runners. FLAG: watch whether it materially softens the turf-toll income loop.
+- **The rep decay/gain perks (T1 `REP_DECAY_MULT` 2, T3 `REP_GAIN_MULT` 0.5) are pure risk-management** — they
+  only return a legend's lanes toward baseline faster / heat them slower; notoriety never goes below 0, so these
+  can never push interdiction below the signed floor or guards above the signed tier. Status→access, no faucet.
+- KEEP recommendation for alpha: the numbers make a farmed lane meaningfully riskier (interdiction climbs
+  ~0.16 over ~5 un-rotated runs on the port; guards shed up to 24 on a hot convoy lane) while a rotated player
+  is untouched — the intended "vary your lanes" pressure. Dials if it bites: `GAIN`/`DECAY_PER_HR`/`MAX` for
+  the pressure magnitude, `PORT_P_PER`/`CONVOY_DEF_PER` for the per-point severity, the `REP_*_TIER` thresholds
+  for how quickly reputation earns relief.

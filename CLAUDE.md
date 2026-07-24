@@ -4664,3 +4664,35 @@ sound. Founder sign-off flags (BALANCE.md, not defects): the `blood_oath` ×1.25
 signed loot rate (clamped, the open_season precedent), the new net-deflationary consignment P2P $OMR
 rail (collusion −EV by the take), and the Sybil-inflatable status boards (no payout — the hitman-rep
 posture). Suite 45/45 + sim drift-0. All Tier-4 numbers are founder sign-off levers.
+
+**TRANSPORT DEPTH — Tier C: ROUTE NOTORIETY + THE SMUGGLER'S REPUTATION — BUILT** (`omerta-transport-depth-design.md`
+Tier C; `src/notoriety.js` — a shared helper module, `route_notoriety` table, the `NOTORIETY` rules block +
+`haulerTierOf`/`smugglerTierOf`/`notorietyNow`/`smuggleRepPerks`; `test/port.js`/`test/convoy.js`). Answers the
+tester's "transport farming is repetitive" — the trade-goods/convoy/port loops resolved to a single optimal lane
+you then farmed. Now **running the SAME lane HEATS it** (a per-`(character, lane)` heat, the business-scrutiny
+pattern: `GAIN` 8/run, decays `DECAY_PER_HR` 4 toward 0, capped `MAX` 40) — pushing route variety.
+**EMISSION-SAFE by construction:** on the PORT the heat only RAISES interdiction (`+p` capped at `PORT_P_CAP` 0.16 →
+FEWER clean landings → LESS emission; bumped at `launchRun`, applied at `collectRun`, re-clamped to the signed
+`INTERDICT_MAX`); on CONVOYS it only LOWERS the shipper's own guard defense (`−def` capped at `CONVOY_DEF_CAP` 24,
+baked into `convoys.guards` at `departConvoy` so an ambush's def calc reads it — bandits case a farmed lane; an
+ambush is a pure ownership TRANSFER, not a §10.4 faucet, so only WHO holds the same bounded haul changes). Lane
+keys: `port:<routeId>` / `convoy:<origin>:<dest>` (a directional land lane). **THE SMUGGLER'S REPUTATION** — the
+existing Teamster (`freight_delivered`) / Smuggler (`smuggled`) LEGENDS (pure status until now) grant, off the rank
+TIER (the Underworld-tier status→access precedent): **T1** (≥$250k) your lanes cool 2× faster (`REP_DECAY_MULT`);
+**T2** (≥$2M) the docks/destination toll is HALVED (`REP_TOLL_MULT` — a §10.4-neutral TRANSFER discount, the
+convoy/harbormaster `port:toll`/`convoy:toll` row is just smaller, the treasury receives less, nothing created);
+**T3** (≥$10M) low profile — your lanes heat half as fast (`REP_GAIN_MULT`). So reputation MANAGES the very
+notoriety the mechanic adds — a self-referential progression. **§10.4: ZERO new reason/bucket/faucet** — the only
+value-touching change is the toll DISCOUNT (a smaller existing transfer); notoriety is a pure risk/ownership
+surface. `route_notoriety` DIES WITH THE STREET (joined the runEstate wipe + the migrate DISPOSITION map — the
+heir runs clean lanes). NO new player routes — it's all folded into `depart`/`run`/`collect` + board surfacing:
+`GET /v1/port` gains per-route `notoriety`/`hot` + a `reputation` block; `GET /v1/convoys` gains `mine.notoriety`/
+`guardCut` + `reputation`; `/v1/rules` a `smuggling` block. Console: a Sea Lanes card + HOT LANE chips in the
+route picker (Port), a lane-heat chip on the active shipment + a reputation line (Big Scores). `test/port.js`
+proves a run heats the lane + the board surfaces it + hammering climbs it + a cold lane stays cold + the interdiction
+rises above the floor + rep T2 halves the docks toll; `test/convoy.js` proves a cold first depart (no cut) → a hot
+second depart (reduced stored guards) → climbing → a fresh lane cold + rep T2 halves the destination toll + the
+board reputation/lane-heat surface + the discounted `convoy:toll` transfer reconciles the gang-treasuries §10.4
+check. All `NOTORIETY.*` numbers are founder sign-off levers (risk/status modifiers, off every signed faucet curve —
+the toll discount reduces family toll income, flagged). Deferred (Tier A/B, founder call): the surface hot-markets
+board + daily directed orders (Tier A), and the per-run seed-drawn EVENT + pre-committed choice (Tier B).

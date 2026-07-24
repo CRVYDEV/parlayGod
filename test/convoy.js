@@ -9,7 +9,7 @@ process.env.MOD_KEY = 'test-mod-key'; // Tier-4 death test uses /v1/mod/kill
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from '../src/convoy.js';
-import { CONVOY, goodPriceOf } from '../src/rules.js';
+import { CONVOY, NOTORIETY, goodPriceOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import crypto from 'node:crypto';
 
@@ -287,9 +287,66 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM rigs WHERE character_id='${rick.id}'`)).rows[0].n), 0, 'the rig is wiped by the estate');
 assert.equal(await freightOf(rick.id, 'freight_delivered'), rickDelivered, 'the Teamster legend survives death (account-level)');
 
+// ════════════════════ TIER C — ROUTE NOTORIETY + THE HAULER'S REPUTATION ════════════════════
+// running the SAME land lane heats it (bandits case it → the convoy departs with weaker guards); reputation
+// from THE TEAMSTER legend manages it (faster decay / lower gain) + a destination-toll break. EMISSION-SAFE
+// (an ambush is a pure ownership transfer, not a §10.4 faucet — only WHO holds the same bounded haul changes).
+const tc = await mk('Trucker Tim'); await seedCh(tc.id, "respect=400, cash=8000000, loc='docks'");
+await pool.query(`DELETE FROM route_notoriety WHERE character_id='${tc.id}'`);
+const depart = async (to) => {
+  await seedCh(tc.id, "loc='docks'");
+  await call('POST', '/v1/goods/buy', { token: tc.token, body: { goodId: 'gin', qty: 10 } });
+  const o = (await call('POST', '/v1/convoy', { token: tc.token, body: { to, goodId: 'gin', qty: 10 } })).body;
+  const d = (await call('POST', '/v1/convoy/depart', { token: tc.token, body: { guards: 'heavy' } })).body;
+  await pool.query(`UPDATE convoys SET status='done' WHERE id='${o.id}'`); // free the shipper slot for the next depart
+  return { id: o.id, ...d };
+};
+const d1 = await depart('neon');
+assert.equal(d1.notoriety, 0, 'a fresh lane departs cold — the first run faces no notoriety');
+assert.equal(d1.guardCut, 0, 'no guard cut on a cold lane');
+const d2 = await depart('neon');
+assert(d2.notoriety > d1.notoriety, 'the SAME lane heats up — the second run faces notoriety');
+assert(d2.guardCut > 0, 'a hot lane departs with WEAKER guards (bandits have it cased)');
+const g2 = Number((await pool.query(`SELECT guards FROM convoys WHERE id='${d2.id}'`)).rows[0].guards);
+assert(g2 < CONVOY.GUARD_TIERS.find((t) => t.id === 'heavy').def, 'the hot-lane convoy stored reduced guard defense');
+const d3 = await depart('neon');
+assert(d3.notoriety > d2.notoriety && d3.guardCut >= d2.guardCut, 'hammering the lane keeps climbing');
+// a DIFFERENT lane starts cold — the incentive to rotate routes
+assert.equal((await depart('canal')).notoriety, 0, 'a different lane is cold — vary your lanes to stay cool');
+
+// THE HAULER'S REPUTATION — rep T2 (Dispatcher rank, ≥$2M delivered): the destination toll is HALVED
+const tcAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${tc.id}'`)).rows[0].a;
+await pool.query(`UPDATE account_persistent SET freight_delivered=2500000 WHERE account_id='${tcAcct}'`); // Dispatcher rank → rep tier 2
+const tollBoss = await mk('Toll Boss'); await seedCh(tollBoss.id, "respect=800, cash=100000, loc='docks'");
+await call('POST', '/v1/gangs', { token: tollBoss.token, body: { name: 'Neon Kings', tag: 'NK' } });
+const ngid = (await pool.query(`SELECT id FROM gangs WHERE name='Neon Kings'`)).rows[0].id;
+await pool.query(`UPDATE districts SET holder_gang='${ngid}' WHERE id='neon'`);
+await seedCh(tc.id, "loc='docks'");
+await call('POST', '/v1/goods/buy', { token: tc.token, body: { goodId: 'gin', qty: 10 } });
+const to2 = (await call('POST', '/v1/convoy', { token: tc.token, body: { to: 'neon', goodId: 'gin', qty: 10 } })).body;
+await call('POST', '/v1/convoy/depart', { token: tc.token, body: { guards: 'heavy' } });
+await pool.query(`UPDATE convoys SET arrives_at = now() - interval '1 minute' WHERE id='${to2.id}'`); // arrive it
+await seedCh(tc.id, "loc='neon'");
+const col = (await call('POST', `/v1/convoy/${to2.id}/collect`, { token: tc.token })).body;
+const cv2 = goodPriceOf('gin', 'neon') * col.collected;
+const fullToll = Math.floor(cv2 * CONVOY.TOLL_BPS / 10000);
+assert.equal(col.toll, Math.floor(cv2 * CONVOY.TOLL_BPS / 10000 * NOTORIETY.REP_TOLL_MULT), 'a Dispatcher-rank hauler (rep T2) is tolled at HALF (the reputation transfer break)');
+assert(col.toll > 0 && col.toll < fullToll, 'the reputation toll break is a real discount');
+// the board surfaces the reputation + the active shipment's lane heat
+await seedCh(tc.id, "loc='docks'");
+await call('POST', '/v1/goods/buy', { token: tc.token, body: { goodId: 'gin', qty: 10 } });
+await call('POST', '/v1/convoy', { token: tc.token, body: { to: 'neon', goodId: 'gin', qty: 10 } });
+await call('POST', '/v1/convoy/depart', { token: tc.token, body: { guards: 'heavy' } });
+const cbTC = (await call('GET', '/v1/convoys', { token: tc.token })).body;
+assert(cbTC.reputation && cbTC.reputation.tollBreak && cbTC.reputation.coolsFaster, 'the board surfaces the hauler reputation perks');
+assert(cbTC.mine && cbTC.mine.notoriety > 0, 'the active shipment shows the lane heat');
+
 // ── §10.4: the vocabulary knows the convoy reasons (cash + ammo) ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `convoy:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
+// the reputation toll is a TRANSFER (a discounted convoy:toll) — the gang-treasuries check reconciles
+const treC = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+assert(treC.ok, `the discounted convoy:toll transfer reconciles the treasury (drift ${treC.drift})`);
 
 console.log('✅ Convoy test passed — bulk loading beyond the trunk, guard-fee sink ledgered, band-only road board, ambush gates (own/family/safehouse/once/spent), deterministic hijack (trunk-capped transfer, remainder rolls on, shipper notified), deterministic repel (hospital, freight untouched), arrival + at-destination collect + STEP TWO: destination toll (treasury credit, §10.4 exact), degrading multi-ambush (per-character once, 3-cap, wear in the audit), insured freight (premium → pool, pool-capped claim, §10.4 pool check), vocabulary; STEP THREE: NPC TRUCKING (the worker tops the road to TARGET unmarked trucks, no over-spawn, an NPC truck on the public board, a deterministic hijack landing goods in the raider trunk with no owner to notify, and an arrived NPC convoy despawning with its cargo — no faucet on a delivered truck)');
 await app.close();

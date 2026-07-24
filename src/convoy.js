@@ -13,9 +13,18 @@
 // therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
-import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf } from './rules.js';
+import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks } from './rules.js';
 import { activeDecree } from './commission.js';
+import { laneHeat, heatLane } from './notoriety.js';
+
+// TIER C — the hauler's reputation (from THE TEAMSTER legend rank tier): manages route notoriety (faster
+// decay / lower gain) + a destination-toll break. Pure status→access, off every faucet curve.
+async function haulerRep(client, accountId) {
+  const delivered = Number((await client.query('SELECT freight_delivered FROM account_persistent WHERE account_id=$1', [accountId])).rows[0]?.freight_delivered || 0);
+  return smuggleRepPerks(haulerTierOf(delivered));
+}
+const convoyLaneKey = (origin, destination) => 'convoy:' + origin + ':' + destination;
 
 const uid = () => crypto.randomUUID();
 
@@ -136,13 +145,23 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   // ROAD CAPTAIN (skills): the wheelman's convoys run faster — a new modifier, sign-off lever
   const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT) * (1 - rigSpeedBps / 10000) * openRoads);
   const arrivesAt = new Date(Date.now() + rideMs);
+  // TIER C: a hammered LANE sheds guard defense — the bandits have it cased. Read the lane's current NOTORIETY
+  // (a legend's rep cools it faster), cut the effective guards this run, then HEAT the lane for next time. The
+  // stored `guards` is what an ambush's def reads, so the cut is baked in at depart. Emission-safe: an ambush
+  // is a pure ownership transfer, not a §10.4 faucet — this only changes WHO holds the same bounded haul.
+  const rep = await haulerRep(client, ch.account_id);
+  const laneKey = convoyLaneKey(convoy.origin, convoy.destination);
+  const heat = await laneHeat(client, ch.id, laneKey, rep.decayMult);
+  const defCut = Math.min(NOTORIETY.CONVOY_DEF_CAP, heat * NOTORIETY.CONVOY_DEF_PER);
+  const guards = Math.max(0, Math.round(tier.def + rigArmor - defCut));
   await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, insured=$4, departed_at=now(), arrives_at=$5 WHERE id=$1",
-    [convoy.id, tier.def + rigArmor, h.owned.gangId || null, !!premium, arrivesAt]);
+    [convoy.id, guards, h.owned.gangId || null, !!premium, arrivesAt]);
+  await heatLane(client, ch.id, laneKey, rep.decayMult, rep.gainMult);
   const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
   await bumpStanding(client, h, ch, 'harbor', 2, { action: 'depart' }); // freight on the water is Big Tuna's business
   await h.track(client, ch.account_id, 'convoy_depart', { units, guards: tier.id, insured: !!premium });
-  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(rideMs / 1000), units, band, premium };
+  return { ok: true, id: convoy.id, arrivesSeconds: Math.ceil(rideMs / 1000), units, band, premium, notoriety: Math.round(heat), guardCut: Math.round(defCut) };
 }
 
 // CANCEL while loading — the goods come back to the trunk (they must fit).
@@ -284,7 +303,10 @@ export async function collectConvoy(ch, convoyId, client, h) {
   let toll = 0;
   const holder = (await client.query('SELECT holder_gang FROM districts WHERE id=$1', [c.destination])).rows[0]?.holder_gang;
   if (holder && holder !== c.owner_gang && collectedValue > 0) {
-    toll = Math.min(Math.floor(collectedValue * CONVOY.TOLL_BPS / 10000),
+    // TIER C: a known hauler (rep T2) is tolled at half — a transfer discount (§10.4-neutral: the holder
+    // treasury just receives less; nothing is created). The discounted amount is what's ledgered.
+    const tollMult = (await haulerRep(client, ch.account_id)).tollMult;
+    toll = Math.min(Math.floor(collectedValue * CONVOY.TOLL_BPS / 10000 * tollMult),
       Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
     if (toll > 0) {
       const upd = await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [holder, toll]);
@@ -485,11 +507,22 @@ export async function convoyBoard(pool, characterId) {
   }
   const [roadBoss, teamsterOfWeek] = await Promise.all([topWeek(pool, 'hijack'), topWeek(pool, 'deliver')]);
   const delivered = Number(acct.freight_delivered || 0), hijacked = Number(acct.freight_hijacked || 0);
+  // TIER C — the hauler's reputation + this shipment's LANE heat (so the player can see a lane going hot
+  // and rotate). The heat sheds guard def on THIS lane; reputation manages it (cools/quiets) + halves the toll.
+  const rep = smuggleRepPerks(haulerTierOf(delivered));
+  if (my && mine) {
+    const heat = await laneHeat(pool, characterId, convoyLaneKey(mine.origin, mine.destination), rep.decayMult);
+    my.notoriety = Math.round(heat);
+    my.guardCut = Math.round(Math.min(NOTORIETY.CONVOY_DEF_CAP, heat * NOTORIETY.CONVOY_DEF_PER));
+  }
   return { guardTiers: CONVOY.GUARD_TIERS, minQty: CONVOY.MIN_QTY,
     maxAmbushes: CONVOY.MAX_AMBUSHES, tollBps: CONVOY.TOLL_BPS,
     insureBps: CONVOY.INSURE_BPS, insurePayoutBps: CONVOY.INSURE_PAYOUT_BPS,
     inTransit, mine: my,
     legend: { delivered, hauler: haulerRankOf(delivered).title, hijacked, bandit: banditRankOf(hijacked).title },
+    reputation: { tier: rep.tier, coolsFaster: rep.decayMult > 1, tollBreak: rep.tollMult < 1, quieter: rep.gainMult < 1,
+      perks: [{ tier: NOTORIETY.REP_DECAY_TIER, perk: 'your lanes cool 2× faster' }, { tier: NOTORIETY.REP_TOLL_TIER, perk: 'destination toll halved' }, { tier: NOTORIETY.REP_GAIN_TIER, perk: 'your lanes heat half as fast' }] },
+    notoriety: { gain: NOTORIETY.GAIN, max: NOTORIETY.MAX, decayPerHr: NOTORIETY.DECAY_PER_HR, defPer: NOTORIETY.CONVOY_DEF_PER, defCap: NOTORIETY.CONVOY_DEF_CAP },
     rig, rigs: CONVOY.RIGS.map((r) => ({ id: r.id, name: r.name, cost: r.cost, minLvl: r.minLvl, armor: r.armor })),
     roadBoss, teamsterOfWeek };
 }
