@@ -7,8 +7,9 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
+import { sweepGrandReferrals } from '../src/game.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -477,6 +478,90 @@ process.env.SOCIAL_VERIFY_MODE = 'trust'; process.env.NODE_ENV = 'production';
 assert.equal(socialRewardsLive(), false, "'trust' is not live in production (fail-closed)");
 delete process.env.NODE_ENV;
 assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-production)");
+
+// ══════════ REFERRAL / X-RECRUITMENT FIXES ══════════
+// ── FIX M2: the Spread-the-Word share URL is the FRICTIONLESS /u/<name>?ref=<name> deep link (was the
+// bare domain, forcing a recruit to type the code) — a tapped daily-task tweet now auto-credits the sharer.
+{
+  const u = socialShareUrl('tweet', 'Promoter Pete');
+  const inner = decodeURIComponent((u.match(/[?&]url=([^&]+)/) || [])[1] || '');
+  assert(inner.includes('/u/Promoter') && inner.includes('ref=Promoter'), `the share URL carries the auto-crediting ?ref deep link (${inner})`);
+  assert(!socialShareUrl('tweet', '').includes('/u/'), 'a nameless share falls back to the bare domain');
+  assert(/x\.com\/OmertaOnRH/i.test(SOCIAL_LINKS.ob_x), 'SOCIAL_LINKS.ob_x resolves to the OMERTÀ handle');
+}
+// ── FIX L1: the First-Week "Follow on X" task points at the OMERTÀ handle, not the bare x.com homepage.
+{
+  const ob = (await call('GET', '/v1/onboard', { token: promoter.token })).body;
+  const obx = (ob.tasks || []).find((t) => t.id === 'ob_x');
+  assert(obx && /x\.com\/OmertaOnRH/i.test(obx.social), `the First-Week X task links to the handle (${obx && obx.social})`);
+}
+// ── FIX H1/H2: Spread-the-Word in LIVE verify mode — a share needs a POST LINK to pay (H1), and the post
+// must come from the player's LINKED X account (H2 author-binding, previously dead code off the claim path).
+// Stub the X API so the check is deterministic (no network). ──
+{
+  process.env.SOCIAL_VERIFY_MODE = 'live'; process.env.X_BEARER_TOKEN = 'test-bearer';
+  const realFetch = global.fetch;
+  let stubAuthor = '777';
+  global.fetch = async () => ({ status: 200, ok: true, json: async () => ({ data: { id: '12345678901234', author_id: stubAuthor } }) });
+  try {
+    // H1: a share registered with NO proof can NEVER pay in live mode (the exact production break — the
+    // old client posted an empty body, so verifyPostUp(null) threw need_proof and nobody was ever paid).
+    const noProof = await mk('No-Proof Ned');
+    await call('POST', '/v1/social/sw_post/claim', { token: noProof.token }); // register, no proof (the old client)
+    await matureSw(noProof.id, 'sw_post');
+    assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: noProof.token })).body.error, 'need_proof',
+      'live mode: a proof-less share can never pay — the client now sends the post link');
+    // H2: an X-linked account whose post comes from THEIR handle pays (author-binding satisfied on the real path)
+    const linked = await mk('Linked Lou');
+    const linkedAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${linked.id}'`)).rows[0].a;
+    await pool.query(`UPDATE accounts SET auth_provider='x', auth_subject='777' WHERE id='${linkedAcct}'`);
+    stubAuthor = '777';
+    await call('POST', '/v1/social/sw_post/claim', { token: linked.token, body: { proof: 'https://x.com/lou/status/12345678901234' } });
+    await matureSw(linked.id, 'sw_post');
+    assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: linked.token })).body.cash, SOCIAL_TASKS.CASH,
+      'live mode: a matured post from the linked X account pays (H2 author-binding wired through the claim path)');
+    // H2: registering someone ELSE's tweet (a different author_id) pays NOTHING
+    const faker = await mk('Faker Frank');
+    const fakerAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${faker.id}'`)).rows[0].a;
+    await pool.query(`UPDATE accounts SET auth_provider='x', auth_subject='888' WHERE id='${fakerAcct}'`);
+    stubAuthor = '999'; // the post is NOT Frank's
+    await call('POST', '/v1/social/sw_post/claim', { token: faker.token, body: { proof: 'https://x.com/celeb/status/12345678901234' } });
+    await matureSw(faker.id, 'sw_post');
+    assert.equal((await call('POST', '/v1/social/sw_post/claim', { token: faker.token })).body.error, 'not_your_post',
+      "live mode binds the post to the player's linked X account (registering a celebrity's tweet earns nothing)");
+  } finally {
+    global.fetch = realFetch; delete process.env.X_BEARER_TOKEN; process.env.SOCIAL_VERIFY_MODE = 'trust';
+  }
+}
+// ── FIX M1: the tier-2 "family tree" reconcile sweep — a grandrecruiter who had no living street at the
+// qualifying instant lost the finder's fee forever (the one-shot post-commit hook never retried). The
+// worker sweep pays it once they're reachable again, idempotently. ──
+{
+  const gAl = await mk('Grand Al');                  // A — grandrecruiter (root)
+  const mMoe = await mk('Middle Moe', 'Grand Al');   // R — brought in by A
+  const bBo = await mk('Bottom Bo', 'Middle Moe');   // R2 — brought in by R
+  const qualify = async (c) => { // drive a recruit through the 4 gates (level/jobs/checkins/cash)
+    await seedCh(c.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+    await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${c.id}')`);
+    for (let i = 0; i < 20; i++) { await seedCh(c.id, 'nerve=50, energy=200, jail_until=NULL'); const rr = await call('POST', '/v1/crimes/pick', { token: c.token }); if (rr.body.success) break; }
+  };
+  await qualify(mMoe);
+  const l2 = (id) => pool.query(`SELECT ref_paid, ref_l2_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`).then((r) => r.rows[0]);
+  assert.equal((await l2(mMoe.id)).ref_paid, true, 'the middle link qualified');
+  // A goes dark — no living street — right as R2 qualifies, so the inline tier-2 can't reach them
+  await pool.query(`UPDATE characters SET alive=false WHERE id='${gAl.id}'`);
+  await qualify(bBo);
+  assert.equal((await l2(bBo.id)).ref_paid, true, 'R2 qualified (the direct referral paid)');
+  assert.equal((await l2(bBo.id)).ref_l2_paid, false, 'but the tier-2 fee was NOT paid — the grandrecruiter had no living street');
+  // A stands a new street up; the worker reconcile pays the deferred fee, once
+  await pool.query(`UPDATE characters SET alive=true WHERE id='${gAl.id}'`);
+  const alBefore = (await meOf(gAl.token)).cash;
+  const sweep = await sweepGrandReferrals(pool);
+  assert(sweep.paid >= 1, `the reconcile sweep pays the deferred tier-2 fee (paid ${sweep.paid})`);
+  assert.equal((await l2(bBo.id)).ref_l2_paid, true, 'the tier-2 latch is now set');
+  assert.equal((await meOf(gAl.token)).cash, alBefore + 5000, 'A received the $5k finder\'s fee after the sweep');
+  assert.equal((await sweepGrandReferrals(pool)).paid, 0, 'a second sweep pays nothing (idempotent — the latch holds)');
+}
 
 // ── telemetry (§12) ──
 for (const ev of ['crime_attempt', 'deal', 'first_week_step', 'referral_qualified', 'referral_spark', 'social_task'])

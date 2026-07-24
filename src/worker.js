@@ -16,6 +16,8 @@ import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
 import { runWageEpoch } from './emission.js';
+import { sweepGrandReferrals } from './game.js';
+import { sweepSocialClaims } from './growth.js';
 import { sweepUncreditedStore } from './store.js';
 import { sweepPassStipends } from './pass.js';
 import { sweepStaleHeists } from './heists.js';
@@ -269,6 +271,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 7 * 86400000)])); // (red-team LOW) a gala is a 4h window — old guest lists are noise
     await safe('oauth state sweep', () => pool.query('DELETE FROM oauth_states WHERE created_at < $1',
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
+    // §7.13 tier-2 reconcile: pay the "family tree" fee the post-commit hook couldn't (grandrecruiter
+    // had no living character at the qualifying instant); idempotent, pays A once A has a living heir
+    const gr = await safe('grand-referral reconcile', () => sweepGrandReferrals(pool));
+    if (gr?.paid > 0) console.log(`🌳 referral: reconciled ${gr.paid} tier-2 fee(s)`);
+    await safe('social claims sweep', () => sweepSocialClaims(pool)); // drop spent Spread-the-Word rows (housekeeping)
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
     await safe('secrets sweep', () => sweepSecrets(pool)); // unpaid demands blow at the deadline; stale dirt reaped

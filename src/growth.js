@@ -3,7 +3,7 @@
 import { GameError, cleanText, assignedSoldier, soldierResult } from './game.js';
 import { soldierFxOf, SOLDIERS } from './rules.js';
 import {
-  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl,
+  PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
 } from './rules.js';
 import { verifySocial, verifyPostUp } from './verify.js';
@@ -311,7 +311,7 @@ export async function agentLeaderboard(pool, limit = 25) {
 export function onboardBoard(ch, h) {
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
   const tasks = ONBOARD_TASKS.map((t) => ({
-    id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: t.social || null,
+    id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: SOCIAL_LINKS[t.id] || t.social || null,
     claimed: !!onboard[t.id],
     ready: t.social ? true : !!(CHECKS[t.id] && CHECKS[t.id](ch, h)), // social tasks verify at claim time
   }));
@@ -410,7 +410,10 @@ export async function claimSocial(ch, taskId, proof, client, h) {
       return { ok: true, kind: 'social', task: taskId, pending: true,
         matureSeconds: Math.ceil((mature - age) / 1000) };
     }
-    await verifyPostUp(pend.proof ?? proof); // live mode: the post must STILL be up; trust passes
+    // live mode: the post must STILL be up AND (for an X-linked account) come from THEIR handle —
+    // pass ctx so verifyPostUp's D2 author-binding activates on the real claim path (was dead code:
+    // it only fired via a direct unit call). Trust mode short-circuits before touching ctx.
+    await verifyPostUp(pend.proof ?? proof, { client, accountId: h.accountId });
     await client.query('UPDATE social_claims SET paid=true WHERE account_id=$1 AND day=$2 AND task_id=$3',
       [h.accountId, pend.day, taskId]);
     const paidIds = (await client.query(
@@ -434,6 +437,18 @@ export async function claimSocial(ch, taskId, proof, client, h) {
   await h.track(client, h.accountId, 'social_post', { task: taskId, proof: cleanProof });
   return { ok: true, kind: 'social', task: taskId, pending: true, registered: true,
     matureSeconds: Math.ceil(mature / 1000) };
+}
+
+// worker housekeeping (L5): drop spent social_claims rows so the table doesn't grow forever. The
+// board/claim queries already FILTER on today / the 48h pending window, so this only trims what's
+// no longer readable: PAID rows older than a week and UNPAID registrations past the pending TTL.
+export async function sweepSocialClaims(pool) {
+  const paidCut = new Date(Date.now() - 7 * 24 * 3600000);
+  const pendCut = new Date(Date.now() - SOCIAL_PENDING_TTL);
+  const r = await pool.query(
+    'DELETE FROM social_claims WHERE (paid AND posted_at < $1) OR (NOT paid AND posted_at < $2)',
+    [paidCut, pendCut]);
+  return { swept: r.rowCount || 0 };
 }
 
 // WALLET LINK is SIWE now — see chain.js walletChallenge/walletVerify. The legacy
