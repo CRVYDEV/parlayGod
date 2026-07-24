@@ -331,7 +331,13 @@ export async function jump(ch, victim, client, h, intent) {
   // A founder who wants hospitalized retaliation reverts this one line.
   if (hospitalized(ch)) throw new GameError('hosp_self', "You're in no shape for a fight — laid up under the Doc's care.");
   if (Number(ch.health) < M3.JUMP_MIN_HEALTH) throw new GameError('health', "You're in no shape for a fight.");
-  if (Number(ch.energy) < M3.JUMP_ENERGY) throw new GameError('energy', `Need ${M3.JUMP_ENERGY} energy to jump someone.`);
+  // D6a step two — THE MESSAGE: what you came for (money vs reputation). An omitted/unknown intent
+  // resolves to 'standard' (all mults 1.0), byte-identical to the pre-choice jump. Resolved HERE (above
+  // the energy gate) because the intent prices its own energy: `message` costs 1.5× so its 1.5× rep and
+  // 1.5× hospital blanket are rate-neutral per ENERGY too, not just per mark-clock (the red-team flag).
+  const it = M3.JUMP_INTENTS[intent] || M3.JUMP_INTENTS.standard;
+  const energyCost = Math.max(1, Math.round(M3.JUMP_ENERGY * (it.energyMult ?? 1)));
+  if (Number(ch.energy) < energyCost) throw new GameError('energy', `Need ${energyCost} energy for that.`);
   if ((Number(ch.ammo) || 0) < M3.JUMP_AMMO) throw new GameError('ammo', `A jump takes ${M3.JUMP_AMMO} rounds.`);
   if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
   // an unreachable target can't be jumped either — jail/witness-protection/the Pen's yard-boss shield or
@@ -345,10 +351,7 @@ export async function jump(ch, victim, client, h, intent) {
   // matching fire/npcHit/postBounty/startSearch so a fugitive forfeits protection on EVERY PvP path (the
   // non-lethal jump was the one gap; a hunted man's own family can lay hands on him too).
   if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId && !h.victimAcct.rat && !isWanted(victim)) throw new GameError('family', "They're family. Omertà.");
-  // D6a step two — THE MESSAGE: what you came for (money vs reputation). An omitted/unknown intent
-  // resolves to 'standard' (all mults 1.0), byte-identical to the pre-choice jump.
-  const it = M3.JUMP_INTENTS[intent] || M3.JUMP_INTENTS.standard;
-  ch.energy = Number(ch.energy) - M3.JUMP_ENERGY;
+  ch.energy = Number(ch.energy) - energyCost;
   ch.ammo = Number(ch.ammo) - M3.JUMP_AMMO;
   // a public beating is noisy whether you win or lose — the Law hears about it either way (the
   // Go Loud precedent). Clamped [0,100] like every other heat bump.
@@ -414,11 +417,11 @@ export async function jump(ch, victim, client, h, intent) {
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
-    return { ok: true, win: true, intent: it.id, stolen, crates, rep, bounty, war: !!war };
+    return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war };
   }
   const dmg = rand(10, 25);
   ch.health = Math.max(1, Number(ch.health) - dmg);
-  return { ok: true, win: false, intent: it.id, dmg };
+  return { ok: true, win: false, intent: it.id, energy: energyCost, dmg };
 }
 
 // ═══════════════════ BOUNTIES / THE CONTRACT BOARD (§5.2, M7 Phase 1) ═══════════════════
@@ -1079,6 +1082,12 @@ export async function fire(ch, victim, client, h, rounds) {
     // stays out of reach. One ledger pair covers both legs (the character-cash check spans
     // cash+bank, so a single whack:loot row per side stays exact).
     const inTransit = Math.min(Math.floor(Number(victim.bank_intransit || 0)), Math.floor(Number(victim.bank)));
+    // ANTI-SYBIL FLOOR (SIGN-OFF 2.3): loot only comes off a mark who was worth hunting. Below
+    // LOOT_MIN_LVL a kill still runs the full estate — it just pays no cash/$OMR/gear — which closes
+    // the "funnel value through disposable low-level alts onto one main" concentration rail without
+    // touching the whale-hunting economics D1 signed. The npcHit-rookie / WANTED_MIN_LVL / legend-floor
+    // posture, now on the one loot surface that was missing it.
+    const lootable = vicLvl >= (M3.LOOT_MIN_LVL || 0);
     // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS loots deeper (clamped — never past half)
     const seasonLootMult = seasonModOf().lootMult || 1;
     // BLOOD OATH (Commission Tier-4 decree): a blood week — a fresh kill takes more off the body. One
@@ -1086,8 +1095,8 @@ export async function fire(ch, victim, client, h, rounds) {
     // (the critique's dual-loot-site fix). Clamped ≤ 0.5 at every site so the deepen never breaches the ceiling.
     const bloodOath = (await activeDecree(client))?.id === 'blood_oath' ? (COMMISSION.BLOOD_OATH_LOOT_MULT || 1) : 1;
     const cashLootRate = Math.min(0.5, M3.CASH_LOOT_RATE * seasonLootMult * bloodOath);
-    const pocketLoot = Math.floor(Number(victim.cash) * cashLootRate);
-    const transitLoot = Math.floor(inTransit * cashLootRate);
+    const pocketLoot = lootable ? Math.floor(Number(victim.cash) * cashLootRate) : 0;
+    const transitLoot = lootable ? Math.floor(inTransit * cashLootRate) : 0;
     const loot = pocketLoot + transitLoot;
     if (loot > 0) {
       victim.cash = Number(victim.cash) - pocketLoot;      // the estate now burns only the remainder
@@ -1100,7 +1109,7 @@ export async function fire(ch, victim, client, h, rounds) {
     // …and liquid $OMR PLUS unbonding principal (the unstake exposure window). Staked stays the
     // untouchable safe harbour; extraction is what crosses the street.
     const liquid = Number(h.victimAcct.omr), unbonding = Number(h.victimAcct.unbonding || 0);
-    const omrLoot = Math.floor((liquid + unbonding) * Math.min(0.5, M3.OMR_LOOT_RATE * seasonLootMult));
+    const omrLoot = lootable ? Math.floor((liquid + unbonding) * Math.min(0.5, M3.OMR_LOOT_RATE * seasonLootMult)) : 0;
     if (omrLoot > 0) {
       const fromLiquid = Math.min(omrLoot, liquid);
       h.victimAcct.omr = liquid - fromLiquid;
@@ -1116,7 +1125,7 @@ export async function fire(ch, victim, client, h, rounds) {
     let gearLoot = null;
     const gearRoll = Math.random();
     // env-overridable for tests (the SEARCH_MS pattern); production reads the M3 default
-    if (gearRoll < Number(process.env.GEAR_LOOT_CHANCE ?? M3.GEAR_LOOT_CHANCE)) {
+    if (lootable && gearRoll < Number(process.env.GEAR_LOOT_CHANCE ?? M3.GEAR_LOOT_CHANCE)) {
       const vg = (await client.query('SELECT gear_id FROM account_gear WHERE account_id=$1 AND NOT minted_onchain', [victim.account_id])).rows.map((x) => x.gear_id);
       const killerHas = new Set(h.owned.gear || []);
       const takeable = vg.filter((g) => !killerHas.has(g));
@@ -1135,7 +1144,7 @@ export async function fire(ch, victim, client, h, rounds) {
     // NOT a §10.4 currency (the gear-loot precedent, no ledger row), bounded by what was legitimately
     // sourced under the supply cap. Absolute reads (NUMERIC, arith-safe); the remainder dies with the street.
     let contraLoot = 0;
-    const vContra = Math.floor(Number(victim.contraband) || 0);
+    const vContra = lootable ? Math.floor(Number(victim.contraband) || 0) : 0;
     if (vContra > 0) {
       contraLoot = Math.floor(vContra * PORT.STEP5.CONTRA_LOOT_RATE);
       if (contraLoot > 0) {
@@ -1244,10 +1253,14 @@ export async function enterSafehouse(ch, client, h) {
   // max(flat floor, cash+bank × SAFEHOUSE_NW_BPS). The flat $25k was ~0.25%/day for an endgame
   // landlord (the audit's safehoused-landlord stack); a % keeps the shield real for street
   // players and expensive for whales. Paid from pocket — going to ground takes walking money.
-  // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS prices shelter up (composes like the decree)
-  const cost = Math.floor(Math.max(M3.SAFEHOUSE_COST,
+  // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS prices shelter up (composes like the decree).
+  // The SIGNED $25k floor is re-asserted AFTER the multiplier (AUDIT-slate-drops #3): applying it
+  // outside the max() meant a future sub-1 "cheap shelter" season could undercut the minimum the
+  // Make-Risk-Pay pass signed. No current mod is <1, so this changes nothing today — it just makes
+  // the floor un-breachable by any season we ship later.
+  const cost = Math.max(M3.SAFEHOUSE_COST, Math.floor(Math.max(M3.SAFEHOUSE_COST,
     Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
-    * (seasonModOf().safehouseMult || 1));
+    * (seasonModOf().safehouseMult || 1)));
   if (Number(ch.cash) < cost) throw new GameError('cash', `A safehouse runs $${cost} for a man of your means (1% of liquid wealth, $${M3.SAFEHOUSE_COST} minimum) — in pocket cash.`);
   // Commission decree: OPEN SEASON halves every stay — the knives are out this week
   const decree = await activeDecree(client);
@@ -1477,8 +1490,10 @@ export async function huntWanted(pool) {
       // the hunter lands it — the estate runs (no killerCh: no chop/loot/rep; the pool bounty burns)
       await runEstate(client, h, victim, 'A BOUNTY HUNTER');
       // narrow hand-rolled persist (no persistAccount here): must carry every account field runEstate
-      // mutates — prestige, deaths, and (L2a) the death-duty $OMR burn (ledgered inside runEstate).
-      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4 WHERE account_id=$1', [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr]);
+      // mutates — prestige, deaths, and (L2a) the death-duty $OMR burn (ledgered inside runEstate),
+      // which reaches liquid AND unbonding, so both columns ride or the burn drifts §10.4.
+      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4, unbonding=$5 WHERE account_id=$1',
+        [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr, victimAcct.unbonding ?? 0]);
       bus.emit('streets', { type: 'kill', by: 'a bounty hunter', victim: victim.name });
       await client.query('COMMIT'); killed++;
     } catch (e) { await client.query('ROLLBACK'); console.error('huntWanted', m.id, e.message); }
@@ -1528,13 +1543,20 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   acct.deaths = Number(acct.deaths) + 1;
   // L2a — THE DEATH DUTY (stakes/spine review #2): the account-level wealth survives death, so dying cost
   // the established dynasty almost nothing. A succession tax burns DEATH_DUTY_RATE of the heir's inherited
-  // LIQUID $OMR (staked $OMR / the RWA portfolio / the estate are safe harbours — untouched) so death
-  // finally costs the bloodline its extractable hoard. A §10.4 $OMR BURN (`death:duty`); runs on EVERY
-  // death path (a respawn-token save skips the estate entirely → no duty). acct.omr is persisted by
-  // persistAccount at the end of the wrapper (the whack:loot $OMR precedent).
-  const deathDuty = Math.floor(Number(acct.omr) * (M3.DEATH_DUTY_RATE || 0));
+  // EXTRACTABLE $OMR — liquid PLUS unbonding principal, the exact base the sibling P1.1 whack:loot
+  // takes (a red-team flag: taxing liquid only let a dynasty shelter its hoard from the duty by dying
+  // inside the 6h unbond window). Staked $OMR / the RWA portfolio / the estate stay safe harbours —
+  // untouched — so death costs the bloodline its extractable hoard, never what it committed. A §10.4
+  // $OMR BURN (`death:duty`); runs on EVERY death path (a respawn-token save skips the estate entirely
+  // → no duty). Liquid is drained first (the loot ordering). acct.omr/unbonding are persisted by
+  // persistAccount at the end of the wrapper (the whack:loot $OMR precedent); the two hand-rolled
+  // headless persists (mod-kill, huntWanted) carry both columns for the same reason.
+  const dutyLiquid = Number(acct.omr), dutyUnbond = Number(acct.unbonding || 0);
+  const deathDuty = Math.floor((dutyLiquid + dutyUnbond) * (M3.DEATH_DUTY_RATE || 0));
   if (deathDuty > 0) {
-    acct.omr = Number(acct.omr) - deathDuty;
+    const fromLiquid = Math.min(dutyLiquid, deathDuty);
+    acct.omr = dutyLiquid - fromLiquid;
+    if (deathDuty > fromLiquid) acct.unbonding = dutyUnbond - (deathDuty - fromLiquid);
     await h.ledger(client, { accountId: victim.account_id, currency: 'omr', amount: -deathDuty, reason: 'death:duty' });
   }
 

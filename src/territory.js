@@ -139,15 +139,30 @@ export async function upgradeRacket(ch, districtId, client, h) {
   if (!next) throw new GameError('maxed', 'That operation already runs at full strength.');
   if (isCold(r)) throw new GameError('cold', 'That operation is dark — pay its pad before you pour money into it.');
   if (Number(g.treasury) < next.cost) throw new GameError('treasury', `The ${next.name} takes $${next.cost} from the treasury.`);
+  // SIGN-OFF Tier 5 (parity with the speakeasy's resolve-raid-before-upgrade fix): upgrading BANKS the
+  // pending income, so without this a boss watching the Bureau heat climb could bank the take through an
+  // upgrade and never face the crackdown roll that `collectTerritory` runs. Resolve it here on the same
+  // terms — a raid SEIZES the pending (so `accrued` is read after) and fines the treasury.
+  const raid = await resolveTerritoryRaid(r, Number(g.treasury), client, h, h.owned.gangId, ch.id);
+  let raidFine = 0;
+  if (raid.raided) {
+    // the crackdown SEIZED the pending take and ledgered the fine (the caller applies it, as in
+    // collectTerritory). Re-check affordability against the reduced treasury, and read `accrued`
+    // from the reset clock so the upgrade banks nothing the Bureau just took.
+    raidFine = raid.fine;
+    if (Number(g.treasury) - raidFine < next.cost) throw new GameError('treasury', 'The Bureau just hit that operation — the treasury is short.');
+    r.last_income_at = new Date();
+  }
   const pending = accrued(r);
   // the upgrade squares the pad too (upkeep_at=now): a fresh clock at the new rate, no retroactive bump.
   // the pending collect also banks lifetime territory income (THE EMPIRE — step two).
-  await client.query('UPDATE gangs SET treasury = treasury - $2 + $3, territory_earned = territory_earned + $3 WHERE id=$1', [h.owned.gangId, next.cost, pending]);
+  await client.query('UPDATE gangs SET treasury = treasury - $2 + $3 - $4, territory_earned = territory_earned + $3 WHERE id=$1', [h.owned.gangId, next.cost, pending, raidFine]);
   await client.query('UPDATE territory_rackets SET tier=$2, last_income_at=now(), upkeep_at=now() WHERE district_id=$1', [districtId, next.tier]);
   await h.ledger(client, { currency: 'cash', amount: -next.cost, reason: 'territory:establish', counterparty: h.owned.gangId });
   if (pending > 0) await h.ledger(client, { currency: 'cash', amount: pending, reason: 'territory:income', counterparty: h.owned.gangId });
-  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - next.cost + pending;
-  return { ok: true, district: districtId, tier: next.tier, kind: r.kind, name: `${next.name} ${territoryTypeOf(r.kind).name}`, collected: pending };
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) - next.cost + pending - raidFine;
+  return { ok: true, district: districtId, tier: next.tier, kind: r.kind, name: `${next.name} ${territoryTypeOf(r.kind).name}`, collected: pending,
+    ...(raid.raided ? { raided: { seized: raid.seized, fine: raid.fine } } : {}) };
 }
 
 // Collect the accrued income from every operation the family runs → the treasury. Any member can

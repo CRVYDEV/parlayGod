@@ -637,8 +637,8 @@ export function view(ch, acct = {}, owned = {}) {
     bankClearSeconds: (Number(ch.bank_intransit || 0) > 0 && ch.bank_intransit_at)
       ? Math.max(0, Math.ceil((new Date(ch.bank_intransit_at).getTime() + CONSTANTS.BANK_CLEAR_MS - Date.now()) / 1000)) : 0,
     // (red-team) the live quote MIRRORS enterSafehouse exactly — incl. the season mult when armed
-    safehouseCost: Math.floor(Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
-      * (seasonModOf().safehouseMult || 1)),
+    safehouseCost: Math.max(M3.SAFEHOUSE_COST, Math.floor(Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
+      * (seasonModOf().safehouseMult || 1))),
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
     rerollCredits: Number(acct.reroll_credits || 0), // paid 0.01-ETH stat re-rolls in hand

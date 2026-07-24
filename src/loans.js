@@ -385,6 +385,11 @@ export async function unsellPaper(ch, loanId, client, h) {
 // A pure taxed cash transfer (the loan's principal/vig fire later on repay/collect, whoever holds it).
 export async function buyPaper(ch, seller, loanId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No buying paper from a cell.');
+  // offerLoan-parity (AUDIT-loan-sharking-step-three F1): buying paper converts lootable cash into a
+  // claim, so it's gated from a safehouse like every other cash-parking act. The audit judged it low
+  // value (the seller is a live lootable target, and paper is a purchase not reclaimable escrow) —
+  // shipped anyway so the whole loan surface reads one way: you don't do business from a bunker.
+  if (safeHoused(ch)) throw new GameError('safe', 'Nobody signs paper over to a ghost — surface first.');
   const loan = (await client.query('SELECT * FROM loans WHERE id=$1 FOR UPDATE', [loanId])).rows[0];
   if (!loan || loan.status !== 'active' || loan.for_sale == null) throw new GameError('gone', 'That paper is off the market.');
   if (loan.lender_character !== seller.id) throw new GameError('mismatch', 'The book doesn’t match.');

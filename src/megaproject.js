@@ -134,6 +134,11 @@ export async function giveGoods(ch, goodId, qty, client, h) {
   const need = Number(p.target) - Number(p.progress);
   n = Math.min(n, Math.max(1, Math.ceil(need / g.base))); // the fewest units that cover the wall
   const value = Math.min(n * g.base, Math.ceil(need));    // credit never overshoots the target
+  // (red-team C5) the goods rail carries the same $-value floor as the cash rail — one cheap unit
+  // (~$40) used to buy a plaque row the $100 cash floor would refuse, so dust-spam could farm the
+  // wall's contributor list. Freight worth less than a cash brick isn't a contribution.
+  if (value < MEGAPROJECT.MIN_CASH)
+    throw new GameError('amount', `That freight is worth $${value} — the smallest brick is $${MEGAPROJECT.MIN_CASH}.`);
   const left = have - n;
   h.owned.cargo[goodId] = left;
   // goods are not a §10.4 currency — deleting them from the trunk is a pure ownership sink

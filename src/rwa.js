@@ -94,6 +94,15 @@ export async function claimVaulted(ch, ticker, omr, client, h) {
   if (!t) throw new GameError('ticker', 'No such stock on the board.');
   if (ch.jail_until && new Date(ch.jail_until) > new Date())
     throw new GameError('jailed', "You can't move money into legit fronts from a cell.");
+  // MINTED-ONLY (AUDIT-rwa-float #2, recommended): claiming from the float is the on-ramp to the one
+  // KYC-gated extraction the whole design is built around, so every claiming identity pays the
+  // 0.01-ETH mint fee first — the Street Wage D1 precedent. Two reasons, both load-bearing:
+  // (1) Sybil — the per-account daily cap is only a real bound if an account costs something;
+  // (2) R3 dead allocation — nothing ever decrements `rwa_vault`, so units claimed by alts that will
+  //     never KYC permanently shrink the claimable float. Free-trial players still play and earn
+  //     everything else; minting was already the gate on every other extraction path.
+  if (!h.acct.minted)
+    throw new GameError('mint', 'The float only opens to a made man — mint your character first.');
   const amt = Math.floor(Number(omr));
   if (!(Number.isFinite(amt) && amt >= RWA_FLOAT.CLAIM_MIN_OMR))
     throw new GameError('amount', `Claims start at ${RWA_FLOAT.CLAIM_MIN_OMR} $OMR.`);

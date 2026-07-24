@@ -187,6 +187,21 @@ await seedCh(don.id, 'hosp_until=NULL'); // heal the boss up for the rest of the
   assert.equal(junk.code, 200, 'an unknown intent is not a 400');
   assert.equal(junk.body.intent, 'standard', 'an unknown intent resolves to standard');
   assert.equal((await meOf(don.token)).heat, 0, 'standard/fallback draws no heat');
+  // ── red-team: THE MESSAGE prices its own ENERGY ────────────────────────────────────────────────
+  // Rep ×1.5 with hospital ×1.5 is rate-neutral against ONE mark's clock, but ENERGY is the real
+  // binding constraint across MANY marks — a flat price made `message` a straight 1.5× rep-per-energy
+  // lever (and a 1.5×-better ally-shield). energyMult 1.5 restores neutrality on both axes.
+  assert.equal(rob.body.energy, 25, 'a stick-up costs the base energy');
+  assert.equal(junk.body.energy, 25, 'standard costs the base energy');
+  assert.equal(msg.body.energy, 38, 'a message costs 1.5x energy (25 -> 38)');
+  const perE = (j) => j.body.rep / j.body.energy;
+  assert(Math.abs(perE(msg) - perE(junk)) / perE(junk) < 0.05,
+    `a message is rate-neutral per ENERGY, not a free 1.5x (${perE(msg).toFixed(3)} vs ${perE(junk).toFixed(3)} rep/energy)`);
+  // and it is actually charged — a man with only the base tank can't send one
+  await seedCh(don.id, 'energy=25, health=100, hosp_until=NULL, heat=0'); await freshMark();
+  const broke = await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token, body: { intent: 'message' } });
+  assert.equal(broke.body.error, 'energy', 'the base tank no longer covers a message');
+  assert.equal((await call('POST', `/v1/streets/${rocco.id}/jump`, { token: don.token })).code, 200, 'the same tank still covers a standard jump');
   await seedCh(rocco.id, 'hosp_until=NULL, health=100'); await ready();
 }
 // full-system v3 (death lens): a JAILED target is out of reach — jump must gate it like fire/npcHit/shank
@@ -418,8 +433,17 @@ const whack = async (tid, rounds = 6000) => {
 // anti-farm floor (audit M1): whacking a sub-level-5 rookie counts on NO board — not rep, not
 // the kills counter, not the season streak — so the leaderboards can't be farmed with rookies/alts
 const rookie = await mk('Rookie Ricky');
+// SIGN-OFF 2.3 — the same floor now governs the LOOT: a stuffed throwaway alt pays the killer
+// nothing, so value can't be funnelled through disposable rookies onto one main. Death is still
+// death (the estate runs) — only the payday is withheld.
+await pool.query(`UPDATE account_persistent SET omr = omr + 50 WHERE account_id=(SELECT account_id FROM characters WHERE id='${rookie.id}')`);
+await seedCh(rookie.id, 'cash=400000');
+const donPreRookie = await meOf(don.token);
 let k = await whack(rookie.id);
 assert(k.kill, 'rookie whacked'); assert.equal(k.hitman.repGain, 0, 'no rep for a rookie (below the level floor)');
+assert.equal(k.loot || 0, 0, 'a rookie mark pays NO cash loot however stuffed the alt is');
+assert.equal(k.omrLoot || 0, 0, 'and no $OMR loot');
+assert.equal((await meOf(don.token)).omr, donPreRookie.omr, "the killer's $OMR is untouched by a rookie kill");
 assert.equal(k.hitman.qualified, false, 'a rookie kill does not qualify for the boards');
 donMe = await meOf(don.token);
 assert.equal(donMe.kills, 1, 'rookie kill does NOT inflate the lifetime kills board');
@@ -478,6 +502,35 @@ assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: {
 await seedCh(don.id, "energy=200, ammo=3000, jail_until=NULL, hosp_until=NULL, loc='docks'");
 r = await call('POST', `/v1/streets/${hmark.id}/jump`, { token: don.token });
 assert(r.body.win && r.body.bounty === 12000, "the dead hitman's directed pot opened — any player collects it (not locked to the corpse)");
+
+// ── red-team: THE DEATH DUTY reaches UNBONDING $OMR, not just liquid ───────────────────────────────
+// The duty taxes the EXTRACTABLE hoard. Taxing liquid only let a dynasty shelter it by dying inside
+// the 6h unbond window — the sibling P1.1 whack:loot already takes liquid + unbonding, so the two
+// mechanics now share one base. Staked $OMR stays a safe harbour. Drains liquid first.
+{
+  const doomed = await mk('The Unbonded');
+  const dAcct = `(SELECT account_id FROM characters WHERE id='${doomed.id}')`;
+  await pool.query(`UPDATE account_persistent SET omr=10, unbonding=30, staked=100 WHERE account_id=${dAcct}`);
+  const omrLedgerPre = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND account_id=${dAcct}`)).rows[0].s);
+  // a mod-kill runs the estate with NO killer (no loot), so the duty is the ONLY $OMR movement — and
+  // it exercises the hand-rolled headless persist, which must carry BOTH columns or the burn drifts
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: doomed.id }, headers: { 'x-mod-key': 'test-mod-key' } })).statusCode, 200, 'the unbonded man is killed');
+  const dead = (await pool.query(`SELECT omr, unbonding, staked FROM account_persistent WHERE account_id=${dAcct}`)).rows[0];
+  // 25% of (10 liquid + 30 unbonding) = 10 — liquid drained first, so liquid 10→0 and unbonding untouched
+  assert.equal(Number(dead.omr), 0, 'the duty drains liquid first (10 → 0)');
+  assert.equal(Number(dead.unbonding), 30, 'the remainder of the duty was covered by liquid — unbonding intact');
+  assert.equal(Number(dead.staked), 100, 'staked $OMR stays a safe harbour');
+  const omrLedgerPost = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND account_id=${dAcct}`)).rows[0].s);
+  assert.equal(omrLedgerPost - omrLedgerPre, -10, 'the duty is ledgered at the full liquid+unbonding base (§10.4 exact on the headless path)');
+  // now a bloodline whose ENTIRE hoard is mid-unbond: the duty must reach it
+  const heirAcct = dAcct; // the account survives; the heir inherits
+  await pool.query(`UPDATE account_persistent SET omr=0, unbonding=40 WHERE account_id=${heirAcct}`);
+  const heirCh = (await pool.query(`SELECT id FROM characters WHERE account_id=${heirAcct} AND alive=true`)).rows[0].id;
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: heirCh }, headers: { 'x-mod-key': 'test-mod-key' } })).statusCode, 200, 'the heir dies too');
+  const dead2 = (await pool.query(`SELECT omr, unbonding FROM account_persistent WHERE account_id=${heirAcct}`)).rows[0];
+  assert.equal(Number(dead2.omr), 0, 'nothing liquid to take');
+  assert.equal(Number(dead2.unbonding), 30, 'the duty reached the unbond window (40 → 30): no shelter');
+}
 
 // the feared-assassin leaderboard: the lifetime legend + this season's streak
 const lb = (await call('GET', '/v1/leaderboard/hitmen', { token: don.token })).body;
@@ -1239,7 +1292,9 @@ assert(t4Treas.ok, `the treasury check reconciles territory:fortify + territory:
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
 // ══ the safehouse is priced off the wealth it protects
 const vault = await mk('Vinnie Vault');
-await seedCh(vault.id, "cash=100000, loc='docks'");
+// respect 1444 = level 20, comfortably past M3.LOOT_MIN_LVL — a mark worth hunting, so the loot
+// surfaces below actually fire (the anti-Sybil floor pays nothing for a throwaway rookie)
+await seedCh(vault.id, "cash=100000, loc='docks', respect=1444");
 r = await call('POST', '/v1/bank/deposit', { token: vault.token, body: { amount: 80000 } });
 assert.equal(r.code, 200, 'deposited');
 let vm = await meOf(vault.token);
@@ -1263,7 +1318,10 @@ assert.equal(kv.omrLoot, Math.floor(50 * 0.20), 'loot took 20% of the UNBONDING 
 await pool.query(`UPDATE account_persistent SET unbond_at = now() - interval '1 minute' WHERE account_id = (SELECT account_id FROM characters WHERE id='${vault.id}')`);
 vm = await meOf(vault.token);
 assert.equal(vm.unbonding, 0, 'the unbond window passed — released');
-assert.equal(Math.floor(vm.omr), 40, 'principal (50 − 10 looted) is liquid on the heir\'s account');
+// 50 − 10 looted = 40, then the L2a death duty takes 25% of the EXTRACTABLE hoard — which now
+// reaches the unbond window (the red-team fix: dying mid-unbond used to shelter the whole hoard
+// from the duty), so 40 − 10 = 30 releases to the heir.
+assert.equal(Math.floor(vm.omr), 30, 'principal (50 − 10 looted − 10 death duty) is liquid on the heir\'s account');
 // wealth-scaled safehouse: 1% of liquid wealth, $25k floor — priced off what it protects
 const rich = await mk('Richie Reserves');
 await seedCh(rich.id, "cash=6000000, bank=14000000");

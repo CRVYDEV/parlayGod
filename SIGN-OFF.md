@@ -214,3 +214,88 @@ bots, and the on-chain Store paywall. See `CHAIN-DEPLOY.md` §7.
 
 **Fastest path:** reply *"ship S1/S2"* (or name a CHANGE), and confirm the three chain gates are owned by the
 legal/audit track. The correctness fixes above need nothing from you.
+
+---
+
+## 📌 FINAL SWEEP (founder-directed 2026-07-24: *"Bring up a list of all not patched items and apply your game balancing recommendations to all"*)
+
+Every item still marked open across `BALANCE.md`, the 56 `AUDIT-*.md` reports and the sheet above was
+re-read, classified, and **acted on**. Nothing is left as an un-owned "flagged" note: each row below is
+either **APPLIED** (the recommendation is now in the code), **ACCEPTED** (my recommendation *was* to keep
+it — recorded as a decision, not a to-do), or **NOT-A-BALANCE-ITEM** (legal/chain/infra — a separate track,
+listed so nothing is lost).
+
+Suite green + `node tools/sim.js` drift-0 after the package.
+
+### A. APPLIED — the recommendation is now shipped
+
+| # | Item (source) | What shipped |
+|---|---|---|
+| A1 | **Death duty spared unbonding $OMR** (AUDIT-stakes-spine F1) | the duty now taxes liquid **+ unbonding** — the exact base the sibling P1.1 loot uses, so dying mid-unbond no longer shelters the hoard. Staked/RWA/estate stay safe harbours. Both hand-rolled headless persists carry the column. |
+| A2 | **THE MESSAGE was a free 1.5× rep + 1.5× ally-shield** (AUDIT-stakes-spine F2+F3) | `JUMP_INTENTS.energyMult` — `message` costs 1.5× energy, so its rep and its hospital blanket are rate-neutral per **energy** as well as per mark-clock. One change closes both flags; the intent now buys concentration + damage, paid in law heat. |
+| A3 | **Port "Deep Run" was a trap route** (full-product #2) | `deeprun.sell` 1900 → **2700** (×3.0). Derived, not guessed: realized/day = `cap × [(m−1)·P(clean) − 1.5·P(caught)]`, so the audit's own "~$2,400" still lost to Open Water; ×3.0 gives ~$380k/day vs $303k — a real reward for L32 + 30% bust odds + the boat-sinking risk. |
+| A4 | **Stable vs Boxing cap asymmetry** (full-product #4) | `STABLE.STABLE_MAX` 4 → **3**, aligned with `BOXING.STABLE_MAX`. Identical bounded-PvE-purse mechanic; the 4th slot was a free +33% ceiling. |
+| A5 | **Gold Rush round-trip** (slate #1) | `tradeSellMult` 1.05 → **1.03** — back under the 4% fee wall, so the season pays traders who move freight and pays nothing for standing still. |
+| A6 | **`duel_wins` farmable off one funded alt** (slate #2) | the lifetime legend now needs a **new opponent bloodline each day** (`prior === 0`, reusing the pair/day counter the ELO K-decay already computes — the hitman-rep diminishing precedent). The level floor bounded *who*; this bounds *how often*. |
+| A7 | **Latent sub-1 `safehouseMult`** (slate #3) | the signed $25k floor is re-asserted **after** the season multiplier in both `enterSafehouse` and the view quote. No current mod is <1 — this just makes the floor un-breachable by a future season. |
+| A8 | **`whack:loot` had no level floor** (2.3) | `M3.LOOT_MIN_LVL` (10) — a fire-kill on a rookie still runs the full estate but pays **no** cash/$OMR/gear/contraband, closing the disposable-alt value funnel without touching the D1 whale-hunting economics. |
+| A9 | **Loan-house death cycle** (deep-deferred) | `LOAN.HOUSE_MIN_LVL` 3 → **10** — a throwaway borrower now costs a real grind (the WANTED_MIN_LVL posture). The P2P market stays open to new players from level 1. |
+| A10 | **Pen `PROTECTION_COST` flat** (Tier 3) | wealth-scaled: `max($15k, (cash+bank) × PROTECTION_NW_BPS 50)` per 2h — the SAFEHOUSE_NW_BPS pattern at half rate for half the window. A riot's half-price cover is a *designed* discount, so the floor guards the wealth scale only. |
+| A11 | **No shank cooldown** (Tier 3) | `PEN.SHANK_CD_MS` (30 min) per attacker, set win **or** lose. Energy + a shiv + a sentence extension let a stocked-up inmate work down a whole wing in one sitting. `PEN_SHANK_CD_MS` is a test-only knob. |
+| A12 | **S1 — crew-sale raid read UNCLAMPED heat** (sheet addendum) | the raid probability now reads `min(100, heat)`, matching the sibling Law-exposure path. Player-favourable; a neglected hot stash can't face worse odds than a maxed heat bar implies. |
+| A13 | **`upgradeRacket` dodged a pending Bureau raid** (Tier 5) | it now resolves the crackdown first — parity with the speakeasy's resolve-before-upgrade fix. Upgrading banks the pending take, so it had been a way to launder a hot operation's income past the roll `collectTerritory` runs. |
+| A14 | **Heist `fenceLoot` had no safehouse gate** (tier1-deepening) | added — fencing is income-realizing, so it can't run from cover. Now the whole risk layer reads one way. |
+| A15 | **`buyPaper` had no safehouse gate** (loan step-three F1) | added for offerLoan parity. Low value on its own (the audit said so) — shipped so the loan surface is consistent: you don't do business from a bunker. |
+| A16 | **Megaproject goods rail had no $-value floor** (megaproject C5) | freight worth less than `MIN_CASH` is refused — a $40 unit could buy a plaque row the $100 cash floor rejects. |
+| A17 | **RWA float claims weren't minted-gated** (rwa-float #2) | `claimVaulted` now requires `minted`. Two independent reasons the audit gave: the per-account daily cap only bounds anything if an account *costs* something (the Wage D1 precedent), and un-KYC'd alt claims permanently shrink the float (nothing decrements `rwa_vault`). |
+| A18 | **Numbers lazy-dominates the hot racket types** (full-product #3) | guidance, not a retune (the curve is signed): every type's description now states the collection cadence it needs — Numbers explicitly "the best type if you collect once a day", the hot types "collect inside ~Nh". Informed choice instead of a trap. |
+| A19 | **i18n over-promise** (full-product #5) | the picker is labelled **"(menus)"** with a tooltip saying the game text stays English. Honest about what the 15 packs cover; a prose translation remains a real content project, not an overnight machine pass. |
+
+### B. ACCEPTED — my recommendation was to keep it (now a decision, not an open item)
+
+- **Jump-to-shield** (stakes-spine F2b): hospital = protection is the signed v24 rule, and A2 removed the
+  *amplification*. Deliberately jumping an ally to shelter them stays possible and stays symmetric.
+- **Megaproject plaque includes agents** (C3): every other status board excludes agents because the axis is
+  free to farm. The plaque is **bought with burned value** — an agent paid the same price. Kept inclusive.
+- **Secrets: instant expose, late-window quiet expiry, no actor gates, multi-holder stacking**: all bounded
+  and intended (real dirt required; a 5-ring day reaches 125 exposure vs `INDICT_AT` 3000). The pressure is
+  the mechanic. `exposeHeat` / `MAX_HELD` / `DIG_OMR` remain the dials if the alpha disagrees.
+- **Status-board Sybil inflation** (commander / spymaster / collector / statesman / kingpin / tycoon /
+  builder / recruiter boards): earned by real play, **no payout attaches**. The hitman-rep posture. A Sybil
+  ring can inflate any status axis and no per-account cap fixes Sybil — accepted, as before.
+- **Estate staff walking** (deep-deferred): the rehire fee floors the recurring sink for a gala-only owner.
+  Bounded and self-correcting (no staff = no gala prestige); dials recorded, no change.
+- **Commission levy self-deal / last-second proposal sniping**: bounded by a public vote + the *seasonal*
+  seat formula the econ-pass fix installed. Intended leverage; a levy-cadence cap is the dial if it becomes
+  the permanent decree.
+- **Ring-poker soft play / chip dumping**: dumping is a *worse* transfer rail than the audited 2% ones
+  (raked ≥3%); out-of-band collusion is unpreventable server-side in any poker game. The rake taxes it.
+- **Mad Dog can name a consigliere**: flavour (a mad dog with a respected adviser). Unlike marriage and
+  diplomacy, no lockout is load-bearing here.
+- **Trade-goods arbitrage** (1.6), **bank-interest 24/7 edge** (1.5), **occupation on-ramp** (2.2),
+  **standover forced-sale price** (2.8), **hole teeth / `pen:work`** (Tier 3), **WANTED disproportion +
+  pool-bounty alt-farm** (Tier 4), **convoy insurance remainder**, **omertà gang-churn**, **open-season
+  entry-time semantics**, **heist leader-rat grief**, **endgame crime at the 0.97 cap**, **`demandTrial`
+  cheap reset**, **business/racket bucket stacking**: previously SHIPPED/WATCH — re-confirmed, unchanged.
+- **Passive fronts ≫ active loops** (full-product #1): already acted on this session by the founder-directed
+  **L1a + L1b** package (apex front incomes halved, progressive pad) — the maxed 5-front stack fell
+  **$48.96M → $21.6M/day net** (2.27×), measured by sim P9.20. The remaining gap is the intended
+  "capital works for you" endgame. Further dials (a global personal-income cap, the full front curve,
+  territory-side) stay available.
+- **Cosmetic LOWs** (full-system-v4): the `raceChallenge` ternary, the `rentBerth` arithmetic UPDATE (proven
+  working), the `assertChainId` warning verbosity, `claimPendingWire` defence-in-depth. No behaviour, no value.
+
+### C. NOT A BALANCE ITEM — separate tracks (listed so nothing is lost)
+
+- **Chain / mainnet (Tier 6):** `forge test` is now **GREEN — 73/73 incl. both fuzzes** (first execution,
+  2026-07-23), so gate 1 is closed. Remaining: **third-party audit** of contracts + the off-chain EIP-712
+  signer, and **legal counsel** on the Risk-to-Earn / RWA line. Neither is a founder tuning call.
+- **RWA float pre-mainnet economics** (rwa-float #1/#3/#4): the stale-oracle free option, FCFS sniping, and
+  the R3 simulated-unit reconciliation. #2 (minted-only) shipped as A17; the rest genuinely need the real
+  buy bot + oracle to exist before they can be decided. **#1 remains the single most important economics
+  decision before the bot switches on.**
+- **Infra:** the per-IP throttle gap is largely closed (auth bucket + keyless heavy-GET limiter). Residual
+  hardening is a deploy concern.
+- **Deploy config:** production must run `SOCIAL_VERIFY_MODE=live`, `INVITE_MODE=on` for the closed alpha,
+  and must **not** set any `*_P` / `*_MS` test knob (`SHANK_P`, `LAW_BUST_P`, `SEARCH_MS`, `PEN_SHANK_CD_MS`,
+  `TERRITORY_RAID_P`, `GEAR_LOOT_CHANCE`, …).
