@@ -110,11 +110,62 @@ assert.equal(r.body.ladder[0].name, 'Knuckles Kane', 'the bruiser tops the ladde
 assert(r.body.ladder[0].elo > DUELS.ELO_START, 'with a real rating');
 assert(r.body.ladder[0].lifetimeWins >= 1, 'and the lifetime legend');
 
-// ── the SEASONAL reset: rollover sends every elo back to the start line ──
+// ═══ TIER-4 DEEPENING: styles, divisions, the belt, grudge rematches, season titles ═══
+
+// ── WEAPON STYLES: pick a stance, the board reflects it, bad input is refused ──
+r = await call('POST', '/v1/duels/style', { token: bruiser.token, body: { style: 'brawler' } });
+assert.equal(r.code, 200, 'the bruiser picks a stance');
+assert.equal(r.body.style, 'brawler', 'the stance sticks');
+r = await call('POST', '/v1/duels/style', { token: pigeon.token, body: { style: 'gunslinger' } });
+assert.equal(r.code, 200, 'the pigeon picks a counter-able stance');
+r = await call('POST', '/v1/duels/style', { token: bruiser.token, body: { style: 'nunchucks' } });
+assert.equal(r.body.error, 'style', 'no such fighting style');
+
+// ── the board deepens: division on every duelist, your style/titles, the catalogs, THE BELT ──
+r = await call('GET', '/v1/duels', { token: bruiser.token });
+assert.equal(r.body.you.style, 'brawler', 'your stance is on the sheet');
+assert(r.body.you.division && r.body.you.division.name, 'your division reads');
+assert(Array.isArray(r.body.styles) && r.body.styles.length === 3, 'the styles catalog (rock-paper-scissors)');
+assert(Array.isArray(r.body.divisions) && r.body.divisions.length >= 6, 'the divisions ladder');
+assert(r.body.duelists.every((d) => d.division && d.division.name), 'every listed duelist carries a division');
+assert(r.body.belt && r.body.belt.name === 'Knuckles Kane', 'the top-ELO listed duelist holds THE BELT');
+assert.equal(r.body.belt.mine, true, 'the bruiser reads the belt as his');
+
+// ── the STYLE EDGE resolves a duel between styled opponents (brawler > gunslinger) ──
+process.env.DUEL_CD_MS = '1';
+await pool.query(`UPDATE characters SET duel_at=NULL WHERE id='${bruiser.id}'`);
+r = await call('POST', `/v1/duels/${pigeon.id}`, { token: bruiser.token, body: { amount: 2000 } });
+assert.equal(r.code, 200, 'a styled duel resolves (brawler beats gunslinger AND the build)');
+assert.equal(r.body.win, true, 'the favorable matchup + build carries');
+
+// ── GRUDGE REMATCH: the pigeon (beaten last by the bruiser) rematches on a shortened cooldown ──
+await pool.query(`UPDATE characters SET duel_at=NULL WHERE id='${pigeon.id}'`);
+const grudgeCd = 600000; process.env.DUEL_CD_MS = String(grudgeCd);
+const tGrudge = Date.now();
+r = await call('POST', `/v1/duels/${bruiser.id}`, { token: pigeon.token, body: { amount: 2000 } });
+assert.equal(r.code, 200, 'the grudge rematch resolves');
+const pigeonCd = new Date((await pool.query(`SELECT duel_at FROM characters WHERE id='${pigeon.id}'`)).rows[0].duel_at).getTime() - tGrudge;
+assert(pigeonCd < grudgeCd * 0.5, `the grudge cools ~⅓ as long: ${Math.round(pigeonCd / 1000)}s vs ${grudgeCd / 1000}s full`);
+assert(pigeonCd > grudgeCd * 0.2, 'but it is still a real cooldown (the GRUDGE_CD_MULT band)');
+process.env.DUEL_CD_MS = '1';
+await pool.query('UPDATE characters SET duel_at=NULL');
+
+// ── the leaderboard deepens: division + titles + the champions board ──
+r = await call('GET', '/v1/leaderboard/duels', { token: bruiser.token });
+assert(r.body.ladder[0].division, 'the ladder carries divisions');
+assert('champions' in r.body, 'the death-proof champions board exists');
+
+// ── the SEASONAL reset: rollover crowns the champion into lifetime titles, then resets the elo ──
 await pool.query('UPDATE characters SET season = season - 1');
+const titlesBefore = Number((await pool.query(`SELECT duel_titles FROM account_persistent WHERE account_id='${bruiser.aid}'`)).rows[0].duel_titles);
 await runSeasonRollover(pool, { season: Math.floor(Date.now() / 86400000 / 28) + 1 });
 const eloAfter = Number((await pool.query(`SELECT duel_elo FROM characters WHERE id='${bruiser.id}'`)).rows[0].duel_elo);
 assert.equal(eloAfter, DUELS.ELO_START, 'the season reset the ladder — a fresh 28-day race');
+const titlesAfter = Number((await pool.query(`SELECT duel_titles FROM account_persistent WHERE account_id='${bruiser.aid}'`)).rows[0].duel_titles);
+assert.equal(titlesAfter, titlesBefore + 1, 'the season champion is crowned into a lifetime title (survives death)');
+r = await call('GET', '/v1/duels', { token: bruiser.token });
+assert.equal(r.body.you.titles, titlesAfter, 'the title count surfaces on the board');
+assert.equal(r.body.you.titleRank, 'Belt Holder', 'and the title rank');
 
 // ── §10.4: the duel: vocabulary + per-character cash reconciles both sides ──
 const inv = await runLedgerInvariants(pool);

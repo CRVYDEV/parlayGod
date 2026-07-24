@@ -2707,6 +2707,39 @@ export const DUELS = {
   ],
 };
 export const duelRankOf = (elo) => [...DUELS.RANKS].reverse().find((r) => Number(elo) >= r.elo) || DUELS.RANKS[0];
+// ── DUELS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §1) ──
+// DIVISIONS (a competitive ladder over the raw ELO — the boxing-rank/league shape), WEAPON STYLES
+// (a rock-paper-scissors combat axis so the BUILD isn't the only thing that decides), the season
+// BELT + account-level TITLES (survive death — the boxing-belt/hitman-rep precedent), and GRUDGE
+// rematches (a beaten duelist chases redemption on a shorter cooldown). All status/combat — the
+// wager stays the audited casino:pvp transfer, so §10.4 is UNTOUCHED. All numbers sign-off levers.
+DUELS.DIVISIONS = [
+  { elo: 0,    name: 'Bronze',  tag: 'B' },
+  { elo: 1100, name: 'Silver',  tag: 'S' },
+  { elo: 1250, name: 'Gold',    tag: 'G' },
+  { elo: 1400, name: 'Platinum', tag: 'P' },
+  { elo: 1550, name: 'Diamond', tag: 'D' },
+  { elo: 1700, name: 'Master',  tag: 'M' },
+];
+export const duelDivisionOf = (elo) => [...DUELS.DIVISIONS].reverse().find((d) => Number(elo) >= d.elo) || DUELS.DIVISIONS[0];
+// STYLES: each beats one, loses to another (the classic triangle). Brawler > Gunslinger > Fencer >
+// Brawler. A matched-up style gets STYLE_EDGE on its contest roll; a mirror is neutral. Reading the
+// board (an opponent's listed style is public) and counter-picking is the skill.
+DUELS.STYLES = [
+  { id: 'brawler',    name: 'Brawler',    beats: 'gunslinger', blurb: 'Close the distance and swing.' },
+  { id: 'gunslinger', name: 'Gunslinger', beats: 'fencer',     blurb: 'Fast hands, faster iron.' },
+  { id: 'fencer',     name: 'Fencer',     beats: 'brawler',    blurb: 'Footwork and the point.' },
+];
+export const duelStyleOf = (id) => DUELS.STYLES.find((s) => s.id === id) || null;
+DUELS.STYLE_EDGE = 1.15;        // the favorable-matchup multiplier on the contest roll (combat, no §10.4)
+DUELS.GRUDGE_CD_MULT = 0.34;    // a REMATCH vs someone who last beat you cools ~⅓ as long (chase it back)
+export const DUEL_TITLE_RANKS = [
+  { titles: 1, name: 'Belt Holder' },
+  { titles: 3, name: 'Repeat Champion' },
+  { titles: 6, name: 'Dynasty of the Ring' },
+  { titles: 12, name: 'The Immortal Duelist' },
+];
+export const duelTitleRankOf = (n) => [...DUEL_TITLE_RANKS].reverse().find((r) => Number(n) >= r.titles) || null;
 
 // ═══ CLUE SCROLLS (slate #4 — treasure trails). ALL numbers are founder sign-off levers.
 // The casket is the drop's ONE new faucet, bounded three ways (the 2% drop × one active hunt ×

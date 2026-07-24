@@ -2453,7 +2453,7 @@
       ['GET', '/v1/clues'], ['POST', '/v1/clues/dig', {}], ['GET', '/v1/leaderboard/clues'],
     ],
     'The Dueling Circuit': [
-      ['GET', '/v1/duels'], ['POST', '/v1/duels/list', { limit: 5000 }],
+      ['GET', '/v1/duels'], ['POST', '/v1/duels/list', { limit: 5000 }], ['POST', '/v1/duels/style', { style: 'brawler' }],
       ['POST', '/v1/duels/:targetId', { amount: 1000 }], ['GET', '/v1/leaderboard/duels'],
     ],
     'The Megaproject': [
@@ -2585,21 +2585,32 @@
       </div>
 
       ${(() => { const d = duels; if (!d) return '';
+        const styleName = (id) => (d.styles.find((s) => s.id === id) || {}).name || null;
+        const beats = (id) => { const s = d.styles.find((x) => x.id === id); return s ? styleName(s.beats) : null; };
         return `<h2 style="margin-top:12px">⚔ The Dueling Circuit <span class="d" style="font-size:11px">— ranked. Seasonal. The number follows you.</span></h2>
+        ${d.belt ? `<div class="card" style="border-color:var(--gold);background:rgba(212,175,55,.06)"><span class="t" style="color:var(--gold)">🏆 THE BELT</span>
+          <div>${d.belt.mine ? 'YOU HOLD IT' : esc(d.belt.name)} <span class="d">— top rating on the circuit, ${d.belt.elo}. Crowned into a lifetime title at season's end.</span></div></div>` : ''}
         <div class="grid">
           <div class="card"><span class="t">YOUR RATING</span>
-            <div style="font-size:24px;color:var(--neon)">${d.you.elo} <span class="d" style="font-size:12px">${esc(d.you.rank)}</span></div>
+            <div style="font-size:24px;color:var(--neon)">${d.you.elo} <span class="d" style="font-size:12px">${esc(d.you.rank)}</span>
+              <span class="chip">${esc(d.you.division.name)}</span>${d.you.titles > 0 ? `<span class="chip" style="color:var(--gold)">🏆 ${d.you.titles}${d.you.titleRank ? ' · ' + esc(d.you.titleRank) : ''}</span>` : ''}</div>
             <div class="d">${d.you.listed ? `on the circuit — taking duels up to $${fmt(d.you.limit)}` : 'not listed — nobody can challenge you'}</div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+              <span class="d" style="font-size:11px">stance:</span>
+              <select id="du-style" style="font-size:11px">${d.styles.map((s) => `<option value="${s.id}"${d.you.style === s.id ? ' selected' : ''}>${s.name} (beats ${styleName(s.beats)})</option>`).join('')}</select>
+              <button class="act" id="du-setstyle">set stance</button>
+            </div>
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
               <input id="du-limit" type="number" placeholder="stake cap $" style="width:110px">
               <button class="act" id="du-list">${d.you.listed ? 're-list' : 'enter the circuit'}</button>
               ${d.you.listed ? '<button class="act" id="du-unlist">step off</button>' : ''}
             </div>
-            <div class="d" style="font-size:11px;margin-top:4px">stakes $${fmt(d.stakeMin)}+ · 5% rake · win takes the stake · level ${d.minLevel}+ · elo resets each season</div>
+            <div class="d" style="font-size:11px;margin-top:4px">stakes $${fmt(d.stakeMin)}+ · 5% rake · win takes the stake · level ${d.minLevel}+ · elo resets each season · a favorable stance is a +${Math.round(((d.styleEdge || 1.15) - 1) * 100)}% combat edge</div>
           </div>
           ${d.duelists.filter((x) => !x.me).slice(0, 8).map((x) => `
             <div class="card"><span class="t">${esc(x.name)}</span> <span class="d">lvl ${x.level}${x.tag ? ' · ' + esc(x.tag) : ''}</span>
-              <div class="d"><b>${x.elo}</b> ${esc(x.rank)} · takes up to $${fmt(x.limit)}</div>
+              <div class="d"><b>${x.elo}</b> ${esc(x.rank)} <span class="chip">${esc(x.division.name)}</span> · takes up to $${fmt(x.limit)}</div>
+              <div class="d" style="font-size:11px">${x.style ? `stance: ${esc(styleName(x.style) || x.style)} — counter with ${esc(d.styles.find((s) => s.beats === x.style)?.name || '—')}` : 'no stance declared'}</div>
               <div style="display:flex;gap:6px;margin-top:6px">
                 <input data-duamt="${x.id}" type="number" placeholder="stake $" style="width:100px">
                 <button class="act" data-duel="${x.id}">DUEL</button>
@@ -2630,7 +2641,9 @@
         const ex = Number(t.querySelector('#ct-excl').value); if (ex) body.exclusiveHours = ex; }
       act('POST', `/v1/streets/${t.querySelector('#ct-target').value}/bounty`, body).then(() => renderPvp());
     };
-    { const dl = t.querySelector('#du-list');
+    { const ss = t.querySelector('#du-setstyle');
+      if (ss) ss.onclick = () => act('POST', '/v1/duels/style', { style: t.querySelector('#du-style').value }).then(() => renderPvp());
+      const dl = t.querySelector('#du-list');
       if (dl) dl.onclick = () => act('POST', '/v1/duels/list', { limit: Number(t.querySelector('#du-limit').value) }).then(() => renderPvp());
       const du = t.querySelector('#du-unlist');
       if (du) du.onclick = () => act('POST', '/v1/duels/list', { limit: null }).then(() => renderPvp());
@@ -4142,6 +4155,7 @@
       wage_paid: () => `street wage: +${d.omr} $OMR`,
       clue_found: () => `🗺 a CLUE SCROLL turned up on that job — “${d.riddle}” (${d.steps} steps to a casket)`,
       duel_result: () => `⚔ ${d.by} ${d.win ? 'lost to you' : 'beat you'} in a ranked duel — your elo is ${d.elo} (${d.delta > 0 ? '+' + d.delta : d.delta})`,
+      duel_champion: () => `🏆 SEASON CHAMPION — you held THE BELT at ${d.elo}. Crowned into a lifetime title.`,
       megaproject_milestone: () => `🏗 ${d.monument} is ${d.pct}% raised — the scaffolding climbs`,
       megaproject_complete: () => `🏛 ${d.monument} STANDS — raised by the whole city. Architect: ${d.architect}`,
       megaproject_architect: () => `🏛 you are THE ARCHITECT of ${d.monument} — your name leads the plaque forever`,
