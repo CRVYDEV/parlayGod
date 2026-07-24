@@ -256,9 +256,9 @@ for (let i = 0; i < 3; i++) {
 
 // ── First Week (§5.1): server-checked claims, capstone, cash-only rewards ──
 await seedCh(chef.id, 'cash=500000, energy=50, jail_until=NULL');
-// the guided board (the client's Start Here funnel): nine tasks, none claimed, crime not yet ready
+// the guided board (the client's Start Here funnel): eight tasks, none claimed, crime not yet ready
 let ob = (await call('GET', '/v1/onboard', { token: chef.token })).body;
-assert.equal(ob.total, 9, 'nine first-week tasks on the board');
+assert.equal(ob.total, 8, 'eight first-week tasks on the board');
 assert.equal(ob.claimed, 0, 'a fresh street has claimed nothing');
 assert.equal(ob.allDone, false, 'and is not done');
 assert.equal(ob.tasks.find((t) => t.id === 'ob_crime').ready, false, 'pull-a-job is not ready before any crime');
@@ -284,13 +284,13 @@ assert.equal((await call('POST', '/v1/wallet', { token: chef.token, body: { addr
 await pool.query(`UPDATE account_persistent SET wallet_address='0x1111111111111111111111111111111111111111' WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
 await seedCh(chef.id, 'jail_until=NULL, cash=500000');
 assert.equal((await call('POST', '/v1/gangs', { token: chef.token, body: { name: 'The Kitchen Cartel', tag: 'KC' } })).code, 200);
-for (const t of ['ob_boost', 'ob_bank', 'ob_wallet', 'ob_path', 'ob_family', 'ob_x', 'ob_discord']) {
+for (const t of ['ob_boost', 'ob_bank', 'ob_wallet', 'ob_path', 'ob_family', 'ob_x']) {
   r = await call('POST', `/v1/onboard/${t}/claim`, { token: chef.token });
   assert.equal(r.code, 200, `claimed ${t}`);
-  assert.equal(r.body.capstone, false, 'capstone waits for all nine');
+  assert.equal(r.body.capstone, false, 'capstone waits for all eight');
 }
-r = await call('POST', '/v1/onboard/ob_repo/claim', { token: chef.token });
-assert.equal(r.code, 200, 'ninth claim');
+r = await call('POST', '/v1/onboard/ob_discord/claim', { token: chef.token });
+assert.equal(r.code, 200, 'eighth (final) claim');
 assert.equal(r.body.capstone, true, 'THE FIRST WEEK IS DONE');
 assert.equal(r.body.cash, 1500 + 5000, 'task + capstone cash (cash-only, never $OMR)');
 

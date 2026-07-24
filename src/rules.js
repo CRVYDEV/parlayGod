@@ -434,7 +434,6 @@ export const ONBOARD_TASKS = [
   { id: "ob_wallet", name: "Connect a wallet", desc: "The wallet is what survives you.", reward: { cash: 2000 }, check: (pl) => !!pl.wallet },
   { id: "ob_x", name: "Follow OMERTÀ on X", desc: "Launches, events, and season news.", reward: { cash: 1500 }, social: "https://x.com/", check: () => true },
   { id: "ob_discord", name: "Join the community", desc: "The other families are in there too.", reward: { cash: 1500 }, social: "https://discord.com/", check: () => true },
-  { id: "ob_repo", name: "Star the repo", desc: "Open development, open books.", reward: { cash: 1500 }, social: "https://github.com/", check: () => true },
 ]
 
 export const RECRUIT_MILESTONES = [
@@ -2804,7 +2803,6 @@ export const socialShareUrl = (kind, code = '') => {
 export const SOCIAL_LINKS = {
   ob_x: `https://x.com/${SOCIAL_X_HANDLE}`,
   ob_discord: process.env.SOCIAL_DISCORD_URL || null,
-  ob_repo: process.env.GITHUB_REPO ? `https://github.com/${process.env.GITHUB_REPO}` : null,
 }
 
 // ═══ EMISSION — THE STREET WAGE (the value-creation pivot, founder-directed 2026-07-23;
