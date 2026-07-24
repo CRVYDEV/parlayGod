@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -646,6 +646,49 @@ phase('P9.19 clue scrolls — the casket faucet (bounded)');
   const mean = (CLUES.CASKET_MIN + CLUES.CASKET_MAX) / 2;
   note('clues', 'casket faucet ceiling', `$${fmt(Math.round(perDay * mean))}/day/char hard max`,
     `${perDay}/day cadence cap × $${fmt(mean)} mean take (band $${fmt(CLUES.CASKET_MIN)}–$${fmt(CLUES.CASKET_MAX)}); realized far lower (2% drop on jobs, travel per step) — petty vs the signed loops; KEEP unless dust telemetry says otherwise`);
+}
+
+// ════════ P9.20 THE PASSIVE STACK — the parallel-income ceiling one operator can run (the gap) ════════
+// Every prior P9 probe measures ONE faucet. This sums what a SINGLE maxed operator collects in parallel,
+// because the passive earners DON'T compete for energy (the bound on the active crime loop) — they cost
+// only cooldowns + upkeep. So the honest question is not "is any one faucet at parity" but "does the STACK
+// dwarf the active loop". Analytic, from the signed constants — no value seeded, §10.4 untouched.
+phase('P9.20 the passive stack — parallel energy-free income vs the active grind (the balance gap)');
+{
+  const bizCapH = CONSTANTS.BUSINESS_CAP_MS / 3600000;
+  const bizKeep = 1 - CONSTANTS.BUSINESS_UPKEEP_BPS / 10000;
+  // PERSONAL FRONTS: one of each kind at top tier (UNIQUE(character_id,kind)) — uncontestable, 5 collect clicks
+  let frontGross = 0, frontCapital = 0;
+  for (const b of BUSINESSES) {
+    const top = b.tiers[b.tiers.length - 1];
+    frontGross += top.incomePerHr * bizCapH;
+    frontCapital += b.tiers.reduce((s, t) => s + t.cost, 0);
+  }
+  const frontNet = frontGross * bizKeep;
+  note('stack', 'personal front stack (5 kinds, top tier, NET of pad)', `$${fmt(Math.round(frontNet))}/day`,
+    `gross $${fmt(Math.round(frontGross))}/day − ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% pad; ${bizCapH}h collect cap; build-to-here $${fmt(Math.round(frontCapital))} → payback ~${(frontCapital / frontNet).toFixed(1)}d; ENERGY-FREE (5 collect clicks/day)`);
+
+  // SPEAKEASY: one club per district, top tier, net of the sign-off upkeep — personal, additive to the fronts
+  const seTop = SPEAKEASY.TIERS[SPEAKEASY.TIERS.length - 1];
+  const seKeep = 1 - SPEAKEASY.UPKEEP_BPS / 10000;
+  const seClubNet = seTop.incomePerHr * (SPEAKEASY.INCOME_CAP_MS / 3600000) * seKeep;
+  note('stack', 'speakeasy (per club, top tier, NET)', `$${fmt(Math.round(seClubNet))}/day/club`,
+    `one club per district, additive to the fronts; safehouse-gated collect (D2)`);
+
+  // FAMILY passive (boss-collected to the treasury, not the pocket, but still a maxed-operation ceiling):
+  //   territory (6 core districts, top tier × best type), frontier tribute (5 outfits), sov income (6 tiers)
+  const tTop = TERRITORY_RACKETS[TERRITORY_RACKETS.length - 1];
+  const tMult = Math.max(...TERRITORY_TYPES.map((t) => t.incomeMult));
+  const terrDayPerDistrict = tTop.incomePerHr * tMult * (CONSTANTS.TERRITORY_CAP_MS / 3600000);
+  note('stack', 'territory rackets (family, per district, top tier × best type)', `~$${fmt(Math.round(terrDayPerDistrict))}/day/district`,
+    `×${tMult} type mult; up to 6 core districts if the family holds them — a separate, treasury-side passive stack`);
+
+  // THE VERDICT: the personal stack alone vs the measured active-grind ceiling
+  const ratio = frontNet / grindDay;
+  note('stack', 'PERSONAL passive : ACTIVE grind', `${ratio.toFixed(0)}×`,
+    `the 5-front stack ($${fmt(Math.round(frontNet))}/day, energy-free) vs the top-tier crime grind ($${fmt(Math.round(grindDay))}/day, ~200 energy-bounded attempts) — before speakeasy/territory/frontier/sov add more; the active loop is economically irrelevant at the top`);
+  note('stack', 'FLAG (founder sign-off, ground rule #1)', 'the front income CURVE is the dial, not §10.4',
+    `every front is a ledgered faucet (sweep stays drift-0), but the STACK is ~${ratio.toFixed(0)}× the active loop — recommend flattening the top-tier front incomePerHr and/or a wealth-scaled pad; NOT retuned here (BALANCE.md)`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
