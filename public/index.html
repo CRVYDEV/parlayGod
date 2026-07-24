@@ -733,6 +733,8 @@
     if (body.won !== undefined && body.feeBurned !== undefined) bits.push(body.won ? `TOOK IT OVER — the ${body.kind} is yours (they got $${fmt(body.net)})` : `the takeover was fought off — the $${fmt(body.feeBurned)} fee is gone`);
     if (body.pledged !== undefined && body.standing) bits.push(`pledged ${fmt(body.pledged)} $OMR to the treasury — ${body.standing.tier} (score ${fmt(body.standing.score)})`);
     if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
+    if (body.restored !== undefined && body.need !== undefined) bits.push(body.restored ? `the floor OVERRODE the head veto — the decree is RESTORED (${body.weight}/${body.need})` : `moved to override — the floor musters ${body.weight}/${body.need}`);
+    if (body.vetoed && body.week !== undefined) bits.push(`VETOED ${body.vetoed} at the table`);
     if (body.credited !== undefined && body.monument) bits.push(body.completed
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
@@ -1775,7 +1777,8 @@
         (sov.structures || []).some((s) => s.vulnerable))}
 
       ${sect('fam-commission', `The Commission ${mySeat ? '· seated #' + ((com.seats || []).indexOf(mySeat) + 1) : '· no seat'}`, 'the five biggest families set a weekly decree over the whole city', `
-      <div class="d" style="color:var(--dim);font-size:12.5px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · vetoed: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
+      <div class="d" style="color:var(--dim);font-size:12.5px">decree in force: <b>${com.decree?.name || com.decree?.id || 'none'}</b>${com.veto ? ` · <span style="color:var(--bad)">VETOED</span>: ${com.veto.decree} by ${com.veto.family}` : ''}</div>
+      ${com.override ? `<div class="d" style="color:var(--dim);font-size:12px;margin-top:2px">floor override: ${com.override.weight}/${com.override.need} weight ${com.override.restored ? '— <b style="color:var(--ok)">RESTORED</b> (the floor overruled the head)' : `— the head veto stands unless the floor musters ${com.override.need}`}</div>` : ''}
       <div class="grid" style="margin-top:4px">${(com.seats || []).map((s, i) => `
         <div class="card"><span class="t">#${i + 1} [${s.tag}] ${s.name}</span><div class="d">standing ${fmt(s.standing)} · weight ${s.weight}</div></div>`).join('')}</div>
       ${(com.proposals || []).length ? `<div class="d" style="margin-top:4px">motions on the table (ONLY these are votable this week): ${com.proposals.map((p) => `<span class="chip">${p.decree} — ${p.tag ? '[' + p.tag + '] ' : ''}${p.family}</span>`).join(' ')}</div>` : ''}
@@ -1783,8 +1786,12 @@
         <select id="com-decree">${(com.book || []).map((d) => `<option value="${d.id}">${d.id} — ${d.name || d.desc || ''}</option>`).join('')}</select>
         <button class="act" id="com-vote">cast the family's vote</button>
         <button class="act" id="com-propose">table a motion ($${fmt(com.proposalDeposit || 100000)} deposit)</button>
-        <button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button></div>
-        <div class="d" style="color:var(--dim);font-size:12px">a motion stakes a treasury deposit — it refunds if your decree is enacted, forfeits if the chamber goes another way</div>` : ''}`,
+        ${(com.seats || []).indexOf(mySeat) === 0 ? `<button class="act" data-do="POST /v1/commission/veto">VETO (head of the table)</button>` : ''}
+        ${(com.seats || []).indexOf(mySeat) > 0 && com.veto ? `<button class="act" data-do="POST /v1/commission/override">move to OVERRIDE the veto</button>` : ''}</div>
+        <div class="d" style="color:var(--dim);font-size:12px">a motion stakes a treasury deposit — it refunds if your decree is enacted, forfeits if the chamber goes another way. The head can VETO; a floor supermajority can OVERRIDE.</div>` : ''}
+      ${(com.record || []).length ? `<div class="d" style="color:var(--dim);font-size:12px;margin-top:6px">the record: ${com.record.map((r) => `<span class="chip">wk${r.week}: ${r.name}</span>`).join(' ')}</div>` : ''}
+      ${(com.statesmenTop || []).length ? `<div class="d" style="color:var(--dim);font-size:12px;margin-top:4px">statesmen: ${com.statesmenTop.map((s) => `<span class="chip">${s.name} · ${s.rank} (${s.statecraft})</span>`).join(' ')}</div>` : ''}
+      ${me.statesman ? `<div class="d" style="color:var(--dim);font-size:12px;margin-top:2px">your political capital: <b>${me.statesman.statecraft}</b> — ${me.statesman.rank}</div>` : ''}`,
         !!(boss && mySeat))}
 
       ${sect('fam-foundation', `The Foundation ${g.foundation ? '· ' + g.foundation : ''}`, 'the family charity — public philanthropy that softens every member\'s RICO odds', `
@@ -2429,6 +2436,7 @@
       ['POST', '/v1/territory/collect', {}], ['POST', '/v1/territory/upkeep', {}],
       ['POST', '/v1/gangs/contract/:targetId', { amount: 10000, kind: 'kill' }],
       ['GET', '/v1/commission'], ['POST', '/v1/commission/vote', { decree: 'pax' }], ['POST', '/v1/commission/veto', {}],
+      ['POST', '/v1/commission/propose', { decree: 'pax' }], ['POST', '/v1/commission/override', {}], ['GET', '/v1/leaderboard/statesmen'],
     ],
     'Kitchen': [
       ['POST', '/v1/kitchen/makings/:drugId', { qty: 1 }], ['POST', '/v1/kitchen/lab/upgrade', {}],
@@ -4266,6 +4274,7 @@
       gala: () => `${d.host} threw open the doors${d.estate ? ` at ${d.estate}` : ''} — a gala is ON tonight`,
       gala_guest: () => `${d.guest} made an entrance at your gala (${d.guests} on the list)`,
       commission_proposal: () => `${d.family || 'a seated family'} tabled a motion before the Commission: ${d.decree}`,
+      commission_override: () => `${d.family || 'a floor family'} moved to override the head's veto${d.restored ? ' — the decree is RESTORED' : ''}`,
       bracket_round: () => `the bracket cut the field — round ${d.round}, ${d.remaining} still standing`,
       ring_folded_up: () => `the ring table folded up — your $${fmt(d.cashedOut)} came home`,
       loan_forfeited: () => d.lost ? 'your pledged car was forfeited to the lender' : 'a pledged car was forfeited to you',

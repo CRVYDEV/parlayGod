@@ -116,6 +116,9 @@ export async function removeMember(client, gangId, characterId) {
     // gang's frozen vote must not govern next week from beyond the grave, invisible to the
     // board's join). Its VETO record stays — the decree it killed was killed while it lived.
     await client.query('DELETE FROM commission_votes WHERE gang_id=$1', [gangId]);
+    // Tier-4 — its OVERRIDE ballots die with it too (a dead family can't muster against the head veto).
+    // overrideWeightOf already filters by live seats so a stale row scores 0, but keep the table honest.
+    await client.query('DELETE FROM commission_overrides WHERE gang_id=$1', [gangId]);
     // R1 — the family's legit book dies with the family (status only, no §10.4 currency: the $OMR
     // that bought the shares was already burned 'rwa:invest', so nothing is stranded).
     await client.query('DELETE FROM gang_portfolios WHERE gang_id=$1', [gangId]);
@@ -1026,7 +1029,11 @@ export async function fire(ch, victim, client, h, rounds) {
     const inTransit = Math.min(Math.floor(Number(victim.bank_intransit || 0)), Math.floor(Number(victim.bank)));
     // SEASONAL MODIFIER (slate #6): BLOOD IN THE STREETS loots deeper (clamped — never past half)
     const seasonLootMult = seasonModOf().lootMult || 1;
-    const cashLootRate = Math.min(0.5, M3.CASH_LOOT_RATE * seasonLootMult);
+    // BLOOD OATH (Commission Tier-4 decree): a blood week — a fresh kill takes more off the body. One
+    // touchpoint on the CASH loot rate, threaded into runEstate so the escrow legs share the exact mult
+    // (the critique's dual-loot-site fix). Clamped ≤ 0.5 at every site so the deepen never breaches the ceiling.
+    const bloodOath = (await activeDecree(client))?.id === 'blood_oath' ? (COMMISSION.BLOOD_OATH_LOOT_MULT || 1) : 1;
+    const cashLootRate = Math.min(0.5, M3.CASH_LOOT_RATE * seasonLootMult * bloodOath);
     const pocketLoot = Math.floor(Number(victim.cash) * cashLootRate);
     const transitLoot = Math.floor(inTransit * cashLootRate);
     const loot = pocketLoot + transitLoot;
@@ -1142,7 +1149,7 @@ export async function fire(ch, victim, client, h, rounds) {
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
       await h.notify(client, w.id, 'witness', { killer: ch.name, victim: victim.name });
     await h.track(client, ch.account_id, 'kill', { rounds: fired, btk, victim: victim.id, rep: hit.repGain, directed });
-    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true });
+    const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true, bloodOathMult: bloodOath });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
       vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
@@ -1631,8 +1638,9 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // his own standing BIDS burn (the dead-funder precedent) and those auctions reopen.
   // audit #1: a PLAYER fire-kill (opts.loot) loots CASH_LOOT_RATE of the victim's live order
   // escrow to the killer — parked liquid is no longer a loot-proof vault. NPC/mod kills pass 0.
-  // (red-team) the seasonal lootMult covers EVERY fire-kill loot surface — escrow legs included
-  const estateLootRate = opts.loot ? Math.min(0.5, M3.CASH_LOOT_RATE * (seasonModOf().lootMult || 1)) : 0;
+  // (red-team) the seasonal lootMult covers EVERY fire-kill loot surface — escrow legs included; the
+  // BLOOD OATH decree mult (threaded from fire) rides the SAME clamp so the escrow legs match the pocket loot.
+  const estateLootRate = opts.loot ? Math.min(0.5, M3.CASH_LOOT_RATE * (seasonModOf().lootMult || 1) * (opts.bloodOathMult || 1)) : 0;
   const mkt = await voidListingsAtDeath(client, victim.id, opts.killerCh, estateLootRate);
   if (opts.killerCh && mkt.selfRefund) opts.killerCh.cash = Number(opts.killerCh.cash) + mkt.selfRefund;
   await burnBidsAtDeath(client, victim.id);

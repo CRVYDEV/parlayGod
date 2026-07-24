@@ -1505,11 +1505,20 @@ export const COMMISSION = {
   OPEN_SEASON_MULT: 0.5,  // safehouse stays halved
   AMNESTY_MULT: 0.5,      // laylow at half price
   LOCKDOWN_DEF: 20,       // every convoy fights +20 defense
+  // Tier-4 decree modifiers (each a bounded ONE-WEEK, ONE-TOUCHPOINT modifier on a signed lever — the
+  // modifier is itself a founder sign-off lever, not a retune of the underlying number)
+  OPEN_ROADS_MULT: 0.8,        // open_roads: convoy arrival clock ×0.8 (already wired at convoy depart)
+  PORT_INTERDICT_MULT: 0.75,   // smugglers_moon: the Coast Guard eases off ×0.75
+  BLOOD_OATH_LOOT_MULT: 1.25,  // blood_oath: a fire-kill loots more cash (clamped at the 0.5 loot ceiling)
   DECREES: [
     { id: 'open_season', name: 'Open Season', desc: 'Safehouse stays are halved city-wide. The knives come out.' },
     { id: 'pax',         name: 'The Pax',     desc: 'No new wars may be declared. Consolidation week.' },
     { id: 'amnesty',     name: 'Amnesty',     desc: 'Laying low costs half. The Commission paid the judges.' },
     { id: 'lockdown',    name: 'Lockdown',    desc: 'Every convoy rides with extra guns. The freight is protected.' },
+    // Tier-4 catalog expansion (5 → 8): three more one-week, one-touchpoint modifiers
+    { id: 'smugglers_moon', name: "Smuggler's Moon", desc: 'The Coast Guard looks the other way — sea runs land easier.' },
+    { id: 'open_roads',     name: 'Open Roads',      desc: 'The freight moves fast — convoys arrive quicker.' },
+    { id: 'blood_oath',     name: 'Blood Oath',      desc: 'A blood week — a fresh kill takes more off the body.' },
     // step three — THE LEVY: the chamber's first decree with financial teeth, built as a PURE
     // REDIRECT (zero new money): while in force, the 12h buyback's EXISTING family split (normally
     // pro-rata to the top-25 by lifetime standing) pays the SEATED chamber instead, weighted by
@@ -1523,8 +1532,21 @@ export const COMMISSION = {
   // TALLY-ENACTED decree refunds at settle; every other forfeits to the street-tax pool. Founder
   // sign-off lever.
   PROPOSAL_DEPOSIT: 100000,
+  // Tier-4 — THE STATESMAN (a survives-death political-capital legend) + THE OVERRIDE (the floor's
+  // parliamentary check on the head veto) + THE RECORD (chamber history). All status/politics — §10.4-neutral.
+  STATECRAFT_VOTE: 2, STATECRAFT_VETO: 5, STATECRAFT_PROPOSE: 3, STATECRAFT_OVERRIDE: 3, STATECRAFT_ENACTED: 15,
+  STATESMAN_RANKS: [
+    { min: 0, name: 'Ward Heeler' }, { min: 25, name: 'Fixer' }, { min: 75, name: 'Power Broker' },
+    { min: 200, name: 'Boss of Bosses' }, { min: 500, name: 'Kingmaker' }, { min: 1200, name: 'Il Capo di Tutti Capi' },
+  ],
+  OVERRIDE_WEIGHT: 7, // of the 10 non-head floor weight (4+3+2+1) — a floor supermajority overrides the head veto
+  RECORD_WEEKS: 8,    // the chamber-history scan window
 };
 export const decreeOf = (id) => COMMISSION.DECREES.find((d) => d.id === id) || null;
+export const statesmanRankOf = (n) => {
+  let r = COMMISSION.STATESMAN_RANKS[0];
+  for (const t of COMMISSION.STATESMAN_RANKS) if (Number(n || 0) >= t.min) r = t; return r;
+};
 // THE BLACK MARKET — P2P trade: cars by AUCTION (single standing bid, min-raise, optional
 // buy-now), goods FIXED-PRICE with district-pinned pickup (the market must not teleport freight
 // past the convoy game). The 2% take is carved FROM the hammer (half street tax, half burns) —

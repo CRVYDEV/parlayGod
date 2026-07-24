@@ -2130,3 +2130,11 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS laundered_lifetime NUMER
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS spec TEXT;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS spec_at TIMESTAMPTZ;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS takeover_cd_until TIMESTAMPTZ;
+
+-- THE COMMISSION Tier-4: THE STATESMAN (lifetime political capital, survives death, ranked; DIRECT SQL
+-- only, OFF persistAccount → clobber-safe) + THE OVERRIDE (seated floor families override the head veto).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS statecraft NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE commission_proposals ADD COLUMN IF NOT EXISTS proposer_account TEXT; -- bumps this account's statecraft on ENACT
+CREATE TABLE IF NOT EXISTS commission_overrides (
+  week INT NOT NULL, gang_id TEXT NOT NULL, PRIMARY KEY (week, gang_id)
+);

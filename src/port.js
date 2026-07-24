@@ -9,8 +9,9 @@
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
 import { GameError, bus } from './game.js';
-import { PORT, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf } from './rules.js';
+import { PORT, COMMISSION, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf } from './rules.js';
 import { logCollect } from './collection.js';
+import { activeDecree } from './commission.js';
 
 // THE SMUGGLER'S LEGEND — lifetime contraband value landed, account-level (survives death — the boxing/
 // wheel/war-effort precedent). Direct SQL on the account (NUMERIC, arith-safe); status only, no §10.4.
@@ -157,8 +158,12 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   if (new Date(boat.run_until) > new Date()) throw new GameError('at_sea', 'Still out on the water — check the ETA.');
   const route = portRouteOf(boat.run_route), spec = boatOf(boat.kind);
   const patrolMod = cityHourOf(Date.now()).patrol ? 15 : -10; // the Coast Guard works patrol hours; the small hours are safer
-  const p = process.env.PORT_INTERDICT_P != null ? Number(process.env.PORT_INTERDICT_P)
+  let p = process.env.PORT_INTERDICT_P != null ? Number(process.env.PORT_INTERDICT_P)
     : interdictChance(route, { speed: effSpeed(boat, spec) }, boat.run_escort, patrolMod);
+  // SMUGGLER'S MOON (Commission decree): the Coast Guard looks the other way — interdiction ×PORT_INTERDICT_MULT
+  // this week (one touchpoint; the test-pinned p is left alone so the roll knob stays deterministic).
+  if (process.env.PORT_INTERDICT_P == null && (await activeDecree(client))?.id === 'smugglers_moon')
+    p *= COMMISSION.PORT_INTERDICT_MULT;
   const roll = Math.random();
   await h.rngLog(client, ch.id, `port:${route.id}`, roll, roll < p ? 'interdicted' : 'clean');
   const clearRun = async () => {
