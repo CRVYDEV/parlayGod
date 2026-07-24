@@ -752,49 +752,61 @@ export function view(ch, acct = {}, owned = {}) {
 }
 
 // ── §7.2 CRIME ──
-export function doCrime(ch, crimeId, client, h) {
+export function doCrime(ch, crimeId, client, h, approach) {
   const c = CRIMES.find((x) => x.id === crimeId);
   if (!c) throw new GameError('bad_crime', 'No such job.');
   const lvl = levelOf(Number(ch.respect));
   if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'You are in lockup.');
   if (lvl < c.lvl) throw new GameError('level', `That job needs level ${c.lvl}.`);
   if (Number(ch.nerve) < c.nerve) throw new GameError('nerve', `Takes ${c.nerve} nerve.`);
+  // D6a — THE APPROACH: the per-job risk/reward choice. An unknown/omitted approach falls back to
+  // 'standard' (the signed baseline, byte-identical to the old single-click behaviour). Cash EV is
+  // held ~flat by payMult ≈ 1/successMult, so the §7.2 cash faucet is untouched; the choice moves the
+  // secondary axes (variance, materials, rep, heat, bust severity).
+  const ap = M3.CRIME_APPROACHES[approach] || M3.CRIME_APPROACHES.standard;
   ch.nerve = Number(ch.nerve) - c.nerve;
+  // Going LOUD is noisy whether you get away or not — it draws law heat on the attempt (feeds the RICO
+  // meter). Quiet/standard add none. Clamped [0,100] like every other heat bump.
+  if (ap.heat) ch.heat = Math.min(100, Number(ch.heat || 0) + ap.heat);
   const ev = cityEventOf(dayOf());
   const rIdx = rankIdxOf(lvl);
   const held = h.owned?.held || [];
   const eff = (s) => effStat(ch[s], s, h.owned?.assets || [], h.owned?.gear || []);
-  // §7.2 full chance: stats + gang level (treasury tiers) + Brick Yards turf + rank
+  // §7.2 full chance: stats + gang level (treasury tiers) + Brick Yards turf + rank, then the approach
+  // (quiet safer / loud riskier), all under the same 0.97 ceiling so quiet's edge tapers for a maxed street.
   const gangLevel = h.owned?.gang ? gangLevelOf(h.owned.gang.treasury) : 0;
-  const chance = Math.min(0.97, c.base + eff('cunning') * 0.004 + eff('speed') * 0.002
-    + gangLevel * 0.02 + (held.includes('brick') ? 0.02 : 0) + (rIdx >= 9 ? 0.02 : 0));
+  const chance = Math.min(0.97, (c.base + eff('cunning') * 0.004 + eff('speed') * 0.002
+    + gangLevel * 0.02 + (held.includes('brick') ? 0.02 : 0) + (rIdx >= 9 ? 0.02 : 0)) * ap.successMult);
   const roll = Math.random();
   return (async () => {
     // SOLDIERS: the assigned, fit second rides along (assists + takes a cut + carries the risk)
     const second = await assignedSoldier(client, ch.id);
     if (roll < chance) {
+      // THE APPROACH pay: payMult ≈ 1/successMult keeps cash EV flat; loud may carry a founder-set
+      // cash premium (default 1.0 = EV-neutral). Rides the same crime:<id> faucet (ledgered==credited).
+      const payM = ap.payMult * (ap.id === 'loud' ? (M3.CRIME_LOUD_CASH_PREMIUM ?? 1) : 1);
       let take = Math.floor((c.cash[0] + Math.random() * (c.cash[1] - c.cash[0]))
         * (held.includes('canal') ? 1.1 : 1)                       // Canal Row turf +10%
         * (rIdx >= 1 ? 1.05 : 1) * (rIdx >= 8 ? 1.10 : 1)
-        * roleMultOf(h.owned?.gangRole) * (ev.jobPay || 1));
+        * roleMultOf(h.owned?.gangRole) * (ev.jobPay || 1) * payM);
       // the second's cut comes OFF THE TOP before the books — the crime faucet only SHRINKS
       // (ledgered amount == credited amount; strictly §10.4-safe, no new reason)
       let soldierCut = 0;
       if (second) { soldierCut = Math.floor(take * SOLDIERS.CUT_BPS / 10000); take -= soldierCut; }
-      const rep = Math.round(c.respect * (ev.crimeRep || 1));
+      const rep = Math.round(c.respect * (ev.crimeRep || 1) * ap.repMult);
       ch.cash = Number(ch.cash) + take; ch.respect = Number(ch.respect) + rep; ch.lc_crime += 1;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: `crime:${c.id}` });
-      // §7.2 contraband crates: Docks turf ×1.5, event cbMult; feed the workshop/exchange
-      const pCrate = (0.25 + Number(ch.nerve) * 0.02) * (ev.cbMult || 1) * (held.includes('docks') ? 1.5 : 1);
+      // §7.2 contraband crates: Docks turf ×1.5, event cbMult, the approach (loud grabs more, quiet less)
+      const pCrate = (0.25 + Number(ch.nerve) * 0.02) * (ev.cbMult || 1) * (held.includes('docks') ? 1.5 : 1) * ap.crateMult;
       let crates = 0;
       if (Math.random() < pCrate) {
         crates = 1 + Math.floor(Number(ch.nerve) / 8);
         ch.cb = Number(ch.cb || 0) + crates;
         await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: crates, reason: `crime:${c.id}:cb` });
       }
-      // §7.2 makings drop: P = 0.15, a random unlocked line, 1 + floor(nerve/6) units
+      // §7.2 makings drop: P = 0.15 × the approach (loud +50% / quiet −50%), a random unlocked line
       let makingsDrop = null;
-      if (Math.random() < 0.15) {
+      if (Math.random() < 0.15 * ap.makingsMult) {
         const unlocked = DRUGS.filter((d) => tradeRankIdx(Number(ch.trade_rep || 0)) >= d.unlock);
         if (unlocked.length) {
           const d = unlocked[Math.floor(Math.random() * unlocked.length)];
@@ -845,12 +857,13 @@ export function doCrime(ch, crimeId, client, h) {
           }
         }
       } catch { /* the trail is a bonus, never a blocker */ }
-      return { ok: true, success: true, take, rep, crates, makingsDrop, clue,
+      return { ok: true, success: true, approach: ap.id, take, rep, crates, makingsDrop, clue,
         soldier: soldier ? { ...soldier, cut: soldierCut } : null };
     }
     // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever.
     // A WHEELMAN soldier stacks the same way (a second behind the wheel — SOLDIERS sign-off lever).
-    const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1)
+    // THE APPROACH: a loud bust does harder time (jailMult 1.4), a cased job softer (0.8).
+    const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1) * ap.jailMult
       * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT)
       * (second?.trait === 'wheelman' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
@@ -858,7 +871,7 @@ export function doCrime(ch, crimeId, client, h) {
     await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: false });
     // the bust is the RISKY outcome — the second can get hurt, or worse
     const soldier = second ? await soldierResult(client, h, ch, second, { success: false, cause: 'busted on a job' }) : null;
-    return { ok: true, success: false, jailSeconds: jailS, soldier };
+    return { ok: true, success: false, approach: ap.id, jailSeconds: jailS, soldier };
   })();
 }
 

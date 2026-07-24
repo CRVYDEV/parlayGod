@@ -1882,3 +1882,17 @@ NPC-hunter carry the `omr` decrement in their hand-rolled persists). Dial: `DEAT
 **SIGN-OFF:** the duty concentrates nothing (it's a pure deflationary $OMR sink — it helps
 extraction≤inflow) but it *does* make repeated death a real $OMR cost; sim the effect on a high-death-rate
 PvP player's extraction runway before production.
+
+## THE APPROACH (D6a — the crime risk/reward choice) — founder sign-off flags
+Every job now takes a per-job choice (Case It / Standard / Go Loud), `M3.CRIME_APPROACHES`. **The CASH
+faucet is EV-NEUTRAL by construction** (`payMult ≈ 1/successMult`) — the sim-signed §7.2 crime cash curve
+is UNTOUCHED, and the default/omitted approach IS 'standard' (byte-identical to the old behaviour, so the
+sim's measurement holds). The choice differentiates on the SECONDARY axes, which ARE sign-off levers (sim
+before production): **materials** (loud crateMult 1.6 / makingsMult 1.5 vs quiet 0.5 — a cb/makings
+emission shift, still fully ledgered so §10.4 stays exact, but it changes workshop/kitchen input supply);
+**rep** (loud ×1.15 — a mild leveling-speed nudge, status not a §10.4 currency); **heat** (loud +6 on the
+attempt → feeds the RICO meter — an opt-in downside the player chose); **bust severity** (loud jailMult 1.4
+/ quiet 0.8). `CRIME_LOUD_CASH_PREMIUM` (default 1.0 = EV-neutral) is the dial if Go Loud should pay a real
+cash premium (>1 makes it a genuine faucet change → needs its own sim + sign-off). Recommendation: KEEP the
+EV-neutral default; sim the cb/makings emission delta from loud-spamming (bounded by nerve + the bust risk +
+the heat it draws) before production.

@@ -26,6 +26,28 @@ assert(successes > 0, 'at least one clean job');
 me = (await call('GET', '/v1/me', { token })).body.character;
 assert(me.respect > 0, 'respect earned');
 
+// D6a — THE APPROACH: the per-job risk/reward choice (Case It / Standard / Go Loud).
+// The three-way picker is public on /v1/rules; the server stays the referee.
+const rules = (await call('GET', '/v1/rules', { token })).body;
+assert.deepEqual(rules.crimeApproaches.map((a) => a.id), ['quiet', 'standard', 'loud'], 'the three approaches surface on /v1/rules');
+// wait for nerve to regen if the loop above spent it, then take a fresh reading
+async function tillNerve(min) { for (let i = 0; i < 40; i++) { const c = (await call('GET', '/v1/me', { token })).body.character; if (Number(c.nerve) >= min) return c; await app.pool.query("UPDATE characters SET nerve=10 WHERE id=$1", [c.id]); } return (await call('GET', '/v1/me', { token })).body.character; }
+let pre = await tillNerve(1);
+// GO LOUD adds law heat whether you get away or not (feeds the RICO meter); the response carries the approach
+const loud = await call('POST', '/v1/crimes/pick', { token, body: { approach: 'loud' } });
+assert.equal(loud.code, 200, 'a loud job runs');
+assert.equal(loud.body.approach, 'loud', 'the response echoes the chosen approach');
+let post = (await call('GET', '/v1/me', { token })).body.character;
+assert.equal(post.heat, Math.min(100, pre.heat + rules.crimeApproaches.find((a) => a.id === 'loud').heat), 'Go Loud drew law heat on the attempt');
+// STANDARD (and an unknown approach → standard fallback) draws no heat
+pre = await tillNerve(1);
+const std = await call('POST', '/v1/crimes/pick', { token, body: { approach: 'nonsense' } });
+assert.equal(std.code, 200, 'an unknown approach falls back to standard (no 400)');
+assert.equal(std.body.approach, 'standard', 'the unknown approach resolved to standard');
+post = (await call('GET', '/v1/me', { token })).body.character;
+assert.equal(post.heat, pre.heat, 'standard/fallback adds no heat');
+me = (await call('GET', '/v1/me', { token })).body.character;
+
 // train (energy check), bank round trip, travel, checkin
 assert.equal((await call('POST', '/v1/train/muscle', { token })).code, 200);
 assert.equal((await call('POST', '/v1/bank/deposit', { token, body: { amount: 200 } })).code, 200);

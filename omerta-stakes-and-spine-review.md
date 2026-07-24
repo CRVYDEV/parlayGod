@@ -145,16 +145,25 @@ collect + watch cooldowns + place a bet). Most of the "depth" is accounting dept
 player never sees, not decision depth.
 
 This isn't a bug to fix; it's a **direction call**. The honest options:
-- **D6a — stop adding systems, deepen one core verb.** Give *crime* a real decision (risk/reward
-  choice per job: go loud for more cash + heat, or quiet; pick a crew loadout). One verb with a
-  meaningful choice beats a 36th system.
+- **D6a — stop adding systems, deepen one core verb. ✅ BUILT — THE APPROACH.** Every job now takes a
+  per-job risk/reward CHOICE — **Case It** (quiet: safer, no heat, soft bust — the play when you're near
+  a RICO indictment or can't afford lockup), **Standard** (the signed baseline), or **Go Loud** (bigger
+  single score + more contraband/makings + rep, but draws law heat and a harder bust). The design
+  constraint kept it a *decision, not a rebalance*: the CASH faucet is **EV-neutral by construction**
+  (`payMult ≈ 1/successMult`), so the sim-signed §7.2 cash curve is untouched (the sim measures
+  'standard'; an omitted/unknown approach IS standard, byte-identical to the old one-click behaviour).
+  The choice bites on the secondary axes (variance, materials, rep, heat, bust severity) — and it teaches
+  the Law/RICO interaction (loud is how you *feel* the heat system in the early loop). `M3.CRIME_APPROACHES`
+  + `CRIME_LOUD_CASH_PREMIUM` (the dial if loud should pay a real cash premium); `POST /v1/crimes/:id
+  {approach}`; three-way console picker; smoke-test coverage. **DONE.**
 - **D6b — accept it as an idle/collection game** and lean in (the systems ARE the content; the loop is
   collection + status). Then #1/#2/#3 matter *more*, because collection-game economies live or die on
-  their sink/faucet balance and their status spine.
+  their sink/faucet balance and their status spine. *(Still the honest framing of what the game largely
+  is — THE APPROACH adds decision depth to the entry verb without pretending the whole game is twitch.)*
 
-Recommendation: **D6b is what the game actually is** — so the priority is fixing the economy (#1) and
-giving it a spine (#4, below), not injecting twitch depth. If Jorge wants more *game*, **D6a on the
-crime loop** is the highest-leverage single addition.
+Recommendation: **D6b is what the game actually is** — so #1 (economy) and #4 (the spine) were the
+priority (both now built). D6a on the crime loop was the highest-leverage single *game* addition, so it
+shipped too (THE APPROACH). The other verbs (endgame collect/bet) stay idle-shaped by design.
 
 ---
 
@@ -186,7 +195,7 @@ crime loop** is the highest-leverage single addition.
 | 3 | PvP is −EV and opt-out-able | **L3a/L3b/L3c ALL BUILT** | the Sacking + the Shield Cap + the Contract's Bullets — done |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
-| 6 | breadth ≫ depth | **PROPOSED** | choose D6a (deepen crime) or D6b (embrace collection) |
+| 6 | breadth ≫ depth | **D6a BUILT** | THE APPROACH — a per-job risk/reward choice, cash-EV-neutral; D6b remains the honest framing |
 | 7 | consistency snags | **VERIFIED / shipped** | (cooldown-window rhythm = a tuning call) |
 
 **The one thing to take away:** #1, #2, #3 are the same problem, and **L3a — make passive wealth
