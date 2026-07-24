@@ -18,6 +18,7 @@ import * as Diplomacy from './diplomacy.js';
 import * as Sov from './sov.js';
 import * as Campaigns from './campaigns.js';
 import * as Bloodline from './bloodline.js';
+import * as Honor from './honor.js';
 import * as Dynasty from './dynasty.js';
 import * as Soldiers from './soldiers.js';
 import * as Secrets from './secrets.js';
@@ -1870,6 +1871,8 @@ export async function buildServer() {
   app.get('/v1/bloodline', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
   app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
+  // FIVE PILLARS → Tier 4 — THE REPUTATION BOARDS (the honor legend: Men of Honor + the Most Feared)
+  app.get('/v1/leaderboard/honor', async () => Honor.honorLeaderboard(pool));
   // DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3 — account-level ties on the Bloodline)
   app.get('/v1/dynasty', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.dynastyBoard(ch, client)));

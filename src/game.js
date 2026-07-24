@@ -676,8 +676,11 @@ export function view(ch, acct = {}, owned = {}) {
       + (owned.skills?.has('pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
       + (owned.skills?.has('road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0),
     skills: [...(owned.skills || [])],
-    // FIVE PILLARS #1 — the honor axis (Fable): the value + tier the world reads you by
-    honor: { value: Number(ch.honor || 0), tier: honorTierOf(ch.honor || 0).name },
+    // FIVE PILLARS #1 — the honor axis (Fable): the value + tier the world reads you by, plus the
+    // Tier-4 bloodline LEGEND (the dynasty's high-water honor + deepest infamy — survives death)
+    honor: { value: Number(ch.honor || 0), tier: honorTierOf(ch.honor || 0).name,
+      peak: Number(acct?.honor_peak || 0), peakTier: honorTierOf(acct?.honor_peak || 0).name,
+      low: Number(acct?.honor_low || 0), lowTier: honorTierOf(acct?.honor_low || 0).name },
     // (red-team R5) mirror pointsOf() — total = level-derived + the prestige bonus the learn-gate grants;
     // the display had omitted the prestige points, under-reporting a prestiged bloodline's real budget.
     skillPoints: (() => {

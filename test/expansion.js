@@ -33,6 +33,8 @@ const mk = async (base) => {
 };
 const setHonor = (id, n) => pool.query(`UPDATE characters SET honor=${n} WHERE id='${id}'`);
 const honorOf = async (id) => Number((await pool.query(`SELECT honor FROM characters WHERE id='${id}'`)).rows[0].honor);
+const acctHonorLow = async (id) => Number((await pool.query(`SELECT honor_low FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`)).rows[0].honor_low);
+const setAcctPeak = (id, n) => pool.query(`UPDATE account_persistent SET honor_peak=${n} WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`);
 const setCash = (id, n) => pool.query(`UPDATE characters SET cash=${n} WHERE id='${id}'`);
 const setRespect = (id, n) => pool.query(`UPDATE characters SET respect=${n} WHERE id='${id}'`);
 // found a family for a character + return the gang id (the standard test path)
@@ -56,7 +58,12 @@ const found = async (t, tag) => {
   // the bump is clamped in SQL for the sweep path; here confirm the tier ladder resolves top + bottom
   await setHonor(a.id, 80); assert.equal((await meOf(a.token)).honor.tier, 'Man of Honor', 'high honor → Man of Honor');
   await setHonor(a.id, -80); assert.equal((await meOf(a.token)).honor.tier, 'Mad Dog', 'deep infamy → Mad Dog');
-  console.log('✓ honor axis + tiers');
+  // Tier-4 — the ladder scaled 5→7: the two new extreme tiers resolve, and the view carries the LEGEND fields
+  await setHonor(a.id, 95); assert.equal((await meOf(a.token)).honor.tier, 'The Untouchable', 'the new apex tier');
+  await setHonor(a.id, -95); assert.equal((await meOf(a.token)).honor.tier, 'Monster', 'the new nadir tier');
+  const hv = (await meOf(a.token)).honor;
+  assert('peak' in hv && 'low' in hv, 'the view carries the honor legend (peak/low)');
+  console.log('✓ honor axis + tiers (5→7 ladder + legend fields)');
 }
 
 // ═══ #1 teeth: Mad Dog can't hire a bodyguard ═══
@@ -94,9 +101,17 @@ let gA, gB, bossA, bossB;
   assert.equal(r.code, 200, `break pact: ${JSON.stringify(r.body)}`);
   assert.ok(r.body.oathbreak, 'breaking a sworn pact is the oathbreak');
   assert.equal(await honorOf(bossA.id), h0 + HONOR.OATHBREAK, 'the breaker eats the honor hit');
+  // Tier-4 — the honor LEGEND captured the infamy: bumpHonor recorded the account's deepest low
+  assert.equal(await acctHonorLow(bossA.id), h0 + HONOR.OATHBREAK, 'the bloodline honor legend recorded the oathbreak low');
   const b2 = (await call('GET', '/v1/diplomacy', { token: bossA.token })).body;
   assert.ok(b2.oathbreaker, 'the family wears the oathbreaker mark');
-  console.log('✓ pacts: propose/accept/block-war/oathbreak');
+  // Tier-4 — THE REPUTATION BOARDS: seed a high peak (setHonor doesn't bump; the board reads the legend
+  // columns directly), then both lists resolve — the man of honor + the oathbreaker as the most feared
+  await setAcctPeak(bossB.id, 95);
+  const rep = (await call('GET', '/v1/leaderboard/honor', { token: bossA.token })).body;
+  assert(rep.menOfHonor.some((m) => m.name === bossB.name && m.tier === 'The Untouchable'), 'the man of honor tops his board');
+  assert(rep.mostFeared.some((m) => m.name === bossA.name && m.low <= HONOR.OATHBREAK), 'the oathbreaker is on the most-feared board');
+  console.log('✓ pacts: propose/accept/block-war/oathbreak + the honor legend + reputation boards');
 }
 
 // ═══ #2 COALITIONS — dominance gate + the member war discount ═══

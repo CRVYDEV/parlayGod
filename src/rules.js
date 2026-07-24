@@ -2613,8 +2613,11 @@ export const freshWindowMs = () => Number(process.env.FRESH_WINDOW_MS ?? 48 * 36
 // a founder sign-off lever. #1 honor / #2 diplomacy / #3 sovereignty / #4 campaigns / #5 bloodline. ═══
 export const HONOR = {
   MIN: -100, MAX: 100,
-  TIERS: [ { min: -100, name: 'Mad Dog' }, { min: -60, name: 'Ruthless' }, { min: -20, name: 'Unproven' },
-           { min: 20, name: 'Respected' }, { min: 60, name: 'Man of Honor' } ],
+  // Tier-4 — the ladder scales 5→7 (Monster / The Untouchable at the extremes; the middle five
+  // are unchanged, so the DREADED −60 / TRUSTED 60 teeth thresholds still land on the same tiers).
+  TIERS: [ { min: -100, name: 'Monster' }, { min: -80, name: 'Mad Dog' }, { min: -60, name: 'Ruthless' },
+           { min: -20, name: 'Unproven' }, { min: 20, name: 'Respected' }, { min: 60, name: 'Man of Honor' },
+           { min: 90, name: 'The Untouchable' } ],
   // deed deltas — single touchpoints at existing sites (the discounted/bumped number is the event)
   REPAY: 2, BODYGUARD_SAVE: 8, VENDETTA_SETTLE: 10,
   WELSH: -15, RAT: -30, SHANK: -12, NPC_HIT: -5, OATHBREAK: -20,
