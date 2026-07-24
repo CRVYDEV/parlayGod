@@ -13,10 +13,24 @@
 // therefore settles lazily in the OWNER's own collect transaction, never the ambusher's).
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
-import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, guardTierOf, DISTRICTS, GOODS, goodPriceOf } from './rules.js';
+import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf } from './rules.js';
 import { activeDecree } from './commission.js';
 
 const uid = () => crypto.randomUUID();
+
+// THE TEAMSTER / THE HIGHWAYMAN legends (Tier-4) — lifetime clean-delivered / hijacked value. Pure
+// STATUS (account-level, survives death; NUMERIC arith → pg-mem-safe; off persistAccount's list, so
+// clobber-safe). Bumps the ACTOR's OWN already-actor-locked account as a leaf write (the port
+// bumpSmuggled posture) + logs a haul for the read-derived weekly contest. Gated at LEGEND_MIN_LVL.
+async function bumpFreight(client, ch, kind, value) {
+  if (levelOf(Number(ch.respect)) < CONVOY.LEGEND_MIN_LVL) return;
+  const v = Math.floor(Math.max(0, Number(value) || 0));
+  if (v <= 0) return;
+  const col = kind === 'hijack' ? 'freight_hijacked' : 'freight_delivered';
+  await client.query(`UPDATE account_persistent SET ${col} = ${col} + $1 WHERE account_id=$2`, [v, ch.account_id]);
+  await client.query('INSERT INTO convoy_hauls (id, account_id, kind, value) VALUES ($1,$2,$3,$4)', [uid(), ch.account_id, kind, v]);
+}
 const rand = (n) => Math.random() * n;
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -111,11 +125,19 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
     await client.query('UPDATE convoy_insurance SET pool=$1 WHERE id=1', [Number(pool.pool) + premium]);
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -premium, reason: 'convoy:insure' });
   }
+  // THE RIG (Tier-4): a built hauler adds ARMOR to the guard defense and an ENGINE transit-cut.
+  // Composes multiplicatively with ROAD CAPTAIN (skills) + OPEN_ROADS (Commission decree, if any).
+  const rig = (await client.query('SELECT * FROM rigs WHERE character_id=$1', [ch.id])).rows[0];
+  const rigCfg = rig ? rigOf(rig.kind) : null;
+  const rigArmor = rigCfg ? rigCfg.armor + Number(rig.armor_lvl || 0) * CONVOY.RIG_ARMOR_STEP : 0;
+  const rigSpeedBps = rigCfg ? Math.min(CONVOY.RIG_SPEED_CAP_BPS, rigCfg.speedBps + Number(rig.engine_lvl || 0) * CONVOY.RIG_ENGINE_STEP_BPS) : 0;
+  // OPEN_ROADS decree (Commission Tier-4): the roads move quicker for everyone this week (COMMISSION.OPEN_ROADS_MULT if armed, else 1)
+  const openRoads = (await activeDecree(client))?.id === 'open_roads' ? (COMMISSION.OPEN_ROADS_MULT || 1) : 1;
   // ROAD CAPTAIN (skills): the wheelman's convoys run faster — a new modifier, sign-off lever
-  const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT));
+  const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT) * (1 - rigSpeedBps / 10000) * openRoads);
   const arrivesAt = new Date(Date.now() + rideMs);
   await client.query("UPDATE convoys SET status='transit', guards=$2, owner_gang=$3, insured=$4, departed_at=now(), arrives_at=$5 WHERE id=$1",
-    [convoy.id, tier.def, h.owned.gangId || null, !!premium, arrivesAt]);
+    [convoy.id, tier.def + rigArmor, h.owned.gangId || null, !!premium, arrivesAt]);
   const band = valueBand(value);
   bus.emit('streets', { type: 'convoy', from: convoy.origin, to: convoy.destination, band });
   await bumpStanding(client, h, ch, 'harbor', 2, { action: 'depart' }); // freight on the water is Big Tuna's business
@@ -210,6 +232,7 @@ export async function ambushConvoy(ch, convoyId, client, h) {
     // own transaction; an ambush never touches the owner's character row). No money moves here.
     if (c.insured && lossValue > 0)
       await client.query('UPDATE convoys SET insured_loss=$2 WHERE id=$1', [convoyId, Number(c.insured_loss || 0) + lossValue]);
+    await bumpFreight(client, ch, 'hijack', lossValue); // THE HIGHWAYMAN legend (Tier-4) — the value taken off the road
     if (c.owner_character) await h.notify(client, c.owner_character, 'convoy_hit', { from: c.origin, to: c.destination, taken }); // NPC convoys have no owner to notify (step three)
     bus.emit('streets', { type: 'convoy_hijacked', by: ch.name, from: c.origin, to: c.destination });
     await h.track(client, ch.account_id, 'convoy_ambush', { win: true, taken });
@@ -251,6 +274,7 @@ export async function collectConvoy(ch, convoyId, client, h) {
       await client.query('UPDATE convoy_cargo SET qty = $3 WHERE convoy_id=$1 AND good_id=$2', [convoyId, m.good_id, Number(m.qty) - grab]);
     }
   }
+  await bumpFreight(client, ch, 'deliver', collectedValue); // THE TEAMSTER legend (Tier-4) — clean freight landed
   // the destination toll: the family holding these docks takes its cut of what YOU collect
   // (unheld docks — and the family you SHIPPED UNDER (the depart snapshot, so a last-minute
   // join can't dodge it) — are free). The toll reaches pocket THEN bank (the raid-fine
@@ -350,6 +374,72 @@ export async function despawnArrivedNpc(pool) {
   return { despawned };
 }
 
+// ── Tier-4 THE RIG — a buyable hauler + armor/engine upgrades (cash SINKS on the convoy: prefix) ──
+export async function buyRig(ch, kind, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No shopping for trucks from lockup.');
+  const cfg = rigOf(kind);
+  if (!cfg) throw new GameError('bad_rig', 'No such rig — Panel Van, Box Truck, Armored Hauler, The Semi.');
+  if (levelOf(Number(ch.respect)) < cfg.minLvl) throw new GameError('level', `The ${cfg.name} is for level ${cfg.minLvl}+.`);
+  if ((await client.query('SELECT 1 FROM rigs WHERE character_id=$1', [ch.id])).rows[0])
+    throw new GameError('already', 'You run one rig — sell the old one first (well, you would if we let you; trade up later).');
+  if (Number(ch.cash) < cfg.cost) throw new GameError('cash', `The ${cfg.name} runs $${cfg.cost}.`);
+  ch.cash = Number(ch.cash) - cfg.cost;
+  await client.query('INSERT INTO rigs (character_id, kind) VALUES ($1,$2)', [ch.id, cfg.id]);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cfg.cost, reason: 'convoy:rig' });
+  return { ok: true, rig: cfg.id, name: cfg.name, cost: cfg.cost };
+}
+
+export async function upgradeRig(ch, track, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No wrenching from lockup.');
+  const t = track === 'engine' ? 'engine' : 'armor';
+  const rig = (await client.query('SELECT * FROM rigs WHERE character_id=$1 FOR UPDATE', [ch.id])).rows[0];
+  if (!rig) throw new GameError('no_rig', 'Buy a rig first.');
+  const lvlCol = t === 'engine' ? 'engine_lvl' : 'armor_lvl';
+  const cur = Number(rig[lvlCol] || 0);
+  if (cur >= CONVOY.RIG_UPGRADE_MAX) throw new GameError('maxed', `The ${t} is as built as it gets.`);
+  const cost = rigUpgradeCost(rigOf(rig.kind), cur);
+  if (Number(ch.cash) < cost) throw new GameError('cash', `The next ${t} level runs $${cost}.`);
+  ch.cash = Number(ch.cash) - cost;
+  await client.query(`UPDATE rigs SET ${lvlCol}=$2 WHERE character_id=$1`, [ch.id, cur + 1]); // ABSOLUTE write (pg-mem INT-arith quirk)
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'convoy:rig:up' });
+  return { ok: true, track: t, level: cur + 1, cost };
+}
+
+// THE TWO LEADERBOARDS (Tier-4) — the biggest lifetime haulers + highwaymen (agents excluded). Status.
+export async function convoyLeaderboard(pool) {
+  const q = async (col) => (await pool.query(
+    `SELECT a.${col} v, c.name FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+      WHERE a.${col} > 0 AND NOT a.agent_flag ORDER BY a.${col} DESC, c.name LIMIT 15`)).rows;
+  const teamsters = (await q('freight_delivered')).map((r, i) => ({ pos: i + 1, name: r.name, value: Number(r.v), rank: haulerRankOf(r.v).title }));
+  const highwaymen = (await q('freight_hijacked')).map((r, i) => ({ pos: i + 1, name: r.name, value: Number(r.v), rank: banditRankOf(r.v).title }));
+  return { teamsters, highwaymen };
+}
+
+// worker sweep — drop stale haul-log rows (the weekly-contest reads window-filter, so a missed sweep is only bloat)
+export async function sweepConvoyHauls(pool) {
+  const r = await pool.query('DELETE FROM convoy_hauls WHERE at < now() - $1::interval',
+    [`${Math.floor(CONVOY.HAULS_RETENTION_MS / 1000)} seconds`]);
+  return { swept: r.rowCount || 0 };
+}
+
+// the read-derived weekly contest leader (Road Boss = most hijacked this week / Teamster = most delivered).
+// Flat query + JS aggregate — pg-mem chokes on a GROUP BY aggregate with a joined alias (the /v1/gangs
+// precedent), so sum per account in JS. Agents excluded; a line with no living character is skipped.
+async function topWeek(pool, kind) {
+  const since = new Date(Date.now() - CONVOY.CONTEST_WINDOW_MS);
+  const rows = (await pool.query('SELECT account_id, value FROM convoy_hauls WHERE kind=$1 AND at > $2', [kind, since])).rows;
+  if (!rows.length) return null;
+  const agents = new Set((await pool.query('SELECT account_id FROM account_persistent WHERE agent_flag')).rows.map((a) => a.account_id));
+  const tally = {};
+  for (const r of rows) { if (agents.has(r.account_id)) continue; tally[r.account_id] = (tally[r.account_id] || 0) + Number(r.value); }
+  const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+  if (!top) return null;
+  const who = (await pool.query('SELECT name FROM characters WHERE account_id=$1 AND alive LIMIT 1', [top[0]])).rows[0];
+  if (!who) return null;
+  return { name: who.name, value: Math.floor(top[1]) };
+}
+
 export async function convoyBoard(pool, characterId) {
   const rows = (await pool.query(
     `SELECT c.*, ch.name AS owner FROM convoys c JOIN characters ch ON ch.id = c.owner_character
@@ -378,8 +468,28 @@ export async function convoyBoard(pool, characterId) {
       insuranceDue: mine.insured ? Math.floor(Number(mine.insured_loss || 0) * CONVOY.INSURE_PAYOUT_BPS / 10000) : 0,
       arrivesSeconds: mine.arrives_at ? Math.max(0, Math.ceil((new Date(mine.arrives_at) - Date.now()) / 1000)) : null };
   }
+  // Tier-4 — the caller's two legends + their rig + the read-derived weekly contest + the rig catalog
+  const acct = (await pool.query(
+    'SELECT ap.freight_delivered, ap.freight_hijacked FROM account_persistent ap JOIN characters c ON c.account_id=ap.account_id WHERE c.id=$1',
+    [characterId])).rows[0] || {};
+  const rigRow = (await pool.query('SELECT * FROM rigs WHERE character_id=$1', [characterId])).rows[0];
+  let rig = null;
+  if (rigRow) {
+    const cfg = rigOf(rigRow.kind) || {};
+    rig = { kind: rigRow.kind, name: cfg.name, armorLvl: Number(rigRow.armor_lvl || 0), engineLvl: Number(rigRow.engine_lvl || 0),
+      armorDef: (cfg.armor || 0) + Number(rigRow.armor_lvl || 0) * CONVOY.RIG_ARMOR_STEP,
+      speedBps: Math.min(CONVOY.RIG_SPEED_CAP_BPS, (cfg.speedBps || 0) + Number(rigRow.engine_lvl || 0) * CONVOY.RIG_ENGINE_STEP_BPS),
+      max: CONVOY.RIG_UPGRADE_MAX,
+      nextArmorCost: Number(rigRow.armor_lvl || 0) < CONVOY.RIG_UPGRADE_MAX ? rigUpgradeCost(cfg, Number(rigRow.armor_lvl || 0)) : null,
+      nextEngineCost: Number(rigRow.engine_lvl || 0) < CONVOY.RIG_UPGRADE_MAX ? rigUpgradeCost(cfg, Number(rigRow.engine_lvl || 0)) : null };
+  }
+  const [roadBoss, teamsterOfWeek] = await Promise.all([topWeek(pool, 'hijack'), topWeek(pool, 'deliver')]);
+  const delivered = Number(acct.freight_delivered || 0), hijacked = Number(acct.freight_hijacked || 0);
   return { guardTiers: CONVOY.GUARD_TIERS, minQty: CONVOY.MIN_QTY,
     maxAmbushes: CONVOY.MAX_AMBUSHES, tollBps: CONVOY.TOLL_BPS,
     insureBps: CONVOY.INSURE_BPS, insurePayoutBps: CONVOY.INSURE_PAYOUT_BPS,
-    inTransit, mine: my };
+    inTransit, mine: my,
+    legend: { delivered, hauler: haulerRankOf(delivered).title, hijacked, bandit: banditRankOf(hijacked).title },
+    rig, rigs: CONVOY.RIGS.map((r) => ({ id: r.id, name: r.name, cost: r.cost, minLvl: r.minLvl, armor: r.armor })),
+    roadBoss, teamsterOfWeek };
 }

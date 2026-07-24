@@ -1464,8 +1464,33 @@ export const CONVOY = {
     MIN_QTY: 6, MAX_QTY: 16,                    // units of one good on an NPC truck (a modest manifest)
     GUARDS: ['none', 'crew', 'heavy'],         // guard tier drawn uniformly (the run's defense)
   },
+  // ── Tier-4 (omerta-tier3-deepening-design.md §Convoys) — all founder sign-off levers ──
+  // THE RIG: a scaling shipper-side catalog (the Port-boats/car precedent). One rig per character;
+  // ARMOR folds into the convoy's guard defense at depart, ENGINE cuts transit time. Cash SINKS only.
+  RIGS: [
+    { id: 'van',     name: 'Panel Van',      cost: 40000,   minLvl: 6,  armor: 8,  speedBps: 500 },
+    { id: 'box',     name: 'Box Truck',      cost: 180000,  minLvl: 14, armor: 18, speedBps: 1000 },
+    { id: 'armored', name: 'Armored Hauler', cost: 600000,  minLvl: 28, armor: 32, speedBps: 1500 },
+    { id: 'semi',    name: 'The Semi',       cost: 2000000, minLvl: 42, armor: 50, speedBps: 2000 },
+  ],
+  RIG_UPGRADE_MAX: 5,          // per-track (armor/engine) level cap
+  RIG_ARMOR_STEP: 6,           // +guard-def per armor level (folds into c.guards at depart)
+  RIG_ENGINE_STEP_BPS: 400,    // +transit-cut bps per engine level
+  RIG_SPEED_CAP_BPS: 4000,     // hard cap on total rig transit cut (40%) — a run is never instant
+  RIG_UP_COST_BPS: 3000,       // an upgrade costs 30% of the rig's base cost × (level+1)
+  LEGEND_MIN_LVL: 10,          // anti-Sybil floor: deliver/hijack bumps the legend + logs a haul only at/above this level
+  HAULER_RANKS: [ { at: 0, title: 'Gofer' }, { at: 250000, title: 'Teamster' }, { at: 2000000, title: 'Dispatcher' },
+                  { at: 10000000, title: 'Freight Boss' }, { at: 50000000, title: 'The Baron of the Roads' } ],
+  BANDIT_RANKS: [ { at: 0, title: 'Footpad' }, { at: 250000, title: 'Highwayman' }, { at: 2000000, title: 'Road Agent' },
+                  { at: 10000000, title: 'The Terror of the Turnpike' }, { at: 50000000, title: 'The Highway King' } ],
+  CONTEST_WINDOW_MS: 7 * 24 * 3600 * 1000,   // rolling week for the Road Boss / Teamster-of-the-Week
+  HAULS_RETENTION_MS: 8 * 24 * 3600 * 1000,  // worker sweep drops older haul-log rows
 };
 export const guardTierOf = (id) => CONVOY.GUARD_TIERS.find((t) => t.id === id) || null;
+export const rigOf = (id) => CONVOY.RIGS.find((r) => r.id === id) || null;
+export const rigUpgradeCost = (rig, curLvl) => rig ? Math.floor(rig.cost * CONVOY.RIG_UP_COST_BPS / 10000 * (Number(curLvl) + 1)) : 0;
+export const haulerRankOf = (v) => [...CONVOY.HAULER_RANKS].reverse().find((r) => Number(v || 0) >= r.at) || CONVOY.HAULER_RANKS[0];
+export const banditRankOf = (v) => [...CONVOY.BANDIT_RANKS].reverse().find((r) => Number(v || 0) >= r.at) || CONVOY.BANDIT_RANKS[0];
 // THE COMMISSION — the top-SEATS families vote weekly on a city decree (majority of last week's
 // votes governs this week; ties deadlock). Effects are bounded one-week MODIFIERS on signed
 // levers — the modifiers are founder sign-off levers themselves. No decree moves money (§10.4

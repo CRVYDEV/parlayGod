@@ -5,9 +5,10 @@
 // degrading MULTI-AMBUSH (one per character, MAX_AMBUSHES per convoy), and INSURED freight
 // (premium → pool, pool-capped claim at collect, §10.4 pool check exact). pg-mem, zero infra.
 process.env.CONVOY_MS = '600000'; // 10-minute road for the test (TEST-ONLY knob, SEARCH_MS pattern)
+process.env.MOD_KEY = 'test-mod-key'; // Tier-4 death test uses /v1/mod/kill
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { spawnNpcConvoys, despawnArrivedNpc } from '../src/convoy.js';
+import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from '../src/convoy.js';
 import { CONVOY, goodPriceOf } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import crypto from 'node:crypto';
@@ -201,6 +202,90 @@ const dsp = await despawnArrivedNpc(pool);
 assert(dsp.despawned >= 1, 'the arrived NPC truck despawned');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoys WHERE id='${goneId}'`)).rows[0].n), 0, 'the delivered NPC convoy is gone');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoy_cargo WHERE convoy_id='${goneId}'`)).rows[0].n), 0, 'its cargo is gone too (no faucet on a delivered truck)');
+
+// ══ CONVOYS → Tier 4: THE RIG, the two legends, the weekly boards ══
+// clear prior-block haul noise so the read-derived weekly contest reflects only the Tier-4 actors
+// (earlier test streets legitimately banked deliver/hijack hauls — the board correctly sums them)
+await pool.query('DELETE FROM convoy_hauls');
+const rick = await mk('Rig Rick');     // high level — buys/upgrades a rig, delivers clean
+const bo = await mk('Bandit Bo');      // high level — hijacks (bumps the Highwayman legend)
+const runt = await mk('Legend Runt');  // below LEGEND_MIN_LVL — the anti-Sybil floor
+await seedCh(rick.id, "respect=1000000, cash=8000000, loc='docks', energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL");
+await seedCh(bo.id, "respect=1000000, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
+await seedCh(runt.id, "respect=100, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
+const aidOf = async (id) => (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a;
+const freightOf = async (id, col) => Number((await pool.query(`SELECT ${col} v FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`)).rows[0].v);
+
+// (A) THE RIG — level gate, ledgered sink, one per char, upgrades (absolute writes), maxed, no_rig
+assert.equal((await call('POST', '/v1/convoy/rig/box', { token: runt.token })).body.error, 'level', 'the Box Truck is level-gated');
+assert.equal((await call('POST', '/v1/convoy/rig/upgrade', { token: bo.token, body: { track: 'armor' } })).body.error, 'no_rig', 'no rig to upgrade');
+r = await call('POST', '/v1/convoy/rig/box', { token: rick.token });
+assert.equal(r.code, 200, `bought the box: ${JSON.stringify(r.body)}`); assert.equal(r.body.rig, 'box');
+assert.equal((await call('POST', '/v1/convoy/rig/van', { token: rick.token })).body.error, 'already', 'one rig per man');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='convoy:rig' AND character_id='${rick.id}'`)).rows[0].s) < 0, 'convoy:rig is a ledgered cash sink');
+r = await call('POST', '/v1/convoy/rig/upgrade', { token: rick.token, body: { track: 'armor' } });
+assert.equal(r.code, 200); assert.equal(r.body.level, 1, 'armor → level 1 (absolute write)');
+assert.equal((await call('POST', '/v1/convoy/rig/upgrade', { token: rick.token, body: { track: 'engine' } })).body.level, 1, 'engine track independent');
+assert(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='convoy:rig:up' AND character_id='${rick.id}'`)).rows[0].s) < 0, 'convoy:rig:up ledgered');
+for (let i = 1; i < CONVOY.RIG_UPGRADE_MAX; i++) await call('POST', '/v1/convoy/rig/upgrade', { token: rick.token, body: { track: 'armor' } });
+assert.equal((await call('POST', '/v1/convoy/rig/upgrade', { token: rick.token, body: { track: 'armor' } })).body.error, 'maxed', 'armor caps at RIG_UPGRADE_MAX');
+let cbR = (await call('GET', '/v1/convoys', { token: rick.token })).body;
+assert.equal(cbR.rig.kind, 'box', 'the board surfaces the rig'); assert.equal(cbR.rig.armorLvl, CONVOY.RIG_UPGRADE_MAX, 'armor maxed on the board');
+
+// (B) THE TEAMSTER legend — a clean collect banks freight_delivered (+ a haul row); the RIG armor rides depart
+await call('POST', '/v1/goods/buy', { token: rick.token, body: { goodId: 'gin', qty: 10 } });
+r = await call('POST', '/v1/convoy', { token: rick.token, body: { to: 'neon', goodId: 'gin', qty: 10 } });
+const rcid = r.body.id;
+r = await call('POST', '/v1/convoy/depart', { token: rick.token, body: { guards: 'crew' } });
+assert.equal(r.code, 200, 'rick departed');
+const departedGuards = Number((await pool.query(`SELECT guards FROM convoys WHERE id='${rcid}'`)).rows[0].guards);
+assert(departedGuards > CONVOY.GUARD_TIERS.find((g) => g.id === 'crew').def, 'the rig armor folded into the convoy guard defense at depart');
+await pool.query(`UPDATE convoys SET arrives_at = now() - interval '1 minute' WHERE id='${rcid}'`);
+await seedCh(rick.id, "loc='neon'");
+r = await call('POST', `/v1/convoy/${rcid}/collect`, { token: rick.token });
+assert.equal(r.code, 200, `rick collected: ${JSON.stringify(r.body)}`);
+assert(await freightOf(rick.id, 'freight_delivered') > 0, 'THE TEAMSTER: clean freight banked to the legend');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoy_hauls WHERE account_id='${await aidOf(rick.id)}' AND kind='deliver'`)).rows[0].n), 1, 'a deliver haul was logged');
+
+// (C) THE HIGHWAYMAN legend — a win ambush banks freight_hijacked; a sub-floor bandit banks NOTHING
+await seedCh(rick.id, "loc='docks'");
+await call('POST', '/v1/goods/buy', { token: rick.token, body: { goodId: 'gin', qty: 10 } });
+r = await call('POST', '/v1/convoy', { token: rick.token, body: { to: 'neon', goodId: 'gin', qty: 10 } });
+const hcid = r.body.id;
+await call('POST', '/v1/convoy/depart', { token: rick.token, body: { guards: 'none' } });
+r = await call('POST', `/v1/convoy/${hcid}/ambush`, { token: bo.token });
+assert.equal(r.body.win, true, 'Bo overwhelms the unguarded run');
+assert(await freightOf(bo.id, 'freight_hijacked') > 0, 'THE HIGHWAYMAN: the take banked to the legend');
+// the runt wins too but is below LEGEND_MIN_LVL → banks nothing
+await pool.query(`UPDATE convoys SET status='done' WHERE id='${hcid}'`); // free rick's shipper slot (the hijacked run stays in transit otherwise)
+await seedCh(rick.id, "loc='docks'");
+await call('POST', '/v1/goods/buy', { token: rick.token, body: { goodId: 'gin', qty: 10 } });
+r = await call('POST', '/v1/convoy', { token: rick.token, body: { to: 'canal', goodId: 'gin', qty: 10 } });
+await call('POST', '/v1/convoy/depart', { token: rick.token, body: { guards: 'none' } });
+r = await call('POST', `/v1/convoy/${r.body.id}/ambush`, { token: runt.token });
+assert.equal(r.body.win, true, 'the runt wins the fight');
+assert.equal(await freightOf(runt.id, 'freight_hijacked'), 0, 'a sub-floor bandit banks NOTHING (anti-Sybil floor)');
+
+// (D) THE BOARDS — the two leaderboards + the read-derived weekly contest
+r = await call('GET', '/v1/leaderboard/convoy', { token: rick.token });
+assert.equal(r.code, 200);
+assert(r.body.teamsters.some((x) => x.name === 'Rig Rick'), 'Rick tops the Teamsters');
+assert(r.body.highwaymen.some((x) => x.name === 'Bandit Bo'), 'Bo is a Highwayman');
+cbR = (await call('GET', '/v1/convoys', { token: rick.token })).body;
+assert(cbR.teamsterOfWeek && cbR.teamsterOfWeek.name === 'Rig Rick', 'the read-derived Teamster of the Week');
+assert(cbR.roadBoss && cbR.roadBoss.name === 'Bandit Bo', 'the read-derived Road Boss');
+
+// (E) the worker sweep drops stale haul rows; a fresh one is kept
+await pool.query(`INSERT INTO convoy_hauls (id, account_id, kind, value, at) VALUES ('stale-haul', '${await aidOf(bo.id)}', 'hijack', 1, now() - interval '9 days')`);
+await sweepConvoyHauls(pool);
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM convoy_hauls WHERE id='stale-haul'`)).rows[0].n), 0, 'the stale haul was swept');
+assert(Number((await pool.query(`SELECT COUNT(*) n FROM convoy_hauls WHERE account_id='${await aidOf(rick.id)}'`)).rows[0].n) >= 1, 'the fresh deliver haul survives');
+
+// (F) DEATH — the rig dies with the street; the freight legend SURVIVES
+const rickDelivered = await freightOf(rick.id, 'freight_delivered');
+await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: rick.id } });
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM rigs WHERE character_id='${rick.id}'`)).rows[0].n), 0, 'the rig is wiped by the estate');
+assert.equal(await freightOf(rick.id, 'freight_delivered'), rickDelivered, 'the Teamster legend survives death (account-level)');
 
 // ── §10.4: the vocabulary knows the convoy reasons (cash + ammo) ──
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');

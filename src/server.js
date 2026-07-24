@@ -1248,6 +1248,12 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.ambushConvoy(ch, req.params.id, client, h)));
   app.post('/v1/convoy/:id/collect', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.collectConvoy(ch, req.params.id, client, h)));
+  // ── CONVOYS → Tier 4 ──
+  app.post('/v1/convoy/rig/:kind', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.buyRig(ch, req.params.kind, client, h)));
+  app.post('/v1/convoy/rig/upgrade', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.upgradeRig(ch, req.body?.track, client, h)));
+  app.get('/v1/leaderboard/convoy', async () => Convoy.convoyLeaderboard(pool));
 
   // CREW HEISTS — THE BIG SCORE: plan, crew up off the board, execute together (or rat).
   app.get('/v1/heists', { preHandler: auth }, async (req) => {

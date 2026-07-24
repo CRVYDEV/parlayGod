@@ -27,7 +27,7 @@ import { sweepMarket } from './market.js';
 import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
-import { spawnNpcConvoys, despawnArrivedNpc } from './convoy.js';
+import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
@@ -285,6 +285,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const npcGone = await safe('npc convoy despawn', () => despawnArrivedNpc(pool));
     const npcNew = await safe('npc convoy spawn', () => spawnNpcConvoys(pool));
     if ((npcGone?.despawned > 0) || (npcNew?.spawned > 0)) console.log(`🚚 convoy: NPC trucks −${npcGone?.despawned || 0} +${npcNew?.spawned || 0}`);
+    await safe('convoy hauls sweep', () => sweepConvoyHauls(pool)); // Tier-4: drop stale Road-Boss/Teamster haul-log rows
     // THE COMMISSION (step three): settle frozen-week proposals — the enacted motion refunds, the rest forfeit
     const cp = await safe('commission proposals', () => settleProposals(pool));
     if (cp && (cp.refunded || cp.forfeited)) console.log(`\u2696\ufe0f commission: settled proposals (${cp.refunded} refunded, ${cp.forfeited} forfeited)`);
