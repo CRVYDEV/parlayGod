@@ -21,7 +21,36 @@ export async function bumpHonor(client, ch, delta) {
   const next = clamp(Number(ch.honor || 0) + delta);
   await client.query('UPDATE characters SET honor=$2 WHERE id=$1', [ch.id, next]);
   ch.honor = next;
+  // THE HONOR LEGEND (Tier-4) — the bloodline's high-water mark of honor + its deepest infamy
+  // (account-level, survives death; the account row is held by the caller's char lock → no new lock.
+  // NUMERIC, so GREATEST/LEAST arithmetic is pg-mem-safe).
+  await client.query(
+    'UPDATE account_persistent SET honor_peak = GREATEST(honor_peak, $2), honor_low = LEAST(honor_low, $2) WHERE account_id=$1',
+    [ch.account_id, next]);
   return next;
+}
+
+// THE REPUTATION BOARDS (Tier-4) — MEN OF HONOR (highest honor the bloodline ever reached) and THE
+// MOST FEARED (its deepest infamy). Account-level, survives death; agents excluded. Pure STATUS.
+export async function honorLeaderboard(pool) {
+  const nameFor = async (rows) => {
+    const out = rows.map((r) => ({ ...r }));
+    for (const r of out) {
+      const c = (await pool.query('SELECT name FROM characters WHERE account_id=$1 AND alive LIMIT 1', [r.account_id])).rows[0];
+      r.name = c?.name || (r.dynasty_name ? `House ${r.dynasty_name}` : 'a fallen name');
+    }
+    return out;
+  };
+  const menRows = await nameFor((await pool.query(
+    `SELECT account_id, honor_peak, dynasty_name FROM account_persistent
+      WHERE NOT agent_flag AND honor_peak > 0 ORDER BY honor_peak DESC, account_id LIMIT 15`)).rows);
+  const fearedRows = await nameFor((await pool.query(
+    `SELECT account_id, honor_low, dynasty_name FROM account_persistent
+      WHERE NOT agent_flag AND honor_low < 0 ORDER BY honor_low ASC, account_id LIMIT 15`)).rows);
+  return {
+    menOfHonor: menRows.map((r, i) => ({ pos: i + 1, name: r.name, peak: Number(r.honor_peak), tier: honorTierOf(r.honor_peak).name })),
+    mostFeared: fearedRows.map((r, i) => ({ pos: i + 1, name: r.name, low: Number(r.honor_low), tier: honorTierOf(r.honor_low).name })),
+  };
 }
 
 // The set-based bump for paths with no loaded/locked ch (the loans overdue sweep marks welshers in

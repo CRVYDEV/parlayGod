@@ -3926,6 +3926,8 @@
       <h2>Your Name on the Street <span class="chip ${honClass}">honor ${hon.value > 0 ? '+' : ''}${hon.value} — ${hon.tier}</span></h2>
       <div class="d" style="font-size:11px;margin:-4px 0 8px;color:var(--dim)">Deeds move it: keep your word, save a guard, avenge blood → a <b>Man of Honor</b> (laying low costs less, the street trusts you).
         Welsh on a debt, rat, break an oath → a <b>Mad Dog</b> (no guard steps in front of you, no family swears a pact with you).</div>
+      <div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">THE BLOODLINE'S NAME <span class="d">(the legend — survives death)</span></span>
+        <div class="d">high-water: <b style="color:var(--ok)">${hon.peak > 0 ? '+' : ''}${hon.peak ?? 0}</b> (${hon.peakTier || '—'}) · deepest infamy: <b style="color:var(--bad)">${hon.low ?? 0}</b> (${hon.lowTier || '—'}) · <a href="#" id="honor-board">the men of honor & the most feared →</a></div><div id="honor-lb"></div></div>
 
       <h2>The Build <span class="d" style="font-size:11px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
         <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
@@ -4011,6 +4013,12 @@
              <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (2 $OMR)</button></div>`
           : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
       </div>`;
+    { const hb = t.querySelector('#honor-board');
+      if (hb) hb.onclick = async (e) => { e.preventDefault();
+        const b = (await api('GET', '/v1/leaderboard/honor')).body || {};
+        t.querySelector('#honor-lb').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+          <div style="flex:1;min-width:180px"><div class="d" style="color:var(--ok)"><b>MEN OF HONOR</b></div>${(b.menOfHonor || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — +${k.peak} <span class="chip">${k.tier}</span></div>`).join('') || '<div class="d">none yet</div>'}</div>
+          <div style="flex:1;min-width:180px"><div class="d" style="color:var(--bad)"><b>THE MOST FEARED</b></div>${(b.mostFeared || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — ${k.low} <span class="chip bad">${k.tier}</span></div>`).join('') || '<div class="d">none yet</div>'}</div></div>`; }; }
     t.querySelectorAll('[data-learn]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/skills/${btn.dataset.learn}`, {}).then(() => renderLife()));
     t.querySelectorAll('[data-respec1]').forEach((btn) => btn.onclick = () =>

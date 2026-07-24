@@ -2079,3 +2079,10 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS tycoon_earned NUMERIC NO
 -- write under the megaprojects singleton lock, so no deadlock surface.)
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS monument_built NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE gangs ADD COLUMN IF NOT EXISTS monument_built NUMERIC NOT NULL DEFAULT 0;
+
+-- ── THE FIVE PILLARS TIER-4 DEEPENING — the HONOR legend (design omerta-tier2-deepening-design.md §4) ──
+-- honor_peak / honor_low: the bloodline's high-water mark of honor and its deepest infamy (account-level
+-- → survives death; honor itself dies with the street + echoes 25% to the heir). Pure STATUS — the honor
+-- legend axis. Bumped in honor.js:bumpHonor (the account is held under the caller's char lock).
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS honor_peak NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS honor_low NUMERIC NOT NULL DEFAULT 0;
