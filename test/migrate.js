@@ -87,6 +87,7 @@ const DISPOSITION = {
   futurity_runners: 'escrow', grand_prix_entries: 'escrow', poker_entries: 'escrow', stakes_entries: 'escrow', track_entries: 'escrow',
   transactions: 'ledger', rng_audit: 'ledger', notifications: 'log',
   clue_scrolls: 'wiped', // the treasure trail dies with the street (the heir starts a fresh hunt)
+  poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)
   chat_messages: 'log', // troll-box lines keep their name snapshot — a dead man's words stand (7d worker retention)
 };
 // SCOPE: this guard covers the literal `character_id` column convention (42 tables). Tables that

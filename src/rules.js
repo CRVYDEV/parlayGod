@@ -630,6 +630,18 @@ export const CASINO = {
   // the field is net-negative by the rake). One open tournament at a time; a new one opens on the
   // next entry after the last settles. `TOURNEY_MS` env is TEST-ONLY (the SEARCH_MS pattern).
   TOURNEY: { BUYIN: 5000, REGISTER_MS: 86400000, MIN_ENTRANTS: 2, RAKE_BPS: 500, PAYOUTS: [0.5, 0.3, 0.2] },
+  // step five — RING POKER (omerta-deep-deferred-design.md §D): true multi-way hold'em with betting
+  // streets. THE TABLE IS AN ESCROW (cash moves only at sit/leave); raises cap at the smallest live
+  // stack (no side pots); everyone antes the bb (ante poker — no blind positions). The SKILL game of
+  // the den. RING_TURN_MS env is TEST-ONLY (the SEARCH_MS pattern). All sign-off levers.
+  RING: { BLINDS: [100, 1000, 10000], SEATS: 6, BUYIN_MIN_BB: 20, BUYIN_MAX_BB: 200,
+    RAKE_BPS: 300, RAKE_CAP_BB: 10, TURN_MS: 90 * 1000, IDLE_MS: 30 * 60 * 1000, MIN_LVL: 3 },
+  // step five — THE BRACKET: the multi-table elimination tournament on the EXISTING tournament
+  // escrow (same reasons → the escrow identity is untouched). Rounds of heats; the top ADVANCE of
+  // each heat go through; the final heat pays TOURNEY.PAYOUTS net of the same rake. Still a
+  // chance-based pooled draw per heat (the den's honest note) — the skill game is the ring table.
+  // BRACKET_ROUND_MS env is TEST-ONLY.
+  BRACKET: { HEAT_SIZE: 6, ADVANCE: 2, ROUND_MS: 10 * 60 * 1000 },
   // ── THE TRACK: the dogs & the ponies (all founder sign-off levers) ──
   // A daily race card — greyhounds and horses. Each race draws a FIELD of runners off the §7.11
   // seed, each with a true win probability p and posted decimal odds = (1/p)×(1−EDGE), so the
@@ -1255,6 +1267,15 @@ export const LOAN = {
   // a higher one directly taxes the Sybil ring while a real predatory-lending target (a mid-game player
   // taking a $25k+ loan) is comfortably past it. Founder sign-off lever — raise further if farmed.
   WANTED_MIN_LVL: 20,
+  // step 5 (THE LOAN HOUSE — the backed NPC lender, omerta-deep-deferred-design.md §C): the lender
+  // of last resort, deliberately WORSE than the P2P market (the house prices in the risk it can't
+  // vet): a fixed usurious rate, a short fixed term, a level-scaled cap. The house lends ONLY what
+  // its sink-fed pool holds (full-reserve — never a mint); HOUSE_VIG_BPS of every P2P vig feeds the
+  // window. Defaults are auto-collected by the sweep (seize → pool + the standard welsher/WANTED
+  // machinery — the house always enforces). All founder sign-off levers.
+  HOUSE_RATE: 0.35, HOUSE_TERM_H: 24, HOUSE_MIN: 1000,
+  HOUSE_MAX_PER_LVL: 2000, HOUSE_MAX: 50000, HOUSE_MIN_LVL: 3,
+  HOUSE_VIG_BPS: 5000, // half of every P2P loan vig → the house window (the rest → the buyback pool)
 };
 export const loanVig = (amt) => Math.ceil(Math.max(0, Number(amt)) * LOAN.VIG_BPS / 10000);
 // step 3: the house take on a paper (loan-claim) sale — the market/bodyguard 2% precedent → the pool
@@ -1337,7 +1358,19 @@ export const COMMISSION = {
     { id: 'pax',         name: 'The Pax',     desc: 'No new wars may be declared. Consolidation week.' },
     { id: 'amnesty',     name: 'Amnesty',     desc: 'Laying low costs half. The Commission paid the judges.' },
     { id: 'lockdown',    name: 'Lockdown',    desc: 'Every convoy rides with extra guns. The freight is protected.' },
+    // step three — THE LEVY: the chamber's first decree with financial teeth, built as a PURE
+    // REDIRECT (zero new money): while in force, the 12h buyback's EXISTING family split (normally
+    // pro-rata to the top-25 by lifetime standing) pays the SEATED chamber instead, weighted by
+    // seat (5..1). One touchpoint (worker.js runBuyback); amounts and §10.4 posture unchanged.
+    { id: 'the_levy',    name: 'The Levy',    desc: "The buyback's family cut is levied by the chamber — the five seated families collect it, by seat." },
   ],
+  // step three — PROPOSALS WITH DEPOSITS (design omerta-deep-deferred-design.md §B): a seated
+  // family may PROPOSE a decree for the week being voted, staking a treasury CASH deposit. When any
+  // proposals exist for a week, the tally counts ONLY proposed decrees (skin in the game sets the
+  // ballot); with none, the chamber votes freely (backward-compatible). The proposal matching the
+  // TALLY-ENACTED decree refunds at settle; every other forfeits to the street-tax pool. Founder
+  // sign-off lever.
+  PROPOSAL_DEPOSIT: 100000,
 };
 export const decreeOf = (id) => COMMISSION.DECREES.find((d) => d.id === id) || null;
 // THE BLACK MARKET — P2P trade: cars by AUCTION (single standing bid, min-raise, optional
@@ -2289,6 +2322,26 @@ export const ESTATE = {
 };
 export const estateTierOf = (tier) => ESTATE.TIERS.find((t) => t.tier === Number(tier)) || null;
 export const estateFeatureOf = (id) => ESTATE.FEATURES.find((f) => f.id === id) || null;
+// ── ESTATE STEP TWO — THE STAFF & THE GALA (design omerta-deep-deferred-design.md §A) ──
+// The recurring $OMR drain the one-time burns lacked: a household PAYROLL (wages accrue lazily on
+// one clock, settled all-or-nothing as an `estate:staff` burn — the business-pad/crew-nut pattern;
+// unpaid past WALK_MS the staff WALK, arrears cleared, rehire from scratch) + THE GALA (a big
+// tier-scaled burn that opens a be-seen window — the speakeasy fantasy at the compound). PURE
+// STATUS both (prestige + guest lists, zero gameplay power). All numbers sign-off levers.
+// Hire fees are 10× the daily wage, so the dismiss-before-payday dodge is always −EV vs the
+// 7-day walk window (you save ≤7 days' wage and pay 10 to restaff).
+ESTATE.STAFF = [
+  { id: 'groundskeeper', name: 'Groundskeeper',     wageOmrDay: 0.5, hireOmr: 5,  minTier: 1, blurb: 'The roses never say what they saw.' },
+  { id: 'butler',        name: 'The Butler',        wageOmrDay: 1,   hireOmr: 10, minTier: 2, blurb: 'Runs the house. Required to host a gala.' },
+  { id: 'sommelier',     name: 'Sommelier',         wageOmrDay: 1.5, hireOmr: 15, minTier: 3, blurb: 'Pours vintages older than most grudges.' },
+  { id: 'curator',       name: 'Curator',           wageOmrDay: 2,   hireOmr: 20, minTier: 3, blurb: 'Keeps the trophies gleaming and the books straight.' },
+  { id: 'house_capo',    name: 'Capo of the House', wageOmrDay: 3,   hireOmr: 30, minTier: 4, blurb: 'Security, discretion, and a very short memory.' },
+];
+ESTATE.STAFF_WALK_MS = 7 * 24 * 3600 * 1000;   // arrears older than this → the staff WALK (bounds owed)
+ESTATE.GALA_OMR = 15;                           // × the estate tier — the host's burn
+ESTATE.GALA_MIN_TIER = 2;                       // a Row House can host; a Safe House can't
+ESTATE.GALA_MS = 4 * 3600 * 1000;               // the open-doors window
+export const estateStaffOf = (id) => ESTATE.STAFF.find((s) => s.id === id) || null;
 
 // ── THE AUCTION HOUSE ("the sit-down"): the COMPETITIVE, RECURRING $OMR sink ──
 // Server-run weekly auctions of UNIQUE, numbered prestige items — highest $OMR bid wins, the winning

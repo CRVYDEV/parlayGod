@@ -25,6 +25,7 @@ import { sweepWire, sweepWireAlerts, sweepStandingWatches } from './wire.js';
 import { reclaimExpiredVouchers, assertChainId } from './chain.js';
 import { sweepMarket } from './market.js';
 import { sweepDiplomacy } from './diplomacy.js';
+import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { spawnNpcConvoys, despawnArrivedNpc } from './convoy.js';
 import { sweepLaw } from './law.js';
@@ -32,6 +33,7 @@ import { sweepLoans } from './loans.js';
 import { sweepAuctions } from './auction.js';
 import { sweepMainEvents, enforceBeltDefense } from './boxing.js';
 import { sweepTournaments, sweepTrackEntries, sweepFuturity } from './casino.js';
+import { sweepRingTables } from './ring.js';
 import { sweepGrandPrix } from './races.js';
 import { sweepStakes } from './stable.js';
 import { syncFeeEvents, syncClaimedEvents, syncTradeFees, syncBondEvents, makeViemSource, DEFAULT_CONFIRMATIONS } from './watcher.js';
@@ -65,7 +67,17 @@ export async function runBuyback(pool, opts = {}) {
       `SELECT id, lifetime_tribute, wars_won FROM gangs
         WHERE lifetime_tribute + 10000 * wars_won > 0
         ORDER BY lifetime_tribute + 10000 * wars_won DESC LIMIT 25`)).rows;
-    for (const id of ranked.map((g) => g.id).sort())
+    // THE LEVY (Commission step three, omerta-deep-deferred-design.md §B): while the decree is in
+    // force, the family split pays the SEATED CHAMBER weighted by seat (5..1) instead of the top-25
+    // lifetime-standing formula — a PURE REDIRECT (same pool, same amount, same §10.4 posture; only
+    // WHO collects changes, for the decree's week). Both reads are plain MVCC reads; the payee rows
+    // are locked sorted below either way, so the lock discipline is unchanged.
+    const levy = (await activeDecree(client))?.id === 'the_levy';
+    const chamber = levy ? await seatedGangs(client) : [];
+    const payees = levy && chamber.length
+      ? chamber.map((g, i) => ({ id: g.id, w: chamber.length - i }))
+      : ranked.map((g) => ({ id: g.id, w: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) }));
+    for (const id of payees.map((p) => p.id).sort())
       await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [id]);
     // now the singleton — authoritative pool under lock
     const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
@@ -108,11 +120,11 @@ export async function runBuyback(pool, opts = {}) {
     // undistributed remainder) rolls to the event fund.
     const clanShare = forSplit / 2;
     let toFund = forSplit / 2, distributed = 0;
-    const totalStanding = ranked.reduce((a, g) => a + Number(g.lifetime_tribute) + 10000 * Number(g.wars_won), 0);
-    if (totalStanding > 0) {
-      for (const g of ranked) {
-        const share = clanShare * (Number(g.lifetime_tribute) + 10000 * Number(g.wars_won)) / totalStanding;
-        await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [g.id, share]);
+    const totalW = payees.reduce((a, p) => a + p.w, 0);
+    if (totalW > 0) {
+      for (const p of payees) {
+        const share = clanShare * p.w / totalW;
+        await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [p.id, share]);
         distributed += share;
       }
       toFund += clanShare - distributed;
@@ -121,7 +133,7 @@ export async function runBuyback(pool, opts = {}) {
     }
     await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
     await client.query('COMMIT');
-    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: ranked.length,
+    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: payees.length, levy,
       lpCash, lpOmr };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
@@ -251,6 +263,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const npcGone = await safe('npc convoy despawn', () => despawnArrivedNpc(pool));
     const npcNew = await safe('npc convoy spawn', () => spawnNpcConvoys(pool));
     if ((npcGone?.despawned > 0) || (npcNew?.spawned > 0)) console.log(`🚚 convoy: NPC trucks −${npcGone?.despawned || 0} +${npcNew?.spawned || 0}`);
+    // THE COMMISSION (step three): settle frozen-week proposals — the enacted motion refunds, the rest forfeit
+    const cp = await safe('commission proposals', () => settleProposals(pool));
+    if (cp && (cp.refunded || cp.forfeited)) console.log(`\u2696\ufe0f commission: settled proposals (${cp.refunded} refunded, ${cp.forfeited} forfeited)`);
     // THE AUCTION HOUSE: settle last week's lots — the top bidder wins the trophy, the winning bid burns
     const auc = await safe('auction sweep', () => sweepAuctions(pool));
     if (auc && auc.settled > 0) console.log(`🎩 auction: settled ${auc.settled} lot(s), burned ${auc.burned} $OMR`);
@@ -258,6 +273,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const me = await safe('main event sweep', () => sweepMainEvents(pool));
     if (me && me.resolved > 0) console.log(`🥊 boxing: resolved ${me.resolved} main event(s)`);
     // THE GAMBLING DEN (step four): settle any poker TOURNAMENT past its registration window — deal + pay
+    // RING POKER: fold out stalled hands (the never-wedge rule) + fold up idle tables (stacks cash out)
+    const rng2 = await safe('ring sweep', () => sweepRingTables(pool));
+    if (rng2 && (rng2.resolvedStalls || rng2.foldedTables)) console.log(`\u2660\ufe0f ring: ${rng2.resolvedStalls} stall(s) resolved, ${rng2.foldedTables} idle table(s) folded up`);
     const trn = await safe('tournament sweep', () => sweepTournaments(pool));
     if (trn && trn.resolved > 0) console.log(`🃏 den: settled ${trn.resolved} poker tournament(s)`);
     // THE TRACK (step three): the day after, bank each entered racer's card result (status only)
