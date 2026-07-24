@@ -6,7 +6,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { STABLE } from '../src/rules.js';
+import { STABLE, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -25,7 +25,7 @@ const mk = async (name) => {
 const seed = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${id}'`);
 let cashDrift = 0;
 const grantCash = async (id, n) => { await pool.query(`UPDATE characters SET cash = cash + ${n} WHERE id='${id}'`); cashDrift += n; };
-const lvlRespect = (lvl) => 4 * (lvl - 1) * (lvl - 1);
+const lvlRespect = (lvl) => PACING.LEVEL_DIVISOR * (lvl - 1) * (lvl - 1); // reads the live curve, not a copy
 const racerWins = async (aid) => Number((await pool.query(`SELECT racer_wins w FROM account_persistent WHERE account_id='${aid}'`)).rows[0].w);
 
 const aa = await mk('Diamond Jim');   // the strong stable (dogs + horses)

@@ -89,7 +89,7 @@ const addsNoDrift = async (name, action, label) => {
   const A = await mk('Poster A'); const C = await mk('Confed C'); const B = await mk('Victim B');
   await seedCh(A.id, 'cash = 50000, muscle = 500, speed = 500, energy = 200');
   await seedCh(C.id, 'cash = 50000');
-  await seedCh(B.id, 'respect = 400, muscle = 1, speed = 1');
+  await seedCh(B.id, 'respect = 1000, muscle = 1, speed = 1');
   assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: A.token, body: { amount: 2000, kind: 'hospitalize' } })).code, 200, 'A posts');
   assert.equal((await call('POST', `/v1/streets/${B.id}/bounty`, { token: C.token, body: { amount: 500, kind: 'hospitalize' } })).code, 200, 'C tops up');
   const r = await call('POST', `/v1/streets/${B.id}/jump`, { token: A.token });
@@ -99,7 +99,7 @@ const addsNoDrift = async (name, action, label) => {
   // a non-funder CAN collect: C's confederate D whacks B and takes the pot
   const D = await mk('Collector D');
   await seedCh(D.id, 'muscle = 500, speed = 500, energy = 200');
-  await seedCh(B.id, 'hosp_until = NULL, respect = 400, muscle = 1, speed = 1');
+  await seedCh(B.id, 'hosp_until = NULL, respect = 1000, muscle = 1, speed = 1');
   const r2 = await call('POST', `/v1/streets/${B.id}/jump`, { token: D.token });
   assert(r2.body.win && r2.body.bounty >= 2500, 'a non-funder collects the full pot');
 }
@@ -132,7 +132,7 @@ const addsNoDrift = async (name, action, label) => {
 // ═══ FINDING (kitchen-2): mission $OMR pays once per ACCOUNT, not per character ═══
 {
   const chef = await mk('One Shot');
-  await seedCh(chef.id, 'respect = 1000, cunning = 40, cb = 20, cash = 500000');
+  await seedCh(chef.id, 'respect = 2500, cunning = 40, cb = 20, cash = 500000');
   await call('POST', '/v1/armory/gun/argument/buy', { token: chef.token }); // fp 18 for m4
   const before = (await meOf(chef.token)).omr;
   let r = await call('POST', '/v1/missions/m4', { token: chef.token });
@@ -140,7 +140,7 @@ const addsNoDrift = async (name, action, label) => {
   assert.equal((await meOf(chef.token)).omr, before + 5, 'omr credited once');
   // kill → heir re-grinds and re-does the same mission: cash/respect re-earn, $OMR must NOT
   await call('POST', '/v1/mod/kill', { body: { characterId: chef.id }, headers: modH });
-  await seedCh((await meOf(chef.token)).id, 'respect = 1000, cunning = 40, cb = 20, cash = 500000');
+  await seedCh((await meOf(chef.token)).id, 'respect = 2500, cunning = 40, cb = 20, cash = 500000');
   await call('POST', '/v1/armory/gun/argument/buy', { token: chef.token });
   const heirOmr = (await meOf(chef.token)).omr;
   r = await call('POST', '/v1/missions/m4', { token: chef.token });
@@ -308,7 +308,7 @@ const addsNoDrift = async (name, action, label) => {
   // member's socket kept feeding the family's private war/contract/tribute chatter until they chose to
   // disconnect. Leaving now closes their sockets (fresh, gangless subs on reconnect).
   const founder = await mk('Family Man');
-  await seedCh(founder.id, 'respect = 5000000, cash = 50000000');
+  await seedCh(founder.id, 'respect = 12500000, cash = 50000000');
   assert.equal((await call('POST', '/v1/gangs', { token: founder.token, body: { name: 'The Regression Family', tag: 'REG' } })).code, 200, 'gang founded');
   const gws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', founder.token]);
   await new Promise((res, rej) => { gws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; gws.onerror = rej; setTimeout(rej, 4000); });
@@ -324,7 +324,7 @@ const addsNoDrift = async (name, action, label) => {
   const dcreate = await call('POST', '/v1/character', { token: dtok, body: { name: 'Whacked Wiseguy' } });
   assert.equal(dcreate.code, 200, `doomed character created (${JSON.stringify(dcreate.body)})`);
   const doomed = { token: dtok, id: (await meOf(dtok)).id };
-  await seedCh(doomed.id, 'respect = 5000000, cash = 50000000');
+  await seedCh(doomed.id, 'respect = 12500000, cash = 50000000');
   assert.equal((await call('POST', '/v1/gangs', { token: doomed.token, body: { name: 'The Doomed Family', tag: 'DMD' } })).code, 200, 'doomed founds a family');
   const dws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`, ['bearer', doomed.token]);
   await new Promise((res, rej) => { dws.onmessage = (e) => { if (JSON.parse(e.data).channel === 'hello') res(); }; dws.onerror = rej; setTimeout(rej, 4000); });

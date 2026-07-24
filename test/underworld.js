@@ -42,7 +42,7 @@ const rob = await mk('Rob the Mark');     // search/bounty target
 const mark = await mk('Marked Mel');      // NPC-hit target (level-gated)
 await seedCh(una.id, "cash=1000000, cb=5, loc='docks'");
 await seedCh(ted.id, "cash=3000000, cb=20, loc='docks'");
-await seedCh(mark.id, 'respect=100');     // lvl 6 — over the NPC-hit floor
+await seedCh(mark.id, 'respect=250');     // lvl 6 — over the NPC-hit floor
 
 // ── the board: four named fixtures, all strangers at first ──
 let r = await call('GET', '/v1/underworld', { token: una.token });
@@ -242,7 +242,7 @@ const ray = await mk('Rival-test Ray');
 await seedCh(ray.id, 'cash=100000');
 await seedNpc(ray.id, 'doc', 30);
 const vic2 = await mk('Poor Vic');
-await seedCh(vic2.id, 'respect=100');
+await seedCh(vic2.id, 'respect=250');
 assert.equal((await call('POST', `/v1/streets/${vic2.id}/npchit`, { token: ray.token, body: { tier: 'legbreaker' } })).code, 200, 'ray sends the man with the bag');
 assert.equal((await standingOf(ray.token, 'fixer')).standing, 4, 'Vinnie approves (+4)');
 assert.equal((await standingOf(ray.token, 'doc')).standing, 28, 'the Doc does not (−2)');
@@ -267,7 +267,7 @@ assert.equal((await standingOf(bo.token, 'harbor')).standing, 30 - UNDERWORLD.ST
 const gus = await mk('Grudge Gus');
 await seedNpc(gus.id, 'doc', 80); // his best (task = heal, never performed → no lead noise)
 const vip = await mk('Connected Carlo');
-await seedCh(vip.id, 'respect=100');
+await seedCh(vip.id, 'respect=250');
 await seedNpc(vip.id, 'doc', 70);     // a real friend of the Doc (≥ GRUDGE_MIN 60)
 await seedNpc(vip.id, 'madame', 60);  // and of the Madame (exactly at the line)
 await seedNpc(vip.id, 'harbor', 10);  // an acquaintance of Big Tuna — no grudge for those

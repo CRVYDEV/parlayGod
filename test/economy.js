@@ -36,7 +36,7 @@ await call('POST', '/v1/character', { token, body: { name: 'Don Testa' } });
 let me = await meOf(token);
 const cid = me.id;
 const seed = (cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${cid}'`);
-await seed("respect=250000, cash=2000000, energy=200, loc='docks'"); // respect 250k ≈ level 250 (well past every gate)
+await seed("respect=625000, cash=2000000, energy=200, loc='docks'"); // respect 250k ≈ level 250 (well past every gate)
 
 // ── deterministic market (§7.11) ──
 const mkt1 = (await call('GET', '/v1/market/prices', {})).body;
@@ -320,9 +320,9 @@ assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'A
 let cat = await call('GET', '/v1/catalog');
 assert.equal(cat.code, 200, 'catalog is public'); assert(cat.body.businesses.find((b) => b.kind === 'laundromat')?.tiers.length === 3, 'catalog lists the laundromat + its tier ladder');
 // level gate — a low-level man can't open a front
-await seed("respect=100"); // level ~6, below the laundromat's level-15 gate
+await seed("respect=250"); // level ~6, below the laundromat's level-15 gate
 assert.equal((await call('POST', '/v1/business/laundromat/buy', { token })).body.error, 'level', 'a business is level-gated ("acquired later")');
-await seed("respect=250000, cash=2000000, loc='docks', heat=0");
+await seed("respect=625000, cash=2000000, loc='docks', heat=0");
 // buy
 let bizCashPre = (await meOf(token)).cash;
 r = await call('POST', '/v1/business/laundromat/buy', { token });
@@ -571,7 +571,7 @@ assert(frontTitles([{ kind: 'laundromat', tier: 3 }, { kind: 'restaurant', tier:
 assert(Array.isArray((await meOf(token)).frontTitles), 'the view exposes frontTitles');
 
 // (E) THE HOSTILE TAKEOVER — c2 (a strong, ungangled rival ≥ MIN_LEVEL who runs no laundromat) takes bizId
-await seed2(`respect=1000000, cash=200000000, loc='docks', muscle=800, cunning=800, energy=200, safe_until=NULL, hosp_until=NULL, jail_until=NULL`);
+await seed2(`respect=2500000, cash=200000000, loc='docks', muscle=800, cunning=800, energy=200, safe_until=NULL, hosp_until=NULL, jail_until=NULL`);
 await pool.query(`UPDATE businesses SET spec='fortress', spec_at=now(), takeover_cd_until=NULL, last_collect_at=now() WHERE id='${bizId}'`);
 // (red-team) seed a lifetime den volume so the rakeback-cursor handover below is a real assertion
 await pool.query('INSERT INTO den_volume (id, total) VALUES (1, 5000000) ON CONFLICT (id) DO UPDATE SET total=5000000');
@@ -595,7 +595,7 @@ assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transacti
 const { body: { token: t3 } } = await call('POST', '/v1/auth/guest');
 await call('POST', '/v1/character', { token: t3, body: { name: 'Third Owner' } });
 const c3 = (await meOf(t3)).id;
-await pool.query(`UPDATE characters SET respect=250000, cash=2000000, loc='docks' WHERE id='${c3}'`);
+await pool.query(`UPDATE characters SET respect=625000, cash=2000000, loc='docks' WHERE id='${c3}'`);
 const buy3 = await call('POST', '/v1/business/laundromat/buy', { token: t3 });
 const biz3 = buy3.body.id;
 assert.equal((await call('POST', `/v1/business/${biz3}/takeover`, { token: t2 })).body.error, 'have_kind', 'you can only hold one of each kind');

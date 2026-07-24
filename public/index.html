@@ -2087,14 +2087,16 @@
       <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks pays real cash + $OMR + milestone bonuses</span></h2>
       <div id="recruit-lb" class="d" style="color:var(--dim);font-size:12.5px">loading…</div>
 
-      <h2 style="margin-top:14px">Missions <span class="d" style="font-size:11px">— one-time scripted jobs (cash + respect, sometimes $OMR &amp; a title)</span></h2>
+      <h2 style="margin-top:14px">Missions <span class="d" style="font-size:11px">— the family's story, one job at a time (cash + respect, sometimes $OMR &amp; a title)</span></h2>
       <div class="grid">${(rules?.missions || []).filter((m) => (m.req?.lvl || 0) <= (me?.level || 1)).map((m) => {
+        const missionCd = Number(me?.missionSeconds || 0); // PACING: one job at a time
         const statReq = ['muscle', 'cunning', 'speed'].map((s) => m.req?.[s] ? `${s} ${m.req[s]}` : null).filter(Boolean).join(', ');
         const meets = ['muscle', 'cunning', 'speed'].every((s) => !m.req?.[s] || (me?.stats?.[s] || 0) >= m.req[s]);
         return `<div class="card"><span class="t">${m.name}</span>
           <div class="d">${m.brief || ''}</div>
           <div class="d">needs lvl ${m.req?.lvl || 1}${statReq ? ` · ${statReq}` : ''} · pays $${fmt(m.reward?.cash || 0)}${m.reward?.omr ? ` + ${m.reward.omr} $OMR` : ''}${m.reward?.title ? ' + a title' : ''}</div>
-          <button class="act" data-mission="${m.id}"${meets ? '' : ' disabled'}>attempt${meets ? '' : ' (train up first)'}</button></div>`;
+          <button class="act" data-mission="${m.id}"${meets && !missionCd ? '' : ' disabled'}>attempt${
+            !meets ? ' (train up first)' : missionCd ? ` (next job in ${mins(missionCd)})` : ''}</button></div>`;
       }).join('') || '<span class="d" style="color:var(--dim)">level up to unlock your first mission</span>'}</div>`;
     // THE CITY STANDING — your own aggregate score across the six pillars + the top of the board (the spine).
     api('GET', '/v1/leaderboard/city').then((r) => {
@@ -2172,8 +2174,12 @@
     const restCrimes = rest.map(crimeCard).join('');
     const travel = (rules?.districts || []).map((d) =>
       `<button class="act" data-do="POST /v1/travel/${d.id || d}">${d.name || d.id || d}</button>`).join('');
+    // PACING: the gym runs on a cooldown now, so show the live timer rather than letting the player
+    // click into a bare `cooldown` error.
+    const gymCd = Number(me?.trainSeconds || 0);
     const train = (rules?.stats || []).map((s) =>
-      `<button class="act" data-do="POST /v1/train/${s}">${s}</button>`).join('');
+      `<button class="act" data-do="POST /v1/train/${s}"${gymCd > 0 ? ' disabled' : ''}>${s}</button>`).join('')
+      + (gymCd > 0 ? ` <span class="d">gym reopens in ${mins(gymCd)}</span>` : '');
     // the Path — declared once you make rank (lvl 5). Shapes how you earn for the rest of the street.
     let pathBlock = '';
     if (me && me.path) {

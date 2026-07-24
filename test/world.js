@@ -74,7 +74,7 @@ assert(goodPriceOf(g.id, 'docks', blk) >= 10, 'the price floor still holds under
 // PHASE 2 — NPC rival families
 // ─────────────────────────────────────────────────────────────────────────────
 const raider = await mk('Raider Rae');
-await seedCh(raider.id, 'respect=2000, muscle=200, speed=100, energy=200, ammo=100, cash=1000');
+await seedCh(raider.id, 'respect=5000, muscle=200, speed=100, energy=200, ammo=100, cash=1000');
 let board = (await call('GET', '/v1/world', { token: raider.token })).body;
 const zappa = board.npcs.find((n) => n.id === 'zappa');
 assert.equal(zappa.strengthPct, 100, 'an untouched outfit is at full strength');
@@ -194,8 +194,8 @@ delete process.env.WORLD_RAID_P;
 // ─────────────────────────────────────────────────────────────────────────────
 const boss = await mk('Frontier Boss');
 const soldier = await mk('Frontier Soldier');
-await seedCh(boss.id, 'respect=2000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
-await seedCh(soldier.id, 'respect=2000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
+await seedCh(boss.id, 'respect=5000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
+await seedCh(soldier.id, 'respect=5000, muscle=200, speed=100, energy=200, ammo=100, cash=100000');
 // the boss founds a family; the soldier joins it (the frontier flag is planted by the LEADER's family)
 assert.equal((await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'The Frontier Mob', tag: 'FRM' } })).code, 200, 'the family is founded');
 const gangId = (await meOf(boss.token)).gang.id;
@@ -253,8 +253,8 @@ delete process.env.WORLD_RAID_P;
 // rows are cleared (no orphan bloat the sweep never reaps; the pen-break death precedent)
 const doomed = await mk('Doomed Leader');
 const stranded = await mk('Stranded Soldier');
-await seedCh(doomed.id, 'respect=2000, energy=200, ammo=100');
-await seedCh(stranded.id, 'respect=2000, energy=200, ammo=100');
+await seedCh(doomed.id, 'respect=5000, energy=200, ammo=100');
+await seedCh(stranded.id, 'respect=5000, energy=200, ammo=100');
 const dplan = await call('POST', '/v1/world/kryl/plan', { token: doomed.token });
 assert.equal(dplan.code, 200, 'the raid is planned');
 assert.equal((await call('POST', `/v1/world/raids/${dplan.body.id}/join`, { token: stranded.token })).code, 200, 'the soldier crews up');
@@ -312,7 +312,7 @@ assert.equal((await call('POST', '/v1/world/kryl/invade', { token: boss.token })
 
 // (4) a RIVAL family invades the Frontier Mob's Kryl — outbids the garrison from the treasury
 const rboss = await mk('Rival Don');
-await seedCh(rboss.id, 'respect=2000, cash=100000');
+await seedCh(rboss.id, 'respect=5000, cash=100000');
 assert.equal((await call('POST', '/v1/gangs', { token: rboss.token, body: { name: 'The Usurpers', tag: 'USR' } })).code, 200, 'the rival family is founded');
 const rivalGang = (await meOf(rboss.token)).gang.id;
 const RIVAL_SEED = 500000;
@@ -335,7 +335,7 @@ assert.equal(kb.invadeCost, Math.max(WORLD.FRONTIER.INVADE_BASE, Math.floor(expe
 // B1 (audit) — you can only HOLD turf you could RAID: a rookie boss with a fat treasury can't seat
 // himself on an apex outpost (kryl is lvl 20). Money alone doesn't take the frontier.
 const rookieBoss = await mk('Rookie Don');
-await seedCh(rookieBoss.id, 'respect=324, cash=100000');  // level 10 — enough to found (lvl 5), under kryl's minLvl 20
+await seedCh(rookieBoss.id, 'respect=810, cash=100000');  // level 10 — enough to found (lvl 5), under kryl's minLvl 20
 assert.equal((await call('POST', '/v1/gangs', { token: rookieBoss.token, body: { name: 'The Nobodies', tag: 'NOB' } })).code, 200, 'the rookie family is founded');
 // the level gate fires BEFORE the treasury read, so no seed needed — money can't buy an apex outpost
 assert.equal((await call('POST', '/v1/world/kryl/invade', { token: rookieBoss.token })).body.error, 'level', 'a rookie boss can’t invade an apex outpost, treasury or no');

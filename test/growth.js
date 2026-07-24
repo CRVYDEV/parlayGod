@@ -28,7 +28,7 @@ const mk = async (name, referralCode) => {
 
 // ── the chef: level 11, bankrolled ──
 const chef = await mk('Stringer Bell');
-await seedCh(chef.id, "respect=400, cash=500000, cb=20, energy=200, loc='docks'");
+await seedCh(chef.id, "respect=1000, cash=500000, cb=20, energy=200, loc='docks'");
 
 // ── paths (§5.1): $10k first pick at level 5+ ──
 assert.equal((await call('POST', '/v1/path', { token: chef.token, body: { path: 'chemistry' } })).code, 400, 'bad path rejected');
@@ -265,7 +265,14 @@ await seedCh(chef.id, 'muscle=10');
 r = await call('POST', '/v1/missions/m1', { token: chef.token });
 assert.equal(r.code, 200, 'mission cleared'); assert.equal(r.body.reward.cash, 1000);
 assert.equal((await call('POST', '/v1/missions/m1', { token: chef.token })).code, 400, 'chapters close');
-await seedCh(chef.id, 'respect=1000, cunning=40, cb=20, cash=500000'); // lvl 16 for m4
+// PACING: the ladder no longer cascades — one job at a time. (This is what stopped a tester
+// claiming all 28 back-to-back for level 245 in an afternoon.)
+await seedCh(chef.id, 'speed=20'); // m10's req, so the COOLDOWN is what refuses it (reqs are checked first)
+assert.equal((await call('POST', '/v1/missions/m10', { token: chef.token })).body.error, 'cooldown',
+  'the family gives you one job at a time — no cascading the ladder');
+assert((await meOf(chef.token)).missionSeconds > 0, 'the sheet shows the next-job timer');
+await seedCh(chef.id, 'mission_at=NULL'); // the rest of this block tests mission MECHANICS, not pacing
+await seedCh(chef.id, 'respect=2500, cunning=40, cb=20, cash=500000'); // lvl 16 for m4
 await call('POST', '/v1/armory/gun/argument/buy', { token: chef.token }); // fp 18
 const omrBefore = (await meOf(chef.token)).omr;
 r = await call('POST', '/v1/missions/m4', { token: chef.token });
@@ -365,7 +372,7 @@ assert(funnel2.broadcast.sharers >= 1 && typeof funnel2.broadcast.referredPerSha
 const sponsor = await mk('Sponsor Sal');
 const rookie = await mk('Green Recruit', 'Sponsor Sal');
 const sponsorBefore = (await meOf(sponsor.token)).cash;
-await seedCh(rookie.id, 'respect=64, lc_crime=9, nerve=50, energy=200'); // L5, 9 jobs — one shy of the spark gate
+await seedCh(rookie.id, 'respect=160, lc_crime=9, nerve=50, energy=200'); // L5, 9 jobs — one shy of the spark gate
 for (let i = 0; i < 20; i++) { await seedCh(rookie.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: rookie.token }); if (r.body.success) break; }
 const spSponsor = await meOf(sponsor.token);
 assert.equal(spSponsor.cash, sponsorBefore + 2500, 'the sponsor gets the early spark ($2500) — fast feedback before full qualification');
@@ -386,7 +393,7 @@ assert.equal((await meOf(sponsor.token)).cash, sponsorBefore + 2500, 'the spark 
 const mentor = await mk('Mentor Max');
 const recruit = await mk('Fresh Blood', 'Mentor Max');
 assert(Number((await pool.query('SELECT COUNT(*) n FROM referrals')).rows[0].n) >= 1, 'referral graph row written');
-await seedCh(recruit.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await seedCh(recruit.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
 await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id = (SELECT account_id FROM characters WHERE id='${recruit.id}')`);
 const mentorCashBefore = (await meOf(mentor.token)).cash;
 for (let i = 0; i < 20; i++) { // the 40th CLEAN job crosses the last gate — retry the odd fumble
@@ -409,7 +416,7 @@ assert.equal((await meOf(mentor.token)).recruits, 1, 'qualification fires once')
 // agent-flagged recruits never pay out
 const bot = await mk('Bot Barlow', 'Mentor Max');
 await pool.query(`UPDATE account_persistent SET agent_flag=true, checkins_lifetime=3 WHERE account_id = (SELECT account_id FROM characters WHERE id='${bot.id}')`);
-await seedCh(bot.id, 'respect=400, lc_crime=40, cash=30000, nerve=50, energy=200');
+await seedCh(bot.id, 'respect=1000, lc_crime=40, cash=30000, nerve=50, energy=200');
 await call('POST', '/v1/crimes/pick', { token: bot.token });
 assert.equal((await meOf(mentor.token)).recruits, 1, 'agent accounts excluded from referral payouts');
 
@@ -420,7 +427,7 @@ assert(mm && mm.recruits === 1, 'the recruiter appears on the board with their r
 assert.equal(mm.rank, 'First Blood Brought In', 'the milestone rank surfaces on the board');
 assert(!lb.recruiters.some((r) => r.agent), 'agent recruiters never appear (they never bump recruits)');
 // family recruitment board: put the mentor in a gang and their count feeds the family total
-await seedCh(mentor.id, 'cash=200000, respect=400, energy=200, nerve=50, jail_until=NULL');
+await seedCh(mentor.id, 'cash=200000, respect=1000, energy=200, nerve=50, jail_until=NULL');
 await call('POST', '/v1/gangs', { token: mentor.token, body: { name: 'The Rainmakers', tag: 'RAIN' } });
 const lb2 = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.token })).body;
 const fam = lb2.families.find((f) => f.name === 'The Rainmakers');
@@ -432,7 +439,7 @@ const drive = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.t
 assert(drive.active && drive.mult === 2 && drive.seconds > 0, 'the drive is live + publicly visible on the board');
 const dMentor = await mk('Drive Dana');
 const dRecruit = await mk('Doubled Danny', 'Drive Dana');
-await seedCh(dRecruit.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await seedCh(dRecruit.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
 await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${dRecruit.id}')`);
 const dMentorBefore = (await meOf(dMentor.token)).cash;
 for (let i = 0; i < 20; i++) { await seedCh(dRecruit.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: dRecruit.token }); if (r.body.success) break; }
@@ -447,11 +454,11 @@ const gTony = await mk('Grand Tony');                    // A — the grandrecru
 const mMike = await mk('Middle Mike', 'Grand Tony');     // R — brought in by A
 const bBenny = await mk('Bottom Benny', 'Middle Mike');  // R2 — brought in by R
 // the middle link must ITSELF qualify (audit: every level of the tree is a real made man) — qualify Mike first
-await seedCh(mMike.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await seedCh(mMike.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
 await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${mMike.id}')`);
 for (let i = 0; i < 20; i++) { await seedCh(mMike.id, 'nerve=50, energy=200, jail_until=NULL'); r = await call('POST', '/v1/crimes/pick', { token: mMike.token }); if (r.body.success) break; }
 assert.equal((await pool.query(`SELECT ref_paid FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${mMike.id}')`)).rows[0].ref_paid, true, 'the middle link qualified');
-await seedCh(bBenny.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+await seedCh(bBenny.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
 await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${bBenny.id}')`);
 const tonyMe0 = await meOf(gTony.token); // captured AFTER Mike's qualification already paid Tony
 const tonyBefore = tonyMe0.cash, tonyOmrBefore = tonyMe0.omr;
@@ -582,7 +589,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
   const mMoe = await mk('Middle Moe', 'Grand Al');   // R — brought in by A
   const bBo = await mk('Bottom Bo', 'Middle Moe');   // R2 — brought in by R
   const qualify = async (c) => { // drive a recruit through the 4 gates (level/jobs/checkins/cash)
-    await seedCh(c.id, 'respect=400, lc_crime=39, cash=30000, nerve=50, energy=200');
+    await seedCh(c.id, 'respect=1000, lc_crime=39, cash=30000, nerve=50, energy=200');
     await pool.query(`UPDATE account_persistent SET checkins_lifetime=3 WHERE account_id=(SELECT account_id FROM characters WHERE id='${c.id}')`);
     for (let i = 0; i < 20; i++) { await seedCh(c.id, 'nerve=50, energy=200, jail_until=NULL'); const rr = await call('POST', '/v1/crimes/pick', { token: c.token }); if (rr.body.success) break; }
   };

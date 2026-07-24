@@ -680,7 +680,10 @@ export const CASINO = {
 // unpredictable without the seed, verifiable after the fact)
 export const numbersDrawOf = (day = dayOf()) => Math.floor(hash01(`numbers:${day}:${MARKET_SEED}`) * 1000);
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
-export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/4))+1;
+// PACING override (founder-directed, see the PACING block below): the prototype's `/4` made levels
+// far too cheap. Reads PACING.LEVEL_DIVISOR at CALL time, so the const being declared later in the
+// module is fine. RE-APPLY THIS LINE after any tools/extract-rules.js regeneration.
+export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/PACING.LEVEL_DIVISOR))+1;
 export const trimOf=(id)=>TRIMS.find(t=>t.id===id)||TRIMS[1];
 export const carOf=(id)=>CARS.find(c=>c.id===id);
 export const drugOf=(id)=>DRUGS.find(d=>d.id===id);
@@ -1029,6 +1032,52 @@ export const M3 = {
     message:  { id: 'message',  name: 'Send a Message', stealMult: 0.4,  repMult: 1.5, dmgMult: 1.4, hospMult: 1.5, heat: 5, energyMult: 1.5 },
   },
 };
+// ── THE PACING BLOCK (founder-directed 2026-07-24, from live alpha) ────────────────────────────
+// An alpha tester reached LEVEL 240 in a couple of hours. The diagnosis (measured, not guessed):
+//
+//   1. `train` had NO cooldown and NO cash cost — 10 energy against a 40/min regen = ~240 sessions
+//      an hour, so every mission STAT gate (muscle/cunning/speed up to 155) fell in one sitting.
+//   2. MISSIONS had no cooldown either, and the ladder SELF-UNLOCKS: from ~m6 on, each mission's
+//      respect reward overshoots the NEXT mission's level gate by 30–100 levels, so once the stats
+//      were up all 28 could be claimed back-to-back.
+//   3. The ladder pays **239,200 respect** end to end, and `levelOf` needed only 228,484 for L240.
+//      The mission chain alone WAS levels 1→245; the rest of the game never entered into it.
+//
+// For scale: the best sustained crime grind is ~3,257 respect/hr, so the ladder handed over
+// roughly three days of hard grinding in one uninterrupted sitting.
+//
+// Every dial the fix uses lives here so the whole pacing curve is one block to tune. NOTE:
+// `levelOf` lives in the AUTO-GENERATED section and now reads LEVEL_DIVISOR from here — this is a
+// deliberate founder override of the prototype's `/4` (the D5 bank-taper precedent). A future
+// `tools/extract-rules.js` run must re-apply that one-line reference.
+export const PACING = {
+  // (1) THE LEVEL CURVE. respect(L) = LEVEL_DIVISOR × (L−1)². The prototype's 4 made levels far too
+  // cheap at the top (L240 = 228k respect ≈ 70h of grinding even before the mission ladder short-cut
+  // it). 10 costs 2.5× more respect at every level — the same shape, stretched.
+  LEVEL_DIVISOR: 10,
+
+  // (2) THE MASTER CLOCK — regen. This is the real "cooldown on activities": at 40 energy/min a
+  // 50-point tank refilled in ~75 seconds, so energy never actually paced anything. Cutting energy
+  // to 12/min and nerve to 6/min makes a tank a ~15-20 minute affair — you play in bursts and come
+  // back, which is the genre's whole rhythm. Health is untouched (the Doc is a cash sink, not a gate).
+  ENERGY_REGEN_PER_MIN: 12,
+  ENERGY_REGEN_RANK_BONUS: 4,   // Runner+ bump (was +20 on top of 40)
+  NERVE_REGEN_PER_MIN: 6,
+
+  // (3) MISSIONS are a STORY LADDER, not the levelling curve. A cooldown between claims stops the
+  // whole chain being cascaded in one sitting (28 × 4h ≈ 5 days minimum to walk it), and the respect
+  // rewards are scaled to 25% so finishing the ladder is a meaningful boost — worth roughly a level
+  // 70-80 character — instead of the entire game. Cash/$OMR/title rewards are UNTOUCHED: the story
+  // still pays, it just stops being the fastest way to a number.
+  MISSION_CD_MS: 4 * 3600 * 1000,
+  MISSION_RESPECT_MULT: 0.25,
+
+  // (4) THE GYM. A per-session cooldown on top of the energy cost, so stat gates take days rather
+  // than an afternoon. 3 min → ~20 sessions/hr; the ~500 sessions the top mission tier demands is
+  // now a ~25-hour investment spread over real days instead of one sitting.
+  TRAIN_CD_MS: 3 * 60 * 1000,
+};
+
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited
 // balance or §10.4 value flows beyond its own enumerated $OMR burn ('vanity:*'). These are the

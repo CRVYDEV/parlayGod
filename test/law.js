@@ -182,7 +182,7 @@ assert.equal((await call('POST', '/v1/law/plea', { token: pab.token })).body.err
 const rat = await mk('Ratty Ray');       // will flip
 const named = await mk('Named Nick');     // the rival Ray names
 // seed the named rival just under the line so the FLIP_SEED tips them over → indicted by testimony
-await seedCh(named.id, `respect=200, heat_exposure=${LAW.INDICT_AT - LAW.FLIP_SEED + 200}`);
+await seedCh(named.id, `respect=500, heat_exposure=${LAW.INDICT_AT - LAW.FLIP_SEED + 200}`);
 const namedExp0 = Number((await rawCh(named.id)).heat_exposure);
 await seedCh(rat.id, 'indicted_at=now(), heat_exposure=4000, cash=100000');
 r = await call('POST', `/v1/law/flip/${named.id}`, { token: rat.token });
@@ -216,7 +216,7 @@ assert.equal(r.body.error, 'directed_min', 'a non-rat directed contract still ta
 // loyal member is still protected. (Without the fix a rat hiding in a family defeats the magnet.)
 const capo = await mk('Capo Carl');
 const loyalist = await mk('Loyal Lou');
-await seedCh(capo.id, 'respect=2000, cash=100000, jail_until=NULL');
+await seedCh(capo.id, 'respect=5000, cash=100000, jail_until=NULL');
 await seedCh(rat.id, 'jail_until=NULL');
 const gid = (await call('POST', '/v1/gangs', { token: capo.token, body: { name: 'The Carls', tag: 'CARL' } })).body.gangId;
 assert.equal((await call('POST', `/v1/gangs/${gid}/join`, { token: rat.token })).code, 200, 'the rat is in the family');
@@ -234,8 +234,8 @@ assert.equal(r.code, 200, 'the rat enters witness protection');
 assert((await meOf(rat.token)).law.witproSeconds > 0, 'the relocation window is live');
 assert.equal((await call('POST', '/v1/law/witpro', { token: rat.token })).body.error, 'done', 'relocation is one-time');
 // a witpro'd rat is untouchable — an NPC hit can't reach them (the rat is over the level floor)
-await seedCh(poster.id, 'cash=5000000, respect=200');
-await seedCh(rat.id, 'respect=200');
+await seedCh(poster.id, 'cash=5000000, respect=500');
+await seedCh(rat.id, 'respect=500');
 const hit = await call('POST', `/v1/streets/${rat.id}/npchit`, { token: poster.token, body: { tier: 'legbreaker' } });
 assert.equal(hit.body.error, 'witpro', 'the marshals put the rat beyond a contractor reach');
 

@@ -96,8 +96,8 @@ let a, b;
   // via the NPC-hit payer path: a pays for a hit on b (the payer IS killerCh for scandal purposes).
   process.env.SEARCH_MS = '1'; process.env.SHOOT_CD_MS = '1';
   await setCash(a.id, 500000);
-  await pool.query(`UPDATE characters SET respect=1000, health=100 WHERE id='${a.id}'`);
-  await pool.query(`UPDATE characters SET respect=1000, health=1 WHERE id='${b.id}'`);
+  await pool.query(`UPDATE characters SET respect=2500, health=100 WHERE id='${a.id}'`);
+  await pool.query(`UPDATE characters SET respect=2500, health=1 WHERE id='${b.id}'`);
   const h0 = await honorOf(a.id);
   // loop the npc hit until it lands (the fee burns each try; the tier roll is server-side)
   let killed = false;
@@ -171,7 +171,7 @@ let a, b;
 // ═══ SOLDIERS — hire/assign + the crime assist + permadeath + the memorial ═══
 {
   const s = await mk('Boss');
-  await pool.query(`UPDATE characters SET respect=1000, nerve=99, energy=99 WHERE id='${s.id}'`);
+  await pool.query(`UPDATE characters SET respect=2500, nerve=99, energy=99 WHERE id='${s.id}'`);
   // broke hire refused
   let r = await call('POST', '/v1/soldiers/hire', { token: s.token });
   assert.equal(r.body?.error, 'cash', 'broke hire refused');

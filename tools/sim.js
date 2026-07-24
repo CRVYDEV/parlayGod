@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -38,7 +38,9 @@ const newChar = async (name) => {
 };
 // state warps (never value)
 const warp = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${id}'`);
-const lvlRespect = (lvl) => 4 * (lvl - 1) * (lvl - 1); // levelOf inverse
+// levelOf inverse — reads the PACING divisor so the sim tracks the live curve instead of a
+// hardcoded copy of it (this is what silently under-seeded every probe when the curve moved).
+const lvlRespect = (lvl) => PACING.LEVEL_DIVISOR * (lvl - 1) * (lvl - 1);
 const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 const metrics = [];

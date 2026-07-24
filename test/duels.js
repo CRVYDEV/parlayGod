@@ -34,8 +34,8 @@ const bruiser = await mk('Knuckles Kane');   // the strong build
 const pigeon = await mk('Soft Solly');       // the weak build (but a real level)
 const runt = await mk('Little Larry');       // below MIN_LVL
 // stats seeded (not currency); respect 1444 = level 20, 324 = level 10
-await seedCh(bruiser.id, 'respect=1444, muscle=100, cunning=60, speed=60, cash=cash+500000');
-await seedCh(pigeon.id, 'respect=1444, muscle=5, cunning=5, speed=5, cash=cash+500000');
+await seedCh(bruiser.id, 'respect=3610, muscle=100, cunning=60, speed=60, cash=cash+500000');
+await seedCh(pigeon.id, 'respect=3610, muscle=5, cunning=5, speed=5, cash=cash+500000');
 const seedDrift = 1_000_000;
 
 // ── listing: the level gate + the floor + unlist ──

@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -37,8 +37,11 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const held = ctx.held || [];
   const maxEnergy = 50 + 2 * lvl + assetEnergyCap(assets);
   const maxNerve = 10 + lvl;
-  ch.energy = Math.min(maxEnergy, Number(ch.energy) + (40 + (rIdx >= 2 ? 20 : 0)) * dtMin); // Runner+ regen bump
-  ch.nerve = Math.min(maxNerve, Number(ch.nerve) + 20 * (held.includes('cathedral') ? 2 : 1) * dtMin); // Cathedral Hill turf
+  // PACING (founder-directed): energy/nerve regen is the game's master clock — at the prototype's
+  // 40/min a full tank refilled in ~75 seconds, so it paced nothing and the whole progression ran
+  // as fast as a player could click. Both rates now live in PACING.
+  ch.energy = Math.min(maxEnergy, Number(ch.energy) + (PACING.ENERGY_REGEN_PER_MIN + (rIdx >= 2 ? PACING.ENERGY_REGEN_RANK_BONUS : 0)) * dtMin); // Runner+ regen bump
+  ch.nerve = Math.min(maxNerve, Number(ch.nerve) + PACING.NERVE_REGEN_PER_MIN * (held.includes('cathedral') ? 2 : 1) * dtMin); // Cathedral Hill turf
   ch.health = Math.min(100, Number(ch.health) + 20 * dtMin);
 
   // bank interest: 2% per 12h, continuous approximation, income window cap.

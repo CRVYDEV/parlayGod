@@ -92,7 +92,7 @@ const killer = await mk('Shiv Sam');
 const mark = await mk('Marked Marv');
 const free = await mk('Free Fred');
 await seedCh(killer.id, `${jailFuture}, energy=200, cash=200000, muscle=400`);
-await seedCh(mark.id, `${jailFuture}, muscle=5, respect=500`);
+await seedCh(mark.id, `${jailFuture}, muscle=5, respect=1250`);
 
 // gates: a free target is out of reach; you need a shiv
 assert.equal((await call('POST', `/v1/pen/shank/${free.id}`, { token: killer.token })).body.error, 'target_free', 'no reaching a free man');
@@ -136,7 +136,7 @@ assert(r.body.sentenceSeconds >= killerSentence0 + PEN.KILL_ADD_S - 3, 'a body m
 const killer2 = await mk('Clumsy Cliff');
 const mark2 = await mk('Lucky Lou');
 await seedCh(killer2.id, `${jailFuture}, energy=200, cash=200000, health=100`);
-await seedCh(mark2.id, `${jailFuture}, respect=500`);
+await seedCh(mark2.id, `${jailFuture}, respect=1250`);
 await call('POST', '/v1/pen/buy/shiv', { token: killer2.token });
 const k2sent0 = (await call('GET', '/v1/pen', { token: killer2.token })).body.sentenceSeconds;
 process.env.SHANK_P = '0';
@@ -155,7 +155,7 @@ assert(!!(await rawCh(mark2.id)).alive, 'the mark walks away');
   const cd = await mk('Cooldown Carl');
   const mark3 = await mk('Wing Walter');
   await seedCh(cd.id, `${jailFuture}, energy=200, cash=200000, health=100, muscle=90`);
-  await seedCh(mark3.id, `${jailFuture}, respect=500, muscle=1`);
+  await seedCh(mark3.id, `${jailFuture}, respect=1250, muscle=1`);
   await call('POST', '/v1/pen/buy/shiv', { token: cd.token });
   await call('POST', '/v1/pen/buy/shiv', { token: cd.token });
   process.env.PEN_SHANK_CD_MS = String(30 * 60 * 1000); // the production value
@@ -180,7 +180,7 @@ const funder = await mk('Funder Fay');
 const yardKiller = await mk('Yard Yuri');
 const contractMark = await mk('Contract Cyril');
 await seedCh(funder.id, 'cash=300000');
-await seedCh(contractMark.id, 'respect=800');   // a real target
+await seedCh(contractMark.id, 'respect=2000');   // a real target
 r = await call('POST', `/v1/streets/${contractMark.id}/bounty`, { token: funder.token, body: { amount: 100000, kind: 'kill' } });
 assert.equal(r.code, 200, 'an open kill contract is posted on the mark');
 await seedCh(yardKiller.id, `${jailFuture}, energy=200, cash=100000, muscle=400`);
@@ -201,7 +201,7 @@ assert.equal(Number((await rawCh(yardKiller.id)).cash) - ykCash0, 100000, 'the s
 const holed = await mk('Holed Hank');
 const holeMark = await mk('Hole Mark');
 await seedCh(holed.id, `${jailFuture}, energy=200, cash=200000, health=100`);
-await seedCh(holeMark.id, `${jailFuture}, respect=500`);
+await seedCh(holeMark.id, `${jailFuture}, respect=1250`);
 await call('POST', '/v1/pen/buy/shiv', { token: holed.token });
 process.env.SHANK_P = '0';
 r = await call('POST', `/v1/pen/shank/${holeMark.id}`, { token: holed.token });
@@ -227,7 +227,7 @@ await seedCh(holed.id, 'hole_until=NULL');
 const inc = await mk('Incident Ike');
 const incMark = await mk('Incident Mark');
 await seedCh(inc.id, `${jailFuture}, energy=200, cash=1000000, muscle=400`);
-await seedCh(incMark.id, `${jailFuture}, respect=500`);
+await seedCh(incMark.id, `${jailFuture}, respect=1250`);
 await call('POST', '/v1/pen/buy/shiv', { token: inc.token });
 process.env.PEN_YARD_EVENT = 'lockdown';
 assert.equal((await call('POST', `/v1/pen/shank/${incMark.id}`, { token: inc.token })).body.error, 'lockdown', 'a lockdown freezes the yard — no shanks');
@@ -254,7 +254,7 @@ process.env.PEN_YARD_EVENT = 'quiet';
 const caller = await mk('Caller Cass');
 const hitMark = await mk('Hit Mark');
 await seedCh(caller.id, `${jailFuture}, cash=1000000`);
-await seedCh(hitMark.id, 'respect=800');   // over the NPC-hit level floor, on the outside
+await seedCh(hitMark.id, 'respect=2000');   // over the NPC-hit level floor, on the outside
 // a normal NPC hit from lockup is refused…
 assert.equal((await call('POST', `/v1/streets/${hitMark.id}/npchit`, { token: caller.token, body: { tier: 'legbreaker' } })).body.error, 'jailed', 'no arranging wet work from lockup — without a burner');
 // …but a burner reaches out. No burner yet → refused.
@@ -272,7 +272,7 @@ assert.equal((await pool.query(`SELECT COALESCE(SUM(qty),0) q FROM pen_contraban
 const burnKiller = await mk('Burner Bane');
 const segTarget = await mk('Seg Target');
 await seedCh(burnKiller.id, `${jailFuture}, cash=2000000`);
-await seedCh(segTarget.id, `${jailFuture}, respect=500`);   // jailed + over the NPC-hit level floor
+await seedCh(segTarget.id, `${jailFuture}, respect=1250`);   // jailed + over the NPC-hit level floor
 await call('POST', '/v1/pen/buy/burner', { token: burnKiller.token });
 await seedCh(segTarget.id, "hole_until = now() + interval '20 minutes'");
 assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'segregated', 'no burner-hit reaches a man in the hole');
@@ -286,7 +286,7 @@ assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burn
 await seedCh(burnKiller.id, 'pen_safe_until=NULL');
 // AUDIT REGRESSION: a LOCKDOWN freezes an INSIDE burner-kill, but an OUTSIDE call still goes through
 const outsideMark = await mk('Outside Otto');
-await seedCh(outsideMark.id, 'respect=800');   // free, over the floor
+await seedCh(outsideMark.id, 'respect=2000');   // free, over the floor
 process.env.PEN_YARD_EVENT = 'lockdown';
 assert.equal((await call('POST', `/v1/pen/burner/${segTarget.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } })).body.error, 'lockdown', 'lockdown freezes an inside burner-kill');
 r = await call('POST', `/v1/pen/burner/${outsideMark.id}`, { token: burnKiller.token, body: { tier: 'legbreaker' } });
@@ -297,7 +297,7 @@ process.env.PEN_YARD_EVENT = 'quiet';
 const shortTimer = await mk('Short Timer');
 const stMark = await mk('ST Mark');
 await seedCh(shortTimer.id, "jail_until = now() + interval '10 seconds', energy=200, cash=200000, health=100");
-await seedCh(stMark.id, `${jailFuture}, respect=500`);
+await seedCh(stMark.id, `${jailFuture}, respect=1250`);
 await call('POST', '/v1/pen/buy/shiv', { token: shortTimer.token });
 process.env.SHANK_P = '0';
 await call('POST', `/v1/pen/shank/${stMark.id}`, { token: shortTimer.token });

@@ -97,8 +97,8 @@ assert.equal(qView.safehouseCost, Math.floor(M3.SAFEHOUSE_COST * 1.25), 'the she
 // the kill loot: a full §9 hit on a cash-fat mark loots cashLootRate = min(.5, .25×1.15) = .2875
 const killer = await mk('Seasonal Sid');
 const mark = await mk('Marked Mel');
-await seedCh(killer.id, "respect=10000, muscle=120, energy=200, loc='docks', ammo=8000, cb=10, cash=cash+200000");
-await seedCh(mark.id, "respect=1444, cash=cash+1000000, health=1, loc='docks'");
+await seedCh(killer.id, "respect=25000, muscle=120, energy=200, loc='docks', ammo=8000, cb=10, cash=cash+200000");
+await seedCh(mark.id, "respect=3610, cash=cash+1000000, health=1, loc='docks'");
 await call('POST', '/v1/armory/gun/lastresort/buy', { token: killer.token, body: {} });
 await call('POST', `/v1/streets/${mark.id}/search`, { token: killer.token, body: {} });
 await new Promise((res) => setTimeout(res, 120)); // SEARCH_MS=50 — the search places

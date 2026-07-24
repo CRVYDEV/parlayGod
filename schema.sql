@@ -179,6 +179,8 @@ CREATE TABLE IF NOT EXISTS characters (
   hole_until TIMESTAMPTZ,                          -- THE PEN step two: solitary (a caught shank) — no yard actions, untouchable
   pen_faction TEXT,                                -- THE PEN step five: the yard crew this inmate runs with (cover from shanks; only functional while jailed)
   shank_at TIMESTAMPTZ,                            -- THE PEN: per-attacker shank cooldown (SIGN-OFF Tier 3) — direct-SQL, outside persistCharacter
+  train_at TIMESTAMPTZ,                            -- PACING: per-session gym cooldown — direct-SQL, outside persistCharacter
+  mission_at TIMESTAMPTZ,                          -- PACING: cooldown between mission claims (stops the ladder cascading) — direct-SQL
   welsher BOOLEAN NOT NULL DEFAULT false,          -- LOAN SHARKING: defaulted on a debt — can't borrow again (dies with the street)
   wanted_until TIMESTAMPTZ,                         -- LOAN step 4: WANTED — a defaulter under active pursuit (omertà stripped + NPC hunters + a pool bounty) until it lapses or they square up
   envelope_until TIMESTAMPTZ,                       -- THE ENVELOPE: standing graft to the cops — investigation meter builds slower while current (a $OMR sink)

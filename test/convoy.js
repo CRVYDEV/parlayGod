@@ -32,7 +32,7 @@ const sam = await mk('Shipper Sam');
 const harry = await mk('Highway Harry');
 const fred = await mk('Family Fred');
 const willy = await mk('Weak Willy');
-await seedCh(sam.id, "respect=400, cash=200000, loc='docks'");
+await seedCh(sam.id, "respect=1000, cash=200000, loc='docks'");
 
 // ── load: goods come FROM the trunk; two loads beat the trunk cap ──
 let r = await call('POST', '/v1/goods/buy', { token: sam.token, body: { goodId: 'gin', qty: 10 } });
@@ -102,7 +102,7 @@ assert((await meOf(willy.token)).hospSeconds > 0, 'the guards put him in the hos
 assert.equal(Number((await pool.query(`SELECT qty FROM convoy_cargo WHERE convoy_id='${cid2}'`)).rows[0].qty), 10, 'the freight rolls on untouched');
 
 // ── STEP TWO: the destination TOLL — the family holding the docks taxes what lands there ──
-await seedCh(harry.id, 'respect=400, cash=60000');
+await seedCh(harry.id, 'respect=1000, cash=60000');
 const rbId = (await call('POST', '/v1/gangs', { token: harry.token, body: { name: 'Road Barons', tag: 'RBS' } })).body.gangId;
 assert(rbId, 'harry founded the Road Barons');
 await pool.query(`UPDATE districts SET holder_gang='${rbId}' WHERE id='docks'`);
@@ -210,9 +210,9 @@ await pool.query('DELETE FROM convoy_hauls');
 const rick = await mk('Rig Rick');     // high level — buys/upgrades a rig, delivers clean
 const bo = await mk('Bandit Bo');      // high level — hijacks (bumps the Highwayman legend)
 const runt = await mk('Legend Runt');  // below LEGEND_MIN_LVL — the anti-Sybil floor
-await seedCh(rick.id, "respect=1000000, cash=8000000, loc='docks', energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL");
-await seedCh(bo.id, "respect=1000000, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
-await seedCh(runt.id, "respect=100, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
+await seedCh(rick.id, "respect=2500000, cash=8000000, loc='docks', energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL");
+await seedCh(bo.id, "respect=2500000, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
+await seedCh(runt.id, "respect=250, cash=100000, energy=200, ammo=100, muscle=600, speed=600, safe_until=NULL, hosp_until=NULL, jail_until=NULL, loc='docks'");
 const aidOf = async (id) => (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a;
 const freightOf = async (id, col) => Number((await pool.query(`SELECT ${col} v FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${id}')`)).rows[0].v);
 
@@ -291,7 +291,7 @@ assert.equal(await freightOf(rick.id, 'freight_delivered'), rickDelivered, 'the 
 // running the SAME land lane heats it (bandits case it → the convoy departs with weaker guards); reputation
 // from THE TEAMSTER legend manages it (faster decay / lower gain) + a destination-toll break. EMISSION-SAFE
 // (an ambush is a pure ownership transfer, not a §10.4 faucet — only WHO holds the same bounded haul changes).
-const tc = await mk('Trucker Tim'); await seedCh(tc.id, "respect=400, cash=8000000, loc='docks'");
+const tc = await mk('Trucker Tim'); await seedCh(tc.id, "respect=1000, cash=8000000, loc='docks'");
 await pool.query(`DELETE FROM route_notoriety WHERE character_id='${tc.id}'`);
 const depart = async (to) => {
   await seedCh(tc.id, "loc='docks'");
@@ -317,7 +317,7 @@ assert.equal((await depart('canal')).notoriety, 0, 'a different lane is cold —
 // THE HAULER'S REPUTATION — rep T2 (Dispatcher rank, ≥$2M delivered): the destination toll is HALVED
 const tcAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${tc.id}'`)).rows[0].a;
 await pool.query(`UPDATE account_persistent SET freight_delivered=2500000 WHERE account_id='${tcAcct}'`); // Dispatcher rank → rep tier 2
-const tollBoss = await mk('Toll Boss'); await seedCh(tollBoss.id, "respect=800, cash=100000, loc='docks'");
+const tollBoss = await mk('Toll Boss'); await seedCh(tollBoss.id, "respect=2000, cash=100000, loc='docks'");
 await call('POST', '/v1/gangs', { token: tollBoss.token, body: { name: 'Neon Kings', tag: 'NK' } });
 const ngid = (await pool.query(`SELECT id FROM gangs WHERE name='Neon Kings'`)).rows[0].id;
 await pool.query(`UPDATE districts SET holder_gang='${ngid}' WHERE id='neon'`);

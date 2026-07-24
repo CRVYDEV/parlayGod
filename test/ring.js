@@ -33,7 +33,7 @@ const mk = async (name, seed) => {
   const { body: { token } } = await call('POST', '/v1/auth/guest');
   await call('POST', '/v1/character', { token, body: { name } });
   const ch = await meOf(token);
-  await pool.query(`UPDATE characters SET ${seed || "respect=324, cash=cash+500000, loc='neon'"} WHERE id='${ch.id}'`);
+  await pool.query(`UPDATE characters SET ${seed || "respect=810, cash=cash+500000, loc='neon'"} WHERE id='${ch.id}'`);
   return { token, id: ch.id };
 };
 const escrowOk = async (label) => {

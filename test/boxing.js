@@ -6,7 +6,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { BOXING, UNDERWORLD } from '../src/rules.js';
+import { BOXING, UNDERWORLD, PACING } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { sweepMainEvents, enforceBeltDefense } from '../src/boxing.js';
 
@@ -26,7 +26,7 @@ const mk = async (name) => {
 const seed = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${id}'`);
 let cashDrift = 0;
 const grantCash = async (id, n) => { await pool.query(`UPDATE characters SET cash = cash + ${n} WHERE id='${id}'`); cashDrift += n; };
-const lvlRespect = (lvl) => 4 * (lvl - 1) * (lvl - 1);
+const lvlRespect = (lvl) => PACING.LEVEL_DIVISOR * (lvl - 1) * (lvl - 1); // reads the live curve, not a copy
 const boxingWins = async (aid) => Number((await pool.query(`SELECT boxing_wins w FROM account_persistent WHERE account_id='${aid}'`)).rows[0].w);
 
 const aa = await mk('Don King');        // manager of the strong stable (the challenger)

@@ -26,7 +26,7 @@ const seedCash = async (id, amt) => { await pool.query(`UPDATE characters SET ca
 const cashOf = async (t) => (await meOf(t)).cash;
 
 const cap = await mk('Captain Nemo');
-await pool.query(`UPDATE characters SET respect=6000, loc='docks' WHERE id='${cap.id}'`); // level ~38 — every route open
+await pool.query(`UPDATE characters SET respect=15000, loc='docks' WHERE id='${cap.id}'`); // level ~38 — every route open
 await seedCash(cap.id, 6000000);
 
 // ── buy a boat: cash sink + gates ──
@@ -145,10 +145,10 @@ process.env.PORT_RUN_MS = String(60 * 60 * 1000); // a long run so it stays AT S
 r = await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
 const pirateHold = r.body.hold; // the upgraded hold
 // set up the pirate: a made man at the docks with a fast boat + guns
-const bb = await mk('Blackbeard'); await pool.query(`UPDATE characters SET respect=400, loc='docks', energy=200, ammo=50 WHERE id='${bb.id}'`); await seedCash(bb.id, 2000000);
+const bb = await mk('Blackbeard'); await pool.query(`UPDATE characters SET respect=1000, loc='docks', energy=200, ammo=50 WHERE id='${bb.id}'`); await seedCash(bb.id, 2000000);
 const bbBoat = (await call('POST', '/v1/port/boat/cutter', { token: bb.token })).body.boat.id;
 // gates: a rookie can't pirate
-const rk = await mk('Deckhand Dan'); await pool.query(`UPDATE characters SET respect=50, loc='docks' WHERE id='${rk.id}'`);
+const rk = await mk('Deckhand Dan'); await pool.query(`UPDATE characters SET respect=125, loc='docks' WHERE id='${rk.id}'`);
 assert.equal((await call('POST', `/v1/port/intercept/${cutter}`, { token: rk.token })).body.error, 'level', 'piracy is level-gated');
 // the seas board shows the run (route + value BAND, never the manifest)
 const seas = (await call('GET', '/v1/port', { token: bb.token })).body.seas;
@@ -175,7 +175,7 @@ await pool.query(`UPDATE characters SET hosp_until=NULL, energy=200, ammo=50 WHE
 assert.equal((await call('POST', `/v1/port/intercept/${cutter}`, { token: bb.token })).body.error, 'once', 'one run at a given cargo per pirate');
 
 // ── RENDEZVOUS: hand the at-sea run to a partner's flagged boat (§10.4-neutral) ──
-const mate = await mk('First Mate'); await pool.query(`UPDATE characters SET respect=400, loc='docks' WHERE id='${mate.id}'`); await seedCash(mate.id, 2000000);
+const mate = await mk('First Mate'); await pool.query(`UPDATE characters SET respect=1000, loc='docks' WHERE id='${mate.id}'`); await seedCash(mate.id, 2000000);
 const mateBoat = (await call('POST', '/v1/port/boat/cutter', { token: mate.token })).body.boat.id;
 assert.equal((await call('POST', `/v1/port/rendezvous/${cutter}`, { token: cap.token, body: { to: mateBoat } })).body.error, 'closed', "can't hand off to a boat that isn't waiting");
 await call('POST', `/v1/port/boat/${mateBoat}/rendezvous`, { token: mate.token, body: { open: true } });
@@ -225,7 +225,7 @@ delete process.env.PORT_RUN_MS; delete process.env.PORT_INTERDICT_P;
 
 // ── THE HARBORMASTER: a family holding the docks tolls a clean landing (the convoy-toll twin) ──
 process.env.PORT_RUN_MS = '0'; process.env.PORT_INTERDICT_P = '0';
-const boss = await mk('Dock King'); await pool.query(`UPDATE characters SET respect=400, loc='docks' WHERE id='${boss.id}'`); await seedCash(boss.id, 100000);
+const boss = await mk('Dock King'); await pool.query(`UPDATE characters SET respect=1000, loc='docks' WHERE id='${boss.id}'`); await seedCash(boss.id, 100000);
 await call('POST', '/v1/gangs', { token: boss.token, body: { name: 'Dock Kings', tag: 'DK' } });
 const gid = (await pool.query(`SELECT id FROM gangs WHERE name='Dock Kings'`)).rows[0].id;
 await pool.query(`UPDATE districts SET holder_gang='${gid}' WHERE id='docks'`);
@@ -265,7 +265,7 @@ await pool.query(`UPDATE characters SET port_used=0, port_at=now() WHERE id='${c
 await call('POST', `/v1/port/collect/${ncBoat}`, { token: cap.token });
 // THE SMUGGLER'S REPUTATION — rep T2 (Smuggler rank, ≥$2M landed): the docks toll is HALVED (a transfer break;
 // a fresh legend so cap's lifetime-identity check below is untouched — smuggled is a status counter, not §10.4)
-const legend = await mk('El Padrino'); await pool.query(`UPDATE characters SET respect=6000, loc='docks' WHERE id='${legend.id}'`); await seedCash(legend.id, 3000000);
+const legend = await mk('El Padrino'); await pool.query(`UPDATE characters SET respect=15000, loc='docks' WHERE id='${legend.id}'`); await seedCash(legend.id, 3000000);
 const legAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${legend.id}'`)).rows[0].a;
 await pool.query(`UPDATE account_persistent SET smuggled=2500000 WHERE account_id='${legAcct}'`); // Smuggler rank → rep tier 2
 const legBoat = (await call('POST', '/v1/port/boat/skiff', { token: legend.token })).body.boat.id;

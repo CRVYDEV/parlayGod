@@ -4,7 +4,7 @@ import { GameError, cleanText, assignedSoldier, soldierResult } from './game.js'
 import { soldierFxOf, SOLDIERS } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
-  levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf,
+  levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
 } from './rules.js';
 import { verifySocial, verifyPostUp } from './verify.js';
 import { spendOmr } from './vanity.js';
@@ -98,9 +98,25 @@ export async function doMission(ch, missionId, client, h) {
     : k === 'trade' ? Number(ch.trade_rep || 0) >= v
     : eff(k) >= v);
   if (!meets) throw new GameError('reqs', "You're not ready. The family doesn't hand out second chances.");
+  // PACING (founder-directed, from live alpha): the ladder SELF-UNLOCKS — from ~m6 on each reward
+  // overshoots the next mission's level gate by 30-100 levels — so with no cooldown all 28 could be
+  // claimed back to back for 239,200 respect (level 245) in one sitting. A cooldown between claims
+  // makes the chain a story you walk over days, not a number you collect in an afternoon.
+  // MISSION_CD_MS = 0 restores the old cascade. `mission_at` is direct-SQL (outside
+  // persistCharacter's positional UPDATE — the active_at pattern), so it can't be clobbered.
+  const missionCd = Number(process.env.MISSION_CD_MS ?? PACING.MISSION_CD_MS);
+  if (missionCd > 0 && ch.mission_at && new Date(ch.mission_at) > new Date())
+    throw new GameError('cooldown', `The family gives you one job at a time. Next one in ${Math.ceil((new Date(ch.mission_at) - Date.now()) / 60000)}m.`);
   await client.query('INSERT INTO missions_done (character_id, mission_id) VALUES ($1,$2)', [ch.id, missionId]);
+  const missionAt = new Date(Date.now() + missionCd);
+  await client.query('UPDATE characters SET mission_at=$2 WHERE id=$1', [ch.id, missionAt]);
+  ch.mission_at = missionAt;
+  // …and the RESPECT reward is scaled: missions are a supplement to the grind, not a replacement for
+  // it. Cash / $OMR / titles are UNTOUCHED — the story still pays, it just stops being the fastest
+  // path to a level. (At MISSION_RESPECT_MULT 0.25 the full ladder is worth a level ~78 character.)
+  const missionRep = Math.round((m.reward.respect || 0) * PACING.MISSION_RESPECT_MULT);
   ch.cash = Number(ch.cash) + (m.reward.cash || 0);
-  ch.respect = Number(ch.respect) + (m.reward.respect || 0);
+  ch.respect = Number(ch.respect) + missionRep;
   if (m.title) ch.title = m.title;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: m.reward.cash || 0, reason: `mission:${missionId}` });
   // $OMR pays ONCE PER ACCOUNT (it survives death; missions_done is per-character, so a
@@ -116,7 +132,8 @@ export async function doMission(ch, missionId, client, h) {
       await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: omrPaid, reason: `mission:${missionId}` }); // enumerated legal faucet (§2)
     }
   }
-  return { ok: true, reward: { ...m.reward, omr: omrPaid }, title: m.title || null };
+  return { ok: true, reward: { ...m.reward, respect: missionRep, omr: omrPaid }, title: m.title || null,
+    nextMissionSeconds: missionCd > 0 ? Math.ceil(missionCd / 1000) : 0 };
 }
 
 // ── DAILY CONTRACTS (§7.4): 3 drawn by (day + 2i) mod pool — no draw storage ──

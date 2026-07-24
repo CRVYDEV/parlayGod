@@ -37,7 +37,7 @@ assert.equal(r.body.points.total, 0, 'level 1 has no points');
 assert.equal((await call('POST', '/v1/skills/pack_mule', { token: rob.token })).body.error, 'points', 'no points, no school');
 assert.equal((await call('POST', '/v1/skills/juggling', { token: vic.token })).body.error, 'bad_skill', 'no such skill');
 // level 25 (respect 2304) → floor(25/4) = 6 points
-await seedCh(vic.id, 'respect=2304');
+await seedCh(vic.id, 'respect=5760');
 r = await call('GET', '/v1/skills', { token: vic.token });
 assert.equal(r.body.points.total, 6, 'level 25 carries six points');
 
@@ -79,7 +79,7 @@ assert.equal((await call('POST', '/v1/skills/respec', { token: vic.token })).bod
 
 // ── the WHEELMAN branch on a fresh street: trunk, stints, convoys ──
 const wil = await mk('Wheelman Wil');
-await seedCh(wil.id, "cash=500000, respect=2304, loc='docks'");
+await seedCh(wil.id, "cash=500000, respect=5760, loc='docks'");
 assert.equal((await call('POST', '/v1/skills/pack_mule', { token: wil.token })).code, 200, 'T1');
 assert.equal((await call('POST', '/v1/skills/getaway', { token: wil.token })).code, 200, 'T2');
 assert.equal((await call('POST', '/v1/skills/road_captain', { token: wil.token })).code, 200, 'T3');
@@ -110,7 +110,7 @@ assert.equal(jailedS, expectStint, `the getaway stint is exactly the book × mul
 
 // ── EXECUTIONER: the hunter's search clock runs at ×0.8 (both sites agree via placedAt) ──
 const ex = await mk('Executioner Eve');
-await seedCh(ex.id, "cash=500000, respect=2304, loc='docks'");
+await seedCh(ex.id, "cash=500000, respect=5760, loc='docks'");
 for (const s of ['bruiser', 'doctors_friend', 'executioner'])
   assert.equal((await call('POST', `/v1/skills/${s}`, { token: ex.token })).code, 200, `${s} learned`);
 await seedCh(rob.id, "loc='docks'");
@@ -131,7 +131,7 @@ assert.equal(r.body.actives.length, 3, 'three capstone-unlocked active abilities
 assert(r.body.actives.every((a) => !a.unlocked), 'no capstone learned yet → nothing unlocked');
 // the capstone needs the tier-3 prereq AND a full ten points (level 40)
 assert.equal((await call('POST', '/v1/skills/made_man', { token: ex.token })).body.error, 'points', 'MADE MAN waits for level 40 (ten points)');
-await seedCh(ex.id, 'respect=6084');   // levelOf(6084)=40 → ten points; enforcer t1-3 already cost six
+await seedCh(ex.id, 'respect=15210');   // levelOf(6084)=40 → ten points; enforcer t1-3 already cost six
 assert.equal((await call('POST', '/v1/skills/made_man', { token: ex.token })).code, 200, 'MADE MAN — the enforcer capstone (cost 4)');
 r = await call('GET', '/v1/skills', { token: ex.token });
 assert.equal(r.body.points.available, 0, 'all ten points spent on the maxed branch');
@@ -161,7 +161,7 @@ assert.equal((await call('POST', '/v1/skills/respec/executioner', { token: ex.to
 
 // ── STEP FOUR: GRANDMASTERY — own BOTH capstones of a pair → a combined ULTIMATE + faster cooldown ──
 const gm = await mk('Grand Master');
-await seedCh(gm.id, 'respect=25000');  // level 80 → 20 points = two fully-maxed branches
+await seedCh(gm.id, 'respect=62500');  // level 80 → 20 points = two fully-maxed branches
 for (const s of ['bruiser', 'doctors_friend', 'executioner', 'made_man',       // enforcer 1+2+3+4 = 10
                  'fast_talker', 'fence_network', 'broker', 'kingpin'])          // operator 1+2+3+4 = 10
   assert.equal((await call('POST', `/v1/skills/${s}`, { token: gm.token })).code, 200, `${s} learned`);
@@ -185,7 +185,7 @@ assert.equal((await call('POST', '/v1/skills/active/adrenaline', { token: gm.tok
 // ── STEP THREE: PRESTIGE POINTS + MUSCLE MEMORY (prestige carries into a new street) ──
 const dyn = await mk('Dynasty Don');
 const dynAcct = `(SELECT account_id FROM characters WHERE id='${dyn.id}')`;
-await seedCh(dyn.id, "cash=500000, respect=2304, loc='docks'");  // level 25 → 6 level points
+await seedCh(dyn.id, "cash=500000, respect=5760, loc='docks'");  // level 25 → 6 level points
 // a long bloodline: prestige 24 → +2 bonus points (floor(24/10), cap 3) and 3 memory slots (floor(24/8), cap 3)
 await pool.query(`UPDATE account_persistent SET prestige=24 WHERE account_id=${dynAcct}`);
 r = await call('GET', '/v1/skills', { token: dyn.token });

@@ -35,11 +35,11 @@ const frontsOf = async (charId) => (await pool.query(`SELECT kind, tier FROM bus
 // a bankrolled, high-level killer; a level-11 victim with an empire
 const don = await mk('Don Sacker');
 const mark = await mk('Marco the Mogul');
-await seedCh(don.id, "respect=20000, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
+await seedCh(don.id, "respect=50000, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: don.token })).code, 200, 'the killer arms up');
 const whack = async (tid, rounds = 8000) => {
   await seedCh(don.id, "energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
-  await seedCh(tid, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks', respect=400");
+  await seedCh(tid, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks', respect=1000");
   await call('POST', `/v1/streets/${tid}/search`, { token: don.token });
   return (await call('POST', `/v1/streets/${tid}/fire`, { token: don.token, body: { rounds } })).body;
 };
@@ -96,11 +96,11 @@ assert.equal((await frontsOf(don.id)).length, 1, "the killer's empire is unchang
 
 // ── the LEVEL gate: a low-level killer cannot seize a high-tier front they could never run ──
 const rookie = await mk('Rookie Rita');
-await seedCh(rookie.id, "respect=100, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, loc='docks'"); // ~level 6, below casino lvl58
+await seedCh(rookie.id, "respect=250, cash=500000, cb=20, muscle=500, speed=500, energy=200, ammo=8000, nerve=50, loc='docks'"); // ~level 6, below casino lvl58
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: rookie.token })).code, 200, 'the rookie arms up');
 const whale = await mk('Casino Carl');
 await seedFront(whale.id, 'casino', 3);        // lvl58 to run
-await seedCh(whale.id, "respect=400, hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks'");
+await seedCh(whale.id, "respect=1000, hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks'");
 await seedCh(rookie.id, "energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
 await call('POST', `/v1/streets/${whale.id}/search`, { token: rookie.token });
 const d2 = driftMap(await runLedgerInvariants(pool));

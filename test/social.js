@@ -33,8 +33,8 @@ const don = await mk('Don Fabrizio');
 const rocco = await mk('Rocco Two-Knives');
 const mook = await mk('Mook');
 // Don: high-level bruiser with a bankroll. Rocco: level 11 target. Mook: NEVER cash-seeded (§10.4 check).
-await seedCh(don.id, "respect=10000, cash=200000, muscle=500, speed=500, energy=200, ammo=3000, cb=20, loc='docks'");
-await seedCh(rocco.id, "respect=400, cash=40000, muscle=1, speed=1, loc='docks'");
+await seedCh(don.id, "respect=25000, cash=200000, muscle=500, speed=500, energy=200, ammo=3000, cb=20, loc='docks'");
+await seedCh(rocco.id, "respect=1000, cash=40000, muscle=1, speed=1, loc='docks'");
 await seedCh(mook.id, "cb=5, loc='docks'");
 
 // ── gangs (§5.5): found, validate, join, promote ──
@@ -451,7 +451,7 @@ assert.equal(donMe.seasonKills, 1, 'nor the season streak');
 assert.equal(donMe.hitmanRep, 33, 'and rep is unchanged');
 
 // directed contract: Vito names Don as the hitman → exclusive window + a 1.5x rep bonus on the kill
-const marked = await mk('Marked Mario'); await seedCh(marked.id, 'respect=400'); // level 11
+const marked = await mk('Marked Mario'); await seedCh(marked.id, 'respect=1000'); // level 11
 await seedCh(vito.id, 'cash=200000');
 // sim-audit F1: exclusivity takes a real stake — below DIRECTED_MIN the direction is refused
 r = await call('POST', `/v1/streets/${marked.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id } });
@@ -459,7 +459,7 @@ assert.equal(r.body.error, 'directed_min', 'a cheap pot cannot reserve a mark ($
 // LOAN step 2 (the welsher hunt): a WELSHER's broken word waives the directed floor on a KILL pot
 // (the rat/vendetta-waiver twin — a status consequence, no money returns to any lender). Hospitalize
 // pots never get the waiver (kill-only — a welsher hunt means a body, not a squat).
-const deadbeat = await mk('Deadbeat Denny'); await seedCh(deadbeat.id, 'respect=400, welsher=true');
+const deadbeat = await mk('Deadbeat Denny'); await seedCh(deadbeat.id, 'respect=1000, welsher=true');
 r = await call('POST', `/v1/streets/${deadbeat.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'kill', hitman: don.id } });
 assert.equal(r.code, 200, 'a welsher is cheap to put a named gun on — the directed floor is waived on a kill pot');
 r = await call('POST', `/v1/streets/${deadbeat.id}/bounty`, { token: vito.token, body: { amount: 3000, kind: 'hospitalize', hitman: don.id } });
@@ -476,7 +476,7 @@ assert.equal(k.hitman.repGain, 49, 'directed kill pays the 1.5x bonus: floor(11�
 assert.equal((await meOf(don.token)).hitmanRep, 82, 'rep 33 + 49');
 
 // repeat-bloodline diminishing: whacking Marked's HEIR (same account) pays half — and no bonus
-const heir2 = await meOf(marked.token); await seedCh(heir2.id, 'respect=400'); // the heir, level 11
+const heir2 = await meOf(marked.token); await seedCh(heir2.id, 'respect=1000'); // the heir, level 11
 k = await whack(heir2.id);
 assert(k.kill, 'the heir is whacked too');
 assert.equal(k.hitman.repGain, 16, 'a repeat kill of the same bloodline is diminished: floor(11×3 / 2)');
@@ -491,8 +491,8 @@ assert.equal(donMe.hitmanTitle, 'Button Man', '98 rep → Button Man');
 // free immunity window. runEstate now clears `hitman` on the deceased's directed pots.
 const hmark = await mk('Hospital Mark');
 const gun = await mk('Doomed Gun');
-await seedCh(hmark.id, "respect=400, cash=5000, muscle=1, speed=1, loc='docks'");
-await seedCh(gun.id, "respect=400, loc='docks'");
+await seedCh(hmark.id, "respect=1000, cash=5000, muscle=1, speed=1, loc='docks'");
+await seedCh(gun.id, "respect=1000, loc='docks'");
 await seedCh(vito.id, 'cash=30000');
 r = await call('POST', `/v1/streets/${hmark.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'hospitalize', hitman: gun.id, exclusiveHours: 999 } });
 assert.equal(r.code, 200, 'directed hospitalize pot posted naming the gun'); assert.equal(r.body.hitman, gun.id, 'the gun is the named hitman');
@@ -548,7 +548,7 @@ await call('POST', `/v1/contracts/${don.id}/kill/cancel`, { token: vito.token })
 // sim-audit F1 (squat resistance): an OUTSIDER killing the mark inside the exclusive window now
 // COLLECTS the kill pot — the mark is dead, the pot pays whoever did the job (the named hitman
 // keeps only the rep bonus). A confederate's cheap pot on your own head now FUNDS your enemies.
-const wanted = await mk('Wanted Wally'); await seedCh(wanted.id, 'respect=400'); // level 11
+const wanted = await mk('Wanted Wally'); await seedCh(wanted.id, 'respect=1000'); // level 11
 await seedCh(vito.id, 'cash=100000');
 r = await call('POST', `/v1/streets/${wanted.id}/bounty`, { token: vito.token, body: { amount: 12000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } });
 assert.equal(r.code, 200, 'directed at Mook');
@@ -563,8 +563,8 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE tar
 const agent = await mk('Agent Smith');
 await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${agent.id}')`);
 const donGun = (await pool.query(`SELECT gun FROM characters WHERE id='${don.id}'`)).rows[0].gun;
-await seedCh(agent.id, `gun='${donGun}', muscle=500, speed=500, energy=200, ammo=8000, respect=400, loc='docks'`);
-const aMark = await mk('Agent Mark'); await seedCh(aMark.id, "respect=400, muscle=1, hosp_until=NULL, loc='docks'"); // level 11
+await seedCh(agent.id, `gun='${donGun}', muscle=500, speed=500, energy=200, ammo=8000, respect=1000, loc='docks'`);
+const aMark = await mk('Agent Mark'); await seedCh(aMark.id, "respect=1000, muscle=1, hosp_until=NULL, loc='docks'"); // level 11
 await call('POST', `/v1/streets/${aMark.id}/search`, { token: agent.token });
 k = (await call('POST', `/v1/streets/${aMark.id}/fire`, { token: agent.token, body: { rounds: 6000 } })).body;
 assert(k.kill, 'agent whacks a qualifying mark'); assert.equal(k.hitman.repGain, 0, 'an agent earns NO feared-rep');
@@ -578,7 +578,7 @@ assert(!lb2.legend.some((e) => e.name === 'Agent Smith') && !lb2.season.some((e)
 const hirer = await mk('Hiram the Hirer'); await seedCh(hirer.id, 'cash=5000000');
 // a high-level mark for the hire/cooldown checks — near-impossible to actually drop, so it
 // survives to test the deterministic parts (fee burn, heat, cooldown)
-const tough = await mk('Tough Tony'); await seedCh(tough.id, 'respect=10000'); // ~level 51 → legbreaker clamps to the 2% floor
+const tough = await mk('Tough Tony'); await seedCh(tough.id, 'respect=25000'); // ~level 51 → legbreaker clamps to the 2% floor
 assert.equal((await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'nope' } })).code, 400, 'bad tier rejected');
 const hirerPre = (await meOf(hirer.token)).cash;
 r = await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'legbreaker' } });
@@ -595,7 +595,7 @@ assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hire
 // strictly MORE lethal than freedom, since a jailed player can't enter a safehouse)
 {
   const inmate = await mk('Jailbird Joe');
-  await seedCh(inmate.id, "respect=100, hosp_until=NULL, loc='docks', jail_until = now() + interval '1 hour'");
+  await seedCh(inmate.id, "respect=250, hosp_until=NULL, loc='docks', jail_until = now() + interval '1 hour'");
   await seedCh(don.id, "energy=200, ammo=8000, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
   await call('POST', `/v1/streets/${inmate.id}/search`, { token: don.token });
   assert.equal((await call('POST', `/v1/streets/${inmate.id}/fire`, { token: don.token, body: { rounds: 8000 } })).body.error, 'jailed', 'no firing a jailed inmate from the street (C-HIGH-1)');
@@ -612,8 +612,8 @@ assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hire
 // fire/jump/npchit rivals with total immunity. Mirror the safehouse actor-block: witpro'd = no offense.)
 {
   const wp = await mk('Rat Ricky'); const mark = await mk('Marked Marv');
-  await seedCh(wp.id, "witpro_until = now() + interval '1 hour', energy=200, ammo=8000, cash=5000000, respect=200000, jail_until=NULL, hosp_until=NULL, safe_until=NULL, shoot_cd_until=NULL, loc='docks'");
-  await seedCh(mark.id, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, witpro_until=NULL, loc='docks', respect=200");
+  await seedCh(wp.id, "witpro_until = now() + interval '1 hour', energy=200, ammo=8000, cash=5000000, respect=500000, jail_until=NULL, hosp_until=NULL, safe_until=NULL, shoot_cd_until=NULL, loc='docks'");
+  await seedCh(mark.id, "hosp_until=NULL, jail_until=NULL, safe_until=NULL, witpro_until=NULL, loc='docks', respect=500");
   assert.equal((await call('POST', `/v1/streets/${mark.id}/jump`, { token: wp.token })).body.error, 'witpro', 'a witpro-protected actor cannot jump');
   await call('POST', `/v1/streets/${mark.id}/search`, { token: wp.token }); // SEARCH_MS=0 → matured; the actor witpro gate still refuses the fire
   assert.equal((await call('POST', `/v1/streets/${mark.id}/fire`, { token: wp.token, body: { rounds: 2200 } })).body.error, 'witpro', 'a witpro-protected actor cannot fire');
@@ -625,11 +625,11 @@ assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hire
 }
 
 // a fresh, killable mark: loop the server roll until the contractor lands a kill → the estate runs
-const kt = await mk('Killable Kelly'); await seedCh(kt.id, 'respect=100'); // level ~6 → professional ≈ 0.52
+const kt = await mk('Killable Kelly'); await seedCh(kt.id, 'respect=250'); // level ~6 → professional ≈ 0.52
 let killed = false;
 for (let i = 0; i < 80 && !killed; i++) {
   await seedCh(hirer.id, 'cash=5000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
-  await seedCh(kt.id, "hosp_until=NULL, respect=100");
+  await seedCh(kt.id, "hosp_until=NULL, respect=250");
   const res = (await call('POST', `/v1/streets/${kt.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body;
   killed = !!res.killed;
 }
@@ -639,7 +639,7 @@ assert.equal((await meOf(hirer.token)).hitmanRep, 0, 'NPC hits earn the payer NO
 assert.equal((await meOf(hirer.token)).kills, 0, 'nor any kills on the legend');
 
 // pre-paid revive insurance absorbs an NPC hit too (the target paid ETH to survive)
-const insured = await mk('Insured Izzy'); await seedCh(insured.id, 'respect=100');
+const insured = await mk('Insured Izzy'); await seedCh(insured.id, 'respect=250');
 await pool.query(`UPDATE account_persistent SET respawn_tokens=1 WHERE account_id=(SELECT account_id FROM characters WHERE id='${insured.id}')`);
 let absorbed = false;
 for (let i = 0; i < 60 && !absorbed; i++) {
@@ -655,7 +655,7 @@ assert.equal((await meOf(insured.token)).respawnTokens, 0, 'the token was consum
 
 // audit HIGH: a payer who funded an EXCLUSIVE directed pot on the victim is REFUNDED on the NPC
 // kill — else refundPot's SQL credit is clobbered by persistCharacter (§10.4 drift + stolen escrow)
-const rival = await mk('Rival Rick'); await seedCh(rival.id, 'respect=100'); // level ~6
+const rival = await mk('Rival Rick'); await seedCh(rival.id, 'respect=250'); // level ~6
 await seedCh(hirer.id, 'cash=200000000, npchit_at=NULL'); await pool.query('DELETE FROM npc_hits');
 assert.equal((await call('POST', `/v1/streets/${rival.id}/bounty`, { token: hirer.token, body: { amount: 12000, kind: 'kill', hitman: mook.id, exclusiveHours: 24 } })).code, 200, 'hirer funds a directed contract on the rival');
 let refundOk = false;
@@ -675,7 +675,7 @@ assert(refundOk, 'the NPC landed the kill and the payer-funded escrow was verifi
 
 // ── M7 Phase 4: earnable defense (safehouse) + interlocks (fire-heat, war-kill scoring) ──
 // safehouse: pay cash to go to ground → untargetable by fire AND NPC-hit for a window
-const dave = await mk('Ducking Dave'); await seedCh(dave.id, 'respect=100, cash=100000');
+const dave = await mk('Ducking Dave'); await seedCh(dave.id, 'respect=250, cash=100000');
 const daveCash = (await meOf(dave.token)).cash;
 r = await call('POST', '/v1/safehouse', { token: dave.token });
 assert.equal(r.code, 200, 'went to ground in a safehouse');
@@ -704,7 +704,7 @@ assert.equal(lapsed.code, 200, 'a lapsed safehouse offers no protection');
 assert((await meOf(don.token)).heat >= donHeat0 + 15, 'the hit drew law heat on the shooter (~20)');
 
 // war-kill scoring: a kill on a family you're at war with scores war points (not just jumps)
-const enemy = await mk('Enemy Eddie'); await seedCh(enemy.id, 'respect=400, cash=50000'); // level 11
+const enemy = await mk('Enemy Eddie'); await seedCh(enemy.id, 'respect=1000, cash=50000'); // level 11
 const egId = (await call('POST', '/v1/gangs', { token: enemy.token, body: { name: 'The Rivals', tag: 'RIV' } })).body.gangId;
 assert(egId, 'enemy founded a rival family');
 await pool.query(`UPDATE gangs SET war_with='${egId}', war_until=now()+interval '1 hour', war_score_us=0 WHERE id='${gangA}'`);
@@ -714,7 +714,7 @@ assert(kr.kill && kr.warKill === true, 'a kill on a warring family is a war kill
 assert.equal(Number((await pool.query(`SELECT war_score_us FROM gangs WHERE id='${gangA}'`)).rows[0].war_score_us), 3, 'a war kill scores WAR_KILL_POINTS (3), worth more than a jump');
 
 // ── M7 Phase 4 remainder: FAMILY CONTRACTS — the treasury orders the hit ──
-const carl = await mk('Contract Carl'); await seedCh(carl.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const carl = await mk('Contract Carl'); await seedCh(carl.id, "respect=1000, muscle=1, speed=1, loc='docks'");
 const sal = await mk('Soldier Sal'); // a PLAIN soldier (mook is the underboss, who legitimately can)
 assert.equal((await call('POST', `/v1/gangs/${gangA}/join`, { token: sal.token })).code, 200, 'sal made his bones');
 assert.equal((await call('POST', `/v1/gangs/contract/${carl.id}`, { token: sal.token, body: { amount: 10000 } })).body.error, 'rank', 'a soldier cannot spend family money');
@@ -732,7 +732,7 @@ assert(kCarl.kill, 'the mark went down');
 assert.equal(kCarl.bounty, 0, "no member of the funding family collects the family's own money");
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM bounties WHERE target_character='${carl.id}'`)).rows[0].n), 0, 'the unclaimed pot died with the mark (burned, ledgered death:bounty)');
 // cancel → the pot goes home to the treasury (the 2% take is spent)
-const carla = await mk('Contract Carla'); await seedCh(carla.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const carla = await mk('Contract Carla'); await seedCh(carla.id, "respect=1000, muscle=1, speed=1, loc='docks'");
 tre = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.treasury;
 assert.equal((await call('POST', `/v1/gangs/contract/${carla.id}`, { token: don.token, body: { amount: 5000 } })).code, 200, 'second family contract posted');
 r = await call('POST', `/v1/gangs/contract/${carla.id}/kill/cancel`, { token: don.token });
@@ -809,7 +809,7 @@ assert((await meOf(gina.token)).hospSeconds > 0, 'gina is in the hospital, carla
 await seedCh(hirer.id, 'npchit_at=NULL');
 assert.equal((await call('POST', `/v1/streets/${carla.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).body.error,
   'target_cd', 'the same mark cannot be hit again for a day');
-const otherMark = await mk('Other Mark'); await seedCh(otherMark.id, 'respect=400');
+const otherMark = await mk('Other Mark'); await seedCh(otherMark.id, 'respect=1000');
 const om = await call('POST', `/v1/streets/${otherMark.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } });
 assert.equal(om.code, 200, 'a DIFFERENT mark is fair game immediately');
 // sim-audit regression (F8): a DEAD guard releases his principals — protection was already void,
@@ -851,7 +851,7 @@ assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, b
 assert.equal((await call('POST', '/v1/gangs/vanity/color', { token: don.token, body: { color: '#AA00FF' } })).code, 200, 'the family flies new colors');
 assert.equal((await call('GET', `/v1/gangs/${gangA}`, {})).body.gang.color, '#aa00ff', 'the crest color shows on the family page');
 // family rename: boss only, founding rules + uniqueness, 25 $OMR
-await seedCh(barry.id, 'respect=100, cash=50000'); // barry founds a throwaway family to squat a name
+await seedCh(barry.id, 'respect=250, cash=50000'); // barry founds a throwaway family to squat a name
 assert.equal((await call('POST', '/v1/gangs', { token: barry.token, body: { name: 'The Landmarks', tag: 'LMK' } })).code, 200, 'barry founded a family');
 assert.equal((await call('POST', '/v1/gangs/vanity/name', { token: don.token, body: { name: 'The Landmarks' } })).body.error, 'taken', 'no renaming onto a claimed name');
 r = await call('POST', '/v1/gangs/vanity/name', { token: don.token, body: { name: 'The New Fabrizi', tag: 'NFAB' } });
@@ -985,8 +985,8 @@ await seedCh(don.id, "indicted_at = NULL, heat_exposure = 0");
 // own family can lay hands on him (parity with fire/npcHit/postBounty; the non-lethal gap, now closed) ──
 const jboss = await mk('Jump Boss');
 const jmember = await mk('Jump Member');
-await seedCh(jboss.id, "respect=5000, cash=100000, muscle=800, energy=200, ammo=500, health=100, loc='downtown', jail_until=NULL, safe_until=NULL");
-await seedCh(jmember.id, "respect=300, health=100, loc='downtown', jail_until=NULL, hosp_until=NULL");
+await seedCh(jboss.id, "respect=12500, cash=100000, muscle=800, energy=200, ammo=500, health=100, loc='downtown', jail_until=NULL, safe_until=NULL");
+await seedCh(jmember.id, "respect=750, health=100, loc='downtown', jail_until=NULL, hosp_until=NULL");
 const jgid = (await call('POST', '/v1/gangs', { token: jboss.token, body: { name: 'Jumpers', tag: 'JMP' } })).body.gangId;
 await call('POST', `/v1/gangs/${jgid}/join`, { token: jmember.token });
 assert.equal((await call('POST', `/v1/streets/${jmember.id}/jump`, { token: jboss.token })).body.error, 'family', 'a loyal family member has omertà on the jump path');
@@ -1008,7 +1008,7 @@ await pool.query(`UPDATE account_persistent SET rat=false WHERE account_id='${jm
 
 // ── Phase 3 remainder: GEAR LOOT on a fire-kill — in-game gear is losable, on-chain gear is safe ──
 process.env.GEAR_LOOT_CHANCE = '1'; // force the roll for a deterministic test (SEARCH_MS pattern)
-const geared = await mk('Geared Gary'); await seedCh(geared.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const geared = await mk('Geared Gary'); await seedCh(geared.id, "respect=1000, muscle=1, speed=1, loc='docks'");
 const garyAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${geared.id}'`)).rows[0].account_id;
 const donAcct = (await pool.query(`SELECT account_id FROM characters WHERE id='${don.id}'`)).rows[0].account_id;
 await pool.query(`INSERT INTO account_gear (account_id, gear_id, minted_onchain) VALUES ('${garyAcct}','knuckles',false)`); // in-game — lootable
@@ -1025,7 +1025,7 @@ delete process.env.GEAR_LOOT_CHANCE; // restore the production default for the r
 // ── THE PORT step five: WAREHOUSED CONTRABAND is a LOOT surface on a fire-kill (the P1.1 twin) ──
 // contraband is a cash-book-value COMMODITY, not a §10.4 currency — the loot is a pure ownership move
 // (no ledger row, no drift), bounded by CONTRA_LOOT_RATE; the remainder dies with the victim.
-const smuggler = await mk('Smuggler Sid'); await seedCh(smuggler.id, "respect=400, muscle=1, speed=1, loc='docks'");
+const smuggler = await mk('Smuggler Sid'); await seedCh(smuggler.id, "respect=1000, muscle=1, speed=1, loc='docks'");
 await seedCh(smuggler.id, 'contraband = 100000');            // Sid is sitting on a warehoused stash
 const donContraBefore = Number((await pool.query(`SELECT contraband c FROM characters WHERE id='${don.id}'`)).rows[0].c);
 const ks = await whack(smuggler.id);
@@ -1065,7 +1065,7 @@ const dkOp = async () => ((await call('GET', '/v1/territory', { token: don.token
 // rank + member + level gates
 assert.equal((await call('POST', '/v1/territory/docks/specialist', { token: sal.token, body: { memberId: mook.id } })).body.error, 'rank', 'a soldier does not assign the crew');
 assert.equal((await call('POST', '/v1/territory/docks/specialist', { token: don.token, body: { memberId: rocco.id } })).body.error, 'not_member', "can't assign an outsider");
-await seedCh(mook.id, 'muscle=20, cunning=12, respect=100');   // level ≥ 5, power = 32 → fort bonus floor(32/8)=4
+await seedCh(mook.id, 'muscle=20, cunning=12, respect=250');   // level ≥ 5, power = 32 → fort bonus floor(32/8)=4
 r = await call('POST', '/v1/territory/docks/specialist', { token: don.token, body: { memberId: mook.id } });
 assert.equal(r.code, 200, 'the boss assigns a made man to the operation'); assert.equal(r.body.fortBonus, 4, 'fort bonus = floor((20+12)/8)');
 let td = await dkOp();
@@ -1106,7 +1106,7 @@ assert(ghScr >= 15 && ghScr <= 25, `only the post-ghost hours accrue (saw ${ghSc
 // reset the operation to a clean tier-2 numbers op for the seizure test below
 await pool.query(`UPDATE territory_rackets SET kind='numbers', fortitude=0, scrutiny=0, op_ghost_until=NULL WHERE district_id='docks'`);
 // ── SEIZURE: a rival takes the turf → the operation transfers with it (wars fight over income) ──
-const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=400, cash=500000');
+const raider = await mk('Turf Raider'); await seedCh(raider.id, 'respect=1000, cash=500000');
 const rg = (await call('POST', '/v1/gangs', { token: raider.token, body: { name: 'The Claimants', tag: 'CLM' } })).body.gangId;
 assert.equal((await call('POST', '/v1/gangs/tribute', { token: raider.token, body: { amount: 300000 } })).code, 200, 'raider funds the war chest');
 r = await call('POST', '/v1/districts/docks/seize', { token: raider.token });
@@ -1124,7 +1124,7 @@ assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, 3000
 
 // ══ TIER-4 §B (the type catalog 3→6) + §D (THE SYNDICATE — the specialization meta) ══
 {
-  const sy = await mk('Forger Fred'); await seedCh(sy.id, 'respect=400, cash=500000');
+  const sy = await mk('Forger Fred'); await seedCh(sy.id, 'respect=1000, cash=500000');
   const sg = (await call('POST', '/v1/gangs', { token: sy.token, body: { name: 'Forgers Inc', tag: 'FRG' } })).body.gangId;
   // the 6-type catalog is the whitelist — a garbage type is refused (before any turf check)
   assert.equal((await call('POST', '/v1/territory/cathedral/establish', { token: sy.token, body: { kind: 'casino_skim' } })).body.error, 'bad_kind', 'a garbage type is refused');
@@ -1199,7 +1199,7 @@ const terrTreas = (await runLedgerInvariants(pool)).checks.find((c) => c.name ==
 assert(terrTreas.ok, `the treasury check reconciles territory:upkeep (drift ${terrTreas.drift})`);
 
 // ══ TERRITORY STEP THREE — per-district racket TYPE + the BUREAU CRACKDOWN ══
-const tboss = await mk('Territory Boss'); await seedCh(tboss.id, 'respect=2000, cash=5000000');
+const tboss = await mk('Territory Boss'); await seedCh(tboss.id, 'respect=5000, cash=5000000');
 const tgang = (await call('POST', '/v1/gangs', { token: tboss.token, body: { name: 'The Frontier Family', tag: 'TFF' } })).body.gangId;
 await call('POST', '/v1/gangs/tribute', { token: tboss.token, body: { amount: 2000000 } }); // a LEDGERED war chest (so the treasury check stays exact)
 await pool.query(`UPDATE districts SET holder_gang='${tgang}' WHERE id='canal'`);   // seed the turf
@@ -1261,7 +1261,7 @@ assert.equal((await call('POST', '/v1/territory/docks/raid', { token: raider.tok
 await seedCh(raider.id, "loc='docks'");
 assert.equal((await call('POST', '/v1/territory/docks/raid', { token: raider.token })).body.error, 'own', "you can't muscle your own family's operation");
 await seedCh(raider.id, "loc='canal'"); // travel to the target to run the raid below
-const gruntRaid = await mk('Gangless Gus'); await seedCh(gruntRaid.id, 'energy=200, respect=400');
+const gruntRaid = await mk('Gangless Gus'); await seedCh(gruntRaid.id, 'energy=200, respect=1000');
 assert.equal((await call('POST', '/v1/territory/canal/raid', { token: gruntRaid.token })).body.error, 'no_gang', 'you need a family to bank the take');
 process.env.TERRITORY_RIVAL_RAID_P = '1'; // pin the contest to a WIN (TEST-ONLY, the raid precedent)
 const rgPreRaid = (await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury;
@@ -1294,7 +1294,7 @@ assert(t4Treas.ok, `the treasury check reconciles territory:fortify + territory:
 const vault = await mk('Vinnie Vault');
 // respect 1444 = level 20, comfortably past M3.LOOT_MIN_LVL — a mark worth hunting, so the loot
 // surfaces below actually fire (the anti-Sybil floor pays nothing for a throwaway rookie)
-await seedCh(vault.id, "cash=100000, loc='docks', respect=1444");
+await seedCh(vault.id, "cash=100000, loc='docks', respect=3610");
 r = await call('POST', '/v1/bank/deposit', { token: vault.token, body: { amount: 80000 } });
 assert.equal(r.code, 200, 'deposited');
 let vm = await meOf(vault.token);
@@ -1333,8 +1333,8 @@ assert.equal((await meOf(rich.token)).cash, 6000000 - 200000, 'charged from pock
 // ══ VENDETTAS & BLOOD FEUDS: every death gets a story hook ══
 const kane = await mk('Kane Killer');
 const vitoB = await mk('Vito Vendetta');
-await seedCh(vitoB.id, "respect=400, muscle=1, loc='docks', hosp_until=NULL");
-await seedCh(kane.id, "respect=400, muscle=1, cash=100000, cb=5, energy=200, ammo=8000, loc='docks'");
+await seedCh(vitoB.id, "respect=1000, muscle=1, loc='docks', hosp_until=NULL");
+await seedCh(kane.id, "respect=1000, muscle=1, cash=100000, cb=5, energy=200, ammo=8000, loc='docks'");
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: kane.token })).code, 200, 'kane armed');
 assert.equal((await call('POST', `/v1/streets/${vitoB.id}/search`, { token: kane.token })).code, 200, 'kane hunts');
 k = (await call('POST', `/v1/streets/${vitoB.id}/fire`, { token: kane.token, body: { rounds: 6000 } })).body;
@@ -1363,7 +1363,7 @@ r = await call('POST', `/v1/streets/${(await meOf(kane.token)).id}/bounty`, { to
 assert.equal(r.code, 200, 'a $600 directed revenge KILL contract clears (the $10k floor is waived for a vendetta)');
 await call('POST', `/v1/contracts/${(await meOf(kane.token)).id}/kill/cancel`, { token: vitoB.token }); // clean the board
 // SETTLEMENT: the heir collects the debt personally — vengeance pays 2x rep
-await seedCh(vHeir.id, "respect=400, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
+await seedCh(vHeir.id, "respect=1000, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: vitoB.token })).code, 200, 'the heir armed');
 const kaneStreet = (await meOf(kane.token)).id;
 await seedCh(kaneStreet, "muscle=1, loc='docks', hosp_until=NULL");
@@ -1384,8 +1384,8 @@ assert.equal((await call('GET', `/v1/feud/${kaneStreet}`, { token: vitoB.token }
 // escalation: a repeat kill DEEPENS the feud (kills++, a higher tier + a longer TTL). Seed a live
 // vendetta at kills=1, then a real repeat kill escalates it to a Blood Feud with a stretched window.
 const esK = await mk('Escalation Kane'); const esV = await mk('Escalation Vito');
-await seedCh(esK.id, "respect=400, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
-await seedCh(esV.id, "respect=400, muscle=1, loc='docks', hosp_until=NULL");
+await seedCh(esK.id, "respect=1000, muscle=100, cash=100000, cb=5, energy=200, ammo=8000, loc='docks', hosp_until=NULL, jail_until=NULL");
+await seedCh(esV.id, "respect=1000, muscle=1, loc='docks', hosp_until=NULL");
 assert.equal((await call('POST', '/v1/armory/gun/lastresort/buy', { token: esK.token })).code, 200, 'armed');
 await call('POST', `/v1/streets/${esV.id}/search`, { token: esK.token });
 k = (await call('POST', `/v1/streets/${esV.id}/fire`, { token: esK.token, body: { rounds: 6000 } })).body;
@@ -1433,7 +1433,7 @@ r = await call('POST', `/v1/streets/${(await meOf(vitoB.token)).id}/bounty`, { t
 assert.equal(r.body.error, 'directed_min', 'no waiver on a lapsed vendetta — the floor is back');
 
 // ── AUDIT #1: a fire-kill LOOTS the victim's live buy-order escrow (no more loot-proof vault) ──
-const vvince = await mk('Vaulting Vince'); await seedCh(vvince.id, "cash=500000, respect=400, loc='docks'");
+const vvince = await mk('Vaulting Vince'); await seedCh(vvince.id, "cash=500000, respect=1000, loc='docks'");
 r = await call('POST', '/v1/market/order', { token: vvince.token, body: { goodId: 'gin', qty: 100, price: 500 } }); // $50k parked
 assert.equal(r.code, 200, 'vince parks $50k in a buy-order'); assert.equal(r.body.escrow, 50000, 'the escrow is the vault');
 // #1(b): can't set up a fresh cash-park while hiding
@@ -1458,7 +1458,7 @@ assert(vocabLoot.ok, `market:loot rides the vocabulary (${JSON.stringify(vocabLo
 // ── STEP FOUR: WANTED — a defaulter forfeits omertà (family may hit them); NPC hunters come ──
 const boss4 = await mk('Boss Fourette');
 const mem4 = await mk('Deadbeat Member');
-await seedCh(boss4.id, 'cash=200000, respect=5000'); // level to found a family
+await seedCh(boss4.id, 'cash=200000, respect=12500'); // level to found a family
 const g4 = (await call('POST', '/v1/gangs', { token: boss4.token, body: { name: 'The Welchers', tag: 'WEL' } })).body.gangId;
 await call('POST', `/v1/gangs/${g4}/join`, { token: mem4.token });
 assert.equal((await call('POST', `/v1/streets/${mem4.id}/bounty`, { token: boss4.token, body: { amount: 5000, kind: 'kill' } })).body.error, 'family', 'omertà: no contract on your own family');
