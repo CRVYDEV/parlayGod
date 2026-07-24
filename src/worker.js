@@ -167,6 +167,13 @@ export async function runSeasonRollover(pool, opts = {}) {
     rows = (await s0.query('SELECT id FROM characters WHERE alive AND season < $1 ORDER BY id', [current])).rows;
   } finally { s0.release(); }
   const prizeByChar = new Map(leaders.map((r, i) => [r.id, { rank: i + 1, omrWorth: PORTFOLIO.SEASON_PRIZES[i] }]));
+  // THE DUELING BELT — the season CHAMPION (highest-ELO active LISTED duelist rolling over this season)
+  // is crowned into the account-level `duel_titles` legend (survives death, the boxing-belt precedent).
+  // Snapshot the id here (a read, order-independent); the bump runs UNDER the champ's own char lock below.
+  const champ = (await pool.query(
+    `SELECT id FROM characters WHERE alive AND season < $1 AND duel_limit IS NOT NULL
+      ORDER BY duel_elo DESC, id ASC LIMIT 1`, [current])).rows[0];
+  const champId = champ ? champ.id : null;
   // R22 (worker-sweep-isolation lens): ONE txn per character — the monolithic single-txn rollover was
   // the lone value-moving sweep without per-row isolation, so a single persistently-throwing row would
   // roll back the WHOLE batch every tick and stall the season for EVERYONE. Per-char txn matches every
@@ -185,6 +192,12 @@ export async function runSeasonRollover(pool, opts = {}) {
           [crypto.randomUUID(), id, 'season_prize', JSON.stringify({ rank: prize.rank, ticker: PORTFOLIO.SEASON_TICKER, shares: g.granted })]);
       }
       const legacy = Math.floor(levelOf(Number(ch.respect)) / 2);
+      // THE DUELING BELT: crown the season champion into their lifetime titles BEFORE the elo reset
+      if (id === champId) {
+        await client.query('UPDATE account_persistent SET duel_titles = duel_titles + 1 WHERE account_id=$1', [ch.account_id]);
+        await client.query('INSERT INTO notifications (id, character_id, type, payload) VALUES ($1,$2,$3,$4)',
+          [crypto.randomUUID(), id, 'duel_champion', JSON.stringify({ season: current, elo: Number(ch.duel_elo) })]);
+      }
       // THE DUELING LADDER: the elo race resets with the season (a fresh 28-day climb)
       await client.query('UPDATE characters SET respect=0, season_kills=0, duel_elo=$3, season=$2 WHERE id=$1', [id, current, DUELS.ELO_START]);
       if (legacy > 0)

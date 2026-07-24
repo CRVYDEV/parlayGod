@@ -2025,3 +2025,9 @@ ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFA
 ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS round INT NOT NULL DEFAULT 0;
 ALTER TABLE poker_tournaments ADD COLUMN IF NOT EXISTS next_round_at TIMESTAMPTZ;
 ALTER TABLE poker_entries ADD COLUMN IF NOT EXISTS eliminated BOOLEAN NOT NULL DEFAULT false;
+
+-- ── DUELS TIER-4 DEEPENING (design omerta-tier1-deepening-design.md §1) ──
+-- duel_style: the chosen weapon stance (direct-SQL, off the positional persist — clobber-safe).
+-- duel_titles: lifetime season championships (account-level → survives death, the boxing-belt legend).
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_style TEXT;   -- brawler | gunslinger | fencer (NULL = no stance yet)
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS duel_titles INT NOT NULL DEFAULT 0;

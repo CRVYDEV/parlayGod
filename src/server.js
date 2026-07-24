@@ -64,7 +64,7 @@ import { rateLimitsEnabled, initRateLimiter, checkRateLimit, checkAuthRateLimit,
 import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
-         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
+         cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
          foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
@@ -728,7 +728,8 @@ export async function buildServer() {
     clues: { dropP: CLUES.DROP_P, digEnergy: CLUES.DIG_ENERGY, casket: [CLUES.CASKET_MIN, CLUES.CASKET_MAX],
       cooldownHours: Math.round(CLUES.CLUE_CD_MS / 3600000), ranks: CLUES.RANKS,
       note: 'a rare drop on any successful job — a riddle trail ending in a casket' },
-    duels: { stakeMin: DUELS.STAKE_MIN, rakeBps: DUELS.RAKE_BPS, minLevel: DUELS.MIN_LVL, ranks: DUELS.RANKS },
+    duels: { stakeMin: DUELS.STAKE_MIN, rakeBps: DUELS.RAKE_BPS, minLevel: DUELS.MIN_LVL, ranks: DUELS.RANKS,
+      divisions: DUELS.DIVISIONS, styles: DUELS.STYLES, styleEdge: DUELS.STYLE_EDGE, titleRanks: DUEL_TITLE_RANKS },
     megaproject: { monuments: MEGAPROJECT.MONUMENTS, minCash: MEGAPROJECT.MIN_CASH,
       minOmr: MEGAPROJECT.MIN_OMR, omrRate: MEGAPROJECT.OMR_RATE,
       note: 'the collective monument — every contribution is a burn; the plaque is forever' },
@@ -2225,6 +2226,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch) => Duels.duelBoard(pool, ch)));
   app.post('/v1/duels/list', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Duels.listDuel(ch, req.body?.limit, client)));
+  app.post('/v1/duels/style', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client) => Duels.pickStyle(ch, req.body?.style, client)));
   app.post('/v1/duels/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId,
       (ch, opponent, client, h) => Duels.challenge(ch, opponent, req.body?.amount, client, h)));
