@@ -1661,3 +1661,27 @@ itself the sign-off decision, since it twists signed numbers for 28 days at a ti
   whole (8h-capped) accrual window. Bounded ±25% × 8h; accepted-shape note.
 - **Two 28-day season clocks** — `seasonIdxOf` (rules.js) and `runSeasonRollover` (worker.js)
   duplicate `day/28`; linking comments added at both sites so a future lever change touches both.
+
+## Deep-deferred four (2026-07-24) — levers, all PROPOSED (sign-off before production)
+**Estate step two** — `ESTATE.STAFF` (wages 0.5–3 $OMR/day, hire 10× daily) / `STAFF_WALK_MS` 7d /
+`GALA_OMR` 15 × tier / `GALA_MIN_TIER` 2 / `GALA_MS` 4h. Pure $OMR SINKS (the recurring drain the
+one-time burns lacked); staff/gala are status-only — zero gameplay power. The dismiss-dodge is −EV by
+construction (rehire fees ≥ 10 days' wage vs a 7-day walk window).
+**Commission step three** — `PROPOSAL_DEPOSIT` $100k (treasury escrow; enacted → refund, else → the
+confiscation pool — a conditional treasury sink). **THE LEVY** moves NO new money — it redirects the
+buyback's existing family split (50% of bought $OMR) to the seated chamber (5..1 by seat) for the
+decree's week. Watch item: a chamber that votes itself the levy weekly is self-dealing the split away
+from the lifetime top-25 — bounded by the seasonal seat formula + the public vote, but a levy-cadence
+cap is the dial if it becomes the permanent decree.
+**The Loan House** — `HOUSE_RATE` 0.35 / `HOUSE_TERM_H` 24 / `HOUSE_MIN` $1k / cap $2k×lvl ≤ $50k /
+`HOUSE_MIN_LVL` 3 / `HOUSE_VIG_BPS` 5000 (half of every P2P vig funds the window). NOT a faucet: the
+pool lends only what sinks funded (full-reserve), defaults are pool-bounded losses. Watch item: the
+die-and-default cycle (a lvl-3 alt borrows ~$6k, extracts, dies — the pool eats it); bounded by the
+pool itself going dry + the welsher/WANTED marks, but `HOUSE_MIN_LVL` and the level-scaled cap are the
+dials if farm telemetry shows drain outpacing vig inflow.
+**Ring poker** — `RING.BLINDS` 100/1k/10k / buy-in 20–200bb / `RAKE_BPS` 300 capped 10bb / `TURN_MS`
+90s / `IDLE_MS` 30min / `MIN_LVL` 3. A NET SINK (the rake burns half); PvP redistribution otherwise.
+Watch item: fold-to-raise chip-dumping is a transfer rail raked at up to 3% (vs the audited 2% takes)
+— dumping is strictly worse than the existing rails, so no new collusion surface, but flag for the
+ops feed. **The bracket** — `BRACKET.HEAT_SIZE` 6 / `ADVANCE` 2 / `ROUND_MS` 10min; the same 5%
+tournament rake; alt-stuffing stays −rake/N per head (renormalized payouts).
