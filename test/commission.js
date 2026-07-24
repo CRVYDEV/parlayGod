@@ -234,6 +234,95 @@ assert(Math.abs(headTake / lastTake - 5) < 0.01, `the head seat takes 5× the la
 const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `no new reasons (${JSON.stringify(vocab.unknown || [])})`);
 
+// ══════════ TIER-4 — THE STATESMAN · THE OVERRIDE · THE RECORD · 3 NEW DECREES ══════════
+const { settleProposals: settle4, statesmenLeaderboard } = await import('../src/commission.js');
+const statecraftOf = async (tok) => Number((await meOf(tok)).statesman.statecraft);
+const seatGangs = [bosses[0].gang, bosses[1].gang, bosses[2].gang, bosses[3].gang, bosses[5].gang]; // F1..F4,F6 (F5 dissolved)
+// clean slate for the political-capital assertions
+await pool.query('DELETE FROM commission_votes');
+await pool.query('DELETE FROM commission_vetoes');
+await pool.query('DELETE FROM commission_overrides');
+await pool.query('DELETE FROM commission_proposals');
+await pool.query('UPDATE account_persistent SET statecraft=0');
+await pool.query(`UPDATE gangs SET treasury=1000000 WHERE id IN ('${seatGangs.join("','")}')`);
+
+// ── THE STATESMAN — a fresh vote earns political capital (once per week per family); re-casting doesn't ──
+assert.equal(await statecraftOf(bosses[0].token), 0, 'clean slate');
+assert.equal((await call('POST', '/v1/commission/vote', { token: bosses[0].token, body: { decree: 'pax' } })).code, 200, 'F1 casts');
+assert.equal(await statecraftOf(bosses[0].token), COMMISSION.STATECRAFT_VOTE, 'the first ballot of the week earns capital');
+await call('POST', '/v1/commission/vote', { token: bosses[0].token, body: { decree: 'open_season' } });
+assert.equal(await statecraftOf(bosses[0].token), COMMISSION.STATECRAFT_VOTE, 're-casting earns nothing more (UPDATE branch)');
+// (proposing also earns — asserted in THE ENACTED PRIZE block below, where the deposit is settled so
+// the escrow stays exact; here we don't strand an open deposit.)
+
+// ── THE OVERRIDE — the floor's parliamentary check on the head's veto ──
+await setLastWeek('amnesty', 'amnesty', 'amnesty', 'amnesty', 'amnesty'); // a clear decree in force this week
+assert.equal((await call('GET', '/v1/commission')).body.decree.id, 'amnesty', 'amnesty is in force');
+assert.equal((await call('POST', '/v1/commission/override', { token: bosses[1].token })).body.error, 'no_veto', 'no veto → nothing to override');
+// the head kills it (and earns the veto capital)
+const vc0 = await statecraftOf(bosses[0].token);
+r = await call('POST', '/v1/commission/veto', { token: bosses[0].token });
+assert.equal(r.body.vetoed, 'amnesty', 'the head vetoes amnesty');
+assert.equal(await statecraftOf(bosses[0].token), vc0 + COMMISSION.STATECRAFT_VETO, 'wielding the veto earns capital');
+assert.equal((await call('GET', '/v1/commission')).body.decree, null, 'the decree is dead at the table');
+// gates: the head can't override itself; a civilian can't; an unseated family can't
+assert.equal((await call('POST', '/v1/commission/override', { token: bosses[0].token })).body.error, 'head', 'the head chair cannot override its own veto');
+assert.equal((await call('POST', '/v1/commission/override', { token: civilian.token })).body.error, 'rank', 'no family, no override');
+assert.equal((await call('POST', '/v1/commission/override', { token: late.token })).body.error, 'no_seat', 'no seat, no override');
+// F2 (weight 4) moves — short of OVERRIDE_WEIGHT alone; F3 (weight 3) tips it to 7 → RESTORED
+r = await call('POST', '/v1/commission/override', { token: bosses[1].token });
+assert.equal(r.code, 200, 'the #2 seat moves to override');
+assert.equal(r.body.restored, false, `4 weight alone is short of ${COMMISSION.OVERRIDE_WEIGHT}`);
+assert.equal(await statecraftOf(bosses[1].token), COMMISSION.STATECRAFT_OVERRIDE, 'moving to override earns capital');
+assert.equal((await call('POST', '/v1/commission/override', { token: bosses[1].token })).body.error, 'again', 'one override per family per week');
+assert.equal((await call('GET', '/v1/commission')).body.decree, null, 'the veto still stands at 4 weight');
+r = await call('POST', '/v1/commission/override', { token: bosses[2].token });
+assert.equal(r.body.restored, true, `4+3 = 7 reaches ${COMMISSION.OVERRIDE_WEIGHT} — the floor overrules the head`);
+r = await call('GET', '/v1/commission');
+assert.equal(r.body.decree.id, 'amnesty', 'the decree is RESTORED by the floor supermajority');
+assert(r.body.override && r.body.override.restored && r.body.override.need === COMMISSION.OVERRIDE_WEIGHT, 'the board shows the override carried');
+
+// ── THE RECORD + the statesmen board + the view legend ──
+r = await call('GET', '/v1/commission');
+assert(Array.isArray(r.body.record) && r.body.record.length, 'the chamber keeps a record of recent weeks');
+assert(r.body.record.every((w) => 'week' in w && 'name' in w), 'each week names its decree (or Deadlock/Vetoed)');
+assert(Array.isArray(r.body.statesmenTop), 'the top statesmen ride the board');
+const lb = (await call('GET', '/v1/leaderboard/statesmen')).body.statesmen;
+assert(lb.length >= 3, 'the statesmen board ranks the political operators');
+assert.equal(lb[0].name, 'Boss Number 1', 'F1 (vote+veto) tops the board');
+assert(lb[0].rank && lb[0].statecraft === COMMISSION.STATECRAFT_VOTE + COMMISSION.STATECRAFT_VETO, 'with the lifetime capital + a derived rank');
+const meView = await meOf(bosses[0].token);
+assert(meView.statesman && meView.statesman.rank, "the view carries the statesman legend");
+
+// ── THE ENACTED PRIZE — a proposer whose motion is enacted earns the big prize (post-commit, own-txn) ──
+await pool.query('DELETE FROM commission_votes');
+await pool.query('DELETE FROM commission_vetoes');
+await pool.query('DELETE FROM commission_overrides');
+await pool.query('DELETE FROM commission_proposals');
+await pool.query('UPDATE account_persistent SET statecraft=0');
+await pool.query(`UPDATE gangs SET treasury=500000 WHERE id IN ('${bosses[0].gang}','${bosses[1].gang}')`);
+r = await call('POST', '/v1/commission/propose', { token: bosses[0].token, body: { decree: 'pax' } });
+assert.equal(r.code, 200, 'F1 tables the pax');
+assert.equal(await statecraftOf(bosses[0].token), COMMISSION.STATECRAFT_PROPOSE, 'moving a motion earns capital');
+await call('POST', '/v1/commission/vote', { token: bosses[0].token, body: { decree: 'pax' } }); // vote it in
+await pool.query(`UPDATE commission_votes SET week=${week - 1}`);   // freeze the voting week
+await pool.query(`UPDATE commission_proposals SET week=${week - 1}`);
+const scPre = await statecraftOf(bosses[0].token); // propose(3) + vote(2) so far
+r = await settle4(pool);
+assert.equal(r.refunded, 1, 'the enacted motion refunds');
+assert.equal(await statecraftOf(bosses[0].token), scPre + COMMISSION.STATECRAFT_ENACTED, 'the proposer earns the ENACTED prize (post-commit)');
+
+// ── THE 3 NEW DECREES are published in the book (touchpoints mirror the tested open_season/pax/amnesty/lockdown mechanism) ──
+const book = (await call('GET', '/v1/commission')).body.book.map((d) => d.id);
+for (const id of ['smugglers_moon', 'open_roads', 'blood_oath'])
+  assert(book.includes(id), `the ${id} decree is on the books`);
+
+// ── §10.4 stays exact across the Tier-4 actions (statecraft/override move no money; deposits ride the step-three vocabulary) ──
+{ const inv = await runLedgerInvariants(pool);
+  assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'no new reasons from the Tier-4 politics');
+  assert.equal(inv.checks.find((c) => c.name === 'commission escrow').drift, 0, 'the commission escrow still reconciles'); }
+// reseat the chamber for the season-rollover assertion below (the ENACTED settle didn't touch season standings)
+
 // ── econ pass: the chamber re-contests every season — the rollover zeroes the ladder ──
 // (the audit's purchasable-standing fix: parked lifetime wealth no longer owns the head seat)
 const { runSeasonRollover } = await import('../src/worker.js');
@@ -244,5 +333,5 @@ assert.equal(Number((await pool.query('SELECT COALESCE(SUM(season_tribute) + SUM
 r = await call('GET', '/v1/commission');
 assert.equal(r.body.seats.length, 0, 'the chamber is empty until someone earns a seat THIS season');
 
-console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed + STEP THREE: proposals with deposits (rank/no_seat/bad_decree/treasury gates, escrowed treasury deposit, one motion per family, public table, votes for unproposed decrees discarded, settle refunds the enacted motion + forfeits the rest to the pool, the commission-escrow §10.4 check exact) and THE LEVY (the buyback family split redirected to the seated chamber, head seat 5× the last)');
+console.log('✅ Commission test passed — five seats by SEASON standing (the purchasable-standing fix: rollover re-contests the chamber), public cast-and-change votes, lazy majority tally + tie deadlock, real-cast lifecycle ballot, OPEN SEASON (half safehouse), THE PAX (war blocked), AMNESTY (half laylow, ledger exact), LOCKDOWN (+20 in the audit trail) + STEP TWO (audit-hardened): standing-ranked ballots (top two beat bottom three, stale head ballots outranked, electorate bounded at five, weighted ties deadlock), dissolution kills the ghost ballot, the head-of-table veto (rank/head/once gates, public record, touchpoint dead), vocabulary closed + STEP THREE: proposals with deposits (rank/no_seat/bad_decree/treasury gates, escrowed treasury deposit, one motion per family, public table, votes for unproposed decrees discarded, settle refunds the enacted motion + forfeits the rest to the pool, the commission-escrow §10.4 check exact) and THE LEVY (the buyback family split redirected to the seated chamber, head seat 5× the last) + TIER-4: THE STATESMAN (vote/veto/propose/override/enacted political-capital legend — survives death, leaderboard + view, once-per-week vote), THE OVERRIDE (the floor musters 7 seat-weight to overrule the head veto — RESTORED; head/rank/no_seat/no_veto/again gates), THE RECORD (chamber history), the 3 new decrees on the books, and §10.4 exact across it all (statecraft/override move no money)');
 await app.close();

@@ -997,6 +997,10 @@ export async function buildServer() {
   // step three — a seated family stakes a treasury deposit to put a motion on the week's ballot
   app.post('/v1/commission/propose', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.proposeDecree(ch, req.body?.decree, client, h)));
+  // Tier-4 — a seated FLOOR family moves to override the head's veto (a floor supermajority restores the decree)
+  app.post('/v1/commission/override', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.overrideVeto(ch, client, h)));
+  app.get('/v1/leaderboard/statesmen', async () => Commission.statesmenLeaderboard(pool)); // the survives-death political legend
 
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
