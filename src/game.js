@@ -8,7 +8,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          gunsValue, fleetValue, racketsValue, hitmanRankOf, sealOf, SKILLS, skillOf, UNDERWORLD, leadTaskOf, ONBOARD_TASKS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
-         SOLDIERS, soldierFxOf, CLUES, clueStepOf } from './rules.js';
+         SOLDIERS, soldierFxOf, CLUES, clueStepOf, seasonModOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -41,6 +41,7 @@ export const deadlockToRetry = (e) =>
 // In-process pub/sub feeding the websocket gateway (§5.6): 'me:{characterId}'
 // for notifications, 'streets' for the public kill/bust feed, 'gang:{id}' updates.
 export const bus = new EventEmitter();
+let clueSavepoints = null; // probed once: does this DB support SAVEPOINT? (pg-mem doesn't)
 bus.setMaxListeners(0);
 
 // Write a notification row AND push it live if the player is connected.
@@ -618,7 +619,9 @@ export function view(ch, acct = {}, owned = {}) {
     bankInTransit: Math.min(Math.floor(Number(ch.bank_intransit || 0)), Math.floor(Number(ch.bank))),
     bankClearSeconds: (Number(ch.bank_intransit || 0) > 0 && ch.bank_intransit_at)
       ? Math.max(0, Math.ceil((new Date(ch.bank_intransit_at).getTime() + CONSTANTS.BANK_CLEAR_MS - Date.now()) / 1000)) : 0,
-    safehouseCost: Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000)),
+    // (red-team) the live quote MIRRORS enterSafehouse exactly — incl. the season mult when armed
+    safehouseCost: Math.floor(Math.max(M3.SAFEHOUSE_COST, Math.floor((Number(ch.cash) + Number(ch.bank)) * CONSTANTS.SAFEHOUSE_NW_BPS / 10000))
+      * (seasonModOf().safehouseMult || 1)),
     stats: { muscle: ch.muscle, cunning: ch.cunning, speed: ch.speed },
     eff: { muscle: eff('muscle'), cunning: eff('cunning'), speed: eff('speed') },
     rerollCredits: Number(acct.reroll_credits || 0), // paid 0.01-ETH stat re-rolls in hand
@@ -774,14 +777,31 @@ export function doCrime(ch, crimeId, client, h) {
       let clue = null;
       try {
         const clueP = process.env.CLUE_DROP_P != null ? Number(process.env.CLUE_DROP_P) : CLUES.DROP_P;
-        if (!(ch.clue_at && new Date(ch.clue_at) > new Date()) && Math.random() < clueP) {
-          const held = (await client.query('SELECT 1 FROM clue_scrolls WHERE character_id=$1', [ch.id])).rows[0];
-          if (!held) {
-            const salt = crypto.randomUUID();
-            const nSteps = CLUES.STEPS_MIN + Math.floor(Math.random() * (CLUES.STEPS_MAX - CLUES.STEPS_MIN + 1));
-            await client.query('INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ($1,$2,1,$3)', [ch.id, salt, nSteps]);
-            clue = { steps: nSteps, riddle: clueStepOf(salt, 1).riddle };
-            await notify(client, ch.id, 'clue_found', clue);
+        const clueRoll = Math.random();
+        if (!(ch.clue_at && new Date(ch.clue_at) > new Date()) && clueRoll < clueP) {
+          // (red-team) a bare swallow can't keep a REAL-Postgres txn healthy if a statement in here
+          // errors — guard the writes with a SAVEPOINT where supported (the collection.js probe
+          // pattern; pg-mem lacks SAVEPOINT and also doesn't poison txns, so bare is safe there)
+          if (clueSavepoints === null) {
+            try { await client.query('SAVEPOINT clue_probe'); await client.query('RELEASE SAVEPOINT clue_probe'); clueSavepoints = true; }
+            catch { clueSavepoints = false; }
+          }
+          if (clueSavepoints) await client.query('SAVEPOINT clue_drop');
+          try {
+            const held = (await client.query('SELECT 1 FROM clue_scrolls WHERE character_id=$1', [ch.id])).rows[0];
+            if (!held) {
+              const salt = crypto.randomUUID();
+              const nSteps = CLUES.STEPS_MIN + Math.floor(Math.random() * (CLUES.STEPS_MAX - CLUES.STEPS_MIN + 1));
+              await client.query('INSERT INTO clue_scrolls (character_id, salt, step, steps) VALUES ($1,$2,1,$3)', [ch.id, salt, nSteps]);
+              // (red-team flag) the entry ticket to a cash faucet is audited randomness
+              await h.rngLog(client, ch.id, 'clue:drop', clueRoll, `scroll dropped (${nSteps} steps)`);
+              clue = { steps: nSteps, riddle: clueStepOf(salt, 1).riddle };
+              await notify(client, ch.id, 'clue_found', clue);
+            }
+            if (clueSavepoints) await client.query('RELEASE SAVEPOINT clue_drop');
+          } catch (e) {
+            if (clueSavepoints) await client.query('ROLLBACK TO SAVEPOINT clue_drop').catch(() => {});
+            clue = null;
           }
         }
       } catch { /* the trail is a bonus, never a blocker */ }

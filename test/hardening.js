@@ -19,7 +19,8 @@ import { runSeasonRollover } from '../src/worker.js';
 {
   const wm = readFileSync(new URL('../docs/WIKI.md', import.meta.url), 'utf8').toLowerCase();
   const wh = readFileSync(new URL('../public/wiki.html', import.meta.url), 'utf8').toLowerCase();
-  for (const term of ['spread the word', 'family tree', 'opportunity', '/agents']) {
+  for (const term of ['spread the word', 'family tree', 'opportunity', '/agents',
+    'dueling circuit', 'clue scrolls', 'megaproject', 'cellphone']) {
     assert(wm.includes(term), `docs/WIKI.md must document "${term}" (codex drift)`);
     assert(wh.includes(term), `public/wiki.html must document "${term}" (codex drift)`);
   }

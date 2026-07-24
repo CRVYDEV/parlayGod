@@ -4430,3 +4430,45 @@ dust note (≤$1 on the final brick, ledger bit-exact). Flagged for founder sign
 inclusion on the plaque (every other status board excludes agents; here the plaque is bought with burned
 value), a goods $-value floor if dust spam shows. All `MEGAPROJECT.*` numbers (targets, OMR_RATE, floors,
 tiers) are founder sign-off levers. Suite 39/39 + sim drift-0.
+
+**THE SLATE TRIO (founder picks #5+#4+#6) — BUILT** (`omerta-ladder-clues-seasons-design.md`;
+`src/duels.js`, `src/clues.js` + the `doCrime` drop hook in `src/game.js`, the `SEASON_MODS` rules tail;
+`test/duels.js`/`test/clues.js`/`test/seasons.js` — the 40th–42nd suites). **#5 THE DUELING LADDER** — ranked
+ELO PvP (`DUELS` rules tail: ELO_START 1200 / K 32 / floor 100 / MIN_LVL 5): consent-by-listing
+(`characters.duel_limit`, the fade/bout pattern), the duel a stat contest (muscle+cunning/2+speed/4 +
+rand(VARIANCE)) settling a CASH stake as the audited **casino:pvp taxed transfer** byte-for-byte (`duel:wager`
+both sides, winner nets stake − 5% rake, half the rake → street_tax — **ZERO new emission**); `duel_elo` a
+per-street seasonal rating (DIRECT SQL, reset to 1200 in `runSeasonRollover`), `duel_wins` the account-level
+lifetime legend (survives death, loser ≥ `LEGEND_MIN_LVL` 10). Anti-Sybil stack: per-account-pair daily
+K-diminishing (`duels` log table, K/(1+priorToday)), level floors both sides, ELO floor, the rake taxing
+every feed, a challenger cooldown (`CHALLENGE_CD_MS` 10min on `characters.duel_at`; `DUEL_CD_MS` TEST-ONLY).
+`GET /v1/duels` board + `GET /v1/leaderboard/duels` (agents excluded); a Dueling Circuit section on Wet Work.
+**#4 CLUE SCROLLS** — the RuneScape treasure trail: a 2% drop on a successful crime (`CLUE_DROP_P` TEST-ONLY;
+SAVEPOINT-probed + rng-audited hook in doCrime — never poisons the action txn) starts a 3–5 step riddle hunt,
+each step a DISTRICT (+ sometimes a city-hour window) derived from the scroll's salt via the §7.11 hash (no
+stored answers); stand right, `POST /v1/clues/dig` (5 energy win or lose; safehouse-gated D2), the final dig
+opens THE CASKET — **the one new faucet** (`clue:casket` $3k–$12k, character_id'd, bounded by drop × one
+active scroll × an 8h `clue_at` cooldown ≈ $22.5k/day hard ceiling, sim P9.19 — petty by design). Scrolls die
+with the street (`clue_scrolls` wiped + DISPOSITION); `caskets` is the account legend +
+`GET /v1/leaderboard/clues`; a clue-slot card on Streets. **#6 SEASONAL LEAGUE MODIFIERS** — the PoE season
+twist, THE ONE DROP THAT TOUCHES SIGNED LEVERS BY DESIGN: `seasonModOf(seasonIdx)` draws one of `SEASON_MODS`
+(Dead Quiet vanilla / The Crackdown lawGain ×1.25 + laylow ×0.75 / Blood in the Streets loot ×1.15 +
+safehouse ×1.25 / The Gold Rush trade-sell ×1.05) per 28-day season off the §7.11 seed — **DORMANT unless
+`SEASON_MODS=on`** (read per call, the SOCIAL_VERIFY_MODE posture; arming is itself the founder sign-off,
+`SEASON_MOD` TEST-ONLY pins it). Five touchpoints, each composing multiplicatively on an EXISTING modifier
+site with the MODIFIED number ledgered (the decree discipline): kitchen laylow, accrual law gain, social
+kill-loot rate (all five loot surfaces incl. the estate's escrow legs) + safehouse cost (charge AND view
+quote), economy goods sell. `/v1/city` carries the season + countdown; a season banner on the City tab.
+§10.4: `duel:`/`clue:` joined the cash vocabulary; seasons add no reason (modified numbers ride the normal
+rails). A six-lens ultracode red-team (`AUDIT-slate-drops.md`, 34 agents, 2-refuter adversarial verification)
+returned **no CRITICAL/HIGH** and fixed 1 MED + 12 LOW in-commit (regression each): the MED — renderPvp's
+duels fetch blanking the whole Wet Work tab on any /v1/duels error (now graceful); the LOWs — the view
+safehouse quote omitting the season mult, lootMult missing the two escrow-loot legs, the un-SAVEPOINTed +
+un-audited clue drop hook, listDuel's stale in-memory limit, floor-clamped elo deltas misreported, the
+missing challenger cooldown, zero lawGainMult test coverage, no duels-log retention (60d sweep added), the
+codex drift-detector unextended, and dig() unguarded from a safehouse. Accepted: the their_cash probe
+(fade/bout parity), pre-commit bus emits (codebase norm). Flagged for sign-off (BALANCE.md): the Gold Rush
+round-trip (+~1%/cycle past the 4% fee wall — moot while unarmed), duel_wins farmable vs one funded lvl-10
+alt (the fight-fix posture), the latent sub-1 safehouseMult outside the max() floor, crackdown retroactivity
+at a boundary, and the two textually-duplicated 28-day season clocks (linking comments added). ALL
+`DUELS.*`/`CLUES.*`/`SEASON_MODS` numbers are founder sign-off levers. Suite 42/42 + sim drift-0.

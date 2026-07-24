@@ -131,7 +131,7 @@ export async function runBuyback(pool, opts = {}) {
 // stamped with an older season convert level → prestige (floor(level/2), the
 // §7.9 formula) and reset respect. Batched; each character is row-locked.
 export async function runSeasonRollover(pool, opts = {}) {
-  const current = opts.season ?? Math.floor(dayOf() / 28);
+  const current = opts.season ?? Math.floor(dayOf() / 28); // MUST match rules.js seasonIdxOf (the same 28-day clock)
   let converted = 0;
   // R1 step-two — THE SEASON PRIZE: the top season grinders (by respect, snapshotted BEFORE the reset
   // below zeroes it) earn the champion's moonshot (SPCX) — a skill-ranked STATUS grant, so no §10.4
@@ -227,6 +227,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       [new Date(Date.now() - 7 * 86400000)])); // 7-day chat retention — talk is ephemeral, not a ledger
     await safe('cellphone retention', () => pool.query('DELETE FROM dm_messages WHERE at < $1',
       [new Date(Date.now() - 30 * 86400000)])); // 30-day DM retention — a phone, not an archive
+    await safe('duel log retention', () => pool.query('DELETE FROM duels WHERE at < $1',
+      [new Date(Date.now() - 60 * 86400000)])); // the pair K-decay reads only TODAY — old rows are noise
     await safe('oauth state sweep', () => pool.query('DELETE FROM oauth_states WHERE created_at < $1',
       [new Date(Date.now() - 30 * 60000)])); // single-use PKCE states die in 30 min regardless
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)

@@ -1901,6 +1901,7 @@ CREATE INDEX IF NOT EXISTS ix_megacontrib_top ON megaproject_contributions (proj
 -- DIRECT-SQL columns (never in the positional persist — clobber-safe, absolute writes).
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_elo INT NOT NULL DEFAULT 1000;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_limit INT;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS duel_at TIMESTAMPTZ;  -- challenger cooldown (direct-SQL col)
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS duel_wins INT NOT NULL DEFAULT 0; -- lifetime legend (survives death)
 -- the duel log: ACCOUNT-pair keyed for the anti-Sybil K-diminishing (a fresh alt street doesn't
 -- reset the pair); no character_id → outside the estate wipe + DISPOSITION guard by construction.

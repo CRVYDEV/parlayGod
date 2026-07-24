@@ -1644,4 +1644,20 @@ rollover rider.
 THE ONE NEW FAUCET: hard ceiling 3 caskets/day ≈ $22.5k mean/day/char (sim P9.19) — petty by design.
 **Seasonal Modifiers (#6)** — `SEASON_MODS`: THE ONE DROP THAT TOUCHES SIGNED LEVERS BY DESIGN (a
 season-long twist on laylow/law-gain/loot/safehouse/trade-sell). Pool ships SMALL (4 mods, 1 vanilla);
-every multiplier is a named lever; review the pool each season.
+every multiplier is a named lever; review the pool each season. **DORMANT BY DEFAULT** — the layer ships
+vanilla (every season Dead Quiet) until the founder arms `SEASON_MODS=on` (read per call); arming it is
+itself the sign-off decision, since it twists signed numbers for 28 days at a time.
+
+**Red-team flags for sign-off (AUDIT-slate-drops.md — flagged, NOT patched):**
+- **The Gold Rush round-trip** — the ×1.05 sell-only mult flips a same-district goods buy→sell round
+  trip past the 4% fee wall (~+1% riskless per cycle, trunk-bounded) for the whole season. Dials:
+  ×1.03, or symmetric buy+sell. Moot while the layer stays unarmed.
+- **`duel_wins` legend farmability** — the lifetime legend has no per-pair decay: one funded lvl-10
+  alt feeds wins at rate-limit speed (rake-taxed, elo-neutral after K-decay). The accepted
+  fight-fix/referral Sybil posture; `LEGEND_MIN_LVL` is the dial.
+- **Latent sub-1 `safehouseMult`** — applied OUTSIDE the `max($25k, 1% NW)` floor; no current mod is
+  sub-1, but a future discount season would undercut the signed minimum (one-line re-floor if ever).
+- **Crackdown `lawGainMult` retroactivity** — at a season boundary the current rate applies to the
+  whole (8h-capped) accrual window. Bounded ±25% × 8h; accepted-shape note.
+- **Two 28-day season clocks** — `seasonIdxOf` (rules.js) and `runSeasonRollover` (worker.js)
+  duplicate `day/28`; linking comments added at both sites so a future lever change touches both.
