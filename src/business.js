@@ -9,8 +9,10 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap } from './game.js';
-import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, businessOf, businessTierOf, levelOf, effStat } from './rules.js';
+import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, businessOf, businessTierOf, businessMaxTier,
+  businessAssessedValue, launderRankOf, levelOf, effStat } from './rules.js';
 import { denAvailable, denDistribute } from './casino.js';
+import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -48,9 +50,11 @@ async function takeHouse(client, tax) {
 // ── step two: the RISK layer — scrutiny + Bureau raids (lazy, the §7.1 kitchen-raid pattern) ──
 // Only LAUNDERING draws scrutiny onto a front; it decays hourly. Income-only fronts never get
 // raided — their risk is rival shakedowns (PvP), so PvE risk tracks extraction, PvP tracks wealth.
+// FRONT SPECIALIZATION (Tier-4): THE FIXER cools scrutiny 2× as fast (decayMult) — read off the row.
+const specDecayMult = (row) => (row.spec && BUSINESS_EMPIRE.SPECS[row.spec]?.decayMult) || 1;
 export function decayedScrutiny(row, now = Date.now()) {
   const hrs = Math.max(0, now - new Date(row.scrutiny_at).getTime()) / 3600000;
-  return Math.max(0, Number(row.scrutiny) - hrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR);
+  return Math.max(0, Number(row.scrutiny) - hrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR * specDecayMult(row));
 }
 
 // Resolve the elapsed window on one (locked) business row: decay scrutiny, and if the front sat
@@ -64,7 +68,7 @@ async function resolveScrutiny(ch, row, client, h) {
   const now = Date.now();
   const scr0 = Number(row.scrutiny);
   const elapsedHrs = Math.max(0, now - new Date(row.scrutiny_at).getTime()) / 3600000;
-  const scr = Math.max(0, scr0 - elapsedHrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR);
+  const scr = Math.max(0, scr0 - elapsedHrs * CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR * specDecayMult(row)); // THE FIXER cools 2×
   if (scr0 >= CONSTANTS.BUSINESS_RAID_THRESHOLD) {
     // roll over the minutes the front actually SAT above the threshold this window — it may have
     // cooled below since the last touch, but the hot stretch still gets its roll. The exponent is
@@ -82,7 +86,9 @@ async function resolveScrutiny(ch, row, client, h) {
       // the fine reaches the BANK once the pocket is empty (audit F7: raids were trivially dodged
       // by banking before touching a hot front — the §10.4 character-cash check covers cash+bank,
       // so the single ledger row stays exact)
-      const fine = Math.min(Math.floor(tier.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE),
+      // THE FIXER (spec) halves the raid fine (fineMult) — a defensive risk-shaper, not a faucet
+      const fineMult = (row.spec && BUSINESS_EMPIRE.SPECS[row.spec]?.fineMult) || 1;
+      const fine = Math.min(Math.floor(tier.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE * fineMult),
         Math.max(0, Math.floor(Number(ch.cash) + Number(ch.bank))));
       const fromPocket = Math.min(fine, Math.max(0, Math.floor(Number(ch.cash))));
       ch.cash = Number(ch.cash) - fromPocket;
@@ -161,6 +167,10 @@ export async function collectBusiness(ch, client, h) {
   if (total > 0) {
     ch.cash = Number(ch.cash) + total;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: total, reason: 'business:income' });
+    // TYCOON fold-in (Tier-4): business income counts toward the account-level tycoon_earned legend
+    // (the comment gap the code never closed). Direct SQL, own account, OFF persistAccount → clobber-safe;
+    // this is on-demand collect income, distinct from ch._accruedIncome — no double-count.
+    await client.query('UPDATE account_persistent SET tycoon_earned = tycoon_earned + $1 WHERE account_id=$2', [total, ch.account_id]);
   }
   if (rakeback > 0) {
     ch.cash = Number(ch.cash) + rakeback;
@@ -267,12 +277,17 @@ export async function launderAtBusiness(ch, businessId, amount, client, h) {
   // step two: washing draws Bureau SCRUTINY onto the front, pro-rated by how hard you push its
   // capacity (a full day-cap = BUSINESS_SCRUTINY_PER_CAP points), capped like heat —
   // resolveScrutiny just stamped the decay clock, so this bump starts a fresh window
-  const scrAdd = amt / tier.launderCapDay * CONSTANTS.BUSINESS_SCRUTINY_PER_CAP;
+  // THE ACCOUNTANT (spec) draws HALF the Bureau's eye (scrutinyMult) — a defensive risk-shaper
+  const scrMult = (r.spec && BUSINESS_EMPIRE.SPECS[r.spec]?.scrutinyMult) || 1;
+  const scrAdd = amt / tier.launderCapDay * CONSTANTS.BUSINESS_SCRUTINY_PER_CAP * scrMult;
   await client.query('UPDATE businesses SET scrutiny = LEAST($3, scrutiny + $2) WHERE id=$1',
     [businessId, scrAdd, CONSTANTS.BUSINESS_SCRUTINY_MAX]);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });
   await takeHouse(client, tax);
+  // THE LAUNDERER legend (Tier-4): lifetime cash washed through YOUR OWN fronts (survives death).
+  // Direct SQL, own account, OFF persistAccount → clobber-safe (the tycoon_earned discipline).
+  await client.query('UPDATE account_persistent SET laundered_lifetime = laundered_lifetime + $1 WHERE account_id=$2', [amt, ch.account_id]);
   h.owned.businesses = await businessesOf(client, ch.id); // refresh launder headroom in the view
   return { ok: true, spentCash: amt, gotOmr: out, price: (c + netIn) / (o - out),
     launderedToday: usedBefore + amt, capDay: tier.launderCapDay, ...(raid.raided ? { raid } : {}) };
@@ -330,6 +345,107 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
   return { ok: true, win: false, kind: r.kind, cut: 0 };
 }
 
+// ── Tier-4: FRONT SPECIALIZATION — a MAX-TIER front can be given ONE build-identity spec for a $OMR
+// burn (deflationary sink). Three defensive/risk-shaping branches (NOT a faucet — income + launder
+// throughput untouched). Re-specializing overwrites (a fresh $OMR burn). §10.4: `business:spec` omr burn. ──
+export async function specializeBusiness(ch, businessId, spec, client, h) {
+  if (!BUSINESS_EMPIRE.SPECS[spec]) throw new GameError('bad_spec', 'Pick The Accountant, The Fortress, or The Fixer.');
+  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
+  if (!r) throw new GameError('not_yours', "That's not your business.");
+  if (Number(r.tier) < businessMaxTier(r.kind)) throw new GameError('not_maxed', 'Only a fully-built front can specialize — max the tier first.');
+  await spendOmr(client, h, BUSINESS_EMPIRE.SPEC_OMR, 'business:spec'); // throws 'omr' if short
+  await client.query('UPDATE businesses SET spec=$2, spec_at=now() WHERE id=$1', [businessId, spec]);
+  h.owned.businesses = await businessesOf(client, ch.id);
+  return { ok: true, kind: r.kind, spec, name: BUSINESS_EMPIRE.SPECS[spec].name, spent: BUSINESS_EMPIRE.SPEC_OMR };
+}
+
+// reset ALL mutable front state on a change of hands — a seized/bought front is never born hot/cold/
+// pending-full/specialized (the speakeasy resetClubToNewOwner precedent). takeover_cd_until is set by the
+// caller BEFORE this (win OR lose) and is deliberately NOT reset here so it survives the handover.
+async function resetFrontToNewOwner(client, businessId, newOwnerId) {
+  await client.query(
+    `UPDATE businesses SET character_id=$2, tier=tier, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(),
+       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=0
+     WHERE id=$1`, [businessId, newOwnerId]);
+}
+
+// ── Tier-4: THE HOSTILE TAKEOVER — the speakeasy-standover twin, applied to fronts (they change hands,
+// not just get skimmed). A rival ≥ MIN_LEVEL who does NOT already run that kind fronts a FEE (burns win or
+// lose — `business:takeover` cash SINK, the npchit-fee posture) and rolls a muscle/cunning contest vs the
+// owner (fortress def bonus applies). A WIN forces a SALE at the front's assessed build value (owner PAID,
+// taxed — the `business:buyout` transfer, identical to the club buyout), the front handed over reset. Runs
+// under withTwoCharacters(raider, owner). BUSINESS_TAKEOVER_P pins the roll for tests (the standover precedent). ──
+export async function takeoverBusiness(ch, owner, businessId, client, h) {
+  if (jailed(ch)) throw new GameError('jailed', 'No moves from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "Can't run a takeover from a safehouse — a shield, not a bunker.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', 'No muscle from a hospital bed.');
+  if (levelOf(ch.respect) < BUSINESS_EMPIRE.TAKEOVER.MIN_LEVEL) throw new GameError('level', `Takeovers open at level ${BUSINESS_EMPIRE.TAKEOVER.MIN_LEVEL}.`);
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 FOR UPDATE', [businessId])).rows[0];
+  if (!r || r.character_id !== owner.id) throw new GameError('bad_business', 'No such front on them.');
+  // you can't run two of one kind — a UNIQUE(character_id,kind) collision would 500; gate before the roll
+  if ((await client.query('SELECT 1 FROM businesses WHERE character_id=$1 AND kind=$2', [ch.id, r.kind])).rows[0])
+    throw new GameError('have_kind', `You already run a ${businessOf(r.kind).name} — you can only hold one.`);
+  if (r.takeover_cd_until && new Date(r.takeover_cd_until) > new Date())
+    throw new GameError('cooldown', 'That front just fought off a move — let it settle.');
+  const fee = BUSINESS_EMPIRE.TAKEOVER.FEE;
+  const price = businessAssessedValue(r.kind, r.tier);
+  if (Number(ch.cash) < fee + price) throw new GameError('cash', `A takeover runs $${fee} fee + $${price} to buy it out.`);
+  // the FEE burns win OR lose (a §10.4 cash sink) + the per-front cooldown is set either way
+  ch.cash = Number(ch.cash) - fee;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + BUSINESS_EMPIRE.TAKEOVER.HEAT);
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'business:takeover' });
+  await client.query('UPDATE businesses SET takeover_cd_until=$2 WHERE id=$1',
+    [businessId, new Date(Date.now() + BUSINESS_EMPIRE.TAKEOVER.CD_MS)]);
+
+  const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
+  const vEff = (s) => effStat(owner[s], s, h.victimOwned.assets, h.victimOwned.gear);
+  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT);
+  const defBonus = (r.spec && BUSINESS_EMPIRE.SPECS[r.spec]?.defBonus) || 0; // THE FORTRESS
+  const def = vEff('muscle') + vEff('cunning') * 0.5 + defBonus;
+  const T = BUSINESS_EMPIRE.TAKEOVER;
+  let p = Math.max(T.MIN_P, Math.min(T.MAX_P, T.BASE_P + (atk - def) / T.STAT_SCALE));
+  if (process.env.BUSINESS_TAKEOVER_P != null) p = Number(process.env.BUSINESS_TAKEOVER_P); // TEST-ONLY (the standover/raid precedent — pins p)
+  const roll = Math.random();
+  const won = roll < p;
+  await h.rngLog(client, ch.id, `business:takeover:${owner.id}`, Math.round(p * 10000) / 10000, won ? 'takeover' : 'repelled');
+
+  if (!won) {
+    ch.health = Math.max(1, Number(ch.health) - rand(10, 25));
+    await h.notify(client, owner.id, 'takeover_failed', { from: ch.name, kind: r.kind });
+    return { ok: true, won: false, kind: r.kind, feeBurned: fee };
+  }
+  // WON — settle the owner's pending scrutiny FIRST (a friendly takeover must not wash a pending fine),
+  // then the taxed buyout transfer + the reset handover (the club-buyout mechanism verbatim)
+  await resolveScrutiny(owner, r, client, h);
+  const buyFee = Math.ceil(price * 0.01), tax = Math.ceil(price * 0.01), net = price - buyFee - tax;
+  ch.cash = Number(ch.cash) - price;
+  owner.cash = Number(owner.cash) + net;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -price, reason: 'business:buyout', counterparty: owner.id });
+  await h.ledger(client, { characterId: owner.id, currency: 'cash', amount: net, reason: 'business:buyout', counterparty: ch.id });
+  await resetFrontToNewOwner(client, businessId, ch.id); // fresh: scrutiny 0, spec cleared, clocks reset
+  await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]); // singleton LAST (canonical order)
+  h.owned.businesses = await businessesOf(client, ch.id);
+  await h.notify(client, owner.id, 'takeover', { from: ch.name, kind: r.kind, net });
+  bus.emit('streets', { type: 'business_takeover', by: ch.name, from: owner.name, kind: r.kind });
+  return { ok: true, won: true, kind: r.kind, price, net, feeBurned: fee };
+}
+
+// THE LAUNDERER leaderboard — the biggest money-men by lifetime cash washed through their fronts (survives
+// death, agent-excluded — the tycoon/hitmen board precedent). A full account scan, LIMIT 20.
+export async function laundererLeaderboard(pool, limit = 20) {
+  const rows = (await pool.query(
+    `SELECT a.laundered_lifetime, c.name, g.name AS gang, g.tag
+       FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+       LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN gangs g ON g.id = gm.gang_id
+      WHERE a.laundered_lifetime > 0 AND NOT a.agent_flag
+      ORDER BY a.laundered_lifetime DESC LIMIT $1`, [limit])).rows;
+  return rows.map((r, i) => ({ rank: i + 1, name: r.name, gang: r.gang || null, tag: r.tag || null,
+    washed: Math.floor(Number(r.laundered_lifetime)), title: launderRankOf(r.laundered_lifetime).name }));
+}
+
 // Reader for GET /v1/business + the character view — your empire, pending income, launder headroom.
 export async function businessesOf(pool, characterId) {
   const rows = (await pool.query('SELECT * FROM businesses WHERE character_id=$1 ORDER BY acquired_at', [characterId])).rows;
@@ -348,6 +464,11 @@ export async function businessesOf(pool, characterId) {
       scrutiny: Math.round(decayedScrutiny(r)), raidRisk: decayedScrutiny(r) >= CONSTANTS.BUSINESS_RAID_THRESHOLD,
       shakedownCdSeconds: r.shakedown_at ? Math.max(0, Math.ceil((new Date(r.shakedown_at).getTime() + CONSTANTS.SHAKEDOWN_CD_MS - Date.now()) / 1000)) : 0,
       nextTier: businessTierOf(r.kind, Number(r.tier) + 1) || null,
+      // Tier-4: the specialization + the hostile-takeover surface
+      maxed: Number(r.tier) >= businessMaxTier(r.kind), spec: r.spec || null, specName: r.spec ? BUSINESS_EMPIRE.SPECS[r.spec]?.name : null,
+      specOmr: BUSINESS_EMPIRE.SPEC_OMR,
+      takeoverFee: BUSINESS_EMPIRE.TAKEOVER.FEE, buyoutPrice: businessAssessedValue(r.kind, r.tier),
+      takeoverCdSeconds: r.takeover_cd_until ? Math.max(0, Math.ceil((new Date(r.takeover_cd_until).getTime() - Date.now()) / 1000)) : 0,
     };
   });
 }

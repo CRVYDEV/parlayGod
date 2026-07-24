@@ -70,7 +70,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE } from './rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -715,7 +715,10 @@ export async function buildServer() {
     assets: ASSETS.map((a) => ({ id: a.id, name: a.name, cat: a.cat, price: a.price, stat: a.stat, boost: a.boost, cargo: a.cargo, desc: a.desc })),
     // ASSETS & RACKETS → Tier 4 — the upgrade axis, the tycoon ladder, the empire-set titles
     empire: { upMax: RACKET_EMPIRE.UP_MAX, upStep: RACKET_EMPIRE.UP_STEP, tycoonRanks: RACKET_EMPIRE.TYCOON_RANKS,
-      sets: RACKET_EMPIRE.SETS.map((s) => ({ id: s.id, name: s.name })) },
+      sets: RACKET_EMPIRE.SETS.map((s) => ({ id: s.id, name: s.name })),
+      // BUSINESS EMPIRE Tier-4 — the launderer legend + the front specializations + the takeover surface
+      launderer: BUSINESS_EMPIRE.LAUNDERER_RANKS, specs: BUSINESS_EMPIRE.SPECS, specOmr: BUSINESS_EMPIRE.SPEC_OMR,
+      takeover: { fee: BUSINESS_EMPIRE.TAKEOVER.FEE, minLevel: BUSINESS_EMPIRE.TAKEOVER.MIN_LEVEL } },
     missions: MISSIONS.map((m) => ({ id: m.id, name: m.name, req: m.req, reward: m.reward, brief: m.brief })),
     seals: GANG_SEALS,
     guns: GUNS.map((g) => ({ id: g.id, name: g.name, cash: g.cash, crates: g.crates, fp: g.fp, desc: g.desc })),
@@ -807,6 +810,16 @@ export async function buildServer() {
     return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
       Business.shakedownBusiness(ch, victim, req.params.id, client, h));
   });
+  // Tier-4: FRONT SPECIALIZATION (a max-tier $OMR-sink build choice) + THE HOSTILE TAKEOVER (two-party PvP)
+  app.post('/v1/business/:id/specialize', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Business.specializeBusiness(ch, req.params.id, req.body?.spec, client, h)));
+  app.post('/v1/business/:id/takeover', { preHandler: auth }, async (req) => {
+    const owner = (await pool.query('SELECT character_id FROM businesses WHERE id=$1', [req.params.id])).rows[0];
+    if (!owner) throw new G.GameError('bad_business', 'No such front.');
+    return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
+      Business.takeoverBusiness(ch, victim, req.params.id, client, h));
+  });
+  app.get('/v1/leaderboard/launderers', async () => ({ launderers: await Business.laundererLeaderboard(pool) }));
   app.get('/v1/business', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };

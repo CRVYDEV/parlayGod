@@ -1799,6 +1799,45 @@ export const BUSINESSES = [
 ];
 export const businessOf = (kind) => BUSINESSES.find((b) => b.kind === kind) || null;
 export const businessTierOf = (kind, tier = 1) => businessOf(kind)?.tiers.find((t) => t.tier === Number(tier)) || null;
+export const businessMaxTier = (kind) => businessOf(kind)?.tiers.length || 0;
+
+// ── BUSINESS EMPIRE Tier-4 — the backer/legend/PvP-endgame layer over the premium fronts. ALL founder
+// sign-off levers (the RACKET_EMPIRE precedent). Status axes move ZERO §10.4 currency; the specialize burn
+// is deflationary $OMR (business:spec); the takeover fee is a cash sink + the buyout a taxed transfer.
+export const BUSINESS_EMPIRE = {
+  // THE LAUNDERER legend — lifetime cash washed through OWN fronts (survives death). Scaled to endgame
+  // wash throughput (~0.5M–2.6M/day/front); thresholds cosmetic.
+  LAUNDERER_RANKS: [
+    { at: 0, name: 'Bagman' }, { at: 1_000_000, name: 'The Washman' }, { at: 20_000_000, name: 'The Rinse Cycle' },
+    { at: 200_000_000, name: 'The Cleaner' }, { at: 2_000_000_000, name: 'The Bleach King' }, { at: 20_000_000_000, name: 'The Holy See' },
+  ],
+  SPEC_OMR: 40, // $OMR burned to specialize / re-specialize a MAX-TIER front (deflationary sink)
+  SPECS: {
+    accountant: { name: 'The Accountant', scrutinyMult: 0.5 },  // washing draws half the Bureau's eye
+    fortress: { name: 'The Fortress', defBonus: 40 },           // a hostile takeover defends +40
+    fixer: { name: 'The Fixer', fineMult: 0.5, decayMult: 2 },  // a raid fine halved + scrutiny cools 2×
+  },
+  SET_FRONTMAN: 'The Front Man',   // own all 5 kinds (read-derived completion title)
+  SET_MOGUL: 'The Mogul',          // own all 5 at max tier
+  TAKEOVER: { FEE: 500_000, CD_MS: 24 * 3600 * 1000, HEAT: 12, MIN_LEVEL: 20, BASE_P: 0.4, MIN_P: 0.1, MAX_P: 0.85, STAT_SCALE: 120 },
+};
+export const launderRankOf = (v) => {
+  let r = BUSINESS_EMPIRE.LAUNDERER_RANKS[0];
+  for (const t of BUSINESS_EMPIRE.LAUNDERER_RANKS) if (Number(v || 0) >= t.at) r = t; return r;
+};
+// read-derived completion titles from the CURRENT holdings (the empireTitles precedent, zero ledger)
+export const frontTitles = (businesses = []) => {
+  const kinds = new Set(businesses.map((b) => b.kind));
+  const titles = [];
+  if (kinds.size >= BUSINESSES.length) titles.push(BUSINESS_EMPIRE.SET_FRONTMAN);
+  if (BUSINESSES.every((b) => businesses.some((x) => x.kind === b.kind && Number(x.tier) >= businessMaxTier(b.kind)))) titles.push(BUSINESS_EMPIRE.SET_MOGUL);
+  return titles;
+};
+// the assessed build value of a front = Σ tier.cost for tiers 1..tier (the speakeasy assessedValueOf pattern)
+export const businessAssessedValue = (kind, tier) => {
+  const b = businessOf(kind); if (!b) return 0;
+  return b.tiers.filter((t) => t.tier <= Number(tier)).reduce((a, t) => a + t.cost, 0);
+};
 // M7 Phase 2 — the feared-assassin rank ladder (thresholds on lifetime hitman_rep).
 export const HITMAN_RANKS = [
   { at: 0, title: 'Associate' },      // hasn't made his bones yet
