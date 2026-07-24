@@ -6,7 +6,7 @@ process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mo
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { runBuyback } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, frontTitles, launderRankOf, businessMaxTier } from '../src/rules.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
 {
@@ -522,5 +522,89 @@ const taperMe = await meOf(token);
 assert(taperMe.bank > 30030000 && taperMe.bank < 30050000,
   `whale interest tapered (+$${Math.round(taperMe.bank - 30000000)}; untapered 4h-gap would be ~+$100k)`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no laundering / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper)');
+// ══════════ BUSINESS EMPIRE → Tier 4 — the launderer legend, specializations, the hostile takeover ══════════
+// reset bizId to a clean, MAX-TIER laundromat owned by cid (done last so we don't disturb the earlier blocks)
+process.env.BUSINESS_TAKEOVER_P = '1';
+await pool.query(`UPDATE businesses SET tier=3, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now(), last_collect_at=now(), upkeep_at=now(), takeover_cd_until=NULL WHERE id='${bizId}'`);
+await seed("cash=2000000, loc='docks', heat=0, safe_until=NULL, muscle=5, cunning=5");
+await pool.query(`UPDATE account_persistent SET omr=200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+const acctOf = async (col) => Number((await pool.query(`SELECT ${col} v FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`)).rows[0].v);
+
+// (A) THE LAUNDERER legend — a wash bumps laundered_lifetime (before/after delta; prior blocks laundered too)
+const washed0 = await acctOf('laundered_lifetime');
+r = await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 100000 } });
+assert.equal(r.code, 200, `laundered: ${JSON.stringify(r.body)}`);
+assert.equal((await acctOf('laundered_lifetime')) - washed0, 100000, 'the wash bumped the LAUNDERER legend by exactly the amount');
+const meLaund = await meOf(token);
+assert.equal(meLaund.launderer.washed, await acctOf('laundered_lifetime'), 'the view surfaces the launderer legend');
+assert.equal(meLaund.launderer.rank, launderRankOf(meLaund.launderer.washed).name, 'the launderer rank matches the ladder');
+
+// (B) THE ACCOUNTANT spec — HALVES the Bureau's scrutiny growth (vs an unspec control)
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now(), spec=NULL WHERE id='${bizId}'`);
+await seed("cash=2000000");
+await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 120000 } }); // some throughput → scrutiny
+const scrUnspec = (await meOf(token)).businesses.find((b) => b.id === bizId).scrutiny;
+// specialize accountant + repeat the same wash from a clean slate
+await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'accountant' } });
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now() WHERE id='${bizId}'`);
+await seed("cash=2000000");
+await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 120000 } });
+const scrAcct = (await meOf(token)).businesses.find((b) => b.id === bizId).scrutiny;
+assert(Math.abs(scrAcct - scrUnspec * 0.5) <= 1, `THE ACCOUNTANT halves scrutiny growth (unspec ${scrUnspec} → accountant ${scrAcct})`);
+assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:spec' AND currency='omr'")).rows[0].s) <= -BUSINESS_EMPIRE.SPEC_OMR, 'business:spec is a ledgered $OMR burn');
+// gates: a bad spec, and specializing a NON-max-tier front
+assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'nope' } })).body.error, 'bad_spec', 'a bad spec is refused');
+await pool.query(`UPDATE businesses SET tier=2 WHERE id='${bizId}'`);
+assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fixer' } })).body.error, 'not_maxed', 'only a max-tier front can specialize');
+await pool.query(`UPDATE businesses SET tier=3 WHERE id='${bizId}'`);
+
+// (C) TYCOON fold-in — a collect bumps the account-level tycoon_earned by exactly the income banked
+await pool.query(`UPDATE businesses SET last_collect_at = now() - interval '1 hour', scrutiny=0, scrutiny_at=now(), upkeep_at=now() WHERE id='${bizId}'`);
+const ty0 = await acctOf('tycoon_earned');
+r = await call('POST', '/v1/business/collect', { token });
+assert(r.body.collected > 0, 'collected some income');
+assert.equal((await acctOf('tycoon_earned')) - ty0, r.body.collected, 'business income folds into the TYCOON legend (exact delta)');
+
+// (D) FRONT-SET titles — read-derived completion titles (helper unit test + the view exposes the field)
+assert(frontTitles([{ kind: 'laundromat', tier: 1 }, { kind: 'restaurant', tier: 1 }, { kind: 'nightclub', tier: 1 }, { kind: 'hotel', tier: 1 }, { kind: 'casino', tier: 1 }]).includes(BUSINESS_EMPIRE.SET_FRONTMAN), 'owning all 5 kinds → The Front Man');
+assert(frontTitles([{ kind: 'laundromat', tier: 3 }, { kind: 'restaurant', tier: 3 }, { kind: 'nightclub', tier: 3 }, { kind: 'hotel', tier: 3 }, { kind: 'casino', tier: 3 }]).includes(BUSINESS_EMPIRE.SET_MOGUL), 'all 5 at max tier → The Mogul');
+assert(Array.isArray((await meOf(token)).frontTitles), 'the view exposes frontTitles');
+
+// (E) THE HOSTILE TAKEOVER — c2 (a strong, ungangled rival ≥ MIN_LEVEL who runs no laundromat) takes bizId
+await seed2(`respect=1000000, cash=200000000, loc='docks', muscle=800, cunning=800, energy=200, safe_until=NULL, hosp_until=NULL, jail_until=NULL`);
+await pool.query(`UPDATE businesses SET spec='fortress', spec_at=now(), takeover_cd_until=NULL, last_collect_at=now() WHERE id='${bizId}'`);
+const ownerCash0 = (await meOf(token)).cash;
+r = await call('POST', `/v1/business/${bizId}/takeover`, { token: t2 });
+assert.equal(r.code, 200, `takeover resolved: ${JSON.stringify(r.body).slice(0, 160)}`);
+assert.equal(r.body.won, true, 'BUSINESS_TAKEOVER_P=1 → the takeover lands');
+assert.equal(r.body.feeBurned, BUSINESS_EMPIRE.TAKEOVER.FEE, 'the takeover fee burned');
+assert.equal(Number((await pool.query(`SELECT character_id c FROM businesses WHERE id='${bizId}'`)).rows[0].c === c2), 1, 'the front changed hands to the raider');
+assert.equal((await meOf(token)).cash - ownerCash0, r.body.net, 'the forced-out owner was PAID the taxed net');
+assert.equal((await pool.query(`SELECT spec FROM businesses WHERE id='${bizId}'`)).rows[0].spec, null, 'the seized front is reset (spec cleared — never born specialized)');
+assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:takeover' AND character_id=$1", [c2])).rows[0].s) === -BUSINESS_EMPIRE.TAKEOVER.FEE, 'the fee is a ledgered §10.4 cash sink');
+// gates: the raider now runs a laundromat → a takeover of ANOTHER laundromat is have_kind.
+// (a fresh third owner opens a laundromat; c2 — who now runs one — is refused before the roll.)
+const { body: { token: t3 } } = await call('POST', '/v1/auth/guest');
+await call('POST', '/v1/character', { token: t3, body: { name: 'Third Owner' } });
+const c3 = (await meOf(t3)).id;
+await pool.query(`UPDATE characters SET respect=250000, cash=2000000, loc='docks' WHERE id='${c3}'`);
+const buy3 = await call('POST', '/v1/business/laundromat/buy', { token: t3 });
+const biz3 = buy3.body.id;
+assert.equal((await call('POST', `/v1/business/${biz3}/takeover`, { token: t2 })).body.error, 'have_kind', 'you can only hold one of each kind');
+delete process.env.BUSINESS_TAKEOVER_P;
+
+// (F) THE LAUNDERER leaderboard — ranked by lifetime washed; agents excluded
+let lbL = (await call('GET', '/v1/leaderboard/launderers')).body;
+assert(lbL.launderers.some((x) => x.washed > 0), 'the launderer board lists a washman');
+const cidName = (await meOf(token)).name;
+await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+lbL = (await call('GET', '/v1/leaderboard/launderers')).body;
+assert(!lbL.launderers.some((x) => x.name === cidName), 'an agent-flagged launderer is excluded from the board');
+await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+
+// (G) §10.4 — the vocabulary stays closed with business:spec (omr) + takeover/buyout (cash) in the mix
+const inv3 = await runLedgerInvariants(pool);
+assert(inv3.checks.find((c) => c.name === 'reason vocabulary').ok, `no unknown-reason alarm (${JSON.stringify(inv3.checks.find((c) => c.name === 'reason vocabulary').unknown || [])})`);
+
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no laundering / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend on a wash + rank/board + agent exclusion, THE ACCOUNTANT spec halving scrutiny + business:spec $OMR burn + not_maxed/bad_spec gates, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
 await app.close();

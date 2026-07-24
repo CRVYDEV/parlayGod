@@ -2122,3 +2122,11 @@ ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS bond_charter INT NOT NUL
 -- pass_seasons is the Ledger prestige (lifetime tracks completed). Both DIRECT SQL only (OFF persistAccount).
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS patron_spent NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS pass_seasons INT NOT NULL DEFAULT 0;
+
+-- BUSINESS EMPIRE Tier-4: THE LAUNDERER legend (lifetime cash washed through own fronts; survives death,
+-- account-level, OFF persistAccount → clobber-safe) + per-front SPECIALIZATION (build-identity, dies with
+-- the street via the businesses estate wipe) + the hostile-takeover per-front cooldown.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS laundered_lifetime NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS spec TEXT;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS spec_at TIMESTAMPTZ;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS takeover_cd_until TIMESTAMPTZ;

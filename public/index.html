@@ -729,6 +729,8 @@
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
+    if (body.spec !== undefined && body.name && body.spent !== undefined) bits.push(`✦ your ${body.kind} is now ${body.name} (−${body.spent} $OMR)`);
+    if (body.won !== undefined && body.feeBurned !== undefined) bits.push(body.won ? `TOOK IT OVER — the ${body.kind} is yours (they got $${fmt(body.net)})` : `the takeover was fought off — the $${fmt(body.feeBurned)} fee is gone`);
     if (body.pledged !== undefined && body.standing) bits.push(`pledged ${fmt(body.pledged)} $OMR to the treasury — ${body.standing.tier} (score ${fmt(body.standing.score)})`);
     if (body.charter !== undefined && body.name && body.spent !== undefined) bits.push(`✦ commissioned the ${body.name} (−${body.spent} $OMR)`);
     if (body.credited !== undefined && body.monument) bits.push(body.completed
@@ -3089,6 +3091,10 @@
         <div class="d">lifetime racket &amp; front income $${fmt(me.tycoon.earned || 0)} <span style="color:var(--dim)">(survives death)</span>
         ${(me.empireTitles || []).length ? ` · ${me.empireTitles.map((x) => `<span class="chip good">${x}</span>`).join(' ')}` : ''}
         · <a href="#" id="tycoon-board">the biggest earners →</a></div><div id="tycoon-lb"></div></div>` : ''}
+      ${me.launderer ? `<div class="card"><span class="t">THE LAUNDERER — ${me.launderer.rank}</span>
+        <div class="d">lifetime cash washed through your own fronts $${fmt(me.launderer.washed || 0)} <span style="color:var(--dim)">(survives death)</span>
+        ${(me.frontTitles || []).map((x) => `<span class="chip good">${x}</span>`).join(' ')}
+        · <a href="#" id="launderer-board">the biggest money-men →</a></div><div id="launderer-lb"></div></div>` : ''}
       <h2>Your Fronts (${owned.length})
         <button class="act" data-do="POST /v1/business/collect" style="margin-left:8px">collect all</button>
         <button class="act" data-do="POST /v1/business/upkeep">pay the pad</button></h2>
@@ -3097,9 +3103,14 @@
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
           <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
           <div class="d">scrutiny ${b.scrutiny} · wash headroom $${fmt(b.launderHeadroom)}/day${b.kind === 'casino' ? ' · den rakeback at collect' : ''}</div>
+          ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
-          <input data-bizamt="${b.id}" placeholder="wash $" size="9"> <button class="act" data-bizwash="${b.id}">launder</button></div>`).join('')}</div>`
+          <input data-bizamt="${b.id}" placeholder="wash $" size="9"> <button class="act" data-bizwash="${b.id}">launder</button>
+          ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): ${['accountant', 'fortress', 'fixer'].map((s) => `<button class="act" data-bizspec="${b.id}:${s}">${(rules?.empire?.specs?.[s]?.name) || s}</button>`).join(' ')}</div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
+      <div class="card" style="margin-top:6px"><span class="t">Hostile Takeover</span>
+        <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
+        <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go">muscle in</button></div>
 
       <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(income + PRIVATE laundering — lower heat than the street wash)</span></h2>
       <div class="grid">${cat.map((c) => `
@@ -3126,6 +3137,12 @@
       act('POST', `/v1/business/${b.dataset.bizup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-bizwash]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.bizwash}/launder`, { amount: Number(t.querySelector(`[data-bizamt="${b.dataset.bizwash}"]`).value) }).then(() => renderEmpire()));
+    t.querySelectorAll('[data-bizspec]').forEach((b) => b.onclick = () => { const [id, spec] = b.dataset.bizspec.split(':');
+      act('POST', `/v1/business/${id}/specialize`, { spec }).then(() => renderEmpire()); });
+    { const g = $('#biz-takeover-go'); if (g) g.onclick = () => act('POST', `/v1/business/${$('#biz-takeover-id').value.trim()}/takeover`, {}).then(() => renderEmpire()); }
+    { const lb = t.querySelector('#launderer-board'); if (lb) lb.onclick = async (e) => { e.preventDefault();
+      const b = (await api('GET', '/v1/leaderboard/launderers')).body?.launderers || [];
+      t.querySelector('#launderer-lb').innerHTML = `<div style="margin-top:6px">${b.slice(0, 10).map((x) => `<div class="d">#${x.rank} ${esc(x.name)}${x.tag ? ` [${esc(x.tag)}]` : ''} — ${x.title} ($${fmt(x.washed)})</div>`).join('') || '<div class="d">none yet</div>'}</div>`; }; }
     t.querySelectorAll('[data-rkbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkbuy}/buy`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-rkup]').forEach((b) => b.onclick = () => act('POST', `/v1/rackets/${b.dataset.rkup}/upgrade`, {}).then(() => renderEmpire()));
     t.querySelectorAll('[data-asbuy]').forEach((b) => b.onclick = () => act('POST', `/v1/assets/${b.dataset.asbuy}/buy`, {}).then(() => renderEmpire()));
