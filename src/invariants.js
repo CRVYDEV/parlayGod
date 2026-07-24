@@ -42,7 +42,7 @@ const KNOWN_REASONS = {
     'commission:'],
   omr: ['swap:', 'stake:reward', 'gear:mint:', 'vest:', 'lab:', 'cleanpapers', 'path:', 'mission:',
     'daily:all', 'referral:', 'family:weekly', 'gang:dissolved', 'withdraw:omr', 'vanity:', 'intel:', 'respec',
-    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:', 'kitchen:'],
+    'gang:tribute', 'whack:loot', 'plex:', 'prize:omr', 'law:jury', 'law:envelope', 'foundation:', 'rwa:', 'estate:', 'auction:', 'dividend:', 'emission:', 'tax:', 'megaproject:', 'kitchen:', 'bond:'],
   cb: ['crime:', 'craft:', 'gun:buy:', 'jump:', 'death:', 'exchange:', 'onboard:', 'cook:'],
   ammo: ['melt', 'melt:tithe', 'craft:ammo', 'ammo:buy', 'jump', 'fire', 'death:', 'exchange:', 'gang:dissolved', 'convoy:', 'world:', 'port:'],
 };
@@ -198,7 +198,7 @@ async function collectLedgerChecks(pool) {
   // law:envelope (THE ENVELOPE) is a $OMR BURN — the standing graft (account bucket, the law:jury twin).
   // foundation:tier (THE FOUNDATION) is a $OMR BURN — the family charity, against the gang reserve bucket
   // (the vanity:gang:seal precedent; the reserve is already in omrBuckets, so only the burn term is new).
-  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='megaproject:omr')"));
+  const omrBurns = -(await sum(pool, "currency='omr' AND (reason LIKE 'vest:%' OR reason='cleanpapers' OR reason LIKE 'lab:%' OR reason LIKE 'gear:mint:%' OR reason LIKE 'path:%' OR reason='gang:dissolved' OR reason='withdraw:omr' OR reason LIKE 'vanity:%' OR reason LIKE 'intel:%' OR reason LIKE 'respec%' OR reason LIKE 'plex:%' OR reason='law:jury' OR reason='law:envelope' OR reason LIKE 'foundation:%' OR reason LIKE 'rwa:%' OR reason LIKE 'estate:%' OR reason='auction:win' OR reason='megaproject:omr' OR reason LIKE 'bond:%')"));
   push('$OMR conservation', omrBuckets, 20000 + omrMints - omrBurns, 0.001);
 
   // THE STREET WAGE — lifetime emission may NEVER exceed the fixed Emission Endowment

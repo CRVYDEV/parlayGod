@@ -66,7 +66,7 @@ import { runLedgerInvariants } from './invariants.js';
 import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          levelOf, GOODS, DRUGS, DISTRICTS, sealOf, CRIMES, GUNS, VESTS, CARS, KITCHENS, TRADE_RANKS, M3, M4, PATHS,
          cityLawEventOf, cityForecast, regionShockOf, cityHourOf, tickerPriceOf, PORTFOLIO, RWA_FLOAT, ESTATE, AUCTION, MEGAPROJECT, CLUES, DUELS, DUEL_TITLE_RANKS, SEASON_MODS, seasonModOf, seasonIdxOf, seasonDaysLeft,
-         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, SPEAKEASY, BOXING,
+         foundationOf, foundationBustMult, foundationBleedMult, FOUNDATION, LAW, WIRE, STORE, PASS, BONDS, SPEAKEASY, BOXING,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
@@ -773,6 +773,8 @@ export async function buildServer() {
       subTiers: WIRE.SUB_TIERS.map((t) => ({ tier: t.tier, name: t.name, omr: t.omr, days: Math.round(t.ms / 86400000), watchSlots: t.watchSlots, warRoom: t.warRoom })) }, // step five ladder + standing watch
     store: STORE.PACKAGES.map((p) => ({ sku: p.sku, name: p.name, priceEth: p.priceEth, grant: p.grant, blurb: p.blurb })),
     pass: { tiers: PASS.TRACK.map((t) => ({ tier: t.tier, reward: t.reward })) },
+    bonds: { backerTiers: BONDS.BACKER_TIERS, charterTiers: BONDS.CHARTER_TIERS, ethScoreOmr: BONDS.ETH_SCORE_OMR, pledgeMin: BONDS.PLEDGE_MIN,
+      discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS },
     casino: { district: CASINO.DISTRICT, minBet: CASINO.MIN_BET, maxBet: CASINO.MAX_BET,
       dice: { pays: '1:1', nerve: CASINO.DICE_NERVE }, numbers: { min: CASINO.NUMBERS_MIN, max: CASINO.NUMBERS_MAX, pays: CASINO.NUMBERS_PAYOUT },
       blackjack: { paysBps: CASINO.BJ_PAYS_BPS, dealerMin: CASINO.BJ_DEALER_MIN, hitSoft17: CASINO.BJ_HIT_SOFT_17 },
@@ -2037,6 +2039,13 @@ export async function buildServer() {
   // ── THE RESERVE BOND (Protocol-Owned Liquidity; off-chain accounting, chain DORMANT / mainnet-gated) ──
   app.get('/v1/bonds', { preHandler: auth }, async (req) => Bonds.bondBoard(pool, req.user.sub));
   app.post('/v1/bonds/:id/claim', { preHandler: auth }, async (req) => Bonds.claimBond(pool, req.user.sub, req.params.id));
+  // THE UNDERWRITER (Tier-4) — the off-chain backer-prestige pillar: pledge $OMR into the treasury's name
+  // (a live-now sink), commission the sequential Charter seal, and the read-derived Underwriters' League.
+  app.post('/v1/bonds/pledge', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Bonds.pledgeTreasury(ch, req.body?.omr, client, h)));
+  app.post('/v1/bonds/charter', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Bonds.commissionCharter(ch, client, h)));
+  app.get('/v1/leaderboard/underwriters', { preHandler: auth }, async () => Bonds.underwriterLeaderboard(pool));
   // the EIP-712 bond QUOTE SIGNER — a player requests a signed BondQuote (bound to their linked wallet),
   // then submits bond(quote, signature) to the on-chain OmertaBond contract; the Bonded watcher books it.
   // Chain-dormant: 400s chain_unconfigured unless the bond chain (CHAIN_ID + OMERTA_BOND_ADDRESS + signer) is set.

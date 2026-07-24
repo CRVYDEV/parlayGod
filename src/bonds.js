@@ -10,7 +10,8 @@
 import crypto from 'node:crypto';
 import { getAddress } from 'viem';
 import { GameError } from './game.js';
-import { BONDS, bondPayout } from './rules.js';
+import { BONDS, bondPayout, underwriterScore, backerTierOf, nextBackerTier, charterOf } from './rules.js';
+import { spendOmr } from './vanity.js';
 
 const uid = () => crypto.randomUUID();
 const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
@@ -157,6 +158,104 @@ export async function fundBondTranche(pool, omr) {
   return { ok: true, added: round6(amt), capacityOmr: round6(Number(r.capacity_omr)), committedOmr: round6(Number(r.committed_omr)) };
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// THE UNDERWRITER (Tier-4) — the off-chain backer-prestige pillar. Pure STATUS + $OMR SINKS: the
+// UNDERWRITER SCORE combines the real-ETH axis (bonded_eth, read-derived from the bonds table) with an
+// earn-in-game pledge axis (pledged_omr, bumped by a $OMR burn), so a player reaches backer status in
+// alpha via THE PLEDGE while the ETH axis lights up at mainnet. Zero new faucet, zero chain touch.
+// Every new WRITE is single-party under withCharacter (locks the caller's own char + own account row
+// only — trivially acyclic); the crown/league are READ-DERIVED (recomputed on read — the architect-crown
+// precedent — so no cross-account write under a singleton lock).
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+// the account's real-ETH backing, read-derived from the bonds table (account-level → survives death).
+async function derivedBondedEth(pool, accountId) {
+  if (!accountId) return 0;
+  const s = (await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds WHERE account_id=$1', [accountId])).rows[0].s;
+  return round6(Number(s || 0));
+}
+
+// the caller's backer standing — the combined score, tier, next-tier delta, and charter badge.
+async function standingOf(pool, accountId) {
+  const ap = (await pool.query('SELECT pledged_omr, bond_charter FROM account_persistent WHERE account_id=$1', [accountId])).rows[0] || {};
+  const pledgedOmr = round6(Number(ap.pledged_omr || 0));
+  const bondedEth = await derivedBondedEth(pool, accountId);
+  const score = underwriterScore(bondedEth, pledgedOmr);
+  const tier = backerTierOf(score);
+  const nxt = nextBackerTier(score);
+  const charterTier = Number(ap.bond_charter || 0);
+  return {
+    bondedEth, pledgedOmr, score, tier: tier.name, tierMin: tier.min,
+    nextTier: nxt ? { name: nxt.name, min: nxt.min, delta: round6(nxt.min - score) } : null,
+    charter: charterTier, charterName: charterTier ? (charterOf(charterTier) || {}).name || null : null,
+    nextCharter: charterOf(charterTier + 1) || null,
+  };
+}
+
+// ── THE PLEDGE — burn in-game $OMR "into the treasury's name" (the live-now orthogonal $OMR sink).
+// Uncapped, repeatable, additive-to-score. A §10.4 BURN (bond:pledge) through the vanity spendOmr till. ──
+export async function pledgeTreasury(ch, omr, client, h) {
+  const amt = num(omr);
+  if (!Number.isFinite(amt) || amt < BONDS.PLEDGE_MIN) throw new GameError('min', `Pledge at least ${BONDS.PLEDGE_MIN} $OMR.`);
+  const cost = round6(amt);
+  await spendOmr(client, h, cost, 'bond:pledge'); // debits h.acct.omr + ledgers the burn (throws 'omr' if short)
+  // bump the account legend by DIRECT SQL on the same already-locked account row (NUMERIC → pg-mem arith-safe;
+  // OFF persistAccount's positional list, so no clobber). h.acct arrives via loadOwned's SELECT *.
+  await client.query('UPDATE account_persistent SET pledged_omr = pledged_omr + $1 WHERE account_id=$2', [cost, h.accountId]);
+  if (h.acct) h.acct.pledged_omr = round6(Number(h.acct.pledged_omr || 0) + cost); // same-turn-consistent view
+  const st = await standingOf(client, h.accountId);
+  return { pledged: cost, standing: st };
+}
+
+// ── THE CHARTER — commission the next sequential treasury seal (the family-seals / estate-tier precedent).
+// A pure display badge; a §10.4 BURN (bond:charter) from the account bucket. Backer-gated (score > 0). ──
+export async function commissionCharter(ch, client, h) {
+  const cur = Number(h.acct?.bond_charter || 0);
+  const next = charterOf(cur + 1);
+  if (!next) throw new GameError('maxed', 'You already hold The Founding Charter.');
+  const bondedEth = await derivedBondedEth(client, h.accountId);
+  const score = underwriterScore(bondedEth, Number(h.acct?.pledged_omr || 0));
+  if (!(score > 0)) throw new GameError('not_backer', 'Back the treasury first — pledge $OMR or bond.');
+  await spendOmr(client, h, next.omr, 'bond:charter'); // throws 'omr' if short
+  await client.query('UPDATE account_persistent SET bond_charter = $1 WHERE account_id=$2', [next.tier, h.accountId]);
+  if (h.acct) h.acct.bond_charter = next.tier;
+  return { charter: next.tier, name: next.name, spent: next.omr };
+}
+
+// ── THE UNDERWRITERS' LEAGUE + THE FINANCIER crown + THE FAMILY SYNDICATE — all read-derived.
+// A full-scan of living non-agent accounts (the hitmen-board precedent), bonds summed in JS (the /v1/gangs
+// pg-mem precedent — never a correlated subquery), score computed, the top backer crowned 'The Financier'. ──
+export async function underwriterLeaderboard(pool, limit = 25) {
+  const rows = (await pool.query(
+    `SELECT a.account_id, a.pledged_omr, a.bond_charter, c.name, g.name AS gang, g.tag
+       FROM account_persistent a
+       JOIN characters c ON c.account_id = a.account_id AND c.alive
+       LEFT JOIN gang_members gm ON gm.character_id = c.id
+       LEFT JOIN gangs g ON g.id = gm.gang_id
+      WHERE NOT a.agent_flag`)).rows;
+  const bondRows = (await pool.query('SELECT account_id, principal_eth FROM bonds WHERE account_id IS NOT NULL')).rows;
+  const ethByAcct = {};
+  for (const b of bondRows) ethByAcct[b.account_id] = (ethByAcct[b.account_id] || 0) + Number(b.principal_eth);
+  const scored = [];
+  const gangTally = {};
+  for (const r of rows) {
+    const bondedEth = round6(Number(ethByAcct[r.account_id] || 0));
+    const pledgedOmr = round6(Number(r.pledged_omr || 0));
+    const score = underwriterScore(bondedEth, pledgedOmr);
+    if (!(score > 0)) continue;
+    scored.push({ name: r.name, gang: r.gang || null, tag: r.tag || null, bondedEth, pledgedOmr, score,
+      tier: backerTierOf(score).name, charter: Number(r.bond_charter || 0),
+      charterName: r.bond_charter ? (charterOf(Number(r.bond_charter)) || {}).name || null : null });
+    if (r.gang) { const gk = r.gang; (gangTally[gk] = gangTally[gk] || { name: r.gang, tag: r.tag || null, score: 0, backers: 0 });
+      gangTally[gk].score += score; gangTally[gk].backers += 1; }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const league = scored.slice(0, limit).map((e, i) => ({ ...e, rank: i + 1, financier: i === 0 }));
+  const syndicate = Object.values(gangTally).map((g) => ({ ...g, score: round6(g.score) }))
+    .sort((a, b) => b.score - a.score).slice(0, 15).map((g, i) => ({ ...g, rank: i + 1 }));
+  return { league, syndicate };
+}
+
 // ── GET /v1/bonds — public: the offering + remaining capacity + the oracle + your bonds. Informational
 // (real bonds are on-chain at the mainnet paywall — the Store's on-chain-note precedent). ──
 export async function bondBoard(pool, accountId) {
@@ -179,6 +278,9 @@ export async function bondBoard(pool, accountId) {
         fullyVested: now - new Date(b.opened_at).getTime() >= Number(b.vest_ms) };
     }),
     isBacker: mine.length > 0, // "Treasury Backer" — pure STATUS (derived; no gameplay power, no §10.4 surface)
+    // Tier-4 — the caller's backer standing + the sink catalogs (the /v1/catalog discoverability precedent)
+    yourStanding: accountId ? await standingOf(pool, accountId) : null,
+    catalogs: { backerTiers: BONDS.BACKER_TIERS, charterTiers: BONDS.CHARTER_TIERS, pledgeMin: BONDS.PLEDGE_MIN, ethScoreOmr: BONDS.ETH_SCORE_OMR },
     note: 'Bonds are purchased on-chain at the OmertaBond paywall (mainnet, dormant); this endpoint is informational.',
   };
 }

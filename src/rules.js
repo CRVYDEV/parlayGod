@@ -2036,6 +2036,32 @@ export const bondPayout = (principalEth, price, discountBps) =>
 (() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS + BONDS.DEV_BPS;
   if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS + DEV_BPS must sum to 10000 (got ${t})`); })();
 
+// ── THE UNDERWRITER — the off-chain backer-prestige pillar layered over the chain bond. Purely
+// STATUS + $OMR sinks (zero new faucet, zero chain touch). The UNDERWRITER SCORE combines the
+// real-ETH axis (bonded_eth, read-derived from the bonds table) with an earn-in-game pledge axis
+// (pledged_omr, an account column bumped by a $OMR burn), so a player reaches backer status in
+// alpha via THE PLEDGE while the ETH axis lights up at mainnet. All numbers are sign-off levers.
+BONDS.ETH_SCORE_OMR = Number(process.env.BOND_ETH_SCORE_OMR || 5000);  // $OMR-equiv per bonded ETH for the STATUS score (deterministic, NOT the live oracle — the R1-Portfolio precedent)
+BONDS.PLEDGE_MIN = Number(process.env.BOND_PLEDGE_MIN || 10);          // min in-game $OMR pledge
+BONDS.BACKER_TIERS = [
+  { min: 0, name: 'Depositor' }, { min: 100, name: 'Patron' }, { min: 1000, name: 'Underwriter' },
+  { min: 10000, name: 'Financier' }, { min: 50000, name: 'Kingmaker' }, { min: 250000, name: 'The Reserve' },
+];
+BONDS.CHARTER_TIERS = [
+  { tier: 1, name: 'Bronze Charter', omr: 25 }, { tier: 2, name: 'Silver Charter', omr: 75 },
+  { tier: 3, name: 'Gold Charter', omr: 200 }, { tier: 4, name: 'Platinum Charter', omr: 600 },
+  { tier: 5, name: 'The Founding Charter', omr: 1500 },
+];
+export const underwriterScore = (bondedEth, pledgedOmr) =>
+  Math.round((Number(bondedEth || 0) * BONDS.ETH_SCORE_OMR + Number(pledgedOmr || 0)) * 1e6) / 1e6;
+export const backerTierOf = (score) => {
+  let t = BONDS.BACKER_TIERS[0];
+  for (const r of BONDS.BACKER_TIERS) if (Number(score || 0) >= r.min) t = r;
+  return t;
+};
+export const nextBackerTier = (score) => BONDS.BACKER_TIERS.find((r) => r.min > Number(score || 0)) || null;
+export const charterOf = (tier) => BONDS.CHARTER_TIERS.find((c) => c.tier === Number(tier)) || null;
+
 // ── THE LEDGER — the Season Pass reward track. A daily-claim track (the genre-standard "battle
 // pass"): while the pass is active, claim the NEXT tier once per CLAIM window, escalating rewards.
 // Anti-pay-to-win + §10.4-safe: rewards are STATUS (a street title), CONSUMABLES (revives out-of-band,
