@@ -4724,3 +4724,33 @@ worker sweep drops spent `social_claims` rows (paid > 7d, unpaid > the 48h pendi
 clear FAQ), `ob_repo` GitHub-star (needs a linked GitHub login — a deferred client feature), the recruitment
 DRIVE (mod-armed), and the broadcast beacon's unused `wanted`/`whacked` kinds. All numbers unchanged
 (§10.4-untouched — the fixes are plumbing/attribution/reconcile, no new faucet).
+
+**THE FIRST-WEEK GITHUB STAR — RETIRED** (founder-directed "Remove the GitHub Star"). The `ob_repo`
+"Star the repo" First-Week onboarding task (never live — `verify.js` rejected it as an unbuilt
+"needs a linked GitHub login" stub) is removed: dropped from `ONBOARD_TASKS` + `SOCIAL_LINKS`
+(`rules.js`), its live-mode branch deleted from `verify.js`, and its First-Week board total dropped
+9→8 with `ob_discord` now the capstone claim (`test/growth.js` updated). Pure removal of dead onboarding
+surface — zero §10.4, no gameplay change.
+
+**UI/UX "THE CITY BREATHES" — a max-effort ALIVE pass** (`public/index.html`; founder-directed
+"TUNE UP THE UI / UX DESIGN FOR THE ENTIRE GAME. MAX EFFORT. Make the game feel more alive"). A
+client-only atmosphere + state-reactivity layer — zero backend, zero §10.4, zero new deps (the
+single static file stays CSP-safe/self-contained). Everything is transform/opacity-only (GPU-cheap),
+pauses when the tab is hidden (`body.paused`, battery), and DIES COMPLETELY under
+`prefers-reduced-motion` (a `#atmo { display:none }` killswitch inside the existing media query +
+the `REDUCED` guard on the money count-up). **(1) THE ATMOSPHERE LAYER** — a fixed `#atmo` behind all
+content (`z-index:0`, `contain:strict`, `pointer-events:none`): an inline-SVG `feTurbulence` FILM GRAIN
+(4% opacity, a 5-step jitter), a slow NEON FOG (two soft radial glows drifting on a 30s breath), and a
+MOOD RING (edge box-shadow). **(2) STATE-REACTIVE MOOD** — `renderSheet` reads the live `me` and stamps
+`body[data-mood]`: **danger** (wanted/welsher/indicted/rat/jailed/health≤25) → a red edge-glow that
+BREATHES (`moodPulse`), **safe** (safehoused) → a cool blue glow; plus `body[data-tod]` from the in-game
+city hour (night/dawn/day/dusk falls back to the wall clock) tinting the fog. **(3) LIVING VITALS** —
+`bar()` now flags a critically-low vital (`<25%` → `.bar.low`, a red-gradient THROB) and a hot heat
+(`≥60%` → `.bar.hot` glow); every fill gets a slow sheen sliding across it. **(4) MONEY COUNT-UP** —
+`countUp()` fills the pocket figure with an eased tween on change (paired with the existing tick flash +
+toast haptic; instant under reduced-motion). **(5) LIVING DETAILS** — a breathing masthead title
+(`titleBreath`), a HEARTBEAT on the live WS dot (`#ws-dot.live`, added on `onopen` / dropped on
+`onclose`), and a one-shot NEON WASH down a fresh feed line (`.ev.fresh`, dropped after 1.6s so
+re-renders don't re-flash). Screenshot-verified in Chromium (main + a forced danger/night state: the
+health bar goes red-throb, the money counts to $1.28M, layout intact, zero page errors). Client script
+parses clean; suite untouched (UI-only). Deferred: nothing — the pass is a self-contained polish layer.

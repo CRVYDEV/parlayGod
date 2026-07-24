@@ -396,10 +396,58 @@
     #brag { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
   }
 
+  /* ═══ THE CITY BREATHES — a living atmosphere layer (fixed, behind all content, GPU-cheap) ═══
+     A film-grain haze, a slow neon fog that drifts + breathes with the in-game clock, and a MOOD
+     glow at the edges that reacts to your street's peril. Everything here is transform/opacity only,
+     pauses when the tab is hidden, and dies completely under prefers-reduced-motion (killswitch below). */
+  #atmo { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; contain: strict; }
+  #atmo .grain { position: absolute; inset: -60%; width: 220%; height: 220%; opacity: .04; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grainShift 1.1s steps(5) infinite; }
+  @keyframes grainShift { 0%{transform:translate(0,0)} 20%{transform:translate(-4%,3%)} 40%{transform:translate(3%,-4%)}
+    60%{transform:translate(-3%,-2%)} 80%{transform:translate(4%,2%)} 100%{transform:translate(0,0)} }
+  /* the fog: two soft glows, tinted by time of day, drifting on a long breath */
+  #atmo .haze { position: absolute; inset: -8%; will-change: transform, opacity;
+    background:
+      radial-gradient(52% 42% at 28% 10%, var(--tod-glow, rgba(232,179,75,.06)), transparent 62%),
+      radial-gradient(46% 40% at 82% 92%, var(--tod-glow2, rgba(107,147,184,.045)), transparent 60%);
+    animation: hazeDrift 30s ease-in-out infinite alternate; }
+  @keyframes hazeDrift { from{transform:translate3d(-1.6%,-1%,0) scale(1.02);opacity:.82} to{transform:translate3d(2.2%,1.6%,0) scale(1.06);opacity:1} }
+  /* the mood ring: the whole screen feels your situation — red when hunted, cool when to ground */
+  #atmo .mood { position: absolute; inset: 0; opacity: 0; transition: opacity .9s ease, box-shadow .9s ease; }
+  body[data-mood="danger"] #atmo .mood { opacity: 1; box-shadow: inset 0 0 150px 6px rgba(192,57,43,.16); animation: moodPulse 3.4s ease-in-out infinite; }
+  body[data-mood="safe"]   #atmo .mood { opacity: 1; box-shadow: inset 0 0 140px 6px rgba(107,147,184,.12); }
+  @keyframes moodPulse { 0%,100%{box-shadow:inset 0 0 130px 4px rgba(192,57,43,.11)} 50%{box-shadow:inset 0 0 175px 14px rgba(192,57,43,.26)} }
+  /* time-of-day tints (fed by body[data-tod], set from the in-game city hour) */
+  body[data-tod="night"] { --tod-glow: rgba(74,112,170,.06); --tod-glow2: rgba(60,90,150,.05); }
+  body[data-tod="dawn"]  { --tod-glow: rgba(210,150,120,.06); --tod-glow2: rgba(150,130,170,.045); }
+  body[data-tod="day"]   { --tod-glow: rgba(232,179,75,.06); --tod-glow2: rgba(120,150,180,.04); }
+  body[data-tod="dusk"]  { --tod-glow: rgba(205,110,60,.07); --tod-glow2: rgba(120,80,140,.05); }
+  body.paused #atmo *, body.paused #top h1 { animation-play-state: paused; }
+
+  /* ── living details: a breathing title, a heartbeat wire, seething vitals ── */
+  #top h1 { animation: titleBreath 7s ease-in-out infinite; }
+  @keyframes titleBreath { 0%,100%{text-shadow:0 0 18px var(--neon-glow)} 50%{text-shadow:0 0 32px var(--neon-glow),0 0 7px var(--neon-soft)} }
+  #ws-dot { transition: color .3s; }
+  #ws-dot.live { animation: heartbeat 2.6s ease-in-out infinite; }
+  @keyframes heartbeat { 0%,100%{opacity:1} 45%{opacity:.32} 55%{opacity:.32} }
+  /* vital bars: a slow sheen slides across the fill; a critical bar throbs red, a hot one glows */
+  .bar i { position: relative; overflow: hidden; }
+  .bar i::after { content:''; position:absolute; inset:0; transform: translateX(-120%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent); animation: barSheen 5s ease-in-out infinite; }
+  @keyframes barSheen { 0%{transform:translateX(-120%)} 55%,100%{transform:translateX(360%)} }
+  .bar.low i { background: linear-gradient(90deg, #7e2519, var(--bad)) !important; box-shadow: 0 0 10px rgba(209,96,85,.3); animation: vitalThrob 1.5s ease-in-out infinite; }
+  .bar.hot i { animation: vitalThrob 1.4s ease-in-out infinite; }
+  @keyframes vitalThrob { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.45)} }
+  /* a fresh feed line gets a one-shot neon wash down its edge — the wire feels live */
+  @keyframes evFlash { 0%{box-shadow:inset 2px 0 0 var(--neon), -6px 0 10px -6px var(--neon-soft)} 100%{box-shadow:none} }
+  .wpane .ev.fresh { animation: evIn .3s var(--ease), evFlash 1.5s var(--ease); }
+
   /* ── accessibility: motion off means OFF ── */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
     html { scroll-behavior: auto; }
+    #atmo { display: none; }
   }
 
   .hidden { display: none !important; }
@@ -407,6 +455,7 @@
 </style>
 </head>
 <body>
+<div id="atmo" aria-hidden="true"><div class="grain"></div><div class="haze"></div><div class="mood"></div></div>
 
 <div id="screen-auth" class="landing hidden">
   <div class="hero">
@@ -1253,7 +1302,10 @@
 
   // the sheet stays honest on its own: countdowns and accrual don't wait for a click
   setInterval(() => { if (me && !document.hidden) { refresh(); renderActive(); pollOnline(); } }, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && me) { refresh(); renderActive(); } });
+  document.addEventListener('visibilitychange', () => {
+    document.body.classList.toggle('paused', document.hidden); // stop the ambient loops off-screen (battery)
+    if (!document.hidden && me) { refresh(); renderActive(); }
+  });
 
   // recent history into the wire so a fresh page isn't blind to what happened while away
   async function backfillFeed() {
@@ -1305,7 +1357,18 @@
   // ── the sheet ──
   function bar(cls, v, max) {
     const pct = Math.max(0, Math.min(100, 100 * v / Math.max(1, max)));
-    return `<div class="bar ${cls}"><i style="width:${pct}%"></i></div>`;
+    // living state: heat runs HOT past 60% (danger); every other vital THROBS red when critically low
+    const extra = cls === 'heat' ? (pct >= 60 ? ' hot' : '') : (pct < 25 ? ' low' : '');
+    return `<div class="bar ${cls}${extra}"><i style="width:${pct}%"></i></div>`;
+  }
+  // a smooth count-up for a changing money figure — the pocket fills, it doesn't just blink
+  function countUp(el, from, to, ms = 650) {
+    if (REDUCED || from === undefined || from === to || !el) { if (el) el.textContent = '$' + fmt(to); return; }
+    const start = performance.now(), diff = to - from;
+    const step = (now) => { const p = Math.min(1, (now - start) / ms), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = '$' + fmt(Math.round(from + diff * e));
+      if (p < 1) requestAnimationFrame(step); else el.textContent = '$' + fmt(to); };
+    requestAnimationFrame(step);
   }
   function renderSheet() {
     if (!me) return;
@@ -1349,11 +1412,19 @@
       <div class="row"><span class="k">${T('k_gun')}</span><span>${me.gun || '—'}</span></div>
       <div class="row"><span class="k">${T('k_ammo')}</span><span>${fmt(me.ammo)} / ${fmt(me.cb)}</span></div>
       <div class="row"><span class="k">${T('k_cars')}</span><span>${(me.cars || []).length}</span></div>`;
-    // money tick — a brief up/down flash when the pocket changes (paired with the toast haptic)
+    // money tick — a brief up/down flash + a smooth count-up when the pocket changes (with the toast haptic)
     { const prev = renderSheet._cash; renderSheet._cash = me.cash;
       if (prev !== undefined && prev !== me.cash) { const m = $('#sheet .money');
         if (m) { m.classList.add(me.cash > prev ? 'tick-up' : 'tick-down');
+          countUp(m, prev, me.cash);
           setTimeout(() => m.classList.remove('tick-up', 'tick-down'), 900); } } }
+    // THE MOOD RING — the whole screen feels your street's peril (hunted → red breath, to ground → cool),
+    // and a TIME-OF-DAY tint from the in-game city clock (falls back to the wall clock's UTC hour).
+    { const danger = me.wanted || me.welsher || me.law?.indicted || me.law?.rat || me.jailSeconds > 0 || Number(me.health) <= 25;
+      const safe = !danger && me.safeSeconds > 0;
+      document.body.dataset.mood = danger ? 'danger' : safe ? 'safe' : '';
+      const hr = (me.city && typeof me.city.hour === 'number') ? me.city.hour : new Date().getUTCHours();
+      document.body.dataset.tod = hr < 5 ? 'night' : hr < 8 ? 'dawn' : hr < 18 ? 'day' : hr < 21 ? 'dusk' : 'night'; }
     if (me.coach) { const cg = $('#coach-go'); if (cg) cg.onclick = () => setTab(me.coach.tab); }
     { const rr = $('#reroll-go'); if (rr) rr.onclick = () => act('POST', '/v1/character/reroll', {}).then(() => refresh()); }
     // a GHOST account lives in this browser only — the claim card upgrades it in place (same
@@ -4366,9 +4437,10 @@
     const cat = channel === 'gang' ? 'family' : catOf(ev);
     const color = FEED_COLOR[cat] || 'var(--dim)';
     const mine = channel === 'me';
-    const line = el(`<div class="ev ${mine ? 'me' : ''}"><span class="dot" style="color:${color}">●</span> ` +
+    const line = el(`<div class="ev fresh ${mine ? 'me' : ''}"><span class="dot" style="color:${color}">●</span> ` +
       `<span style="color:${mine ? 'var(--fg)' : color}">${esc(feedText(ev))}</span></div>`);
     f.prepend(line);
+    setTimeout(() => line.classList.remove('fresh'), 1600); // the neon wash is one-shot; drop it so re-renders don't re-flash
     while (f.childElementCount > 120) f.lastElementChild.remove();
   }
   function statusLine(text) {
@@ -4445,7 +4517,7 @@
       // (red-team R12 F2) pass the session JWT as a subprotocol value, NOT in the URL — a WS URL lands in
       // access/proxy logs + browser history, and this is the same full bearer token (→ account takeover).
       ws = new WebSocket(`${proto}://${location.host}/v1/ws`, ['bearer', token]);
-      ws.onopen = () => { $('#ws-dot').style.color = 'var(--ok)'; pollOnline(); };
+      ws.onopen = () => { const d = $('#ws-dot'); d.style.color = 'var(--ok)'; d.classList.add('live'); pollOnline(); };
       ws.onmessage = (m) => {
         try {
           const ev = JSON.parse(m.data);
@@ -4456,7 +4528,7 @@
           else renderActive();
         } catch { /* noise */ }
       };
-      ws.onclose = () => { $('#ws-dot').style.color = 'var(--bad)'; ws = null; setTimeout(connectWs, 4000); };
+      ws.onclose = () => { const d = $('#ws-dot'); d.style.color = 'var(--bad)'; d.classList.remove('live'); ws = null; setTimeout(connectWs, 4000); };
     } catch { /* headless */ }
   }
 
