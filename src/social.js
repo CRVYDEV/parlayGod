@@ -10,7 +10,7 @@ import {
   levelOf, rankIdxOf, cityEventOf, dayOf, btkOf,
   gunObjOf, vestMultOf, fleetValue, effStat, hitmanRankOf, npcHitmanOf, territoryBuildCost,
   VENDETTA, feudTierOf, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, tickerPriceOf, estateTierOf,
-  worldNpcOf, liberationCost, HONOR, DIPLOMACY, HEIST_LOOT_RATE,
+  worldNpcOf, liberationCost, HONOR, DIPLOMACY, HEIST_LOOT_RATE, BUSINESSES,
   seasonModOf } from './rules.js';
 import { spendOmr } from './vanity.js';
 import { seizeTerritoryRackets, releaseTerritoryRackets } from './territory.js';
@@ -932,6 +932,43 @@ export async function callOffSearch(ch, client) {
   return { ok: true };
 }
 
+// L3a — THE SACKING: on a PLAYER fire-kill the killer SEIZES one of the victim's business fronts (the
+// endgame passive-income engine) instead of it dying with the street — the review's keystone lever that
+// turns the passive empire into genuine PvP RISK CAPITAL and gives the kill a prize worth the ammo. A pure
+// OWNERSHIP move: a front is NOT a §10.4 currency (no business-conservation check — the territory-seize/
+// gear-loot precedent), pending forfeits, clocks/scrutiny reset (the takeover resetFrontToNewOwner
+// precedent). Gated so the killer can only HOLD a front they could run — level ≥ the front's lvl gate AND
+// an empty kind slot (UNIQUE(character_id,kind); the frontier-B1 "hold only what you could raid" rule). If
+// they can hold none, nothing extra happens (the empire dies with the street as normal — no free destroy).
+// MUST run in the loot block BEFORE runEstate's `DELETE businesses WHERE character_id=victim`, so the
+// seized front (now killer-owned) survives the wipe while the rest die. Only fire (a real player kill)
+// sacks — NPC/mod kills don't (the whack:loot precedent).
+async function sackEmpire(client, ch, victim, h) {
+  if (!M3.SACK_ON_KILL) return null;
+  const fronts = (await client.query('SELECT id, kind, tier FROM businesses WHERE character_id=$1', [victim.id])).rows;
+  if (!fronts.length) return null;
+  const killerLvl = levelOf(Number(ch.respect));
+  const killerKinds = new Set((await client.query('SELECT kind FROM businesses WHERE character_id=$1', [ch.id])).rows.map((r) => r.kind));
+  // the most VALUABLE front the killer can actually hold (level gate + an empty kind slot)
+  let best = null;
+  for (const f of fronts) {
+    const cat = BUSINESSES.find((b) => b.kind === f.kind); if (!cat) continue;
+    if (killerLvl < cat.lvl || killerKinds.has(f.kind)) continue;
+    const income = cat.tiers[f.tier - 1]?.incomePerHr || 0;
+    if (!best || income > best.income) best = { id: f.id, kind: f.kind, tier: f.tier, name: cat.name, income };
+  }
+  if (!best) return null;
+  // reset ALL mutable front state on the change of hands (the takeover resetFrontToNewOwner columns) — a
+  // seized front is never born hot/pending-full/specialized; pending income forfeits (clock reset).
+  await client.query(
+    `UPDATE businesses SET character_id=$2, spec=NULL, spec_at=NULL, scrutiny=0, scrutiny_at=now(),
+       last_collect_at=now(), launder_used=0, launder_at=now(), upkeep_at=now(), shakedown_at=NULL, rake_cursor=0
+     WHERE id=$1`, [best.id, ch.id]);
+  // keep the victim's loaded fronts honest so the estate report doesn't double-count the seized one
+  if (h.victimOwned?.businesses) h.victimOwned.businesses = h.victimOwned.businesses.filter((b) => b.id !== best.id);
+  return { kind: best.kind, tier: best.tier, name: best.name };
+}
+
 export async function fire(ch, victim, client, h, rounds) {
   const s = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (!s || s.target !== victim.id) throw new GameError('no_search', 'Your people have no fix on them. Start a search.');
@@ -1103,6 +1140,13 @@ export async function fire(ch, victim, client, h, rounds) {
         await client.query('UPDATE characters SET heist_loot = heist_loot + $2 WHERE id=$1', [ch.id, hotLoot]);
       }
     }
+    // L3a — THE SACKING: the killer takes over one of the victim's fronts (the passive-income prize).
+    // Ownership move only, §10.4-neutral; runs BEFORE runEstate wipes the rest of the empire.
+    const empireLoot = await sackEmpire(client, ch, victim, h);
+    if (empireLoot) {
+      await h.notify(client, ch.id, 'sacked', { kind: empireLoot.kind, name: empireLoot.name, from: victim.name });
+      bus.emit('streets', { type: 'sacked', by: ch.name, on: victim.name, front: empireLoot.name });
+    }
     const { total: bounty, directed } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']); // a kill fulfils both
     // VENDETTA SETTLEMENT — if this kill answers a blood debt (my bloodline sworn against
     // theirs, inside the window), the vendetta is settled: the row closes, the street hears,
@@ -1152,7 +1196,7 @@ export async function fire(ch, victim, client, h, rounds) {
     const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true, loot: true, bloodOathMult: bloodOath });
     bus.emit('streets', { type: 'kill', by: ch.name, victim: victim.name });
     return { ok: true, kill: true, rep, chop, loot, omrLoot, gearLoot, contraLoot, orderLoot: estate.orderLoot || 0, bounty, jammed, warKill, hitman: hit,
-      vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
+      ...(empireLoot ? { empireLoot } : {}), vendetta: !!vend, ...(grudges.length ? { grudges } : {}), estate: { heirId: estate.heirId } };
   }
   // ── THE MISS ──
   ch.shoot_cd_until = new Date(Date.now() + shootCdMs());

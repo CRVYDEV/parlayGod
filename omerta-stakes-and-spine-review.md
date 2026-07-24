@@ -109,11 +109,13 @@ sharp gap between the theme and the incentives, and it's *worsened* by #1 (the r
 they have no reason to take PvP risk) and #2 (killing them doesn't matter).
 
 **PROPOSED levers (founder pick; NOT applied):**
-- **L3a — make the passive stack a PvP target.** The cleanest fix ties into #1: if the endgame wealth
-  is passive fronts/territory, let **PvP threaten it** — a successful kill/seizure should be able to
-  *take or burn* a slice of the victim's front income (the territory-seizure precedent, extended to
-  personal fronts). Then the rich have a reason to fear the streets and the kill economy has a prize
-  worth the ammo. **Recommended — it fixes #1, #2 and #3 at once.**
+- **L3a — make the passive stack a PvP target. ✅ BUILT — THE SACKING.** A PLAYER fire-kill now lets the
+  killer **SEIZE one of the victim's business fronts** (the endgame passive-income engine) instead of it
+  dying with the street — the territory-seizure precedent extended to personal fronts. Pure ownership move
+  (§10.4-neutral — a front is not a currency; pending forfeits; clocks reset), gated so the killer can only
+  *hold* a front they could run (level + an empty kind slot). Now the passive empire is genuine RISK CAPITAL
+  and the kill economy has a prize worth far more than the ammo — the keystone that converges #1/#2/#3. Lever
+  `M3.SACK_ON_KILL` (default on); `test/sacking.js` (45th suite). **DONE.**
 - **L3b — cap the untouchable stack.** Eight opt-outs is too many; consider making the *earned* shields
   (safehouse/bodyguard) and the *paid* shields (respawn token) mutually exclusive, or adding a max-uptime
   so no one is permanently unreachable.
@@ -175,7 +177,7 @@ crime loop** is the highest-leverage single addition.
 |---|---|---|---|
 | 1 | passive stack ≫ active loop ($49M/day, 6× the grind) | **MEASURED** | pick L1a+L1b (or L1c/L1d) |
 | 2 | death costs nothing for the established | **MEASURED** | pick L2a (estate tax) |
-| 3 | PvP is −EV and opt-out-able | **MEASURED** | pick **L3a** (passive wealth PvP-losable) — the keystone |
+| 3 | PvP is −EV and opt-out-able | **L3a BUILT** (the Sacking) | consider L3b (cap the untouchable stack) next |
 | 4 | 35 leaderboards, no spine | **BUILT** | — |
 | 5 | "pay then earn" legibility | **BUILT** | (messaging still counsel-gated) |
 | 6 | breadth ≫ depth | **PROPOSED** | choose D6a (deepen crime) or D6b (embrace collection) |

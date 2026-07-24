@@ -4786,3 +4786,35 @@ the board) so the endgame finally has a single legible goal. `test/standing.js` 
 board rank order, breadth>depth, the pillar breakdown, agent+banned exclusion, the personal rank, and a
 no-legend account reading 0-but-ranked. Suite 44/44 + sim drift-0. (#5 free-path legibility + #7 consistency
 snags: in progress.)
+
+**THE SACKING (L3a — the review's keystone lever, founder-directed "L3a first") — BUILT** (`src/social.js`,
+`src/rules.js` `M3.SACK_ON_KILL`, `test/sacking.js` — the 45th suite). The stakes/spine review found #1
+(too much safe passive wealth), #2 (death costs the established nothing), and #3 (PvP is −EV with eight
+opt-outs) are ONE problem — a safe idle-collector with no threat model — and that making passive wealth
+**PvP-LOSABLE** fixes all three. THE SACKING does exactly that: a PLAYER fire-kill (never NPC/mod — the
+whack:loot precedent) lets the killer **SEIZE one of the victim's business fronts** (the $49M/day-stack
+endgame income engine measured in P9.20) instead of it dying with the street. `sackEmpire` picks the MOST
+VALUABLE front the killer can actually HOLD — level ≥ the front's `lvl` gate AND an empty kind slot
+(`UNIQUE(character_id,kind)`; the frontier-B1 "hold only what you could run" rule) — and transfers it
+(`businesses.character_id` → killer) with clocks/scrutiny reset (the takeover `resetFrontToNewOwner`
+precedent; pending forfeits — the territory-seize precedent). If the killer can hold NONE of the victim's
+fronts, nothing extra happens (the empire dies with the street as normal). Runs in the loot block BEFORE
+runEstate's `DELETE businesses WHERE character_id=victim`, so the seized front (now killer-owned) survives
+the wipe while the rest die. **§10.4-NEUTRAL by construction** — a front is an ownership object, NOT a
+§10.4 currency (no business-conservation check; the gear/contraband-loot precedent), so the seize writes
+ZERO ledger rows and the sim stays drift-0; `test/sacking.js` proves it via a stable-bucket (cash/$OMR/
+cars/cb) drift-delta across the sacking-kill (every real kill flow is a ledgered transfer/burn; the seize
+adds nothing). Now the passive empire is genuine RISK CAPITAL and the kill economy has a prize worth far
+more than the ammo — the rich must defend (a safehouse/bodyguard — sinks) or fight for their fronts.
+Response `empireLoot {kind, tier, name}` + a `sacked` notify + a streets `sacked` event; the console kill
+toast reads "🏢 TOOK OVER their Casino" and the Empire tab now leads with a "⚠ YOUR EMPIRE IS RISK CAPITAL"
+warning. `test/sacking.js` covers the seize (most-valuable holdable front survives the wipe, the rest die,
+clocks reset), the occupied-slot gate (killer already runs that kind → no seize), the level gate (a rookie
+can't hold a casino front → no seize), and §10.4-neutrality on every path. Suite 45/45 + sim drift-0.
+`M3.SACK_ON_KILL` (default on) is a founder sign-off lever — flagged in BALANCE.md to sim the
+wealth-concentration effect (a seized front is a zero-sum transfer between players, no new base-wide
+emission, but it concentrates the passive stack in fewer hands) before production. Deferred (the review's
+other #3 levers, founder call): L3b (cap the eight untouchable states — mutually-exclusive shields / a
+max-uptime) and L3c (a cheaper contracted-kill ammo floor). #7 consistency snags done; the review's #1/#2
+economy levers (L1a/L1b flatten the front curve + progressive pad; L2a the death/estate tax) remain
+founder picks.

@@ -788,7 +788,7 @@
       ? `🏛 YOUR BRICK FINISHED IT — ${body.monument} STANDS. The city will remember.`
       : `laid $${fmt(body.credited)} into ${body.monument} (your total: $${fmt(body.yourTotal)})`);
     if (body.win === false && body.hospSeconds !== undefined) bits.push(`the guards drove you off — ${Math.ceil(body.hospSeconds / 60)}m in the hospital`);
-    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.kill) bits.push(`THEY'RE DONE.${body.loot ? ` looted $${fmt(body.loot)}` : ''}${body.contraLoot ? ` · seized $${fmt(body.contraLoot)} in contraband` : ''}${body.empireLoot ? ` · 🏢 TOOK OVER their ${body.empireLoot.name}` : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.hospitalized && !body.kill) bits.push('they went down — hospital job');
     if (body.absorbed) bits.push('their cover took the hit');
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
@@ -3199,6 +3199,8 @@
     const emp = rules?.empire || {};
     t.innerHTML = `
       ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own, plus doubles as private laundering. They cost upkeep (the pad) and can draw the Bureau, so tend them. A late-game engine — come back as you level.') : ''}
+      ${owned.length ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">⚠ YOUR EMPIRE IS RISK CAPITAL</span>
+        <div class="d">If a rival <b>fire-kills your street</b>, the killer can <b>take over</b> your most valuable front — one they can hold. Your fronts aren't safe just because they're passive: defend yourself (a safehouse, a bodyguard), or expect to fight for them.</div></div>` : ''}
       ${me.tycoon ? `<div class="card" style="border-color:var(--gold)"><span class="t">THE TYCOON — ${me.tycoon.rank}</span>
         <div class="d">lifetime racket &amp; front income $${fmt(me.tycoon.earned || 0)} <span style="color:var(--dim)">(survives death)</span>
         ${(me.empireTitles || []).length ? ` · ${me.empireTitles.map((x) => `<span class="chip good">${x}</span>`).join(' ')}` : ''}
