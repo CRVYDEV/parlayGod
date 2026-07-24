@@ -3,7 +3,7 @@
 //   'trust' — honor system for the invite-code alpha (rewards are cash-only anyway)
 //   'live'  — real API checks; requires the provider credentials below
 // Production MUST run 'live': X follow via the OAuth'd relationship check,
-// Discord join via bot member lookup, GitHub star via the REST API.
+// Discord join via bot member lookup.
 import { GameError } from './game.js';
 
 // ── X-API bulletproofing (the X-integrations hardening pass) ──
