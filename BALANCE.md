@@ -1743,3 +1743,25 @@ SOV_POINTS/RANKS. **Flag:** sim the sov:income curve (base-wide bounded by ≤6 
 **Soldiers** — `SOLDIERS.RANKS` (Associate→Caporegime, derived status) + the COMMANDER LEGEND
 (`account_persistent.soldiers_led`, survives death) + `COMMANDER_RANKS` + `/v1/leaderboard/commanders`.
 Zero §10.4 (a status counter). KEEP.
+
+## TIER-2 → TIER-4 DEEPENING (2026-07-24) — new/widened levers, sim before production
+
+**Kitchen (`KITCHEN` block).** LAB MODULES (`MODULES` purity 0.03 / yield 0.15 / stealth 0.14 per level,
+`MODULE_MAX` 5, `MODULE_BASE_CASH` 60k, `MODULE_OMR_FROM/STEP`) — purity→cook quality, yield→batch cap,
+stealth→offline raid odds. **Flag:** the yield module raises how much product a cook yields and stealth
+cuts product LOST to the Bureau, both mild widenings of the deal faucet — sim the kitchen curve with a
+maxed lab (bounded by the cash+$OMR SINK to buy the levels + the module cap). CUTTING AGENTS (`CUT_COST`
+8k / `CUT_UNITS` 0.4 / `CUT_QUALITY` 0.15 / `CUT_FLOOR` 0.55) — a volume-vs-quality trade, roughly
+margin-neutral (deal price scales on quality); a cash SINK. KINGPIN legend = pure status (KEEP).
+
+**Assets & Rackets (`RACKET_EMPIRE` block).** RACKET UPGRADES (`UP_MAX` 5, `UP_STEP` 0.12,
+`UP_COST_MULT` 0.5) — **the one real faucet-widen**: +12%/level on a racket's `racket:income` accrual, cap
++60%. Bounded by the per-character daily income token bucket (`racket_credit_ms`) + the level cap + the
+`racket:upgrade` cash SINK (cost = racket.cost × 0.5 × level). **Flag:** sim the net per-racket EV
+(the business/territory-upgrade precedent). TYCOON legend + EMPIRE SETS = pure status (KEEP).
+
+**Megaproject (`MEGAPROJECT` block).** Catalog 4→8 (Opera 900M → Eternal Flame 12B, on-curve — content).
+Builder/architect/family-build = pure status; the contribution is still a pure SINK. **Zero faucet — KEEP.**
+
+**Five Pillars (`HONOR` block).** The ladder 5→7 + the honor peak/low legend + the reputation boards =
+pure status; the teeth (DREADED −60 / TRUSTED 60) are unchanged. **Zero faucet — KEEP.**

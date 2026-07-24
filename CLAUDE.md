@@ -4574,3 +4574,46 @@ betting (§C), the sov multi-stage siege + coalition co-defence (§B/§D), and M
 Secrets (types/network/market) — the two already feature-complete for their role. All numbers are founder
 sign-off levers; the new faucets (heist fence, master casket, sov income, territory hot-type mults) are
 sim-before-production flagged in BALANCE.md.
+
+**TIER-2 → TIER-4 DEEPENING PROGRAM (founder-directed 2026-07-24: "upgrade all the systems in tier 2 to
+tier 4 complexity") — ALL FOUR BUILT** (`omerta-tier2-deepening-design.md`; red-team
+`AUDIT-tier2-deepening.md` — no CRITICAL/HIGH; §10.4 drift-0 + the 43-suite green after every drop). The
+companion to the Tier-1 program, walking DOWN the build-depth ranking: the second-thinnest systems
+(a single built level, no step-two, thin catalog) deepened to the depth bar (multiple orthogonal
+mechanics + a scaling catalog + a competitive/meta layer + a status legend + a console screen). Note:
+"Tier 2" is a reconstruction of the earlier tiered inventory (founder can course-correct the membership).
+**(1) THE KITCHEN** (`src/kitchen.js`, `src/accrual.js`, `KITCHEN` rules tail) — **LAB MODULES** (a
+purity/yield/stealth upgrade axis on the lab tier, `characters.lab_purity/lab_yield/lab_stealth` direct-SQL;
+purity→cook quality, yield→batch cap, stealth→the accrual Bureau-raid probability; cash SINK + top-level
+$OMR BURN `kitchen:module`), **CUTTING AGENTS** (`cutStash` — stretch a stash line +40% units at −15%
+quality floored at CUT_FLOOR, cash SINK `kitchen:cut`; units are ownership not currency), and **THE KINGPIN
+LEGEND** (`account_persistent.product_moved` lifetime gross moved across deal + offline crew sales, survives
+death, `KINGPIN_RANKS` + `GET /v1/leaderboard/kingpins`). `kitchen:` joined the cash + omr KNOWN_REASONS
+(+ the omr burn term). **(2) ASSETS & RACKETS** (`src/economy.js`, `RACKET_EMPIRE` rules tail) — **RACKET
+UPGRADES** (`character_rackets.level` 0..5, `upgradeRacket`, a per-racket income multiplier folded into
+§7.1 accrual via `owned.racketLevels`; cash SINK `racket:upgrade` — a faucet-widen bounded by the daily
+income cap + level cap, flagged), **THE TYCOON LEGEND** (`account_persistent.tycoon_earned` lifetime racket+
+front income, bumped at the `racket:income` ledger site, survives death, `TYCOON_RANKS` +
+`GET /v1/leaderboard/tycoons`), and **EMPIRE SETS** (own a full category → a pure-status title,
+`empireTitles`). **(3) THE MEGAPROJECT** (`src/megaproject.js`) — **CATALOG 4→8** (Opera House 900M → the
+Eternal Flame 12B, on-curve, zero-code — `megaMonumentAt` indexes), **THE BUILDER LEGEND**
+(`account_persistent.monument_built` lifetime $-value laid, bumped in `credit` under the own locked account,
+survives death, `BUILDER_RANKS` + `GET /v1/leaderboard/builders`), **THE FAMILY BUILD** (`gangs.monument_built`,
+the family that put up the money, dies with the family, `GET /v1/leaderboard/family-build`), and **THE
+ARCHITECT CROWN** (how many monuments a dynasty topped — READ-DERIVED from the skyline via `architectTally`,
+so NO cross-account write under the megaprojects singleton lock → no deadlock surface). All status axes;
+the contribution cash/goods/$OMR still rides the `megaproject:` sink. **(4) THE FIVE PILLARS** (`src/honor.js`,
+`HONOR` rules tail; the honor pillar — the unifying reputation; Bloodline was already Tier-4-deep) — **THE
+HONOR LEGEND** (`account_persistent.honor_peak/honor_low` the bloodline's high-water honor + deepest infamy,
+bumped in `bumpHonor` under the caller's char lock, survives death — honor itself dies with the street +
+echoes 25% to the heir), **THE REPUTATION BOARDS** (`GET /v1/leaderboard/honor` → menOfHonor + mostFeared),
+and **THE LADDER 5→7** (Monster + The Untouchable at the extremes; the middle five unchanged so the DREADED
+−60 / TRUSTED 60 teeth land on the same tiers). Each drop: schema → rules → module → routes → console →
+tests → suite+sim → commit. Persist-clobber verified clean (every new direct-SQL column absent from the
+persist positional UPDATEs); lock order acyclic (the megaproject gang-bump-under-singleton is cycle-free
+since nothing locks gangs-then-megaprojects; the architect crown is read-derived; honor/legend bumps run
+under the actor's own locked account). Suite 43/43 + sim drift-0. Deferred (flagged): the kitchen
+distribution/corner network, a per-racket PvP shakedown (rackets feed the global lazy accrual, not a
+per-instance clock — a rearchitecture), monument wings + completion district perks, and honor decay +
+deeper diplomacy. All numbers are founder sign-off levers; the faucet-widening levers (racket upgrades,
+the kitchen lab modules/cut) are sim-before-production flagged in BALANCE.md.
