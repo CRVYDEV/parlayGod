@@ -682,6 +682,11 @@ export async function buildServer() {
     // client can render the three-way picker; the server stays the referee (the roll is server-side).
     crimeApproaches: Object.values(M3.CRIME_APPROACHES).map((a) => ({ id: a.id, name: a.name,
       successMult: a.successMult, payMult: a.payMult, heat: a.heat, jailMult: a.jailMult })),
+    // D6a step two — the other two entry verbs' decision axes (each its own, not a copy of the crime picker)
+    jumpIntents: Object.values(M3.JUMP_INTENTS).map((i) => ({ id: i.id, name: i.name,
+      stealMult: i.stealMult, repMult: i.repMult, dmgMult: i.dmgMult, hospMult: i.hospMult, heat: i.heat })),
+    dealPlays: Object.values(M4.DEAL_PLAYS).map((p) => ({ id: p.id, name: p.name,
+      heatMult: p.heatMult, nerveMult: p.nerveMult, repMult: p.repMult })),
     districts: DISTRICTS,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
@@ -1468,7 +1473,7 @@ export async function buildServer() {
       hospitalized: !!(c.hosp_until && new Date(c.hosp_until) > new Date()) })) };
   });
   app.post('/v1/streets/:targetId/jump', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h)));
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h, req.body?.intent)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h,
       { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon,
@@ -1839,7 +1844,7 @@ export async function buildServer() {
   app.post('/v1/kitchen/collect', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.collect(ch, client, h)));
   app.post('/v1/kitchen/deal', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.deal(ch, req.body?.drugId, req.body?.qty, client, h)));
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.deal(ch, req.body?.drugId, req.body?.qty, client, h, req.body?.play)));
   app.post('/v1/kitchen/crew/hire', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => K.hireCrew(ch, client, h)));
   // recurring sinks: pay the crew's nut (wages) — an unpaid crew downs tools until covered

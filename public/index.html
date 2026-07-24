@@ -764,7 +764,7 @@
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
-    if (body.win === true && body.stolen !== undefined) bits.push(`they went down — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
+    if (body.win === true && body.stolen !== undefined) bits.push(`${body.intent === 'message' ? '📢 THE STREET SAW IT' : body.intent === 'rob' ? 'rolled them' : 'they went down'} — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
     if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
     if (body.district && body.win === true && body.cut !== undefined && !body.kind) bits.push(`muscled the block — grabbed $${fmt(body.cut)} from their operation`);
@@ -793,7 +793,7 @@
     if (body.absorbed) bits.push('their cover took the hit');
     if (body.reserve !== undefined && body.fee !== undefined && body.serial) bits.push(`🔨 ${body.name} #${body.serial} on the block — reserve ${fmt(body.reserve)} $OMR (−${body.fee} fee)`);
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
-    if (body.earned) bits.push(`moved product — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}`);
+    if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
     if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) bits.push(body.win ? `🏁 took the checkered — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}` : `🏁 ate the loss — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`);
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
@@ -1697,7 +1697,12 @@
       ${(me.stash || []).length ? `<div class="grid">${me.stash.map((s) => `
         <div class="card"><span class="t">${drugName(s.drug)}</span>
           <div class="d">${s.qty} units · quality ${s.quality} · demand here ×${demandHere[s.drug] ?? '?'}</div>
-          <input data-deal="${s.drug}" placeholder="qty" size="5"> <button class="act" data-dealgo="${s.drug}">deal</button>
+          <input data-deal="${s.drug}" placeholder="qty" size="5">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+            <button class="act" style="opacity:.8" data-dealgo="${s.drug}" data-play="careful" title="work your regulars — half the heat, but it takes patience (double nerve)">quiet</button>
+            <button class="act" data-dealgo="${s.drug}" data-play="standard">deal</button>
+            <button class="act" style="color:#ff9a6a" data-dealgo="${s.drug}" data-play="flood" title="move weight — half the nerve, but DOUBLE the heat (and churn burns your name)">move weight</button>
+          </div>
           <button class="act" data-cut="${s.drug}" title="stretch the line — more units, weaker product">cut it ($${fmt(rules?.kitchen?.cut?.cost || 8000)})</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
 
@@ -1718,7 +1723,7 @@
     if (cookBtn) cookBtn.onclick = () =>
       act('POST', '/v1/kitchen/cook', { drugId: t.querySelector('#cook-drug').value, qty: Number(t.querySelector('#cook-qty').value) || undefined }).then(() => renderKitchen());
     t.querySelectorAll('[data-dealgo]').forEach((b) => b.onclick = () =>
-      act('POST', '/v1/kitchen/deal', { drugId: b.dataset.dealgo, qty: Number(t.querySelector(`[data-deal="${b.dataset.dealgo}"]`).value) || 1 }).then(() => renderKitchen()));
+      act('POST', '/v1/kitchen/deal', { drugId: b.dataset.dealgo, qty: Number(t.querySelector(`[data-deal="${b.dataset.dealgo}"]`).value) || 1, play: b.dataset.play || 'standard' }).then(() => renderKitchen()));
     t.querySelectorAll('[data-cut]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/kitchen/cut/${b.dataset.cut}`).then(() => renderKitchen()));
     t.querySelectorAll('[data-modup]').forEach((b) => b.onclick = () =>
@@ -2776,7 +2781,9 @@
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
-          <button class="act" data-jump="${s.id}">jump</button>
+          <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>
+          <button class="act" data-jump="${s.id}" data-intent="standard">jump</button>
+          <button class="act" style="color:#ff9a6a" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, and it draws the Law">send a message</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
           <button class="act" data-npchit="${s.id}">NPC hit</button>
@@ -2807,7 +2814,7 @@
       $('#phone').classList.remove('hidden'); openPhoneThread(b.dataset.dm);
     });
     t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
-      act('POST', `/v1/streets/${b.dataset.jump}/jump`, {}).then(() => renderPvp()));
+      act('POST', `/v1/streets/${b.dataset.jump}/jump`, { intent: b.dataset.intent || 'standard' }).then(() => renderPvp()));
     t.querySelectorAll('[data-search]').forEach((b) => b.onclick = async () => {
       const r = await act('POST', `/v1/streets/${b.dataset.search}/search`, {});
       if (r.code < 400 && r.body.placedAt)

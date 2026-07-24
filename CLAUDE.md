@@ -4902,3 +4902,35 @@ emission delta, bounded by nerve + bust risk + heat, before production). **This 
 review** (#1 economy, #2 death, #3 PvP stakes, #4 the City Standing spine, #5 legibility, #6 the crime verb,
 #7 consistency — all addressed); D6b (the game is largely an idle/collection economy) remains the honest
 framing, so the endgame collect/bet verbs stay idle-shaped by design.
+
+**D6a step two — THE MESSAGE + THE PLAY (the other two entry verbs) — BUILT** (`src/rules.js`
+`M3.JUMP_INTENTS` + `M4.DEAL_PLAYS`, `src/social.js` `jump`, `src/kitchen.js` `deal`, `src/server.js`,
+`public/index.html`, `test/social.js`, `test/growth.js`). THE APPROACH proved the pattern on crime; the
+game's other two shallow entry verbs (a mugging and a corner sale — both one click + a roll) now carry
+real decisions too, each with its OWN thematic axis rather than a copy of the crime picker. Both keep
+the discipline that made THE APPROACH safe: **`standard` is the identity**, so an omitted/unknown
+choice is byte-identical to the pre-choice behaviour (every existing harness passes unchanged), and
+**neither touches a signed CASH curve**. **(1) JUMP → THE MESSAGE** (`POST /v1/streets/:id/jump
+{intent}`): what you came for — money or reputation. *Roll Them* (stealMult 1.35 / repMult 0.6 /
+dmgMult 0.7 / hospMult 0.7) takes a bigger cut but nobody's impressed; *Send a Message* (stealMult 0.4 /
+repMult 1.5 / dmgMult 1.4 / hospMult 1.5 / +5 law heat) is big respect + a real beating, but you're not
+there to rob them and the Law hears about it. **§10.4-free**: the steal is a pure zero-sum TRANSFER
+(`jump:steal`/`jump:stolen`, still `JUMP_STEAL_CAP`-bounded — scaling it moves who holds the cash, never
+creates any), rep is status, damage/hospital is pacing, heat is a Law lever. Built-in self-limiter: the
+hospital is PROTECTION here, so `message`'s longer stay shields the mark **from you** too. **(2) DEAL →
+THE PLAY** (`POST /v1/kitchen/deal {play}`): how you move it — deliberately **NOT** a price axis, because
+the §7.10 deal cash curve is sim-audited and ground rule #1 stands, so **the cash paid is IDENTICAL on
+every play** (a regression asserts `careful.earned == standard.earned == flood.earned`). What you trade
+is THROUGHPUT against THE LAW: *careful* (heatMult 0.5 / nerveMult 2.0 / repMult 1.10) works your
+regulars — half the heat, but nerve is the corner's real throttle so patience costs you volume; *flood*
+(heatMult 2.0 / nerveMult 0.5 / repMult 0.90) moves weight fast but doubles the heat feeding the RICO
+meter + the Bureau's kitchen raid, and churn burns your name (the `repMult` is arranged so the fast play
+can only SLOW rank progression, never accelerate access to the rank price bonus). `/v1/rules` gained
+`jumpIntents` + `dealPlays`; the console Wet Work roster renders roll-them / jump / send-a-message and
+the Kitchen corner renders quiet / deal / move-weight; `describe()` humanizes both. `test/social.js`
+proves the intents surface, a stick-up draws no heat, a message takes less cash + more rep + the exact
+heat + a longer lay-up, and an unknown intent falls back to standard; `test/growth.js` proves the plays
+surface, **the cash is identical across all three**, the heat/nerve tradeoffs both directions, that
+flooding builds less of a name, and the unknown-play fallback. Suite 46/46 + sim drift-0. All
+`JUMP_INTENTS`/`DEAL_PLAYS` numbers are founder sign-off levers (BALANCE.md). **All three entry verbs
+now carry a real decision** — the review's #6/D6a is complete in both steps.

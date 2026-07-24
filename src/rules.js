@@ -751,6 +751,23 @@ export const racketsValue=(ids=[])=>ids.reduce((a,id)=>a+(RACKETS.find(r=>r.id==
 export const dailyJobsOf=(day=dayOf())=>[0,1,2].map(i=>DAILY_POOL[(day+i*2)%DAILY_POOL.length]);
 export const M4 = {
   CREW_MAX: 5, CREW_COST_STEP: 50000,          // $50k × (crew+1)
+  // D6a step two — THE PLAY (the corner's decision axis). Dealing was the third shallow entry verb:
+  // pick a line, pick a qty, collect. Now you choose HOW you move it — and the axis is deliberately
+  // NOT price, because the deal cash curve is sim-audited (§7.10) and ground rule #1 stands: the
+  // CASH PAID IS IDENTICAL on every play. What you trade is THROUGHPUT against THE LAW.
+  //   • careful  — work your regulars: half the heat, but it takes patience (double nerve, the real
+  //                throttle on the corner) and it builds a book of business (+10% trade rep).
+  //   • standard — hit the corner: the signed baseline (all 1.0 → byte-identical to before).
+  //   • flood    — move weight fast: half the nerve (double the throughput per bar) but DOUBLE the
+  //                heat (feeding the RICO meter + the Bureau's kitchen raid), and churn burns your
+  //                name (−10% trade rep, so the fast play never accelerates rank progression).
+  // §10.4: ZERO cash change, zero new reason, zero faucet — heat/nerve are resources, trade_rep is a
+  // progression axis. All numbers are founder sign-off levers.
+  DEAL_PLAYS: {
+    careful:  { id: 'careful',  name: 'Work the Regulars', heatMult: 0.5, nerveMult: 2.0, repMult: 1.10 },
+    standard: { id: 'standard', name: 'Hit the Corner',    heatMult: 1.0, nerveMult: 1.0, repMult: 1.00 },
+    flood:    { id: 'flood',    name: 'Move Weight',       heatMult: 2.0, nerveMult: 0.5, repMult: 0.90 },
+  },
   // RECURRING SINKS — crew wages ("the nut"): each corner man draws CREW_WAGE_PER_HR whether the
   // stash moves or not (you pay them to stand the corner). Wages accrue on their own clock up to
   // CREW_WAGE_CAP_MS (7d); unpaid past CREW_WAGE_COLD_MS (3d) the crew DOWNS TOOLS (accrual stops
@@ -981,6 +998,23 @@ export const M3 = {
     loud:     { id: 'loud',     name: 'Go Loud',  successMult: 0.82, payMult: 1.22, crateMult: 1.6, makingsMult: 1.5, repMult: 1.15, heat: 6,  jailMult: 1.4 },
   },
   CRIME_LOUD_CASH_PREMIUM: 1.0, // multiplies loud's payMult; >1 makes Go Loud pay a genuine cash premium (a faucet change → sign-off)
+  // D6a step two — THE MESSAGE (the jump's decision axis). A mugging is the game's second entry verb and
+  // was one click + a stat roll. Now you choose WHAT YOU CAME FOR: money or reputation. Deliberately NOT a
+  // copy of the crime picker — each shallow verb gets its own thematic axis.
+  //   • rob      — you're there for the wallet: a bigger cut, but nobody's impressed (less rep, less damage,
+  //                and they're back on their feet sooner, so a shorter hospital shield on your mark).
+  //   • standard — the signed baseline (all 1.0 → byte-identical to the pre-choice behaviour).
+  //   • message  — you're there to be SEEN: big rep + a real beating, but you're not there to rob them
+  //                (a fraction of the cash), it draws LAW HEAT, and the longer hospital stay shields the
+  //                mark from you too (the hospital is protection in this game) — a self-limiting flex.
+  // §10.4: the steal is a pure TRANSFER (jump:steal/jump:stolen, still bounded by JUMP_STEAL_CAP), so
+  // scaling it moves who holds the cash and NEVER creates any — zero faucet, zero new reason. Rep is a
+  // status axis; damage/hospital is pacing; heat is a Law lever. All numbers are founder sign-off levers.
+  JUMP_INTENTS: {
+    rob:      { id: 'rob',      name: 'Roll Them',      stealMult: 1.35, repMult: 0.6, dmgMult: 0.7, hospMult: 0.7, heat: 0 },
+    standard: { id: 'standard', name: 'Jump Them',      stealMult: 1.0,  repMult: 1.0, dmgMult: 1.0, hospMult: 1.0, heat: 0 },
+    message:  { id: 'message',  name: 'Send a Message', stealMult: 0.4,  repMult: 1.5, dmgMult: 1.4, hospMult: 1.5, heat: 5 },
+  },
 };
 // M8 — the TAILOR & ENGRAVER (the vanity/identity shop). Pure STATUS purchases: every item is
 // display-only — no stat, no formula, no gameplay power — so nothing here touches the sim-audited
