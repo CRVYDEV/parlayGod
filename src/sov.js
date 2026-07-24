@@ -41,6 +41,13 @@ function upkeepOwed(s, mult, now = Date.now()) {
   const elapsed = Math.min(Math.max(0, now - new Date(s.upkeep_at).getTime()), SOV.UPKEEP_CAP_MS);
   return Math.floor(tierOf(s).upkeepPerDay * (elapsed / 86400000) * mult);
 }
+// TIER-4 §C — the lazy income a held stronghold has accrued (capped at INCOME_CAP_MS; a crumbling
+// stronghold earns nothing — pay the pad first, the sovGarrisonBonus discipline)
+function incomeOwed(s, now = Date.now()) {
+  if (crumbling(s)) return 0;
+  const elapsed = Math.min(Math.max(0, now - new Date(s.income_at).getTime()), SOV.INCOME_CAP_MS);
+  return Math.floor(tierOf(s).incomePerDay * (elapsed / 86400000));
+}
 
 // the seize touchpoint — an UNLOCKED quote (the outfitStrengthFrac precedent): a crumbling
 // stronghold defends nothing (pay the pad or the walls are scenery).
@@ -129,6 +136,32 @@ export async function paySovUpkeep(ch, client, h) {
   return { ok: true, paid, overextension: Math.round((mult - 1) * 100), settled };
 }
 
+// TIER-4 §C — COLLECT SOV INCOME: bank every held stronghold's accrued tribute to the treasury (the
+// collectTerritory pattern). A §10.4 treasury FAUCET `sov:income` (bounded by tier + the 24h cap; a
+// crumbling stronghold earns nothing). Any member may collect (the collectTerritory posture), but a
+// safehoused member can't (D2 — the collect-class faucet exposure gate).
+export async function collectSov(ch, client, h) {
+  if (!h.owned.gangId) throw new GameError('no_gang', 'Sovereignty is family business.');
+  if (safeHoused(ch)) throw new GameError('safe', "You can't run the family's books from a safehouse."); // D2
+  const g = (await client.query('SELECT * FROM gangs WHERE id=$1 FOR UPDATE', [h.owned.gangId])).rows[0];
+  const rows = (await client.query('SELECT * FROM sov_structures WHERE gang_id=$1 ORDER BY district_id FOR UPDATE', [g.id])).rows;
+  if (!rows.length) throw new GameError('nothing', 'No strongholds to draw tribute from.');
+  let total = 0; const banked = [];
+  for (const s of rows) {
+    const owed = incomeOwed(s);
+    if (owed <= 0) continue;
+    total += owed;
+    await client.query('UPDATE sov_structures SET income_at=now() WHERE district_id=$1', [s.district_id]);
+    banked.push({ district: s.district_id, income: owed });
+  }
+  if (!total) return { ok: true, income: 0, banked: [] };
+  await client.query('UPDATE gangs SET treasury = treasury + $2 WHERE id=$1', [g.id, total]);
+  await h.ledger(client, { currency: 'cash', amount: total, reason: 'sov:income', counterparty: g.id });
+  if (h.owned.gang) h.owned.gang.treasury = Number(g.treasury) + total;
+  await h.track(client, ch.account_id, 'sov_income', { total, strongholds: banked.length });
+  return { ok: true, income: total, banked };
+}
+
 // THE SIEGE — a rival boss assaults the walls during the vulnerability window. The chest burns win
 // or lose; a win knocks the structure down a tier (razed at 0) and scores sov points; a loss costs
 // health. Per-structure cooldown either way (the owner isn't ground down).
@@ -207,6 +240,8 @@ export async function sovBoard(client, h) {
         windowOpen: windowOpen(s), vulnerable: windowOpen(s), crumbling: crumbling(s),
         nextTier: tier < SOV.TIERS.length ? { name: SOV.TIERS[tier].name, cost: SOV.TIERS[tier].cost } : null,
         upkeepOwed: s.gang_id === h.owned.gangId ? upkeepOwed(s, mult) : undefined,
+        incomePerDay: t.incomePerDay,   // TIER-4 §C
+        incomeOwed: s.gang_id === h.owned.gangId ? incomeOwed(s) : undefined,
         siegeCdSeconds: cd && new Date(cd) > new Date() ? Math.floor((new Date(cd) - Date.now()) / 1000) : 0,
       };
     }),

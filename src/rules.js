@@ -2546,9 +2546,16 @@ export const DIPLOMACY = {
 }
 
 export const SOV = {
-  TIERS: [ { name: 'Outpost', cost: 100000, garrison: 15000, upkeepPerDay: 5000 },
-           { name: 'Fort', cost: 400000, garrison: 60000, upkeepPerDay: 15000 },
-           { name: 'Citadel', cost: 1500000, garrison: 250000, upkeepPerDay: 40000 } ],
+  // TIER-4 §A — the stronghold ladder 3 → 6 (on the cost/garrison/upkeep curve; upgradeSov/tierOf handle
+  // any tier, so the extension is content). §C — each tier yields a lazy `incomePerDay` to the treasury
+  // (the territory-income pattern): a held stronghold is now a PRODUCTIVE, defensible asset, not a pure
+  // sink. The income is a NEW treasury faucet (sim sign-off); garrison/upkeep are treasury sinks (§10.4-safe).
+  TIERS: [ { name: 'Outpost', cost: 100000, garrison: 15000, upkeepPerDay: 5000, incomePerDay: 8000 },
+           { name: 'Fort', cost: 400000, garrison: 60000, upkeepPerDay: 15000, incomePerDay: 24000 },
+           { name: 'Citadel', cost: 1500000, garrison: 250000, upkeepPerDay: 40000, incomePerDay: 65000 },
+           { name: 'Bastion', cost: 5000000, garrison: 700000, upkeepPerDay: 90000, incomePerDay: 150000 },
+           { name: 'Fortress-City', cost: 15000000, garrison: 2000000, upkeepPerDay: 200000, incomePerDay: 340000 },
+           { name: 'The Iron Capital', cost: 40000000, garrison: 5000000, upkeepPerDay: 450000, incomePerDay: 780000 } ],
   WINDOW_H: 2,                      // the daily vulnerability window (UTC, chosen at build)
   SIEGE_COST: 50000,                // the assault chest — burns win or lose (the npchit-fee posture)
   SIEGE_CD_MS: 24 * 3600000,        // per-structure, win or lose (the owner isn't ground down)
@@ -2557,9 +2564,11 @@ export const SOV = {
   SIEGE_FAIL_DMG: 20,
   OVEREXT_BPS: 5000,                // +50% upkeep per EXTRA district held (EU4 overextension — the anti-snowball)
   UPKEEP_CAP_MS: 7 * 86400000, CRUMBLE_MS: 3 * 86400000, // the pad/cold pattern
-  SOV_POINTS: [0, 10, 25, 60],      // razing a tier-N stronghold scores SOV_POINTS[N] (index by tier)
+  INCOME_CAP_MS: 24 * 3600000,      // TIER-4 §C — the lazy income cap (≤ one day's take per collect)
+  SOV_POINTS: [0, 10, 25, 60, 120, 220, 400], // razing a tier-N stronghold scores SOV_POINTS[N] (index by tier)
   RANKS: [ { min: 0, name: 'Street Corner' }, { min: 25, name: 'A Name on the Block' },
-           { min: 100, name: 'The Iron Grip' }, { min: 300, name: 'Lords of the City' } ],
+           { min: 100, name: 'The Iron Grip' }, { min: 300, name: 'Lords of the City' },
+           { min: 800, name: 'The Sovereign' } ],   // Tier-4 §D — the deep rung
 }
 export const sovRankOf = (p) => [...SOV.RANKS].reverse().find((r) => Number(p) >= r.min) || SOV.RANKS[0]
 

@@ -1839,6 +1839,8 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.paySovUpkeep(ch, client, h)));
   app.post('/v1/sov/:district/siege', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.siegeSov(ch, req.params.district, client, h)));
+  app.post('/v1/sov/collect', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.collectSov(ch, client, h)));
   app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
   app.get('/v1/campaigns', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.campaignBoard(ch, client, h)));

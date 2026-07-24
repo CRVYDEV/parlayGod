@@ -179,7 +179,30 @@ let gA, gB, bossA, bossB;
   r = await call('POST', '/v1/sov/canal/siege', { token: safe.token });
   assert.equal(r.body?.error, 'safe', `no siege from a safehouse: ${JSON.stringify(r.body)}`);
   delete process.env.SOV_SIEGE_P;
-  console.log('✓ sovereignty: build/upgrade/siege + sov points + per-attacker cooldown + safehouse gate');
+
+  // ── TIER-4 §A/§C — the 6-tier ladder + SOV INCOME (a held stronghold yields treasury tribute) ──
+  const inv0 = (await import('../src/invariants.js')).runLedgerInvariants;
+  // the canal Fort (built above, tier 1 Outpost) has accrued a day of income — pin its clock back 1 day
+  await pool.query(`UPDATE sov_structures SET income_at = now() - interval '1 day', upkeep_at = now() WHERE district_id='canal'`);
+  const cboard = (await call('GET', '/v1/sov', { token: boss.token })).body;
+  assert.equal(cboard.tiers.length, 6, 'the stronghold ladder grew to 6 tiers');
+  const cop = cboard.structures.find((s) => s.district === 'canal');
+  assert.equal(cop.incomePerDay, 8000, 'the Outpost yields $8k/day');
+  assert(cop.incomeOwed > 0, 'a day of tribute has accrued');
+  // §10.4: sov:income is a FAUCET that credits the treasury AND ledgers the row — net-zero to the
+  // gang-treasuries check, so the check's drift (from the test's SQL-seeded treasuries) must NOT MOVE.
+  const driftBefore = (await inv0(pool)).checks.find((c) => c.name === 'gang treasuries').drift;
+  const treBefore = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${g}'`)).rows[0].treasury);
+  r = await call('POST', '/v1/sov/collect', { token: boss.token });
+  assert.equal(r.code, 200, `collect sov income: ${JSON.stringify(r.body)}`);
+  assert(r.body.income >= 8000 - 100 && r.body.income <= 8000 + 100, `~one day's Outpost tribute banked (saw $${r.body.income})`);
+  assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${g}'`)).rows[0].treasury), treBefore + r.body.income, 'the tribute hit the treasury');
+  const driftAfter = (await inv0(pool)).checks.find((c) => c.name === 'gang treasuries').drift;
+  assert.equal(driftAfter, driftBefore, `sov:income is §10.4-neutral — the treasuries drift is unchanged (${driftBefore} → ${driftAfter})`);
+  // a crumbling stronghold earns nothing (pay the pad first)
+  await pool.query(`UPDATE sov_structures SET income_at = now() - interval '1 day', upkeep_at = now() - interval '5 days' WHERE district_id='canal'`);
+  assert.equal((await call('POST', '/v1/sov/collect', { token: boss.token })).body.income, 0, 'a crumbling stronghold draws no tribute');
+  console.log('✓ sovereignty: build/upgrade/siege + sov points + per-attacker cooldown + safehouse gate + TIER-4 (6-tier ladder, sov income faucet, crumbling earns nothing, §10.4 reconcile)');
 }
 
 // ═══ #4 CAMPAIGNS ═══
