@@ -602,23 +602,50 @@ function coachOf(ch, acct, owned) {
   if (ch.welsher) return { label: 'Your name is mud', hint: 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', tab: 'loans' };
   if (Number(ch.lc_crime || 0) < 1) return { label: 'Pull your first job', hint: 'Head to the Streets and run any crime — it\'s how everything starts. Then follow Start Here.', tab: 'streets' };
   if (lvl >= 5 && !ch.path) return { label: 'You\'ve made rank', hint: 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', tab: 'streets' };
-  if (!owned.gangId && lvl >= 3) return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
-  if (Number(ch.cash) > 25000 && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
+  // (harness F1) A rung that a player can DECLINE forever, or one that RE-ARMS every few minutes,
+  // must never sit above the one-time milestone rungs — it masks all of them permanently. The
+  // progression harness caught exactly that: a solo player who never joined a family was pinned on
+  // "Nobody survives alone" for a whole simulated week, so the earner/skills/Kitchen/legit/full-tank
+  // rungs below were unreachable. Same class as the First-Week bug in the note below. Both recurring
+  // nudges now sit at the BOTTOM of the ladder (see COACH_NUDGES), where they fill the quiet moments
+  // instead of blocking the ladder. The early band is kept: for a brand-new street, joining a family
+  // genuinely IS the next thing.
+  if (!owned.gangId && lvl >= 3 && lvl <= M3.COACH_FAMILY_BAND_LVL)
+    return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
   // (audit F1) Only the GAMEPLAY First-Week tasks gate the coach. The 3 socials + the wallet link are
   // OPTIONAL bonuses on Start Here — they throw `verify_unavailable` when SOCIAL_VERIFY_MODE is off
   // (the default), so counting them would pin the coach at "Finish your First Week" forever and mask
   // every mid-game rung below. Gate on the five completable gameplay tasks instead.
-  const obGameplay = ONBOARD_TASKS.filter((t) => !t.social && t.id !== 'ob_wallet');
+  // (harness F1b) `ob_family` belongs in the same exclusion: joining a family is DECLINABLE, so for a
+  // solo player it never completes and this rung would pin the coach exactly like the socials did —
+  // masking the whole mid-game ladder below. The task still exists and still pays on Start Here; it
+  // just can't be a gate. What's left is the four tasks any player can finish alone.
+  const obGameplay = ONBOARD_TASKS.filter((t) => !t.social && t.id !== 'ob_wallet' && t.id !== 'ob_family');
   if (obGameplay.some((t) => !onboard[t.id]))
     return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
   // the bridge into the deep game — a ladder of "what next" so the coach never goes silent mid-game
   const hasEarner = !!ch.lab || (owned.businesses || []).length || (owned.rackets || []).length
     || (owned.assets || []).length || (owned.fighters || []).length || !!owned.speakeasy;
   if (!hasEarner && lvl >= 3) return { label: 'Money while you sleep', hint: 'Buy a racket in The Empire — cheap passive income that pays while you\'re offline. Kitchens and fronts come later.', tab: 'empire' };
-  if (lvl >= 4 && !(owned.skills || []).length) return { label: 'You\'ve earned skill points', hint: 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', tab: 'life' };
+  // (harness F1c) `owned.skills` is a SET (loadOwned:159), so `.length` is undefined and `!undefined`
+  // is always true — this rung fired forever no matter how many skills you'd bought, masking the two
+  // rungs below it. Count the Set properly. (Every other collection here is a real array.)
+  const skillCount = owned.skills instanceof Set ? owned.skills.size : (owned.skills || []).length;
+  if (lvl >= 4 && !skillCount) return { label: 'You\'ve earned skill points', hint: 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', tab: 'life' };
   if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length) return { label: 'Cook up real money', hint: 'Set up a Kitchen — the drug trade is the deepest earner in the game.', tab: 'kitchen' };
   if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length) return { label: 'Time to go legit', hint: 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', tab: 'portfolio' };
-  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'You\'ve got energy to burn — go pull a job on the Streets, or try the Den, the Fights, or a heist crew.', tab: 'streets' };
+  // ── THE RECURRING NUDGES ── (COACH_NUDGES) Everything above is a ONE-TIME milestone that clears
+  // for good once done. These three never clear, so they live down here where they fill the quiet
+  // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable
+  // first, permanent LAST — otherwise the permanent one masks the actionable ones (a solo player
+  // would never be told to bank a fat pocket).
+  if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
+  // (harness) A street player runs on NERVE, never energy — the bar sits full ~94% of the time, so
+  // a full tank isn't idle capacity, it's UNSPENT ACCESS to the physical content. Name what spends
+  // it, or the bar reads as broken.
+  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'Crime runs on nerve — energy is what the PHYSICAL work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns. You\'ve got a full tank going unspent.', tab: 'streets' };
+  // the one a player can decline forever — so it sits at the very bottom, never masking anything
+  if (!owned.gangId && lvl >= 3) return { label: 'Still running solo', hint: 'You can play the whole game alone, but a family is turf, tribute, wars and backup — worth a look.', tab: 'family' };
   return null; // an established player who knows the ropes — no nag
 }
 

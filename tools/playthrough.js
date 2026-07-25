@@ -18,7 +18,7 @@
 // Run: node tools/playthrough.js            (default schedule)
 //      node tools/playthrough.js --days 14  (longer horizon)
 import { buildServer } from '../src/server.js';
-import { CRIMES, MISSIONS, GUNS, CONSTANTS, PACING } from '../src/rules.js';
+import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING } from '../src/rules.js';
 
 const argOf = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -101,7 +101,7 @@ let pathDeclared = false;
 async function tick(dayIdx) {
   const m = await me();
   const lvl = m.level;
-  if (levelAt[lvl] == null) levelAt[lvl] = { world: simMinutes, played: playedMin };
+  if (levelAt[lvl] == null) levelAt[lvl] = { world: simMinutes, played: playedMin, worth: m.cash + m.bank };
   pool_.ticks++; pool_.nerveSum += m.nerve; pool_.nerveCapSum += m.maxNerve;
   if (m.nerve >= m.maxNerve) pool_.nerveAtCap++;
   if (m.energy >= m.maxEnergy) pool_.enAtCap++;
@@ -287,6 +287,22 @@ for (const L of [2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50, 75, 100]) {
   const at = reached(L);
   if (at == null) { console.log(`  ${String(L).padStart(5)}      — not reached`); continue; }
   console.log(`  ${String(L).padStart(5)}      ${hhmm(at.played).padEnd(28)}  ${hhmm(at.world)}`);
+}
+
+// ── THE GATES ───────────────────────────────────────────────────────────────────────────────────
+// Is a level-gated purchase a real milestone when you arrive at its gate, or already pocket change?
+// A gate you can cover the moment you unlock it isn't pacing anything. Measured against net worth
+// (cash + bank) at the first minute the player was AT the gate's level.
+console.log('\nTHE GATES  (can you afford the front the moment you unlock it?)');
+console.log('  front         gate   entry cost      net worth at the gate    covers');
+for (const b of BUSINESSES) {
+  const at = reached(b.lvl);
+  const cost = b.tiers[0].cost;
+  if (at == null) { console.log(`  ${b.kind.padEnd(12)} lvl ${String(b.lvl).padStart(3)}   $${fmt(cost).padEnd(13)} — never reached`); continue; }
+  const pct = Math.round(at.worth / cost * 100);
+  const verdict = pct >= 100 ? 'ALREADY AFFORDABLE — the gate paces nothing'
+    : pct >= 60 ? 'a short save' : 'a real climb';
+  console.log(`  ${b.kind.padEnd(12)} lvl ${String(b.lvl).padStart(3)}   $${fmt(cost).padEnd(13)} $${fmt(at.worth).padEnd(22)} ${String(pct + '%').padStart(5)}  ${verdict}`);
 }
 
 console.log('\nMILESTONES');
