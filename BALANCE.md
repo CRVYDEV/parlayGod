@@ -2121,8 +2121,19 @@ killing residents and looting the body. Measured analytically in the sim (**P9.2
 **Verdict: not a farm.** A kill costs ~$82k in ammo (the D1 anchor), so looting a resident is
 **strongly −EV** — roughly the same conclusion the econ pass reached for player kills, and for the
 same reason: the kill economy is contract-driven, loot is the tip. A resident is scenery with a
-wallet, not a payday. Turnover is additionally bounded by `SPAWN_PER_TICK` (4), so the faucet can
-never be drained faster than the worker refills it.
+wallet, not a payday.
+
+**Correction (red-team, `AUDIT-population.md`).** This section previously claimed turnover was
+bounded by `SPAWN_PER_TICK` so *"the faucet can never be drained faster than the worker refills
+it."* **That was wrong.** The top-up refills **headcount, not cash** — a resident drained to $0
+stays alive and no replacement spawns. The seed pool is a **stock, not a flow**, so the honest
+figure is a **~$998k lifetime bound**, not a rate.
+
+Step two also changed how much of it is realizable. A kill leaks only 25% (the estate burns the
+rest); a **duel win, a fade win or a buy-order fill transfers the whole stake**. So step two added
+no faucet (no new reason, no new emission — that holds) but moved the existing one from
+~25%-realized to ~100%-realized. Against a $21.6M/day passive stack, still petty. The sim prints
+both figures every run.
 
 **Levers if it ever needs tightening:** `TARGET` (exposure), the per-band `seed` (payday),
 `SPAWN_PER_TICK` (turnover), `RETIRE_GENERATIONS` (caps `death:legacy` creep on long-lived lines).
@@ -2136,3 +2147,20 @@ never be drained faster than the worker refills it.
    people is not a call to make silently. Purely a presentation choice; trivially reversible.
 2. **Residents draw NO Street Wage**, even when enrolled and minted (`emission.js`). That one is not
    a lever — a resident drawing emission would be theft from the endowment.
+3. **OPEN — the city is a depleting resource.** Residents have no income, so once players drain the
+   seed pool the boards go quiet again: stakes stop clearing the floors, loan offers stop firing
+   below `LOAN.MIN`, orders stop. Step two lights the city up **once**. Making it renewable —
+   resident income, or retiring-and-respawning a *broke* resident rather than only an old bloodline
+   — converts a one-shot ~$998k into a **recurring faucet**, so it is a balance call, not a bug fix.
+   Dials: `POPULATION.TARGET`, the band seeds, and whether depletion triggers retirement. Note the
+   pool partly recycles unaided: `hireBodyguard` and loan repayment both pay cash *into* residents.
+
+**Consent-limit floors (red-team F1–F3, applied).** The three consent columns are written by direct
+SQL, which bypasses `offerBodyguard` / `listDuel` / `setFadeLimit` and every bound they enforce. Each
+is now gated by **its own system's constant** rather than a population-local floor, so those stay the
+single source of truth: `guard_price = max(M3.BODYGUARD_MIN_PRICE, 12% of cash)` (a guard price is
+income received, not a stake to cover — the old bps-only sizing sold a lethal-hit absorb for a few
+hundred dollars against a **signed $10,000** floor), `duel_limit` only when 9% of cash clears
+`DUELS.STAKE_MIN` (below it the ladder entry is an empty window — unchallengeable decoration), and
+`fade_limit` bounded by `CASINO.MIN_BET/MAX_BET`. Consequence: **fewer but legal listings** — the
+duelling ladder now needs a resident holding ≥ ~$11.1k, so it draws from the made band up.

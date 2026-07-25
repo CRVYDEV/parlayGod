@@ -5167,3 +5167,32 @@ reasons by which a resident can RECEIVE cash is exactly {npc:seed, death:legacy,
 market:refund}, i.e. nothing was conjured. Suite 47/47 + sim drift-0. All `POPULATION.BEHAVIOUR.*`
 numbers are founder sign-off levers. Still deferred: NPC families (Commission/turf untouched) and
 residents opening speakeasies or fielding fighters/racers.
+A focused four-lens red-team over both steps (`AUDIT-population.md`: §10.4/faucet, concurrency/locks,
+exploit/grief, cross-system) returned **no CRITICAL/HIGH and no §10.4 drift** — the seed/retire
+accounting (incl. the negative-delta corner band), the escrow mirroring, the ordinary-runEstate death
+path, the characters→leaf lock order and every exclusion verified sound — and closed **one class of
+defect with four faces**: the three consent columns are written by **direct SQL, which bypasses
+`offerBodyguard`/`listDuel`/`setFadeLimit` and every bound those routes enforce**. **F1 (MED)** —
+residents were selling a lethal-hit absorb for a few hundred dollars against `M3.BODYGUARD_MIN_PRICE`,
+a floor Phase 1.3 deliberately repriced 1000→**10000** for safehouse parity; that also exposed a
+category error in the build — a guard PRICE is income the resident *receives*, not a stake they must
+*cover*, so sizing it to holdings was wrong and left all but the richest ~3% unable to reach the floor
+at all (an empty protection market, the exact thing step two exists to fix) → now
+`max(BODYGUARD_MIN_PRICE, bps(cash, GUARD_BPS))`. **F2 (LOW-MED)** — a `duel_limit` under
+`DUELS.STAKE_MIN` sits inside an **empty window** (`amt >= STAKE_MIN && amt <= limit`), so a majority
+of the ladder was unchallengeable decoration → listed only when it clears the floor. **F3 (LOW)** —
+`fade_limit` now bounded by `CASINO.MIN_BET/MAX_BET`. **F4 (LOW)** — a drained resident's stale stake
+now triggers a relist instead of standing on the board answering only `their_cash`. **F5 (LOW,
+defensive)** — the secured-loan collateral floor was clamped down to `LOAN.COLLATERAL_MAX`, which
+would ship an UNDER-secured (free-money) NPC loan the moment the clamp bound; unreachable today, but
+`LOAN_COLLATERAL_MULT` is a founder lever, so the resident now simply doesn't lend rather than lend
+under-secured. Each limit is gated by **its own system's constant** so those stay the single source of
+truth. The audit also **corrected the sim's own P9.21 claim**: "the worker refills so it can't be
+drained faster than it's topped up" was WRONG — the top-up refills **headcount, not cash**, so the
+seed pool is a **stock, not a flow** (~$998k lifetime), and step two moved it from ~25%-realized (a
+kill burns the rest) to ~100%-realized (a duel/fade/order-fill transfers the whole stake) — still
+petty against the $21.6M/day passive stack, and no new faucet, but the honest figure now prints every
+run. Flagged for founder sign-off (NOT patched): **the city DEPLETES** — residents have no income, so
+once drained the boards go quiet again; making it renewable (resident income, or
+retire-and-respawn-on-broke) turns a one-shot ~$998k into a recurring faucet, which is a balance call.
+Suite 47/47 + sim drift-0.

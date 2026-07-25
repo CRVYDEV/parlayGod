@@ -24,7 +24,7 @@
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
-         LOAN, loanOwed, GOODS, BLACK_MARKET } from './rules.js';
+         LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -214,14 +214,38 @@ export async function residentAct(client, r) {
   // 1. CONSENT LIMITS — what they're willing to be challenged for. Pure column writes, zero value.
   //    This is what lights up the bodyguard market, the back-room fade board and the duel ladder:
   //    all three are consent-by-listing, so an empty alpha has nobody to play against without it.
-  if (r.guard_price == null || r.fade_limit == null || r.duel_limit == null) {
-    const guard = bps(cash, B.GUARD_BPS), fade = bps(cash, B.FADE_BPS), duel = bps(cash, B.DUEL_BPS);
-    if (guard >= B.LIMIT_MIN || fade >= B.LIMIT_MIN || duel >= B.LIMIT_MIN) {
-      await client.query(
-        'UPDATE characters SET guard_price=$2, fade_limit=$3, duel_limit=$4 WHERE id=$1',
-        [r.id, guard >= B.LIMIT_MIN ? guard : null, fade >= B.LIMIT_MIN ? fade : null, duel >= B.LIMIT_MIN ? duel : null]);
-      return 'listed';
-    }
+  //
+  //    (red-team F1–F3) Writing these columns by direct SQL bypasses offerBodyguard / listDuel /
+  //    setFadeLimit and every bound they enforce, so each limit is gated by ITS OWN system's floor
+  //    rather than a population-local one. That matters most for the bodyguard: the Phase-1.3
+  //    reprice set BODYGUARD_MIN_PRICE at $10,000 for safehouse parity, and an unfloored resident
+  //    would have sold the same one-bullet shield for a few hundred — undercutting a signed
+  //    Make-Risk-Pay lever by ~40×. A resident that can't reach a floor just doesn't offer that
+  //    service: a short honest board beats a long one full of listings nobody can act on (an
+  //    under-STAKE_MIN duel entry is literally unchallengeable — `amt >= STAKE_MIN && amt <= limit`
+  //    is an empty window).
+  //    A guard PRICE is income the resident RECEIVES, not a stake they have to cover — sizing it to
+  //    their holdings was a category error copied from the two stake columns, and it left all but
+  //    the richest few unable to reach the floor at all (an empty protection market, which is the
+  //    thing step two exists to fix). It's the floor, or more if they're worth more.
+  const duel = bps(cash, B.DUEL_BPS);
+  const want = {
+    guard: Math.max(M3.BODYGUARD_MIN_PRICE, bps(cash, B.GUARD_BPS)),
+    duel: duel >= DUELS.STAKE_MIN ? duel : null,
+    fade: Math.min(bps(cash, B.FADE_BPS), CASINO.MAX_BET) >= CASINO.MIN_BET
+      ? Math.min(bps(cash, B.FADE_BPS), CASINO.MAX_BET) : null,
+  };
+  // Relist when a stored limit has gone STALE — a drained resident whose advertised stake no longer
+  // covers is a listing that can only ever answer `their_cash`, which is the dead board step two
+  // exists to kill. (A guard PRICE needs no cover — it's income — so it only moves on a relist.)
+  const uncoverable = (r.fade_limit != null && Number(r.fade_limit) > cash)
+    || (r.duel_limit != null && Number(r.duel_limit) > cash);
+  const newlyAble = (r.guard_price == null && want.guard != null)
+    || (r.fade_limit == null && want.fade != null) || (r.duel_limit == null && want.duel != null);
+  if (uncoverable || newlyAble) {
+    await client.query('UPDATE characters SET guard_price=$2, fade_limit=$3, duel_limit=$4 WHERE id=$1',
+      [r.id, want.guard, want.fade, want.duel]);
+    return 'listed';
   }
 
   // 2. THE SHYLOCK — a SECURED offer. Residents never call collectLoan, so an unsecured NPC loan
@@ -234,8 +258,13 @@ export async function residentAct(client, r) {
     const principal = Math.max(LOAN.MIN, Math.min(LOAN.MAX, bps(cash, B.LOAN_BPS), spendable(cash)));
     const rate = Math.round(rnd(B.LOAN_RATE[0], B.LOAN_RATE[1]) * 100) / 100;
     const hours = rndInt(B.LOAN_HOURS[0], B.LOAN_HOURS[1]);
-    const collateral = Math.min(LOAN.COLLATERAL_MAX,
-      Math.floor(loanOwed(principal, rate) * B.LOAN_COLLATERAL_MULT));
+    // (red-team) The recourse guarantee IS the collateral floor, so never clamp it down to
+    // LOAN.COLLATERAL_MAX — that would quietly ship an UNDER-secured NPC loan, which is free money
+    // for a defaulter (a resident never calls collectLoan). Unreachable at today's numbers
+    // (LOAN.MAX × 1.5 vig × 1.3 = $1.95M < the $5M cap), but LOAN_COLLATERAL_MULT and the seed
+    // bands are founder levers — if one ever pushes past the cap the resident simply doesn't lend.
+    const collateral = Math.floor(loanOwed(principal, rate) * B.LOAN_COLLATERAL_MULT);
+    if (collateral > LOAN.COLLATERAL_MAX) return null;
     await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, principal]);
     await client.query(
       'INSERT INTO loans (id, lender_character, principal, rate, hours, status, collateral_min) VALUES ($1,$2,$3,$4,$5,$6,$7)',

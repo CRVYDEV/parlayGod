@@ -726,8 +726,17 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
     `${M3.CASH_LOOT_RATE * 100}% of pocket — the same loot surface as a player kill, and the SAME ammo cost applies`);
   note('population', 'faucet posture', perKill < 25000 ? 'petty vs the signed loops' : 'SIGN-OFF: material',
     'compare to the boxing exhibition / territory bands (~$300-400k/day); a resident is scenery with a wallet, not a payday');
-  note('population', 'turnover bound', `${POPULATION.SPAWN_PER_TICK}/tick`,
-    'the worker refills at most this many, so the faucet cannot be drained faster than it is topped up');
+  // (red-team) The earlier claim here — "the worker refills, so it can't be drained faster than it
+  // is topped up" — was WRONG, and in the direction that matters. The top-up refills HEADCOUNT, not
+  // cash: a resident drained to $0 stays alive and no replacement spawns. So the seed pool is a
+  // ONE-SHOT stock, not a flow. Step two also made far more of it realizable: a kill leaks only
+  // CASH_LOOT_RATE (the rest burns in the estate), but a duel/fade win or an order-fill transfers
+  // ~all of the stake. So the honest lifetime bound is the standing pool, extracted at ~100%
+  // rather than ~25%, refilled only as bloodlines actually turn over.
+  note('population', 'lifetime extraction bound', `~$${fmt(standing)}`,
+    'the seed pool is a STOCK, not a flow — the worker refills headcount, not wallets, so a drained resident just stands there broke');
+  note('population', 'realized share', 'step two: ~100% (was ~25%)',
+    `duel/fade/order-fill transfer the whole stake; only a KILL burns the remainder. Still petty next to the $${fmt(21600000)}/day passive stack — but see BALANCE.md: a drained city goes QUIET, which is the founder call (renewable resident income = a real recurring faucet)`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

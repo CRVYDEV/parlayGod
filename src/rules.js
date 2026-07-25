@@ -3539,10 +3539,16 @@ POPULATION.BEHAVIOUR = {
   KEEP_FLOOR: 0.35,         // never park more than (1 − this) of a resident's cash: they stay lootable and can back their limits
   // consent-by-listing: what a resident is willing to be challenged for. Sized to holdings so a
   // resident can always cover what they've advertised.
-  GUARD_BPS: 1200,          // bodyguard asking price, as bps of cash
-  FADE_BPS: 800,            // back-room dice fade limit
-  DUEL_BPS: 900,            // duelling-ladder stake limit
-  LIMIT_MIN: 250,           // below this a resident just doesn't advertise
+  //
+  // (red-team) There is deliberately NO population-owned floor here. These three columns are
+  // written by direct SQL, which bypasses offerBodyguard / listDuel / setFadeLimit — and with them
+  // every bound those routes enforce. So each limit is gated by ITS OWN system's constant
+  // (M3.BODYGUARD_MIN_PRICE, DUELS.STAKE_MIN, CASINO.MIN_BET/MAX_BET) and a resident that can't
+  // reach one simply doesn't offer that service. Those constants stay the single source of truth,
+  // so moving one moves the residents with it.
+  GUARD_BPS: 1200,          // bodyguard asking price, as bps of cash (floored at BODYGUARD_MIN_PRICE)
+  FADE_BPS: 800,            // back-room dice fade limit (bounded by CASINO.MIN_BET/MAX_BET)
+  DUEL_BPS: 900,            // duelling-ladder stake limit (floored at DUELS.STAKE_MIN)
   // the Shylock: residents lend SECURED only, so a defaulter forfeits a pledged car worth more than
   // the debt (the audited grace-forfeit sweep is the enforcement — an NPC never calls collectLoan).
   LOAN_BPS: 3000,           // principal as bps of cash
