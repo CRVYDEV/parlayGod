@@ -197,20 +197,22 @@ const CHECKS = {
 // buckets use the respect thresholds (levelOf = floor(sqrt(respect/4))+1: lvl5=respect 64, 10=324, 20=1444).
 export async function funnelStats(pool) {
   const one = async (q, p = []) => Number((await pool.query(q, p)).rows[0].n);
+  // THE POPULATION: the onboarding funnel measures REAL players moving through the first week —
+  // NPC residents would silently inflate every stage and make drop-off analysis meaningless.
   const characters = {
-    total: await one('SELECT COUNT(*) n FROM characters'),
-    alive: await one('SELECT COUNT(*) n FROM characters WHERE alive'),
-    dead: await one('SELECT COUNT(*) n FROM characters WHERE NOT alive'),
+    total: await one('SELECT COUNT(*) n FROM characters WHERE NOT is_npc'),
+    alive: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc'),
+    dead: await one('SELECT COUNT(*) n FROM characters WHERE NOT alive AND NOT is_npc'),
   };
   const levels = { // alive, by respect band
-    lvl_1_4: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect < 64'),
-    lvl_5_9: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 64 AND respect < 324'),
-    lvl_10_19: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 324 AND respect < 1444'),
-    lvl_20_plus: await one('SELECT COUNT(*) n FROM characters WHERE alive AND respect >= 1444'),
+    lvl_1_4: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND respect < 64'),
+    lvl_5_9: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND respect >= 64 AND respect < 324'),
+    lvl_10_19: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND respect >= 324 AND respect < 1444'),
+    lvl_20_plus: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND respect >= 1444'),
   };
   const progression = {
-    pulled_a_job: await one('SELECT COUNT(*) n FROM characters WHERE alive AND lc_crime > 0'),
-    declared_path: await one('SELECT COUNT(*) n FROM characters WHERE alive AND path IS NOT NULL'),
+    pulled_a_job: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND lc_crime > 0'),
+    declared_path: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND path IS NOT NULL'),
     in_a_family: await one('SELECT COUNT(DISTINCT character_id) n FROM gang_members'),
     linked_wallet: await one('SELECT COUNT(*) n FROM account_persistent WHERE wallet_address IS NOT NULL'),
   };
@@ -225,7 +227,7 @@ export async function funnelStats(pool) {
     if (p.capstone) capstone++;
   }
   // REFERRAL FUNNEL + viral coefficient (K) — how the organic loop is compounding
-  const accounts = await one('SELECT COUNT(*) n FROM account_persistent');
+  const accounts = await one('SELECT COUNT(*) n FROM account_persistent WHERE NOT npc_flag');
   const referral = {
     accounts,
     referred: await one('SELECT COUNT(*) n FROM account_persistent WHERE referred_by IS NOT NULL'), // came in on a code

@@ -30,6 +30,7 @@ import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
+import { runPopulation } from './population.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions, sweepConsignments } from './auction.js';
@@ -297,6 +298,13 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     const npcNew = await safe('npc convoy spawn', () => spawnNpcConvoys(pool));
     if ((npcGone?.despawned > 0) || (npcNew?.spawned > 0)) console.log(`🚚 convoy: NPC trucks −${npcGone?.despawned || 0} +${npcNew?.spawned || 0}`);
     await safe('convoy hauls sweep', () => sweepConvoyHauls(pool)); // Tier-4: drop stale Road-Boss/Teamster haul-log rows
+    // THE POPULATION: keep the city inhabited — top headcount up to TARGET and retire old bloodlines.
+    // Dormant when POPULATION_OFF is set (the deploy switch for a server with real players).
+    if ((process.env.POPULATION_OFF || 'off') !== 'on') {
+      const pop = await safe('population', () => runPopulation(pool));
+      if (pop && (pop.spawned > 0 || pop.retired > 0))
+        console.log(`🏙️  population: +${pop.spawned} −${pop.retired} residents (${pop.population} on the streets)`);
+    }
     // THE COMMISSION (step three): settle frozen-week proposals — the enacted motion refunds, the rest forfeit
     const cp = await safe('commission proposals', () => settleProposals(pool));
     if (cp && (cp.refunded || cp.forfeited)) console.log(`\u2696\ufe0f commission: settled proposals (${cp.refunded} refunded, ${cp.forfeited} forfeited)`);

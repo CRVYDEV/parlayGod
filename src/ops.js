@@ -11,16 +11,20 @@ export async function opsOverview(pool) {
   const row = async (q, p = []) => (await pool.query(q, p)).rows[0] || {};
   const rows = async (q, p = []) => (await pool.query(q, p)).rows;
 
+  // THE POPULATION: every player count EXCLUDES NPC residents — the founder is reading how many real
+  // people are in the game, and scenery in that number would be worse than useless. `residents` is
+  // reported separately so the city's headcount is still visible.
   const players = {
-    accounts: await one('SELECT COUNT(*) n FROM accounts'),
+    accounts: await one('SELECT COUNT(*) n FROM accounts WHERE auth_provider <> $1', ['npc']),
     banned: await one("SELECT COUNT(*) n FROM accounts WHERE status='banned'"),
-    total: await one('SELECT COUNT(*) n FROM characters'),
-    alive: await one('SELECT COUNT(*) n FROM characters WHERE alive'),
-    dead: await one('SELECT COUNT(*) n FROM characters WHERE NOT alive'),
-    active24h: await one("SELECT COUNT(*) n FROM characters WHERE alive AND last_accrued_at > now() - interval '24 hours'"),
+    total: await one('SELECT COUNT(*) n FROM characters WHERE NOT is_npc'),
+    alive: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc'),
+    dead: await one('SELECT COUNT(*) n FROM characters WHERE NOT alive AND NOT is_npc'),
+    active24h: await one("SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND last_accrued_at > now() - interval '24 hours'"),
     agents: await one('SELECT COUNT(*) n FROM account_persistent WHERE agent_flag'),
-    jailed: await one('SELECT COUNT(*) n FROM characters WHERE alive AND jail_until > now()'),
-    indicted: await one('SELECT COUNT(*) n FROM characters WHERE alive AND indicted_at IS NOT NULL'),
+    residents: await one('SELECT COUNT(*) n FROM characters WHERE alive AND is_npc'),
+    jailed: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND jail_until > now()'),
+    indicted: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND indicted_at IS NOT NULL'),
   };
 
   const amm = await row('SELECT cash_reserve, omr_reserve FROM amm_pool WHERE id=1');
