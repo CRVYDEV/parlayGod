@@ -889,7 +889,28 @@
 
   // ── plumbing ──
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+  // ONE AUTHED REQUEST AT A TIME. Every authed call runs through withCharacter, which takes an
+  // EXCLUSIVE row lock on your character (`SELECT … FOR UPDATE`) — because even a read does lazy
+  // accrual and persists. So same-account requests serialize at the DATABASE whether or not the
+  // browser fires them together, and firing them together is strictly worse: each one occupies a
+  // pooled connection while it waits its turn.
+  //
+  // Seen in production 2026-07-25: four of one player's requests queued on the same character row,
+  // waiting 1.0s, 2.1s, 2.3s and 4.3s. Nothing was broken — that is the lock working — but the
+  // browser had converted "a few quick reads" into "a four-deep queue holding four connections",
+  // and with a handful of players doing that the pool (PG_POOL_MAX) is what runs out.
+  //
+  // Queueing here instead costs nothing (the total wait is identical) and holds no connections.
+  // KEYLESS calls stay parallel — /v1/rules, /v1/city, /v1/online take no lock and needn't wait.
+  let _authQueue = Promise.resolve();
   async function api(method, path, body) {
+    if (!token) return apiNow(method, path, body);
+    const mine = _authQueue.then(() => apiNow(method, path, body));
+    // the chain must survive a rejection, or one failed call wedges every later one
+    _authQueue = mine.catch(() => {});
+    return mine;
+  }
+  async function apiNow(method, path, body) {
     // content-type only when a body rides along — Fastify 400s an empty JSON-typed body.
     // a fresh Idempotency-Key on every mutation lets the server dedup a retried write (belt to the
     // in-flight lock's braces — a network layer that re-sends the request won't double-spend).

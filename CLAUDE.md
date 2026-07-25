@@ -5310,3 +5310,22 @@ while a still-broken one doesn't re-nag hourly; **`/admin`** leads with a Backup
 banner above the §10.4 one (browser-verified in both alarm states, zero page errors); `npm run backup`
 wraps the verified dump. §10.4 untouched — read-only, moves no value. DEPLOY.md §7c documents the
 five states, the webhook requirement, and the `pg_stat_archiver` query for checking by hand.
+
+**ONE AUTHED REQUEST AT A TIME (client) — 2026-07-25, found in the founder's production logs.** The
+same log that finally named the archiving root cause (`[103] … Temporary failure in name resolution`
+— DNS to the pgbackrest repo host, the *cause* behind the earlier exit-82 timeouts) also showed
+FOUR of one player's requests queued on that player's own character row: `SELECT * FROM characters
+WHERE account_id=$1 AND alive FOR UPDATE`, waits of 1.0s/2.1s/2.3s/4.3s, sessions 15–24s. Nothing was
+broken — that is `withCharacter`'s lock working — but EVERY authed request takes it (even a read: the
+§7.1 lazy accrual persists), so same-account calls serialize at the DATABASE whether or not the
+browser fires them together, and firing them together is strictly worse: each waits holding a pooled
+connection, and `PG_POOL_MAX` is what runs out first. `api()` now queues authed calls on a promise
+chain (the chain `.catch()`es so one failure can't wedge it); KEYLESS calls (`/v1/rules`, `/v1/city`,
+`/v1/online`) stay parallel since they take no lock. **Measured in a real browser over a 10-tab sweep
+with refresh+renderActive forced: peak authed in-flight 6 → 1 across 65 requests, zero page errors**
+(the before-number taken by stashing the fix and re-running, so the improvement is measured rather
+than assumed). Total latency is unchanged — the wait just moves from the database to the browser,
+where it costs no connection. Deeper fix NOT taken (flagged): read endpoints could accrue in memory
+without persisting and skip the exclusive lock entirely, but that touches the most heavily-audited
+function in the codebase and was not worth doing reactively at speed.
+
