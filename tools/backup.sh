@@ -58,6 +58,17 @@ MIN_TABLES="${BACKUP_MIN_TABLES:-40}"
 for t in accounts characters transactions; do
   echo "$TOC" | grep -q "TABLE DATA public $t " || {
     echo "BACKUP FAILED: '$t' is missing from the dump — this is not a usable backup of OMERTÀ." >&2
+    # Say enough that the cause is readable from the log alone. "A table is missing" has two very
+    # different causes — the dump is of the wrong/half-built database, or this pg_dump writes a TOC
+    # this grep does not match — and they are indistinguishable without seeing the actual entries.
+    echo "  $TABLES TABLE DATA entries; pg_dump $(pg_dump --version 2>/dev/null | awk '{print $3}'), pg_restore $(pg_restore --version 2>/dev/null | awk '{print $3}')" >&2
+    # Every entry naming it — NOT just the TABLE DATA ones. "TABLE public $t" present while
+    # "TABLE DATA public $t" is absent means the table shipped without its rows, which is a very
+    # different fault from the table being absent altogether.
+    echo "  every TOC entry naming '$t':" >&2
+    { echo "$TOC" | grep -- "$t" | head -6 | sed 's/^/    /'; } >&2
+    echo "  a sample of what IS in the dump:" >&2
+    { echo "$TOC" | grep 'TABLE DATA' | head -3 | sed 's/^/    /'; } >&2
     exit 1
   }
 done
