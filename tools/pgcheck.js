@@ -197,7 +197,37 @@ console.log('\n4. THE ROW LOCK ACTUALLY SERIALIZES (no lost update)');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n5. §10.4 HOLDS on real Postgres');
+console.log('\n5. A REFUSED ACTION LEAVES NO TRACE');
+// **pg-mem's ROLLBACK is a no-op.** Measured: BEGIN, INSERT, ROLLBACK, and the row is still there.
+// So every "the action was refused, therefore nothing changed" assertion across all 47 suites is
+// vacuous — they pass whether or not the transaction actually unwinds. That is not a small gap: the
+// entire economy rests on one-transaction-per-action, and until this check existed, nothing anywhere
+// verified that an action which throws mid-flight takes its partial writes with it.
+{
+  const cid = (await call('GET', '/v1/me', { token })).body.character.id;
+  const rows = async (t) => Number((await pool.query(`SELECT COUNT(*) n FROM ${t} WHERE character_id=$1`, [cid])).rows[0].n);
+  const cashOf = async () => Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [cid])).rows[0].cash);
+
+  // Jail them, then attempt a crime. The gate throws AFTER §7.1 accrual has already run and written
+  // its ledger rows inside the same transaction — so if the rollback were not real, those rows (and
+  // any partial mutation) would survive a refusal.
+  await pool.query(`UPDATE characters SET jail_until = now() + interval '10 minutes',
+    last_accrued_at = now() - interval '6 hours' WHERE id=$1`, [cid]);
+  const [txBefore, cashBefore] = [await rows('transactions'), await cashOf()];
+  const refused = await call('POST', '/v1/crimes/pick', { token });
+  check(refused.code === 400, 'a jailed crime is refused', `${refused.code} ${JSON.stringify(refused.body)}`);
+  check(await rows('transactions') === txBefore, 'the refusal wrote no ledger rows',
+    `${await rows('transactions')} vs ${txBefore}`);
+  check(await cashOf() === cashBefore, 'the refusal moved no money', `${await cashOf()} vs ${cashBefore}`);
+
+  // and the clock did not advance either — the accrual is deferred, not consumed
+  const stale = (await pool.query(
+    "SELECT last_accrued_at < now() - interval '5 hours' old FROM characters WHERE id=$1", [cid])).rows[0].old;
+  check(stale === true, 'the accrual clock is untouched, so the window is re-accrued on the next touch');
+  await pool.query('UPDATE characters SET jail_until=NULL WHERE id=$1', [cid]);
+}
+
+console.log('\n6. §10.4 HOLDS on real Postgres');
 // The suites prove this on pg-mem, where NUMERIC is JavaScript arithmetic. Real Postgres uses true
 // arbitrary-precision NUMERIC with different rounding — so the conservation identities deserve to be
 // re-asserted on the engine that actually stores the money.
@@ -210,7 +240,7 @@ console.log('\n5. §10.4 HOLDS on real Postgres');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n6. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
+console.log('\n7. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
 // Boot applies schema.sql then a derived ADD COLUMN IF NOT EXISTS pass. A second boot against the
 // SAME database must be a clean no-op — that is what makes deploying a new build to a live database
 // safe. pg-mem always starts empty, so it can never exercise the second boot.
@@ -223,7 +253,7 @@ console.log('\n6. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n7. NO node-pg DEPRECATIONS');
+console.log('\n8. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land
 check(deprecations.length === 0, 'no deprecated driver usage',
