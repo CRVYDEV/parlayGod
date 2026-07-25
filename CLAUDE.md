@@ -5329,3 +5329,33 @@ where it costs no connection. Deeper fix NOT taken (flagged): read endpoints cou
 without persisting and skip the exclusive lock entirely, but that touches the most heavily-audited
 function in the codebase and was not worth doing reactively at speed.
 
+
+**POSTGRES SAFETY VALVES + the lock-free read path INVESTIGATED AND REJECTED (2026-07-25).** The
+founder asked for the correct long-term fix to the read-lock contention. Two outcomes, both worth
+recording. **SHIPPED — the safety valves** (`db.js`): the pool now sets `statement_timeout` (15s),
+`lock_timeout` (8s) and `idle_in_transaction_session_timeout` (30s) server-side, plus
+`connectionTimeoutMillis`/`idleTimeoutMillis`. Nothing may wait forever: no query outlives its
+timeout, a request waiting on a busy row GIVES UP instead of queueing behind it indefinitely, and a
+transaction leaked by a crashed handler is killed rather than holding its row locks until the pool
+recycles (which for a player means a permanently frozen character). `55P03` (lock_timeout) joined
+`deadlockToRetry` alongside 40P01/23505 — to a caller it is the same thing: transient, nothing
+committed, safe to retry, never a 500. Verified against real Postgres: the settings reach the server
+(`current_setting` confirms 15s/2s/30s under an override) and a blocked lock gave up after 2002ms
+with 55P03 instead of hanging. All five knobs classified in `preflight.js` (the env-drift guard
+caught them itself). **REJECTED — routing the 24 pure-read GET routes through a lock-free
+`withCharacterRead`.** It was built and it very nearly worked: `accrue()` is verifiably pure (zero
+writes in accrual.js) and idempotent from unchanged clocks, and all 22 board handlers were checked
+mechanically to be side-effect free, so a read genuinely can show accrued income truthfully while
+writing nothing. Two problems surfaced, the second fatal. (1) Reads rolled the §7.1 Bureau raid and
+discarded it — a PHANTOM raid the player sees then refreshes away; fixable with a `ctx.preview` flag
+that skips non-deterministic accrual. (2) **THE KILLER: with reads no longer persisting, a raid can
+only fire during an ACTION — and the raid sets `jail_until`, so that same action's own jail gate
+throws `GameError`, which ROLLBACKs the transaction and undoes the raid that just rolled.** The
+Bureau becomes unreachable. The old design worked only because reads (whose `fn` is `async () =>
+({})` and never throws) were doing the persisting. Making this correct requires accrual side-effects
+to survive a failed action — i.e. restructuring the accrual-vs-action transaction boundary in the
+most heavily audited function in the codebase. That is a designed change, not a same-night patch, so
+the read path was reverted whole. The production symptom it targeted is already addressed by the
+client-side serialization (measured peak 6 → 1). **If it is picked up again**, the shape is: keep
+`withCharacterRead` + `ctx.preview`, and give `withCharacter` a two-phase commit where accrual's
+side-effects (raid, income, interest) commit even when `fn` rejects — then the read path is safe.

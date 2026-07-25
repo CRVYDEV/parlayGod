@@ -83,7 +83,31 @@ export async function makeDb() {
     // a pooled connection while it runs — so a burst of concurrent requests from one account can pin the
     // whole pool and starve every other account. Raise the headroom (env-tunable); paired with the
     // per-account read throttle in the server preHandler, this bounds the connection-flood.
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 20) });
+    // NOTHING MAY WAIT FOREVER. Without these, one pathological query or one leaked transaction
+    // holds a pooled connection — and a character row lock — until someone notices, which for a
+    // player means their character is simply frozen. Postgres enforces all three server-side, so
+    // they hold even if the Node process stops paying attention.
+    //
+    //   statement_timeout                     no single query outlives this
+    //   lock_timeout                          a request waiting on a locked row gives up and says so,
+    //                                         rather than queueing behind it indefinitely. Surfaces as
+    //                                         55P03, which maps to the retryable `contention` error.
+    //   idle_in_transaction_session_timeout   a transaction left open by a crashed handler is killed
+    //                                         instead of holding its row locks until the pool recycles
+    const timeouts = [
+      `statement_timeout=${Number(process.env.PG_STATEMENT_TIMEOUT_MS || 15000)}`,
+      `lock_timeout=${Number(process.env.PG_LOCK_TIMEOUT_MS || 8000)}`,
+      `idle_in_transaction_session_timeout=${Number(process.env.PG_IDLE_TX_TIMEOUT_MS || 30000)}`,
+    ].join(' -c ');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.PG_POOL_MAX || 20),
+      // fail fast when the pool is exhausted: a request that cannot get a connection in 10s should
+      // return a clean 503 rather than pile onto a queue that is already the problem
+      connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS || 10000),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30000),
+      options: `-c ${timeouts}`,
+    });
     // THE PROCESS MUST SURVIVE THE DATABASE RESTARTING. node-pg emits 'error' on the Pool when an IDLE
     // pooled connection dies — a Postgres restart, a failover, an idle-timeout reaper, a network blip.
     // An EventEmitter with no 'error' listener THROWS, and an uncaught exception kills Node. So without

@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
+import { deadlockToRetry as G_deadlockToRetry } from '../src/game.js';
 
 // audit (process): the two codices (canonical docs/WIKI.md + served public/wiki.html) drifted — a
 // system landed in one but not the other. This drift-detector fails if a system this audit re-synced
@@ -693,6 +694,16 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const dbSrc = readFileSync(new URL('../src/db.js', import.meta.url), 'utf8');
   assert(/pool\.on\(\s*['"]error['"]/.test(dbSrc),
     "src/db.js must attach a pool 'error' handler — without it a database restart kills the process");
+}
+
+// ── TRANSIENT CONTENTION IS RETRYABLE, A REAL BUG IS NOT ──
+// The pool now sets lock_timeout, so a request that waits out a busy row surfaces 55P03 rather than
+// queueing on it indefinitely. To a caller that is the same thing as a deadlock: transient, nothing
+// committed, safe to retry — so it gets the same clean error rather than a 500.
+{
+  const lockTimeout = Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
+  assert.equal(G_deadlockToRetry(lockTimeout).code, 'contention', 'lock_timeout maps to a clean retryable error');
+  assert.equal(G_deadlockToRetry(new TypeError('boom')).constructor, TypeError, 'a real bug is not laundered into contention');
 }
 
 // ── ARE THE BACKUPS RUNNING? — the health the game could not see about itself ──

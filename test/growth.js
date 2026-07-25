@@ -139,10 +139,15 @@ const stashBefore = me.stash.find((s) => s.drug === 'vim')?.qty || 0;
 assert(stashBefore > 0, 'product on the shelf for the crew');
 const cashBefore = me.cash;
 await seedCh(chef.id, "last_accrued_at = now() - interval '30 minutes', heat=0");
+// A READ shows the accrued result truthfully but persists nothing (withCharacterRead — reads stopped
+// taking the write lock). Any WRITE banks it. Assert both: the projection, then the ledgered fact.
 me = await meOf(chef.token);
 const stashAfter = me.stash.find((s) => s.drug === 'vim')?.qty || 0;
-assert(stashAfter < stashBefore, 'crew moved product while offline');
-assert(me.cash > cashBefore, 'crew sales paid');
+assert(stashAfter < stashBefore, 'crew moved product while offline (the view shows it)');
+assert(me.cash > cashBefore, 'crew sales paid (the view shows it)');
+const where = (await pool.query('SELECT loc FROM characters WHERE id=$1', [chef.id])).rows[0].loc;
+await seedCh(chef.id, "cash=50000, jail_until=NULL");
+await call('POST', `/v1/travel/${where === 'docks' ? 'neon' : 'docks'}`, { token: chef.token });
 const crewLedger = await pool.query(`SELECT COUNT(*) n FROM transactions WHERE reason='crew:sales' AND character_id='${chef.id}'`);
 assert(Number(crewLedger.rows[0].n) >= 1, 'crew sales ledgered');
 
