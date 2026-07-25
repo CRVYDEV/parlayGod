@@ -8,6 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
+import { pingDb } from './dbhealth.js';
 import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
@@ -242,7 +243,23 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // above all the nightly §10.4 drift monitor (a non-technical founder relies on that alarm).
   // Isolate every job in its own try/catch so a poison row can't take the whole tick down.
   const safe = async (label, fn) => { try { return await fn(); } catch (e) { console.error(`worker: ${label} failed`, e); return null; } };
+  // How many consecutive ticks have found the database unreachable — used only to keep the log honest
+  // (say it once, then say how long it has been going on) rather than to change what we do about it.
+  let dbDownTicks = 0;
   const tick = async () => {
+    // A tick fans out to ~60 independent jobs. `safe()` isolates them so one poison row cannot starve
+    // the §10.4 drift monitor — but when the DATABASE is what is unreachable, every one of those 60
+    // fails identically and dumps a stack trace, so an outage buries its own cause under a wall of
+    // noise. That is precisely what made 2026-07-25 hard to read. Check reachability once up front and,
+    // if the database is gone, say so in ONE line and come back next tick. Nothing here is urgent to
+    // the minute; every sweep is idempotent and catches up on the next run.
+    const health = await pingDb(pool);
+    if (!health.ok) {
+      dbDownTicks++;
+      console.error(`worker: database unreachable (${health.error}) — skipping this tick; ${dbDownTicks} tick(s) so far`);
+      return;
+    }
+    if (dbDownTicks) { console.log(`worker: database back after ${dbDownTicks} skipped tick(s) — resuming`); dbDownTicks = 0; }
     const r = await safe('buyback', () => runBuyback(pool));
     if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
     const s = await safe('season rollover', () => runSeasonRollover(pool));

@@ -5243,3 +5243,49 @@ duplicated the query inline) — ops now uses the helper. Flagged as accepted-by
 draining a cheap corner resident forces a replacement drawn from the full band distribution (E $20,798 vs
 their ~$700), so cheap drains convert into richer targets; the player receives nothing directly and total
 extraction stays bounded by `PER_DAY × mean seed`, but the ceiling is the only thing bounding it.
+
+**SURVIVING A DATABASE OUTAGE — the crash, the legibility, and the verified backup (2026-07-25).**
+The founder reported "omerta-db is down and I don't know", and a tester reported "Internal error on
+every crime". Investigating both turned up ONE severe defect and a class of illegibility around it.
+**THE DEFECT (the important part): the API process DIED every time Postgres restarted.** `pg.Pool`
+emits `'error'` when an IDLE pooled connection drops (a DB restart, a failover, an idle reaper), and
+an EventEmitter with no `'error'` listener THROWS — an uncaught exception that kills Node. `makeDb()`
+never attached one. So a database bounce did not degrade the server, it killed it; on a platform that
+auto-restarts, the visible symptom is exactly "every button returns Internal for a while", which is
+very likely what the tester actually hit (the crime path itself was proven fine by curl, a real
+Chromium click, and real Postgres). Found by stopping a real Postgres under a running server —
+**pg-mem cannot surface this class at all**, so no suite would ever have caught it. Fixed with a
+`pool.on('error')` handler in `db.js` (log + carry on; node-pg discards the dead connection and the
+next request opens a fresh one, so recovery is automatic and needs no redeploy). `test/hardening.js`
+carries a SOURCE-LEVEL tripwire for it, honestly labelled as such, since pg-mem can't reach the path.
+**THE LEGIBILITY (why nobody could tell what was happening):** every DB problem surfaced as
+`500 {"error":"internal"}` — byte-identical to a null-dereference, so an outage and a bug were
+indistinguishable. New `src/dbhealth.js` classifies connectivity failures (`isDbDown` — SQLSTATE 08*/
+57P0*/53300, errnos, `syscall==='connect'` which is what catches a stopped unix-socket Postgres's
+ENOENT, aggregate connect errors, and message fallbacks) and `pingDb` (bounded by a timeout, since a
+pinned pool would otherwise hang the health check itself). The classifier is deliberately CONSERVATIVE:
+laundering a real bug into "try again shortly" would hide it, so anything not clearly connectivity
+stays a 500 — the test pins BOTH directions. Wired up: the error handler returns **503 `db_down`** with
+Retry-After; **`GET /health`** answers "is it up?" keyless for a human or an uptime monitor (200/503 +
+latency + uptime); the **worker** pings once per tick and skips with ONE line instead of ~60 stack
+traces from `safe()`-isolated jobs (every sweep is idempotent, so skipping loses nothing); the
+**console** maps `db_down` and a new `offline` to plain English — `api()` now catches a REJECTED
+fetch (server entirely gone), which previously escaped `act()` (no catch) as an unhandled rejection so
+the button silently did nothing. Verified end-to-end in Chromium against a real Postgres across all
+three states (up → success; DB stopped → "the city's records are unreachable…"; server killed →
+"couldn't reach the city…"), zero page errors. **THE BACKUP:** the incident's root cause was a SILENT
+failure of managed WAL archiving (pgbackrest `archive-push` exit 82, retried ~11 min, everything
+looking healthy), and `tools/backup.sh` had the same shape of flaw — `pg_dump > "$OUT"` wrote straight
+to the final filename (a half-finished dump left a plausible-looking corpse) and nothing ever read a
+dump back. Now it dumps to a temp name, VERIFIES, and only then moves it into place; retention runs
+only after a good dump so bad nights can't age out the last known-good backup. The verification that
+matters most is **actual rows**: measured, a schema-only database dumps to 161 table entries and
+~194 KB, clearing the table count and any sane size floor while holding not one account — so only
+reading the data section back proves there is data in there (`BACKUP_MIN_ROWS=0` for a genuinely cold
+DB). 29 assertions against a real Postgres 16 (happy path, empty DB, schema-only DB, truncated dump via
+a stub `pg_dump`, size floor, missing tables, unreachable DB, no `.part` left on any failure path,
+retention holding fire after a failure); two of them caught defects in the change before it shipped —
+a missing `pg_restore -f -` that would have failed EVERY backup, and the schema-only hole above.
+DEPLOY.md §7b/§7c document what an outage looks like, the uptime-monitor recommendation (and the
+warning NOT to make `/health` the platform's own health check — restarting the API doesn't fix a
+database, it just adds a restart loop). §10.4 untouched throughout — nothing here moves value.

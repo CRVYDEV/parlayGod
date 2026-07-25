@@ -743,6 +743,11 @@
     self: "you can't do that to yourself", family: "omertà — you can't move on your own family", dry: "the pool's dry — check back after the next buyback",
     nothing: "nothing to collect", no_contracts: "no contracts on your head", maxed: "you're already at the cap", spent: "already used up",
     once: "one shot only — you've taken it", not_due: "that isn't due yet", too_soon: "not yet — the clock's still running", cooldown: "still on cooldown",
+    // The city is up, its records room isn't. Distinct from `internal` on purpose: this one is not your
+    // fault, nothing you did was lost, and it will fix itself — so say that instead of "Internal".
+    db_down: "the city's records are unreachable right now — nothing you did was lost. Try again in a minute.",
+    offline: "couldn't reach the city — check your connection, or it's restarting. Nothing you did was lost.",
+    internal: "something broke on our end — that's a bug, not you. Try again; if it keeps happening, say so.",
   };
   function describe(body, code) {
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
@@ -889,11 +894,21 @@
     // a fresh Idempotency-Key on every mutation lets the server dedup a retried write (belt to the
     // in-flight lock's braces — a network layer that re-sends the request won't double-spend).
     const mutating = method !== 'GET';
-    const r = await fetch(path, { method,
-      headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(mutating ? { 'Idempotency-Key': uuid() } : {}),
-        ...(token ? { authorization: 'Bearer ' + token } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body) });
+    let r;
+    try {
+      r = await fetch(path, { method,
+        headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(mutating ? { 'Idempotency-Key': uuid() } : {}),
+          ...(token ? { authorization: 'Bearer ' + token } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body) });
+    } catch {
+      // The request never REACHED a server — the box is down, the deploy is restarting, the phone lost
+      // signal. fetch REJECTS here rather than returning a response, and act() has no catch, so this
+      // used to escape as an unhandled rejection: the button simply did nothing, no toast, no clue.
+      // Hand back a synthetic 503 so every existing `code >= 400` branch behaves and the player is told.
+      // (503 ≠ the server's own `db_down`: that one means the server answered and its database is gone.)
+      return { code: 503, body: { error: 'offline' } };
+    }
     let j = null; try { j = await r.json(); } catch { j = { raw: await r.text?.() }; }
     // NOTE: api() no longer writes the "Last Word" viewer — background reads (refresh, tab renders,
     // the 30s poll) all call api() and would clobber it with a GET /v1/me dump after every action.
