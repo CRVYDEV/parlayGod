@@ -165,12 +165,26 @@ an action, the raid sets `jail_until`, that action's own jail gate throws, and t
 raid. Completing it requires accrual's side-effects to survive a failed action — a two-phase commit
 inside `withCharacter`. **This is the single highest-value piece of remaining work.**
 
-### D2 — pg-mem / Postgres divergence **(HIGH, partially addressed)**
+### D2 — pg-mem / Postgres divergence **(HIGH → ADDRESSED)**
 All 48 suites run on pg-mem; production runs node-pg against Postgres. This class is not theoretical:
-tonight it produced a crash on every database restart (unhandled pool `'error'`) and a deprecated
+it produced a crash on every database restart (unhandled pool `'error'`) and a deprecated
 `Promise.all` on a single pooled client. 37 modules carry pg-mem workaround comments (INT arithmetic,
-correlated subqueries, no `random()`). `tools/pgcheck.js` exists but **is not wired into `npm test`**,
-so nothing forces it to run.
+correlated subqueries, no `random()`).
+
+`tools/pgcheck.js` now runs automatically — `.github/workflows/ci.yml` boots the real server against a
+Postgres 16 service container on every push and PR, alongside `npm test` and the sim. It asserts 19
+properties pg-mem cannot express: the connection safety valves actually reach the server and a blocked
+lock aborts on the pool's *own* `lock_timeout`, the process survives its backends being killed, the
+core loop and every board read stay off 500, concurrent same-row writes serialize with no lost update,
+§10.4 holds on real Postgres, the schema re-applies in place, and node-pg emits no deprecations.
+
+Each check is mutation-verified: removing `pool.on('error')` from `db.js` reproduces the production
+crash and the run exits non-zero; removing the connection `options` fails the three timeout checks.
+The blocked-lock probe refuses to run at all when `lock_timeout` is 0 rather than queue forever — a
+hung CI job is a worse signal than a failed one.
+
+Residual: the divergence itself remains (the suites are still pg-mem, and that is the right trade for
+their speed). CI narrows the blast radius; it does not close the gap.
 
 ### D3 — `server.js` is 2,396 lines registering 491 routes **(MEDIUM)**
 One file wires every route. It works and is consistently structured, but it is the natural next split
@@ -246,7 +260,7 @@ onboarding docs — not for retyping 55,000 lines.
 
 ## 6. Recommended sequence
 
-1. **Wire `pgcheck` into CI** (D2). Hours. Nothing else on this list prevents a repeat of tonight.
+1. ~~**Wire `pgcheck` into CI** (D2).~~ **DONE** — `.github/workflows/ci.yml`.
 2. **Finish the lock-free read path** (D1). Days. Two-phase commit in `withCharacter` so accrual
    survives a failed action, then reads stop taking write locks. Highest architectural payoff.
 3. **Split `rules.js`** into generated + tail (D5). Hours. Makes ground rule #2 mechanically enforceable.

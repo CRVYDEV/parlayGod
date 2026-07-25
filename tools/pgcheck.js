@@ -1,17 +1,22 @@
-// Drive the core loop against a REAL Postgres and fail on anything pg-mem cannot see.
+// THE REAL-POSTGRES GATE — everything the pg-mem suites are structurally blind to.
 //
-// WHY THIS EXISTS. All 48 suites run on pg-mem. That has caught a lot (the INT-arithmetic quirk, the
-// correlated-subquery gap, the missing `random()`), but it is by construction blind to node-pg's own
-// contract — and a real deploy runs node-pg. A tester reporting "Internal on every crime" is exactly
-// the shape of a bug that reproduces on Postgres and nowhere else, and chasing it turned up a live
-// one: `loadOwned` issued 16 overlapping queries on a single pooled client, which node-pg deprecates
-// and removes in pg@9.
+// All 48 suites run on pg-mem. That has earned its keep (it caught the INT-arithmetic quirk, the
+// correlated-subquery gap, the missing random()), but it is by construction blind to node-pg's own
+// contract and to Postgres's real concurrency — and production runs both. On 2026-07-25 that blind
+// spot produced, in one night:
 //
-// So: boot the real server against real Postgres, walk the loop a player actually walks, and treat
-// ANY pg deprecation warning as a failure. Exits non-zero so it drops into CI.
+//   • the API process DYING on every database restart (an unhandled Pool 'error' event)
+//   • `loadOwned` issuing 16 overlapping queries on one pooled client (deprecated; removed in pg@9)
+//
+// Neither was reachable from any pg-mem test. A tester reporting "Internal on every crime" was the
+// only signal, and it pointed at the wrong file.
+//
+// So: boot the real server against real Postgres and assert the things only real Postgres can show.
+// Each block below exists because of a specific bug or a specific property that cannot be faked.
+// Exits non-zero, so CI fails on regression.
 //
 //   createdb omerta_check
-//   DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=y \
+//   DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
 //     MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off node tools/pgcheck.js
 import crypto from 'node:crypto';
 
@@ -20,13 +25,26 @@ if (!process.env.DATABASE_URL) {
   process.exit(2);
 }
 
-// a pg deprecation is a FAILURE here, not a log line: it means we are using the driver in a way the
-// next major removes, and pg-mem will never tell us
+// The throttle switches itself on whenever DATABASE_URL is set — correct for production, but it
+// answers 429 before a request ever reaches the row lock, which is the one thing section 4 exists to
+// measure. The buckets themselves are covered by the pg-mem suites; here they would only hide things.
+process.env.RATE_LIMIT = 'off';
+
+const fails = [];
+const pass = [];
+const check = (ok, label, detail = '') => {
+  if (ok) { pass.push(label); console.log(`  ✓ ${label}`); }
+  else { fails.push(`${label}${detail ? ` — ${detail}` : ''}`); console.error(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`); }
+};
+
+// A pg deprecation is a FAILURE here, not a log line: it means we are using the driver in a way the
+// next major removes, and pg-mem will never tell us.
 const deprecations = [];
 process.on('warning', (w) => { if (/pg|client\.query/i.test(w.message)) deprecations.push(w.message); });
 
 const { buildServer } = await import('../src/server.js');
 const app = await buildServer();
+const pool = app.pool;
 const call = async (method, url, { token, body } = {}) => {
   const res = await app.inject({ method, url,
     headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': crypto.randomUUID() },
@@ -35,40 +53,188 @@ const call = async (method, url, { token, body } = {}) => {
   return { code: res.statusCode, body: json };
 };
 
-const errors = [];
-const step = async (label, method, url, opts) => {
-  const r = await call(method, url, opts);
-  if (r.code >= 500) errors.push(`${label}: ${method} ${url} → ${r.code} ${JSON.stringify(r.body)}`);
-  return r;
-};
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n1. THE SAFETY VALVES actually reach the server');
+// Set in db.js as connection `options`. If a future refactor drops them, nothing else notices until
+// a stuck query pins a connection — or a row lock freezes a character — in production.
+{
+  const s = (await pool.query(`SELECT current_setting('statement_timeout') a,
+                                      current_setting('lock_timeout') b,
+                                      current_setting('idle_in_transaction_session_timeout') c`)).rows[0];
+  check(s.a !== '0', 'statement_timeout is set', `got ${s.a}`);
+  check(s.b !== '0', 'lock_timeout is set', `got ${s.b}`);
+  check(s.c !== '0', 'idle_in_transaction_session_timeout is set', `got ${s.c}`);
 
+  // …and lock_timeout genuinely FIRES rather than queueing forever. pg-mem has no row locks at all,
+  // so this property is invisible to every suite.
+  // Deliberately NOT `SET lock_timeout` here: setting our own would prove only that Postgres has the
+  // feature, while the thing that matters is that OUR pooled connection carries it. So we block on a
+  // real row and wait out the configured value — which costs a few seconds and is worth them.
+  // pg_settings.setting, not current_setting: the latter renders "8s" and any unit-stripping parse of
+  // that reads as 8ms, which would make the deadline assertion below fail against a healthy config.
+  const budget = Number((await pool.query(
+    "SELECT setting FROM pg_settings WHERE name='lock_timeout'")).rows[0]?.setting) || 0;
+  let code = 'none', waited = 0;
+  if (budget <= 0) {
+    // Never actually block here without a timeout to end it: the query would queue forever and CI
+    // would burn its whole job budget on a hang. A hang is a worse failure signal than a failure.
+    check(false, "the pool's own lock_timeout aborts a blocked lock", 'lock_timeout is 0 — not probing, that would hang');
+  } else {
+    const a = await pool.connect(), b = await pool.connect();
+    try {
+      await a.query('BEGIN');
+      await a.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE');
+      const t0 = Date.now();
+      try { await b.query('BEGIN'); await b.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE'); }
+      catch (e) { code = e.code; }
+      waited = Date.now() - t0;
+    } finally {
+      await a.query('ROLLBACK').catch(() => {}); await b.query('ROLLBACK').catch(() => {});
+      a.release(); b.release();
+    }
+    check(code === '55P03', "the pool's own lock_timeout aborts a blocked lock", `waited ${waited}ms, code ${code}`);
+    check(waited < budget * 2, 'it gives up on schedule', `waited ${waited}ms against a ${budget}ms budget`);
+  }
+  const { deadlockToRetry } = await import('../src/game.js');
+  check(deadlockToRetry({ code: '55P03' })?.code === 'contention', 'lock_timeout maps to a retryable error');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n2. THE PROCESS SURVIVES ITS CONNECTIONS BEING KILLED');
+// The 2026-07-25 crash: node-pg emits 'error' on the Pool when an IDLE connection dies (a database
+// restart, a failover, an idle reaper). An EventEmitter with no 'error' listener THROWS, and an
+// uncaught exception kills Node — so the whole API died on every database bounce.
+//
+// Killing our own idle backends reproduces exactly that event. If the handler in db.js is ever
+// removed, THIS PROCESS DIES HERE and CI goes red, which is the entire point.
+{
+  await pool.query('SELECT 1');                              // ensure at least one pooled connection exists
+  const killed = (await pool.query(
+    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid() AND state = 'idle'`)).rowCount;
+  await new Promise((r) => setTimeout(r, 300));              // let the 'error' events land
+  let recovered = false;
+  for (let i = 0; i < 3 && !recovered; i++) {                // node-pg discards dead clients on checkout
+    try { await pool.query('SELECT 1'); recovered = true; } catch { await new Promise((r) => setTimeout(r, 200)); }
+  }
+  check(recovered, 'the pool recovers after its connections are killed', `terminated ${killed} backend(s)`);
+  const me = await call('GET', '/v1/session');
+  check(me.code < 500, 'the server still serves after a connection kill', `got ${me.code}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n3. THE CORE LOOP, on real Postgres');
 const { body: { token } } = await call('POST', '/v1/auth/guest');
-await step('create', 'POST', '/v1/character', { token, body: { name: `PgCheck ${Date.now() % 100000}` } });
+{
+  const c = await call('POST', '/v1/character', { token, body: { name: `PgCheck ${Date.now() % 100000}` } });
+  check(c.code < 500, 'character creation', `${c.code} ${JSON.stringify(c.body).slice(0, 120)}`);
 
-// the core loop, every approach — this is what a tester actually clicks
-const rules = (await call('GET', '/v1/rules')).body;
-for (const c of rules.crimes.filter((c) => c.lvl <= 1)) {
-  for (const approach of [undefined, 'quiet', 'standard', 'loud'])
-    await step('crime', 'POST', `/v1/crimes/${c.id}`, { token, body: approach ? { approach } : undefined });
+  const rules = (await call('GET', '/v1/rules')).body;
+  let bad = null;
+  for (const crime of rules.crimes.filter((x) => x.lvl <= 1)) {
+    for (const approach of [undefined, 'quiet', 'standard', 'loud']) {
+      const r = await call('POST', `/v1/crimes/${crime.id}`, { token, body: approach ? { approach } : undefined });
+      if (r.code >= 500) bad ||= `${crime.id}/${approach || 'none'} → ${r.code} ${JSON.stringify(r.body)}`;
+    }
+  }
+  check(!bad, 'every crime, every approach, no 500', bad || '');
+
+  // every read a fresh client fires on load — these run withCharacter, so they exercise the row lock,
+  // the accrual, three persists and a commit against real Postgres
+  bad = null;
+  for (const url of ['/v1/me', '/v1/streets', '/v1/city', '/v1/onboard', '/v1/casino', '/v1/law', '/v1/wire',
+                     '/v1/boxing', '/v1/races', '/v1/port', '/v1/market', '/v1/loans', '/v1/business',
+                     '/v1/skills', '/v1/underworld', '/v1/estate', '/v1/portfolio', '/v1/pen', '/v1/world']) {
+    const r = await call('GET', url, { token });
+    if (r.code >= 500) bad ||= `${url} → ${r.code} ${JSON.stringify(r.body)}`;
+  }
+  check(!bad, 'every board read, no 500', bad || '');
+
+  bad = null;
+  for (const [url, body] of [['/v1/train', { stat: 'muscle' }], ['/v1/bank/deposit', { amount: 10 }],
+                             ['/v1/travel/neon', undefined]]) {
+    const r = await call('POST', url, { token, body });
+    if (r.code >= 500) bad ||= `${url} → ${r.code} ${JSON.stringify(r.body)}`;
+  }
+  check(!bad, 'write actions, no 500', bad || '');
 }
-// and every read a fresh player's client fires on load
-for (const url of ['/v1/me', '/v1/streets', '/v1/city', '/v1/onboard', '/v1/casino', '/v1/law',
-                   '/v1/wire', '/v1/boxing', '/v1/races', '/v1/port', '/v1/market', '/v1/loans',
-                   '/v1/business', '/v1/skills', '/v1/underworld', '/v1/estate', '/v1/portfolio'])
-  await step('read', 'GET', url, { token });
-for (const [url, body] of [['/v1/train', { stat: 'muscle' }], ['/v1/bank/deposit', { amount: 10 }],
-                           ['/v1/travel', { to: 'neon' }]])
-  await step('write', 'POST', url, { token, body });
 
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n4. THE ROW LOCK ACTUALLY SERIALIZES (no lost update)');
+// pg-mem's locking is effectively a no-op, so a lost update is INVISIBLE to every suite. Here,
+// concurrent same-account deposits must serialize on `SELECT … FOR UPDATE` and sum exactly. If the
+// lock were ever weakened, or a read-modify-write slipped outside it, this is where it shows.
+{
+  const cid = (await call('GET', '/v1/me', { token })).body.character.id;
+  // Cash is EARNED, never SQL-injected. Seeding it unledgered would break §10.4 in section 5 below —
+  // the codebase's own rule, and this probe has to live by it. Jail/energy are not currency, so those
+  // are fair to set; lockup would just make every deposit refuse and pass the check vacuously.
+  for (let i = 0; i < 40; i++) {
+    await pool.query("UPDATE characters SET nerve=60, energy=200, jail_until=NULL, health=100 WHERE id=$1", [cid]);
+    await call('POST', '/v1/crimes/pick', { token });
+    if (Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [cid])).rows[0].cash) > 5000) break;
+  }
+  // Measure the DELTA, never a zeroed balance: `SET bank=0` would silently destroy ledgered value
+  // and drift §10.4 in section 5 — which is exactly what the first draft of this probe did.
+  await pool.query("UPDATE characters SET jail_until=NULL WHERE id=$1", [cid]);
+  const bankOf = async () => Number((await pool.query('SELECT bank FROM characters WHERE id=$1', [cid])).rows[0].bank);
+  const before = await bankOf();
+  const cash = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [cid])).rows[0].cash);
+  const N = 8, AMT = Math.floor(cash / (N + 1));
+  check(AMT > 0, 'earned enough cash to test concurrent deposits', `cash ${cash}`);
+  const results = await Promise.all(Array.from({ length: N }, () =>
+    call('POST', '/v1/bank/deposit', { token, body: { amount: AMT } })));
+  const ok = results.filter((r) => r.code === 200).length;
+  const moved = (await bankOf()) - before;
+  // ok MUST be non-zero, or this check passes by doing nothing — the failure mode of the first draft
+  check(ok === N, `all ${N} concurrent deposits landed`, `${ok}/${N}: ${results.filter((r) => r.code !== 200).map((r) => JSON.stringify(r.body)).join(' ')}`);
+  // Bank interest accrues fractionally on every touch, so the delta carries sub-dollar dust. A LOST
+  // UPDATE is off by a whole deposit, so "at least the full sum, less than one extra" separates them.
+  check(ok > 0 && moved >= ok * AMT && moved < (ok + 1) * AMT,
+    `${ok} concurrent deposits summed exactly (no lost update)`, `bank moved ${moved}, expected ${ok * AMT}`);
+  check(results.every((r) => r.code < 500), 'concurrency produced no 500s',
+    results.filter((r) => r.code >= 500).map((r) => JSON.stringify(r.body)).join(' '));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n5. §10.4 HOLDS on real Postgres');
+// The suites prove this on pg-mem, where NUMERIC is JavaScript arithmetic. Real Postgres uses true
+// arbitrary-precision NUMERIC with different rounding — so the conservation identities deserve to be
+// re-asserted on the engine that actually stores the money.
+{
+  const { runLedgerInvariants } = await import('../src/invariants.js');
+  const inv = await runLedgerInvariants(pool);
+  const broken = (inv.checks || []).filter((c) => !c.ok);
+  check(inv.ok, `all ${(inv.checks || []).length} ledger identities hold`,
+    broken.map((c) => `${c.name} drift ${c.drift}`).join('; '));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n6. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
+// Boot applies schema.sql then a derived ADD COLUMN IF NOT EXISTS pass. A second boot against the
+// SAME database must be a clean no-op — that is what makes deploying a new build to a live database
+// safe. pg-mem always starts empty, so it can never exercise the second boot.
+{
+  const { makeDb } = await import('../src/db.js');
+  let ok = true, err = '';
+  try { const p2 = await makeDb(); await p2.query('SELECT 1'); await p2.end(); }
+  catch (e) { ok = false; err = e.message; }
+  check(ok, 'schema + column migration re-apply cleanly to an existing database', err);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n7. NO node-pg DEPRECATIONS');
 await app.close();
-await new Promise((r) => setTimeout(r, 100)); // let any late warning land
+await new Promise((r) => setTimeout(r, 200));                // let any late warning land
+check(deprecations.length === 0, 'no deprecated driver usage',
+  [...new Set(deprecations)].join(' | '));
 
-if (errors.length) { console.error(`\n${errors.length} server error(s) on real Postgres:`); for (const e of errors) console.error('  ' + e); }
-if (deprecations.length) {
-  console.error(`\n${deprecations.length} node-pg deprecation(s) — these break on the next pg major and pg-mem cannot see them:`);
-  for (const d of new Set(deprecations)) console.error('  ' + d);
-  console.error('  Re-run with --trace-deprecation to get the call site.');
+// ─────────────────────────────────────────────────────────────────────────────
+console.log(`\n${pass.length} passed, ${fails.length} failed`);
+if (fails.length) {
+  console.error('\nreal-Postgres failures (invisible to the pg-mem suites):');
+  for (const f of fails) console.error('  • ' + f);
+  process.exit(1);
 }
-if (errors.length || deprecations.length) process.exit(1);
-console.log('✅ pgcheck passed — the core loop runs clean on real Postgres, with no node-pg deprecations.');
+console.log('✅ pgcheck passed — the loop, the locks, the safety valves, the ledger and the migration all hold on real Postgres.');
 process.exit(0);
