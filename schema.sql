@@ -27,6 +27,12 @@ CREATE TABLE IF NOT EXISTS account_persistent (
   ref_spark BOOLEAN NOT NULL DEFAULT false,  -- the stepped EARLY referral payout fired (before full qualification)
   ref_l2_paid BOOLEAN NOT NULL DEFAULT false,  -- the tier-2 "family tree" finder's fee (to the grandrecruiter) fired for THIS account's qualification
   agent_flag BOOLEAN NOT NULL DEFAULT false,
+  -- THE POPULATION: an NPC resident's account. The agent_flag TWIN — the account-level exclusion hook
+  -- for the human-only surfaces (the Street Wage above all: a resident drawing emission would be theft
+  -- from the endowment). Most other leaderboards need no change, since they rank by legend columns a
+  -- resident never accrues — but any FUTURE step that gives residents a legend must exclude them on
+  -- that board at the same time.
+  npc_flag BOOLEAN NOT NULL DEFAULT false,
   deaths INT NOT NULL DEFAULT 0,
   -- §11 real-ETH entry fees (paid on-chain to OmertaFees, forwarded straight to the dev
   -- wallet — never in-game currency, never touches the §10.4 ledger). `minted` = paid the
@@ -193,6 +199,7 @@ CREATE TABLE IF NOT EXISTS characters (
   port_at TIMESTAMPTZ,                              -- …the window's start marker
   contraband NUMERIC NOT NULL DEFAULT 0,           -- THE PORT step four: warehoused landed contraband (BOOK VALUE at route.sell) — fenced later at a drifting price; direct SQL, dies with the street (heir starts at 0)
   berths INT NOT NULL DEFAULT 0,                    -- THE PORT step four: rented harbor slips — +1 fleet cap each; direct SQL
+  is_npc BOOLEAN NOT NULL DEFAULT false,            -- THE POPULATION: an NPC resident (the convoys.is_npc precedent). A REAL character on every board — jumpable/contractable/robbable through the same audited paths — but excluded from the human-only surfaces (the wage, City Standing, ops, the funnel)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

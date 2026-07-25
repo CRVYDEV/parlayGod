@@ -38,7 +38,7 @@ async function population(pool) {
        FROM account_persistent a
        JOIN characters c ON c.account_id = a.account_id AND c.alive
        JOIN accounts ac ON ac.id = a.account_id
-      WHERE NOT a.agent_flag AND ac.status <> 'banned'`)).rows;
+      WHERE NOT a.agent_flag AND NOT a.npc_flag AND ac.status <> 'banned'`)).rows;
 }
 
 // score every account: per-pillar log-share of the population max, summed into City Standing.

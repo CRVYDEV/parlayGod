@@ -2788,7 +2788,7 @@
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
-          ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}
+          ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
           <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>

@@ -3489,3 +3489,42 @@ export const seasonModOf = (seasonIdx = seasonIdxOf()) => {
   return SEASON_MODS[Math.floor(hash01(`seasonmod:${seasonIdx}:${MARKET_SEED}`) * SEASON_MODS.length)];
 };
 export const seasonDaysLeft = (day = dayOf()) => 28 - (day % 28);
+
+// ── THE POPULATION (NPC residents) ─────────────────────────────────────────────────────────────
+// Design: omerta-npc-population-design.md. OMERTÀ is a multiplayer game launching with ~zero players,
+// so every board that reads `characters` is dead in an empty alpha. A living NPC population fills all
+// of them at once, because they are REAL characters (the convoys.is_npc precedent) — jumpable,
+// contractable, tappable, robbable through the SAME audited code paths a real player uses.
+// ALL numbers are founder sign-off levers; `npc:seed` is the one new cash faucet (sim P9.21).
+export const POPULATION = {
+  TARGET: 48,              // headcount the worker keeps the city topped up to
+  SPAWN_PER_TICK: 4,       // the city fills in visibly instead of appearing all at once
+  RETIRE_GENERATIONS: 6,   // a resident's bloodline is retired past this many deaths (caps death:legacy creep)
+  // Level bands. `w` is the spawn weight, so the roster spans the range instead of clustering at the
+  // bottom. `seed` is the cash a resident is spawned holding — the FAUCET, deliberately modest: a
+  // resident is scenery with a wallet, not a treasure chest. M3.LOOT_MIN_LVL (10) already means the
+  // bottom two bands carry NOTHING lootable, so the cheap end of the population can't be farmed.
+  BANDS: [
+    { id: 'corner',  w: 34, lvl: [2, 9],   seed: [200, 1200],     stat: [4, 12] },
+    { id: 'made',    w: 38, lvl: [10, 24], seed: [2000, 12000],   stat: [10, 30] },
+    { id: 'capo',    w: 20, lvl: [25, 44], seed: [15000, 60000],  stat: [28, 60] },
+    { id: 'boss',    w: 8,  lvl: [45, 70], seed: [60000, 200000], stat: [55, 110] },
+  ],
+};
+// A resident's name: noir first + last, drawn from pools. Uniqueness is enforced by the caller
+// (living names are unique game-wide), which retries on a collision.
+export const NPC_FIRST = ['Sal', 'Vito', 'Carmine', 'Rocco', 'Nunzio', 'Gino', 'Aldo', 'Silvio',
+  'Marco', 'Enzo', 'Bruno', 'Dario', 'Franco', 'Lorenzo', 'Matteo', 'Nico', 'Paulie', 'Renzo',
+  'Tommy', 'Vinnie', 'Angelo', 'Bobby', 'Cesare', 'Donnie', 'Emilio', 'Fausto', 'Gaetano', 'Hugo',
+  'Ivo', 'Joey', 'Luca', 'Mario', 'Otto', 'Pino', 'Remo', 'Santo', 'Turi', 'Umberto'];
+export const NPC_LAST = ['Fontana', 'Marchetti', 'Bellini', 'Corsaro', 'Battaglia', 'Ricci',
+  'Moretti', 'Gallo', 'Rizzo', 'Bruno', 'Ferraro', 'Greco', 'Conti', 'Costa', 'Vitale', 'Serra',
+  'Pagano', 'Sorrentino', 'Barone', 'Palumbo', 'Longo', 'Farina', 'Grasso', 'Rinaldi', 'Damico',
+  'Testa', 'Fabbri', 'Orlando', 'Bianchi', 'Riva', 'Milano', 'Napoli', 'Sciarra', 'Tumbarello'];
+// pick a band by weight from a [0,1) roll
+export const npcBandOf = (roll) => {
+  const total = POPULATION.BANDS.reduce((a, b) => a + b.w, 0);
+  let x = roll * total;
+  for (const b of POPULATION.BANDS) { x -= b.w; if (x < 0) return b; }
+  return POPULATION.BANDS[0];
+};

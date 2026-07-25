@@ -19,6 +19,12 @@ const KNOWN_REASONS = {
     // `campaign:` — the authored-chain reward, a once-per-street-per-chain character_id'd faucet
     // (the missions precedent — check (a) reconciles it per character).
     'sov:', 'campaign:',
+    // THE POPULATION: NPC residents are REAL characters, so they sit inside the per-character cash
+    // check and every dollar they hold needs a reason. `npc:seed` is the cash a resident spawns
+    // holding (the one new FAUCET — bounded by TARGET × band seed × turnover, sim P9.21) and
+    // `npc:retire` burns what a retired resident was carrying (a SINK). A resident KILLED by a
+    // player needs nothing new: the loot rides `whack:loot` and the estate burns the rest.
+    'npc:',
     // MARRIAGES & SOLDIERS: dynasty ceremony/consigliere fees + the soldier hire — all
     // character_id'd cash SINKS (check (a) reconciles); the soldier's 5% crime cut is a
     // pre-ledger shave (the faucet shrinks — no reason of its own)

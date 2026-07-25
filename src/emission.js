@@ -86,7 +86,7 @@ async function runWageEpochInner(pool, opts, epoch, budget) {
 
   const rows = (await pool.query(`
     SELECT c.id, c.account_id, c.respect, s.epoch AS snap_epoch, s.respect AS snap_respect,
-           a.agent_flag, a.minted, acc.status
+           a.agent_flag, a.npc_flag, a.minted, acc.status
       FROM characters c
       JOIN account_persistent a ON a.account_id = c.account_id
       JOIN accounts acc ON acc.id = c.account_id
@@ -98,7 +98,10 @@ async function runWageEpochInner(pool, opts, epoch, budget) {
   const scored = [];
   for (const r of rows) {
     if (Number(r.snap_epoch) !== epoch - 1) continue;
-    if (r.agent_flag || r.status === 'banned') continue;
+    // THE POPULATION: a resident drawing the Street Wage would be theft from the endowment — the
+    // single most important NPC exclusion in the codebase. (Residents are never `minted`, so the D1
+    // wall already stops them whenever WAGE_REQUIRE_MINTED is on; this holds when it isn't.)
+    if (r.agent_flag || r.npc_flag || r.status === 'banned') continue;
     if (needMinted && !r.minted) continue; // the D1 Sybil wall: only paid (minted) identities draw
     const gain = Math.max(0, Number(r.respect) - Number(r.snap_respect));
     if (levelOf(Number(r.respect)) < EMISSION.WAGE_MIN_LVL) continue;

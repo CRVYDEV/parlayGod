@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -693,6 +693,41 @@ phase('P9.20 the passive stack — parallel energy-free income vs the active gri
     `the 5-front stack ($${fmt(Math.round(frontNet))}/day, energy-free) vs the top-tier crime grind ($${fmt(Math.round(grindDay))}/day, ~200 energy-bounded attempts) — before speakeasy/territory/frontier/sov add more`);
   note('stack', 'APPLIED (founder-directed L1a+L1b balance package)', 'front curve flattened + progressive pad',
     `L1a halved the apex hotel/casino incomePerHr; L1b makes a 5-front stack pay ${padBps5 / 100}% pad vs a 1-front's ${CONSTANTS.BUSINESS_UPKEEP_BPS / 100}% — the personal stack dropped ~$48.96M→$${fmt(Math.round(frontNet))}/day (ratio ~6×→${ratio.toFixed(1)}×), still passive-favoured but no longer dwarfing the active loop; §10.4 stays drift-0 (every front a ledgered faucet). Remaining dial: the full front incomePerHr curve (BALANCE.md)`);
+}
+
+// ════════ P9.21 THE POPULATION — the npc:seed faucet, measured analytically ════════
+// Residents are seeded with cash so the boards aren't dead in an empty alpha. That cash is the one
+// new faucet: players extract it by killing residents and looting the body. Bounded by construction
+// (TARGET bodies at once × band seed × how fast a player can actually kill), and the bottom two
+// bands carry NOTHING lootable because M3.LOOT_MIN_LVL gates the loot at level 10.
+phase('P9.21 the population — the npc:seed faucet ceiling');
+{
+  const totalW = POPULATION.BANDS.reduce((a, b) => a + b.w, 0);
+  // expected seed per resident, and the LOOTABLE share (bands under LOOT_MIN_LVL yield nothing)
+  let expSeed = 0, expLootable = 0;
+  for (const b of POPULATION.BANDS) {
+    const mean = (b.seed[0] + b.seed[1]) / 2;
+    const share = b.w / totalW;
+    expSeed += mean * share;
+    // a band is lootable only where its level range clears the loot floor
+    const span = b.lvl[1] - b.lvl[0] + 1;
+    const over = Math.max(0, b.lvl[1] - Math.max(b.lvl[0], M3.LOOT_MIN_LVL) + 1);
+    expLootable += mean * share * (over / span);
+  }
+  const standing = POPULATION.TARGET * expSeed;
+  note('population', 'residents standing', `${POPULATION.TARGET}`, 'headcount the worker holds');
+  note('population', 'seed per resident (E)', `$${fmt(expSeed)}`, 'weighted across the four bands');
+  note('population', 'cash standing in the city', `$${fmt(standing)}`, 'the whole faucet exposure at any instant');
+  note('population', 'LOOTABLE per resident (E)', `$${fmt(expLootable)}`,
+    `bands under LOOT_MIN_LVL ${M3.LOOT_MIN_LVL} carry nothing a killer can take`);
+  // what a killer actually nets: CASH_LOOT_RATE of pocket, against the ammo a kill costs
+  const perKill = expLootable * M3.CASH_LOOT_RATE;
+  note('population', 'a killer nets per resident kill', `$${fmt(perKill)}`,
+    `${M3.CASH_LOOT_RATE * 100}% of pocket — the same loot surface as a player kill, and the SAME ammo cost applies`);
+  note('population', 'faucet posture', perKill < 25000 ? 'petty vs the signed loops' : 'SIGN-OFF: material',
+    'compare to the boxing exhibition / territory bands (~$300-400k/day); a resident is scenery with a wallet, not a payday');
+  note('population', 'turnover bound', `${POPULATION.SPAWN_PER_TICK}/tick`,
+    'the worker refills at most this many, so the faucet cannot be drained faster than it is topped up');
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

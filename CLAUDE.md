@@ -5089,3 +5089,45 @@ front cost curve are MATCHED, so **no retune was warranted and nothing was chang
 confused "a level-44 player can afford a level-15 front" (trivially true, and fine) with "the gate is
 meaningless" (false). The harness prints the gate table every run; if a gate ever goes over 100%, that
 front's entry cost is the dial. §10.4 untouched throughout (the coach reads state and moves nothing).
+
+**THE POPULATION — NPC residents of the city (step one) — BUILT** (`src/population.js`,
+`test/population.js` — the 47th suite; design `omerta-npc-population-design.md`; founder-directed
+2026-07-25, picking **"full residents"** + **"living population"**). OMERTÀ is a multiplayer game
+launching with ~zero players, so every board that reads `characters` is dead in an empty alpha —
+streets roster, contract board, duelling ladder, Black Market, Shylock, bodyguard market, nightlife,
+fights, races strip, fade/poker tables, Wire tap targets, Secrets dig targets. The progression
+harness measured the consequence exactly: a plausible player reaches **level 128 with $51M in 30
+days having never once met another person**. A resident is a **REAL character** (the `convoys.is_npc`
+precedent) — real `accounts` + `account_persistent` + `characters` rows, flagged `characters.is_npc`
++ `account_persistent.npc_flag` (the `agent_flag` twin) — so ONE population lights up every board at
+once and **every interaction runs the same audited code that runs against a player**. `runPopulation`
+(worker, dormant under `POPULATION_OFF=on`) tops headcount to `POPULATION.TARGET` (48) at
+`SPAWN_PER_TICK` (4) a tick across four weighted `BANDS` (corner/made/capo/boss — level, stat and
+seed-cash ranges), and retires bloodlines past `RETIRE_GENERATIONS` (6) so no line accrues prestige —
+and therefore an ever-growing `death:legacy` — forever. **DEATH IS DELIBERATELY NOT SPECIAL:** a
+killed resident runs the ORDINARY `runEstate` and the heir (same name, generation+1) **IS the
+respawn**, so social.js needed no NPC branch and the population self-heals. §10.4: residents hold
+cash, so they sit inside the per-character check and every dollar is enumerated — exactly two new
+reasons under a new `npc:` cash prefix, `npc:seed` (FAUCET, the spawn balance) and `npc:retire`
+(SINK, burned at retirement); a fire-kill loots them through the existing `whack:loot` and the estate
+burns the rest. **The faucet measured (sim P9.21): $20,798 seed per resident, ~$998k standing
+city-wide, a killer nets $5,140 per kill against an ~$82k ammo cost — strongly −EV, not a farm** (the
+same conclusion the econ pass reached for player kills: contracts pay, loot is the tip). Exclusions:
+**the Street Wage** (`emission.js` — the critical one; a resident drawing emission is theft from the
+endowment, enforced even when enrolled AND minted), **City Standing**, **ops** (real-player counts,
+with `residents` reported separately) and **the onboarding funnel**; most other leaderboards need no
+change since they rank by legend columns a resident never accrues — **a future step that gives
+residents a legend must exclude them on that board at the same time**. Two bugs the test earned: the
+`corner` band seeds BELOW the un-ledgered $500 base so the seed row must carry a NEGATIVE delta (a
+silent −$235/resident §10.4 hole otherwise), and `runEstate`'s heir INSERT didn't carry `is_npc`, so
+a killed resident's heir was born a "player" — headcount never self-healed and the ops/funnel
+real-player counts quietly started counting scenery. **The `npc` flag is EXPOSED on `GET /v1/streets`
+(console shows a `RESIDENT` chip), not hidden** — residents are mechanically indistinguishable, but
+in a game with real-money extraction, passing scenery off as people isn't a call to make silently
+(presentation only, trivially reversible). Deferred (step two): **behaviours** — residents listing on
+the Black Market, posting loan offers, taking fade/duel/bout listings, opening clubs, drifting
+between districts. Each moves value, so each needs its own §10.4 reasoning; the discipline is that a
+resident may only ever RECYCLE value it already holds, never conjure it at the point of sale. Also
+deferred: NPC families (so the Commission and turf stay untouched) and any resident telemetry (so
+`/v1/online` presence stays a true human count). All `POPULATION.*` numbers are founder sign-off
+levers (BALANCE.md).

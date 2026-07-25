@@ -2099,3 +2099,40 @@ cost is the dial.
 
 Re-run it after **any** pacing, cooldown, regen, mission or level-curve change — it is the only tool
 that measures what a player feels rather than what the ledger conserves.
+
+---
+
+## THE POPULATION — NPC residents (founder-directed 2026-07-25)
+
+Design: `omerta-npc-population-design.md`. Founder picked **"full residents"** (violence-eligible) +
+**"living population"** (worker-maintained headcount). All `POPULATION.*` numbers are sign-off levers.
+
+**The one new faucet: `npc:seed`** — the cash a resident spawns holding. Players extract it by
+killing residents and looting the body. Measured analytically in the sim (**P9.21**, printed every run):
+
+| | |
+|---|---|
+| residents standing | 48 (`POPULATION.TARGET`) |
+| seed per resident (E) | **$20,798** weighted across the four bands |
+| cash standing in the city | ~$998k — the whole faucet exposure at any instant |
+| lootable per resident (E) | $20,560 (the two bottom bands are under `M3.LOOT_MIN_LVL` 10 → nothing to take) |
+| **a killer nets per resident kill** | **$5,140** (25% of pocket) |
+
+**Verdict: not a farm.** A kill costs ~$82k in ammo (the D1 anchor), so looting a resident is
+**strongly −EV** — roughly the same conclusion the econ pass reached for player kills, and for the
+same reason: the kill economy is contract-driven, loot is the tip. A resident is scenery with a
+wallet, not a payday. Turnover is additionally bounded by `SPAWN_PER_TICK` (4), so the faucet can
+never be drained faster than the worker refills it.
+
+**Levers if it ever needs tightening:** `TARGET` (exposure), the per-band `seed` (payday),
+`SPAWN_PER_TICK` (turnover), `RETIRE_GENERATIONS` (caps `death:legacy` creep on long-lived lines).
+`POPULATION_OFF=on` disables the whole thing for a server with enough real players.
+
+**Two decisions worth the founder's eye:**
+
+1. **The flag is EXPOSED, not hidden.** `GET /v1/streets` returns `npc: true` and the console shows
+   a subtle `RESIDENT` chip. Residents are mechanically indistinguishable — every interaction runs
+   the same audited code — but in a game with real-money extraction, quietly passing scenery off as
+   people is not a call to make silently. Purely a presentation choice; trivially reversible.
+2. **Residents draw NO Street Wage**, even when enrolled and minted (`emission.js`). That one is not
+   a lever — a resident drawing emission would be theft from the endowment.
