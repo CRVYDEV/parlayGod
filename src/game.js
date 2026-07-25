@@ -34,8 +34,11 @@ export const cleanText = (s) => String(s == null ? '' : s).replace(/[<>"\x60\x00
 // 23505s) — the losing txn rolled back cleanly (no §10.4 impact), so retrying finds the row present
 // and proceeds through the raise path. Genuine business duplicates SELECT-check first and throw a
 // specific error before the constraint, so a raw 23505 reaching a wrapper catch is a race.
+// 40P01 deadlock, 23505 a racing first-INSERT, and 55P03 lock_timeout (a request that waited out the
+// pool's lock_timeout rather than queueing on a busy row forever) are all the SAME thing to a caller:
+// transient contention, safe to retry, nothing committed. Give them one honest, retryable error.
 export const deadlockToRetry = (e) =>
-  (e?.code === '40P01' || e?.code === '23505')
+  (e?.code === '40P01' || e?.code === '23505' || e?.code === '55P03')
     ? new GameError('contention', 'The streets got crowded for a second — try that again.') : e;
 
 // In-process pub/sub feeding the websocket gateway (§5.6): 'me:{characterId}'

@@ -61,6 +61,11 @@ export const EXPLICIT_ENV = {
 export const OPERATIONAL_ENV = [
   // infrastructure
   'DATABASE_URL', 'NODE_ENV', 'PORT', 'PG_POOL_MAX', 'REDIS_URL', 'TRUST_PROXY', 'PUBLIC_URL',
+  // Postgres safety valves (db.js). Operational, not gameplay: they bound how long anything may hold
+  // a connection or wait on a row so one stuck query cannot freeze a player. Sane defaults ship; these
+  // exist to tune them per host, never to disable them.
+  'PG_STATEMENT_TIMEOUT_MS', 'PG_LOCK_TIMEOUT_MS', 'PG_IDLE_TX_TIMEOUT_MS',
+  'PG_CONNECT_TIMEOUT_MS', 'PG_IDLE_TIMEOUT_MS',
   'WS_PING_MS', 'INVARIANT_WEBHOOK_URL',
   // access posture
   'INVITE_MODE', 'RATE_LIMIT', 'RATE_AUTH_BURST', 'RATE_AUTH_PER_SEC', 'RATE_HUMAN_BURST',

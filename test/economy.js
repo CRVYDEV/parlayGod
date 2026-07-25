@@ -131,19 +131,39 @@ assert.equal(r.code, 200, 'sell asset'); assert(!r.body.character.assets.include
 // income to ~12h/day no matter how often you touch. Isolate racket income: bank=0, no
 // assets/crew, laundro the only racket. (Every read cancels the daily city-event mult,
 // so we compare against a measured 1h rate rather than an absolute number.)
-await seed("cash=0, bank=0, racket_credit_ms=3600000, last_accrued_at = now() - interval '1 hour'");
-const rate1h = (await meOf(token)).cash;                     // income for exactly 1h eligible
+// Measured off the LEDGER, not off `cash`. Two reasons: it isolates the racket faucet from whatever
+// the collecting action itself costs, and — since reads stopped taking the write lock — accrual is
+// banked by ACTIONS, not by looking at your sheet. A read shows the accrued figure truthfully but
+// persists nothing (see withCharacterRead), so `cash` after a GET is no longer the collected total.
+// The income is not lost: the next action accrues from the same unchanged clock and ledgers the lot.
+const incomeSoFar = async () => Number((await pool.query(
+  "SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE character_id=$1 AND reason='racket:income'",
+  [cid])).rows[0].n);
+const collect = async () => {                                // any write banks the accrued income
+  await seed("cash=50000, jail_until=NULL");                 // cover the fare; cash is not what we measure
+  const here = (await pool.query('SELECT loc FROM characters WHERE id=$1', [cid])).rows[0].loc;
+  const to = here === 'docks' ? 'neon' : 'docks';            // travel refuses a move to where you stand
+  const r = await call('POST', `/v1/travel/${to}`, { token });
+  assert.equal(r.code, 200, `collect via travel (${here} → ${to}): ${JSON.stringify(r.body)}`);
+};
+await seed("bank=0, racket_credit_ms=3600000, last_accrued_at = now() - interval '1 hour'");
+let mark = await incomeSoFar();
+await collect();
+const rate1h = await incomeSoFar() - mark;                   // income for exactly 1h eligible
 assert(rate1h > 0, 'racket pays income per hour');
 // three back-to-back 8h collects over a 24h window, starting from a drained bucket
-await seed("cash=0, racket_credit_ms=0, last_accrued_at = now()");
-for (let i = 0; i < 3; i++) { await seed("last_accrued_at = now() - interval '8 hours'"); await meOf(token); }
-const day = (await meOf(token)).cash;                        // total income across that 24h of touches
+await seed("racket_credit_ms=0, last_accrued_at = now()");
+mark = await incomeSoFar();
+for (let i = 0; i < 3; i++) { await seed("last_accrued_at = now() - interval '8 hours'"); await collect(); }
+const day = await incomeSoFar() - mark;                      // total income across that 24h of touches
 const hoursCollected = day / rate1h;
 assert(hoursCollected < 14, `D2b caps racket income to ~12h/day (got ${hoursCollected.toFixed(1)}h) — pre-fix this window paid 24h`);
 assert(hoursCollected > 10, `income still flows under the cap (got ${hoursCollected.toFixed(1)}h)`);
 // a returning offline player still gets one full 8h burst (credit seeded to OFFLINE_CAP)
-await seed("cash=0, racket_credit_ms=28800000, last_accrued_at = now() - interval '48 hours'");
-assert(Math.round((await meOf(token)).cash / rate1h) === 8, 'offline collect still bursts to the 8h window');
+await seed("racket_credit_ms=28800000, last_accrued_at = now() - interval '48 hours'");
+mark = await incomeSoFar();
+await collect();
+assert(Math.round((await incomeSoFar() - mark) / rate1h) === 8, 'offline collect still bursts to the 8h window');
 await seed("cash=2000000, bank=0, racket_credit_ms=28800000"); // restore for the rest of the suite
 
 // ── AMM swap (§7.12): buy $OMR, then sell some back ──
