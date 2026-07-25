@@ -108,26 +108,37 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf, est] = await Promise.all([
-    client.query('SELECT racket_id, level FROM character_rackets WHERE character_id=$1', [ch.id]),
-    client.query('SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]),
-    client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]),
-    client.query('SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', [ch.id]),
-    client.query('SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', [ch.id]),
-    client.query('SELECT gear_id FROM account_gear WHERE account_id=$1', [ch.account_id]),
-    client.query('SELECT gun_id FROM character_guns WHERE character_id=$1', [ch.id]),
-    client.query('SELECT gang_id, role, joined_at FROM gang_members WHERE character_id=$1', [ch.id]),
-    client.query('SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]),
-    client.query('SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]),
-    client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]),
-    client.query('SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]),
-    client.query('SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]),
-    client.query('SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]),
+  // (found by the real-Postgres probe) These ran as a Promise.all over ONE pooled client. node-pg
+  // has deprecated overlapping queries on a single client and REMOVES them in pg@9 — and the
+  // "parallelism" bought nothing in the first place: a single connection executes one query at a
+  // time, so pg was silently queueing them. Sequential awaits are identical wall-clock against
+  // Postgres and free of the deprecation.
+  //
+  // The whole suite was blind to this because it runs on pg-mem, which has no such constraint.
+  // `tools/pgcheck.js` is the repeatable guard: it drives the core loop against a real Postgres and
+  // FAILS on any pg deprecation warning, so the next one of these can't reach a deploy unnoticed.
+  const rows = [];
+  for (const [sql, params] of [
+    ['SELECT racket_id, level FROM character_rackets WHERE character_id=$1', [ch.id]],
+    ['SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]],
+    ['SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]],
+    ['SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', [ch.id]],
+    ['SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', [ch.id]],
+    ['SELECT gear_id FROM account_gear WHERE account_id=$1', [ch.account_id]],
+    ['SELECT gun_id FROM character_guns WHERE character_id=$1', [ch.id]],
+    ['SELECT gang_id, role, joined_at FROM gang_members WHERE character_id=$1', [ch.id]],
+    ['SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]],
+    ['SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]],
+    ['SELECT * FROM batches WHERE character_id=$1', [ch.id]],
+    ['SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]],
+    ['SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]],
+    ['SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]],
     // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
-    client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id]),
+    ['SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id]],
     // THE ESTATE — account-level too (survives death; the heir inherits the compound)
-    client.query('SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', [ch.account_id]),
-  ]);
+    ['SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', [ch.account_id]],
+  ]) rows.push(await client.query(sql, params));
+  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf, est] = rows;
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
   if (gangId) {
