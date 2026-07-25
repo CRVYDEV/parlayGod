@@ -159,11 +159,44 @@ row. Reads therefore serialize against everything else for that player and hold 
 throughout. **Observed in production:** four of one player's requests queued on their own row for
 1.0s / 2.1s / 2.3s / 4.3s.
 
-Mitigated client-side (peak concurrent authed requests measured 6 → 1). The architectural fix was
-built and reverted the same night: with reads no longer persisting, a Bureau raid can only fire during
-an action, the raid sets `jail_until`, that action's own jail gate throws, and the rollback undoes the
-raid. Completing it requires accrual's side-effects to survive a failed action — a two-phase commit
-inside `withCharacter`. **This is the single highest-value piece of remaining work.**
+Mitigated client-side (peak concurrent authed requests measured 6 → 1). The architectural fix has now
+been attempted **twice**, and the second attempt found the reason it is harder than it looks.
+
+The blocker is real and confirmed at source: reads persist accrual, and §7.1 accrual is gameplay, not
+bookkeeping — it fires the Bureau raid, which sets `jail_until` (`accrual.js:144`). Stop reads
+persisting and the raid can only land during an action; the action then checks its own jail gate,
+throws, and the rollback takes the raid with it. Retry until it misses and a player filters out their
+own raids for free. So the action path has to stand on its own before reads can be made pure.
+
+Two designs were tried and both were rejected on evidence:
+
+- **`SAVEPOINT` after accrual, rewind only the action.** Preserves ground rule #6 (one transaction per
+  action) and is correct on Postgres. Rejected because **pg-mem implements no savepoint syntax at
+  all** — measured, every form fails to parse. All 47 suites would be blind to the mechanism, which is
+  the same blindness that put a process-killing bug into production this week.
+- **Roll the action back whole, re-settle accrual in a second transaction.** Portable, and it was
+  built and passing. Rejected on measurement: **pg-mem's `ROLLBACK` is a no-op** — `BEGIN; INSERT;
+  ROLLBACK;` leaves the row. So on pg-mem the accrual is applied twice, and a single refused action
+  was measured writing **two** `bank:interest` rows with the ledger no longer matching cash+bank — a
+  §10.4 drift of ~$23. Correct on Postgres, drifting in every suite. The full suite and the sim passed
+  anyway, because they rarely hit "productive accrual + refused action" — a latent landmine, not a
+  green light.
+
+**The pg-mem `ROLLBACK` finding is the important one and outlives D1.** Every "the action was refused,
+therefore nothing changed" assertion in the suite is vacuous. That property is now asserted in
+`pgcheck` §5 (*a refused action leaves no trace*) against real Postgres, in CI.
+
+Remaining viable paths, for a decision rather than a late-night guess:
+1. Savepoint version, feature-detected, with the mechanism tested only by `pgcheck`. Preserves ground
+   rule #6; accepts that the suites cannot see it.
+2. Two transactions per action (accrue-and-commit, then act). Portable and testable, but it **violates
+   ground rule #6** and doubles lock acquisitions on writes to remove them from reads.
+3. Optimistic lock-free reads: no `FOR UPDATE`, persist under a `WHERE last_accrued_at = <read value>`
+   compare-and-swap, discard on a lost race. Portable, correct on both, but it rewrites the persist
+   path of the most audited function in the codebase.
+
+**Still the single highest-value piece of remaining work — and now a design decision, not a coding
+task.**
 
 ### D2 — pg-mem / Postgres divergence **(HIGH → ADDRESSED)**
 All 48 suites run on pg-mem; production runs node-pg against Postgres. This class is not theoretical:
@@ -261,8 +294,9 @@ onboarding docs — not for retyping 55,000 lines.
 ## 6. Recommended sequence
 
 1. ~~**Wire `pgcheck` into CI** (D2).~~ **DONE** — `.github/workflows/ci.yml`.
-2. **Finish the lock-free read path** (D1). Days. Two-phase commit in `withCharacter` so accrual
-   survives a failed action, then reads stop taking write locks. Highest architectural payoff.
+2. **Finish the lock-free read path** (D1). Days. Now blocked on a **design choice between three
+   measured options** (see D1), not on implementation — two attempts were built and rejected on
+   evidence. Still the highest architectural payoff.
 3. **Split `rules.js`** into generated + tail (D5). Hours. Makes ground rule #2 mechanically enforceable.
 4. **Split `server.js`** into domain route modules (D3). A day. Pure mechanical relief.
 5. **Split `social.js`** along death/estate | contracts | gangs | combat (D4). Days, carefully, with the
