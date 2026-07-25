@@ -78,3 +78,12 @@ jobs:
           SOCIAL_VERIFY_MODE: 'off'
           POPULATION_OFF: 'on'      # the resident worker would race the probe's own fixtures
         run: npm run pgcheck
+
+      # The backup is the last line of defence and the only check nobody would notice failing — you
+      # find out on the day you need a restore. Two of its verifications were written after real
+      # defects (a missing `pg_restore -f -` that would have failed EVERY backup; a schema-only dump
+      # passing every check while holding no rows), so they get a regression of their own.
+      - name: backup self-test (dump, verify, refuse, restore)
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
+        run: npm run backup:selftest
