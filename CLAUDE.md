@@ -5056,3 +5056,36 @@ before the content gating it (couples to the L1a/L1b front-curve levers). The **
 + gym + garage + Score + missions ONLY, zero contact with another player) is level 44 / $1.9M / 14 of
 28 missions in 7 days. **Re-run it after ANY pacing, cooldown, regen, mission or level-curve change** —
 it's the only tool that measures what a player feels rather than what the ledger conserves.
+
+**THE TWO HARNESS FINDINGS — APPLIED (founder-directed 2026-07-25).** The progression harness's two
+findings, resolved: one was a real defect chain, the other was a claim of mine that measurement
+DISPROVED. **(1) Energy is vestigial → FIXED as legibility, not a retune.** Adding an energy cost to
+crime was rejected (it would double-throttle the signed core loop). The real defect was that the game
+MISLABELS the resource: crime runs on NERVE; energy is what the PHYSICAL work costs (gym, garage,
+heist crews, cartel raids, convoy ambushes, shakedowns, races), so a full bar is unspent ACCESS, not
+idle capacity. The in-game glossary was factually WRONG ("Energy fuels most actions (crimes,
+training)") — split into two honest entries; the sheet's bars are now labelled `energy (gym · garage ·
+crews)` / `nerve (crime)` with hover detail; the coach's `Full tank` rung names the content the tank
+is for. **THE COACH DEAD-END CHAIN (the harness's real catch)** — the harness reported the SAME coach
+line for a whole 7-day run, and a 30-day run was still stuck at "Finish your First Week" at **level
+128**. Three separate rungs could never clear for a solo player, each masking every rung below it:
+**(a)** `Nobody survives alone` is DECLINABLE forever yet sat above every one-time milestone — now
+banded to lvl 3–`M3.COACH_FAMILY_BAND_LVL` (12) where it's genuinely the next thing, and demoted to
+the tail after; **(b)** `ob_family` sat in the First-Week coach gate, so that rung was uncompletable
+too — now excluded alongside the socials and the wallet (the audit-F1 exclusion was incomplete), so
+the gate is the four tasks any player can finish alone; **(c)** a REAL BUG — `owned.skills` is a `Set`
+(loadOwned:159), so the skills rung tested `.length` → `undefined` → `!undefined` → fired forever no
+matter how many skills you owned. All three fixed, plus the recurring `$25k` bank nudge (a mid-game
+session nets ~$360k, so it re-armed on every read) raised to `CONSTANTS.COACH_BANK_NUDGE` ($250k) and
+moved to the tail. **The general rule, now enforced twice over:** a rung that never clears must never
+sit above a rung that does — including WITHIN the tail (most-clearable first, the permanent decline
+LAST, or the solo nudge would mask the bank nudge). `test/growth.js` walks the whole ladder and
+asserts each rung advances. **(2) "Cash outruns progression" → MEASURED, and my claim was WRONG.** The
+harness now reports net worth at the first minute a player is AT each business-front level gate: a
+solo grinder covers **70% / 94% / 85% / 88% / 74%** of the entry cost at laundromat / restaurant /
+nightclub / hotel / casino (a full 30-day run, all five gates reached — level 128, $51.3M, 25/28
+missions at 45h played). Every gate is a short save, with no runaway trend — the cash curve and the
+front cost curve are MATCHED, so **no retune was warranted and nothing was changed.** My claim had
+confused "a level-44 player can afford a level-15 front" (trivially true, and fine) with "the gate is
+meaningless" (false). The harness prints the gate table every run; if a gate ever goes over 100%, that
+front's entry cost is the dial. §10.4 untouched throughout (the coach reads state and moves nothing).

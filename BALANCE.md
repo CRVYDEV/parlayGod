@@ -2044,14 +2044,52 @@ corrected upward — recorded here as the measured number.
 
 Using **only** crime, the gym, the garage, the Score, the mission ladder and the checklist — with
 zero contact with another player — a 45-min-twice-a-day player reaches **level 44, $1.9M, 14/28 of
-the story in 7 days.** Two observations, both **founder calls, not patched**:
+the story in 7 days.**
 
-1. **Cash outruns progression.** Session 1 nets $11k; session 14 nets $360k (a 30× ramp in a week,
-   because crime cash scales with level). By day 7 a solo grinder holds $1.9M — far past the level-15
-   business-front entry — so the passive stack is affordable long before the content that gates it.
-   Couples directly to the L1a/L1b front-curve levers.
-2. **Energy has no role in the core loop.** If it's meant to pace anything, it needs a sink on the
-   street side; otherwise it's honest to say so in the UI rather than show a bar that never moves.
+### Finding 1 — energy is vestigial for a street player → FIXED (legibility, not a retune)
+
+Energy sits full 94% of minutes. The cause isn't a broken resource; it's a **mislabelled** one. Crime
+runs on NERVE; energy is what the *physical* work costs (the gym, boosting cars, heist crews, cartel
+raids, convoy ambushes, shakedowns, races). A street grinder simply never touches that content — so a
+full bar is **unspent access, not idle capacity**. Adding an energy cost to crime was rejected: it
+would double-throttle the signed core loop for no gain. What shipped instead:
+
+- The in-game glossary was **factually wrong** — it read *"Energy fuels most actions (crimes,
+  training)"*. Crimes cost nerve. Split into two honest entries naming exactly what each resource buys.
+- The sheet's two bars are now labelled (`energy (gym · garage · crews)` / `nerve (crime)`) with
+  hover detail.
+- The coach's `Full tank` rung now names the content the tank is for, instead of "energy to burn".
+
+**Coach dead-end fixed with it** (`M3.COACH_FAMILY_BAND_LVL`, `CONSTANTS.COACH_BANK_NUDGE`). The
+harness reported the coach saying *"Nobody survives alone"* for the entire 7-day run — a rung a player
+can **decline forever** sat above every one-time milestone, so the earner / skills / Kitchen /
+going-legit / full-tank rungs were unreachable for any solo player. The `$25k` bank nudge had the same
+shape (a mid-game session nets ~$360k, so it re-armed on every read). Both are **recurring** nudges and
+now live in a tail below the one-time milestones; the family rung keeps its high priority inside the
+early band (lvl 3–12), where joining a family genuinely *is* the next thing. General rule, worth
+holding: **a rung that never clears must never sit above a rung that does.**
+
+### Finding 2 — "cash outruns progression" → MEASURED, and my claim was wrong
+
+I asserted the passive stack was "affordable long before the content that gates it". The harness now
+measures net worth at the first minute a player is AT each front's level gate:
+
+| Front | Gate | Entry cost | Net worth at the gate | Covers |
+|---|---|---|---|---|
+| laundromat | lvl 15 | $250,000 | $175,858 | **70%** |
+| restaurant | lvl 22 | $500,000 | $468,802 | **94%** |
+| nightclub | lvl 30 | $1,200,000 | $1,015,451 | **85%** |
+| hotel | lvl 42 | $3,000,000 | $2,626,036 | **88%** |
+| casino | lvl 58 | $8,000,000 | $5,936,832 | **74%** |
+
+*(30-day solo run, all five gates reached — level 128, $51.3M, 25/28 missions at 45h played.)*
+
+A solo grinder arrives at **every** gate still needing to save — 70–94% across the whole ladder, with
+no runaway trend. The cash curve and the front cost curve are matched, so the gates are pacing
+correctly and **no retune is warranted**. My earlier claim confused "a level-44 player can afford a
+level-15 front" (trivially true, and fine) with "the gate is meaningless" (false). **Nothing changed
+here.** The harness prints this table every run; if a gate ever goes over 100%, that front's entry
+cost is the dial.
 
 ### Using it
 

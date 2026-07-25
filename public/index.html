@@ -610,7 +610,8 @@
   <h2>THE LAY OF THE LAND</h2>
   <dl>
     <dt>Respect / Level</dt><dd>Your standing. Respect is XP; your level is derived from it and gates every job, path, and perk.</dd>
-    <dt>Energy / Nerve</dt><dd>Energy fuels most actions (crimes, training). Nerve is spent on the riskier plays. Both refill over time.</dd>
+    <dt>Nerve</dt><dd>What <b>crime</b> costs. It's the clock on the street loop — jobs are gated by nerve, not energy, so a grinding session is paced by how fast nerve trickles back.</dd>
+    <dt>Energy</dt><dd>What the <b>physical</b> work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns, races. If your energy bar sits full, that's not idle capacity — it's content you haven't touched yet.</dd>
     <dt>Health / Hospital</dt><dd>Lose a fight and you're under the Doc's care for a spell — that's <b>protection, not prison</b>: rivals can't jump or shoot you, but you can still run jobs and your businesses. Hit zero in the wrong fight and you're dead.</dd>
     <dt>Heat / The Law</dt><dd>Crime draws heat. Enough of it and the Bureau opens a RICO case — see The Law tab. Lay low or bribe to cool it.</dd>
     <dt>Cash vs. the Bank vs. $OMR</dt><dd>Pocket cash can be looted when you're killed. Banked cash is safer (but takes time to clear). $OMR is the premium, launderable, extractable currency.</dd>
@@ -1405,8 +1406,8 @@
       <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} ${T('k_liquid')} · ${fmt(me.staked)} ${T('k_staked')}</span></div>
       <div class="row"><span class="k">${T('k_respect')}</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>
       <div class="chips">${chips.map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('')}</div>
-      <div class="row"><span class="k">${T('k_energy')}</span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
-      <div class="row"><span class="k">${T('k_nerve')}</span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
+      <div class="row" title="Energy is the PHYSICAL work: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns, races. Crime doesn't touch it."><span class="k">${T('k_energy')} <span class="d" style="font-size:10px">(gym · garage · crews)</span></span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
+      <div class="row" title="Nerve is what crime costs — the clock on the street loop."><span class="k">${T('k_nerve')} <span class="d" style="font-size:10px">(crime)</span></span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
       <div class="row"><span class="k">${T('k_health')}</span><span>${me.health}/100</span></div>${bar('health', me.health, 100)}
       <div class="row"><span class="k">${T('k_heat')}</span><span>${me.heat}</span></div>${bar('heat', me.heat, 100)}
       <div class="row"><span class="k">${T('k_stats')}</span><span>${me.eff.muscle} / ${me.eff.cunning} / ${me.eff.speed}</span></div>

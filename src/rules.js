@@ -464,6 +464,11 @@ export const CONSTANTS = {
   COOK_MULT: 12, APY: 0.14, SWAP_MIN: 500, PATH_FIRST_COST: 10000, PATH_SWITCH_OMR: 25,
   ONBOARD_CAPSTONE: { cash: 5000, cb: 3, en: 25 },
   TRAVEL_COST: 250, BANK_RATE: 0.02, BANK_PERIOD_MS: 12*3600*1000, OFFLINE_CAP_MS: 8*3600*1000,
+  // COACH_BANK_NUDGE (progression harness) — the coach's "you're carrying too much" floor. The old $25k
+  // was a level-1-era number: the harness measured a mid-game session netting ~$360k, so it fired on
+  // every read and, from its old position above the milestone rungs, masked them. It now lives in the
+  // recurring tail (see coachOf/COACH_NUDGES) at a floor that still means something mid-game.
+  COACH_BANK_NUDGE: 250000,
   // D2b racket/front income cap — rolling budget refills to this many hours of income per
   // real day (continuous online play tops out here); offline collect still bursts to
   // OFFLINE_CAP_MS. 12h is the generous end of the plan's 8-12h range; re-sim + founder
@@ -991,6 +996,12 @@ export const M3 = {
   // killer can only HOLD a front they could run (level + an empty kind slot). Set false to disable.
   // Founder sign-off lever (new/tunable — sim the concentration effect before production).
   SACK_ON_KILL: true,
+  // COACH_FAMILY_BAND_LVL (progression harness F1) — the "join a family" coach rung is a HIGH-priority
+  // nudge only inside the early band (lvl 3..this). Past it the player has plainly decided to run solo,
+  // and the rung drops to the recurring tail of the ladder. Above the band it must NOT sit over the
+  // one-time milestone rungs: a rung a player can decline forever masks every rung below it forever
+  // (the harness pinned a 7-day solo player on it, hiding the earner/skills/Kitchen/legit/energy rungs).
+  COACH_FAMILY_BAND_LVL: 12,
   // D6a — THE APPROACH (stakes/spine review #6: deepen the core crime verb). Every job now takes a
   // risk/reward CHOICE — Case It (quiet), Standard, or Go Loud — a real per-job decision instead of a
   // single click + RNG. The design constraint: the CASH faucet stays EV-NEUTRAL by construction

@@ -352,6 +352,38 @@ await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL');
 for (let i = 0; i < 20; i++) { const c = await call('POST', '/v1/crimes/pick', { token: rook.token }); if (c.body.success) break; await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL'); }
 rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
 assert.notEqual(rm.coach?.label, 'Pull your first job', 'once the first job is pulled the coach advances');
+// (harness F1) THE COACH MUST NOT DEAD-END. THREE separate rungs could never clear for a solo
+// player, each masking every rung below it — the harness caught it by reporting the same coach line
+// for a whole simulated 7-day run, and a 30-day run still stuck at "Finish your First Week" at
+// LEVEL 128. (a) "Nobody survives alone" is declinable forever; (b) `ob_family` sat in the
+// First-Week gate, so that rung was uncompletable too; (c) `owned.skills` is a SET, so the skills
+// rung tested `.length` → undefined → fired forever. Walk the whole ladder and prove each advances.
+const coachOf = async () => (await call('GET', '/v1/me', { token: rook.token })).body.character.coach?.label;
+await seedCh(rook.id, `respect=${10 * 19 * 19}, cash=1000, bank=100, path='gun', gta_at=now(), lc_crime=1`);
+for (const t of ['ob_crime', 'ob_boost', 'ob_bank', 'ob_path']) await call('POST', `/v1/onboard/${t}/claim`, { token: rook.token });
+assert.equal(await coachOf(), 'Money while you sleep',
+  '(b) the four SOLO First-Week tasks clear the gate — ob_family no longer pins it');
+await seedCh(rook.id, "lab='street'");
+assert.equal(await coachOf(), 'You\'ve earned skill points', 'the ladder advances to skills');
+await call('POST', '/v1/skills/bruiser', { token: rook.token });
+assert.notEqual(await coachOf(), 'You\'ve earned skill points',
+  '(c) buying a skill CLEARS the rung — owned.skills is a Set, so .length would have hung here forever');
+// the tail: most-clearable first, the permanent decline LAST, so nothing masks anything
+await seedCh(rook.id, 'cash=400000, bank=0, energy=0');
+assert.equal(await coachOf(), 'You\'re carrying too much', 'a fat pocket surfaces the bank nudge');
+await seedCh(rook.id, 'cash=0, bank=0, energy=999');
+assert.equal(await coachOf(), 'Full tank', 'banked + rested surfaces the energy rung');
+await seedCh(rook.id, 'energy=0');
+assert.equal(await coachOf(), 'Still running solo',
+  '(a) and the declinable family nudge is the LAST rung — present, but masking nothing');
+// …but INSIDE the early band the family rung is still the high-priority nudge it should be: for a
+// brand-new street, joining a family genuinely IS the next thing.
+const band = await mk('Band Benny');
+await seedCh(band.id, `respect=${10 * 5 * 5}, path='gun'`);   // level 6 — inside the 3..12 band
+for (let i = 0; i < 20; i++) { const c = await call('POST', '/v1/crimes/pick', { token: band.token }); if (c.body.success) break; await seedCh(band.id, 'nerve=50, jail_until=NULL'); }
+const bandCoach = (await call('GET', '/v1/me', { token: band.token })).body.character.coach;
+assert.equal(bandCoach?.label, 'Nobody survives alone', 'inside the band a gangless street IS nudged to a family');
+assert.equal(bandCoach.tab, 'family', 'and pointed at the Family tab');
 // the funnel (mod-gated): counts characters + first-week claims, refuses without the key
 assert.equal((await call('GET', '/v1/mod/funnel', { token: rook.token })).code, 401, 'the funnel needs the mod key');
 const funnel = (await app.inject({ method: 'GET', url: '/v1/mod/funnel', headers: { 'x-mod-key': 'test-mod-key' } })).json();
