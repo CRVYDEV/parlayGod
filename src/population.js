@@ -35,6 +35,19 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 // that duplication is what silently under-seeded every sim probe when the curve last moved)
 const respectFor = (lvl) => PACING.LEVEL_DIVISOR * (lvl - 1) * (lvl - 1);
 
+/**
+ * How much `npc:seed` has been emitted in the last rolling 24h — read from the LEDGER, which is the
+ * only state that survives a worker restart (the wage epoch's `emittedThisEpoch` discipline).
+ *
+ * Sums the ledgered DELTAS, which is exactly what the faucet emitted: the `corner` band seeds below
+ * the un-ledgered $500 base, so those rows are negative and correctly REFUND budget.
+ */
+export async function seededToday(client) {
+  return Number((await client.query(
+    `SELECT COALESCE(SUM(amount), 0) n FROM transactions
+      WHERE reason='npc:seed' AND at > now() - interval '24 hours'`)).rows[0].n);
+}
+
 /** How many residents are currently walking around. */
 export async function population(client) {
   return Number((await client.query('SELECT COUNT(*) n FROM characters WHERE alive AND is_npc')).rows[0].n);
@@ -76,6 +89,10 @@ export async function spawnResident(client, opts = {}) {
     [charId, accountId, name, Math.floor(dayOf() / 28), respectFor(lvl), cash,
      rndInt(band.stat[0], band.stat[1]), rndInt(band.stat[0], band.stat[1]), rndInt(band.stat[0], band.stat[1]),
      pick(DISTRICTS).id]);
+
+  // THE TURNOVER: record what they ARRIVED with, so the worker can later tell a resident players
+  // have picked clean from one who was simply born poor. Direct SQL, outside persistCharacter.
+  await client.query('UPDATE characters SET npc_seed=$2 WHERE id=$1', [charId, cash]);
 
   // §10.4 — the seed is ledgered against the resident, so the per-character cash check reconciles
   // them exactly like a player. Every character row carries an un-ledgered base of 500 (that's the
@@ -148,26 +165,59 @@ export async function retireResident(client, charId) {
  * per-job isolation discipline).
  */
 export async function runPopulation(pool) {
-  const out = { spawned: 0, retired: 0, population: 0 };
+  const out = { spawned: 0, retired: 0, drained: 0, population: 0, turnoverLeft: 0 };
 
-  // 1. retire the old lines first, so the top-up below refills the space they leave
-  const old = (await pool.query(
+  // THE CEILING (step three). Recycling makes `npc:seed` recurring, so replacements are metered —
+  // a per-day HEADCOUNT, because a retirement is precisely what creates the vacancy a fresh seed
+  // pays for. Metering dollars instead would let the day-one fill of an empty city (~48 seeds that
+  // replace nobody) eat the whole allowance before a single resident had been robbed.
+  const today = dayOf();
+  const st = (await pool.query('SELECT day, retired FROM population_state WHERE id=1')).rows[0]
+    || { day: today, retired: 0 };
+  const usedToday = Number(st.day) === today ? Number(st.retired) : 0;
+  let allowance = Math.max(0, POPULATION.TURNOVER.PER_DAY - usedToday);
+  out.turnoverLeft = allowance;
+
+  // 1. retire the old lines first, so the top-up below refills the space they leave — AND (step
+  //    three) the ones players have picked clean, which is what makes the city renewable. Both go
+  //    through the same retire path, and both consume the day's allowance: either way the city is
+  //    buying a fresh face with a fresh seed.
+  const room = Math.min(POPULATION.SPAWN_PER_TICK, allowance);
+  const old = room <= 0 ? [] : (await pool.query(
     'SELECT id FROM characters WHERE alive AND is_npc AND generation > $1 ORDER BY id LIMIT $2',
-    [POPULATION.RETIRE_GENERATIONS, POPULATION.SPAWN_PER_TICK])).rows;
-  for (const r of old) {
+    [POPULATION.RETIRE_GENERATIONS, room])).rows;
+  // "picked clean" is measured against what they ARRIVED with (npc_seed), never a flat cash floor —
+  // a flat floor can't tell a drained boss from a corner kid born with $200, and would recycle the
+  // cheap bands forever. `npc_seed > 0` also skips residents not yet stamped (heirs, pre-upgrade
+  // rows), so an unknown stake is never mistaken for a drained one.
+  const oldIds = new Set(old.map((r) => r.id));
+  const drained = old.length >= room ? [] : (await pool.query(
+    `SELECT id FROM characters WHERE alive AND is_npc AND npc_seed > 0
+       AND cash < npc_seed * $1 / 10000.0 ORDER BY id LIMIT $2`,
+    [POPULATION.TURNOVER.DRAINED_BPS, room])).rows
+    .filter((r) => !oldIds.has(r.id)).slice(0, room - old.length);
+  out.drained = drained.length;
+  for (const r of [...old, ...drained]) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const done = await retireResident(client, r.id);
+      // charge the day's allowance in the SAME transaction as the retirement, so a crash between
+      // the two can't hand out a free replacement (the claim-then-act discipline)
+      if (done) await client.query(
+        `UPDATE population_state SET day=$1, retired = CASE WHEN day=$1 THEN retired + 1 ELSE 1 END WHERE id=1`,
+        [today]);
       await client.query('COMMIT');
-      if (done) out.retired++;
+      if (done) { out.retired++; allowance--; out.turnoverLeft = Math.max(0, allowance); }
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
       console.error('[population] retire failed', r.id, e.message);
     } finally { client.release(); }
   }
 
-  // 2. top up to target
+  // 2. top up to target. Deliberately UNMETERED: the ceiling is charged at retirement, which is
+  //    what actually creates the vacancy, so the spawn side is free to refill whatever the city is
+  //    short — including the day-one fill of an empty server, which replaces nobody.
   const have = await population(pool);
   const want = Math.max(0, Math.min(POPULATION.SPAWN_PER_TICK, POPULATION.TARGET - have));
   for (let i = 0; i < want; i++) {
@@ -210,6 +260,13 @@ const bps = (n, b) => Math.floor(Number(n) * b / 10000);
 export async function residentAct(client, r) {
   const B = POPULATION.BEHAVIOUR;
   const cash = Number(r.cash);
+
+  // THE TURNOVER: an HEIR is born through the ordinary runEstate, which knows nothing about
+  // `npc_seed` — so the first time we see a resident carrying an unrecorded stake, record it. Doing
+  // it here rather than in social.js keeps the estate path free of population concerns, and an
+  // unstamped resident is simply never eligible for the drained-retire until we've seen them once.
+  if (Number(r.npc_seed || 0) <= 0 && cash > 0)
+    await client.query('UPDATE characters SET npc_seed=$2 WHERE id=$1', [r.id, cash]);
 
   // 1. CONSENT LIMITS — what they're willing to be challenged for. Pure column writes, zero value.
   //    This is what lights up the bodyguard market, the back-room fade board and the duel ladder:
@@ -318,7 +375,7 @@ export async function runResidentBehaviour(pool) {
   // NOTE: shuffled in JS, not `ORDER BY random()` — pg-mem has no random() (the two-flat-queries
   // precedent). Picking whose turn it is doesn't need to be cryptographic.
   const eligible = (await pool.query(
-    `SELECT id, cash, loc, guard_price, fade_limit, duel_limit FROM characters
+    `SELECT id, cash, loc, npc_seed, guard_price, fade_limit, duel_limit FROM characters
       WHERE alive AND is_npc
         AND (jail_until IS NULL OR jail_until < now())
         AND (hosp_until IS NULL OR hosp_until < now())
@@ -333,7 +390,7 @@ export async function runResidentBehaviour(pool) {
       await client.query('BEGIN');
       // re-read under the row lock — a player may have jumped/robbed them since the pick
       const live = (await client.query(
-        'SELECT id, cash, loc, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE',
+        'SELECT id, cash, loc, npc_seed, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE',
         [r.id])).rows[0];
       const did = live ? await residentAct(client, live) : null;
       await client.query('COMMIT');

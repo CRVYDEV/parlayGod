@@ -5196,3 +5196,31 @@ run. Flagged for founder sign-off (NOT patched): **the city DEPLETES** — resid
 once drained the boards go quiet again; making it renewable (resident income, or
 retire-and-respawn-on-broke) turns a one-shot ~$998k into a recurring faucet, which is a balance call.
 Suite 47/47 + sim drift-0.
+**THE POPULATION — step three: THE TURNOVER — BUILT** (founder-directed 2026-07-25, closing the audit's
+one open flag; `src/population.js`, `POPULATION.TURNOVER` rules block, new `characters.npc_seed` column +
+`population_state` singleton, `test/population.js`). The city now RENEWS itself: the worker retires a
+resident players have **picked clean** alongside the old-bloodline rule, and the existing top-up puts a
+fresh face in the vacancy (both through the same `retireResident` path, so the escrow-reclaim + `npc:retire`
+burn already hold). **"Picked clean" is measured against what they ARRIVED with** (`characters.npc_seed`,
+stamped at spawn, lazily backfilled for heirs in `residentAct`) — **never a flat cash floor**, which is the
+whole design: a flat floor can't tell a drained boss from a corner kid BORN with $200, so it would retire
+the cheap bands the instant they spawned, respawn them, and loop forever (an unbounded faucet).
+`DRAINED_BPS` (15%) carries deliberate margin — a resident with the maximum parked in escrow (a loan offer
+plus a buy order) still holds ~52% of their stake. This deliberately makes `npc:seed` a RECURRING faucet,
+so it ships with an explicit ceiling — and **the ceiling meters RETIREMENTS, not dollars seeded**, because a
+retirement is exactly what creates the vacancy a fresh seed pays for. Metering dollars was the first cut and
+the test killed it: the day-one fill of an empty city is ~48 seeds that replace NOBODY and ate ~$998k of a
+$1M budget before anyone had been robbed. So the rule reads plainly: **at most `TURNOVER.PER_DAY` (24)
+residents are replaced in a day** — a headcount in the new `population_state` singleton, charged in the SAME
+transaction as the retirement (the claim-then-act discipline, so a crash between the two can't hand out a
+free replacement), bounding the faucet at **≈$499k/day** at the weighted mean seed (territory-racket /
+boxing-purse band, ~2.3% of the passive stack). Spent, the city keeps its drained residents until the day
+rolls — surfaced in the worker log and on the ops dashboard (`residentTurnoverToday`/`residentTurnoverCap`/
+`residentSeedToday`) so an under-strength city reads as a ceiling rather than a bug. §10.4 unchanged (no new
+reason — the recycle just fires the existing `npc:seed` faucet and `npc:retire` sink more than once). The
+pool also recycles unaided, off-faucet: `hireBodyguard` and loan repayment pay player cash INTO residents.
+`test/population.js` proves every resident records its arrival stake, THE TRAP (the poorest resident in the
+city is still not "drained" — born poor ≠ picked clean; a city nobody has robbed retires nobody), the
+picked-clean retire + replacement, the per-retirement allowance charge, and the ceiling holding (a drained
+resident STAYS on the streets, broke, once the day's replacements are spent). Suite 47/47 + sim drift-0.
+`TURNOVER.PER_DAY`/`DRAINED_BPS` are founder sign-off levers — `PER_DAY` is the direct faucet dial (BALANCE.md).

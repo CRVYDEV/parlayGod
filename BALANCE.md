@@ -2147,13 +2147,32 @@ both figures every run.
    people is not a call to make silently. Purely a presentation choice; trivially reversible.
 2. **Residents draw NO Street Wage**, even when enrolled and minted (`emission.js`). That one is not
    a lever — a resident drawing emission would be theft from the endowment.
-3. **OPEN — the city is a depleting resource.** Residents have no income, so once players drain the
-   seed pool the boards go quiet again: stakes stop clearing the floors, loan offers stop firing
-   below `LOAN.MIN`, orders stop. Step two lights the city up **once**. Making it renewable —
-   resident income, or retiring-and-respawning a *broke* resident rather than only an old bloodline
-   — converts a one-shot ~$998k into a **recurring faucet**, so it is a balance call, not a bug fix.
-   Dials: `POPULATION.TARGET`, the band seeds, and whether depletion triggers retirement. Note the
-   pool partly recycles unaided: `hireBodyguard` and loan repayment both pay cash *into* residents.
+3. **RESOLVED (founder-directed 2026-07-25) — step three, THE TURNOVER.** The depletion flagged
+   above is closed: the worker now retires residents players have **picked clean** and the top-up
+   puts fresh faces in their place, so the city renews itself instead of quietly emptying.
+
+   That deliberately converts `npc:seed` from a one-shot stock into a **recurring faucet**, so it
+   ships with an explicit ceiling — and the ceiling meters **retirements, not dollars seeded**,
+   because a retirement is exactly what creates the vacancy a fresh seed pays for. Metering dollars
+   was the first cut and the test killed it: the day-one fill of an empty city is ~48 seeds that
+   replace *nobody* and ate ~$998k of a $1M budget before anyone had been robbed.
+
+   | | |
+   |---|---|
+   | `TURNOVER.PER_DAY` | **24** replacements/day (half the city), held in `population_state` |
+   | bounded faucet | **≈$499k/day** at the weighted mean seed — territory-racket / boxing-purse band, ~2.3% of the passive stack |
+   | `TURNOVER.DRAINED_BPS` | **15%** of what a resident ARRIVED with (`characters.npc_seed`) |
+
+   "Picked clean" is measured against their **own arrival stake**, never a flat cash floor — a flat
+   floor can't tell a drained boss from a corner kid born with $200 and would recycle the cheap
+   bands on spawn, forever (an unbounded loop). The 15% line has margin: a resident with the maximum
+   parked in escrow still holds ~52%. The allowance is charged in the same transaction as the
+   retirement, so a crash can't hand out a free replacement. Watch it on the ops dashboard
+   (`residentTurnoverToday` / `residentTurnoverCap` / `residentSeedToday`); the sim prints the
+   ceiling every run. Both numbers are sign-off levers — `PER_DAY` is the direct faucet dial.
+
+   Note the pool also recycles unaided, off-faucet: `hireBodyguard` and loan repayment both pay
+   player cash *into* residents.
 
 **Consent-limit floors (red-team F1–F3, applied).** The three consent columns are written by direct
 SQL, which bypasses `offerBodyguard` / `listDuel` / `setFadeLimit` and every bound they enforce. Each

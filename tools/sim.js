@@ -726,17 +726,22 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
     `${M3.CASH_LOOT_RATE * 100}% of pocket — the same loot surface as a player kill, and the SAME ammo cost applies`);
   note('population', 'faucet posture', perKill < 25000 ? 'petty vs the signed loops' : 'SIGN-OFF: material',
     'compare to the boxing exhibition / territory bands (~$300-400k/day); a resident is scenery with a wallet, not a payday');
-  // (red-team) The earlier claim here — "the worker refills, so it can't be drained faster than it
-  // is topped up" — was WRONG, and in the direction that matters. The top-up refills HEADCOUNT, not
-  // cash: a resident drained to $0 stays alive and no replacement spawns. So the seed pool is a
-  // ONE-SHOT stock, not a flow. Step two also made far more of it realizable: a kill leaks only
-  // CASH_LOOT_RATE (the rest burns in the estate), but a duel/fade win or an order-fill transfers
-  // ~all of the stake. So the honest lifetime bound is the standing pool, extracted at ~100%
-  // rather than ~25%, refilled only as bloodlines actually turn over.
-  note('population', 'lifetime extraction bound', `~$${fmt(standing)}`,
-    'the seed pool is a STOCK, not a flow — the worker refills headcount, not wallets, so a drained resident just stands there broke');
-  note('population', 'realized share', 'step two: ~100% (was ~25%)',
-    `duel/fade/order-fill transfer the whole stake; only a KILL burns the remainder. Still petty next to the $${fmt(21600000)}/day passive stack — but see BALANCE.md: a drained city goes QUIET, which is the founder call (renewable resident income = a real recurring faucet)`);
+  // The standing pool is what's on the street at any instant. Step two made nearly all of it
+  // REALIZABLE (a kill leaks only CASH_LOOT_RATE — the estate burns the rest — but a duel/fade win
+  // or an order-fill transfers the whole stake), and step three made it RECURRING: the worker
+  // retires residents players have picked clean and puts fresh faces in their place.
+  //
+  // So the faucet is now a RATE, and its ceiling is a per-day headcount of replacements — metering
+  // retirements, not dollars seeded, because a retirement is exactly what creates the vacancy a
+  // fresh seed pays for (metering dollars would let the day-one fill of an empty city eat the whole
+  // allowance before anyone had been robbed).
+  const perDay = POPULATION.TURNOVER.PER_DAY * expSeed;
+  note('population', 'standing pool', `~$${fmt(standing)}`,
+    'what is on the street at any instant — step two made ~100% of it realizable (was ~25%: only a kill burns the remainder)');
+  note('population', 'RECURRING ceiling', `${POPULATION.TURNOVER.PER_DAY} replacements/day ≈ $${fmt(perDay)}/day`,
+    `step three: the city renews itself, so npc:seed is a rate. Bounded by headcount in population_state — the same band as a territory racket (~$300-400k/day) or the boxing purse, and ~${Math.round(perDay / 21600000 * 1000) / 10}% of the passive stack`);
+  note('population', 'drained threshold', `${POPULATION.TURNOVER.DRAINED_BPS / 100}% of arrival stake`,
+    'measured against what a resident ARRIVED with (npc_seed), never a flat cash floor — a flat floor would recycle the cheap bands on spawn, forever');
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

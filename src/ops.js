@@ -3,6 +3,8 @@
 // surface. The dashboard also calls the existing mod endpoints (invariants, funnel, vig, emission,
 // reserve, audit) alongside these two. Founder-facing so the alpha can be run and watched without a dev.
 
+import { POPULATION } from './rules.js';
+
 const num = (v) => Number(v || 0);
 const safeParse = (p) => { try { return typeof p === 'string' ? JSON.parse(p) : (p || {}); } catch { return {}; } };
 
@@ -23,6 +25,14 @@ export async function opsOverview(pool) {
     active24h: await one("SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND last_accrued_at > now() - interval '24 hours'"),
     agents: await one('SELECT COUNT(*) n FROM account_persistent WHERE agent_flag'),
     residents: await one('SELECT COUNT(*) n FROM characters WHERE alive AND is_npc'),
+    // step three (THE TURNOVER): the city renews itself by retiring picked-clean residents and
+    // spawning fresh ones, so `npc:seed` is a recurring faucet — surface the replacements used
+    // against the day's ceiling, plus the dollars it actually cost, so the founder can watch the
+    // faucet rather than take it on trust.
+    residentTurnoverToday: await one('SELECT retired n FROM population_state WHERE id=1'),
+    residentTurnoverCap: POPULATION.TURNOVER.PER_DAY,
+    residentSeedToday: await one(
+      "SELECT COALESCE(SUM(amount), 0) n FROM transactions WHERE reason='npc:seed' AND at > now() - interval '24 hours'"),
     jailed: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND jail_until > now()'),
     indicted: await one('SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc AND indicted_at IS NOT NULL'),
   };

@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS characters (
   contraband NUMERIC NOT NULL DEFAULT 0,           -- THE PORT step four: warehoused landed contraband (BOOK VALUE at route.sell) — fenced later at a drifting price; direct SQL, dies with the street (heir starts at 0)
   berths INT NOT NULL DEFAULT 0,                    -- THE PORT step four: rented harbor slips — +1 fleet cap each; direct SQL
   is_npc BOOLEAN NOT NULL DEFAULT false,            -- THE POPULATION: an NPC resident (the convoys.is_npc precedent). A REAL character on every board — jumpable/contractable/robbable through the same audited paths — but excluded from the human-only surfaces (the wage, City Standing, ops, the funnel)
+  npc_seed NUMERIC NOT NULL DEFAULT 0,              -- THE TURNOVER (step three): what a resident ARRIVED with. Lets the worker tell a resident who was BORN poor from one players have picked clean — a plain cash floor can't, and would respawn the cheap bands forever. Direct-SQL only (never in persistCharacter's positional UPDATE)
   last_accrued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1509,6 +1510,18 @@ CREATE TABLE IF NOT EXISTS amm_pool (
   omr_reserve NUMERIC NOT NULL
 );
 -- Street-tax accumulator + event fund; the 12h buyback drains `pool`.
+-- THE POPULATION step three (THE TURNOVER): the city renews itself by retiring residents players
+-- have picked clean, which makes `npc:seed` a RECURRING faucet. This singleton is its ceiling — a
+-- per-day HEADCOUNT of replacements, not a dollar budget: every retirement is what creates the
+-- vacancy a fresh seed pays for, whereas metering dollars would let the day-one fill of an empty
+-- city (~48 seeds replacing nobody) eat the whole allowance before anyone had been robbed.
+CREATE TABLE IF NOT EXISTS population_state (
+  id INT PRIMARY KEY,
+  day INT NOT NULL DEFAULT 0,       -- the day the counter belongs to (rolls it over lazily)
+  retired INT NOT NULL DEFAULT 0    -- residents replaced so far that day
+);
+INSERT INTO population_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS street_tax (
   id INT PRIMARY KEY,
   pool NUMERIC NOT NULL DEFAULT 0,
