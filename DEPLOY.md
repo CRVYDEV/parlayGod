@@ -182,6 +182,19 @@ after a good dump**, so a run of bad nights can never age out the last known-goo
   *silent* failure of exactly that (WAL archiving erroring for ~11 minutes while everything looked
   healthy). Keep an independent dump you have personally restored at least once.
 
+**The script has its own regression test** — `npm run backup:selftest`, pointed at a throwaway
+Postgres it may create and drop databases on. It builds a populated database, a schema-only one and a
+non-OMERTÀ one, and proves each check *refuses what it should*: a verification that cannot fail is
+decoration. CI runs it against a real Postgres on every push, and that has already earned itself —
+it caught a **race in the verifier that refused GOOD dumps**. The required-table check piped into
+`grep -q` under `pipefail`; `grep -q` exits at the first match and SIGPIPEs the writer still emitting
+the rest of a ~34 KB table of contents, so a *successful* match returned 141 and the backup was
+rejected with "table X is missing" about a table that was plainly there. It never reproduced on a
+developer machine and fired on every CI run, blaming a different table each time. Fails closed (a bad
+dump is never kept in place of a good one), but a cron that starts refusing good backups with an
+untrue reason is its own incident. If you ever see that message, check the table really is absent
+before believing it.
+
 ## 8. Post-deploy smoke check
 - [ ] `GET /health` → `200 {"ok":true,"db":"up"}`.
 - [ ] `GET /v1/session` → 200 (server up).
