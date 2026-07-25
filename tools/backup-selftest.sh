@@ -30,7 +30,7 @@ check() { # check <ok?> <label> [detail]
   if [ "$1" = "0" ]; then pass=$((pass+1)); echo "  ✓ $2"; return; fi
   fails+=("$2${3:+ — $3}")
   echo "  ✗ $2${3:+ — $3}"
-  [ -n "${OUTPUT:-}" ] && echo "$OUTPUT" | tail -6 | sed 's/^/      | /'
+  [ -n "${OUTPUT:-}" ] && echo "$OUTPUT" | tail -20 | sed 's/^/      | /'
 }
 # `check_ok CMD…` — expect success; `check_fail CMD…` — expect a non-zero exit.
 run() { OUTPUT="$("$@" 2>&1)"; RC=$?; return 0; }
@@ -82,6 +82,17 @@ loadSchema() {
   [ "${n:-0}" -ge 40 ] || {
     echo "backup-selftest: schema loaded into $1 but only $n tables exist — the fixture is not what the test assumes." >&2
     exit 2; }
+  # A COUNT is not the assertion that matters. backup.sh insists on three tables BY NAME, so the
+  # fixture has to be checked by name too — otherwise "table X is missing from the dump" is ambiguous
+  # between a broken dump and a fixture that never had X, which is exactly the ambiguity that cost a
+  # CI round trip to resolve.
+  local missing
+  missing="$(psql "$(base_url "$1")" -tAc \
+    "SELECT string_agg(t,',') FROM unnest(ARRAY['accounts','characters','transactions']) t
+      WHERE to_regclass('public.'||t) IS NULL" 2>/dev/null | tr -d ' ')"
+  [ -z "$missing" ] || {
+    echo "backup-selftest: $1 has $n tables but is missing: $missing — the fixture is not what the test assumes." >&2
+    exit 2; }
 }
 loadSchema "$FULL_DB"
 loadSchema "$COLD_DB"
@@ -93,6 +104,14 @@ psql_q "$FULL_DB" "INSERT INTO characters (id, account_id, name, season)
                    SELECT gen_random_uuid(), id, 'Selftest '||substr(id::text,1,8), 1 FROM accounts"
 # a database that is NOT omerta — one table, to trip the schema check
 psql_q "$TINY_DB" "CREATE TABLE unrelated (id int); INSERT INTO unrelated VALUES (1)"
+# The fixture is the ground the whole run stands on: if these rows are not here, every later failure
+# is about the fixture and not about backup.sh.
+FIXTURE="$(psql "$(base_url "$FULL_DB")" -tAc \
+  "SELECT (SELECT count(*) FROM accounts)||'/'||(SELECT count(*) FROM characters)" 2>/dev/null | tr -d ' ')"
+[ "$FIXTURE" = "2/2" ] || {
+  echo "backup-selftest: fixture rows are $FIXTURE, expected 2/2 (accounts/characters)." >&2; exit 2; }
+echo "client: pg_dump $(pg_dump --version | awk '{print $3}'), pg_restore $(pg_restore --version | awk '{print $3}'), psql $(psql --version | awk '{print $3}')"
+echo "server: $(psql "$ADMIN_DB_URL" -tAc 'SHOW server_version' 2>/dev/null | tr -d ' ')   fixture: $FIXTURE accounts/characters"
 
 echo
 echo "1. A GOOD BACKUP IS KEPT"
