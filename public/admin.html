@@ -57,6 +57,7 @@
 </div>
 
 <div id="dash" class="hidden">
+  <div id="bkbanner" class="banner hidden">…</div>
   <div id="banner" class="banner">…</div>
   <div id="top">
     <h1>THE BOOKS</h1><span class="sub" id="stamp">—</span>
@@ -65,6 +66,7 @@
     <button id="logout" class="danger">lock up</button>
   </div>
   <div class="grid">
+    <div class="panel" id="p-backups"><h2>Backups</h2><div class="body">…</div></div>
     <div class="panel" id="p-integrity"><h2>§10.4 Integrity</h2><div class="body">…</div></div>
     <div class="panel" id="p-economy"><h2>The Economy</h2><div class="body">…</div></div>
     <div class="panel" id="p-players"><h2>Players</h2><div class="body">…</div></div>
@@ -122,10 +124,55 @@
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
+    renderBackups(ov.body);
     renderActivity(act.body); renderMod();
   }
 
   const rowHtml = (k, v) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+
+  // BACKUPS — the health nobody can see from inside the game. Postgres ships write-ahead-log
+  // segments to the backup service; if that stops, the database keeps working perfectly while the
+  // ability to RESTORE it quietly rots. That happened twice on 2026-07-25 and the only evidence was
+  // in the host's log stream. It gets its own banner because by the time you need a backup, it is
+  // far too late to discover you did not have one.
+  function renderBackups(ov) {
+    const b = ov?.backups || {};
+    const el = $('#p-backups').querySelector('.body');
+    const bn = $('#bkbanner');
+    if (!b.state || b.state === 'unsupported') {
+      bn.className = 'banner hidden';
+      el.innerHTML = '<div class="note">This database does not expose archiver stats (pg-mem in dev, or a '
+        + 'restricted role). Nothing to report — not a problem, just not visible from here.</div>';
+      return;
+    }
+    const ago = (s) => s == null ? 'never' : (s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago');
+    if (b.state === 'failing') {
+      bn.className = 'banner bad';
+      bn.textContent = '\u26a0 BACKUPS ARE FAILING — the game is fine, but RESTORING it may not be. Take a manual dump.';
+    } else if (b.state === 'off') {
+      bn.className = 'banner bad';
+      bn.textContent = '\u26a0 BACKUPS ARE SWITCHED OFF — there is no recovery chain at all. Take a manual dump.';
+    } else {
+      bn.className = 'banner hidden';
+    }
+    const good = b.state === 'ok';
+    el.innerHTML =
+      `<div class="big" style="color:var(--${good ? 'ok' : 'bad'})">${
+        good ? 'HEALTHY' : b.state === 'stale' ? 'QUIET' : b.state === 'off' ? 'NOT RUNNING' : 'FAILING'}</div>`
+      + rowHtml('last shipped', `${b.lastArchivedWal || 'never'} <span class="note">(${ago(b.secondsSinceArchived)})</span>`)
+      + rowHtml('shipped total', fmt(b.archivedCount))
+      + rowHtml('last failure', b.lastFailedWal ? `${b.lastFailedWal} <span class="note">(${ago(b.secondsSinceFailed)})</span>` : 'none')
+      + rowHtml('failures total', fmt(b.failedCount))
+      + `<div class="note">${good
+        ? 'Write-ahead logs are shipping. Point-in-time recovery is being maintained.'
+        : b.state === 'stale'
+          ? 'No failures, but nothing has shipped in a while. Normal on a quiet database (no writes, no logs to ship).'
+          : b.state === 'off'
+            ? 'archive_mode is off — this database has no point-in-time recovery at all. Zero failures here means nothing is even being attempted. Run tools/backup.sh, and check with your database host.'
+            : 'The last thing that happened was a FAILURE. Run tools/backup.sh for an independent dump, and raise it with your database host.'}</div>`
+      + (b.failedCount > 0 && good
+        ? '<div class="note">Past failures are recorded here forever — what matters is that the most recent event was a success.</div>' : '');
+  }
 
   function renderIntegrity(inv) {
     const checks = inv?.checks || [];

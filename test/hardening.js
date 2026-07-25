@@ -695,5 +695,59 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
     "src/db.js must attach a pool 'error' handler — without it a database restart kills the process");
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs)`);
+// ── ARE THE BACKUPS RUNNING? — the health the game could not see about itself ──
+// Postgres ships write-ahead-log segments to the backup service. When that stops, the database keeps
+// serving perfectly while the ability to RESTORE it rots — invisible from inside the game, and on
+// 2026-07-25 invisible to the founder too (twice in one day, evidence only in the host's log stream).
+{
+  const { archiverHealth } = await import('../src/dbhealth.js');
+  // pg-mem has no pg_stat_archiver — the dev default must read as "can't see it", never as broken
+  const dev = await archiverHealth(pool);
+  assert(dev.state === 'unsupported', `a database without pg_stat_archiver reports unsupported, got ${dev.state}`);
+
+  const fake = (rows) => ({ query: async () => ({ rows }) });
+  const iso = (msAgo) => new Date(Date.now() - msAgo).toISOString();
+
+  // healthy: the last thing that happened was a successful ship
+  let h = await archiverHealth(fake([{ archived_count: 900, last_archived_wal: '00000001000000030000000A',
+    last_archived_time: iso(60_000), failed_count: 0, last_failed_wal: null, last_failed_time: null }]));
+  assert(h.state === 'ok' && h.lastArchivedWal.endsWith('0A') && h.secondsSinceArchived <= 61, 'a shipping archive is ok');
+
+  // FAILING: the newest event is a failure. This is the alarm.
+  h = await archiverHealth(fake([{ archived_count: 900, last_archived_wal: 'FD', last_archived_time: iso(600_000),
+    failed_count: 12, last_failed_wal: 'FE', last_failed_time: iso(30_000) }]));
+  assert(h.state === 'failing' && h.failedCount === 12, 'a failure newer than the last success is FAILING');
+
+  // ...and the same numbers the other way round are NOT an alarm. Postgres retries a stuck segment
+  // until it lands, so a HEALED outage leaves its failure timestamps in this view forever — reading
+  // last_failed_time alone would alarm about an incident that resolved hours ago. This is exactly what
+  // 2026-07-25 looked like after 19:37:36: 12 recorded failures, then a success, then normal service.
+  h = await archiverHealth(fake([{ archived_count: 904, last_archived_wal: '000000010000000300000001',
+    last_archived_time: iso(30_000), failed_count: 12, last_failed_wal: 'FD', last_failed_time: iso(600_000) }]));
+  assert(h.state === 'ok' && h.failedCount === 12, 'a HEALED outage is ok — old failures must not re-alarm');
+
+  // quiet (no writes → no segments) is a note, not an alarm: an idle database ships nothing, correctly
+  h = await archiverHealth(fake([{ archived_count: 5, last_archived_wal: 'X', last_archived_time: iso(20 * 3600_000),
+    failed_count: 0, last_failed_wal: null, last_failed_time: null }]));
+  assert(h.state === 'stale', 'a long-quiet archive is stale, not failing');
+
+  // SWITCHED OFF is not healthy. A database with archive_mode=off has zero failures forever, which
+  // the first cut of this read as "ok" — caught by probing a real Postgres that had archiving
+  // disabled. "No failures" and "nothing is even being attempted" must never look the same.
+  h = await archiverHealth(fake([{ archived_count: 0, last_archived_wal: null, last_archived_time: null,
+    failed_count: 0, last_failed_wal: null, last_failed_time: null, archive_mode: 'off' }]));
+  assert(h.state === 'off' && h.archiveMode === 'off', `archive_mode=off must report off, got ${h.state}`);
+  h = await archiverHealth(fake([{ archived_count: 3, last_archived_wal: 'A', last_archived_time: iso(10_000),
+    failed_count: 0, last_failed_wal: null, last_failed_time: null, archive_mode: 'on' }]));
+  assert(h.state === 'ok', 'archive_mode=on and shipping is ok');
+
+  // and it must never throw the caller's request away on a database that refuses the view
+  const denied = await archiverHealth({ query: async () => { throw new Error('permission denied for view pg_stat_archiver'); } });
+  assert(denied.state === 'unsupported', 'a restricted role reports unsupported, not an outage');
+
+  const ov = await call('GET', '/v1/mod/overview', { headers: modH });
+  assert(ov.code === 200 && ov.body.backups && ov.body.backups.state, 'the ops dashboard carries backup health');
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
 await app.close();

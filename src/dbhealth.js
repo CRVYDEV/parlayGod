@@ -56,6 +56,71 @@ export function isDbDown(err) {
 }
 
 /**
+ * IS THE BACKUP CHAIN ALIVE? — the question nobody could answer on 2026-07-25.
+ *
+ * Postgres continuously ships write-ahead-log segments to the backup service. If that stops, the
+ * database keeps serving perfectly and point-in-time recovery quietly rots: everything looks healthy
+ * while your ability to restore does not exist. That failed TWICE in one day here (segments `A8` and
+ * `FD`, ~11 and ~7 minutes), and the only evidence was buried in the hosting provider's log stream.
+ *
+ * `pg_stat_archiver` is the database's own account of it, readable over an ordinary connection —
+ * so the game can watch its own backups instead of a human remembering to go and look.
+ *
+ * The verdict is deliberately five-state, not a boolean:
+ *   ok       — the last thing that happened was a successful ship
+ *   failing  — the last thing that happened was a FAILURE (more recent than the last success)
+ *   stale    — no failures, but nothing has shipped in a long time either. On an idle database that
+ *              is perfectly normal (no writes → no segments), so it is a note, never an alarm.
+ *   off      — archiving is DISABLED. There is no chain to break because there is no chain. Caught
+ *              by a probe against a database with `archive_mode=off`, which the first cut of this
+ *              function cheerfully reported as "ok" — a zero failure count reads as healthy right up
+ *              until you need a backup. Reporting "fine" for "not configured" is the exact false
+ *              reassurance this whole module exists to kill, so archive_mode is read explicitly.
+ *   unsupported — pg-mem, or a role that cannot read the view. Not knowing is not the same as broken.
+ */
+export async function archiverHealth(pool, { staleAfterMs = 6 * 3600 * 1000 } = {}) {
+  let r;
+  try {
+    r = await pool.query(`SELECT archived_count, last_archived_wal, last_archived_time,
+                                 failed_count, last_failed_wal, last_failed_time,
+                                 current_setting('archive_mode') AS archive_mode
+                          FROM pg_stat_archiver`);
+  } catch (e) {
+    // pg-mem has no pg_stat_archiver, and a locked-down managed role may not expose it. Neither is
+    // a backup problem, so neither may be reported as one.
+    return { state: 'unsupported', reason: String(e.message || e).slice(0, 120) };
+  }
+  const s = r.rows[0];
+  if (!s) return { state: 'unsupported', reason: 'pg_stat_archiver returned no row' };
+  const at = s.last_archived_time ? new Date(s.last_archived_time).getTime() : null;
+  const ft = s.last_failed_time ? new Date(s.last_failed_time).getTime() : null;
+  const now = Date.now();
+  // A failure only counts as CURRENT if it is more recent than the last success. Postgres retries the
+  // same segment until it lands, so a healed outage leaves its failure timestamps sitting in this view
+  // forever — reading `last_failed_time` alone would alarm about an incident that is long over.
+  const failing = ft != null && (at == null || ft > at);
+  // `archive_mode` is only absent when the caller handed us a stub row (the unit tests) — a real
+  // Postgres always reports it, so treating "not stated" as on keeps the tests honest about the
+  // failing/healed logic they exist to pin without asserting on a setting they never set.
+  const off = s.archive_mode !== undefined && s.archive_mode !== 'on' && s.archive_mode !== 'always';
+  const state = off ? 'off'
+    : failing ? 'failing'
+      : (at != null && now - at > staleAfterMs ? 'stale' : 'ok');
+  return {
+    state,
+    archiveMode: s.archive_mode ?? null,
+    archivedCount: Number(s.archived_count || 0),
+    failedCount: Number(s.failed_count || 0),
+    lastArchivedWal: s.last_archived_wal || null,
+    lastArchivedAt: s.last_archived_time || null,
+    lastFailedWal: s.last_failed_wal || null,
+    lastFailedAt: s.last_failed_time || null,
+    secondsSinceArchived: at == null ? null : Math.round((now - at) / 1000),
+    secondsSinceFailed: ft == null ? null : Math.round((now - ft) / 1000),
+  };
+}
+
+/**
  * Can we actually round-trip a query right now? Answers in bounded time: a pool with no free
  * connections (or a host that black-holes packets) would otherwise hang the health check itself,
  * which is exactly the failure mode a health check exists to report.
