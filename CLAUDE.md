@@ -5224,3 +5224,22 @@ city is still not "drained" — born poor ≠ picked clean; a city nobody has ro
 picked-clean retire + replacement, the per-retirement allowance charge, and the ceiling holding (a drained
 resident STAYS on the streets, broke, once the day's replacements are spent). Suite 47/47 + sim drift-0.
 `TURNOVER.PER_DAY`/`DRAINED_BPS` are founder sign-off levers — `PER_DAY` is the direct faucet dial (BALANCE.md).
+A **round-two red-team over step three** (`AUDIT-population.md`, same four lenses) returned **no CRITICAL/
+HIGH and no §10.4 drift** (the recycle adds no reason; the allowance charge shares the retirement's
+transaction so a crash can't hand out a free replacement; bodyguards are self-correcting since a hired
+guard has just RECEIVED ≥$10k and so sits well clear of the drained line) and fixed four: **T1 (LOW-MED)**
+old-bloodline retirement and the drained pass shared one per-tick room with old lines taken FIRST, so
+≥`SPAWN_PER_TICK` lines past `RETIRE_GENERATIONS` starved the renewal loop indefinitely — and heavy PvP is
+exactly what sustains that backlog, since a resident's generation only rises when players kill them; the
+loop is now guaranteed a slot whenever it has a candidate and maintenance takes what's left. **T2
+(LOW-MED)** an HEIR was born unstamped and `npc_seed` was backfilled on its first worker turn (a ~8h window
+on a 48-body city at `ACT_PER_TICK` 6 hourly) — drain the heir inside it and the backfill recorded the
+DRAINED cash as their arrival stake, making them permanently un-recyclable (a broke body occupying a slot,
+manufacturable at will by a griefer); the stake is known at the heir's INSERT, so `runEstate` now records
+it there alongside the `is_npc` flag already on that row. **T3 (LOW)** `runPopulation` had no advisory lock
+though it's the second metered faucet — two replicas could each spend the full daily allowance; added the
+`runWageEpoch` session-lock pattern (distinct class). **T4** `seededToday` was production-dead (ops
+duplicated the query inline) — ops now uses the helper. Flagged as accepted-by-design: **the reroll** —
+draining a cheap corner resident forces a replacement drawn from the full band distribution (E $20,798 vs
+their ~$700), so cheap drains convert into richer targets; the player receives nothing directly and total
+extraction stays bounded by `PER_DAY × mean seed`, but the ceiling is the only thing bounding it.
