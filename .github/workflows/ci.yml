@@ -1,0 +1,80 @@
+name: ci
+
+# The three gates the codebase already treats as required, run automatically instead of by hand.
+# Until now they only ran when someone typed the command — which is how, on 2026-07-25, a change
+# that killed the API process on every database restart reached production. That bug was reachable
+# ONLY from real Postgres, so `pgcheck` below is the one that would have caught it.
+#
+#   npm test   — the 47 suites, on pg-mem, in-process. No database, no network.
+#   pgcheck    — the same server against REAL Postgres: pooling, row locks, timeouts, the migration.
+#   sim        — the economy harness; asserts the §10.4 ledger sweep is drift-0 end to end.
+
+on:
+  push:
+    paths-ignore:
+      - 'omerta-contracts/**'      # covered by forge.yml
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - 'omerta-contracts/**'
+      - '**/*.md'
+  workflow_dispatch: {}
+
+concurrency:                        # a new push supersedes an in-flight run of the same branch
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suites:
+    name: suites + sim (pg-mem)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+
+      - name: npm test (47 suites)
+        run: npm test
+
+      - name: economy sim (§10.4 drift-0)
+        run: npm run sim
+
+  pgcheck:
+    name: real Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        # Pin the major to what production runs. The point of this job is fidelity, so tracking
+        # `latest` here would quietly test something the deployment isn't.
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pgcheck
+          POSTGRES_DB: omerta_check
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+
+      - name: pgcheck (pooling, row locks, timeouts, migration, ledger)
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
+          # Throwaway values for a throwaway database. preflight enforces real minimum strengths,
+          # so these have to clear them even though nothing here is ever exposed.
+          JWT_SECRET: ci-jwt-secret-not-a-real-one
+          MOD_KEY: ci-mod-key-long-enough-to-pass-preflight
+          MARKET_SEED: ciMarketSeed7Qx2mVb9PwLn4RtY6hJc
+          SOCIAL_VERIFY_MODE: 'off'
+          POPULATION_OFF: 'on'      # the resident worker would race the probe's own fixtures
+        run: npm run pgcheck
