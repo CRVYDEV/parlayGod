@@ -6,8 +6,14 @@ are set). Two Node processes over one Postgres DB. No build step.
 ## 0. Pre-flight (on the release commit)
 - [ ] `npm ci` (or `npm install`) — one runtime dep tree; no native build required for the game (the
       `@resvg/resvg-js` used by social-share PNGs is an **optionalDependency** — absent → cards fall back to SVG).
-- [ ] `npm test` → **34/34 suites green**.
+- [ ] `npm test` → **48/48 suites green**.
 - [ ] `node tools/sim.js` → ends with `✅ sim complete — §10.4 holds exactly` (drift-0).
+- [ ] **`npm run preflight`** — on the box, with the real environment loaded. Runs exactly the checks
+      the server runs at startup, so a green result means it will boot; non-zero exit means it won't,
+      with the reasons listed. Run it BEFORE cutting traffic over rather than reading a stack trace at
+      3am. (`src/preflight.js` is the single source of truth for every env var this server reads;
+      `test/preflight.js` fails the suite if any new one is left unclassified, which is how the
+      pacing-pass knobs came to be unguarded in the first place.)
 - [ ] (chain path only — not needed for off-chain alpha) `cd omerta-contracts && forge test` on a real
       Foundry toolchain. **Still the pre-mainnet gate; egress-blocked in CI here.**
 
@@ -17,11 +23,22 @@ are set). Two Node processes over one Postgres DB. No build step.
 | `NODE_ENV=production` | enables rate limits + the boot guards below | — |
 | `DATABASE_URL` | real Postgres; refuses pg-mem in prod (RAM-only = data loss on restart) | db.js |
 | `JWT_SECRET` | signs player tokens; refuses the dev fallback | server.js |
-| `MARKET_SEED` | secret ≥24 chars / ≥8 distinct; the §7.11 draw seed (Numbers/Track/Fight/goods). A weak seed is offline-recoverable from the public prices board → predictable money draws | server.js |
+| `MARKET_SEED` | secret ≥24 chars / ≥8 distinct; the §7.11 draw seed (Numbers/Track/Fight/goods). A weak seed is offline-recoverable from the public prices board → predictable money draws | preflight.js |
+| `MOD_KEY` | the only credential on the mod perimeter (ban / mod-kill / confiscate / comp grants) and on `/admin`. Fails closed — unset means every mod route 401s | preflight.js |
+
+**Also refused:** any of the **44 test-only** roll/timer knobs (`SEARCH_MS`, `LAW_BUST_P`, `TRAIN_CD_MS`,
+`MISSION_CD_MS`, `PEN_BREAK_P`, `ALLOW_MOD_REAL_REVENUE`, …). Each one pins a money roll to always-win or
+collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particular would reinstate the
+"level 240 in two hours" speedrun the pacing pass fixed. The full list is `TEST_ONLY_ENV` in
+`src/preflight.js` — and `test/preflight.js` fails if a knob is ever added without being classified.
+
+## 1b. Must be STATED (production refuses to boot without an explicit value)
+- [ ] `SOCIAL_VERIFY_MODE` = `live` | `trust` | `off`. It defaults to `off`, which pays the
+      Spread-the-Word faucet **nothing** while still accepting posts — that default silently ran on a
+      live server once. `live` is what an alpha wants (real X verification, needs the X keys in §3);
+      `off` is a legitimate choice, but it now has to be a *choice*.
 
 ## 2. Recommended production config
-- [ ] `SOCIAL_VERIFY_MODE=live` — **required for the alpha**; social-task + First-Week rewards fail-closed
-      (pay nothing) in any other mode in production. (`off`/`trust` are dev only.)
 - [ ] `MOD_KEY=<secret>` — gates the mod tools + the `/admin` ops dashboard (timing-safe compared). Without
       it the mod surface is disabled.
 - [ ] `RATE_LIMIT=on` — token buckets (auto-on in prod anyway; set explicitly to be sure).
