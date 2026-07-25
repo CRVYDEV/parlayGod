@@ -1784,12 +1784,17 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // that IS the respawn, which is why the estate needs no NPC branch at all. Without carrying the
   // flag the heir would be born a "player": headcount would never self-heal, and every real-player
   // count (ops, the onboarding funnel) would quietly start counting scenery.
+  // (red-team, THE TURNOVER) …and with it the arrival stake, which is what lets the worker tell a
+  // resident players have picked clean from one who was born poor. Backfilling it lazily on the
+  // heir's first worker turn left a window — up to a full sweep of the city — in which a player
+  // could drain the heir first, so the backfill would record the DRAINED cash as their stake and
+  // that resident could never be recycled. The stake is known here; record it here.
   await client.query(
-    'INSERT INTO characters (id, account_id, name, generation, season, cash, minted, honor, is_npc) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    'INSERT INTO characters (id, account_id, name, generation, season, cash, minted, honor, is_npc, npc_seed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
     [heirId, victim.account_id, victim.name, Number(victim.generation) + 1, Math.floor(dayOf() / 28), stake, !!acct.minted,
      // FIVE PILLARS #1: the honor ECHO — identity shadows the name at a quarter strength (the
      // npc-memory precedent; a Mad Dog's heir starts under the cloud, a Man of Honor's with a nod)
-     Math.round(Number(victim.honor || 0) * HONOR.HEIR_KEEP), !!victim.is_npc]);
+     Math.round(Number(victim.honor || 0) * HONOR.HEIR_KEEP), !!victim.is_npc, victim.is_npc ? stake : 0]);
   // legacy stake above the base 500 is a ledgered faucet (base 500 matches every fresh character)
   if (stake > 500) await h.ledger(client, { characterId: heirId, currency: 'cash', amount: stake - 500, reason: 'death:legacy' });
   // …and the names that remember the bloodline follow the heir (fresh touched_at — the clock restarts)

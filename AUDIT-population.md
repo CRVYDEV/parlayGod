@@ -124,6 +124,80 @@ Petty, as intended.
 
 ---
 
+---
+
+# Round two — step three (THE TURNOVER)
+
+Same four lenses over the renewal loop. **No CRITICAL, no HIGH, no §10.4 drift** — the recycle adds
+no reason and fires the existing `npc:seed` faucet and `npc:retire` sink, both already reconciled.
+Four findings fixed in-commit, regression each.
+
+### T1 (LOW-MED) — maintenance could starve the renewal loop indefinitely
+
+Old-bloodline retirement and drained retirement shared one per-tick room, and old lines were taken
+**first**. With `SPAWN_PER_TICK` or more lines past `RETIRE_GENERATIONS`, no drained resident is ever
+replaced — the loop step three exists for simply stops.
+
+Not hypothetical: a resident's `generation` only rises when players **kill** them, so heavy PvP is
+exactly what sustains a backlog of old lines. It is self-limiting (each tick clears four and the
+replacements are generation 0), but "self-limiting" is the wrong bar for a loop that only matters
+when the city is under pressure.
+
+**Fix:** old-bloodline retirement is bounded *maintenance*; the drained pass is the *renewal loop*.
+The loop is now guaranteed a slot whenever it has a candidate, and maintenance takes what's left.
+
+### T2 (LOW-MED) — a drained heir could become permanently un-recyclable
+
+The arrival stake (`npc_seed`) is what distinguishes drained from born-poor. Residents are stamped at
+spawn, but an **heir** is born through the ordinary `runEstate`, which knew nothing about it — so the
+stamp was backfilled lazily on the heir's first worker turn. With `ACT_PER_TICK` 6 against a 48-body
+city on an hourly worker, that window is up to ~8 hours.
+
+Drain the heir inside it and the backfill records the **drained** cash as their arrival stake. They
+then read as "holding 100% of what they came with" forever: never retired, never replaced, a broke
+body occupying a slot. A griefer could manufacture these deliberately to hollow the city out.
+
+**Fix:** the stake is known at the heir's INSERT — record it there, alongside the `is_npc` flag that
+is already carried on the same row. No window, no backfill.
+
+### T3 (LOW) — no advisory lock on the metered faucet
+
+The day's replacement allowance is read once, then spent across separate transactions. Two worker
+replicas could each read it as untouched and each spend all 24, doubling the day's emission past the
+ceiling that is the entire point of metering it. `runWageEpoch` already takes a session advisory lock
+for exactly this; `runPopulation` is the other metered faucet and had none.
+
+**Fix:** the same session advisory lock, distinct class. pg-mem is single-process, so dev is unaffected.
+
+### T4 (cosmetic) — `seededToday` was production-dead
+
+The ops dashboard duplicated its query inline, leaving the exported helper used only by the test.
+Pointed ops at the helper so the reading has one definition.
+
+### Verified clean (round two)
+
+- **§10.4.** The recycle adds no reason; retirement reclaims escrow then burns, `npc:retire` exact.
+  A drained resident's remaining escrow can lift them back over the line *after* the decision to
+  retire — harmless, the burn ledgers whatever is actually there.
+- **The allowance charge** is in the same transaction as the retirement, so a crash between them
+  cannot hand out a free replacement.
+- **Bodyguards are self-correcting.** A hired guard has just *received* ≥$10k, which pushes them well
+  clear of the drained line — so the resident most likely to be retired out from under a paying
+  principal is, in fact, the least likely. And a retired guard fails the same `alive` check a killed
+  one does, so `bodyguardAbsorbs` degrades identically.
+- **The drained threshold vs escrow.** A resident parking the maximum in a loan offer plus a buy
+  order still holds ~52% of their stake — a 3.5× margin over the 15% line.
+
+### Flagged (accepted by design)
+
+**The reroll.** Draining a cheap `corner` resident (a few jumps) forces a retirement whose
+replacement is drawn from the full band distribution — expected seed $20,798 against that corner
+kid's ~$700. A player can therefore convert cheap drains into richer targets. They receive nothing
+directly, and total extraction stays bounded by `PER_DAY × mean seed`, so the ceiling is doing its
+job — but note that the ceiling is the *only* thing bounding it, and the reroll is cheap.
+
+---
+
 ## Flagged for founder sign-off (NOT patched — ground rule #1)
 
 **The city is a depleting resource.** Residents have no income, so once players drain the seed pool

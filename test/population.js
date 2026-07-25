@@ -294,14 +294,48 @@ assert.equal(await one(`SELECT COUNT(*) n FROM characters WHERE id='${mark.id}' 
 assert(await population(pool) >= beforeTurnover,
   'and a fresh face took their place — the city renews itself instead of quietly emptying');
 
-// THE CEILING. Recycling makes npc:seed recurring, so REPLACEMENTS are metered — a per-day headcount
-// held in the population_state singleton, charged in the same transaction as the retirement.
-// Deliberately NOT a dollar budget on seeding: the day-one fill of an empty city is ~48 seeds that
-// replace nobody, and would eat the whole allowance before a single resident had been robbed.
 assert.equal(await one('SELECT retired n FROM population_state WHERE id=1') - chargedBefore, turn.retired,
   'every retirement charged the day\'s replacement allowance, exactly once each');
 assert(await seededToday(pool) > 0, 'and the seeding it paid for is visible on the ledger');
 
+
+// (red-team F1) Retiring old bloodlines is bounded MAINTENANCE; retiring the picked-clean is the
+// renewal LOOP. Sharing a per-tick room and taking old lines FIRST let maintenance starve the loop
+// indefinitely — and heavy PvP sustains that, since a resident's generation only rises when players
+// kill them. Age enough lines to fill the room and confirm the drained still get a slot.
+await pool.query(
+  `UPDATE characters SET generation=$1 WHERE id IN
+     (SELECT id FROM characters WHERE is_npc AND alive ORDER BY id LIMIT $2)`,
+  [POPULATION.RETIRE_GENERATIONS + 1, POPULATION.SPAWN_PER_TICK + 2]);
+const starved = (await pool.query(
+  'SELECT id, cash, npc_seed FROM characters WHERE is_npc AND alive AND npc_seed > 5000 AND generation = 1 ORDER BY npc_seed DESC LIMIT 1')).rows[0];
+const strippedS = Math.floor(Number(starved.npc_seed) * 0.05);
+await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [starved.id, strippedS]);
+await pool.query(
+  "INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,'cash',$3,'npc:retire')",
+  [`t-starve-${starved.id}`, starved.id, strippedS - Number(starved.cash)]);
+const contended = await runPopulation(pool);
+assert(contended.drained > 0,
+  'a picked-clean resident is still replaced with the per-tick room full of old bloodlines — maintenance cannot starve the renewal loop');
+assert(contended.retired <= POPULATION.SPAWN_PER_TICK, 'and the per-tick cap still holds');
+await pool.query('UPDATE characters SET generation=1 WHERE is_npc AND alive');
+
+// (red-team F2) An HEIR records its arrival stake AT BIRTH. Backfilling it on the heir's first
+// worker turn left a window — up to a full sweep of the city — in which a player could drain them
+// first, so the backfill would record the DRAINED cash as their stake and that resident could never
+// be recycled: an immortal broke body occupying a slot, which a griefer could manufacture at will.
+const toKill = (await pool.query('SELECT id, account_id FROM characters WHERE is_npc AND alive ORDER BY id LIMIT 1')).rows[0];
+await call('POST', '/v1/mod/kill', { headers: { 'x-mod-key': 'test-mod-key' }, body: { characterId: toKill.id, reason: 'test' } });
+const bornHeir = (await pool.query(
+  'SELECT cash, npc_seed, is_npc FROM characters WHERE account_id=$1 AND alive', [toKill.account_id])).rows[0];
+assert.equal(bornHeir.is_npc, true, 'the heir is a resident');
+assert(Number(bornHeir.npc_seed) > 0 && Number(bornHeir.npc_seed) === Number(bornHeir.cash),
+  'and is born with its arrival stake already recorded — no window for a drained value to be mistaken for it');
+
+// THE CEILING. Recycling makes npc:seed recurring, so REPLACEMENTS are metered — a per-day headcount
+// held in the population_state singleton, charged in the same transaction as the retirement.
+// Deliberately NOT a dollar budget on seeding: the day-one fill of an empty city is ~48 seeds that
+// replace nobody, and would eat the whole allowance before a single resident had been robbed.
 // spend the rest of the allowance, then prove a picked-clean resident STAYS until the day rolls
 await pool.query('UPDATE population_state SET day=$1, retired=$2 WHERE id=1',
   [Math.floor(Date.now() / 86400000), POPULATION.TURNOVER.PER_DAY]);

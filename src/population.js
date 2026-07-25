@@ -165,6 +165,31 @@ export async function retireResident(client, charId) {
  * per-job isolation discipline).
  */
 export async function runPopulation(pool) {
+  // (red-team F3) The day's replacement allowance is read, then spent across separate transactions,
+  // so two worker replicas could each read it as untouched and each spend the full 24 — doubling
+  // the day's npc:seed emission past the ceiling that is the whole point of metering it. A SESSION
+  // advisory lock serializes them; a crashed run releases it when its session ends. This is the
+  // wage epoch's discipline (emission.js) applied to the other metered faucet. pg-mem (no
+  // DATABASE_URL) is single-process, so there is nothing to serialize there.
+  let lockConn = null;
+  if (process.env.DATABASE_URL) {
+    lockConn = await pool.connect();
+    const got = (await lockConn.query('SELECT pg_try_advisory_lock($1,$2) AS ok', [POP_LOCK_CLASS, 0])).rows[0].ok;
+    if (!got) { lockConn.release(); return { spawned: 0, retired: 0, drained: 0, population: await population(pool), turnoverLeft: 0, skipped: 'locked' }; }
+  }
+  try {
+    return await runPopulationInner(pool);
+  } finally {
+    if (lockConn) {
+      await lockConn.query('SELECT pg_advisory_unlock($1,$2)', [POP_LOCK_CLASS, 0]).catch(() => {});
+      lockConn.release();
+    }
+  }
+}
+
+const POP_LOCK_CLASS = 0x504f;  // 'PO' — distinct from the wage epoch's class
+
+async function runPopulationInner(pool) {
   const out = { spawned: 0, retired: 0, drained: 0, population: 0, turnoverLeft: 0 };
 
   // THE CEILING (step three). Recycling makes `npc:seed` recurring, so replacements are metered —
@@ -183,19 +208,27 @@ export async function runPopulation(pool) {
   //    through the same retire path, and both consume the day's allowance: either way the city is
   //    buying a fresh face with a fresh seed.
   const room = Math.min(POPULATION.SPAWN_PER_TICK, allowance);
-  const old = room <= 0 ? [] : (await pool.query(
+  const oldAll = room <= 0 ? [] : (await pool.query(
     'SELECT id FROM characters WHERE alive AND is_npc AND generation > $1 ORDER BY id LIMIT $2',
     [POPULATION.RETIRE_GENERATIONS, room])).rows;
   // "picked clean" is measured against what they ARRIVED with (npc_seed), never a flat cash floor —
   // a flat floor can't tell a drained boss from a corner kid born with $200, and would recycle the
-  // cheap bands forever. `npc_seed > 0` also skips residents not yet stamped (heirs, pre-upgrade
-  // rows), so an unknown stake is never mistaken for a drained one.
-  const oldIds = new Set(old.map((r) => r.id));
-  const drained = old.length >= room ? [] : (await pool.query(
+  // cheap bands forever. `npc_seed > 0` also skips residents not yet stamped, so an unknown stake is
+  // never mistaken for a drained one.
+  const oldIds = new Set(oldAll.map((r) => r.id));
+  const drainedAll = room <= 0 ? [] : (await pool.query(
     `SELECT id FROM characters WHERE alive AND is_npc AND npc_seed > 0
        AND cash < npc_seed * $1 / 10000.0 ORDER BY id LIMIT $2`,
-    [POPULATION.TURNOVER.DRAINED_BPS, room])).rows
-    .filter((r) => !oldIds.has(r.id)).slice(0, room - old.length);
+    [POPULATION.TURNOVER.DRAINED_BPS, room])).rows.filter((r) => !oldIds.has(r.id));
+
+  // (red-team F1) Retiring old bloodlines is bounded MAINTENANCE; retiring the picked-clean is the
+  // renewal LOOP — the entire point of step three. Taking old lines first out of a shared per-tick
+  // room let maintenance starve the loop indefinitely: with SPAWN_PER_TICK or more lines past
+  // RETIRE_GENERATIONS (which heavy PvP sustains, since a resident's generation only rises when
+  // players kill them), no drained resident is ever replaced. So the loop is guaranteed a slot
+  // whenever it has a candidate, and maintenance takes what's left.
+  const drained = drainedAll.slice(0, Math.max(1, room - oldAll.length));
+  const old = oldAll.slice(0, room - drained.length);
   out.drained = drained.length;
   for (const r of [...old, ...drained]) {
     const client = await pool.connect();
