@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import websocket from '@fastify/websocket';
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
+import { isDbDown, pingDb } from './dbhealth.js';
 import { preflight } from './preflight.js';
 import * as G from './game.js';
 import * as E from './economy.js';
@@ -191,8 +192,35 @@ export async function buildServer() {
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message });
     if (err.code === 'FST_JWT_NO_AUTHORIZATION_IN_HEADER' || err.statusCode === 401) return reply.code(401).send({ error: 'auth' });
+    // An unreachable database is NOT a bug in the game — it is "come back in a minute". Reporting it as
+    // 500 `internal` is what made the 2026-07-25 incident unreadable: an outage and a null-dereference
+    // produced byte-identical responses, so a tester saw "Internal" on every button and nobody could tell
+    // which it was. 503 + Retry-After says the true thing, keeps it out of the bug pile, and lets the
+    // client tell the player something honest. Deliberately still logged — an outage is worth a line.
+    if (isDbDown(err)) {
+      req.log?.error?.({ err }, 'database unreachable');
+      console.error('[db] unreachable:', err.message);
+      return reply.code(503).header('retry-after', '15').send({ error: 'db_down' });
+    }
     req.log?.error?.(err); console.error(err);
     return reply.code(500).send({ error: 'internal' });
+  });
+  // GET /health — the question "is it up?" answered directly, keyless, for a human or an uptime monitor.
+  // 200 with `ok:true` when a query round-trips; 503 with `ok:false` when it does not, so a monitor can
+  // alert on status alone. DEPLOY.md covers the one judgement call: point an UPTIME MONITOR at this, and
+  // think twice before making it the platform's own health check — restarting the API does not fix a
+  // database, it just adds a restart loop to an outage.
+  app.get('/health', async (req, reply) => {
+    const db = await pingDb(pool);
+    const body = {
+      ok: db.ok,
+      db: db.ok ? 'up' : (db.down ? 'unreachable' : 'error'),
+      dbLatencyMs: db.ms,
+      uptimeSeconds: Math.round(process.uptime()),
+      at: new Date().toISOString(),
+    };
+    if (!db.ok) { body.error = db.error; reply.code(503).header('retry-after', '15'); }
+    return body;
   });
   const auth = async (req, reply) => {
     await req.jwtVerify();

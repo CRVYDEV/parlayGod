@@ -626,5 +626,74 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   if (after.code === 200 && gid) assert(after.body.messages.some((m) => m.text.includes('new orders')), 'but sees messages from after they joined');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates)`);
+// ── AN UNREACHABLE DATABASE SAYS SO — 503 db_down, never 500 internal ──
+// The 2026-07-25 incident: every database problem surfaced as `{"error":"internal"}`, which is also
+// what a genuine bug looks like, so a tester reporting "Internal on every button" could have been
+// either and nobody could tell. These assertions pin BOTH directions — an outage must be legible as an
+// outage, and a real bug must NOT be laundered into a reassuring "try again shortly".
+{
+  const { isDbDown } = await import('../src/dbhealth.js');
+  // the shapes node-pg actually produces when Postgres is gone
+  for (const e of [
+    Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:5432'), { code: 'ECONNREFUSED' }),
+    Object.assign(new Error('terminating connection due to administrator command'), { code: '57P01' }),
+    Object.assign(new Error('the database system is starting up'), { code: '57P03' }),
+    Object.assign(new Error('sorry, too many clients already'), { code: '53300' }),
+    new Error('Connection terminated unexpectedly'),                 // no code at all — text is the only signal
+    new Error('timeout exceeded when trying to connect'),
+    Object.assign(new Error('all attempts failed'), { errors: [{ code: 'ECONNREFUSED' }] }), // aggregate connect error
+    // a stopped Postgres on a UNIX SOCKET raises ENOENT — the socket file is gone. Observed against a
+    // real Postgres; the errno alone is far too broad to trust, so it is the syscall that qualifies it.
+    Object.assign(new Error('connect ENOENT /var/run/postgresql/.s.PGSQL.5432'), { code: 'ENOENT', syscall: 'connect' }),
+  ]) assert(isDbDown(e), `an unreachable database must be recognised: ${e.code || e.message}`);
+  // …and a bare ENOENT (a missing file, not a failed connect) is NOT an outage
+  assert(!isDbDown(Object.assign(new Error("ENOENT: no such file or directory, open 'x.html'"), { code: 'ENOENT', syscall: 'open' })),
+    'a missing FILE is not a database outage');
+  // …and everything else stays a bug. Laundering these into "come back later" would hide real defects.
+  for (const e of [
+    new TypeError("Cannot read properties of undefined (reading 'cash')"),
+    Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
+    Object.assign(new Error('deadlock detected'), { code: '40P01' }),
+    Object.assign(new Error('column "nope" does not exist'), { code: '42703' }),
+    new Error('something went wrong'),
+  ]) assert(!isDbDown(e), `a real bug must NOT be reported as an outage: ${e.code || e.message}`);
+  assert(!isDbDown(null) && !isDbDown(undefined), 'a missing error is not an outage');
+
+  // GET /health answers "is it up?" directly, keyless
+  const h = await call('GET', '/health');
+  assert(h.code === 200 && h.body.ok === true && h.body.db === 'up', 'GET /health reports a reachable database');
+  assert(typeof h.body.uptimeSeconds === 'number' && typeof h.body.dbLatencyMs === 'number', '/health carries uptime + latency');
+
+  // and when the database is NOT reachable it reports 503 with a retry hint, not 200 and not 500
+  const realQuery = pool.query.bind(pool);
+  pool.query = async () => { throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }); };
+  try {
+    const down = await call('GET', '/health');
+    assert(down.code === 503, `an unreachable database makes /health 503 (got ${down.code})`);
+    assert(down.body.ok === false && down.body.db === 'unreachable', '/health names the state');
+    assert(down.headers['retry-after'], '/health tells a monitor when to come back');
+    // the same on a real game route: 503 db_down, so the client can say something honest
+    const act = await call('GET', '/v1/me', { token: boss.token });
+    assert(act.code === 503 && act.body.error === 'db_down',
+      `a game route reports db_down, not internal (got ${act.code} ${act.body.error})`);
+  } finally { pool.query = realQuery; }
+  const back = await call('GET', '/health');
+  assert(back.code === 200 && back.body.ok === true, '/health recovers when the database does');
+
+  // THE PROCESS MUST SURVIVE THE DATABASE RESTARTING. node-pg emits 'error' on the Pool when an idle
+  // connection dies, and an EventEmitter with no 'error' listener THROWS — an uncaught exception that
+  // kills Node outright. Verified by stopping a real Postgres under a running server: before the
+  // handler the process died with `Unhandled 'error' event: terminating connection due to
+  // administrator command`; after it, the server rode out a full stop/start and recovered on its own.
+  //
+  // This assertion is deliberately SOURCE-LEVEL. The suite runs on pg-mem, whose adapter never raises
+  // that event, so no behavioural test here can reach the real code path — but a defect that kills the
+  // process on every database bounce is worth a guard against silent deletion even so. The real proof
+  // is the stop/start probe against Postgres; this is the tripwire.
+  const dbSrc = readFileSync(new URL('../src/db.js', import.meta.url), 'utf8');
+  assert(/pool\.on\(\s*['"]error['"]/.test(dbSrc),
+    "src/db.js must attach a pool 'error' handler — without it a database restart kills the process");
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs)`);
 await app.close();

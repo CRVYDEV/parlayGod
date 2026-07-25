@@ -84,6 +84,24 @@ export async function makeDb() {
     // whole pool and starve every other account. Raise the headroom (env-tunable); paired with the
     // per-account read throttle in the server preHandler, this bounds the connection-flood.
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 20) });
+    // THE PROCESS MUST SURVIVE THE DATABASE RESTARTING. node-pg emits 'error' on the Pool when an IDLE
+    // pooled connection dies — a Postgres restart, a failover, an idle-timeout reaper, a network blip.
+    // An EventEmitter with no 'error' listener THROWS, and an uncaught exception kills Node. So without
+    // this handler the entire API (and the worker) crashes every single time the database bounces.
+    //
+    // Found by stopping a real Postgres under a running server: the process did not degrade, it died
+    // with `Unhandled 'error' event: terminating connection due to administrator command`. That is very
+    // likely what a tester actually hit as "Internal error on every crime" — not a bug in the crime
+    // path at all, but the server being restarted underneath them.
+    //
+    // The correct response is to log and carry on. A dead idle connection is not a dead pool: node-pg
+    // discards it and opens a fresh one on the next checkout, so the very next request recovers by
+    // itself. Errors on a connection that a request is actively holding still reject that request's
+    // promise and surface through the normal error path (503 db_down) — this handler only catches the
+    // idle-connection case, which has no request to reject.
+    pool.on('error', (err) => {
+      console.error('[db] idle client error (pool recovers on next checkout):', err.message);
+    });
     // (deploy R31) SERIALIZE first-boot schema creation ACROSS PROCESSES. In a multi-process deploy (the API
     // + the worker), both boot at the same instant against a FRESH DB and BOTH run `CREATE TABLE IF NOT
     // EXISTS` concurrently — Postgres races on its internal type catalog and one process crashes with

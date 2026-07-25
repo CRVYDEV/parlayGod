@@ -114,7 +114,49 @@ created whole and an **in-place upgrade** of an existing DB back-fills any later
 `[db] Postgres ready — column migration ran N …`). No manual migration step. (MED-1/R30 — the in-place
 break is closed; a proper FK/migration-tool pass remains an optional defense-in-depth follow-up.)
 
+## 7b. When the database goes down — what you should see (and what to do)
+The 2026-07-25 incident was hard to read because a database problem and a code bug produced the
+identical response (`500 {"error":"internal"}`), so "Internal on every button" could have been either.
+That is now separated:
+
+| you see | it means | do |
+|---|---|---|
+| `503 {"error":"db_down"}` on game routes | the database is unreachable; **nothing was lost**, it recovers by itself | check the DB dashboard; no code change needed |
+| `500 {"error":"internal"}` | a real bug | read the server log; it is not an outage |
+| `GET /health` → `503 {"ok":false,"db":"unreachable"}` | same, from a keyless probe | as above |
+
+- **The API survives a database restart.** It logs `[db] idle client error …`, keeps serving 503s, and
+  reconnects on its own when Postgres returns — no redeploy, no manual restart. (Before this was fixed
+  the process *died* on every DB bounce, which is the likeliest real cause of the "Internal on every
+  crime" report.) Verified by stopping a real Postgres under a running server.
+- **The worker** skips a tick with one line (`worker: database unreachable … skipping this tick`)
+  instead of dumping ~60 stack traces, and logs `database back after N skipped tick(s)` on recovery.
+  Every sweep is idempotent, so nothing is lost by skipping.
+- **Point an uptime monitor at `GET /health`** (keyless, no secret in the URL). It reports
+  `{ok, db, dbLatencyMs, uptimeSeconds}` and returns 503 when the DB is unreachable, so a monitor can
+  alert on status code alone.
+- **Think twice before making `/health` the PLATFORM's own health check.** Restarting the API does not
+  fix a database — it just adds a restart loop on top of an outage. Alerting on it is the point;
+  auto-restarting on it usually is not.
+
+## 7c. Backups — `tools/backup.sh` (cron it nightly)
+```
+0 4 * * * DATABASE_URL=postgres://… /path/to/tools/backup.sh /backups
+```
+It dumps to a temp name, **verifies**, and only then moves the file into place — so a run that dies
+halfway leaves no truncated file wearing a plausible name. Verification is: readable by `pg_restore`,
+the expected schema, `accounts`/`characters`/`transactions` present, a size floor, **and actual rows**
+(a schema-only database dumps to 161 tables and ~194 KB — it clears every other check while holding
+nothing, so only reading the data section back proves there is data in there). Retention runs **only
+after a good dump**, so a run of bad nights can never age out the last known-good backup.
+- exit non-zero = **no backup was kept**; the message says why. Alert on it.
+- `BACKUP_MIN_ROWS=0` for a genuinely cold database (nobody has signed up yet).
+- A managed platform's own backups are not a substitute — the incident that motivated this was a
+  *silent* failure of exactly that (WAL archiving erroring for ~11 minutes while everything looked
+  healthy). Keep an independent dump you have personally restored at least once.
+
 ## 8. Post-deploy smoke check
+- [ ] `GET /health` → `200 {"ok":true,"db":"up"}`.
 - [ ] `GET /v1/session` → 200 (server up).
 - [ ] Boot log shows `[db] Postgres ready` (NOT `[db] pg-mem …` — that means `DATABASE_URL` was missing).
 - [ ] `POST /v1/auth/guest` → token; `POST /v1/character {name}` → 200; `POST /v1/crimes/pick` → a result.
