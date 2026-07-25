@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import websocket from '@fastify/websocket';
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
+import { preflight } from './preflight.js';
 import * as G from './game.js';
 import * as E from './economy.js';
 import * as S from './social.js';
@@ -79,47 +80,22 @@ import { dirname, join } from 'node:path';
 const uid = () => crypto.randomUUID();
 
 export async function buildServer() {
-  // (red-team R9 config) The whole hardening posture below used to hinge SOLELY on
-  // NODE_ENV==='production' — but `npm start` / a bare `node src/server.js` never sets it, so a
-  // real deploy that forgot the one variable most likely to be forgotten silently reverted EVERY
-  // guard (forgeable JWT, public MARKET_SEED, live test-knobs, rate limits off) at once. A real
-  // DATABASE_URL is the unforgeable "there is persistent value at stake here" signal — dev/CI use
-  // pg-mem (no DATABASE_URL) and stay on the convenient fallbacks; anything pointed at a real
-  // Postgres hardens regardless of NODE_ENV. (Tests set neither, so they are unaffected; the
-  // security suite still sets NODE_ENV=production explicitly to exercise the guards.)
-  const hardened = process.env.NODE_ENV === 'production' || !!process.env.DATABASE_URL;
-  // Never boot a real deployment on the public dev fallback secret — anyone could forge a
-  // token for any account. Dev/test may use the fallback (in-memory db, no real value).
-  if (hardened && !process.env.JWT_SECRET)
-    throw new Error('JWT_SECRET must be set for a real deployment (NODE_ENV=production or DATABASE_URL set) — refusing to boot on the dev fallback.');
-  // (red-team R3) The §7.11 determinism model rests on MARKET_SEED being a server SECRET — every seeded
-  // money draw (the Numbers 600:1, the Track/Fight winners, goods prices) is client-PREDICTABLE if the seed
-  // is the known public default. Unlike JWT this fails OPEN (forget the env → silently vulnerable), so refuse
-  // to boot on the unset/default seed — same fail-closed posture as the JWT guard above.
-  if (hardened && (!process.env.MARKET_SEED || process.env.MARKET_SEED === 'omerta-server-seed'))
-    throw new Error('MARKET_SEED must be set to a secret value for a real deployment — the default is public and makes every seeded draw (Numbers/Track/Fight/goods) predictable.');
-  // (red-team R14 F1) The seeded draws use FNV-1a truncated to mod 1000, and the public prices board
-  // publishes goodPriceOf(good,district,block) — leaking many (known-prefix → mod-1000) pairs. FNV is
-  // brute-forceable, so a SHORT/low-entropy operator seed is recoverable offline from that surface, after
-  // which numbersDrawOf/trackWinnerOf/boutOf are all computable (guaranteed 600:1 hits). A long random
-  // seed is NOT recoverable, so this reduces to seed hygiene — enforce a floor (length + distinct chars),
-  // matching the fail-closed posture above. (The hash itself staying FNV is a founder call — swapping it
-  // to a keyed HMAC changes every deterministic draw/price output, a mechanic surface; flagged, not changed.)
-  if (hardened) {
-    const seed = String(process.env.MARKET_SEED || '');
-    const distinct = new Set(seed).size;
-    if (seed.length < 24 || distinct < 8)
-      throw new Error('MARKET_SEED is too weak — use a long, high-entropy random secret (≥24 chars, ≥8 distinct). A short seed is offline-recoverable from the public prices board, making every money draw predictable.');
-  }
-  // (red-team R3) Test-only roll/timer overrides turn a money-affecting roll into an always-win switch or
-  // collapse a §9/convoy/port timer, server-wide. They are safe-by-default (require an active misconfig) but
-  // must never reach a real deployment — refuse to boot if any leaked into the env (the fail-closed JWT pattern;
-  // CHAIN_POLL_MS is a legitimate production knob and is deliberately excluded).
-  if (hardened) {
-    const TEST_ONLY_ENV = ['BUSINESS_RAID_P', 'CALLOUT_MS', 'CLUE_DROP_P', 'CLUE_RELIC_P', 'DUEL_CD_MS', 'SEASON_MOD', 'RING_TURN_MS', 'BRACKET_ROUND_MS', 'CONVOY_MS', 'FUTURITY_MS', 'GEAR_LOOT_CHANCE', 'GRAND_PRIX_MS', 'LAW_BUST_P', 'MAIN_EVENT_MS', 'PASS_CLAIM_MS', 'PEN_BREAK_P', 'PEN_YARD_EVENT', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_RUN_MS', 'PORT_SINK', 'RACE_CD_MS', 'SEARCH_MS', 'SHANK_P', 'SHOOT_CD_MS', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'STAKES_MS', 'TERRITORY_RAID_P', 'TERRITORY_RIVAL_RAID_P', 'TOURNEY_MS', 'WANTED_HUNT_P', 'WORLD_RAID_P', 'WORLD_UPRISING', 'WORLD_UPRISING_FORCE'];
-    const leaked = TEST_ONLY_ENV.filter((k) => process.env[k] != null);
-    if (leaked.length) throw new Error(`Test-only roll/timer overrides must not be set in production (they turn money rolls into always-win switches): ${leaked.join(', ')}`);
-  }
+  // ── PREFLIGHT (src/preflight.js) ────────────────────────────────────────────────────────────
+  // Every deploy check lives there as DATA, because the guards were never the weak part — the LIST
+  // was. It sat inline here, so each drop that added a test-only knob had to remember to come update
+  // it, and several didn't: the pacing pass shipped TRAIN_CD_MS and MISSION_CD_MS, the two knobs that
+  // exist to collapse the very timers that stopped "level 240 in two hours", and neither was ever
+  // guarded. `test/preflight.js` now fails if any process.env in src/ is unclassified, so the list
+  // can't fall behind again.
+  //
+  // "Real deployment" keys off DATABASE_URL as well as NODE_ENV: `npm start` never sets NODE_ENV, so
+  // hinging solely on it meant a deploy that forgot the single most forgettable variable silently
+  // reverted every guard at once. Dev/CI (pg-mem, no DATABASE_URL) keeps the convenient fallbacks.
+  const { errors: preflightErrors, warnings: preflightWarnings } = preflight();
+  if (preflightErrors.length)
+    throw new Error(`Refusing to boot — deploy preflight failed:\n  - ${preflightErrors.join('\n  - ')}`);
+  for (const w of preflightWarnings) console.warn(`⚠️  preflight: ${w}`);
+
   // trustProxy (AUDIT-full-system-v2 H): OFF by default (raw socket IP — X-Forwarded-For is spoofable
   // when NOT behind a trusted proxy). An operator deploying behind a load balancer sets TRUST_PROXY=on
   // so req.ip reflects the real client — else the per-IP auth throttle (E-M1) collapses to one global
