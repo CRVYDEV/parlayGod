@@ -23,9 +23,14 @@ BACKUP="$HERE/backup.sh"
 [ -n "${DATABASE_URL:-}" ] || { echo "backup-selftest needs DATABASE_URL pointed at a throwaway Postgres."; exit 2; }
 
 pass=0; fails=()
+# On failure, always show what backup.sh actually SAID. Without this a red CI run reports only which
+# assertion failed, not why — and "the cold database was refused for the wrong reason" is unreadable
+# without the reason. OUTPUT holds the last `run` invocation's combined output.
 check() { # check <ok?> <label> [detail]
-  if [ "$1" = "0" ]; then pass=$((pass+1)); echo "  ✓ $2"
-  else fails+=("$2${3:+ — $3}"); echo "  ✗ $2${3:+ — $3}"; fi
+  if [ "$1" = "0" ]; then pass=$((pass+1)); echo "  ✓ $2"; return; fi
+  fails+=("$2${3:+ — $3}")
+  echo "  ✗ $2${3:+ — $3}"
+  [ -n "${OUTPUT:-}" ] && echo "$OUTPUT" | tail -6 | sed 's/^/      | /'
 }
 # `check_ok CMD…` — expect success; `check_fail CMD…` — expect a non-zero exit.
 run() { OUTPUT="$("$@" 2>&1)"; RC=$?; return 0; }
@@ -64,8 +69,22 @@ cleanup_dbs() {
 trap 'cleanup_dbs; rm -rf "$WORK"' EXIT
 
 # The real schema, so the table-count and required-table checks see what production sees.
-psql "$(base_url "$FULL_DB")" -v ON_ERROR_STOP=1 -f "$HERE/../schema.sql" >/dev/null 2>&1
-psql "$(base_url "$COLD_DB")" -v ON_ERROR_STOP=1 -f "$HERE/../schema.sql" >/dev/null 2>&1
+# LOUD, for the same reason psql_q is: a silently half-loaded schema does not announce itself, it just
+# makes a later check fail for the wrong reason. On CI this cost a round trip — the cold-database
+# checks failed and the log could not say why, because the only evidence had been sent to /dev/null.
+loadSchema() {
+  local err
+  err="$(psql "$(base_url "$1")" -v ON_ERROR_STOP=1 -f "$HERE/../schema.sql" 2>&1 >/dev/null)" || {
+    echo "backup-selftest: SCHEMA LOAD FAILED on $1" >&2; echo "$err" | tail -20 >&2; exit 2; }
+  # and prove it landed, rather than trusting a zero exit
+  local n
+  n="$(psql "$(base_url "$1")" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null | tr -d ' ')"
+  [ "${n:-0}" -ge 40 ] || {
+    echo "backup-selftest: schema loaded into $1 but only $n tables exist — the fixture is not what the test assumes." >&2
+    exit 2; }
+}
+loadSchema "$FULL_DB"
+loadSchema "$COLD_DB"
 # Rows in the two tables the script insists on. Every NOT NULL column without a default has to be
 # supplied — accounts needs the auth pair, characters needs a season.
 psql_q "$FULL_DB" "INSERT INTO accounts (id, auth_provider, auth_subject)
