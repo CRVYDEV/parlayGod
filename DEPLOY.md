@@ -14,6 +14,16 @@ are set). Two Node processes over one Postgres DB. No build step.
       3am. (`src/preflight.js` is the single source of truth for every env var this server reads;
       `test/preflight.js` fails the suite if any new one is left unclassified, which is how the
       pacing-pass knobs came to be unguarded in the first place.)
+- [ ] **`npm run pgcheck`** against a throwaway Postgres — the suite runs on pg-mem, which is by
+      construction blind to node-pg's own contract, and a real deploy runs node-pg. This drives the
+      core loop on real Postgres and FAILS on any pg deprecation. It has already caught one: 16
+      overlapping queries on a single pooled client in `loadOwned`, deprecated today and removed in
+      pg@9 — i.e. an upgrade would have 500'd every action in the game.
+      ```
+      createdb omerta_check
+      DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=y \
+        MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off npm run pgcheck
+      ```
 - [ ] (chain path only — not needed for off-chain alpha) `cd omerta-contracts && forge test` on a real
       Foundry toolchain. **Still the pre-mainnet gate; egress-blocked in CI here.**
 
