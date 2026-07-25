@@ -12,7 +12,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct } from '../src/population.js';
+import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct, seededToday } from '../src/population.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
@@ -250,6 +250,73 @@ const credits = (await pool.query(
 const conjured = credits.filter((r) => !ALLOWED_CREDITS.has(r));
 assert.deepEqual(conjured, [],
   `step two conjured NOTHING — a resident only ever spends what it already holds (unexpected credit reasons: ${conjured})`);
+
+// ════════════ STEP THREE — THE TURNOVER ════════════
+// Steps one/two light the city up ONCE: residents have no income, so the seed pool is a stock, not a
+// flow. The worker now retires residents players have PICKED CLEAN and puts fresh faces in their
+// place — which makes `npc:seed` a RECURRING faucet, hence the explicit rolling-24h ceiling.
+
+// fixture: the old-bloodline section above aged EVERY resident past RETIRE_GENERATIONS, and old
+// lines are retired first, so they'd starve the drained pass of its per-tick room. Reset the
+// generations (pure status, no money) so the turnover path below is actually exercised.
+await pool.query('UPDATE characters SET generation=1 WHERE is_npc AND alive');
+
+// every resident records what they ARRIVED with — the only way to tell drained from born-poor
+assert.equal(await one('SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND npc_seed <= 0'), 0,
+  'every resident carries the stake they arrived with');
+
+// THE TRAP this design exists to avoid: a flat cash floor would retire the `corner` band (seeded as
+// little as $200) the moment it spawned, respawn it, and loop forever — an unbounded faucet. Measured
+// against their OWN arrival stake instead, a freshly-spawned resident is never "picked clean".
+const poor = (await pool.query(
+  'SELECT id, cash, npc_seed FROM characters WHERE is_npc AND alive ORDER BY cash ASC LIMIT 1')).rows[0];
+assert(Number(poor.cash) >= Number(poor.npc_seed) * POPULATION.TURNOVER.DRAINED_BPS / 10000,
+  'the poorest resident in the city is still not "drained" — born poor is not the same as picked clean');
+const quiet = await runPopulation(pool);
+assert.equal(quiet.drained, 0, 'a city nobody has robbed retires nobody for being broke');
+
+// now actually pick one clean — the after-state of a player draining them through duels/fades/fills.
+// (A direct cash write would move the books, so the burn is ledgered as the loss it represents.)
+const mark = (await pool.query(
+  'SELECT id, cash, npc_seed FROM characters WHERE is_npc AND alive AND npc_seed > 5000 ORDER BY npc_seed DESC LIMIT 1')).rows[0];
+const stripped = Math.floor(Number(mark.npc_seed) * 0.05); // 5% of what they arrived with
+await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [mark.id, stripped]);
+await pool.query(
+  "INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,'cash',$3,'npc:retire')",
+  [`t-drain-${mark.id}`, mark.id, stripped - Number(mark.cash)]);
+
+const beforeTurnover = await population(pool);
+const chargedBefore = await one('SELECT retired n FROM population_state WHERE id=1');
+const turn = await runPopulation(pool);
+assert(turn.drained > 0, 'the worker retires a resident players have picked clean');
+assert.equal(await one(`SELECT COUNT(*) n FROM characters WHERE id='${mark.id}' AND alive`), 0,
+  'the picked-clean resident is off the streets');
+assert(await population(pool) >= beforeTurnover,
+  'and a fresh face took their place — the city renews itself instead of quietly emptying');
+
+// THE CEILING. Recycling makes npc:seed recurring, so REPLACEMENTS are metered — a per-day headcount
+// held in the population_state singleton, charged in the same transaction as the retirement.
+// Deliberately NOT a dollar budget on seeding: the day-one fill of an empty city is ~48 seeds that
+// replace nobody, and would eat the whole allowance before a single resident had been robbed.
+assert.equal(await one('SELECT retired n FROM population_state WHERE id=1') - chargedBefore, turn.retired,
+  'every retirement charged the day\'s replacement allowance, exactly once each');
+assert(await seededToday(pool) > 0, 'and the seeding it paid for is visible on the ledger');
+
+// spend the rest of the allowance, then prove a picked-clean resident STAYS until the day rolls
+await pool.query('UPDATE population_state SET day=$1, retired=$2 WHERE id=1',
+  [Math.floor(Date.now() / 86400000), POPULATION.TURNOVER.PER_DAY]);
+const mark2 = (await pool.query(
+  'SELECT id, cash, npc_seed FROM characters WHERE is_npc AND alive AND npc_seed > 5000 ORDER BY npc_seed DESC LIMIT 1')).rows[0];
+const stripped2 = Math.floor(Number(mark2.npc_seed) * 0.05);
+await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [mark2.id, stripped2]);
+await pool.query(
+  "INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,'cash',$3,'npc:retire')",
+  [`t-drain2-${mark2.id}`, mark2.id, stripped2 - Number(mark2.cash)]);
+const capped = await runPopulation(pool);
+assert.equal(capped.turnoverLeft, 0, 'the day\'s replacement allowance reads as spent');
+assert.equal(capped.drained, 0, 'and a picked-clean resident is NOT replaced past the ceiling');
+assert.equal(await one(`SELECT COUNT(*) n FROM characters WHERE id='${mark2.id}' AND alive`), 1,
+  'they stay on the streets, broke, until the day rolls — the faucet is bounded by headcount, not hope');
 assert(credits.includes('npc:seed'), 'and the seed is the source it all traces back to');
 
 // (4) RETIREMENT WITH LIVE ESCROW — the books must still close. A retiring resident pulls its offers

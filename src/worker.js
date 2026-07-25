@@ -8,7 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
@@ -303,7 +303,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     if ((process.env.POPULATION_OFF || 'off') !== 'on') {
       const pop = await safe('population', () => runPopulation(pool));
       if (pop && (pop.spawned > 0 || pop.retired > 0))
-        console.log(`🏙️  population: +${pop.spawned} −${pop.retired} residents (${pop.population} on the streets)`);
+        console.log(`🏙️  population: +${pop.spawned} −${pop.retired} residents (${pop.drained} picked clean; ${pop.population} on the streets, ${pop.turnoverLeft} replacements left today)`);
+      // step three: the turnover cap is a ceiling, not a rate — say so plainly when it binds, since
+      // a city full of drained residents looks like a bug if the operator can't see why.
+      if (pop && pop.turnoverLeft <= 0 && pop.drained === 0)
+        console.log('🏙️  population: the day\'s replacement allowance is spent — picked-clean residents stay put until it rolls');
       // step two: the city ACTS — consent limits, secured loan offers, standing buy orders, drift.
       // Pure recycling of cash they already hold, so no new faucet (design doc §"the one rule").
       const beh = await safe('resident behaviour', () => runResidentBehaviour(pool));

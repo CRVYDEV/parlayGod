@@ -3560,3 +3560,29 @@ POPULATION.BEHAVIOUR = {
   ORDER_BPS: 2500,          // escrow as bps of cash
   ORDER_PRICE_BPS: [9000, 11000], // they bid 90–110% of a good's base — sometimes a bargain, sometimes not
 };
+// ── THE POPULATION step three — THE TURNOVER ───────────────────────────────────────────────────
+// Steps one/two lit the city up ONCE: residents have no income, so the seed pool is a STOCK, not a
+// flow (the red-team's correction to the sim's own claim). Once players drain it — duels, fades,
+// order-fills, kills — the stake-backed boards go quiet again and the alpha is back where it
+// started. So the worker now RETIRES a resident players have picked clean and lets the top-up put a
+// fresh face in their place: the city renews itself.
+//
+// That makes `npc:seed` a RECURRING faucet rather than a one-shot, which is exactly why it gets an
+// explicit ceiling — and the ceiling meters RETIREMENTS, not seeding. Every retirement is what
+// creates the vacancy a fresh seed pays for, so counting them bounds the faucet exactly; counting
+// dollars seeded does not, because the day-one fill of an empty city is ~48 seeds that replace
+// nobody and would eat the whole allowance before a single resident had been drained.
+//
+// So the rule reads plainly: **at most PER_DAY residents are replaced in a day** — a headcount, held
+// in the `population_state` singleton (restart-proof, and free of any genesis interaction). At the
+// weighted mean seed that bounds the faucet at roughly $500k/day, the same band as a territory
+// racket or the boxing purse. Spent, the city simply keeps its drained residents until the day rolls.
+POPULATION.TURNOVER = {
+  // "picked clean" = holding less than this share of what they ARRIVED with. Compared against
+  // `characters.npc_seed`, never a flat cash floor: a flat floor can't tell a drained boss from a
+  // corner kid who was BORN with $200, and would respawn the cheap bands forever — an infinite
+  // faucet loop. The margin is deliberate: a resident who has parked the maximum in escrow (a loan
+  // offer plus a buy order) still holds ~52% of their stake, well clear of this line.
+  DRAINED_BPS: 1500,  // 15% of what they arrived with
+  PER_DAY: 24,        // residents replaced per day — half the city, ≈$500k/day of npc:seed at the mean
+};

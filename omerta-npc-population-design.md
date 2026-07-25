@@ -165,13 +165,42 @@ lender who no longer exists.
 
 §10.4 clean throughout.
 
-**The open founder call — the city DEPLETES.** Residents have no income, so once players drain the
-seed pool (duels, fades, order-fills, kills) the boards go quiet again: stakes stop clearing the
-floors, loan offers stop firing below `LOAN.MIN`, orders stop. Step two lights the city up **once**.
-Making it renewable — resident income, or retiring-and-respawning a *broke* resident rather than only
-an old bloodline — turns a one-shot ~$998k into a **recurring faucet**, so it's a balance decision
-rather than a bug fix. It partly recycles unaided: `hireBodyguard` and loan repayment both pay cash
-*into* residents. Flagged in BALANCE.md; the red-team write-up is `AUDIT-population.md`.
+---
+
+## Step three — THE TURNOVER (BUILT)
+
+Steps one and two light the city up **once**. Residents have no income, so the seed pool is a
+**stock, not a flow**: as players drain it (duels, fades, order-fills, kills) the stake-backed boards
+go quiet again — stakes stop clearing the floors, loan offers stop firing below `LOAN.MIN`, orders
+stop — and the alpha is back where it started. Founder-directed: make the city renewable.
+
+**The mechanism.** The worker retires a resident players have **picked clean** alongside the
+old-bloodline rule, and the existing top-up puts a fresh face in the vacancy. Both go through the
+same `retireResident` path, so the escrow-reclaim and the `npc:retire` burn already hold.
+
+**Picked clean is measured against what they ARRIVED with** (`characters.npc_seed`, stamped at
+spawn, lazily backfilled for heirs in `residentAct`) — **never a flat cash floor.** That distinction
+is the whole design: a flat floor can't tell a drained boss from a corner kid who was *born* with
+$200, so it would retire the cheap bands the instant they spawned, respawn them, and loop forever —
+an unbounded faucet. `DRAINED_BPS` (15%) has deliberate margin: a resident with the maximum parked
+in escrow (a loan offer plus a buy order) still holds ~52% of their stake.
+
+**The ceiling meters RETIREMENTS, not dollars seeded.** A retirement is exactly what creates the
+vacancy a fresh seed pays for, so counting them bounds the faucet precisely. Counting dollars does
+not — the day-one fill of an empty city is ~48 seeds that replace *nobody*, and would eat the whole
+allowance before a single resident had been robbed. (That was the first cut of this design, and the
+test caught it: genesis alone consumed ~$998k of a $1M budget.)
+
+So the rule reads plainly: **at most `TURNOVER.PER_DAY` (24) residents are replaced in a day** — a
+headcount held in the `population_state` singleton, charged in the **same transaction** as the
+retirement so a crash between the two can't hand out a free replacement. At the weighted mean seed
+that bounds the faucet at **≈$500k/day**, the same band as a territory racket or the boxing purse,
+and ~2.3% of the passive stack. Spent, the city simply keeps its drained residents until the day
+rolls — visible in the worker log and on the ops dashboard (`residentTurnoverToday` /
+`residentTurnoverCap` / `residentSeedToday`), which is honest rather than mysterious.
+
+The pool also recycles unaided, without touching the faucet: `hireBodyguard` and loan repayment both
+pay player cash *into* residents.
 
 **Still deliberately NOT done:** residents don't emit telemetry or bus events, so `/v1/online`
 presence stays a true human count and the feed isn't padded with fake activity. No NPC families, so
