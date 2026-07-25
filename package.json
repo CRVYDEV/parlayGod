@@ -18,7 +18,7 @@
     "backup:selftest": "bash tools/backup-selftest.sh"
   },
   "dependencies": {
-    "@fastify/jwt": "^9.0.0",
+    "@fastify/jwt": "^10.2.0",
     "@fastify/websocket": "^11.3.0",
     "fastify": "^5.0.0",
     "ioredis": "^5.11.1",

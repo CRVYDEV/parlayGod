@@ -6,8 +6,11 @@ process.env.RATE_LIMIT = 'off';           // flipped on for the rate-limit secti
 process.env.RATE_HUMAN_PER_SEC = '0.5';   // slow refill so bursts are observable
 process.env.RATE_HUMAN_BURST = '8';
 process.env.MOD_KEY = 'test-mod-key';
+process.env.JWT_SECRET = 'test-jwt-secret-for-the-hardening-suite'; // pinned so the token-algorithm
+                                                                   // section can hand-sign with it
 
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
@@ -704,6 +707,42 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const lockTimeout = Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
   assert.equal(G_deadlockToRetry(lockTimeout).code, 'contention', 'lock_timeout maps to a clean retryable error');
   assert.equal(G_deadlockToRetry(new TypeError('boom')).constructor, TypeError, 'a real bug is not laundered into contention');
+}
+
+// ── THE TOKEN ALGORITHM IS PINNED — and a rejected token is a 401, not a 500 ──
+// fast-jwt derives the allowed algorithm set from the KEY when none is given, and a string secret
+// admits the whole HMAC family. Measured: before `verify: { algorithms: ['HS256'] }` was set, a token
+// hand-signed HS512 with the same secret AUTHENTICATED — the server accepted tokens it never issues.
+// Not a break (same secret, HMAC is HMAC), but a needlessly wide door, and one that would swing open
+// much further the day someone swaps in an asymmetric key. So the set is pinned in code, and this is
+// the regression that notices if the pin is ever dropped.
+{
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const g = (await call('POST', '/v1/auth/guest')).body;
+  const sub = app.jwt.decode(g.token).sub;
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+
+  assert.equal(app.jwt.decode(g.token, { complete: true }).header.alg, 'HS256',
+    'tokens are issued HS256 — so pinning HS256 accepts every token already in the wild');
+
+  const body = `${b64({ alg: 'HS512', typ: 'JWT' })}.${b64({ sub, exp })}`;
+  const sig = crypto.createHmac('sha512', process.env.JWT_SECRET).update(body).digest('base64url');
+  const hs512 = await call('GET', '/v1/me', { token: `${body}.${sig}` });
+  assert.equal(hs512.code, 401, 'a valid-signature HS512 token is refused, not authenticated');
+  assert.equal(hs512.body.error, 'auth', '…and refused cleanly');
+
+  // the classic. Belt and braces: this was already rejected, and must stay rejected.
+  const none = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ sub, exp })}.`;
+  assert.equal((await call('GET', '/v1/me', { token: none })).code, 401, 'alg:none is refused');
+
+  // The rejection must not read as a server fault. FAST_JWT_INVALID_ALGORITHM carries no statusCode,
+  // so before the error handler matched the FAST_JWT_/FST_JWT_ family it fell through to `internal` —
+  // the one case the pin exists to catch reported itself as a bug in the game.
+  assert.notEqual(hs512.code, 500, 'an untrusted token is never a 500');
+  for (const bad of ['not.a.jwt', 'zzzz', app.jwt.sign({ sub }, { expiresIn: '-1s' })]) {
+    assert.equal((await call('GET', '/v1/me', { token: bad })).code, 401,
+      'malformed / garbage / expired tokens all 401 so the client knows to re-authenticate');
+  }
 }
 
 // ── ARE THE BACKUPS RUNNING? — the health the game could not see about itself ──
