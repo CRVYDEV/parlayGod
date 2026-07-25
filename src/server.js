@@ -187,11 +187,27 @@ export async function buildServer() {
   app.get('/openapi.json', async () => (openApiCache ||= buildOpenApi(routeRegistry, { baseUrl })));
   const pool = await makeDb();
   app.decorate('pool', pool);
-  await app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret-change-me' });
+  // `algorithms` is pinned rather than inferred. fast-jwt already derives the allowed set from the key
+  // — a string secret admits only HMAC, so the classic "sign HS256 using the RSA public key as the
+  // shared secret" confusion has no purchase here. But that safety is a property of the key we happen
+  // to pass today, not of this line. Pinning makes it a property of the code: if someone later moves to
+  // an asymmetric key, the verifier does not silently widen to whatever that key can do. Tokens are
+  // signed HS256 by default with a string secret, so this accepts every token already issued.
+  await app.register(jwt, {
+    secret: process.env.JWT_SECRET || 'dev-secret-change-me',
+    verify: { algorithms: ['HS256'] },
+  });
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof G.GameError) return reply.code(400).send({ error: err.code, message: err.message });
-    if (err.code === 'FST_JWT_NO_AUTHORIZATION_IN_HEADER' || err.statusCode === 401) return reply.code(401).send({ error: 'auth' });
+    // A bad token is a bad token — 401, never 500. Most fast-jwt errors already arrive carrying a 401,
+    // but not all: FAST_JWT_INVALID_ALGORITHM (raised by the pinned `algorithms` above when a token is
+    // signed with an algorithm we do not accept) has no statusCode and fell through to `internal`. So
+    // the very case the pin exists to reject reported itself as a server bug, which both misleads the
+    // client and buries a probe in the 500 pile. Match the whole FAST_JWT_/FST_JWT_ family instead of
+    // naming codes one at a time — every one of them means "we could not trust this token".
+    if (/^(FAST_JWT_|FST_JWT_)/.test(String(err.code || '')) || err.statusCode === 401)
+      return reply.code(401).send({ error: 'auth' });
     // An unreachable database is NOT a bug in the game — it is "come back in a minute". Reporting it as
     // 500 `internal` is what made the 2026-07-25 incident unreadable: an outage and a null-dereference
     // produced byte-identical responses, so a tester saw "Internal" on every button and nobody could tell
