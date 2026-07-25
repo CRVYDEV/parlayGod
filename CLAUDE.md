@@ -5289,3 +5289,24 @@ a missing `pg_restore -f -` that would have failed EVERY backup, and the schema-
 DEPLOY.md §7b/§7c document what an outage looks like, the uptime-monitor recommendation (and the
 warning NOT to make `/health` the platform's own health check — restarting the API doesn't fix a
 database, it just adds a restart loop). §10.4 untouched throughout — nothing here moves value.
+
+**THE BACKUP WATCHDOG — the game now watches its own backups (2026-07-25, same incident).** The WAL
+archiving failure recurred that evening (segment `FD`, ~7 min, after the morning's `A8`, ~11 min —
+both self-healed), which made the real problem plain: this is the ONE failure invisible from inside
+the game, and the founder could only learn of it by reading the host's log stream. So the game now
+reads Postgres's own account of it. `dbhealth.js:archiverHealth` queries `pg_stat_archiver` +
+`archive_mode` and returns a FIVE-state verdict, each state earning its place: **ok** (the newest
+event was a successful ship), **failing** (the newest event was a FAILURE — the alarm; deliberately
+compared against `last_archived_time`, because Postgres retries a stuck segment until it lands and a
+HEALED outage leaves its failure timestamps in that view forever, so reading `last_failed_time` alone
+would alarm about an incident that ended hours ago), **stale** (nothing shipped lately — normal on an
+idle database, a note not an alarm), **off** (`archive_mode=off`: no chain to break because no chain
+exists — **found by probing a real Postgres that had archiving disabled, which the first cut reported
+as "ok"**, since zero failures reads as healthy right up until you need a backup), and **unsupported**
+(pg-mem or a restricted role — not knowing is not the same as broken). Wired: the **worker** checks
+EVERY tick (not nightly) and alerts through the existing `alertDrift` channel (telemetry +
+`INVARIANT_WEBHOOK_URL`) latched once per episode, so a healed-then-broken-again outage alerts again
+while a still-broken one doesn't re-nag hourly; **`/admin`** leads with a Backups panel + its own red
+banner above the §10.4 one (browser-verified in both alarm states, zero page errors); `npm run backup`
+wraps the verified dump. §10.4 untouched — read-only, moves no value. DEPLOY.md §7c documents the
+five states, the webhook requirement, and the `pg_stat_archiver` query for checking by hand.

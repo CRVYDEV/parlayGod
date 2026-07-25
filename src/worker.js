@@ -8,7 +8,7 @@
 // ledger-invariant sweep. All three are exported for the tests.
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
-import { pingDb } from './dbhealth.js';
+import { pingDb, archiverHealth } from './dbhealth.js';
 import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
@@ -246,6 +246,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
   // How many consecutive ticks have found the database unreachable — used only to keep the log honest
   // (say it once, then say how long it has been going on) rather than to change what we do about it.
   let dbDownTicks = 0;
+  // latched so a still-broken archive doesn't re-alert every hour; cleared on recovery so the NEXT
+  // episode alerts again (two separate outages in one day is exactly the pattern that matters).
+  let archiverAlerted = false;
   const tick = async () => {
     // A tick fans out to ~60 independent jobs. `safe()` isolates them so one poison row cannot starve
     // the §10.4 drift monitor — but when the DATABASE is what is unreachable, every one of those 60
@@ -387,6 +390,36 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // otherwise-permanently-committed reserve capacity) and restore optimistically-removed gear.
     const vr = await safe('voucher reclaim', () => reclaimExpiredVouchers(pool));
     if (vr && (vr.omrReclaimed > 0 || vr.gearRestored > 0)) console.log(`♻️  vouchers: reclaimed ${vr.omrReclaimed.toFixed(3)} $OMR + restored ${vr.gearRestored} gear from expired claims`);
+    // ARE THE BACKUPS ACTUALLY RUNNING? Checked EVERY tick, not nightly, because this is the one
+    // failure that is invisible from inside the game: the database serves perfectly while its
+    // point-in-time-recovery chain rots. It broke twice on 2026-07-25 and the only evidence was in
+    // the hosting provider's log stream, where nobody was looking. Now the game watches its own
+    // backups and shouts through the SAME channel as a §10.4 drift (telemetry + the founder webhook),
+    // once per episode — a healed-then-broken-again outage alerts again, a still-broken one does not
+    // re-nag every hour.
+    const arch = await safe('archiver health', () => archiverHealth(pool));
+    // BOTH bad states alarm — `off` (archive_mode disabled: no recovery chain exists at all) as well
+    // as `failing`. `off` is arguably the worse of the two precisely because it looks calm: zero
+    // failures forever, because nothing is even being attempted.
+    const archBad = arch && (arch.state === 'failing' || arch.state === 'off');
+    if (arch && arch.state !== 'unsupported') {
+      if (archBad && !archiverAlerted) {
+        archiverAlerted = true;
+        const detail = arch.state === 'off'
+          ? 'archive_mode is OFF — this database has NO point-in-time recovery.'
+          : `Last success: ${arch.lastArchivedWal || 'never'} (${arch.secondsSinceArchived ?? '?'}s ago); last failure: ${arch.lastFailedWal} (${arch.secondsSinceFailed}s ago), ${arch.failedCount} total.`;
+        console.error(`🚨 BACKUPS ARE NOT RUNNING (${arch.state}) — ${detail} TAKE A MANUAL DUMP (npm run backup) and raise it with your database host.`);
+        await safe('archiver alert', () => alertDrift(pool, [{
+          name: `wal archiving ${arch.state}`, archiveMode: arch.archiveMode,
+          lastArchivedWal: arch.lastArchivedWal, lastFailedWal: arch.lastFailedWal,
+          secondsSinceArchived: arch.secondsSinceArchived, failedCount: arch.failedCount,
+          note: 'Backups are not being shipped. The database is fine; RESTORING it may not be. Take a manual dump.',
+        }, ], 'backup'));
+      } else if (!archBad && archiverAlerted) {
+        archiverAlerted = false;
+        console.log(`✅ WAL archiving recovered — last shipped ${arch.lastArchivedWal} (${arch.secondsSinceArchived}s ago)`);
+      }
+    }
     if (dayOf() !== lastInvariantDay) {
       lastInvariantDay = dayOf();
       // (red-team R15 F1) Prune on TWO horizons. COMPLETED rows (status<>0, holding a stored response)

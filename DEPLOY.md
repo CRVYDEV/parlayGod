@@ -139,7 +139,34 @@ That is now separated:
   fix a database — it just adds a restart loop on top of an outage. Alerting on it is the point;
   auto-restarting on it usually is not.
 
-## 7c. Backups — `tools/backup.sh` (cron it nightly)
+## 7c. Backups — you are told when they break, and you keep your own
+**The game now watches its own backups.** Postgres ships write-ahead-log segments to the backup
+service; when that stops, the database keeps serving perfectly while your ability to *restore* it
+quietly rots. It is the one failure that is invisible from inside the game — and on 2026-07-25 it
+happened twice in one day with the only evidence buried in the host's log stream.
+
+- **`/admin` leads with a Backups panel** and shows a red banner when it is broken. Five states:
+  `HEALTHY` (shipping), `FAILING` (the newest event was a failure — act), `QUIET` (nothing shipped
+  lately, normal on an idle database), `NOT RUNNING` (**`archive_mode=off`** — there is no recovery
+  chain at all), `unsupported` (dev/pg-mem, or a role that can't read the view).
+- **The worker checks every tick** and alerts through the same channel as a §10.4 drift (telemetry +
+  `INVARIANT_WEBHOOK_URL`), once per episode — a healed-then-broken-again outage alerts again; a
+  still-broken one doesn't re-nag hourly. **Set `INVARIANT_WEBHOOK_URL`** or nobody gets paged.
+- Note that a *healed* outage leaves its failure counts in `pg_stat_archiver` forever. What matters
+  is whether the most recent event was a success — which is what the panel reports.
+
+You can also ask the database directly:
+```sql
+SELECT last_archived_wal, last_archived_time, failed_count, last_failed_wal, last_failed_time
+FROM pg_stat_archiver;
+```
+If `last_failed_time` is newer than `last_archived_time`, archiving is broken right now.
+
+### Your own dump — `npm run backup` (cron it nightly)
+```
+0 4 * * * cd /path/to/repo && DATABASE_URL=postgres://… BACKUP_DIR=/backups npm run backup
+```
+or call the script directly:
 ```
 0 4 * * * DATABASE_URL=postgres://… /path/to/tools/backup.sh /backups
 ```

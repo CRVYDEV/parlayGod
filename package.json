@@ -13,7 +13,8 @@
     "preflight": "node tools/preflight.js",
     "pgcheck": "node tools/pgcheck.js",
     "sim": "node tools/sim.js",
-    "playthrough": "node tools/playthrough.js"
+    "playthrough": "node tools/playthrough.js",
+    "backup": "bash tools/backup.sh ${BACKUP_DIR:-./backups}"
   },
   "dependencies": {
     "@fastify/jwt": "^9.0.0",

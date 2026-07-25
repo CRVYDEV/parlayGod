@@ -5,6 +5,7 @@
 
 import { POPULATION } from './rules.js';
 import { seededToday } from './population.js';
+import { archiverHealth } from './dbhealth.js';
 
 const num = (v) => Number(v || 0);
 const safeParse = (p) => { try { return typeof p === 'string' ? JSON.parse(p) : (p || {}); } catch { return {}; } };
@@ -56,6 +57,10 @@ export async function opsOverview(pool) {
 
   return {
     at: null, // stamped by the client on receipt (Date.now() is unavailable server-side in some paths)
+    // ARE THE BACKUPS RUNNING? The one health question the game could not previously answer about
+    // itself — the database serves fine while its recovery chain rots. Read straight from Postgres's
+    // own pg_stat_archiver, so the dashboard shows it without anyone reading the host's log stream.
+    backups: await archiverHealth(pool),
     players,
     economy: {
       ammPrice: Math.round(ammPrice * 100) / 100,
