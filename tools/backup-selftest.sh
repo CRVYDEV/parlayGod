@@ -34,6 +34,10 @@ check() { # check <ok?> <label> [detail]
 }
 # `check_ok CMD…` — expect success; `check_fail CMD…` — expect a non-zero exit.
 run() { OUTPUT="$("$@" 2>&1)"; RC=$?; return 0; }
+# Substring tests use bash, never `echo … | grep -q`. Under `pipefail` that pipeline reports failure
+# on a MATCH when grep exits first and SIGPIPEs the writer — the exact bug this suite just caught in
+# backup.sh, and there is no reason to reintroduce it in the thing testing for it.
+said() { case "$OUTPUT" in *"$1"*) return 0;; *) return 1;; esac; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -114,6 +118,22 @@ echo "client: pg_dump $(pg_dump --version | awk '{print $3}'), pg_restore $(pg_r
 echo "server: $(psql "$ADMIN_DB_URL" -tAc 'SHOW server_version' 2>/dev/null | tr -d ' ')   fixture: $FIXTURE accounts/characters"
 
 echo
+echo "0. THE REQUIRED-TABLE CHECK DOES NOT PIPE INTO grep -q"
+# A SOURCE-LEVEL tripwire, and labelled as one: the bug it guards is a RACE, so the behavioural test
+# below cannot be relied on to reproduce it. `echo "$TOC" | grep -q PATTERN` under `pipefail` reports
+# FAILURE on a match whenever grep exits first and SIGPIPEs the writer mid-TOC — CI hit it on every
+# run while it never once fired here, and it blamed a different table each time. The consequence is a
+# nightly backup refusing a GOOD dump and reporting a table as missing that is demonstrably present.
+# Since the reproduction is environmental, the guard is textual.
+# Comments are stripped first — the fix in backup.sh QUOTES the bad pattern while explaining it, and
+# a tripwire that trips on its own documentation is a tripwire nobody keeps.
+BADPAT='echo "$TOC" | grep -q'
+case "$(grep -v '^[[:space:]]*#' "$BACKUP")" in
+  *"$BADPAT"*) check 1 "backup.sh matches TOC entries without a grep -q pipeline" "found: $BADPAT";;
+  *)           check 0 "backup.sh matches TOC entries without a grep -q pipeline";;
+esac
+
+echo
 echo "1. A GOOD BACKUP IS KEPT"
 DEST="$WORK/good"
 run env DATABASE_URL="$(base_url "$FULL_DB")" bash "$BACKUP" "$DEST"
@@ -131,7 +151,7 @@ echo "2. THE SCHEMA-ONLY TRAP — the hole that passed before"
 DEST="$WORK/cold"
 run env DATABASE_URL="$(base_url "$COLD_DB")" bash "$BACKUP" "$DEST"
 check $([ $RC -ne 0 ] && echo 0 || echo 1) "a schema-only database is REFUSED, not silently kept" "rc=$RC"
-check $(echo "$OUTPUT" | grep -q "holds 0 rows" && echo 0 || echo 1) "…and says why (zero rows, not 'looks fine')"
+check $(said "holds 0 rows" && echo 0 || echo 1) "…and says why (zero rows, not 'looks fine')"
 check $([ -z "$(find "$DEST" -name '*.dump' 2>/dev/null)" ] && echo 0 || echo 1) "the refused dump is not kept"
 check $([ -z "$(find "$DEST" -name '*.part' 2>/dev/null)" ] && echo 0 || echo 1) "no .part survives the refusal"
 # …and the documented escape hatch for a genuinely new deployment must work
@@ -164,7 +184,7 @@ echo "4. THE WRONG DATABASE IS CAUGHT"
 DEST="$WORK/wrong"
 run env DATABASE_URL="$(base_url "$TINY_DB")" bash "$BACKUP" "$DEST"
 check $([ $RC -ne 0 ] && echo 0 || echo 1) "a stale DATABASE_URL pointing elsewhere is REFUSED" "rc=$RC"
-check $(echo "$OUTPUT" | grep -qE "tables in the dump|is missing from the dump" && echo 0 || echo 1) \
+check $( { said "tables in the dump" || said "is missing from the dump"; } && echo 0 || echo 1) \
   "…and names the reason (wrong database / no schema)"
 
 echo

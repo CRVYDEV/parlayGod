@@ -55,8 +55,19 @@ MIN_TABLES="${BACKUP_MIN_TABLES:-40}"
   exit 1
 }
 # and specifically the tables whose loss is unrecoverable: who people are, and every value movement
+#
+# Matched with bash's own substring test, NOT `echo "$TOC" | grep -q`. That pipeline is a race and it
+# fails on GOOD dumps: `grep -q` exits the instant it matches, closing the pipe while `echo` is still
+# writing the rest of a ~34 KB table of contents. echo takes SIGPIPE, exits 141, and under `pipefail`
+# the pipeline reports 141 even though the needle was found. CI caught it — nondeterministically
+# blaming a different table each run, while the diagnostic below printed that table's TOC entry
+# sitting right there. On a nightly cron that reads as "backups have started failing" with a message
+# saying a table is missing when it is present. `rowsOf` below already had to dodge the same class
+# with `set +o pipefail`; `case` dodges it by having no pipe and no second process at all.
 for t in accounts characters transactions; do
-  echo "$TOC" | grep -q "TABLE DATA public $t " || {
+  case "$TOC" in
+    *"TABLE DATA public $t "*) ;;
+    *)
     echo "BACKUP FAILED: '$t' is missing from the dump — this is not a usable backup of OMERTÀ." >&2
     # Say enough that the cause is readable from the log alone. "A table is missing" has two very
     # different causes — the dump is of the wrong/half-built database, or this pg_dump writes a TOC
@@ -66,11 +77,14 @@ for t in accounts characters transactions; do
     # "TABLE DATA public $t" is absent means the table shipped without its rows, which is a very
     # different fault from the table being absent altogether.
     echo "  every TOC entry naming '$t':" >&2
-    { echo "$TOC" | grep -- "$t" | head -6 | sed 's/^/    /'; } >&2
+    # `|| true` because these pipelines end in `head`, which is the very early-exit/SIGPIPE shape
+    # described above — a diagnostic must not itself abort the script before it has printed.
+    { echo "$TOC" | grep -- "$t" | head -6 | sed 's/^/    /' || true; } >&2
     echo "  a sample of what IS in the dump:" >&2
-    { echo "$TOC" | grep 'TABLE DATA' | head -3 | sed 's/^/    /'; } >&2
+    { echo "$TOC" | grep 'TABLE DATA' | head -3 | sed 's/^/    /' || true; } >&2
     exit 1
-  }
+    ;;
+  esac
 done
 
 # CONTAINS ROWS, not just tables. Measured, not assumed: a schema-only database (schema.sql loaded,
