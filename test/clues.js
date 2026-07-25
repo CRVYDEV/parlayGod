@@ -8,6 +8,11 @@
 // + every casket — the faucet reconciles per character).
 process.env.MOD_KEY = 'test-mod-key';
 process.env.CLUE_DROP_P = '1'; // TEST-ONLY (boot-guard rejects it in production)
+// TEST-ONLY, and off until the relic section deliberately turns it on. The easy tier carries
+// relicP 0.02, so the first casket below drops a relic on ~1 run in 50 — which is precisely how
+// often CI went red on an assertion that has nothing to do with that roll. Pinning it to 0 makes
+// every casket before the relic test deterministic instead of merely usually-right.
+process.env.CLUE_RELIC_P = '0';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { CLUES, clueStepOf, cityHourOf } from '../src/rules.js';
@@ -131,6 +136,13 @@ assert.equal(r.scroll.tierName, 'a Master Scroll', 'and its name');
 assert(['riddle', 'anagram', 'cipher'].includes(r.scroll.kind), 'the step carries a puzzle kind');
 assert(Array.isArray(r.tiers) && r.tiers.length === 5, 'the 5-tier ladder surfaces');
 assert('relics' in r.legend, 'the relic count is on the board');
+// Measured as a DELTA, not an absolute. The easy-tier casket earlier in this run rolls its own relic
+// chance, so "exactly one relic exists" is true only on the runs where that roll missed — a 1-in-N
+// red CI for a test that is not about that roll at all. What is actually being asserted is that a
+// rare casket yields a relic AND that the relic reaches the Collection, which is a +1 either way.
+const relicRows0 = Number((await pool.query(
+  `SELECT COUNT(*) n FROM collection_log WHERE account_id='${digger.aid}' AND category='relics'`)).rows[0].n);
+const relics0 = r.legend.relics;
 // walk the single master step to the casket with a FORCED relic
 process.env.CLUE_RELIC_P = '1';
 const st = clueStepOf(goodSalt, 1);
@@ -141,8 +153,8 @@ assert.equal(r.tier, 'master', 'the casket knows its tier');
 assert(r.take >= 55000 && r.take <= 120000, `the take is in the MASTER band (saw $${r.take})`);
 assert(r.relic && r.relic.id, 'a rare casket yielded a RELIC (status collectible)');
 // the relic is logged to the Collection + surfaces on the board
-assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM collection_log WHERE account_id='${digger.aid}' AND category='relics'`)).rows[0].n), 1, 'the relic is in the Collection');
-assert.equal((await call('GET', '/v1/clues', { token: digger.token })).body.legend.relics, 1, 'the board shows one relic found');
+assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM collection_log WHERE account_id='${digger.aid}' AND category='relics'`)).rows[0].n), relicRows0 + 1, 'the relic is in the Collection');
+assert.equal((await call('GET', '/v1/clues', { token: digger.token })).body.legend.relics, relics0 + 1, 'the board shows the relic found');
 process.env.CLUE_RELIC_P = '';
 
 // ── DEATH: the scroll dies with the street; the legend survives to the heir ──
