@@ -23,7 +23,8 @@
 // same name, generation+1 — IS the respawn. social.js needs zero changes and the population
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
-import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf } from './rules.js';
+import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
+         LOAN, loanOwed, GOODS, BLACK_MARKET } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -98,7 +99,35 @@ export async function retireResident(client, charId) {
   const c = (await client.query(
     'SELECT id, cash, bank FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE', [charId])).rows[0];
   if (!c) return null;
-  const held = Number(c.cash) + Number(c.bank);
+
+  // STEP TWO: pull their escrows back in FIRST. A retiring resident with a live loan offer or buy
+  // order would otherwise leave it standing on the board forever with nobody behind it — a player
+  // could take a loan from a lender who no longer exists and never be collected from. Mirrors the
+  // audited cancel paths exactly (`loan:refund` / `market:refund`), so both escrow checks stay
+  // balanced and the refunded cash is burned with the rest below.
+  let reclaimed = 0;
+  const offers = (await client.query(
+    "SELECT id, principal FROM loans WHERE lender_character=$1 AND status='open' FOR UPDATE", [charId])).rows;
+  for (const o of offers) {
+    await client.query("UPDATE loans SET status='cancelled' WHERE id=$1", [o.id]);
+    await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+      [uid(), charId, 'cash', Number(o.principal), 'loan:refund']);
+    reclaimed += Number(o.principal);
+  }
+  const orders = (await client.query(
+    "SELECT id, qty, price FROM market_listings WHERE seller_character=$1 AND kind='order' AND status='live' FOR UPDATE", [charId])).rows;
+  for (const o of orders) {
+    const remaining = Number(o.qty) * Number(o.price);
+    await client.query("UPDATE market_listings SET qty=0, status='cancelled' WHERE id=$1", [o.id]);
+    if (remaining > 0) {
+      await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), charId, 'cash', remaining, 'market:refund']);
+      reclaimed += remaining;
+    }
+  }
+  if (reclaimed > 0) await client.query('UPDATE characters SET cash = cash + $2 WHERE id=$1', [charId, reclaimed]);
+
+  const held = Number(c.cash) + Number(c.bank) + reclaimed;
   if (held > 0) {
     await client.query(
       'INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
@@ -154,5 +183,136 @@ export async function runPopulation(pool) {
     } finally { client.release(); }
   }
   out.population = await population(pool);
+  return out;
+}
+
+// ════════════════════ STEP TWO — THE CITY ACTS ════════════════════
+//
+// THE ONE RULE: a resident may only ever RECYCLE value it already holds, never conjure it at the
+// point of sale. So step two adds **no new faucet** — every behaviour either moves zero value
+// (drift, consent limits) or parks cash the resident was already `npc:seed`ed with into an EXISTING
+// audited escrow (`loan:offer`, `market:list`+`market:order`), which the existing worker sweeps
+// refund on expiry. §10.4 needs no new reason at all.
+//
+// Residents deliberately emit NO telemetry and NO bus events, so `/v1/online` presence stays a true
+// human count. They are present and transactable, not fake activity in the feed.
+
+/** Cash a resident is willing to commit — never more than (1 − KEEP_FLOOR), so they stay lootable. */
+const spendable = (cash) => Math.floor(Number(cash) * (1 - POPULATION.BEHAVIOUR.KEEP_FLOOR));
+const bps = (n, b) => Math.floor(Number(n) * b / 10000);
+
+/**
+ * ONE resident takes ONE turn. Returns the action taken (or null). Runs inside the caller's txn.
+ *
+ * Deliberately at most one thing per turn: the city stirs rather than stampedes, and a single
+ * failure can only cost one resident one action.
+ */
+export async function residentAct(client, r) {
+  const B = POPULATION.BEHAVIOUR;
+  const cash = Number(r.cash);
+
+  // 1. CONSENT LIMITS — what they're willing to be challenged for. Pure column writes, zero value.
+  //    This is what lights up the bodyguard market, the back-room fade board and the duel ladder:
+  //    all three are consent-by-listing, so an empty alpha has nobody to play against without it.
+  if (r.guard_price == null || r.fade_limit == null || r.duel_limit == null) {
+    const guard = bps(cash, B.GUARD_BPS), fade = bps(cash, B.FADE_BPS), duel = bps(cash, B.DUEL_BPS);
+    if (guard >= B.LIMIT_MIN || fade >= B.LIMIT_MIN || duel >= B.LIMIT_MIN) {
+      await client.query(
+        'UPDATE characters SET guard_price=$2, fade_limit=$3, duel_limit=$4 WHERE id=$1',
+        [r.id, guard >= B.LIMIT_MIN ? guard : null, fade >= B.LIMIT_MIN ? fade : null, duel >= B.LIMIT_MIN ? duel : null]);
+      return 'listed';
+    }
+  }
+
+  // 2. THE SHYLOCK — a SECURED offer. Residents never call collectLoan, so an unsecured NPC loan
+  //    would be free money for a defaulter; requiring collateral worth MORE than the debt means the
+  //    audited grace-forfeit sweep seizes a car worth more than they borrowed. Recourse without
+  //    needing an NPC to act.
+  const hasOffer = Number((await client.query(
+    "SELECT COUNT(*) n FROM loans WHERE lender_character=$1 AND status='open'", [r.id])).rows[0].n);
+  if (!hasOffer && spendable(cash) >= LOAN.MIN) {
+    const principal = Math.max(LOAN.MIN, Math.min(LOAN.MAX, bps(cash, B.LOAN_BPS), spendable(cash)));
+    const rate = Math.round(rnd(B.LOAN_RATE[0], B.LOAN_RATE[1]) * 100) / 100;
+    const hours = rndInt(B.LOAN_HOURS[0], B.LOAN_HOURS[1]);
+    const collateral = Math.min(LOAN.COLLATERAL_MAX,
+      Math.floor(loanOwed(principal, rate) * B.LOAN_COLLATERAL_MULT));
+    await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, principal]);
+    await client.query(
+      'INSERT INTO loans (id, lender_character, principal, rate, hours, status, collateral_min) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [uid(), r.id, principal, rate, hours, 'open', collateral]);
+    await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+      [uid(), r.id, 'cash', -principal, 'loan:offer']);
+    return 'lent';
+  }
+
+  // 3. THE BLACK MARKET — a standing BUY ORDER. Gives a player a reliable cash buyer for goods they
+  //    actually hold: a fair exchange, bounded by the resident's own cash, and the existing sweep
+  //    refunds the unfilled escrow on expiry. Mirrors postOrder's accounting exactly (fee + escrow).
+  const hasOrder = Number((await client.query(
+    "SELECT COUNT(*) n FROM market_listings WHERE seller_character=$1 AND status='live'", [r.id])).rows[0].n);
+  if (!hasOrder) {
+    const good = pick(GOODS);
+    const unit = Math.max(1, bps(good.base, rndInt(B.ORDER_PRICE_BPS[0], B.ORDER_PRICE_BPS[1])));
+    const budget = Math.min(spendable(cash), bps(cash, B.ORDER_BPS));
+    const qty = Math.min(BLACK_MARKET.ORDER_MAX_QTY, Math.floor(budget / unit));
+    const escrow = qty * unit;
+    const fee = Math.max(BLACK_MARKET.LIST_FEE_MIN, Math.floor(escrow * BLACK_MARKET.LIST_FEE_BPS / 10000));
+    if (qty >= 1 && escrow >= BLACK_MARKET.MIN_PRICE && Number(r.cash) >= escrow + fee) {
+      await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, escrow + fee]);
+      await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), r.id, 'cash', -fee, 'market:list']);
+      await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), r.id, 'cash', -escrow, 'market:order']);
+      await client.query(
+        'INSERT INTO market_listings (id, seller_character, kind, good_id, qty, district, price, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [uid(), r.id, 'order', good.id, qty, r.loc, unit,
+         new Date(Date.now() + BLACK_MARKET.MAX_TTL_H * 3600 * 1000)]);
+      return 'ordered';
+    }
+  }
+
+  // 4. DRIFT — the city moves. Pure position, zero value (a resident isn't paying cab fare).
+  const to = pick(DISTRICTS.filter((d) => d.id !== r.loc));
+  if (to) { await client.query('UPDATE characters SET loc=$2 WHERE id=$1', [r.id, to.id]); return 'moved'; }
+  return null;
+}
+
+/**
+ * THE WORKER TICK — give a handful of residents a turn.
+ *
+ * Skips anyone the world has taken out of play (jailed / hospitalized / in a safehouse), so a
+ * resident under a player's boot doesn't carry on trading as if nothing happened. One transaction
+ * per resident: a poison row can never starve the rest.
+ */
+export async function runResidentBehaviour(pool) {
+  const out = { acted: 0, actions: {} };
+  // NOTE: shuffled in JS, not `ORDER BY random()` — pg-mem has no random() (the two-flat-queries
+  // precedent). Picking whose turn it is doesn't need to be cryptographic.
+  const eligible = (await pool.query(
+    `SELECT id, cash, loc, guard_price, fade_limit, duel_limit FROM characters
+      WHERE alive AND is_npc
+        AND (jail_until IS NULL OR jail_until < now())
+        AND (hosp_until IS NULL OR hosp_until < now())
+        AND (safe_until IS NULL OR safe_until < now())
+      ORDER BY id`)).rows;
+  const pick_ = eligible
+    .map((r) => ({ r, k: Math.random() })).sort((a, b) => a.k - b.k)
+    .slice(0, POPULATION.BEHAVIOUR.ACT_PER_TICK).map((x) => x.r);
+  for (const r of pick_) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // re-read under the row lock — a player may have jumped/robbed them since the pick
+      const live = (await client.query(
+        'SELECT id, cash, loc, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1 AND alive AND is_npc FOR UPDATE',
+        [r.id])).rows[0];
+      const did = live ? await residentAct(client, live) : null;
+      await client.query('COMMIT');
+      if (did) { out.acted++; out.actions[did] = (out.actions[did] || 0) + 1; }
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('[population] resident action failed', r.id, e.message);
+    } finally { client.release(); }
+  }
   return out;
 }

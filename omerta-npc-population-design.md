@@ -1,6 +1,6 @@
 # THE POPULATION — NPC residents of the city
 
-**Status:** step one BUILT. Founder-directed 2026-07-25 ("full residents" + "living population").
+**Status:** steps one + two BUILT. Founder-directed 2026-07-25 ("full residents" + "living population").
 **Numbers:** every `POPULATION.*` constant is a founder sign-off lever. The one new faucet
 (`npc:seed`) is measured in `tools/sim.js` like any other.
 
@@ -113,19 +113,43 @@ Referrals are safe by construction: an NPC account has no `referred_by` and neve
 
 ---
 
-## Deliberately NOT in step one
+## Step two — THE CITY ACTS (BUILT)
 
-- **Behaviours.** Residents do not yet list on the Black Market, post loan offers, take fade/duel
-  listings, or open clubs. They are present, targetable, and interactable — the commerce layer is
-  step two, and it is the step that needs care (an NPC that *posts* value is a second faucet).
-- **NPC families.** No gangs founded, so the Commission and turf are untouched.
-- **Telemetry.** Residents emit none, so `/v1/online` presence stays a true human count. A later
-  behaviour step must keep that true or explicitly exclude them.
+`runResidentBehaviour` gives `ACT_PER_TICK` residents one turn each worker tick. **The one rule: a
+resident may only ever RECYCLE value it already holds, never conjure it at the point of sale.** So
+step two adds **no new faucet and no new §10.4 reason** — every behaviour is either zero-value or
+parks already-seeded cash in an existing audited escrow that the existing sweeps refund on expiry.
 
-## Step two (planned)
+| Behaviour | What it lights up | §10.4 |
+|---|---|---|
+| **Consent limits** — `guard_price` / `fade_limit` / `duel_limit`, sized to holdings | the bodyguard market, the back-room fade board, the duelling ladder — all three are consent-by-listing, so an empty alpha has *nobody to play against* without them | zero value (column writes) |
+| **The Shylock** — a SECURED loan offer | the Shylock's board | `loan:offer` (existing escrow) |
+| **The Black Market** — a standing buy order | the market board, and a reliable cash buyer for goods a player actually holds | `market:list` + `market:order` (existing escrow) |
+| **Drift** — move district | the city moves | zero value |
 
-Give residents a daily behaviour tick: list a car or goods on the Black Market at fair value, post a
-small loan offer, set a `fade_limit`/`duel_limit`/`bout_limit` so the tables have takers, and drift
-between districts. Each of those moves value, so each needs its own §10.4 reasoning — the discipline
-is that a resident may only ever *recycle* value it already holds, never conjure it at the point of
-sale.
+**Why residents lend SECURED only.** A resident never calls `collectLoan`, so an *unsecured* NPC
+loan would be free money for a defaulter — `LOAN.MAX` is $1M against a $50k square cost. Requiring
+collateral worth `LOAN_COLLATERAL_MULT` × what's owed means the **already-audited grace-forfeit
+sweep** seizes a pledged car worth more than they borrowed. Recourse without an NPC ever acting.
+
+**Retirement pulls escrow back first.** A retiring resident cancels its open offers and orders
+(`loan:refund` / `market:refund`, mirroring the audited cancel paths) before the burn — otherwise an
+offer would stand on the board forever with nobody behind it, and a player could take a loan from a
+lender who no longer exists.
+
+**Measured, before → after** (empty alpha, then the city filled in):
+
+| Board | before | after |
+|---|---|---|
+| streets roster | 1 | 49 |
+| loan offers | 0 | 12 |
+| market listings | 0 | 11 |
+| duelling ladder | 0 | 20 |
+| bodyguards for hire | 0 | 21 |
+
+§10.4 clean throughout.
+
+**Still deliberately NOT done:** residents don't emit telemetry or bus events, so `/v1/online`
+presence stays a true human count and the feed isn't padded with fake activity. No NPC families, so
+the Commission and turf are untouched. Residents don't *take* the other side of a player's listing
+(they post their own), which keeps every interaction player-initiated.

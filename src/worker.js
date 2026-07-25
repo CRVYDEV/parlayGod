@@ -30,7 +30,7 @@ import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
-import { runPopulation } from './population.js';
+import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
 import { sweepLoans } from './loans.js';
 import { sweepAuctions, sweepConsignments } from './auction.js';
@@ -304,6 +304,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       const pop = await safe('population', () => runPopulation(pool));
       if (pop && (pop.spawned > 0 || pop.retired > 0))
         console.log(`🏙️  population: +${pop.spawned} −${pop.retired} residents (${pop.population} on the streets)`);
+      // step two: the city ACTS — consent limits, secured loan offers, standing buy orders, drift.
+      // Pure recycling of cash they already hold, so no new faucet (design doc §"the one rule").
+      const beh = await safe('resident behaviour', () => runResidentBehaviour(pool));
+      if (beh && beh.acted > 0)
+        console.log(`🏙️  residents: ${Object.entries(beh.actions).map(([k, v]) => `${v} ${k}`).join(', ')}`);
     }
     // THE COMMISSION (step three): settle frozen-week proposals — the enacted motion refunds, the rest forfeit
     const cp = await safe('commission proposals', () => settleProposals(pool));
