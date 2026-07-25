@@ -171,8 +171,22 @@ const escrowDrift = async () => {
 };
 const escrow0 = await escrowDrift();
 
-// give every standing resident several turns so each behaviour branch fires
-for (let i = 0; i < 12; i++) await runResidentBehaviour(pool);
+// Give every standing resident MANY turns, and make sure there are enough of them. Both matter, and
+// for different reasons — this block asserts that specific boards light up, and each assertion has
+// its own way of coming up empty by luck:
+//
+//   • the DUEL ladder needs a resident who can actually reach DUELS.STAKE_MIN. A limit is bps of
+//     their own cash, so only the richer bands qualify at all — with a dozen residents there is a
+//     real chance the band draw hands out nobody who can. More residents, not more turns, fixes it.
+//   • the ESCROW assertions need a resident to reach the SHYLOCK / market branches, and a resident's
+//     FIRST turn is always consumed by the consent-limit branch (it returns 'listed'). So those
+//     branches are only reachable on a second turn onward. More turns, not more residents, fixes it.
+//
+// Measured before this: ~1 run in 12 failed, on one or the other. A gate that reddens at random
+// teaches people to ignore it, so the fix is to make the conditions overwhelmingly likely rather
+// than to weaken what is being asserted — the assertions themselves are the point.
+for (let i = 0; i < 4; i++) await runPopulation(pool);          // headcount, for the band draw
+for (let i = 0; i < 60; i++) await runResidentBehaviour(pool);  // turns, for the later branches
 
 // (1) CONSENT LIMITS — this is what lights up the bodyguard market, the fade board and the duel
 //     ladder. All three are consent-by-listing, so without residents an empty alpha has NOBODY.
