@@ -18,7 +18,7 @@ import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
 import { opsOverview } from '../src/ops.js';
 import { runWageEpoch } from '../src/emission.js';
-import { POPULATION, levelOf, npcBandOf } from '../src/rules.js';
+import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -186,6 +186,39 @@ assert(await one('SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND d
 const overcommitted = await one(
   'SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND duel_limit IS NOT NULL AND duel_limit > cash + 1');
 assert.equal(overcommitted, 0, 'a resident never advertises a stake bigger than its own cash');
+
+// (1b) RED-TEAM F1–F3 — these three columns are written by DIRECT SQL, which bypasses
+//      offerBodyguard / listDuel / setFadeLimit and every bound they enforce. So each advertised
+//      limit must independently satisfy its OWN system's constant, or residents quietly undercut a
+//      signed lever (the bodyguard floor is the sharp one: Phase 1.3 repriced it 1000→10000 for
+//      safehouse parity, and an unfloored resident would sell the same one-bullet shield for a few
+//      hundred) or post listings that are literally unactionable.
+const cheapGuard = await one(
+  `SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND guard_price IS NOT NULL AND guard_price < ${M3.BODYGUARD_MIN_PRICE}`);
+assert.equal(cheapGuard, 0, 'no resident undercuts the signed bodyguard floor — the direct-SQL write respects it');
+const deadDuel = await one(
+  `SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND duel_limit IS NOT NULL AND duel_limit < ${DUELS.STAKE_MIN}`);
+assert.equal(deadDuel, 0, 'every ladder entry is actually challengeable (under STAKE_MIN is an empty window)');
+const badFade = await one(
+  `SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND fade_limit IS NOT NULL AND (fade_limit < ${CASINO.MIN_BET} OR fade_limit > ${CASINO.MAX_BET})`);
+assert.equal(badFade, 0, 'every fade sits inside the table limits');
+
+// (1c) a DRAINED resident drops OFF the boards. Simulating the after-state of a player emptying
+//      one: a stored stake its cash can no longer cover. Left standing, that listing can only ever
+//      answer `their_cash` — a board that looks full and isn't, which is the exact failure step two
+//      exists to fix. (duel_limit is a status column, so this fixture moves no money.)
+const drained = (await pool.query(
+  'SELECT id, cash FROM characters WHERE is_npc AND alive AND duel_limit IS NOT NULL ORDER BY id LIMIT 1')).rows[0];
+await pool.query('UPDATE characters SET duel_limit = cash + 1000000 WHERE id=$1', [drained.id]);
+const c1 = await pool.connect();
+await c1.query('BEGIN');
+const didRelist = await residentAct(c1, (await c1.query(
+  'SELECT id, cash, loc, guard_price, fade_limit, duel_limit FROM characters WHERE id=$1', [drained.id])).rows[0]);
+await c1.query('COMMIT'); c1.release();
+assert.equal(didRelist, 'listed', 'a resident whose advertised stake has gone stale spends its turn relisting');
+const relisted = (await pool.query('SELECT duel_limit FROM characters WHERE id=$1', [drained.id])).rows[0].duel_limit;
+assert(relisted == null || Number(relisted) <= Number(drained.cash),
+  'the stale stake is off the board — what they advertise is what they can still cover');
 
 // (2) THE SHYLOCK — secured offers. A resident never calls collectLoan, so an UNSECURED NPC loan
 //     would be free money for a defaulter; requiring collateral worth more than the debt means the

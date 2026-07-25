@@ -122,10 +122,26 @@ parks already-seeded cash in an existing audited escrow that the existing sweeps
 
 | Behaviour | What it lights up | §10.4 |
 |---|---|---|
-| **Consent limits** — `guard_price` / `fade_limit` / `duel_limit`, sized to holdings | the bodyguard market, the back-room fade board, the duelling ladder — all three are consent-by-listing, so an empty alpha has *nobody to play against* without them | zero value (column writes) |
+| **Consent limits** — `guard_price` / `fade_limit` / `duel_limit` | the bodyguard market, the back-room fade board, the duelling ladder — all three are consent-by-listing, so an empty alpha has *nobody to play against* without them | zero value (column writes) |
 | **The Shylock** — a SECURED loan offer | the Shylock's board | `loan:offer` (existing escrow) |
 | **The Black Market** — a standing buy order | the market board, and a reliable cash buyer for goods a player actually holds | `market:list` + `market:order` (existing escrow) |
 | **Drift** — move district | the city moves | zero value |
+
+**Why each consent limit obeys its own system's floor** (red-team F1–F3). Those three columns are
+written by **direct SQL**, which bypasses `offerBodyguard` / `listDuel` / `setFadeLimit` and every
+bound they enforce. So each is gated by the constant its own system owns:
+
+- `guard_price = max(M3.BODYGUARD_MIN_PRICE, 12% of cash)`. A guard price is income the resident
+  **receives**, not a stake they must **cover** — sizing it to holdings was a category error copied
+  from the two stake columns, and it sold a lethal-hit absorb for a few hundred dollars against a
+  floor Phase 1.3 deliberately set at **$10,000** for safehouse parity.
+- `duel_limit` only when 9% of cash clears `DUELS.STAKE_MIN`. Below it, `amt >= STAKE_MIN && amt <=
+  limit` is an **empty window** — an entry nobody can ever act on. A short honest ladder beats a
+  long decorative one.
+- `fade_limit` bounded by `CASINO.MIN_BET`/`MAX_BET`.
+
+A stake that the resident's cash no longer covers (they've been drained) triggers a **relist**,
+dropping them off the board rather than leaving a listing that can only answer `their_cash`.
 
 **Why residents lend SECURED only.** A resident never calls `collectLoan`, so an *unsecured* NPC
 loan would be free money for a defaulter — `LOAN.MAX` is $1M against a $50k square cost. Requiring
@@ -148,6 +164,14 @@ lender who no longer exists.
 | bodyguards for hire | 0 | 21 |
 
 §10.4 clean throughout.
+
+**The open founder call — the city DEPLETES.** Residents have no income, so once players drain the
+seed pool (duels, fades, order-fills, kills) the boards go quiet again: stakes stop clearing the
+floors, loan offers stop firing below `LOAN.MIN`, orders stop. Step two lights the city up **once**.
+Making it renewable — resident income, or retiring-and-respawning a *broke* resident rather than only
+an old bloodline — turns a one-shot ~$998k into a **recurring faucet**, so it's a balance decision
+rather than a bug fix. It partly recycles unaided: `hireBodyguard` and loan repayment both pay cash
+*into* residents. Flagged in BALANCE.md; the red-team write-up is `AUDIT-population.md`.
 
 **Still deliberately NOT done:** residents don't emit telemetry or bus events, so `/v1/online`
 presence stays a true human count and the feed isn't padded with fake activity. No NPC families, so
