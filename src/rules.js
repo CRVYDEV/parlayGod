@@ -3528,3 +3528,29 @@ export const npcBandOf = (roll) => {
   for (const b of POPULATION.BANDS) { x -= b.w; if (x < 0) return b; }
   return POPULATION.BANDS[0];
 };
+// ── THE POPULATION step two — BEHAVIOURS ───────────────────────────────────────────────────────
+// The city ACTS. Every behaviour below obeys one rule: a resident may only ever RECYCLE value it
+// already holds, never conjure it at the point of sale. So there is NO new faucet in step two —
+// each behaviour either moves zero value (drift, consent limits) or parks cash the resident was
+// already seeded with into an EXISTING audited escrow (the loan offer, the market buy-order), which
+// the existing sweeps refund on expiry. All numbers are founder sign-off levers.
+POPULATION.BEHAVIOUR = {
+  ACT_PER_TICK: 6,          // residents that get a turn each worker tick — the city stirs, it doesn't stampede
+  KEEP_FLOOR: 0.35,         // never park more than (1 − this) of a resident's cash: they stay lootable and can back their limits
+  // consent-by-listing: what a resident is willing to be challenged for. Sized to holdings so a
+  // resident can always cover what they've advertised.
+  GUARD_BPS: 1200,          // bodyguard asking price, as bps of cash
+  FADE_BPS: 800,            // back-room dice fade limit
+  DUEL_BPS: 900,            // duelling-ladder stake limit
+  LIMIT_MIN: 250,           // below this a resident just doesn't advertise
+  // the Shylock: residents lend SECURED only, so a defaulter forfeits a pledged car worth more than
+  // the debt (the audited grace-forfeit sweep is the enforcement — an NPC never calls collectLoan).
+  LOAN_BPS: 3000,           // principal as bps of cash
+  LOAN_RATE: [0.15, 0.45],  // the vig they ask
+  LOAN_HOURS: [12, 72],
+  LOAN_COLLATERAL_MULT: 1.3, // pledged-car floor as a multiple of what's OWED — defaulting always costs more than the loan
+  // the Black Market: a standing buy order gives players a reliable cash buyer for goods they
+  // actually hold. A fair exchange, bounded by the resident's own cash.
+  ORDER_BPS: 2500,          // escrow as bps of cash
+  ORDER_PRICE_BPS: [9000, 11000], // they bid 90–110% of a good's base — sometimes a bargain, sometimes not
+};

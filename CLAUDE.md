@@ -5131,3 +5131,39 @@ resident may only ever RECYCLE value it already holds, never conjure it at the p
 deferred: NPC families (so the Commission and turf stay untouched) and any resident telemetry (so
 `/v1/online` presence stays a true human count). All `POPULATION.*` numbers are founder sign-off
 levers (BALANCE.md).
+
+**THE POPULATION — step two: THE CITY ACTS — BUILT** (`src/population.js` `residentAct`/
+`runResidentBehaviour`, `POPULATION.BEHAVIOUR` rules block, `test/population.js`). Residents now DO
+things, under one rule that makes the whole step §10.4-free: **a resident may only ever RECYCLE value
+it already holds, never conjure it at the point of sale** — so step two adds **NO new faucet and NO
+new §10.4 reason**. `runResidentBehaviour` (worker, after the top-up) gives `ACT_PER_TICK` (6)
+residents ONE turn each, skipping anyone the world has taken out of play (jailed/hospitalized/
+safehoused) and re-reading each under the row lock (a player may have robbed them since the pick).
+Four behaviours: **(1) CONSENT LIMITS** — `guard_price`/`fade_limit`/`duel_limit` sized in bps of
+their own cash (never advertising a stake bigger than they hold), which is what actually lights up
+the bodyguard market, the back-room fade board and the duelling ladder — all three are
+consent-by-listing, so an empty alpha has literally nobody to play against without them; zero value
+moved. **(2) THE SHYLOCK** — a **SECURED** loan offer (`loan:offer`, the existing escrow). Secured
+ONLY, and that's load-bearing: a resident never calls `collectLoan`, so an unsecured NPC loan would
+be free money for a defaulter (`LOAN.MAX` $1M vs a $50k square cost); requiring collateral worth
+`LOAN_COLLATERAL_MULT` (1.3) × what's OWED means the **already-audited grace-forfeit sweep** seizes a
+pledged car worth more than they borrowed — recourse without an NPC ever acting. **(3) THE BLACK
+MARKET** — a standing BUY ORDER (`market:list` + `market:order`, the existing escrow), giving players
+a reliable cash buyer for goods they actually hold (a fair exchange, bounded by the resident's own
+cash, refunded by the existing sweep on expiry). **(4) DRIFT** — move district, pure position.
+`retireResident` now pulls escrow back FIRST (cancelling open offers/orders via `loan:refund`/
+`market:refund`, mirroring the audited cancel paths) before the burn — otherwise an offer would stand
+on the board forever with nobody behind it and a player could take a loan from a lender who no longer
+exists. **Measured before → after** (empty alpha, then the city filled in): streets roster 1 → **49**,
+loan offers 0 → **12**, market listings 0 → **11**, duelling ladder 0 → **20**, bodyguards for hire
+0 → **21**, §10.4 clean throughout. pg-mem note: the turn picker shuffles in JS, not `ORDER BY
+random()` (pg-mem has no `random()` — the two-flat-queries precedent). Residents still emit NO
+telemetry and NO bus events, so `/v1/online` presence stays a true human count and the feed isn't
+padded with fake activity; they post their own listings but never TAKE the other side of a player's,
+so every interaction stays player-initiated. `test/population.js` asserts the consent limits are
+always covered by held cash, every resident offer is secured above what's owed, the escrows
+reconcile, retirement-with-live-escrow closes the books, and — the core claim — that the set of
+reasons by which a resident can RECEIVE cash is exactly {npc:seed, death:legacy, loan:refund,
+market:refund}, i.e. nothing was conjured. Suite 47/47 + sim drift-0. All `POPULATION.BEHAVIOUR.*`
+numbers are founder sign-off levers. Still deferred: NPC families (Commission/turf untouched) and
+residents opening speakeasies or fielding fighters/racers.

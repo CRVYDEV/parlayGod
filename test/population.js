@@ -12,7 +12,7 @@
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { spawnResident, retireResident, runPopulation, population } from '../src/population.js';
+import { spawnResident, retireResident, runPopulation, population, runResidentBehaviour, residentAct } from '../src/population.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
@@ -161,6 +161,79 @@ assert(tick3.retired > 0, 'the worker retires bloodlines past RETIRE_GENERATIONS
 assert.equal(await driftOf('character cash'), cashDrift0, 'and the burn keeps §10.4 exact');
 assert(await population(pool) <= before + POPULATION.SPAWN_PER_TICK, 'headcount stays bounded');
 
+// ════════════ STEP TWO — THE CITY ACTS ════════════
+// The one rule: a resident may only ever RECYCLE value it already holds, never conjure it at the
+// point of sale. So every behaviour below is either zero-value (consent limits, drift) or parks
+// already-seeded cash in an EXISTING audited escrow — NO new faucet, NO new §10.4 reason.
+const escrowDrift = async () => {
+  const r = await runLedgerInvariants(pool);
+  return r.checks.filter((c) => /escrow/.test(c.name)).map((c) => `${c.name}:${c.drift}`).join(' ');
+};
+const escrow0 = await escrowDrift();
+
+// give every standing resident several turns so each behaviour branch fires
+for (let i = 0; i < 12; i++) await runResidentBehaviour(pool);
+
+// (1) CONSENT LIMITS — this is what lights up the bodyguard market, the fade board and the duel
+//     ladder. All three are consent-by-listing, so without residents an empty alpha has NOBODY.
+const listed = await one('SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND guard_price IS NOT NULL');
+assert(listed > 0, 'residents advertise a bodyguard price');
+assert(await one('SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND fade_limit IS NOT NULL') > 0,
+  'residents take a fade at the back-room table');
+assert(await one('SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND duel_limit IS NOT NULL') > 0,
+  'residents are on the duelling ladder');
+// what they advertise is always covered by what they hold — they can't write a cheque that bounces
+const overcommitted = await one(
+  'SELECT COUNT(*) n FROM characters WHERE is_npc AND alive AND duel_limit IS NOT NULL AND duel_limit > cash + 1');
+assert.equal(overcommitted, 0, 'a resident never advertises a stake bigger than its own cash');
+
+// (2) THE SHYLOCK — secured offers. A resident never calls collectLoan, so an UNSECURED NPC loan
+//     would be free money for a defaulter; requiring collateral worth more than the debt means the
+//     audited grace-forfeit sweep seizes a car worth more than they borrowed.
+const offers = (await pool.query(
+  "SELECT l.principal, l.rate, l.collateral_min FROM loans l JOIN characters c ON c.id=l.lender_character WHERE c.is_npc AND l.status='open'")).rows;
+assert(offers.length > 0, 'the Shylock board has resident offers on it');
+for (const o of offers) {
+  assert(Number(o.collateral_min) > 0, 'every resident offer is SECURED — never free money for a defaulter');
+  const owed = Number(o.principal) * (1 + Number(o.rate));
+  assert(Number(o.collateral_min) >= owed, 'the pledged car must be worth MORE than what is owed');
+}
+
+// (3) THE BLACK MARKET — a standing buy order gives a player a reliable cash buyer for real goods
+const orders = (await pool.query(
+  "SELECT m.qty, m.price FROM market_listings m JOIN characters c ON c.id=m.seller_character WHERE c.is_npc AND m.kind='order' AND m.status='live'")).rows;
+assert(orders.length > 0, 'residents post standing buy orders');
+
+// §10.4 — the whole point: no new faucet, and every escrow reconciles
+assert.equal(await driftOf('character cash'), cashDrift0, 'the per-character cash check is UNMOVED by a city full of activity');
+assert.equal(await escrowDrift(), escrow0, 'every escrow check still reconciles with resident money in it');
+// The real claim: step two introduced no NEW way for a resident to RECEIVE cash. Every credit a
+// resident holds must come from an enumerated, pre-existing flow — the spawn seed, the heir's estate
+// stake, or its own escrow coming back. Anything else would mean a behaviour conjured value.
+const ALLOWED_CREDITS = new Set(['npc:seed', 'death:legacy', 'loan:refund', 'market:refund']);
+const credits = (await pool.query(
+  `SELECT DISTINCT t.reason FROM transactions t JOIN characters c ON c.id = t.character_id
+    WHERE c.is_npc AND t.currency='cash' AND t.amount > 0`)).rows.map((r) => r.reason);
+const conjured = credits.filter((r) => !ALLOWED_CREDITS.has(r));
+assert.deepEqual(conjured, [],
+  `step two conjured NOTHING — a resident only ever spends what it already holds (unexpected credit reasons: ${conjured})`);
+assert(credits.includes('npc:seed'), 'and the seed is the source it all traces back to');
+
+// (4) RETIREMENT WITH LIVE ESCROW — the books must still close. A retiring resident pulls its offers
+//     and orders back in first, so nothing is left standing on a board with nobody behind it.
+const withEscrow = (await pool.query(
+  "SELECT c.id FROM characters c JOIN loans l ON l.lender_character=c.id AND l.status='open' WHERE c.is_npc AND c.alive LIMIT 1")).rows[0];
+assert(withEscrow, 'found a resident holding live escrow');
+const c3 = await pool.connect();
+await c3.query('BEGIN');
+await retireResident(c3, withEscrow.id);
+await c3.query('COMMIT');
+c3.release();
+assert.equal(await one("SELECT COUNT(*) n FROM loans WHERE lender_character=$1 AND status='open'", [withEscrow.id]), 0,
+  'their offer is pulled off the board, not left standing behind a dead lender');
+assert.equal(await driftOf('character cash'), cashDrift0, 'and the cash check STILL reconciles');
+assert.equal(await escrowDrift(), escrow0, 'as does every escrow check');
+
 // ════════════ THE VOCABULARY ════════════
 const inv = await runLedgerInvariants(pool);
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -174,5 +247,5 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
-  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel');
+  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet');
 process.exit(0);
