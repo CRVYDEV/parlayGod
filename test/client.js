@@ -1,8 +1,8 @@
 // THE CLIENT'S WIRING (the 53rd suite).
 //
 // tools/mobile.js proves the screens LAY OUT. Nothing proved the buttons WORK. This does, for the
-// two ways a control dies silently — and both have shipped, repeatedly, and both were only ever
-// caught by a person clicking through by hand:
+// three ways a control dies silently — all of which have shipped, repeatedly, and all of which were
+// only ever caught by a person clicking through by hand:
 //
 //   1. THE ROUTE DOES NOT EXIST. The client calls `/v1/contracts/:id/cancel`, the server mounts
 //      `/v1/contracts/:targetId/:kind/cancel`. The button 404s forever. Two deck entries were wrong
@@ -11,7 +11,13 @@
 //   2. THE VALUE IS NOT REAL. The client hardcodes a body the server rejects — `{path:'earner'}`
 //      when the ids are `gun|brain|face`, or an npchit `tier:'local'` when the ladder is
 //      `legbreaker|shooter|...`. The request is well-formed, the route exists, and it fails EVERY
-//      time for every player. `{drugId:...}` vs `{drug:...}` is the same class.
+//      time for every player.
+//   3. THE FIELD IS NEVER READ. `{price: 50}` when the handler reads `req.body?.unitPrice`. Route
+//      exists, value is sane, and the field is simply ignored — the server gets undefined on every
+//      call. This is the `{drugId}` vs `{drug}` class, and checks 1 and 2 are both blind to it.
+//
+// Both the player console and /admin are covered. The dashboard is the one the founder would be
+// holding during an incident, so a dead button there surfaces at the worst possible moment.
 //
 // Both are checked STATICALLY against the server's own truth — fastify's mounted-route registry and
 // the rules catalogs — so there are no side effects, no ordering, and no flake. The alternative,
@@ -19,15 +25,17 @@
 // can't afford it", and a check that cannot tell those apart reports noise until someone deletes it.
 //
 // WHAT THIS DOES NOT CHECK, so a green run is not read as more than it is: whether a button is
-// wired to the RIGHT route (only that its route exists), whether required body fields are present,
-// or whether the action then behaves correctly. Those need the gameplay suites, which exist.
+// wired to the RIGHT route (only that its route exists — the four dead ones found on the first run
+// were each traced to the correct HANDLER by hand), whether a REQUIRED field is missing rather than
+// misnamed, or whether the action then behaves correctly. Those need the gameplay suites, which exist.
 process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS } from '../src/rules.js';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const admin = readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8');
 const app = await buildServer();
 
 // ── 1. every route the client can call must be mounted ──────────────────────────────────────────
@@ -70,6 +78,13 @@ for (const m of html.matchAll(/\[\s*'(GET|POST|PUT|DELETE)'\s*,\s*'([^']+)'/g)) 
 for (const m of html.matchAll(/\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
   const lit = readLiteral(html, m.index + m[0].length);
   if (lit) addRef(m[1], lit, 'api()/act()');
+}
+// THE OPS DASHBOARD is a second client against the same server, and the one the founder would be
+// holding during an incident — a dead button there is discovered at the worst possible moment. It
+// calls through its own j(method, path) helper, so it needs its own extraction or it goes unchecked.
+for (const m of admin.matchAll(/\bj\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
+  const lit = readLiteral(admin, m.index + m[0].length);
+  if (lit) addRef(m[1], lit, '/admin');
 }
 
 assert(refs.size > 150, `only ${refs.size} client route references found — the extraction broke, ` +
@@ -144,11 +159,82 @@ assert.deepEqual(bogus, [],
   `the client hardcodes ${bogus.length} value(s) the server does not recognise — those controls fail for every player`);
 assert(checked.length > 10, `only ${checked.length} catalog values checked — the extraction broke`);
 
+// ── 3. every body field the client sends must be one its route actually reads ────────────────────
+// The class the two checks above CANNOT see: `{drug: 'vim'}` when the handler reads `req.body?.drugId`.
+// The route exists, the value is a real drug id, and the field is simply never read — so the server
+// receives undefined and refuses (or worse, proceeds with a default) on every single call.
+//
+// Resolved PER ROUTE, not against a global pool of field names, because `qty` being read *somewhere*
+// says nothing about whether THIS handler reads it. Each registration's source text is sliced out and
+// scanned for the shapes this codebase actually uses: `req.body?.x`, `req.body.x`, and destructuring.
+const srcFiles = ['src/server.js', ...readdirSync(new URL('../src/routes', import.meta.url)).map((f) => `src/routes/${f}`)];
+const handlerFields = new Map();              // "METHOD /path" → Set(field) | null when unresolvable
+for (const rel of srcFiles) {
+  const src = readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+  const regs = [...src.matchAll(/\bapp\.(get|post|put|delete)\(\s*'([^']+)'/g)];
+  regs.forEach((m, i) => {
+    const body = src.slice(m.index, i + 1 < regs.length ? regs[i + 1].index : src.length);
+    const fields = new Set();
+    for (const f of body.matchAll(/req\.body\s*\??\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/g)) fields.add(f[1]);
+    for (const d of body.matchAll(/const\s*\{([^}]*)\}\s*=\s*req\.body/g)) {
+      for (const name of d[1].split(',')) { const n = name.split(':')[0].trim(); if (n) fields.add(n); }
+    }
+    // handed the whole object (`Mod.fn(ch, req.body, …)`) — the fields are read a module away, so
+    // this route cannot be resolved here. Recorded as null and COUNTED, never silently passed.
+    const wholeBody = /req\.body\s*(?:\|\|\s*\{\})?\s*[,)]/.test(body);
+    handlerFields.set(`${m[1].toUpperCase()} ${m[2]}`, wholeBody && !fields.size ? null : fields);
+  });
+}
+
+// what the client SENDS: the deck's third tuple element, and data-body="{…}".
+const sends = [];                             // [method, path, [field…], where]
+const objectAt = (src, i) => {                // read a balanced {…} and return its top-level keys
+  if (src[i] !== '{') return null;
+  let depth = 0;
+  for (let j = i; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}' && --depth === 0) {
+      const inner = src.slice(i + 1, j);
+      return [...inner.matchAll(/(?:^|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g)].map((m) => m[1]);
+    }
+  }
+  return null;
+};
+for (const m of html.matchAll(/\[\s*'(GET|POST|PUT|DELETE)'\s*,\s*'([^']+)'\s*,\s*/g)) {
+  const keys = objectAt(html, m.index + m[0].length);
+  if (keys?.length) sends.push([m[1], m[2], keys, 'the deck']);
+}
+for (const m of html.matchAll(/data-do="(GET|POST|PUT|DELETE)\s+([^"]+)"[^>]*?data-body='(\{[^']*\})'/g)) {
+  const keys = [...m[3].matchAll(/"([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g)].map((k) => k[1]);
+  if (keys.length) sends.push([m[1], m[2], keys, 'data-body']);
+}
+assert(sends.length > 20, `only ${sends.length} client bodies found — the extraction broke`);
+
+// match a sent body to its route the same segment-wise way, then compare field by field
+const unread = [], unresolvable = [];
+for (const [method, rawPath, keys, where] of sends) {
+  const path = rawPath.replace(/\$\{[^}]*\}/g, ':p').split('?')[0];
+  const seg = path.split('/');
+  const hit = [...handlerFields.entries()].find(([k]) => {
+    const [hm, hp] = k.split(' ');
+    if (hm !== method) return false;
+    const hs = hp.split('/');
+    return hs.length === seg.length && hs.every((s, i) => s.startsWith(':') || s === seg[i]);
+  });
+  if (!hit) continue;                                    // route-existence is check 1's job
+  if (hit[1] === null) { unresolvable.push(hit[0]); continue; }
+  for (const k of keys) if (!hit[1].has(k)) unread.push(`${method} ${path} sends '${k}' — the handler reads ${[...hit[1]].join('|') || 'no body at all'}`);
+}
+assert.deepEqual(unread, [],
+  `the client sends ${unread.length} body field(s) its route never reads — those actions get undefined every time`);
+
 await app.close();
-console.log(`✅ client wiring test passed — of ${refs.size} routes the console can call, ` +
-  `${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so /v1/streets/:id/jump ` +
-  `cannot match /v1/streets/roster) and ${dynamic.length} build their action at runtime and cannot be ` +
-  `checked statically; all ${checked.length} catalog-backed values it hardcodes are ones the server ` +
-  `recognises. Those are the two ways a button dies silently, and this found FOUR dead ones on its ` +
-  `first run. ${Object.keys(CATALOGS).length} fields have catalogs here; ${skipped.size} other literal ` +
-  `fields are not catalog-backed and go unchecked.`);
+console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
+  `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
+  `/v1/streets/:id/jump cannot match /v1/streets/roster) and ${dynamic.length} build their action at ` +
+  `runtime and cannot be checked statically; all ${checked.length} catalog-backed values they hardcode ` +
+  `are ids the server recognises; and every field in ${sends.length} request bodies is one its own ` +
+  `route actually reads (${unresolvable.length} handed the whole body to a module, so unresolvable here). ` +
+  `Those are the three ways a button dies silently — this found four dead routes and five ignored ` +
+  `fields, one of them a broken action, across two runs. ${Object.keys(CATALOGS).length} fields have ` +
+  `catalogs; ${skipped.size} other literal fields are not catalog-backed and go unchecked.`);
