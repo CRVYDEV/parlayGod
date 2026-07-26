@@ -13,7 +13,7 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
-import { runLedgerInvariants } from '../src/invariants.js';
+import { runLedgerInvariants, alertDrift } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
 import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/game.js';
 
@@ -938,6 +938,61 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
       if (c[1].split(',').map((a) => a.trim()).includes('pool')) leaks.push(`${m[1]} -> ${c[0]}`);
   }
   assert.equal(leaks.length, 0, `read routes must hand their board the guarded client, not the pool: ${leaks.join(' | ')}`);
+}
+
+// ════════════ THE ALARM ACTUALLY REACHES A HUMAN ════════════
+// The nightly §10.4 sweep and the backup watchdog POST to INVARIANT_WEBHOOK_URL, and the deploy docs tell
+// the founder to point it at Slack or Discord. Both REJECT (400) a body with no `text` / `content`
+// respectively, and alertDrift swallows the failure into a console line nobody reads — so the original
+// payload of `{alert, failed}` meant a correctly-configured webhook delivered NOTHING, silently, forever.
+// This is the whole silent-failure class the drift monitor exists to catch, aimed at the monitor itself.
+{
+  const { webhookText } = await import('../src/invariants.js');
+  const drift = [{ name: 'character cash', lhs: 1477500, rhs: -22500, drift: 1500000, ok: false }];
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => { sent.push({ url, body: JSON.parse(opts.body) }); return { ok: true }; };
+  process.env.INVARIANT_WEBHOOK_URL = 'http://127.0.0.1:1/hook';
+  try {
+    await alertDrift(pool, drift);
+    await alertDrift(pool, [{ name: 'wal archiving off', archiveMode: 'off', note: 'no PITR' }], 'backup');
+  } finally { globalThis.fetch = realFetch; delete process.env.INVARIANT_WEBHOOK_URL; }
+
+  assert.equal(sent.length, 2, 'a webhook fires for both the ledger sweep and the backup watchdog');
+  for (const { body } of sent) {
+    assert(typeof body.text === 'string' && body.text.length > 0,
+      'the payload must carry `text` — Slack incoming webhooks 400 without it and the failure is swallowed');
+    assert(typeof body.content === 'string' && body.content.length > 0,
+      'the payload must carry `content` — Discord webhooks 400 without it and the failure is swallowed');
+    assert(body.content.length < 2000, "Discord's hard message limit is 2,000 characters");
+    assert(Array.isArray(body.failed), 'the structured fields stay, for anything custom');
+  }
+  assert(sent[0].body.text.includes('character cash') && sent[0].body.text.includes('1500000'),
+    'the message must name the failed check and its drift, or it is a page with no information');
+  assert(/BACKUPS ARE NOT RUNNING/.test(sent[1].body.content),
+    'the backup alarm must say what is wrong in words the founder can act on');
+  // and no `[object Object]`: the archiver shape has no lhs/rhs/drift, so a naive formatter mangles it
+  for (const { body } of sent) assert(!/\[object Object\]/.test(body.content), 'no unformatted objects in the message');
+
+  // nothing sent when unconfigured — the var is optional and its absence must not throw
+  const before = sent.length;
+  globalThis.fetch = async () => { sent.push({ url: 'SHOULD-NOT-HAPPEN' }); return { ok: true }; };
+  try { await alertDrift(pool, drift); } finally { globalThis.fetch = realFetch; }
+  assert.equal(sent.length, before, 'with no INVARIANT_WEBHOOK_URL set, nothing is posted anywhere');
+
+  // a 4-check drift renders one line per check, so a real page is readable at a glance
+  const many = webhookText('ledger', ['a', 'b', 'c', 'd'].map((n) => ({ name: n, lhs: 1, rhs: 0, drift: 1 })));
+  assert.equal(many.split('\n').length, 5, 'a header plus one line per failed check');
+
+  // …and the clamp is exercised with a payload that WOULD exceed the limit. The two alerts above are a few
+  // hundred characters, so asserting `< 2000` on them passed whether or not a clamp existed — a vacuous
+  // check of exactly the kind this file keeps finding. Every named check failing at once is plausible
+  // (a corrupt ledger fails all 18 plus every per-currency bucket), and Discord DROPS an over-long
+  // message with a 400, so the alarm would go silent precisely when it matters most.
+  const flood = webhookText('ledger', Array.from({ length: 300 },
+    (_, i) => ({ name: `some quite long check name number ${i}`, lhs: 123456789, rhs: -987654321, drift: 1111111111 })));
+  assert(flood.length < 2000, `a 300-check page must be clamped under Discord's limit; got ${flood.length}`);
+  assert(flood.endsWith('(truncated)'), 'and it must say it was truncated, not just stop mid-sentence');
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
