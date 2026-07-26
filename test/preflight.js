@@ -17,8 +17,13 @@ import { preflight, isHardened, CLASSIFIED, TEST_ONLY_ENV, REQUIRED_ENV, EXPLICI
 const used = new Set();
 // preflight.js is the classifier, not a consumer — it only ever reads the `env` object it is
 // handed, and its prose mentions `process.env.X` generically, which the scanner would take literally
-for (const f of fs.readdirSync('src').filter((f) => f.endsWith('.js') && f !== 'preflight.js'))
-  for (const m of fs.readFileSync(`src/${f}`, 'utf8').matchAll(/process\.env\.([A-Z_0-9]+)/g)) used.add(m[1]);
+// Walked RECURSIVELY: the scan used to be flat over src/, so when the route modules were split out
+// of server.js an env var read from one of them became invisible to this detector — which is the
+// exact drift this file exists to catch.
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  (e.isDirectory() ? walk(`${dir}/${e.name}`) : e.name.endsWith('.js') ? [`${dir}/${e.name}`] : []));
+for (const f of walk('src').filter((f) => f !== 'src/preflight.js'))
+  for (const m of fs.readFileSync(f, 'utf8').matchAll(/process\.env\.([A-Z_0-9]+)/g)) used.add(m[1]);
 
 const unclassified = [...used].filter((v) => !CLASSIFIED.has(v)).sort();
 assert.deepEqual(unclassified, [],

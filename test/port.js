@@ -79,6 +79,14 @@ assert.equal((await call('POST', `/v1/port/collect/${cutter}`, { token: cap.toke
 process.env.PORT_INTERDICT_P = '1'; process.env.PORT_SINK = '0';
 await call('POST', `/v1/port/run/${cutter}`, { token: cap.token, body: { route: 'coastal' } });
 const coastalCost = boatOf('cutter').hold * PORT.ROUTES.find((x) => x.id === 'coastal').buy;
+// The RICO meter moves on the §7.1 clock — it GAINS while heat sits above LAW.WATCH and BLEEDS the
+// rest of the time — so an exact "the bust added BUST_EXPOSURE" assertion is only meaningful with
+// that confound removed. Zeroing both floors it: heat 0 is below WATCH so nothing gains, and the
+// bleed clamps at 0, leaving the bust as the only thing that can move the number. (Reading the raw
+// column across intervening API calls used to be steadier only because every read persisted its
+// accrual; since the lock-free read path landed, reads no longer checkpoint, so the window between
+// this read and the collect is however long the test itself takes.)
+await pool.query(`UPDATE characters SET heat=0, heat_exposure=0 WHERE id='${cap.id}'`);
 const heatBefore = (await meOf(cap.token)).heat;
 const expBefore = Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e);
 const cashB = await cashOf(cap.token);
