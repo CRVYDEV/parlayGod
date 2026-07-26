@@ -82,10 +82,13 @@ const coastalCost = boatOf('cutter').hold * PORT.ROUTES.find((x) => x.id === 'co
 // The RICO meter moves on the §7.1 clock — it GAINS while heat sits above LAW.WATCH and BLEEDS the
 // rest of the time — so an exact "the bust added BUST_EXPOSURE" assertion is only meaningful with
 // that confound removed. Zeroing both floors it: heat 0 is below WATCH so nothing gains, and the
-// bleed clamps at 0, leaving the bust as the only thing that can move the number. (Reading the raw
-// column across intervening API calls used to be steadier only because every read persisted its
-// accrual; since the lock-free read path landed, reads no longer checkpoint, so the window between
-// this read and the collect is however long the test itself takes.)
+// bleed clamps at 0, leaving the bust as the only thing that can move the number.
+//
+// The confound is that `meOf`/`cashOf` below are the CAPTAIN'S OWN requests, so each one runs the
+// captain's accrual and banks whatever it finds — after this raw sample was taken. That is true of
+// reads both before and after the lock-free read path landed (a read with real accrual behind it
+// declines the fast path and re-runs under the lock, which persists), so this was always latent and
+// is not a consequence of that change.
 await pool.query(`UPDATE characters SET heat=0, heat_exposure=0 WHERE id='${cap.id}'`);
 const heatBefore = (await meOf(cap.token)).heat;
 const expBefore = Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e);
