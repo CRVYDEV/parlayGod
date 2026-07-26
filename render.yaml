@@ -45,7 +45,15 @@ services:
       - key: NODE_ENV
         value: production
       - key: SOCIAL_VERIFY_MODE
-        value: live               # REQUIRED in production or social/First-Week rewards pay nothing
+        value: live               # REQUIRED in production or social/First-Week rewards pay nothing.
+                                 # BUT `live` means "verify for real", and that needs a token to verify
+                                 # WITH. On its own it pays nobody either — the faucet reports itself OFF
+                                 # and the X/Discord First-Week tasks drop off the checklist. To switch
+                                 # the word-of-mouth loop ON, add these to the omerta-secrets group:
+                                 #   X_BEARER_TOKEN     — post checks (Spread the Word). The one that matters.
+                                 #   X_TARGET_USER_ID   — + the "Follow on X" task
+                                 #   DISCORD_BOT_TOKEN + DISCORD_GUILD_ID — + the "Join the community" task
+                                 # /admin's "Growth loop" panel says PAYING or NOT PAYING at a glance.
       - key: RATE_LIMIT
         value: "on"
       - key: TRUST_PROXY

@@ -67,6 +67,7 @@
   </div>
   <div class="grid">
     <div class="panel" id="p-backups"><h2>Backups</h2><div class="body">…</div></div>
+    <div class="panel" id="p-social"><h2>Growth loop</h2><div class="body">…</div></div>
     <div class="panel" id="p-integrity"><h2>§10.4 Integrity</h2><div class="body">…</div></div>
     <div class="panel" id="p-economy"><h2>The Economy</h2><div class="body">…</div></div>
     <div class="panel" id="p-players"><h2>Players</h2><div class="body">…</div></div>
@@ -124,7 +125,7 @@
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
-    renderBackups(ov.body);
+    renderBackups(ov.body); renderSocial(ov.body);
     renderActivity(act.body); renderMod();
   }
 
@@ -135,6 +136,29 @@
   // ability to RESTORE it quietly rots. That happened twice on 2026-07-25 and the only evidence was
   // in the host's log stream. It gets its own banner because by the time you need a backup, it is
   // far too late to discover you did not have one.
+  // THE GROWTH LOOP — the backups panel's twin. A server can run SOCIAL_VERIFY_MODE=live with no
+  // provider token, and then the word-of-mouth cash faucet pays nobody while everything looks normal:
+  // no boot error, nothing in the game, nothing here. That is how it shipped. Now it is one line.
+  function renderSocial(ov) {
+    const s = ov?.social || {};
+    const el = $('#p-social').querySelector('.body');
+    const yes = (b) => `<span style="color:var(--${b ? 'ok' : 'bad'})">${b ? 'yes' : 'no'}</span>`;
+    const live = !!s.rewardsLive;
+    el.innerHTML =
+      `<div class="big" style="color:var(--${live ? 'ok' : 'bad'})">${live ? 'PAYING' : 'NOT PAYING'}</div>`
+      + rowHtml('verify mode', s.mode || 'off')
+      + rowHtml('post checks (Spread the Word)', yes(s.posts))
+      + rowHtml('follow check (First Week · X)', yes(s.x))
+      + rowHtml('Discord check (First Week)', yes(s.discord))
+      + (live
+        ? '<div class="note">Word-of-mouth rewards are being paid. A check a provider can\'t perform means '
+          + 'that task is dropped from the First-Week checklist rather than shown and refused.</div>'
+        : `<div class="note">The Spread-the-Word cash faucet is <b>inert</b> — players can share, but nobody
+           gets paid.${s.mode === 'live' ? ' Mode is <code>live</code> but <code>X_BEARER_TOKEN</code> is not set: '
+          + 'add it (plus <code>X_TARGET_USER_ID</code> for the follow check) to switch the loop on.'
+          : ' Set <code>SOCIAL_VERIFY_MODE=live</code> plus the X tokens to switch it on.'}</div>`);
+  }
+
   function renderBackups(ov) {
     const b = ov?.backups || {};
     const el = $('#p-backups').querySelector('.body');

@@ -144,6 +144,27 @@ export function preflight(env = process.env) {
   // warnings: not wrong, but the operator probably didn't mean it
   if (env.SOCIAL_VERIFY_MODE === 'trust')
     warnings.push("SOCIAL_VERIFY_MODE=trust pays the Spread-the-Word faucet without verifying anything — fine for a closed alpha, not for an open server.");
+  // …and the mirror case, which is what actually shipped: `live` is the correct production setting,
+  // but it needs a provider token to be able to VERIFY anything. Without one, every claim threw and
+  // the whole word-of-mouth loop paid nobody, silently — no boot error, nothing in the game.
+  //
+  // A WARNING, deliberately, not an error. preflight errors are fatal (`Refusing to boot`), so making
+  // this an error would take a running production server DOWN on its next deploy to fix a dormant
+  // faucet — strictly worse than the faucet being dormant. The game now degrades honestly instead
+  // (an unconfigured provider's tasks are not offered), and /admin carries the live state, which is
+  // the answer to "a warning nobody reads".
+  if (env.SOCIAL_VERIFY_MODE === 'live') {
+    if (!env.X_BEARER_TOKEN)
+      warnings.push('SOCIAL_VERIFY_MODE=live but X_BEARER_TOKEN is not set — the Spread-the-Word cash faucet '
+        + 'reports itself OFF and pays nobody, and "Follow on X" is dropped from the First-Week checklist. '
+        + 'Set X_BEARER_TOKEN (and X_TARGET_USER_ID for the follow check) to turn the growth loop on.');
+    else if (!env.X_TARGET_USER_ID)
+      warnings.push('SOCIAL_VERIFY_MODE=live with X_BEARER_TOKEN but no X_TARGET_USER_ID — post checks work, '
+        + 'but "Follow on X" cannot be verified, so it is dropped from the First-Week checklist.');
+    if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID)
+      warnings.push('SOCIAL_VERIFY_MODE=live without DISCORD_BOT_TOKEN + DISCORD_GUILD_ID — "Join the community" '
+        + 'is dropped from the First-Week checklist (harmless if you do not run a Discord).');
+  }
   if (env.WS_ALLOW_QUERY_TOKEN === 'on')
     warnings.push('WS_ALLOW_QUERY_TOKEN=on puts player tokens in URLs, where proxies and access logs keep them.');
   if (!env.TRUST_PROXY && env.RATE_LIMIT !== 'off')
