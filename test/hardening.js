@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
-import { deadlockToRetry as G_deadlockToRetry } from '../src/game.js';
+import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/game.js';
 
 // audit (process): the two codices (canonical docs/WIKI.md + served public/wiki.html) drifted — a
 // system landed in one but not the other. This drift-detector fails if a system this audit re-synced
@@ -799,5 +799,55 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert(ov.code === 200 && ov.body.backups && ov.body.backups.state, 'the ops dashboard carries backup health');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
+// ── D1: THE LOCK-FREE READ PATH ────────────────────────────────────────────────────────────────
+// Reads used to open SELECT … FOR UPDATE on the player's own row and hold it for the whole request,
+// so a player's own requests serialized against each other — production caught four of one player's
+// queued 1.0s/2.1s/2.3s/4.3s. withCharacterRead accrues in memory with no lock and reports whether
+// there is anything to persist; readCharacter falls through to the locked path when there is.
+{
+  const { body: { token: rt } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: rt, body: { name: 'Reader Malone' } });
+  const rid = (await call('GET', '/v1/me', { token: rt })).body.character.id;
+  const acctOf = async () => (await pool.query(`SELECT account_id a FROM characters WHERE id='${rid}'`)).rows[0].a;
+  const aid = await acctOf();
+
+  // 1. Nothing accrued → the fast path serves the read itself and returns a character.
+  const fast = await withCharacterRead(app.pool, aid, async () => ({}));
+  assert(fast && fast.character && fast.character.id === rid, 'a clean read is served without the lock');
+
+  // 2. Accrual moved → it declines, so the caller re-runs under the lock. Backdating the clock is
+  //    what an idle player looks like, and it MUST still reach the locked path: §7.1 accrual is
+  //    gameplay (it fires the Bureau raid), not something a read may quietly skip.
+  await pool.query(`UPDATE characters SET last_accrued_at = now() - interval '30 minutes' WHERE id='${rid}'`);
+  const declined = await withCharacterRead(app.pool, aid, async () => ({}));
+  assert(declined === null, 'a read with real accrual behind it declines the fast path');
+
+  // …and the route wrapper transparently picks the locked path, so the player still sees the
+  //    accrued state — energy regenerates over 30 idle minutes and the row is banked.
+  const before = Number((await pool.query(`SELECT energy FROM characters WHERE id='${rid}'`)).rows[0].energy);
+  const seen = (await call('GET', '/v1/me', { token: rt })).body.character;
+  const after = Number((await pool.query(`SELECT energy FROM characters WHERE id='${rid}'`)).rows[0].energy);
+  assert(after > before, 'the delegated read banked the accrual it found');
+  assert(seen.energy === after, 'and the view the player saw matches what was persisted');
+
+  // 3. The write guard is real, not a comment. These routes are registered on the read path only
+  //    because they were verified side-effect free; a future edit that writes must fail loudly
+  //    rather than commit outside any transaction — there is no BEGIN on this path to roll back.
+  let guarded = null;
+  try {
+    await withCharacterRead(app.pool, aid, async (ch, client) =>
+      client.query(`INSERT INTO notifications (id, character_id, type) VALUES ('d1-guard-probe','${rid}','x')`));
+  } catch (e) { guarded = e; }
+  assert(guarded && /read path attempted a write/.test(guarded.message), 'a write from the read path is refused');
+  assert.equal(Number((await pool.query(
+    `SELECT COUNT(*) n FROM notifications WHERE id='d1-guard-probe'`)).rows[0].n), 0,
+    'and the refused write never landed');
+
+  // 4. A read still SELECTs freely — the guard blocks writes, not queries.
+  const read = await withCharacterRead(app.pool, aid, async (ch, client) =>
+    ({ n: (await client.query('SELECT 1 AS one')).rows.length }));
+  assert(read && read.n === 1, 'the read path can still query');
+}
+
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, and the read path's write guard refuses — and does not land — an INSERT), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
 await app.close();

@@ -310,10 +310,25 @@ for (let i = 0; i < 25 && !bigLive; i++) { await seed('nerve=50');
 }
 assert(bigLive, 'a live high-stakes hand sits'); // Lou is level 58 → the high-stakes room
 await seed('nerve=50');
+// The contract is "the tip never exceeds profit the house has not already committed" — the live
+// hand's pending payout is reserved against it. Asserting the pool does not move AT ALL only holds
+// when the reservation happens to exceed undistributed profit, and everything above this line is
+// random cards and dice: measured at 2 failures in 24 runs on an unmodified tree, a ~6% chance of
+// reddening CI for a reason unrelated to anything under test. So assert the contract itself, which
+// is true on every deal of the cards. (The book can't simply be squared here — den_volume.profit is
+// reconciled against the ledger by the `den profit` §10.4 check, so zeroing it would break that.)
+const dvRes = (await pool.query('SELECT profit, distributed FROM den_volume WHERE id=1')).rows[0];
+// what the live hand reserves: bet × (doubled ? 2 : 1) × 2. Any OTHER open liability (numbers
+// tickets, fight bets) only makes the real reserve larger, so this over-states what's available and
+// the assertion stays sound either way.
+const reservedRes = 2 * CASINO.HIGH_MAX;
+const availRes = Math.max(0, Math.floor(Number(dvRes.profit) - Number(dvRes.distributed) - reservedRes));
 const taxBeforeRes = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 assert.equal((await call('POST', '/v1/casino/dice', { token, body: { amount: 1000 } })).code, 200, 'a dice round while a big hand is live');
-assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool), taxBeforeRes,
-  'no street tip while the live blackjack hand reserves more than the realized profit');
+const taxAfterRes = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+assert(taxAfterRes - taxBeforeRes <= availRes,
+  `the live blackjack hand's payout is RESERVED — the street tip never exceeds uncommitted profit `
+  + `(tipped ${taxAfterRes - taxBeforeRes}, available ${availRes})`);
 await call('POST', '/v1/casino/blackjack/stand', { token }); // resolve so no hand lingers into the §10.4 check
 
 // ── HEADS-UP HOLD'EM: consent-by-listing, best 5-of-7 wins the raked pot, a tie splits ──
