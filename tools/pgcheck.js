@@ -267,6 +267,132 @@ console.log('\n6. §10.4 HOLDS on real Postgres');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+console.log("\n6b. loadOwned's UNION returns what the fourteen queries did");
+// loadOwned fetches fourteen small result sets in ONE round trip, as a UNION ALL over a shared
+// narrow shape with hand-written casts, demultiplexed in JS. It runs on every authed request, so it
+// is the single most-executed query in the game — and it is exactly the kind of change pg-mem cannot
+// police:
+//
+//   * pg-mem returns `numeric` as a NUMBER; node-pg returns it as a STRING. Every branch that
+//     carries a number now goes through an explicit `Number()`, and whether that is right can only
+//     be checked here.
+//   * a branch whose typed NULLs are wrong fails at PARSE time on Postgres ("UNION types … cannot
+//     be matched") — a 500 on every request — and pg-mem's pairwise left-to-right unification
+//     accepts shapes Postgres rejects, and vice versa.
+//   * the suites drive characters who own almost nothing, so twelve of the fourteen branches are
+//     EMPTY in every existing test. An empty branch proves nothing about a populated one.
+//
+// So: seed a row in every branch and compare the demultiplexed output against the ORIGINAL query
+// for that branch, field by field, INCLUDING the JS type. A future fifteenth branch that forgets a
+// cast, or a field read raw where it used to be coerced, fails here.
+{
+  // its own character, made through the API like a player's — nothing here touches §6's fixtures
+  const { body: { token: uTok } } = await call('POST', '/v1/auth/guest');
+  await call('POST', '/v1/character', { token: uTok, body: { name: `Union Uli ${Date.now() % 100000}` } });
+  const A = { id: (await call('GET', '/v1/me', { token: uTok })).body.character.id };
+  const accOf = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [A.id])).rows[0].account_id;
+  const gId = 'g-union-' + Date.now();
+  await pool.query('INSERT INTO gangs (id, name, tag) VALUES ($1,$2,$3)', [gId, 'Union Family ' + Date.now(), 'UNI']);
+  for (const [sql, params] of [
+    ["INSERT INTO character_rackets (character_id, racket_id, level) VALUES ($1,'numbers',3)", [A.id]],
+    ["INSERT INTO character_assets (character_id, asset_id) VALUES ($1,'watch')", [A.id]],
+    ["INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,'cigs',7)", [A.id]],
+    ["INSERT INTO character_items (character_id, item_id, qty) VALUES ($1,'ammo',42)", [A.id]],
+    ["INSERT INTO account_gear (account_id, gear_id) VALUES ($1,'ring')", [accOf]],
+    ["INSERT INTO character_guns (character_id, gun_id) VALUES ($1,'pistol')", [A.id]],
+    ['INSERT INTO gang_members (gang_id, character_id, role) VALUES ($1,$2,$3)', [gId, A.id, 'boss']],
+    ["INSERT INTO makings (character_id, drug_id, qty) VALUES ($1,'weed',12)", [A.id]],
+    // two rows here, so a single-row group cannot hide a demultiplexing bug
+    ["INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ($1,'weed',5,73)", [A.id]],
+    ["INSERT INTO stash (character_id, drug_id, qty, quality) VALUES ($1,'coke',3,88)", [A.id]],
+    ["INSERT INTO character_skills (character_id, skill_id) VALUES ($1,'bruiser')", [A.id]],
+    ["INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,'doc',44)", [A.id]],
+    ["INSERT INTO npc_standing (character_id, npc_id, standing) VALUES ($1,'armorer',61)", [A.id]],
+    ["INSERT INTO npc_grudges (character_id, npc_id, count) VALUES ($1,'doc',2)", [A.id]],
+    ["INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ($1,'AAPL',1.234567,25)", [accOf]],
+    ["INSERT INTO estates (account_id, name, tier, spent_omr) VALUES ($1,'The Villa',3,915)", [accOf]],
+  ]) await pool.query(sql, params);
+
+  // the ORIGINAL per-branch queries, kept here deliberately: this section is a DIFFERENTIAL test,
+  // so it needs the thing being differed against. If a branch's source table or filter changes, the
+  // line below changes with it — which is the review moment the round-trip collapse should have.
+  const originals = {
+    rk: ['SELECT racket_id, level FROM character_rackets WHERE character_id=$1', A.id],
+    as: ['SELECT asset_id FROM character_assets WHERE character_id=$1', A.id],
+    cargo: ['SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', A.id],
+    items: ['SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', A.id],
+    gear: ['SELECT gear_id FROM account_gear WHERE account_id=$1', accOf],
+    guns: ['SELECT gun_id FROM character_guns WHERE character_id=$1', A.id],
+    gm: ['SELECT gang_id, role, joined_at FROM gang_members WHERE character_id=$1', A.id],
+    mk: ['SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', A.id],
+    st: ['SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', A.id],
+    sk: ['SELECT skill_id FROM character_skills WHERE character_id=$1', A.id],
+    npc: ['SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', A.id],
+    grudge: ['SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', A.id],
+    pf: ['SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', accOf],
+    est: ['SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', accOf],
+  };
+
+  const { loadOwned } = await import('../src/game.js');
+  const ch = (await pool.query('SELECT * FROM characters WHERE id=$1', [A.id])).rows[0];
+  const c = await pool.connect();
+  let owned = null, boom = '';
+  try { owned = await loadOwned(c, ch); } catch (e) { boom = e.message; }
+  check(!!owned, 'the union PARSES and runs on real Postgres with every branch populated', boom);
+
+  if (owned) {
+    // each branch's rows survived the round trip, in the right numbers
+    const counts = {
+      rk: owned.rackets.length, as: owned.assets.length,
+      cargo: Object.keys(owned.cargo).length, items: Object.keys(owned.items).length,
+      gear: owned.gear.length, guns: owned.guns.length, gm: owned.gangId ? 1 : 0,
+      mk: Object.keys(owned.makings).length, st: owned.stash.length, sk: owned.skills.size,
+      npc: Object.keys(owned.npc).length, grudge: Object.keys(owned.grudges).length,
+      pf: owned.portfolio.length, est: owned.estate ? 1 : 0,
+    };
+    const wrong = [];
+    for (const [g, [sql, param]] of Object.entries(originals)) {
+      const want = (await pool.query(sql, [param])).rows.length;
+      if (counts[g] !== want) wrong.push(`${g}: union ${counts[g]} vs original ${want}`);
+    }
+    check(wrong.length === 0, 'every branch returns the same rows the original query did', wrong.join('; '));
+
+    // …and each VALUE came out of the right slot. This is the check that earns the section: the
+    // union packs fourteen different row shapes into six generic columns, so a branch reading `n2`
+    // where it means `n` silently swaps two fields — here, a stash line's quantity and its purity.
+    // Row counts still match, no error is raised, and every existing suite passes, because they all
+    // drive characters whose stash is EMPTY. Verified by mutation: swapping those two slots fails
+    // exactly this line and nothing else in the tree.
+    const slots = [
+      ['cargo.cigs', owned.cargo.cigs, 7], ['items.ammo', owned.items.ammo, 42],
+      ['makings.weed', owned.makings.weed, 12], ['racketLevels.numbers', owned.racketLevels.numbers, 3],
+      ['stash[].qty', owned.stash.find((s) => s.drug_id === 'weed')?.qty, 5],
+      ['stash[].quality', owned.stash.find((s) => s.drug_id === 'weed')?.quality, 73],
+      ['grudges.doc', owned.grudges.doc, 2], ['estate.tier', Number(owned.estate?.tier), 3],
+    ];
+    const wrongSlot = slots.filter(([, v, want]) => v !== want).map(([k, v, want]) => `${k}=${v} (want ${want})`);
+    check(wrongSlot.length === 0, 'every populated branch demultiplexes from the right slot', wrongSlot.join(', '));
+    check(Math.abs(owned.portfolio[0]?.shares - 1.234567) < 1e-9,
+      'a fractional numeric keeps its precision through numeric→Number', `${owned.portfolio[0]?.shares}`);
+
+    // THE FIELDS NOTHING DOWNSTREAM RE-WRAPS. Worth being precise about what this proves: node-pg
+    // returns `numeric` as a STRING and pg-mem returns a number, so the union coerces — but every
+    // map/reduce consumer of those branches ALSO wraps in Number(), so that coercion is currently
+    // belt-and-braces, and asserting the type of a re-wrapped field proves nothing (checked by
+    // mutation: dropping a coercion changes no observable value today).
+    //
+    // These three are the exceptions — raw pass-throughs with no second coercion behind them. A
+    // timestamp arriving as a string would still compare truthy in `new Date(x) > y` while breaking
+    // arithmetic on it, which is the quiet kind of wrong.
+    check(owned.gangJoinedAt instanceof Date, 'gangJoinedAt is a Date, not a string', `${typeof owned.gangJoinedAt}`);
+    check(owned.gangRole === 'boss', 'the text field riding a second generic column survives', `${owned.gangRole}`);
+    check(typeof owned.estate?.tier === 'number', 'the estate row is handed over already coerced',
+      `${typeof owned.estate?.tier}`);
+  }
+  c.release();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n7. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
 // Boot applies schema.sql then a derived ADD COLUMN IF NOT EXISTS pass. A second boot against the
 // SAME database must be a clean no-op — that is what makes deploying a new build to a live database

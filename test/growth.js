@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -673,6 +673,31 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     assert.equal(partial.rewardsLive, true, 'so Spread-the-Word starts paying');
     assert.equal((await call('GET', '/v1/onboard', { token: dud.token })).body.total, 6,
       'ob_x is still dropped — the follow check is what it needs, and that is still unconfigured');
+
+    // THE BOARD AND THE PAYOUT MUST AGREE. The first cut of this fix filtered the BOARD and left the
+    // claim path computing its capstone over the unfiltered list — so the checklist read "complete"
+    // and the capstone bonus never fired. A promise the UI makes and the ledger never keeps is worse
+    // than the unreachable capstone it replaced. Drive the last offered task with the other five
+    // already claimed, and require the money.
+    delete process.env.X_BEARER_TOKEN;                       // back to the fully-unconfigured server
+    const finisher = await mk('Capstone Cass');
+    await pool.query(
+      `UPDATE account_persistent SET onboard=$2 WHERE account_id=(SELECT account_id FROM characters WHERE id=$1)`,
+      [finisher.id, JSON.stringify({ ob_boost: true, ob_bank: true, ob_path: true, ob_family: true, ob_wallet: true })]);
+    const before = (await call('GET', '/v1/onboard', { token: finisher.token })).body;
+    assert.equal(before.total, 6, 'six offered on this server');
+    assert.equal(before.allDone, false, 'one to go');
+    await seedCh(finisher.id, 'nerve=50, energy=200');       // the last one is a crime — go pull it
+    for (let i = 0; i < 30; i++) {
+      await seedCh(finisher.id, 'nerve=50, energy=200, jail_until=NULL');
+      if ((await call('POST', '/v1/crimes/pick', { token: finisher.token })).body?.success) break;
+    }
+    const last = await call('POST', '/v1/onboard/ob_crime/claim', { token: finisher.token });
+    assert.equal(last.body.capstone, true,
+      'the capstone fires on the tasks THIS SERVER offers — not on two it can never verify');
+    assert.equal(last.body.cash, 500 + CONSTANTS.ONBOARD_CAPSTONE.cash, 'and the bonus cash is actually paid');
+    assert.equal((await call('GET', '/v1/onboard', { token: finisher.token })).body.allDone, true,
+      'board and payout agree');
   } finally {
     delete process.env.X_BEARER_TOKEN; process.env.SOCIAL_VERIFY_MODE = prevMode;
   }

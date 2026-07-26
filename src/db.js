@@ -147,6 +147,16 @@ export async function makeDb() {
     // rather than returned to the pool. All this prevents is the unhandled throw. Attached ONCE per
     // client (a pooled client is checked out many times — re-attaching would leak listeners until
     // Node's MaxListeners warning fires).
+    //
+    // WHY THIS WRAPS `connect` AND NOT `query` — verified against pg-pool, not assumed, because the
+    // obvious "simplification" is wrong in a way that only shows up during an outage. `pool.query()`
+    // attaches its OWN `client.once('error', …)` for the life of the call, so a one-off query is
+    // already covered and needs nothing from us. The exposed path is the one this game runs on: every
+    // transaction does `pool.connect()` and holds the client across many awaits, and checkout REMOVES
+    // the idle-time error listener the pool installed. Between checkout and release there is no
+    // listener at all — which is precisely the window a transaction lives in. Removing this wrapper on
+    // the grounds that "pg handles client errors" reopens exactly that window; `tools/chaos.js`
+    // scenario 2 kills backends mid-transaction and the process dies without it.
     const HANDLED = Symbol.for('omerta.clientErrorHandled');
     const rawConnect = pool.connect.bind(pool);
     pool.connect = async (...args) => {

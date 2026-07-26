@@ -327,16 +327,22 @@ export async function agentLeaderboard(pool, limit = 25) {
 // The guided First-Week board (read-only) — the client's "Start Here" funnel. Server-authoritative
 // readiness (the same CHECKS claimOnboard enforces) so the client never re-derives game state:
 // each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.
+// THE CHECKLIST THIS SERVER CAN ACTUALLY OFFER. A social task whose PROVIDER is not configured is
+// dropped entirely — not listed-and-unclaimable. Offering a reward that always throws is worse than
+// not offering it: the player reads it as a bug, and it made the all-done capstone unreachable,
+// which is the state the live server shipped in (SOCIAL_VERIFY_MODE=live with no X or Discord
+// tokens). A task ALREADY CLAIMED stays on the list whatever the config now says, so nobody's
+// completed checklist silently shrinks if a token is later removed.
+//
+// ONE function, because the board and the PAYOUT must agree. They did not: the board filtered and
+// the claim path computed its capstone over the unfiltered `ONBOARD_TASKS`, so on a server without
+// Discord the checklist read "complete" and the capstone bonus never fired. A promise the UI makes
+// and the ledger never keeps is worse than the unreachable capstone it replaced.
+const offeredTasks = (onboard) => ONBOARD_TASKS.filter((t) => !!onboard[t.id] || socialTaskAvailable(t.id));
+
 export function onboardBoard(ch, h) {
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
-  // A social task whose PROVIDER is not configured on this server is dropped from the checklist
-  // entirely — not listed-and-unclaimable. Offering a reward that always throws is worse than not
-  // offering it: the player reads it as a bug, and it made the all-done capstone unreachable, which
-  // is the state the live server shipped in (SOCIAL_VERIFY_MODE=live with no X or Discord tokens).
-  // A task ALREADY CLAIMED stays visible whatever the config now says, so nobody's completed
-  // checklist silently shrinks if a token is later removed.
-  const tasks = ONBOARD_TASKS
-    .filter((t) => !!onboard[t.id] || socialTaskAvailable(t.id))
+  const tasks = offeredTasks(onboard)
     .map((t) => ({
       id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: SOCIAL_LINKS[t.id] || t.social || null,
       claimed: !!onboard[t.id],
@@ -359,7 +365,9 @@ export async function claimOnboard(ch, taskId, client, h) {
   else if (!CHECKS[taskId] || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
   onboard[taskId] = true;
   h.acct.onboard = JSON.stringify(onboard);
-  const allDone = ONBOARD_TASKS.every((x) => onboard[x.id]);
+  // the same list the board showed — see offeredTasks. `onboard` already carries THIS claim, so a
+  // task just completed counts, and an unofferable task is not held against the player.
+  const allDone = offeredTasks(onboard).every((x) => onboard[x.id]);
   const cash = (t.reward.cash || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.cash : 0);
   const cb = (t.reward.cb || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.cb : 0);
   const en = (t.reward.en || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.en : 0);

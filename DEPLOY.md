@@ -43,13 +43,25 @@ are set). Two Node processes over one Postgres DB. No build step.
       terminates ~80 backends mid-transaction under load, and stops Postgres entirely underneath a running
       server. Exits non-zero on drift, a double payout, or the process dying.
       ```
+      # On a Debian/Ubuntu package install pg_ctl must run AS the postgres user and be pointed at the
+      # config, which the packaged layout keeps apart from the data directory. PG_CTL takes any
+      # command, so a wrapper does it. (A bare `pg_ctl -D …` as root fails to start — and the harness
+      # then reports the outage as unrecoverable, which reads exactly like a real bug.)
+      printf '%s\n' '#!/bin/sh' \
+        'exec su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main \
+           -o '"'"'-c config_file=/etc/postgresql/16/main/postgresql.conf'"'"' $*"' > /tmp/pgctl.sh
+      chmod +x /tmp/pgctl.sh
+
       DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
         MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off \
-        PG_CTL='/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main' npm run chaos
+        PG_CTL=/tmp/pgctl.sh npm run chaos
       ```
       `PG_CTL` is optional — without it the full-outage scenario is SKIPPED and says so, rather than
       silently passing. On its first run it found the other half of the 2026-07-25 outage bug (see §7b):
-      a connection dying mid-transaction still killed the whole API.
+      a connection dying mid-transaction still killed the whole API. The full-outage scenario itself
+      first RAN on 2026-07-26 and passed — the API survived Postgres being stopped underneath it,
+      answered `503 db_down` (never a 500) throughout, and recovered with no redeploy. That path had
+      been reasoned about since the outage; it is now measured.
       **CI already runs everything except the full-outage scenario** (it needs `pg_ctl` on the database
       host, which a service container has no way to provide). So the reason to run this by hand is
       exactly that scenario — do it before any deploy that touches the pool, a transaction boundary, or
