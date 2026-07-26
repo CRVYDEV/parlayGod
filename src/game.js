@@ -564,8 +564,15 @@ export async function withCharacterRead(pool, accountId, fn) {
 // anchored check. So look for the write forms ANYWHERE too — in their multi-word shapes, which do not
 // appear by accident in a SELECT the way a bare `update` can (a column named `last_update` is safe:
 // the `_` is a word character, so \b does not match inside it).
-const WRITE_HEAD = /^\s*(?:insert|update|delete|truncate|drop|alter|create|grant|revoke)\b/i;
-const WRITE_ANY = /\b(?:insert\s+into|update\s+\w+\s+set|delete\s+from|truncate\b)/i;
+//
+// The list below is deliberately wider than "the SQL the handlers happen to contain today". A backstop
+// that only catches the mistakes you already thought of is a comment with extra steps, so it was
+// probed: MERGE, COPY … FROM, SELECT … INTO, setval/nextval, an advisory lock and `SELECT … FOR UPDATE`
+// all sailed straight past the first version. FOR UPDATE is not a write, but on this path there is no
+// BEGIN, so the lock is taken and dropped in the same statement — it looks like protection and is not,
+// which is worse than not having it.
+const WRITE_HEAD = /^\s*(?:insert|update|delete|truncate|drop|alter|create|grant|revoke|merge|copy)\b/i;
+const WRITE_ANY = /\b(?:insert\s+into|update\s+\w+\s+set|delete\s+from|truncate\b|merge\s+into|copy\s+\w+\s+from|\binto\s+\w+\s+from|for\s+update\b|for\s+no\s+key\s+update\b|for\s+share\b|setval\s*\(|nextval\s*\(|pg_advisory_(?:xact_)?lock\s*\()/i;
 function readOnlyClient(client) {
   return {
     query: (text, params) => {

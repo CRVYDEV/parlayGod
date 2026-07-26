@@ -830,6 +830,62 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert(after > before, 'the delegated read banked the accrual it found');
   assert(seen.energy === after, 'and the view the player saw matches what was persisted');
 
+  // THE CLAIM THAT MATTERS, stated so it cannot quietly stop being true: a read still CHECKPOINTS.
+  // The fast path skips the write only when accrue() provably changed nothing, and the fallback
+  // persists — so `last_accrued_at` advances on any read with real time behind it, exactly as it did
+  // before this path existed. Without this, an idle-but-polling player would drift toward the
+  // offline-returner treatment on every time-metered surface (bank interest is capped per BURST as
+  // well as per day, and the RICO meter builds from heat sampled at the START of a step), which
+  // would be a silent change to signed economy behaviour. It is measured here instead of assumed:
+  // an earlier reading of this code concluded the opposite, and only the measurement settled it.
+  const stamp = async () => (await pool.query(`SELECT last_accrued_at FROM characters WHERE id='${rid}'`)).rows[0].last_accrued_at;
+  await pool.query(`UPDATE characters SET last_accrued_at = now() - interval '20 minutes' WHERE id='${rid}'`);
+  const t0 = await stamp();
+  await call('GET', '/v1/skills', { token: rt });
+  assert(+new Date(await stamp()) > +new Date(t0),
+    'a READ with real time behind it advances last_accrued_at — reads still checkpoint accrual');
+  // …and one with nothing behind it does not write at all (that is the whole point of the fast path)
+  const t1 = await stamp();
+  await call('GET', '/v1/skills', { token: rt });
+  assert.equal(+new Date(await stamp()), +new Date(t1),
+    'a read with nothing to bank leaves the clock alone rather than churning the row');
+
+  // The write guard is a BACKSTOP, so it is probed with forms nobody wrote by hand. MERGE, COPY,
+  // SELECT … INTO, setval/nextval, an advisory lock and `SELECT … FOR UPDATE` all slipped past the
+  // first version of it. FOR UPDATE is not a write, but with no BEGIN on this path the lock is taken
+  // and dropped in the same statement — protection that looks real and is not.
+  for (const sql of [
+    'MERGE INTO characters USING characters s ON (1=1) WHEN MATCHED THEN UPDATE SET cash=1',
+    'COPY characters FROM STDIN',
+    'SELECT id INTO tmp_x FROM characters',
+    "SELECT setval('s', 1)", "SELECT nextval('s')",
+    'SELECT pg_advisory_lock(1)', 'SELECT pg_advisory_xact_lock(1)',
+    `SELECT * FROM characters WHERE id='${rid}' FOR UPDATE`,
+    'SELECT * FROM characters FOR SHARE',
+    'WITH x AS (SELECT 1) INSERT INTO rng_audit SELECT * FROM x',
+  ]) {
+    let refused = false;
+    await withCharacterRead(app.pool, aid, async (_ch, client) => {
+      try { await client.query(sql); } catch (e) { refused = /read path attempted a write/.test(e.message); }
+      return {};
+    });
+    assert(refused, `the read path must refuse: ${sql.slice(0, 46)}`);
+  }
+  // …without refusing legitimate reads, including the shapes that look like writes
+  for (const sql of [
+    'SELECT 1 AS updated_at, 2 AS last_update',
+    `SELECT c.id, g.name FROM characters c LEFT JOIN gangs g ON g.id=c.gang_id WHERE c.id='${rid}'`,
+    'SELECT COUNT(*) FROM transactions WHERE reason LIKE $1',
+  ]) {
+    let ok = true;
+    await withCharacterRead(app.pool, aid, async (_ch, client) => {
+      try { await client.query(sql, sql.includes('$1') ? ['crime:%'] : undefined); }
+      catch (e) { if (/read path attempted a write/.test(e.message)) ok = false; }
+      return {};
+    });
+    assert(ok, `the guard must not refuse a legitimate read: ${sql.slice(0, 46)}`);
+  }
+
   // 3. The write guard is real, not a comment. These routes are registered on the read path only
   //    because they were verified side-effect free; a future edit that writes must fail loudly
   //    rather than commit outside any transaction — there is no BEGIN on this path to roll back.
@@ -884,5 +940,5 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   assert.equal(leaks.length, 0, `read routes must hand their board the guarded client, not the pool: ${leaks.join(' | ')}`);
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, and the read path's write guard refuses — and does not land — an INSERT), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
 await app.close();

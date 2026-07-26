@@ -235,6 +235,42 @@ only ever exist on the dirty path that delegates.
    never match Postgres's microseconds, so it must be an integer `accrual_seq` bumped on every persist.
    Worth doing only if reads after a real gap show up in production waits.
 
+
+**Consequence audit (2026-07-26).** D1 is the only change in the split programme that altered
+semantics rather than moving code, so its consequences were traced rather than assumed. Four classes,
+each measured:
+
+1. **Do reads still checkpoint accrual?** YES — measured against a live server, not read off the
+   source. The fast path skips the write only when `accrue()` provably changed nothing (it early-
+   returns under one second); anything with real time behind it fails the fingerprint, falls back to
+   `withCharacter`, and persists. A read 20 minutes after the last checkpoint advances
+   `last_accrued_at` exactly as it did before D1. This matters because `accrue()` is **not**
+   split-neutral — measured, a 4-hour step and 240 one-minute steps disagree on `heat_exposure`
+   (0 vs 19.5) and on bank interest (the bucket is capped per BURST as well as per day, so one big
+   step earns 8h of interest and polled steps earn 12h/day) — so if reads had stopped checkpointing,
+   an idle-but-polling player would have drifted onto the offline-returner treatment on every
+   time-metered surface. They have not. Both facts are now asserted in `test/hardening.js` and both
+   assertions were shown non-vacuous by flipping them.
+2. **Are the 24 read handlers really side-effect free?** YES, re-verified across all 23 board
+   functions (11–83 lines each) — none calls `h.track`/`h.notify`/`h.ledger`/`h.bumpDaily`, none
+   issues write SQL, none takes a lock. Worth recording HOW: the first pass reported "clean" from an
+   extraction that returned **zero lines for every function**. A check that examines nothing agrees
+   with everything.
+3. **The write guard was a backstop with holes.** Probed rather than trusted: MERGE, `COPY … FROM`,
+   `SELECT … INTO`, `setval`/`nextval`, an advisory lock and `SELECT … FOR UPDATE` all sailed past the
+   first version. FOR UPDATE is the interesting one — with no BEGIN on this path the lock is taken and
+   dropped in the same statement, so it looks like protection and is not. All now blocked, with three
+   legitimate reads (a column named `last_update`, a join, a `LIKE` count) asserted to still pass.
+4. **Tests reading raw DB columns across API calls.** Only the actor's own row is affected (a read
+   never touches a third party's), which clears the `test/intrigue.js` exposure assertions. The one
+   real instance was `test/port.js`, already fixed — but the explanation committed with that fix was
+   **wrong**: it blamed D1 for reads no longer checkpointing. They do. The confound is that the
+   intervening `meOf`/`cashOf` calls are the captain's OWN requests and bank his accrual after the raw
+   sample, which was equally true before D1. Comment corrected.
+
+Net: no production behaviour difference found. One incorrect explanation corrected, one vacuous check
+replaced with a real one, and the guard tightened from six known holes to none.
+
 ### D2 — pg-mem / Postgres divergence **(HIGH → ADDRESSED)**
 All 48 suites run on pg-mem; production runs node-pg against Postgres. This class is not theoretical:
 it produced a crash on every database restart (unhandled pool `'error'`) and a deprecated
