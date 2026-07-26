@@ -14,7 +14,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Test suites | **52** files, **16430** lines (`test/`) — ratio 0.54 test:src |
 | HTTP routes | **491** registrations |
 | Database tables | **162** (`schema.sql`, 2,218 lines) |
-| Client | **4,631** lines (`public/index.html`, single file, zero dependencies) |
+| Client | **4,727** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption) |
