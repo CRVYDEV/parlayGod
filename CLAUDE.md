@@ -3113,6 +3113,25 @@ SAME EIP-1193 flow (`connectedProvider`) as an injected wallet — SIWE link + b
 (the projectId is public/client-embedded by design; `chainId` = `CHAIN_ID` or 1) and the console hides the option
 when null. `test/chain.js` asserts the config surface (null without the env, the public id + chainId with it).
 STILL deferred before real bonds flow: the POL-pairing + DEX buyback bots, the on-chain Store paywall.
+**THE WALLET PICKER — hardened + widened (2026-07-26).** Coinbase, Trust, Rabby, Phantom, Crypto.com, Rainbow,
+OKX, Zerion and Robinhood Wallet all speak EIP-6963, so they were ALREADY supported — the discovery layer covers
+wallets that don't exist yet, and hardcoding a vendor list would have been a REGRESSION from that. What was
+actually missing, all fixed: **(1)** a WalletConnect session proposal REQUIRED the OMERTÀ chain, which is a veto —
+a phone wallet that has never heard of an Orbit L2 rejects the whole session, and linking only ever needs a
+SIGNATURE — so every chain is now `optionalChains` (dormant today with `CHAIN_ID` unset, but it would have broken
+exactly the mobile wallets on mainnet); **(2)** no wallet detected was a dead-end toast ("install MetaMask") — the
+picker now opens in a "here's where to get one" mode listing `KNOWN_WALLETS` install links (the catalog is ONLY
+for hints — matched loosely by rdns OR name so a wrong rdns still suppresses its own hint; nothing needs an entry
+to work); **(3)** a **real bug**: callers `await pickProvider()` OUTSIDE their try, and the single-option shortcut
+auto-fired WalletConnect, so a failed connect (blocked CDN, closed QR) escaped as an unhandled rejection and the
+button looked simply DEAD. Now WC alone still shows the picker (a QR on a tap deserves consent), and every failure
+path routes through `walletFailed()` → a toast. Also: `eip6963:requestProvider` is re-dispatched when the picker
+opens (extensions that inject after our script), and an in-app wallet browser's bare `window.ethereum` is used
+directly. Verified in Chromium against real Postgres across five scenarios — nothing detected, two wallets, in-app
+`window.ethereum`, WC-only, and a **full SIWE happy path** (real viem signature through the picker's SECOND wallet
+→ server-verified → linked, correct address, zero page errors) — plus both failure paths toasting with zero
+unhandled errors. Desktop needs no config; **mobile is dormant until `WALLETCONNECT_PROJECT_ID` is set** (a free
+public id from dashboard.reown.com — documented in `render.yaml` / `.env.example` / `CHAIN-DEPLOY.md`).
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,

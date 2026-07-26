@@ -597,7 +597,7 @@
   <div style="margin-top:14px;text-align:right"><button class="act" id="death-go" style="font-size:15px;padding:10px 22px">THE HEIR RISES →</button></div>
 </div></div>
 
-<!-- the wallet picker (EIP-6963 multi-wallet discovery: MetaMask, Robinhood Wallet, Coinbase, …) -->
+<!-- the wallet picker (EIP-6963 multi-wallet discovery: MetaMask, Coinbase, Trust, Rabby, Phantom, …) -->
 <div id="walletpick" class="modal-bg hidden"><div class="modal">
   <h2>CHOOSE A WALLET</h2>
   <p class="dim">Pick the wallet to connect. Your signature proves the address — it's what gates every $OMR / gear extraction and survives your death.</p>
@@ -1013,13 +1013,38 @@
   // ── wallet integration: EIP-6963 multi-wallet discovery (MetaMask, Robinhood Wallet, Coinbase, Rabby, …) ──
   // Modern injected wallets ANNOUNCE themselves; we collect them so the player can pick which one to connect
   // instead of being stuck with whichever grabbed `window.ethereum`. Falls back to the legacy provider.
+  //
+  // Deliberately NOT a hardcoded per-wallet integration: every EVM wallet worth supporting speaks EIP-6963,
+  // so discovery covers ones that do not exist yet. The catalog below is ONLY for install hints — a wallet
+  // does not need an entry here to be usable, and an entry here never conjures one that is not installed.
   const wallets = new Map(); // rdns → { info:{name,icon,rdns}, provider }  (desktop/extension injected wallets)
   let connectedProvider = null;
   let wcProvider = null; // memoized WalletConnect (mobile) provider
   window.addEventListener('eip6963:announceProvider', (e) => {
     if (e.detail?.info?.rdns) wallets.set(e.detail.info.rdns, e.detail);
   });
-  try { window.dispatchEvent(new Event('eip6963:requestProvider')); } catch {}
+  const askWallets = () => { try { window.dispatchEvent(new Event('eip6963:requestProvider')); } catch {} };
+  askWallets(); // and again right before we show the picker — some extensions inject after our script runs
+
+  // popular EVM wallets, for "you don't have one — here's where to get it" only. Matched loosely (rdns OR a
+  // name substring) so a wallet whose rdns we guessed wrong still suppresses its own install hint once it is
+  // detected. Mobile-capable ones are reachable today through WalletConnect without installing anything.
+  const KNOWN_WALLETS = [
+    { rdns: 'io.metamask',        name: 'MetaMask',        url: 'https://metamask.io/download',            mobile: true },
+    { rdns: 'com.coinbase.wallet',name: 'Coinbase Wallet', url: 'https://www.coinbase.com/wallet/downloads',mobile: true },
+    { rdns: 'com.trustwallet.app',name: 'Trust Wallet',    url: 'https://trustwallet.com/download',         mobile: true },
+    { rdns: 'io.rabby',           name: 'Rabby',           url: 'https://rabby.io/',                        mobile: false },
+    { rdns: 'app.phantom',        name: 'Phantom',         url: 'https://phantom.com/download',             mobile: true },
+    { rdns: 'com.crypto.wallet',  name: 'Crypto.com',      url: 'https://crypto.com/onchain',               mobile: true },
+    { rdns: 'me.rainbow',         name: 'Rainbow',         url: 'https://rainbow.me/download',              mobile: true },
+    { rdns: 'com.okex.wallet',    name: 'OKX Wallet',      url: 'https://www.okx.com/web3',                 mobile: true },
+    { rdns: 'io.zerion.wallet',   name: 'Zerion',          url: 'https://zerion.io/download',               mobile: true },
+    { rdns: 'com.robinhood.wallet', name: 'Robinhood Wallet', url: 'https://robinhood.com/us/en/wallet/',   mobile: true },
+  ];
+  const walletDetected = (k) => [...wallets.values()].some((w) =>
+    w.info?.rdns === k.rdns || String(w.info?.name || '').toLowerCase().includes(k.name.toLowerCase().split(' ')[0]));
+  // one place to turn a failed/cancelled connect into a visible message and a null provider
+  const walletFailed = (e) => { toast(e?.message ? 'wallet: ' + e.message : 'wallet connect failed', true); return null; };
 
   // WalletConnect (mobile wallets — Robinhood Wallet, MetaMask Mobile, …): lazy-loaded from a CDN only when
   // chosen, so the console stays a single zero-dep file otherwise. DORMANT unless the server surfaces a
@@ -1030,9 +1055,14 @@
     const cfg = rules?.walletConnect;
     if (!cfg?.projectId) throw new Error('WalletConnect is not enabled on this server');
     const { EthereumProvider } = await import('https://esm.sh/@walletconnect/ethereum-provider@2');
+    // Every chain is OPTIONAL, deliberately. A REQUIRED chain is a veto: a phone wallet that has never heard
+    // of the OMERTÀ chain rejects the whole session proposal — and linking a wallet only ever needs a
+    // SIGNATURE, no chain at all. Requesting it as optional connects Trust / Crypto.com / Phantom / Coinbase
+    // regardless, and `submitBondOnChain` still asks the wallet to switch when there is a real tx to send.
+    const optionalChains = [...new Set([1, Number(cfg.chainId) || 1])];
     const p = await EthereumProvider.init({
       projectId: cfg.projectId,
-      chains: [cfg.chainId], optionalChains: [cfg.chainId],
+      optionalChains,
       showQrModal: true,
       metadata: { name: 'OMERTÀ', description: 'A noir mob RPG', url: location.origin, icons: [] },
     });
@@ -1047,20 +1077,35 @@
   // more than one option), else legacy window.ethereum. Injected + WalletConnect are unified as EIP-1193.
   function pickProvider() {
     if (connectedProvider) return Promise.resolve(connectedProvider);
+    askWallets(); // re-ask: an extension that woke up after page load announces itself now
     const opts = [...wallets.values()].map((w) => ({ name: w.info.name, icon: w.info.icon, get: () => Promise.resolve(w.provider) }));
-    if (rules?.walletConnect?.projectId) opts.push({ name: 'WalletConnect (mobile)', icon: null, wc: true, get: () => getWalletConnect() });
-    if (opts.length === 0) return Promise.resolve(window.ethereum || null); // legacy single-provider fallback
-    if (opts.length === 1) return opts[0].get();
-    // >1 option → let the player choose (MetaMask vs Robinhood Wallet vs WalletConnect vs …)
+    const wcOn = !!rules?.walletConnect?.projectId;
+    if (wcOn) opts.push({ name: 'WalletConnect (mobile)', icon: null, wc: true, get: () => getWalletConnect() });
+    // an in-app wallet browser (Trust / Coinbase / Crypto.com) injects window.ethereum without announcing
+    if (opts.length === 0 && window.ethereum) return Promise.resolve(window.ethereum);
+    // exactly one INJECTED wallet is unambiguous — connect it. WalletConnect alone still shows the picker:
+    // opening a QR modal on a tap deserves explicit consent, and the picker is where the install links live
+    // (it is also the path whose .get() can genuinely fail — a blocked CDN or a closed QR — and the picker
+    // catches that into a toast). The .catch below is belt-and-braces: an injected get() resolves a provider
+    // it already holds. It is here because callers await pickProvider OUTSIDE their try, so any rejection
+    // escaping this function would surface as an unhandled error and the button would look simply dead.
+    if (opts.length === 1 && !opts[0].wc) return opts[0].get().catch(walletFailed);
+    // 0 options → the picker becomes "you have no wallet, here is where to get one" instead of a dead end
+    // >1 → let the player choose (MetaMask vs Coinbase vs Rabby vs Phantom vs WalletConnect vs …)
     return new Promise((resolve) => {
       const box = $('#walletpick-list');
-      box.innerHTML = opts.map((o, i) => `<button class="act" data-wi="${i}" style="display:flex;align-items:center;gap:10px;justify-content:flex-start;text-align:left">
-        ${o.icon ? `<img src="${o.icon}" alt="" width="24" height="24" style="border-radius:5px">` : (o.wc ? '<span style="font-size:18px">📱</span>' : '')}<span>${esc(o.name)}</span></button>`).join('');
+      const missing = KNOWN_WALLETS.filter((k) => !walletDetected(k));
+      box.innerHTML = (opts.length
+        ? opts.map((o, i) => `<button class="act" data-wi="${i}" style="display:flex;align-items:center;gap:10px;justify-content:flex-start;text-align:left">
+            ${o.icon ? `<img src="${o.icon}" alt="" width="24" height="24" style="border-radius:5px">` : (o.wc ? '<span style="font-size:18px">📱</span>' : '')}<span>${esc(o.name)}</span></button>`).join('')
+        : `<div class="d">No wallet detected in this browser.${wcOn ? ' Use <b>WalletConnect</b> above to scan with a phone wallet, or install one:' : ' Install one, then reload this page:'}</div>`)
+        + (missing.length ? `<div class="d" style="margin-top:${opts.length ? 12 : 8}px">${opts.length ? "Don't have one? " : ''}Popular EVM wallets — all of these work here:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${missing.map((k) =>
+              `<a class="act" href="${k.url}" target="_blank" rel="noopener noreferrer" style="font-size:12px;padding:5px 9px">${esc(k.name)} ↗</a>`).join('')}</div>` : '');
       const done = async (opt) => {
         $('#walletpick').classList.add('hidden');
         if (!opt) return resolve(null);
-        try { resolve(await opt.get()); }
-        catch (e) { toast(e?.message ? 'wallet: ' + e.message : 'wallet connect failed', true); resolve(null); }
+        try { resolve(await opt.get()); } catch (e) { resolve(walletFailed(e)); }
       };
       box.querySelectorAll('[data-wi]').forEach((b) => b.onclick = () => done(opts[Number(b.dataset.wi)]));
       $('#walletpick-cancel').onclick = () => done(null);
@@ -1072,7 +1117,9 @@
   // you and gates every $OMR / gear extraction. No wallet extension → a clean pointer.
   async function linkWallet() {
     const provider = await pickProvider();
-    if (!provider) { toast('no browser wallet found — install MetaMask or Robinhood Wallet, then reload', true); return; }
+    // null now only ever means the player closed the picker — the picker itself explains an empty list and
+    // offers install links, so repeating "no wallet found" here would just talk over it.
+    if (!provider) return;
     try {
       const [address] = await provider.request({ method: 'eth_requestAccounts' });
       if (!address) { toast('no wallet account selected', true); return; }
@@ -1091,7 +1138,7 @@
   // (to / value / data), and the player approves. Mainnet-dormant until the bond chain is configured.
   async function submitBondOnChain(nonce) {
     const provider = await pickProvider();
-    if (!provider) { toast('connect a wallet first — install MetaMask or Robinhood Wallet', true); return; }
+    if (!provider) return; // picker closed — it already showed what is available / how to get one
     try {
       const cd = await api('POST', '/v1/bond/calldata', { nonce });
       if (cd.code !== 200) { toast(describe(cd.body, cd.code), true); return; }
@@ -3923,7 +3970,7 @@
       <h2 style="margin-top:12px">Your Wallet <span class="d" style="font-size:11px">(the proven 0x address gates every $OMR / gear extraction — and survives your death)</span></h2>
       <div class="card">${me.wallet
         ? `<span class="t">Linked <span class="chip good">${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}</span></span><div class="d">on-chain extraction is unlocked (mainnet rail is dormant until launch)</div>`
-        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Robinhood Wallet, or any injected wallet on desktop${rules?.walletConnect ? ', or scan with a mobile wallet (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
+        : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
       <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(become Made, then pull your earned $OMR out to your own wallet — what you earn is yours to keep)</span></h2>
