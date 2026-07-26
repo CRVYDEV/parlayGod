@@ -570,7 +570,6 @@ const ONBOARD_TASKS = [
   { id: "ob_wallet", name: "Connect a wallet", desc: "The wallet is what survives you.", reward: { cash: 2000 }, check: (pl) => !!pl.wallet },
   { id: "ob_x", name: "Follow OMERTÀ on X", desc: "Launches, events, and season news.", reward: { cash: 1500 }, social: "https://x.com/", check: () => true },
   { id: "ob_discord", name: "Join the community", desc: "The other families are in there too.", reward: { cash: 1500 }, social: "https://discord.com/", check: () => true },
-  { id: "ob_repo", name: "Star the repo", desc: "Open development, open books.", reward: { cash: 1500 }, social: "https://github.com/", check: () => true },
 ];
 const ONBOARD_CAPSTONE = { cash: 5000, cb: 3, en: 25 }; // all nine claimed
 

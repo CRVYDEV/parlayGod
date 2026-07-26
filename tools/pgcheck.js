@@ -188,9 +188,14 @@ console.log('\n4. THE ROW LOCK ACTUALLY SERIALIZES (no lost update)');
   const moved = (await bankOf()) - before;
   // ok MUST be non-zero, or this check passes by doing nothing — the failure mode of the first draft
   check(ok === N, `all ${N} concurrent deposits landed`, `${ok}/${N}: ${results.filter((r) => r.code !== 200).map((r) => JSON.stringify(r.body)).join(' ')}`);
-  // Bank interest accrues fractionally on every touch, so the delta carries sub-dollar dust. A LOST
-  // UPDATE is off by a whole deposit, so "at least the full sum, less than one extra" separates them.
-  check(ok > 0 && moved >= ok * AMT && moved < (ok + 1) * AMT,
+  // Bank interest accrues fractionally on every touch, so the delta carries sub-dollar dust — and
+  // `moved` is a float subtraction of two interest-bearing balances, so the dust lands on EITHER side
+  // of the sum. A bare `moved >= ok * AMT` therefore fails on a delta of 3383.9999999999995 against
+  // an expected 3384, which is a rounding artifact and not a lost update. The thing being detected is
+  // off by a WHOLE DEPOSIT (hundreds or thousands), so a cent of tolerance keeps the check exact in
+  // every sense that matters while giving the float arithmetic room to be itself.
+  const dust = 0.01;
+  check(ok > 0 && moved >= ok * AMT - dust && moved < (ok + 1) * AMT,
     `${ok} concurrent deposits summed exactly (no lost update)`, `bank moved ${moved}, expected ${ok * AMT}`);
   check(results.every((r) => r.code < 500), 'concurrency produced no 500s',
     results.filter((r) => r.code >= 500).map((r) => JSON.stringify(r.body)).join(' '));

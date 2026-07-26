@@ -51,7 +51,13 @@ curl -s localhost:8787/v1/me -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Layout
-- `src/rules.js` — ALL game data (350+ entries), auto-generated from `omerta-game-v24.jsx`. Never hand-edit the tables; the tail (from `CONSTANTS` down — helpers like `hash01`, `carMelt`, `goodPriceOf`) is preserved verbatim by the extractor and is where hand-maintained logic lives. Regenerate tables with `node tools/extract-rules.js path/to/omerta-game-v24.jsx`.
+- `src/rules.generated.js` — the prototype's 22 data tables and NOTHING else. Machine-owned:
+  `node tools/extract-rules.js path/to/omerta-game-v24.jsx` overwrites it wholesale, so never hand-edit
+  it — change the PROTOTYPE and re-extract.
+- `src/rules.tail.js` — the hand-written half: every constant, catalog, ladder, helper (`hash01`,
+  `carMelt`, `goodPriceOf`, `levelOf`) and founder-signed lever. The extractor never touches this file.
+- `src/rules.js` — re-exports both halves, so everything imports from here and no caller needs to know
+  which half a name lives in. `test/rules.js` enforces the separation.
 - `src/accrual.js` — spec §7.1 lazy accrual: regen (turf-aware), bank interest, racket/asset income, staking rewards, heat decay (the no-global-tick design)
 - `src/game.js` — shared txn machinery: `withCharacter` (locks character + account), `withTwoCharacters` (locks both parties in stable order, §10.1), notifications + the websocket event bus, weekly family contracts
 - `src/economy.js` — M2 actions: garage (melt tithes to the family), workshop, goods (turf prices), rackets/assets, swap, staking, gear, armory
