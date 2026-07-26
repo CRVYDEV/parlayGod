@@ -122,11 +122,26 @@ r = await call('GET', '/v1/leaderboard/clues', { token: digger.token });
 assert.equal(r.body.diggers[0].name, 'Shovels McGee', 'the digger leads');
 assert.equal(r.body.diggers[0].caskets, 1, 'with one casket');
 
+// A crime only drops a scroll when it SUCCEEDS, and a bust also puts the digger in lockup — so
+// "pull jobs until one lands" has to clear the cell as well as the nerve, or every retry after the
+// first bust is refused and the loop spins to its bound. CLUE_DROP_P=1 makes the drop certain on a
+// success, so this converges quickly; the bound is only there so a real regression fails loudly
+// instead of hanging.
+const pullUntilScroll = async () => {
+  let res = null;
+  for (let i = 0; i < 40; i++) {
+    await pool.query(`UPDATE characters SET nerve=50, energy=200, jail_until=NULL WHERE id='${digger.id}'`);
+    res = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} });
+    if (res.body.success && res.body.clue) return res;
+  }
+  assert.fail('no scroll dropped in 40 successful-or-busted jobs with CLUE_DROP_P=1 — the drop hook is broken');
+  return res;
+};
+
 // ═══ TIER-4: trail tiers, the puzzle kind, casket band scaling, relics ═══
 // clear the cooldown, force a fresh scroll, then pin it to the MASTER tier
-await pool.query(`UPDATE characters SET clue_at=NULL, nerve=50, energy=200 WHERE id='${digger.id}'`);
-r = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} });
-let ct = 0; while ((!r.body.clue || !r.body.success) && ct++ < 20) { await pool.query(`UPDATE characters SET nerve=50 WHERE id='${digger.id}'`); r = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} }); }
+await pool.query(`UPDATE characters SET clue_at=NULL WHERE id='${digger.id}'`);
+r = await pullUntilScroll();
 assert(r.body.clue && r.body.clue.tier, 'the drop carries a trail tier');
 // pin a MASTER 1-step solvable hunt (goodSalt step 1 answers now)
 await pool.query(`UPDATE clue_scrolls SET salt='${goodSalt}', step=1, steps=1, tier='master' WHERE character_id='${digger.id}'`);
@@ -159,8 +174,7 @@ process.env.CLUE_RELIC_P = '';
 
 // ── DEATH: the scroll dies with the street; the legend survives to the heir ──
 await pool.query(`UPDATE characters SET clue_at=NULL WHERE id='${digger.id}'`);
-await pool.query(`UPDATE characters SET nerve=50 WHERE id='${digger.id}'`);
-r = await call('POST', '/v1/crimes/pick', { token: digger.token, body: {} });
+r = await pullUntilScroll();
 assert(r.body.clue, 'a fresh scroll for the death test');
 await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 'test-mod-key' }, payload: { characterId: digger.id } });
 assert.equal((await pool.query(`SELECT 1 FROM clue_scrolls WHERE character_id='${digger.id}'`)).rows.length, 0,
