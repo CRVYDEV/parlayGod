@@ -2,6 +2,12 @@ node_modules/
 .env
 *.log
 econ-sim.json
+
+# Database dumps — `npm run backup` writes here (default BACKUP_DIR=./backups). A dump is a COMPLETE
+# copy of the database: accounts, wallet addresses, the whole ledger. Committing one would publish
+# every player's data permanently to git history, so it must never be stageable by accident.
+backups/
+*.dump
 omerta-contracts/out-js/
 
 # Foundry (CI/local build artifacts — deps + out are fetched/generated, never committed)

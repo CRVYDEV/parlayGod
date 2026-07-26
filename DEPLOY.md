@@ -187,6 +187,40 @@ after a good dump**, so a run of bad nights can never age out the last known-goo
   *silent* failure of exactly that (WAL archiving erroring for ~11 minutes while everything looked
   healthy). Keep an independent dump you have personally restored at least once.
 
+#### Running it ONCE, by hand, from your own machine
+Do this on **your computer, not on Render.** A Render container's disk is wiped on the next deploy, and
+the point of this dump is to survive a problem *at Render* — a copy that lives there survives nothing.
+
+You need three things:
+1. **Postgres 16 client tools** (`pg_dump` + `pg_restore`). macOS: `brew install libpq` then follow the
+   "add to PATH" line it prints, or install Postgres.app. Windows: the official Postgres installer.
+   `pg_dump --version` must print **16 or higher** — an older client refuses to dump a newer server
+   ("server version mismatch"), and Render's Postgres is 16.
+2. **The EXTERNAL database URL** — Render dashboard → `omerta-db` → *Connections* → **External Database
+   URL** → copy. (The internal `….internal` hostname only resolves inside Render's network, so it fails
+   from your laptop with a DNS error.)
+3. A terminal in the repo folder.
+
+```bash
+DATABASE_URL='<paste the external URL>' npm run backup
+```
+Windows PowerShell: `$env:DATABASE_URL='<url>'; npm run backup`
+
+Success looks exactly like this (measured, not paraphrased):
+```
+dumping…
+verifying…
+backup verified: ./backups/omerta-20260726-123716.dump (194085 bytes, 161 tables)
+restore with: pg_restore --no-owner --clean --if-exists -d <target> ./backups/omerta-…dump
+```
+If it instead says `'accounts' holds 0 rows … expected ≥ 1`, it dumped an EMPTY database — almost always
+the wrong `DATABASE_URL`. Only add `BACKUP_MIN_ROWS=0` if the game genuinely has no players yet; adding
+it to silence the message is how you end up holding a backup of nothing.
+
+The file lands in `./backups/` mode 0600. **It is a complete copy of the database** — accounts, wallet
+addresses, the entire ledger — so treat it like a password: keep it off shared drives and out of git
+(`backups/` is already ignored).
+
 **The script has its own regression test** — `npm run backup:selftest`, pointed at a throwaway
 Postgres it may create and drop databases on. It builds a populated database, a schema-only one and a
 non-OMERTÀ one, and proves each check *refuses what it should*: a verification that cannot fail is
