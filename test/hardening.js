@@ -993,6 +993,30 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
     (_, i) => ({ name: `some quite long check name number ${i}`, lhs: 123456789, rhs: -987654321, drift: 1111111111 })));
   assert(flood.length < 2000, `a 300-check page must be clamped under Discord's limit; got ${flood.length}`);
   assert(flood.endsWith('(truncated)'), 'and it must say it was truncated, not just stop mid-sentence');
+
+  // THE DRILL. Setting INVARIANT_WEBHOOK_URL is otherwise unverifiable — you find out whether it works
+  // the night the ledger drifts, which is the worst moment to discover a typo. POST /v1/mod/alert/test
+  // fires through this same path so a message landing in the channel proves the whole chain.
+  const drill = [];
+  globalThis.fetch = async (url, opts) => { drill.push(JSON.parse(opts.body)); return { ok: true }; };
+  process.env.INVARIANT_WEBHOOK_URL = 'http://127.0.0.1:1/hook';
+  let testRes;
+  try {
+    testRes = await app.inject({ method: 'POST', url: '/v1/mod/alert/test', headers: { 'x-mod-key': 'test-mod-key' } });
+  } finally { globalThis.fetch = realFetch; delete process.env.INVARIANT_WEBHOOK_URL; }
+  assert.equal(testRes.statusCode, 200);
+  assert.equal(testRes.json().configured, true, 'the route reports whether a webhook is actually configured');
+  assert.equal(drill.length, 1, 'the drill posts exactly one message');
+  assert(drill[0].text && drill[0].content, 'and it carries both provider keys, like a real alert');
+  // A DRILL MUST NOT READ LIKE AN EMERGENCY. The generic formatter renders kind='test' as
+  // "🚨 … test invariant drift", which is precisely the message someone would panic at — and the
+  // point of a drill is to learn what a real page looks like, so it has to be distinguishable.
+  assert(/DRILL/.test(drill[0].content) && !drill[0].content.startsWith('🚨'),
+    `the test alert must announce itself as a drill, not impersonate an emergency; got ${JSON.stringify(drill[0].content)}`);
+
+  // mod-gated like every other tool on that perimeter
+  assert.equal((await app.inject({ method: 'POST', url: '/v1/mod/alert/test' })).statusCode, 401,
+    'the drill is a mod tool — an unauthenticated caller cannot make the founder\'s phone buzz');
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);

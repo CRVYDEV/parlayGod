@@ -69,6 +69,13 @@ export async function opsOverview(pool) {
     // visible anywhere. `rewardsLive` is the bottom line: false means the word-of-mouth cash faucet
     // is inert right now, whatever the mode says.
     social: { ...socialProviders(), rewardsLive: socialRewardsLive() },
+    // CAN THE ALARM REACH YOU? Same class again. Both alarms above (§10.4 drift, backups) shout through
+    // INVARIANT_WEBHOOK_URL; unset, they only reach a log nobody reads. It is set on the WORKER, so an
+    // api-only reading of `process.env` here can say "no" while the worker says "yes" — the dashboard
+    // labels that rather than implying the alarm is dead. Never return the URL itself: it is a bearer
+    // secret (anyone holding it can post into the channel) and this endpoint's output ends up pasted
+    // into bug reports.
+    alerting: { webhook: !!process.env.INVARIANT_WEBHOOK_URL },
     players,
     economy: {
       ammPrice: Math.round(ammPrice * 100) / 100,

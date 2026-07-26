@@ -161,12 +161,24 @@
 
   function renderBackups(ov) {
     const b = ov?.backups || {};
+    const wh = !!ov?.alerting?.webhook;
     const el = $('#p-backups').querySelector('.body');
+    // CAN THE ALARM REACH YOU? Both alarms — this one and the §10.4 sweep — shout down the same webhook.
+    // Unset, they shout into a log file, which is exactly the situation the backup incident exposed.
+    // Built here rather than inline because the archiver-unsupported branch below returns EARLY, and
+    // whether your alerts work has nothing to do with whether this database exposes archiver stats —
+    // put it only after that return and it vanishes on precisely the setups least able to spare it.
+    const alertRow = rowHtml('alerts reach you', wh
+      ? '<span style="color:var(--ok)">yes — webhook set</span>'
+      : '<span style="color:var(--bad)">NO — log only</span>')
+      + (wh ? '' : '<div class="note">Set <code>INVARIANT_WEBHOOK_URL</code> (a Slack or Discord webhook) so a '
+        + 'failing backup or a drifting ledger reaches your phone instead of a log nobody reads. '
+        + 'Then use <b>send test alert</b> under Mod Tools to prove it arrives.</div>');
     const bn = $('#bkbanner');
     if (!b.state || b.state === 'unsupported') {
       bn.className = 'banner hidden';
       el.innerHTML = '<div class="note">This database does not expose archiver stats (pg-mem in dev, or a '
-        + 'restricted role). Nothing to report — not a problem, just not visible from here.</div>';
+        + 'restricted role). Nothing to report — not a problem, just not visible from here.</div>' + alertRow;
       return;
     }
     const ago = (s) => s == null ? 'never' : (s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago');
@@ -195,7 +207,8 @@
             ? 'archive_mode is off — this database has no point-in-time recovery at all. Zero failures here means nothing is even being attempted. Run tools/backup.sh, and check with your database host.'
             : 'The last thing that happened was a FAILURE. Run tools/backup.sh for an independent dump, and raise it with your database host.'}</div>`
       + (b.failedCount > 0 && good
-        ? '<div class="note">Past failures are recorded here forever — what matters is that the most recent event was a success.</div>' : '');
+        ? '<div class="note">Past failures are recorded here forever — what matters is that the most recent event was a success.</div>' : '')
+      + alertRow;
   }
 
   function renderIntegrity(inv) {
@@ -322,6 +335,8 @@
       <div class="mod-row"><input id="m-ban-id" placeholder="account id"><button id="m-ban" class="danger">ban</button></div>
       <div class="mod-row"><input id="m-fund" placeholder="$OMR to reserve" size="10"><button id="m-fund-go">fund reserve</button></div>
       <div class="mod-row"><input id="m-push-h" placeholder="hours" size="5" value="48"><input id="m-push-m" placeholder="mult" size="5" value="2"><button id="m-push-go">start recruit drive</button></div>
+      <div class="mod-row"><button id="m-alert-go">send test alert</button>
+        <span class="note">proves INVARIANT_WEBHOOK_URL works — before you need it</span></div>
       <div id="m-out" class="note"></div>`;
     const out = (m, bad) => { const el = $('#m-out'); el.textContent = m; el.style.color = bad ? 'var(--bad)' : 'var(--dim)'; };
     $('#m-invite').onclick = async () => {
@@ -358,6 +373,13 @@
       if (!confirm(`Start a ${mult}× recruitment drive for ${hours}h? Referral CASH payouts multiply.`)) return;
       const r = await j('POST', '/v1/mod/referral/push', { hours, mult });
       out(r.code === 200 ? `drive live: ${r.body.mult}× for ${r.body.hours}h` : `error: ${r.body.message || r.code}`, r.code !== 200);
+    };
+    // No confirm() on this one — it is the only harmless button on the panel (it moves nothing and
+    // touches no player), and a drill you have to click twice is a drill you skip.
+    $('#m-alert-go').onclick = async () => {
+      out('sending…');
+      const r = await j('POST', '/v1/mod/alert/test');
+      out(r.code === 200 ? r.body.message : `error: ${r.body.message || r.code}`, r.code !== 200 || !r.body.configured);
     };
   }
 

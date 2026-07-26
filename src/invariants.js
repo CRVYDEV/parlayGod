@@ -451,8 +451,12 @@ export async function alertDrift(pool, failed, kind = 'ledger') {
 // shape passed to alertDrift carries a `name`; the ledger ones add lhs/rhs/drift, so those are named
 // explicitly and anything else falls back to its own JSON rather than printing "[object Object]".
 export function webhookText(kind, failed = []) {
-  const head = kind === 'backup' ? '🚨 OMERTÀ — BACKUPS ARE NOT RUNNING'
-    : `🚨 OMERTÀ — ${kind === 'ledger' ? '§10.4 ledger' : kind} invariant drift`;
+  // A drill must not read like an emergency. Without this the test alert arrives as "🚨 OMERTÀ — test
+  // invariant drift", which is exactly the message someone would panic at — and the point of the drill
+  // is to learn what a REAL one looks like, so it has to be unmistakably distinguishable from one.
+  const head = kind === 'test' ? '✅ OMERTÀ — alert test. This is a DRILL: alerting works, nothing is wrong.'
+    : kind === 'backup' ? '🚨 OMERTÀ — BACKUPS ARE NOT RUNNING'
+      : `🚨 OMERTÀ — ${kind === 'ledger' ? '§10.4 ledger' : kind} invariant drift`;
   const lines = (Array.isArray(failed) ? failed : [failed]).map((f) => {
     if (!f || typeof f !== 'object') return `• ${String(f)}`;
     if (f.drift !== undefined) return `• ${f.name}: drift ${f.drift} (balances ${f.lhs} vs ledger ${f.rhs})`;
