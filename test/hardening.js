@@ -847,6 +847,41 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   const read = await withCharacterRead(app.pool, aid, async (ch, client) =>
     ({ n: (await client.query('SELECT 1 AS one')).rows.length }));
   assert(read && read.n === 1, 'the read path can still query');
+
+  // 5. (red-team) A LEADING SELECT does not make a statement a read. An anchored check passes both
+  //    of these straight through, which would have made the guard weaker than it reads.
+  for (const sneaky of [
+    `SELECT 1; INSERT INTO notifications (id, character_id, type) VALUES ('d1-sneak','${rid}','x')`,
+    `WITH x AS (SELECT 1) INSERT INTO notifications (id, character_id, type) VALUES ('d1-cte','${rid}','x')`,
+  ]) {
+    let blocked = null;
+    try { await withCharacterRead(app.pool, aid, async (ch, client) => client.query(sneaky)); }
+    catch (e) { blocked = e; }
+    assert(blocked && /read path attempted a write/.test(blocked.message),
+      `the guard sees the write past a leading SELECT: ${sneaky.slice(0, 28)}…`);
+  }
+  //    …while an ordinary SELECT naming a column like `last_update` is NOT a false positive.
+  const ok = await withCharacterRead(app.pool, aid, async (ch, client) =>
+    ({ n: (await client.query("SELECT 1 AS updated_at, 2 AS last_update")).rows.length }));
+  assert(ok && ok.n === 1, 'a column named like a write keyword is not mistaken for one');
+
+  // 6. (red-team) The guard only protects a route that actually PASSES it. Three read routes were
+  //    handing their board the raw `pool` instead — statically write-free, so no bug, but entirely
+  //    outside the guard. A source-level tripwire, because that is a wiring mistake, not a runtime one.
+  const server = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8').split('\n');
+  const leaks = [];
+  for (let i = 0; i < server.length; i++) {
+    const m = /app\.get\('([^']+)'/.exec(server[i]);
+    if (!m) continue;
+    let end = Math.min(i + 14, server.length);
+    for (let j = i + 1; j < end; j++) if (/^\s*app\.(get|post|put|delete|patch)\(/.test(server[j])) { end = j; break; }
+    const body = server.slice(i, end).join('\n');
+    if (!body.includes('readCharacter')) continue;
+    const inner = body.slice(body.indexOf('=>', body.indexOf('readCharacter')) + 2);
+    for (const c of inner.matchAll(/\b[A-Z][A-Za-z]*\.[a-zA-Z]+\(([^)]*)\)/g))
+      if (c[1].split(',').map((a) => a.trim()).includes('pool')) leaks.push(`${m[1]} -> ${c[0]}`);
+  }
+  assert.equal(leaks.length, 0, `read routes must hand their board the guarded client, not the pool: ${leaks.join(' | ')}`);
 }
 
 console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, and the read path's write guard refuses — and does not land — an INSERT), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);

@@ -559,12 +559,18 @@ export async function withCharacterRead(pool, accountId, fn) {
 }
 
 // Reads are declared side-effect free; this makes the declaration enforceable rather than a comment.
-const WRITE_SQL = /^\s*(?:insert|update|delete|truncate|drop|alter|create|grant|revoke)\b/i;
+// Anchoring at the start of the statement is not enough on its own: a leading SELECT does not make a
+// statement a read, and both `SELECT 1; INSERT …` and `WITH x AS (…) INSERT …` sail straight past an
+// anchored check. So look for the write forms ANYWHERE too — in their multi-word shapes, which do not
+// appear by accident in a SELECT the way a bare `update` can (a column named `last_update` is safe:
+// the `_` is a word character, so \b does not match inside it).
+const WRITE_HEAD = /^\s*(?:insert|update|delete|truncate|drop|alter|create|grant|revoke)\b/i;
+const WRITE_ANY = /\b(?:insert\s+into|update\s+\w+\s+set|delete\s+from|truncate\b)/i;
 function readOnlyClient(client) {
   return {
     query: (text, params) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
-      if (WRITE_SQL.test(sql)) {
+      if (WRITE_HEAD.test(sql) || WRITE_ANY.test(sql)) {
         throw new Error(`read path attempted a write: ${sql.slice(0, 80)}`);
       }
       return client.query(text, params);
