@@ -3,7 +3,7 @@
 // closure it used to read directly (pool, auth), so nothing about what is mounted or how it is
 // authenticated moves with it; test/routes.js asserts the mounted surface is identical either way.
 import crypto from 'node:crypto';
-import { runLedgerInvariants } from '../invariants.js';
+import { runLedgerInvariants, alertDrift } from '../invariants.js';
 import { TAX, withdrawTaxBps } from '../rules.js';
 import * as Bonds from '../bonds.js';
 import * as Chain from '../chain.js';
@@ -103,6 +103,22 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       G.startReferralPush(pool, req.body?.hours, req.body?.mult));
     app.get('/v1/mod/referral/push', { preHandler: modAuth }, async () => G.referralPushStatus(pool));
     app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
+    // FIRE A TEST ALERT. Setting INVARIANT_WEBHOOK_URL is otherwise unverifiable: you find out whether
+    // it works the night the economy actually drifts, which is the worst possible moment to discover a
+    // typo. This posts through the SAME alertDrift path the real alarms use — same payload, same Slack
+    // `text` / Discord `content` keys, same swallowed-error behaviour — so a message arriving in the
+    // channel proves the whole chain, not just that the URL is a valid URL. It writes a telemetry row
+    // like any alert (visible in the activity feed) and moves no value.
+    app.post('/v1/mod/alert/test', { preHandler: modAuth }, async () => {
+      const configured = !!process.env.INVARIANT_WEBHOOK_URL;
+      await alertDrift(pool, [{ name: 'test alert', note: 'fired from /admin — this is a drill, nothing is wrong' }], 'test');
+      // `configured` is the honest answer to "did anything actually leave the building". alertDrift
+      // swallows a failed POST on purpose (an alarm must never take down the caller), so a 200 here
+      // means "we tried", not "it arrived" — say so rather than implying delivery.
+      return { ok: true, configured,
+        message: configured ? 'Test alert sent. If nothing arrives within a few seconds the URL is wrong or the channel was deleted — check the service logs for "invariant webhook failed".'
+          : 'INVARIANT_WEBHOOK_URL is not set on THIS service, so the alert only reached the log. Set it and redeploy.' };
+    });
     app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
     app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot
     app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed

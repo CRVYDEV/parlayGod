@@ -99,6 +99,13 @@ collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particula
       env group so both get it. A Slack or Discord webhook URL works as-is: the payload carries `text` and
       `content` alongside the structured fields, because those services 400 a body with neither and
       `alertDrift` swallows the error — a webhook that looked configured would have delivered nothing.
+      **Getting one (Discord, 60 seconds):** Server Settings → Integrations → Webhooks → New Webhook →
+      pick a channel → *Copy Webhook URL*. It looks like `https://discord.com/api/webhooks/<id>/<token>`.
+      **Slack:** api.slack.com/apps → your app → Incoming Webhooks → *Add New Webhook to Workspace*.
+      **Then PROVE it:** open `/admin` → Mod Tools → **send test alert**. A message must land in the
+      channel within seconds. `/admin`'s Backups panel also carries an *alerts reach you* line, so an
+      unset webhook is visible rather than discovered the night the ledger drifts. Treat the URL as a
+      password — anyone who has it can post into that channel.
 
 ## 3. The X integrations — the full checklist (one-click sign-in + social verification)
 All from https://developer.x.com (create a Project + App once). Every X surface degrades cleanly
