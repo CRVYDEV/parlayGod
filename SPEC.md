@@ -459,6 +459,14 @@ Verified by removing the handler and confirming the harness fails (it does, loud
 fix: interrupted sweeps settle each lot exactly once, ~80 killed backends leave §10.4 unmoved, and a full
 database outage produces 503s rather than 500s and **recovers unaided** with no redeploy.
 
+**It runs in CI**, on the real-Postgres job that already existed, on its own database so `pgcheck`'s
+fresh-database ledger leg still runs. Scenario 3 needs `pg_ctl` on the database host, which a service
+container cannot give it — the harness skips that one and its summary line stops claiming the outage
+path was covered, so run it by hand against a local Postgres before a deploy that touches the pool or a
+transaction boundary. `loadtest` joined it at a small field: a correctness gate, not a benchmark.
+A guard in `test/docs.js` fails if the workflow ever stops invoking one of them, because a harness that
+does not run is not a guard.
+
 **Then the same weapon was aimed at the two places where being wrong costs real value.** `runWageEpoch`
 MINTS $OMR against a lifetime endowment, one character per transaction; a resumed run is supposed to
 split only what the crash had not already spent. Killed at five points mid-payment and resumed, it pays
@@ -514,9 +522,11 @@ onboarding docs — not for retyping 55,000 lines.
 ## 6. Recommended sequence
 
 1. ~~**Wire `pgcheck` into CI** (D2).~~ **DONE** — `.github/workflows/ci.yml`.
-2. **Finish the lock-free read path** (D1). Days. Now blocked on a **design choice between three
-   measured options** (see D1), not on implementation — two attempts were built and rejected on
-   evidence. Still the highest architectural payoff.
+2. ~~**Finish the lock-free read path** (D1).~~ **DONE** — `withCharacterRead` / `readCharacter` wired
+   to all 24 authed read GETs, verified against real Postgres in `pgcheck` §8, red-teamed after
+   shipping. This entry said "blocked on a design choice" for a while after D1 was already finished,
+   which would have sent the next reader off to re-do it; `test/docs.js` now fails if a debt item is
+   struck through in §4 and still listed as outstanding here.
 3. ~~**Split `server.js`** into domain route modules (D3).~~ **DONE** — 220 routes into 18 modules,
    2,396 → 1,771 lines, route table proven identical, two new guards for what that diff can't see.
 4. ~~**Split `rules.js`** into generated + tail (D5).~~ **DONE** — machine-owned tables in one file,
@@ -530,6 +540,8 @@ onboarding docs — not for retyping 55,000 lines.
    machine-checked by `test/docs.js` + `test/routes.js` — five stale claims found and fixed, nine
    tripwires mutation-tested. See D7.
 
-**What is left.** D1 is the only substantial item, and it is waiting on a design decision rather than
-implementation. D6 (lock discipline by convention) and D8–D10 are accepted as-is with guards. Everything
-else on this list is done.
+**What is left. Nothing on this list.** Every numbered item is struck through. D6 (lock discipline by
+convention) is measured and accepted; D8–D10 are accepted as-is with guards; D11 is addressed and now
+runs in CI. What remains is not architecture: the founder's operational steps (the alert webhook, one
+production backup, the X token), the balance levers tracked in `SIGN-OFF.md`, and the chain track, which
+is gated on a third-party audit and legal counsel rather than on any work in this repo.

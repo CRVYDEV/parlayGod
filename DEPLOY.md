@@ -49,8 +49,11 @@ are set). Two Node processes over one Postgres DB. No build step.
       ```
       `PG_CTL` is optional — without it the full-outage scenario is SKIPPED and says so, rather than
       silently passing. On its first run it found the other half of the 2026-07-25 outage bug (see §7b):
-      a connection dying mid-transaction still killed the whole API. Run it after anything that touches
-      the pool, a transaction boundary, or a worker sweep.
+      a connection dying mid-transaction still killed the whole API.
+      **CI already runs everything except the full-outage scenario** (it needs `pg_ctl` on the database
+      host, which a service container has no way to provide). So the reason to run this by hand is
+      exactly that scenario — do it before any deploy that touches the pool, a transaction boundary, or
+      a worker sweep.
 - [ ] (chain path only — not needed for off-chain alpha) `cd omerta-contracts && forge test` on a real
       Foundry toolchain. **Still the pre-mainnet gate; egress-blocked in CI here.**
 
