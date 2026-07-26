@@ -21,6 +21,24 @@ envVarGroups:
         generateValue: true      # the secret seed behind Numbers/Track/Fight/goods price draws (§7.11)
       - key: MOD_KEY
         generateValue: true      # gates the /admin dashboard + mod tools — reveal it in the Render dashboard
+      # ── ONE-CLICK "SIGN IN WITH X" (optional; the whole path is DORMANT until both are set) ──
+      # Without these the entry screen offers the ghost door and a paste-a-token box for developers,
+      # which is not something to put in front of a normal player. With them, players sign in with one
+      # tap — and it is also what makes the "Follow OMERTÀ on X" First-Week task claimable at all, since
+      # that check reads the player's own X identity and a guest hasn't got one.
+      - key: X_CLIENT_ID
+        sync: false              # OAuth 2.0 Client ID from developer.x.com → your App → Keys and tokens.
+                                 # NOT the API Key: that is the older OAuth 1.0a pair and will not work.
+      - key: X_CLIENT_SECRET
+        sync: false              # ONLY if the X app is a CONFIDENTIAL client ("Web App, Automated App or
+                                 # Bot"). For a Public client leave this UNSET — sending a secret an app
+                                 # does not have, or omitting one it does, fails the token exchange with
+                                 # an unhelpful error. Match it to the app type you picked.
+      - key: PUBLIC_URL
+        sync: false              # your real origin, e.g. https://omerta.example.com — no trailing slash.
+                                 # The callback to register on the X app is EXACTLY this + the path:
+                                 #   https://omerta.example.com/v1/auth/x/callback
+                                 # X compares it byte-for-byte; a trailing slash or http:// is a mismatch.
       - key: INVARIANT_WEBHOOK_URL
         sync: false              # YOU paste this one: a Slack or Discord webhook URL. It is how the game
                                  # TELLS you something is wrong — the nightly §10.4 economy check and the
