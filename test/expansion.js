@@ -206,13 +206,13 @@ let gA, gB, bossA, bossB;
   assert(cop.incomeOwed > 0, 'a day of tribute has accrued');
   // §10.4: sov:income is a FAUCET that credits the treasury AND ledgers the row — net-zero to the
   // gang-treasuries check, so the check's drift (from the test's SQL-seeded treasuries) must NOT MOVE.
-  const driftBefore = (await inv0(pool)).checks.find((c) => c.name === 'gang treasuries').drift;
+  const driftBefore = (await inv0(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries').drift;
   const treBefore = Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${g}'`)).rows[0].treasury);
   r = await call('POST', '/v1/sov/collect', { token: boss.token });
   assert.equal(r.code, 200, `collect sov income: ${JSON.stringify(r.body)}`);
   assert(r.body.income >= 8000 - 100 && r.body.income <= 8000 + 100, `~one day's Outpost tribute banked (saw $${r.body.income})`);
   assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${g}'`)).rows[0].treasury), treBefore + r.body.income, 'the tribute hit the treasury');
-  const driftAfter = (await inv0(pool)).checks.find((c) => c.name === 'gang treasuries').drift;
+  const driftAfter = (await inv0(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries').drift;
   assert.equal(driftAfter, driftBefore, `sov:income is §10.4-neutral — the treasuries drift is unchanged (${driftBefore} → ${driftAfter})`);
   // a crumbling stronghold earns nothing (pay the pad first)
   await pool.query(`UPDATE sov_structures SET income_at = now() - interval '1 day', upkeep_at = now() - interval '5 days' WHERE district_id='canal'`);
@@ -306,7 +306,7 @@ let gA, gB, bossA, bossB;
   // drive the chain to completion via SQL (the faucet at claim is what we're isolating)
   await pool.query(`UPDATE campaign_progress SET step=2, done=0, completed=true WHERE character_id='${p.id}' AND campaign_id='bella_daughter'`);
 
-  const before = await runLedgerInvariants(pool);
+  const before = await runLedgerInvariants(pool, { alert: false });
   assert.ok(before.checks.find((c) => c.name === 'reason vocabulary')?.ok,
     `the reason vocabulary stays closed with sov:/campaign: live: ${JSON.stringify(before.checks.find((c) => c.name === 'reason vocabulary'))}`);
   const cashBefore = driftOf(before, 'character cash');
@@ -320,7 +320,7 @@ let gA, gB, bossA, bossB;
   assert.equal(r.code, 200, `ledger campaign claim: ${JSON.stringify(r.body)}`);
   assert.ok(r.body.cash > 0, 'the campaign faucet paid cash');
 
-  const after = await runLedgerInvariants(pool);
+  const after = await runLedgerInvariants(pool, { alert: false });
   assert.ok(after.checks.find((c) => c.name === 'reason vocabulary')?.ok, 'vocabulary still closed after the new-reason flows');
   // both new reasons ledger exactly → the window moves NO check's drift (the pre-existing seed pollution is
   // captured in `before`). A faucet lifts lhs+rhs together; a sink drops both together — net drift delta 0.

@@ -25,7 +25,7 @@ const mk = async (name) => {
   return { token, id: (await meOf(token)).id };
 };
 const seedCh = (id, cols) => pool.query(`UPDATE characters SET ${cols} WHERE id='${id}'`);
-const escrowOk = async () => (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'market escrow');
+const escrowOk = async () => (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'market escrow');
 
 const sal = await mk('Seller Sal');       // lists the iron
 const bea = await mk('Bidder Bea');       // wins auctions
@@ -322,7 +322,7 @@ assert.equal(r.code, 200, 'a tiny goods listing');
 assert.equal(r.body.fee, MARKET.LIST_FEE_MIN, 'the broker halves the %, but the anti-spam floor still holds');
 
 // ── the vocabulary stays closed ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `market:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
 
 console.log('✅ Black Market test passed — listing gates (fee/floor/escrow guards: melt+fence refuse listed iron), car auction (bid floor, 5% min-raise, outbid refund exact, self-raise diff-only, buy-now instant settle, 2% take carved FROM the hammer as one NULL row), goods district-pinned partial buys + trunk-space reclaim, worker expiry settle + lapse, death (seller listings void with bids refunded, dead man\'s bids burn) + STEP TWO: hidden reserves (board flags met/not, under-reserve lapse refunds the bidder), anti-snipe soft close, standing BUY ORDERS (escrow at post, dock-pinned fills paid minus the take, warehouse claim, un-filled cancel/expiry refunds, dead-poster burn) + AUDIT: buying a buy-order rejected (no minting from escrow, C1), a self-raise never extends the clock (M2), the broker fee never dips below the floor (LOW-1), §10.4 market escrow + vocabulary');

@@ -349,7 +349,7 @@ assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.to
 
 // ── §10.4: rwa:invest is a recognized burn; dividend:* are TRANSFERS (pool ↔ account, both inside
 // omrBuckets), so the ONLY drift is the unledgered SQL grants ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `rwa: rides the omr vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');

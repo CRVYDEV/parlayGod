@@ -221,7 +221,7 @@ assert.equal((await call('POST', '/v1/races/gp', { token: gpd[0].token, body: { 
 const gpId = (await pool.query("SELECT id FROM grand_prix WHERE status='open'")).rows[0].id;
 assert.equal(Number((await pool.query(`SELECT pool FROM grand_prix WHERE id='${gpId}'`)).rows[0].pool), 4 * GP.BUYIN, 'the pool holds all four buy-ins');
 // escrow mid-open: the §10.4 grand-prix-escrow check reconciles
-assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow reconciles mid-open');
+assert((await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow reconciles mid-open');
 // one driver's street DIES before the flag — his stake burns at settle
 await pool.query(`UPDATE characters SET alive=false WHERE id='${gpd[3].id}'`);
 const winPre = await gpSum('race:gp:win'), takePre = -(await gpSum('race:gp:take')), deathPre = -(await gpSum('race:gp:death'));
@@ -234,7 +234,7 @@ assert.equal(win2 + take2 + death2, 4 * GP.BUYIN, 'buy-ins == prizes + house tak
 const placed = (await pool.query(`SELECT place FROM grand_prix_entries WHERE gp_id='${gpId}' AND place IS NOT NULL ORDER BY place`)).rows;
 assert.equal(placed.length, 3, 'the three LIVE runners were ranked (the dead man is not)');
 assert((await pool.query('SELECT current FROM grand_prix_state WHERE id=1')).rows[0].current === null, 'the state cleared for the next race');
-assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow holds after settle');
+assert((await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'grand prix escrow')?.ok, 'the grand-prix escrow holds after settle');
 // a SHORT grid (< MIN_ENTRANTS) is refunded, not raced
 const sf1 = await mk('Short Grid 1'); const sf2 = await mk('Short Grid 2');
 for (const d of [sf1, sf2]) { await pool.query(`UPDATE characters SET respect=9000 WHERE id='${d.id}'`); await seedCash(d.id, 100000); }
@@ -252,7 +252,7 @@ const lb = (await call('GET', '/v1/leaderboard/races', { token: racer.token })).
 assert(lb.drivers.find((d) => d.name === 'Speed Demon' && d.wins >= 2), 'the racer ranks on THE WHEEL');
 
 // ── §10.4: every race:* row is character_id'd → the per-character cash check reconciles ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `race: rides the cash vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');

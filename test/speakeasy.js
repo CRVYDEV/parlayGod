@@ -310,7 +310,7 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasies WHERE 
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM speakeasy_patrons WHERE district_id='neon'`)).rows[0].n), 0, 'the guest list reset for the new proprietor');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles the speakeasy: vocabulary ──
-let inv = await runLedgerInvariants(pool);
+let inv = await runLedgerInvariants(pool, { alert: false });
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cashCheck.drift, cashDrift, `the only cash drift is the test's unledgered grants (${cashDrift}) — speakeasy: reconciles`);
 let vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
@@ -328,7 +328,7 @@ assert(board.open.includes('neon'), 'the district is open for a new proprietor')
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM store_cosmetics WHERE account_id='${owner.aid}' AND style='deco'`)).rows[0].n), 1, 'the decor cosmetic survives (account-level, the patron-badge precedent)');
 
 // §10.4 still holds after the estate (the club/guest-list wipe moves no currency)
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'vocabulary still closed');
 

@@ -130,7 +130,7 @@ assert.equal(Number(lootRow.amount), Math.floor(markCash * Math.min(0.5, M3.CASH
   process.env.SEASON_MOD = 'blood_in_the_streets'; }
 
 // ── §10.4: every modified number rode the normal rails — the sweep stays exact ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const cash = inv.checks.find((c) => c.name === 'character cash');
 assert.equal(cash.drift, 3_300_000, `cash drift == the SQL seeds only (modified prices ledger exactly): ${cash.drift}`);
 

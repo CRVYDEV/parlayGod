@@ -342,7 +342,7 @@ assert.equal((await call('POST', '/v1/world/kryl/invade', { token: rookieBoss.to
 
 // (5) §10.4 — the gang-treasuries check reconciles world:tribute (+) and world:invade (−); the only
 // unexplained drift is the SQL-seeded rival treasury (fully-earned tribute needs no seed)
-const gt = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const gt = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert.equal(gt.lhs - gt.rhs, RIVAL_SEED, 'gang treasuries reconcile world:tribute/world:invade — drift == the rival seed only');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ assert.equal(kr.held_by_gang, rivalGang, 'a REINFORCED outpost REPELS the uprisi
 assert.equal(Number(kr.garrison), need + 50000, 'the garrison is untouched on a repel');
 
 // (5) §10.4 — the gang-treasuries check still reconciles with world:reinforce as a treasury SINK
-const gt2 = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const gt2 = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert.equal(gt2.lhs - gt2.rhs, RIVAL_SEED, 'gang treasuries reconcile world:reinforce (a sink) — drift == the rival seed only');
 delete process.env.WORLD_UPRISING; // clear the test knob
 
@@ -423,7 +423,7 @@ assert.equal(Math.round(bustProbOf(indicted, noonUTC) / bustProbOf(indicted, nig
 // ─────────────────────────────────────────────────────────────────────────────
 // §10.4 — the Living World: vocabulary is closed (world:raid cash faucet + ammo sink)
 // ─────────────────────────────────────────────────────────────────────────────
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `world:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
 console.log('✅ test/world.js — the Living World across all four phases + STEP TWO (roster 3→5, THE WAR EFFORT, ENRAGED CARTELS) + STEP THREE — CO-OP CREW RAIDS (plan/board/join/go, solo-outfit + crew_short + not_leader gates, a crew ROUTS an apex outfit, leader-weighted world:raid shares ledgered per head + ammo sink, war effort banked to both) + THE FRONTIER (the routing family plants its flag — board heldBy + the conquest leaderboard, dies with the family) + STEP FOUR — THE FRONTIER MADE REAL (a rout installs a garrison + tribute clock; a member collects the outpost’s TRIBUTE to the treasury — a ledgered world:tribute faucet capped at 24h; a rival INVADES by outbidding the garrison — a ledgered world:invade sink transferring the flag/garrison/clock; rank/unheld/held gates; the gang-treasuries §10.4 check reconciles both) + STEP SIX — THE UPRISING (the cartels push back: a seed-drawn forecast-able uprising raises an outfit’s defense + suspends its tribute; REINFORCE the garrison — a ledgered world:reinforce treasury SINK, not_held/amount gates; THE RECKONING — an undefended held outpost is RECLAIMED by the rising outfit (§10.4-neutral), a reinforced one REPELS it; idempotent worker sweep; the gang-treasuries §10.4 check reconciles the reinforce sink)');

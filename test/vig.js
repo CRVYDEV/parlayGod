@@ -145,7 +145,7 @@ assert.equal(r.body.status, 'signed', 'A6: a further withdrawal signs against th
 assert(vig.invariants.summary.extracted <= vig.invariants.summary.funded + 1e-9, 'A6: extraction never exceeds the funded reserve');
 
 // ── (7) §10.4 in-game conservation holds with the prize mint + PLEX/withdraw burns + the trade source in the mix ──
-assert((await runLedgerInvariants(pool)).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns; trade revenue is out-of-band)');
+assert((await runLedgerInvariants(pool, { alert: false })).ok, '§10.4 in-game ledger still balances (prize:omr mint offset by plex:* + withdraw:omr burns; trade revenue is out-of-band)');
 
 console.log('✅ Vig test passed — real revenue → 60/40 split → buyback (spend ≤ inflow) → reserve+prize → prize payout → PLEX bridge (pay fees in earned $OMR) → real Vig-funded withdrawal + TIER A: a TRADE-fee source (the afterSwap→Vig hook rail) splits/buys/reconciles end-to-end and WIDENS extraction≤inflow, §10.4 untouched — the extraction-≤-inflow invariant + §10.4 conservation holding throughout');
 await app.close();

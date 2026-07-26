@@ -106,7 +106,7 @@ assert(lb.fighters[0] && lb.fighters[0].fighter === 'The Bull' && lb.fighters[0]
 assert(lb.legend.find((m) => m.manager === 'Don King' && m.wins === 2), 'the manager legend ranks Don King by career wins');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles boxing: incl. the exhibition faucet ──
-let inv = await runLedgerInvariants(pool);
+let inv = await runLedgerInvariants(pool, { alert: false });
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, `the only cash drift is the test grants (${cashDrift}) — boxing: (bout/purse/fee/train/recruit) all reconcile`);
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'boxing: rides the §10.4 vocabulary');
 
@@ -148,7 +148,7 @@ const card = meBoard.mainEvents.find((m) => m.id === boutId);
 assert(card && card.a.pool + card.b.pool === winBet1 + winBet2 + loseBet, 'the board shows the live pools');
 assert.equal(card.yourBet.amount, winBet1, 'the board shows your own bet');
 // §10.4 escrow reconciles mid-window (bets are transfers into the pot)
-let inv2 = await runLedgerInvariants(pool);
+let inv2 = await runLedgerInvariants(pool, { alert: false });
 const esc = (i) => i.checks.find((c) => c.name === 'boxing bet escrow');
 assert(esc(inv2).ok && esc(inv2).lhs === winBet1 + winBet2 + loseBet, 'escrow == the sum of live bets');
 assert.equal(inv2.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash still reconciles with escrowed bets');
@@ -182,7 +182,7 @@ assert.equal(await boxingWins(cc.aid), 1, 'the manager legend banked the main-ev
 assert.equal((await pool.query(`SELECT booked_until FROM fighters WHERE id='${goliath}'`)).rows[0].booked_until, null, 'the fighters are unbooked after the bell');
 // (R34) Goliath still won despite David's post-bell live stats being maxed — the snapshot defeated the rig. Restore David.
 await pool.query(`UPDATE fighters SET power=${davidLive.power}, chin=${davidLive.chin}, speed=${davidLive.speed} WHERE id='${david}'`);
-let inv3 = await runLedgerInvariants(pool);
+let inv3 = await runLedgerInvariants(pool, { alert: false });
 assert(esc(inv3).ok && esc(inv3).lhs === 0, 'the escrow empties after resolution');
 assert.equal(inv3.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles after payout (bets/wins/purse are transfers)');
 
@@ -211,7 +211,7 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: 
 assert.equal((await pool.query(`SELECT status FROM boxing_bouts WHERE id='${bout2}'`)).rows[0].status, 'cancelled', "a dead principal's card is cancelled");
 assert.equal((await meOf(bet1.token)).cash, bet1Pre + 15000, 'the crowd is refunded when the card is cancelled');
 assert.equal((await pool.query(`SELECT booked_until FROM fighters WHERE id='${goliath}'`)).rows[0].booked_until, null, 'the surviving fighter is freed');
-let inv4 = await runLedgerInvariants(pool);
+let inv4 = await runLedgerInvariants(pool, { alert: false });
 assert(esc(inv4).ok && esc(inv4).lhs === 0, 'escrow reconciles through the death-cancel');
 assert.equal(inv4.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'per-character cash reconciles through the cancel');
 
@@ -288,7 +288,7 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: 
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM fighters WHERE character_id='${aa.id}'`)).rows[0].n), 0, "the dead manager's stable is gone");
 assert.equal((await pool.query('SELECT holder_fighter FROM boxing_title WHERE id=1')).rows[0].holder_fighter, null, 'the belt is vacated when the champion dies');
 assert.equal(await boxingWins(aa.aid), 3, 'the career legend (account-level) SURVIVES death — the heir keeps it (exhibition + bout + belt defense)');
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, 'cash §10.4 holds through the estate');
 
 console.log('✅ The Fight Circuit test passed — recruit/THE STABLE (level/name/cash gates + cap at STABLE_MAX + rolled stats), train-by-id (gates + sink + ownership), the NPC EXHIBITION (bad-tier gate, fee-sink + purse-faucet on a win, the career-win bank, the per-fighter cooldown), the PvP BOUT (ownership/self/limit gates, the taxed transfer + rake split half→buyback, records + injury), THE TITLE BELT (claimed vacant, chip on the board, vacated on the champion\'s death), the MANAGER LEGEND (lifetime wins, leaderboard, SURVIVES death), STEP THREE — THE MAIN EVENT (announce gates + consent-by-listing, booked-form freeze, CASH parimutuel betting with escrow + gates, the worker resolution: winners split the losers net of vig / the promoter purse / half-vig→buyback / the manager legend, the board pools, DEATH cancels a booked card + refunds the crowd, and the boxing-bet-escrow §10.4 check), STEP FOUR — THE CORNERMAN (Underworld fixture — training ×0.9 cash at tier 1, +2 build at tier 3, the weekly stable patch-up favor) + BELT DEFENSE (a win while holding the belt is a DEFENSE that grows the reign; the mandatory-defense clock + #1 contender on the board; an inactive champion is STRIPPED by the worker), STEP FIVE — THE CALLOUT (only the #1 contender can call out the champ, self/not-contender/one-at-a-time gates, the board shows the pending challenge + accept clock; DUCK IT → the belt forfeits straight to the challenger; ACCEPT IT → a TITLE main event is booked, the callout consumed, both fighters locked, the board flags the title fight), the board + leaderboard, DEATH (the stable dies with the street), and §10.4 (per-character cash reconciles boxing: incl. the exhibition faucet)');

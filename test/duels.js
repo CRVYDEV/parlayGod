@@ -168,7 +168,7 @@ assert.equal(r.body.you.titles, titlesAfter, 'the title count surfaces on the bo
 assert.equal(r.body.you.titleRank, 'Belt Holder', 'and the title rank');
 
 // ── §10.4: the duel: vocabulary + per-character cash reconciles both sides ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `duel: rides the cash vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const cash = inv.checks.find((c) => c.name === 'character cash');

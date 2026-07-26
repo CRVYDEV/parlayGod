@@ -272,7 +272,7 @@ const lb = (await call('GET', '/v1/leaderboard/heists', { token: hank.token })).
 assert(lb.crews.some((c) => c.name === 'Heist Hank'), 'the notorious crew is on the board');
 
 // ── §10.4: the vocabulary knows every heist reason (incl. heist:fence) ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `heist:crew*/heist:inside/heist:fence ride the 'heist' prefix (${JSON.stringify(vocab.unknown || [])})`);
 
 console.log('✅ Crew heists test passed — board/gates, scored job (weighted split, exact ledgered shares, shared cooldown), shared-jail bust, THE RAT, disband/leave/stale refunds + STEP TWO: roles + the INSIDE JOB + TIER-4: the 12-job ladder, THE CASING phase (energy spent, board flag, no double-case), THE FENCE (a hot score banks loot not cash, fenced to cash at the drifting rate, hot loot on the board), the NOTORIETY gate on the marquee jobs + the crew leaderboard, and §10.4 (heist:fence rides the heist prefix)');

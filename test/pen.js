@@ -487,7 +487,7 @@ assert(new Date(ratMnAfter.jail_until).getTime() < new Date(ratLdAfter.jail_unti
 assert(new Date(ratMnAfter.hole_until) > new Date(), 'and is holed WITH the crew so the roster never outs them');
 
 // ── §10.4: the Pen vocabulary is closed ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
 // ── SIGN-OFF (Pen T3): 'quiet' is weighted up so the yard isn't hard-blocked ~40% of days ──

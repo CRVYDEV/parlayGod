@@ -75,7 +75,7 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', payload: { characterId: 
 assert.equal((await call('GET', '/v1/landmarks')).body.landmarks.find((l) => l.district === 'neon').holder, 'Sollozzo', 'the monument outlives the man');
 
 // ── §10.4: vanity:landmark rides vanity:% — the only $OMR drift is the unledgered SQL grant ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `vanity:landmark rides the omr vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');

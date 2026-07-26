@@ -37,7 +37,7 @@ const mk = async (name, seed) => {
   return { token, id: ch.id };
 };
 const escrowOk = async (label) => {
-  const c = (await runLedgerInvariants(pool)).checks.find((x) => x.name === 'ring poker escrow');
+  const c = (await runLedgerInvariants(pool, { alert: false })).checks.find((x) => x.name === 'ring poker escrow');
   assert.equal(c.drift, 0, `${label}: ring escrow reconciles (${c.drift})`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -223,7 +223,7 @@ const bWins = await flow('casino:tourney:win');
 const bTake = -(await flow('casino:tourney:take'));
 assert.equal(bBuyins, 8 * CASINO.TOURNEY.BUYIN, 'eight buy-ins escrowed');
 assert.equal(bWins + bTake, bBuyins, 'the final paid the whole pool: winners + the take == every buy-in');
-const trCheck = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'poker tourney escrow');
+const trCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'poker tourney escrow');
 assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the bracket (${trCheck.drift})`);
 
 // ── (red-team HIGH) a runner who DIES mid-bracket burns their stake in a NON-terminal round, and the
@@ -244,7 +244,7 @@ assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the br
   const deadBurn = -Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:tourney:death' AND counterparty='${dbid}'`)).rows[0].s);
   assert.equal(deadBurn, CASINO.TOURNEY.BUYIN, 'the dead runner\'s stake burned');
   assert.equal(Number(st.pool), 7 * CASINO.TOURNEY.BUYIN, 'and the pool DROPPED by the burn (the drift fix)');
-  const dCheck = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'poker tourney escrow');
+  const dCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'poker tourney escrow');
   assert.equal(dCheck.drift, 0, `the escrow identity holds at the OPEN mid-bracket death state (${dCheck.drift})`);
   await sleep(10); await sweepTournaments(pool); // settle the final so the one-open slot frees
 }

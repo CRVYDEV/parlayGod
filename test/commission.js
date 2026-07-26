@@ -205,7 +205,7 @@ assert.equal(r.forfeited, 1, 'one motion failed → forfeited');
 assert.equal(await treasuryOf(bosses[1].gang), t0 + COMMISSION.PROPOSAL_DEPOSIT, 'the pax deposit came home');
 assert.equal(await poolOf(), p0 + COMMISSION.PROPOSAL_DEPOSIT, "the levy deposit fell to the confiscation pool");
 assert.equal((await pool.query("SELECT COUNT(*) n FROM commission_proposals WHERE status='open'")).rows[0].n, '0', 'the table is clear');
-{ const inv = await runLedgerInvariants(pool);
+{ const inv = await runLedgerInvariants(pool, { alert: false });
   const esc = inv.checks.find((c) => c.name === 'commission escrow');
   assert.equal(esc.drift, 0, `the commission escrow reconciles (posted − refunded − forfeited): ${esc.drift}`); }
 
@@ -231,7 +231,7 @@ assert(headTake > 0 && lastTake > 0, 'every seated family collected');
 assert(Math.abs(headTake / lastTake - 5) < 0.01, `the head seat takes 5× the last seat (${(headTake / lastTake).toFixed(2)})`);
 
 // ── no decree moves money: the vocabulary stays closed ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `no new reasons (${JSON.stringify(vocab.unknown || [])})`);
 
 // ══════════ TIER-4 — THE STATESMAN · THE OVERRIDE · THE RECORD · 3 NEW DECREES ══════════
@@ -318,7 +318,7 @@ for (const id of ['smugglers_moon', 'open_roads', 'blood_oath'])
   assert(book.includes(id), `the ${id} decree is on the books`);
 
 // ── §10.4 stays exact across the Tier-4 actions (statecraft/override move no money; deposits ride the step-three vocabulary) ──
-{ const inv = await runLedgerInvariants(pool);
+{ const inv = await runLedgerInvariants(pool, { alert: false });
   assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'no new reasons from the Tier-4 politics');
   assert.equal(inv.checks.find((c) => c.name === 'commission escrow').drift, 0, 'the commission escrow still reconciles'); }
 // reseat the chamber for the season-rollover assertion below (the ENACTED settle didn't touch season standings)

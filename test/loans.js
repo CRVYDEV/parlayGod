@@ -31,7 +31,7 @@ const cashOf = async (id) => Number((await rawCh(id)).cash);
 const poolCash = async () => Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
 const ledgerOf = async (chId, reason) => Number((await pool.query(
   `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id='${chId}' AND currency='cash' AND reason='${reason}'`)).rows[0].s);
-const check = async (name) => (await runLedgerInvariants(pool)).checks.find((c) => c.name === name);
+const check = async (name) => (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === name);
 
 // ── offer: escrow the principal ──
 const shark = await mk('Sharky Sam');

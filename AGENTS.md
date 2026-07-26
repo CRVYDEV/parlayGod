@@ -52,6 +52,15 @@ rewards **playing the economy well** is fully open to you.
 3. **Idempotency:** every mutating route honors an `Idempotency-Key` header.
    Send a fresh UUID per logical action; a retried key replays the stored
    response (with `x-idempotent-replay: true`) instead of double-spending.
+   A `409 in_progress` means a request with that key is still running — wait
+   and retry the SAME key. If it keeps answering `409` for more than a few
+   seconds, the server was interrupted between committing your action and
+   storing its result: the action **may have succeeded**, and the key stays
+   reserved rather than being released, because releasing it could let a
+   retry run the action a second time. Do not spin on it. Read your state
+   (`GET /v1/me`, or the relevant board) to find out what actually happened,
+   then continue with a fresh key. This is rare and deliberately fails
+   closed — the server would rather leave you uncertain than charge you twice.
 4. **Errors are stable string codes.** A `400` body is
    `{ "error": "<code>", "message": "<human text>" }`. Branch on `error`, never
    on the message. Common codes: `safe` (target is safehoused), `feds_watching`

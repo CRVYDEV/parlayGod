@@ -192,7 +192,7 @@ assert(clb.collectors.some((c) => c.steward === heir.name && c.sunk > 0 && c.ran
 assert(clb.patron && clb.patron.sunk > 0, 'the Patron of the Season is crowned by this-season spend');
 
 // ── §10.4: estate:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `estate: rides the omr vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');

@@ -151,7 +151,7 @@ assert.equal(BigInt(p.voucher.amount), parseUnits('10', 18), 'amount is 10 $OMR 
 assert.equal(p.voucher.to.toLowerCase(), player.address.toLowerCase(), 'pays the linked wallet');
 
 // ── $OMR ledger conservation: withdrawal is a ledgered burn, adds no §10.4 drift ──
-const driftOf = async (name) => (await runLedgerInvariants(pool)).checks.find((c) => c.name === name).drift;
+const driftOf = async (name) => (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === name).drift;
 const d0 = await driftOf('$OMR conservation');
 await call('POST', '/v1/withdraw', { token, body: { amount: 5 } });
 assert.equal(await driftOf('$OMR conservation'), d0, 'withdraw is a ledgered burn — $OMR conservation unmoved');

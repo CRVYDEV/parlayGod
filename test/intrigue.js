@@ -93,7 +93,7 @@ let spy, mark, secretId;
   // §10.4 delta around the hush: the taxed transfer reconciles exactly
   const driftOf = (inv) => { const c = inv.checks.find((x) => x.name === 'character cash'); return c.lhs - c.rhs; };
   await setCash(mark.id, 200000);
-  const before = await runLedgerInvariants(pool);
+  const before = await runLedgerInvariants(pool, { alert: false });
   const cash0 = driftOf(before);
   const spyCash0 = (await meOf(spy.token)).cash;
   r = await call('POST', `/v1/secrets/${secretId}/pay`, { token: mark.token });
@@ -101,7 +101,7 @@ let spy, mark, secretId;
   assert.equal((await meOf(mark.token)).cash, 100000, 'the mark paid the demand');
   const fee = Math.ceil(100000 * 0.01), tax = Math.ceil(100000 * 0.01);
   assert.equal((await meOf(spy.token)).cash, spyCash0 + 100000 - fee - tax, 'the holder nets 98%');
-  const after = await runLedgerInvariants(pool);
+  const after = await runLedgerInvariants(pool, { alert: false });
   assert.equal(driftOf(after) - cash0, 0, 'the hush transfer is §10.4-exact (delta-0)');
   assert.ok(after.checks.find((c) => c.name === 'reason vocabulary')?.ok, 'secret: is vocabularied');
   // the secret is consumed — no double-collect
