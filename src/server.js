@@ -49,6 +49,23 @@ import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
 import * as Rwa from './rwa.js';
 import { register as registerCasino } from './routes/casino.js';
+import { register as registerPen } from './routes/pen.js';
+import { register as registerSpeakeasy } from './routes/speakeasy.js';
+import { register as registerPort } from './routes/port.js';
+import { register as registerKitchen } from './routes/kitchen.js';
+import { register as registerTerritory } from './routes/territory.js';
+import { register as registerBoxing } from './routes/boxing.js';
+import { register as registerRaces } from './routes/races.js';
+import { register as registerLaw } from './routes/law.js';
+import { register as registerEstate } from './routes/estate.js';
+import { register as registerStable } from './routes/stable.js';
+import { register as registerConvoy } from './routes/convoy.js';
+import { register as registerHeists } from './routes/heists.js';
+import { register as registerUnderworld } from './routes/underworld.js';
+import { register as registerDiplomacy } from './routes/diplomacy.js';
+import { register as registerSov } from './routes/sov.js';
+import { register as registerLeaderboards } from './routes/leaderboards.js';
+import { register as registerModTools } from './routes/modtools.js';
 import * as Phone from './phone.js';
 import * as Mega from './megaproject.js';
 import * as Duels from './duels.js';
@@ -275,11 +292,35 @@ export async function buildServer() {
   const modAuth = async (req, reply) => {
     if (!modKeyOk(req.headers['x-mod-key'])) return reply.code(401).send({ error: 'mod_auth' });
   };
-  // AUDIT-full-system-v2 D-MED2: real-ETH revenue (vig/pol/rwa) is booked ONLY from the on-chain
-  // watcher observing a genuine event — a mod comp/QA route must never fabricate it. So mod routes
-  // pass their caller-supplied txHash through this gate: it survives only when ALLOW_MOD_REAL_REVENUE=on
-  // (a QA-only escape hatch, default OFF), so a production comp can't book unbacked withdrawal reserve.
-  const modRealTxHash = (req) => (process.env.ALLOW_MOD_REAL_REVENUE === 'on' ? (req.body?.txHash || null) : null);
+
+  // ── the live intel-feed socket registry ────────────────────────────────────────────────────────
+  // Declared here, above the route registrations, because routes in the extracted src/routes modules
+  // need the two close helpers passed in — a `const` further down would be in its temporal dead zone
+  // at register time. The websocket route itself lives below and closes over the same map.
+  //
+  // (red-team R4 auth F1) The connect-time banned check only guards NEW connections, so a mid-session
+  // ban left an already-open socket feeding streets/gang chatter until the client chose to disconnect,
+  // falsifying the documented "banned-WS close" guarantee. The ban handler closes every open socket.
+  const wsClients = new Map(); // accountId -> Set<socket>
+  // close every live socket for an account (its own 'close' handler tears down the bus subs + registry)
+  const closeAccountSockets = (accountId, code, reason) => {
+    const s = wsClients.get(accountId); if (!s) return;
+    for (const sock of [...s]) { try { sock.close(code, reason); } catch { /* already gone */ } }
+  };
+  // (red-team R26 WS) A killed character's account is left GANGLESS (runEstate → removeMember; the heir is
+  // born with no family), but its live socket keeps the dead street's `gang:` subscription — a stale mole
+  // into the former family's private war/contract/tribute/racket feed. runEstate can't reach wsClients
+  // (a buildApp closure), so the KILL ROUTES must close the victim's sockets post-COMMIT, mirroring the
+  // leave/kick fix (R9). Look the account up server-side by the victim CHARACTER id (the row survives as
+  // alive=false — never deleted), never exposing the account UUID. Non-fatal like kick: a throw here would
+  // surface a 5xx AFTER the kill committed → the onSend idempotency release → a retry re-runs the kill.
+  const closeSocketsOnKill = async (result, victimCharId) => {
+    try {
+      if (!(result && (result.kill === true || result.killed === true)) || !victimCharId) return;
+      const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [victimCharId])).rows[0];
+      if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
+    } catch (e) { console.error('kill socket-close (post-commit, non-fatal)', e?.code || e); }
+  };
 
   // ── M5 hardening hooks: §10.2 rate limits + §5 idempotency keys ──
   // Applied to mutating player endpoints (auth/mod routes are excluded).
@@ -600,7 +641,7 @@ export async function buildServer() {
   // ── ASSETS & RACKETS → Tier 4 ──
   app.post('/v1/rackets/:id/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.upgradeRacket(ch, req.params.id, client, h)));
-  app.get('/v1/leaderboard/tycoons', async () => E.tycoonLeaderboard(pool));
+  registerLeaderboards(app, { pool, auth, modAuth });
 
   // ── M2: swap, staking, gear (§7.12 / §5.4) ──
   app.post('/v1/swap', { preHandler: auth }, async (req) =>
@@ -669,35 +710,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.declareWar(ch, req.params.targetGangId, client, h)));
   app.post('/v1/districts/:id/seize', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.seizeDistrict(ch, req.params.id, client, h)));
-  // Risk-to-Earn Phase 3: territory rackets — establish/upgrade an operation on your turf, collect
-  // its income, and lose it (with the district) to whoever seizes the turf.
-  app.post('/v1/territory/:districtId/establish', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.establishRacket(ch, req.params.districtId, req.body?.kind, client, h)));
-  app.post('/v1/territory/:districtId/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.upgradeRacket(ch, req.params.districtId, client, h)));
-  app.post('/v1/territory/collect', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.collectTerritory(ch, client, h)));
-  // recurring sinks: a boss/underboss pays the pad on the family's operations from the treasury
-  app.post('/v1/territory/upkeep', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.payTerritoryUpkeep(ch, client, h)));
-  // step four — the racket-wars layer: fortify your own op (treasury sink) / raid a rival's for a cut
-  app.post('/v1/territory/:districtId/fortify', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.fortifyRacket(ch, req.params.districtId, client, h)));
-  app.post('/v1/territory/:districtId/raid', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.raidRivalRacket(ch, req.params.districtId, client, h)));
-  // step five — racket specialists + special operations
-  app.post('/v1/territory/:districtId/specialist', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.assignSpecialist(ch, req.params.districtId, req.body?.memberId, client, h)));
-  app.delete('/v1/territory/:districtId/specialist', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.unassignSpecialist(ch, req.params.districtId, client, h)));
-  app.post('/v1/territory/:districtId/op', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Territory.runTerritoryOp(ch, req.params.districtId, client, h)));
-  app.get('/v1/territory', { preHandler: auth }, async (req) => {
-    const gid = (await pool.query('SELECT gang_id FROM gang_members WHERE character_id=(SELECT id FROM characters WHERE account_id=$1 AND alive)', [req.user.sub])).rows[0]?.gang_id;
-    if (!gid) return { territory: [], syndicate: null };
-    return { territory: await Territory.territoryOf(pool, gid), ...(await Territory.territorySyndicate(pool, gid)) };
-  });
-  app.get('/v1/leaderboard/territory', { preHandler: auth }, async () => Territory.territoryLeaderboard(pool)); // THE EMPIRE board
+  registerTerritory(app, { pool, auth });
 
   // Business Empire — the premium, acquired-later personal front layer: buy/upgrade venues that
   // farm pocket cash and double as private, lower-heat laundering. GET /v1/catalog is the public
@@ -871,174 +884,20 @@ export async function buildServer() {
     return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
       Business.takeoverBusiness(ch, victim, req.params.id, client, h));
   });
-  app.get('/v1/leaderboard/launderers', async () => ({ launderers: await Business.laundererLeaderboard(pool) }));
   app.get('/v1/business', { preHandler: auth }, async (req) => {
     const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
     return { businesses: cid ? await Business.businessesOf(pool, cid) : [] };
   });
 
-  // THE SPEAKEASY — the social hub: a club per district, the proprietor's front + the being-seen economy.
-  app.get('/v1/speakeasy', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    return Speakeasy.speakeasyBoard(pool, cid || '');
-  });
-  app.post('/v1/speakeasy/:districtId/open', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.openSpeakeasy(ch, req.params.districtId, client, h)));
-  app.post('/v1/speakeasy/collect', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.collectSpeakeasy(ch, client, h)));
-  app.post('/v1/speakeasy/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.upgradeSpeakeasy(ch, client, h)));
-  app.post('/v1/speakeasy/name', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.nameSpeakeasy(ch, req.body?.name, client, h)));
-  app.post('/v1/speakeasy/:districtId/bottle', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.bottleService(ch, req.params.districtId, req.body?.bottle, client, h)));
-  // buy a round: two-party (patron → owner) — look up the club's owner first, then withTwoCharacters
-  // locks both sides in sorted order (the shakedown precedent).
-  app.post('/v1/speakeasy/:districtId/round', { preHandler: auth }, async (req) => {
-    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
-    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
-    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
-      Speakeasy.visitSpeakeasy(ch, owner, req.params.districtId, req.body?.round, client, h));
-  });
-  // the back-room table: two-party (patron plays, owner takes the rake)
-  app.post('/v1/speakeasy/:districtId/table', { preHandler: auth }, async (req) => {
-    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
-    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
-    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
-      Speakeasy.playTable(ch, owner, req.params.districtId, req.body?.bet, client, h));
-  });
-  // step three — the P2P buyout: list / unlist your club, buy out a listed one (two-party)
-  app.post('/v1/speakeasy/list', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.listSpeakeasy(ch, req.body?.price, client, h)));
-  app.post('/v1/speakeasy/unlist', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.unlistSpeakeasy(ch, client, h)));
-  app.post('/v1/speakeasy/:districtId/buy', { preHandler: auth }, async (req) => {
-    const club = (await pool.query('SELECT owner_character, sale_price FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
-    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
-    if (club.sale_price == null) throw new G.GameError('not_for_sale', "That club isn't on the market.");
-    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, seller, client, h) =>
-      Speakeasy.buySpeakeasy(ch, seller, req.params.districtId, client, h));
-  });
-  // step three — apply an owned/renown-earned cosmetic decor style to your club (null clears to stock)
-  app.post('/v1/speakeasy/decor', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Speakeasy.applyDecor(ch, req.body?.style, client, h)));
-  // step four — the STANDOVER: a hostile forced-sale (two-party muscle contest), the challenger leans on the owner
-  app.post('/v1/speakeasy/:districtId/standover', { preHandler: auth }, async (req) => {
-    const club = (await pool.query('SELECT owner_character FROM speakeasies WHERE district_id=$1', [req.params.districtId])).rows[0];
-    if (!club) throw new G.GameError('no_club', "There's no club in that district.");
-    return G.withTwoCharacters(pool, req.user.sub, club.owner_character, (ch, owner, client, h) =>
-      Speakeasy.standoverSpeakeasy(ch, owner, req.params.districtId, client, h));
-  });
-  app.get('/v1/leaderboard/nightlife', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    return Speakeasy.nightlifeLeaderboard(pool, cid || '');
-  });
+  registerSpeakeasy(app, { pool, auth });
 
-  // THE FIGHT CIRCUIT — sign a contender, train them, stake them in PvP bouts (the casino:pvp pattern).
-  app.get('/v1/boxing', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    return Boxing.boxingBoard(pool, cid || '');
-  });
-  app.post('/v1/boxing/recruit', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.recruitFighter(ch, req.body?.name, client, h)));
-  app.post('/v1/boxing/train', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.trainFighter(ch, req.body?.fighter, req.body?.stat, client, h)));
-  app.post('/v1/boxing/list', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.listBout(ch, req.body?.fighter, req.body?.stake, client, h)));
-  // NPC exhibition — a bounded PvE purse: your fighter vs a server card (step two)
-  app.post('/v1/boxing/exhibition', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.exhibitionBout(ch, req.body?.fighter, req.body?.tier, client, h)));
-  app.post('/v1/boxing/fight/:opponentId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
-      Boxing.fightBout(ch, opponent, req.body, client, h)));
-  // THE MAIN EVENT (step three) — book a scheduled card the crowd bets on; place a CASH bet; worker resolves.
-  app.post('/v1/boxing/announce/:opponentId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
-      Boxing.announceMainEvent(ch, opponent, req.body, client, h)));
-  app.post('/v1/boxing/bout/:id/bet', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.placeBoutBet(ch, req.params.id, req.body, client, h)));
-  // THE CALLOUT (step five) — the #1 contender forces a title fight; the champ accepts or forfeits.
-  app.post('/v1/boxing/callout/:fighterId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.callOutChamp(ch, req.params.fighterId, client, h)));
-  app.post('/v1/boxing/callout/accept', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Boxing.acceptCallout(ch, client, h)));
-  app.get('/v1/leaderboard/boxing', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    return Boxing.boxingLeaderboard(pool, cid || '');
-  });
+  registerBoxing(app, { pool, auth });
 
-  // ── THE STABLE — own the dogs & the ponies (buy/train/list/circuit(PvE)/match(PvP) + the legend) ──
-  app.get('/v1/stable', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    return Stable.stableBoard(pool, cid || '');
-  });
-  app.post('/v1/stable/buy', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.buyRacer(ch, req.body?.kind, req.body?.name, client, h)));
-  app.post('/v1/stable/train/:racerId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.trainRacer(ch, req.params.racerId, req.body?.stat, client, h)));
-  app.post('/v1/stable/list/:racerId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.listRacer(ch, req.params.racerId, req.body?.limit, client, h)));
-  app.post('/v1/stable/circuit/:racerId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.raceCircuit(ch, req.params.racerId, req.body?.meet, client, h)));
-  app.post('/v1/stable/match/:opponentId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.opponentId, (ch, opponent, client, h) =>
-      Stable.matchRace(ch, opponent, req.body, client, h)));
-  // step two: breeding (two racers → a foal) + THE STAKES (a scheduled marquee race, worker-resolved)
-  app.post('/v1/stable/breed', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.breedRacers(ch, req.body?.sire, req.body?.dam, req.body?.name, client, h)));
-  app.post('/v1/stable/stakes/:racerId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Stable.enterStakes(ch, req.params.racerId, client, h)));
-  app.get('/v1/leaderboard/stable', { preHandler: auth }, async () => Stable.stableLeaderboard(pool));
+  registerStable(app, { pool, auth });
 
-  // ── STREET RACES — the deep car catalog as a competitive loop (PvE circuit + PvP wagers + tuning) ──
-  app.get('/v1/races', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Races.raceBoard(ch, client, h)));
-  app.post('/v1/races/npc', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.raceNpc(ch, req.body?.car, req.body?.tier, req.body?.nos, client, h)));
-  app.post('/v1/races/tune/:carId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.tuneCar(ch, req.params.carId, client, h)));
-  app.post('/v1/races/nos/:carId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.buyNos(ch, req.params.carId, client, h)));
-  app.post('/v1/races/list/:carId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.listRace(ch, req.params.carId, req.body?.limit, client, h)));
-  app.post('/v1/races/unlist/:carId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.unlistRace(ch, req.params.carId, client, h)));
-  app.post('/v1/races/pinkslip/:carId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.pinkSlipList(ch, req.params.carId, req.body?.on, client, h)));
-  app.post('/v1/races/challenge/:ownerId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.ownerId, (ch, opponent, client, h) =>
-      Races.raceChallenge(ch, opponent, req.body, client, h)));
-  app.post('/v1/races/pinks/:ownerId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.ownerId, (ch, opponent, client, h) =>
-      Races.pinkSlipRace(ch, opponent, req.body, client, h)));
-  app.post('/v1/races/gp', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.enterGrandPrix(ch, req.body?.car, client, h)));
-  app.get('/v1/leaderboard/races', { preHandler: auth }, async () => Races.raceLeaderboard(pool));
-  app.get('/v1/leaderboard/port', { preHandler: auth }, async () => Port.portLeaderboard(pool)); // THE SMUGGLER'S LEGEND board
+  registerRaces(app, { pool, auth });
 
-  // ── THE PORT — maritime smuggling (boats + the run + the Coast Guard) ──
-  app.get('/v1/port', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Port.portBoard(ch, client, h)));
-  app.post('/v1/port/boat/:kind', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.buyBoat(ch, req.params.kind, client, h)));
-  app.post('/v1/port/boat/:boatId/sell', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.sellBoat(ch, req.params.boatId, client, h)));
-  app.post('/v1/port/run/:boatId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.launchRun(ch, req.params.boatId, req.body?.route, !!req.body?.escort, client, h)));
-  app.post('/v1/port/collect/:boatId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.collectRun(ch, req.params.boatId, !!req.body?.warehouse, client, h)));
-  app.post('/v1/port/fence', { preHandler: auth }, async (req) =>                    // step four: fence warehoused contraband
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.fenceContraband(ch, client, h)));
-  app.post('/v1/port/berth', { preHandler: auth }, async (req) =>                     // step four: rent a harbor slip (+fleet cap)
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.rentBerth(ch, client, h)));
-  app.post('/v1/port/upgrade/:boatId', { preHandler: auth }, async (req) =>          // step two: naval upgrade (hull/engine)
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.upgradeBoat(ch, req.params.boatId, req.body?.part, client, h)));
-  app.post('/v1/port/intercept/:boatId', { preHandler: auth }, async (req) =>        // step two: PIRACY — run down a rival at sea
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.interceptRun(ch, req.params.boatId, client, h)));
-  app.post('/v1/port/boat/:boatId/rendezvous', { preHandler: auth }, async (req) =>  // step two: flag a docked boat open to a handoff
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.setRendezvous(ch, req.params.boatId, req.body?.open !== false, client, h)));
-  app.post('/v1/port/rendezvous/:boatId', { preHandler: auth }, async (req) =>       // step two: hand your run to a partner's boat
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.rendezvous(ch, req.params.boatId, req.body?.to, client, h)));
+  registerPort(app, { pool, auth });
 
   // THE COMMISSION — the top families' weekly city decree (votes public, effect next week).
   app.get('/v1/commission', async () => Commission.commissionBoard(pool));
@@ -1052,7 +911,6 @@ export async function buildServer() {
   // Tier-4 — a seated FLOOR family moves to override the head's veto (a floor supermajority restores the decree)
   app.post('/v1/commission/override', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Commission.overrideVeto(ch, client, h)));
-  app.get('/v1/leaderboard/statesmen', async () => Commission.statesmenLeaderboard(pool)); // the survives-death political legend
 
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
@@ -1067,70 +925,9 @@ export async function buildServer() {
   app.post('/v1/skills/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.learnSkill(ch, req.params.id, client, h)));
 
-  // THE LAW — the state antagonist. GET /v1/law is the rap sheet + docket; the sinks are the
-  // escapes (bribe/lawyer), the courtroom is plea/jury/trial, and the flip turns state's evidence.
-  app.get('/v1/law', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Law.lawBoard(ch, h)));
-  app.post('/v1/law/bribe', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.bribe(ch, client, h)));
-  app.post('/v1/law/retainer', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.retainer(ch, client, h)));
-  app.post('/v1/law/envelope', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.payEnvelope(ch, client, h)));
-  app.post('/v1/law/plea', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.plea(ch, client, h)));
-  app.post('/v1/law/jury', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.buyJury(ch, client, h)));
-  app.post('/v1/law/trial', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.demandTrial(ch, client, h)));
-  app.post('/v1/law/witpro', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.enterWitpro(ch, client, h)));
-  // the flip is two-party — you name a rival, seeding THEIR case. Look up the target, lock both.
-  app.post('/v1/law/flip/:targetId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Law.flip(ch, victim, client, h)));
+  registerLaw(app, { pool, auth });
 
-  // THE PEN — the prison meta-game. Every action requires being in lockup; the shank is two-party.
-  app.get('/v1/pen', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Pen.penBoard(ch, client, h)));
-  app.post('/v1/pen/work', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.workYard(ch, client, h)));
-  app.post('/v1/pen/buy/:item', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.buyContraband(ch, req.params.item, client, h)));
-  app.post('/v1/pen/protection', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.payProtection(ch, client, h)));
-  app.post('/v1/pen/bribe', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.bribeGuard(ch, req.body?.seconds, client, h)));
-  app.post('/v1/pen/break', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.attemptBreak(ch, client, h)));
-  // step four — the CO-OP BREAKOUT (the crew-heist pattern, inside)
-  app.get('/v1/pen/breaks', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
-    return Pen.breakBoard(pool, cid);
-  });
-  app.post('/v1/pen/break/plan', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.planBreak(ch, client, h)));
-  app.post('/v1/pen/break/:id/join', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.joinBreak(ch, req.params.id, client, h)));
-  app.post('/v1/pen/break/:id/leave', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveBreak(ch, req.params.id, client, h)));
-  app.post('/v1/pen/break/:id/go', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.executeBreak(ch, req.params.id, client, h)));
-  app.post('/v1/pen/shank/:targetId', { preHandler: auth }, async (req) => {
-    const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.shank(ch, victim, client, h));
-    await closeSocketsOnKill(r, req.params.targetId);
-    return r;
-  });
-  // step two: the burner phone — call in an NPC hit from inside (two-party, consumes a burner)
-  app.post('/v1/pen/burner/:targetId', { preHandler: auth }, async (req) =>
-    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => Pen.burnerHit(ch, victim, client, h, req.body?.tier)));
-  // step five: prison factions (join/leave for cover) + the break RAT
-  app.post('/v1/pen/faction/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.joinFaction(ch, req.params.id, client, h)));
-  app.post('/v1/pen/faction', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveFaction(ch, client, h)));
-  app.post('/v1/pen/break/:id/rat', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.ratBreak(ch, req.params.id, client, h)));
+  registerPen(app, { pool, auth, closeSocketsOnKill });
 
   // LOAN SHARKING — the Shylock: escrowed offers, a taken loan is a live debt, default is enforced.
   app.get('/v1/loans', { preHandler: auth }, async (req) => {
@@ -1166,8 +963,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.takeHouseLoan(ch, req.body?.amount, client, h)));
   app.post('/v1/loans/house/repay', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.repayHouseLoan(ch, client, h)));
-  app.post('/v1/mod/loanhouse/fund', { preHandler: modAuth }, async (req) =>
-    Loans.fundLoanHouse(pool, req.body?.amount));
+  registerModTools(app, { pool, auth, modAuth, closeAccountSockets });
   app.post('/v1/loans/square', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Loans.squareWanted(ch, client, h)));
   // buy is two-party (buyer pays the current lender, becomes the new lender): look up the seller, lock both.
@@ -1177,23 +973,7 @@ export async function buildServer() {
     return G.withTwoCharacters(pool, req.user.sub, l.lender_character, (ch, victim, client, h) => Loans.buyPaper(ch, victim, req.params.id, client, h));
   });
 
-  // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
-  app.get('/v1/underworld', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, client, h)));
-  app.post('/v1/underworld/discharge', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.discharge(ch, client, h)));
-  app.post('/v1/underworld/gun/:gunId/sell', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.sellGunBack(ch, req.params.gunId, client, h)));
-  app.post('/v1/underworld/:npc/gift', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.giftNpc(ch, req.params.npc, client, h)));
-  // step four: square a grudge (a ledgered cash sink) / claim the weekly favor (resources, never money)
-  app.post('/v1/underworld/:npc/penance', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.payPenance(ch, req.params.npc, client, h)));
-  app.post('/v1/underworld/:npc/favor', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.claimFavor(ch, req.params.npc, client, h)));
-  // step five: the errand chain — a fixture's storyline (drawn task on N separate days → big standing jump)
-  app.post('/v1/underworld/:npc/errand', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.startErrand(ch, req.params.npc, client, h)));
+  registerUnderworld(app, { pool, auth });
 
   // R1 — THE PORTFOLIO ("going legit"): burn clean $OMR into legit, death-proof RWA/blue-chip
   // holdings (pure STATUS in R1 — no sell, no cash-out; the only §10.4 flow is the 'rwa:invest' burn).
@@ -1218,33 +998,10 @@ export async function buildServer() {
   // name the FAMILY fund (a reserve $OMR sink) + the family-legit leaderboard (biggest family books)
   app.post('/v1/gangs/portfolio/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameFamilyDynasty(ch, req.body?.name, client, h)));
-  app.get('/v1/leaderboard/family-portfolio', { preHandler: auth }, async () => Portfolio.familyPortfolioLeaderboard(pool));
-  app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
   app.post('/v1/dynasty/name', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.nameDynasty(ch, req.body?.name, client, h)));
-  app.get('/v1/leaderboard/foundation', { preHandler: auth }, async () => V.foundationLeaderboard(pool));
 
-  // THE ESTATE ("the compound"): the deep personal $OMR sink + a "home" that displays your legend.
-  app.get('/v1/estate', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Estate.estateBoard(ch, client, h)));
-  app.post('/v1/estate/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.upgradeEstate(ch, client, h)));
-  app.post('/v1/estate/feature/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.unlockFeature(ch, req.params.id, client, h)));
-  app.post('/v1/estate/name', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.nameEstate(ch, req.body?.name, client, h)));
-  // step two — THE STAFF (recurring $OMR payroll) + THE GALA (design omerta-deep-deferred-design.md §A)
-  app.post('/v1/estate/staff/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.hireStaff(ch, req.params.id, client, h)));
-  app.delete('/v1/estate/staff/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.dismissStaff(ch, req.params.id, client, h)));
-  app.post('/v1/estate/wages', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.payStaffWages(ch, client, h)));
-  app.post('/v1/estate/gala', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.throwGala(ch, client, h)));
-  app.post('/v1/estate/gala/attend', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.attendGala(ch, req.body?.hostId, client, h)));
-  app.get('/v1/leaderboard/estates', { preHandler: auth }, async () => Estate.estateLeaderboard(pool));
+  registerEstate(app, { pool, auth });
 
   // THE AUCTION HOUSE ("the sit-down"): weekly $OMR auctions of unique prestige items — highest bid burns.
   app.get('/v1/auction', { preHandler: auth }, async (req) =>
@@ -1258,7 +1015,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidConsignment(ch, req.params.id, req.body?.amount, client, h)));
   app.post('/v1/auction/consign/:id/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.reclaimConsignment(ch, req.params.id, client, h)));
-  app.get('/v1/leaderboard/collectors', { preHandler: auth }, async () => Estate.collectorLeaderboard(pool)); // the survives-death Collector legend + the Patron
 
   // NAMED LANDMARKS — one dedicable plaque per district, held by the highest $OMR flex (a status sink).
   app.get('/v1/landmarks', async () => Landmarks.landmarkBoard(pool));
@@ -1284,8 +1040,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.traceBugs(ch, client, h)));
   app.post('/v1/wire/dossier/:targetId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.pullDossier(ch, req.params.targetId, client, h)));
-  app.get('/v1/leaderboard/wire', { preHandler: auth }, async () => Wire.wireLeaderboard(pool));
-  // Wire step three: DISINFORMATION (feed your tappers lies) + THE INFORMANT (a standing human source)
   app.post('/v1/wire/disinfo', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.plantDisinfo(ch, client, h)));
   app.post('/v1/wire/informant/:targetId', { preHandler: auth }, async (req) =>
@@ -1316,47 +1070,9 @@ export async function buildServer() {
     if (!cid) throw new G.GameError('no_character', 'Create a character first.');
     return Convoy.convoyBoard(pool, cid);
   });
-  app.post('/v1/convoy', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.openConvoy(ch, req.body?.to, req.body?.goodId, req.body?.qty, client, h)));
-  app.post('/v1/convoy/load', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.loadConvoy(ch, req.body?.goodId, req.body?.qty, client, h)));
-  app.post('/v1/convoy/depart', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.departConvoy(ch, req.body?.guards, !!req.body?.insure, client, h)));
-  app.post('/v1/convoy/cancel', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.cancelConvoy(ch, client, h)));
-  app.post('/v1/convoy/:id/ambush', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.ambushConvoy(ch, req.params.id, client, h)));
-  app.post('/v1/convoy/:id/collect', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.collectConvoy(ch, req.params.id, client, h)));
-  // ── CONVOYS → Tier 4 ──
-  app.post('/v1/convoy/rig/:kind', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.buyRig(ch, req.params.kind, client, h)));
-  app.post('/v1/convoy/rig/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Convoy.upgradeRig(ch, req.body?.track, client, h)));
-  app.get('/v1/leaderboard/convoy', async () => Convoy.convoyLeaderboard(pool));
+  registerConvoy(app, { pool, auth });
 
-  // CREW HEISTS — THE BIG SCORE: plan, crew up off the board, execute together (or rat).
-  app.get('/v1/heists', { preHandler: auth }, async (req) => {
-    const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
-    if (!cid) throw new G.GameError('no_character', 'Create a character first.');
-    return Heists.heistBoard(pool, cid);
-  });
-  app.post('/v1/heists/plan', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) =>
-      Heists.planHeist(ch, req.body?.job, { role: req.body?.role, businessId: req.body?.businessId, fence: req.body?.fence }, client, h)));
-  app.post('/v1/heists/:id/join', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.joinHeist(ch, req.params.id, req.body?.role, client, h)));
-  app.post('/v1/heists/:id/leave', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.leaveHeist(ch, req.params.id, client, h)));
-  app.post('/v1/heists/:id/case', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.caseJob(ch, req.params.id, client, h)));
-  app.post('/v1/heists/:id/rat', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.ratHeist(ch, req.params.id, client, h)));
-  app.post('/v1/heists/:id/execute', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.executeHeist(ch, req.params.id, client, h)));
-  app.post('/v1/heists/fence', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Heists.fenceLoot(ch, client, h)));
-  app.get('/v1/leaderboard/heists', { preHandler: auth }, async () => Heists.heistLeaderboard(pool));
+  registerHeists(app, { pool, auth });
 
   registerCasino(app, { pool, auth });
 
@@ -1456,20 +1172,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.peekContracts(ch, client, h)));
   app.post('/v1/contracts/:targetId/:kind/cancel', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.cancelBounty(ch, req.params.targetId, req.params.kind, client, h)));
-  // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
-  app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
-  // THE CITY STANDING — the unifying "who's winning" spine over the 35 status axes. One aggregate metric
-  // (six pillars, log-share of the population) so the endgame finally has a single answer. Status only, §10.4-free.
-  app.get('/v1/leaderboard/city', { preHandler: auth }, async (req) => ({
-    board: await Standing.cityStanding(pool), you: await Standing.myStanding(pool, req.user.sub) }));
-  // The RECRUITERS (§7.13): the organic-growth hall of fame + the family recruitment board. Status only.
-  app.get('/v1/leaderboard/recruiters', { preHandler: auth }, async () => ({
-    recruiters: await W.recruiterLeaderboard(pool), families: await W.recruitingFamilyLeaderboard(pool),
-    push: await G.referralPushStatus(pool) })); // the active recruitment DRIVE (2×… payouts), publicly visible
-  // THE AGENT LEADERBOARD: a SEPARATE machine hall of fame (net worth / kills / $OMR extracted). See AGENTS.md.
-  app.get('/v1/leaderboard/agents', { preHandler: auth }, async () => ({ agents: await W.agentLeaderboard(pool) }));
-  // THE OPPORTUNITY BOARD (the agent-liquidity feature): every open economic action + standing
-  // skill-loop with EV/risk signals, in ONE read. Read-only; the caller's character scopes filters.
   app.get('/v1/opportunities', { preHandler: auth }, async (req) => {
     const ch = (await pool.query('SELECT id, loc FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0] || null;
     return opportunityBoard(pool, ch);
@@ -1502,8 +1204,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.proposePeace(ch, req.params.targetId, client, h)));
   app.post('/v1/feud/:targetId/peace/accept', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.acceptPeace(ch, req.params.targetId, client, h)));
-  app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));
-  // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
   app.post('/v1/streets/:targetId/npchit', { preHandler: auth }, async (req) => {
     const r = await G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.npcHit(ch, victim, client, h, req.body?.tier));
     await closeSocketsOnKill(r, req.params.targetId);
@@ -1580,11 +1280,6 @@ export async function buildServer() {
 
   // ── M3: websocket gateway (§5.6) — channels: me, streets, gang:{id} ──
   await app.register(websocket);
-  // (red-team R4 auth F1) A live intel-feed registry keyed by account — the connect-time banned
-  // check (below) only guards NEW connections, so a mid-session ban left an already-open socket
-  // feeding streets/gang chatter until the client chose to disconnect, falsifying the documented
-  // "banned-WS close" guarantee. The ban handler closes every open socket for the banned account.
-  const wsClients = new Map(); // accountId -> Set<socket>
   const wsReserving = new Map(); // accountId -> in-flight connection count (TOCTOU-safe cap)
   const WS_MAX_PER_ACCOUNT = 8; // (red-team R7 DoS) one token can't open unlimited sockets — each adds a
   // 'streets' bus listener, so N sockets make every streets emit O(N) server-wide; 8 covers legit multi-tab.
@@ -1652,25 +1347,6 @@ export async function buildServer() {
       releaseReservation();
     }
   });
-  // close every live socket for an account (its own 'close' handler tears down the bus subs + registry)
-  const closeAccountSockets = (accountId, code, reason) => {
-    const s = wsClients.get(accountId); if (!s) return;
-    for (const sock of [...s]) { try { sock.close(code, reason); } catch { /* already gone */ } }
-  };
-  // (red-team R26 WS) A killed character's account is left GANGLESS (runEstate → removeMember; the heir is
-  // born with no family), but its live socket keeps the dead street's `gang:` subscription — a stale mole
-  // into the former family's private war/contract/tribute/racket feed. runEstate can't reach wsClients
-  // (a buildApp closure), so the KILL ROUTES must close the victim's sockets post-COMMIT, mirroring the
-  // leave/kick fix (R9). Look the account up server-side by the victim CHARACTER id (the row survives as
-  // alive=false — never deleted), never exposing the account UUID. Non-fatal like kick: a throw here would
-  // surface a 5xx AFTER the kill committed → the onSend idempotency release → a retry re-runs the kill.
-  const closeSocketsOnKill = async (result, victimCharId) => {
-    try {
-      if (!(result && (result.kill === true || result.killed === true)) || !victimCharId) return;
-      const acc = (await pool.query('SELECT account_id FROM characters WHERE id=$1', [victimCharId])).rows[0];
-      if (acc) closeAccountSockets(acc.account_id, 4009, 'gang_changed');
-    } catch (e) { console.error('kill socket-close (post-commit, non-fatal)', e?.code || e); }
-  };
 
   // ── PRESENCE — who's on the wire right now (founder: "display of all users online") ──
   // `online` = distinct accounts with a live websocket (in the console this second);
@@ -1805,32 +1481,7 @@ export async function buildServer() {
   app.delete('/v1/phone/block/:characterId', { preHandler: auth }, async (req) =>
     Phone.unblockLine(pool, req.user.sub, req.params.characterId));
 
-  // ── M4: the Kitchen (§5.3, §7.10) ──
-  app.post('/v1/kitchen/makings/:drugId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.buyMakings(ch, req.params.drugId, req.body?.qty, client, h)));
-  app.post('/v1/kitchen/lab/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.upgradeLab(ch, client, h)));
-  app.post('/v1/kitchen/cook', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cook(ch, req.body?.drugId, req.body?.qty, client, h)));
-  app.post('/v1/kitchen/collect', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.collect(ch, client, h)));
-  app.post('/v1/kitchen/deal', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.deal(ch, req.body?.drugId, req.body?.qty, client, h, req.body?.play)));
-  app.post('/v1/kitchen/crew/hire', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.hireCrew(ch, client, h)));
-  // recurring sinks: pay the crew's nut (wages) — an unpaid crew downs tools until covered
-  app.post('/v1/kitchen/crew/wages', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.payCrewWages(ch, client, h)));
-  app.post('/v1/kitchen/laylow', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.layLow(ch, client, h)));
-  app.post('/v1/kitchen/cleanpapers', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cleanPapers(ch, client, h)));
-  // ── THE KITCHEN → Tier 4 ──
-  app.post('/v1/kitchen/module/:mod', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.upgradeModule(ch, req.params.mod, client, h)));
-  app.post('/v1/kitchen/cut/:drugId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => K.cutStash(ch, req.params.drugId, client, h)));
-  app.get('/v1/leaderboard/kingpins', async () => K.kingpinLeaderboard(pool));
+  registerKitchen(app, { pool, auth });
 
   // ── M4: growth (§5.1) ──
   app.post('/v1/path', { preHandler: auth }, async (req) =>
@@ -1855,34 +1506,8 @@ export async function buildServer() {
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
 
-  // ── FIVE PILLARS: diplomacy (#2), sovereignty (#3), campaigns (#4), the bloodline (#5) ──
-  app.get('/v1/diplomacy', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.diplomacyBoard(client, h)));
-  app.post('/v1/diplomacy/pact/:gangId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.proposePact(ch, req.params.gangId, client, h)));
-  app.post('/v1/diplomacy/pact/:gangId/accept', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.acceptPact(ch, req.params.gangId, client, h)));
-  app.delete('/v1/diplomacy/pact/:gangId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.breakPact(ch, req.params.gangId, client, h)));
-  app.post('/v1/diplomacy/coalition/:gangId', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.formCoalition(ch, req.params.gangId, client, h)));
-  app.post('/v1/diplomacy/coalition/:id/join', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.joinCoalition(ch, req.params.id, client, h)));
-  app.delete('/v1/diplomacy/coalition/:id', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.leaveCoalition(ch, req.params.id, client, h)));
-  app.get('/v1/sov', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => Sov.sovBoard(client, h)));
-  app.post('/v1/sov/:district/build', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.buildSov(ch, req.params.district, req.body?.windowHour, client, h)));
-  app.post('/v1/sov/:district/upgrade', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.upgradeSov(ch, req.params.district, client, h)));
-  app.post('/v1/sov/upkeep', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.paySovUpkeep(ch, client, h)));
-  app.post('/v1/sov/:district/siege', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.siegeSov(ch, req.params.district, client, h)));
-  app.post('/v1/sov/collect', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.collectSov(ch, client, h)));
-  app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
+  registerDiplomacy(app, { pool, auth });
+  registerSov(app, { pool, auth });
   app.get('/v1/campaigns', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.campaignBoard(ch, client, h)));
   app.post('/v1/campaigns/:id/start', { preHandler: auth }, async (req) =>
@@ -1893,10 +1518,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.claimCampaign(ch, req.params.id, client, h)));
   app.get('/v1/bloodline', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
-  app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
-  // FIVE PILLARS → Tier 4 — THE REPUTATION BOARDS (the honor legend: Men of Honor + the Most Feared)
-  app.get('/v1/leaderboard/honor', async () => Honor.honorLeaderboard(pool));
-  // DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3 — account-level ties on the Bloodline)
   app.get('/v1/dynasty', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Dynasty.dynastyBoard(ch, client)));
   app.post('/v1/dynasty/propose/:characterId', { preHandler: auth }, async (req) =>
@@ -1914,7 +1535,6 @@ export async function buildServer() {
   // NAMED SOLDIERS (XCOM — recruit / assign / dismiss; the assists live inside crime/heist/raids)
   app.get('/v1/soldiers', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.soldierBoard(ch, client, h.acct)));
-  app.get('/v1/leaderboard/commanders', { preHandler: auth }, async () => Soldiers.commanderLeaderboard(pool));
   app.post('/v1/soldiers/hire', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.hireSoldier(ch, client, h)));
   app.post('/v1/soldiers/:id/assign', { preHandler: auth }, async (req) =>
@@ -1950,7 +1570,6 @@ export async function buildServer() {
   });
   // THE COLLECTION — the account-level completion ledger (pure status)
   app.get('/v1/collection', { preHandler: auth }, async (req) => Collection.collectionBoard(pool, req.user.sub));
-  app.get('/v1/leaderboard/collection', { preHandler: auth }, async () => Collection.collectionLeaderboard(pool));
   app.post('/v1/onboard/:taskId/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimOnboard(ch, req.params.taskId, client, h)));
   // DAILY SOCIAL TASKS ("Spread the Word") — the organic word-of-mouth / referral petty-cash faucet
@@ -1968,92 +1587,6 @@ export async function buildServer() {
   });
 
   // ── M4: mod tools (§10.3) — X-Mod-Key header; disabled unless MOD_KEY is set ──
-  app.post('/v1/mod/ban', { preHandler: modAuth }, async (req) => {
-    const { accountId, reason } = req.body || {};
-    if (!accountId) throw new G.GameError('args', 'accountId required.');
-    await pool.query("UPDATE accounts SET status='banned' WHERE id=$1", [accountId]);
-    await pool.query('INSERT INTO bans (account_id, kind, reason, by_mod) VALUES ($1,$2,$3,$4)',
-      [accountId, 'ban', reason || null, 'mod']);
-    closeAccountSockets(accountId, 4003, 'banned'); // red-team R4 F1: cut the live intel feed now, not at their leisure
-    return { ok: true };
-  });
-  app.post('/v1/mod/kill', { preHandler: modAuth }, async (req) => {
-    // runs the §7.9 estate without a killer ("THE COMMISSION")
-    const { characterId, reason } = req.body || {};
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const victim = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [characterId])).rows[0];
-      if (!victim) throw new G.GameError('no_target', 'No living character by that id.');
-      const victimAcct = (await client.query('SELECT * FROM account_persistent WHERE account_id=$1 FOR UPDATE', [victim.account_id])).rows[0];
-      const victimOwned = await G.loadOwned(client, victim);
-      const h = { ledger: G.ledger, notify: G.notify, victimAcct, victimOwned };
-      const estate = await S.runEstate(client, h, victim, 'THE COMMISSION'); // tracks the death itself
-      // this hand-rolled txn isn't wrapped by persistAccount, so it must persist every account field
-      // runEstate mutates in memory: prestige, deaths, and (L2a) the death-duty $OMR burn (the ledger
-      // row is written inside runEstate; without omr here the burn drifts §10.4 on a mod-kill). The duty
-      // reaches liquid AND unbonding, so both columns ride.
-      await client.query('UPDATE account_persistent SET prestige=$2, deaths=$3, omr=$4, unbonding=$5 WHERE account_id=$1',
-        [victim.account_id, victimAcct.prestige, victimAcct.deaths, victimAcct.omr, victimAcct.unbonding ?? 0]);
-      if (reason) await G.track(client, victim.account_id, 'mod_kill_reason', { reason });
-      await client.query('COMMIT');
-      closeAccountSockets(victim.account_id, 4009, 'gang_changed'); // R26 WS: the heir is gangless — cut the dead street's stale gang: feed
-      return { ok: true, heirId: estate.heirId };
-    // runEstate → removeMember can hit a war-partner AB-BA (40P01); this hand-rolled txn isn't
-    // wrapped by withCharacter, so map it to a clean retry here too (audit MED) instead of a 500.
-    } catch (e) { await client.query('ROLLBACK'); throw G.deadlockToRetry(e); }
-    finally { client.release(); }
-  });
-  app.post('/v1/mod/confiscate', { preHandler: modAuth }, async (req) => {
-    // seized cash recycles into the street-tax pool (next buyback)
-    const { characterId, amount } = req.body || {};
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const ch = (await client.query('SELECT * FROM characters WHERE id=$1 AND alive FOR UPDATE', [characterId])).rows[0];
-      if (!ch) throw new G.GameError('no_target', 'No living character by that id.');
-      // clamp to [0, pocket] (audit M2): a negative `amount` was truthy, so `cash - (-x)` MINTED
-      // cash to the player and drained the street-tax pool below zero (a §10.4-invisible mint into
-      // an unaudited buffer). A MISSING amount keeps the documented "confiscate all" default;
-      // an explicit invalid/negative amount confiscates NOTHING (never mints, never "all" on a typo).
-      const pocket = Math.max(0, Math.floor(Number(ch.cash)));
-      let want;
-      if (amount === undefined || amount === null || amount === '') want = pocket; // "confiscate all"
-      else { const n = Number(amount); want = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; }
-      const amt = Math.max(0, Math.min(want, pocket));
-      await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [characterId, amt]);
-      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [amt]);
-      await G.ledger(client, { characterId, currency: 'cash', amount: -amt, reason: 'mod:confiscate' });
-      await client.query('COMMIT');
-      return { ok: true, confiscated: amt };
-    } catch (e) { await client.query('ROLLBACK'); throw e; }
-    finally { client.release(); }
-  });
-  app.post('/v1/mod/invites', { preHandler: modAuth }, async (req) => {
-    const count = Math.min(100, Math.max(1, Math.floor(Number(req.body?.count) || 1)));
-    const uses = Math.max(1, Math.floor(Number(req.body?.uses) || 1));
-    const codes = [];
-    for (let i = 0; i < count; i++) {
-      const code = crypto.randomBytes(6).toString('hex');
-      await pool.query('INSERT INTO invite_codes (code, uses_left, created_by) VALUES ($1,$2,$3)', [code, uses, 'mod']);
-      codes.push(code);
-    }
-    return { codes, uses };
-  });
-  // Start a time-boxed RECRUITMENT DRIVE — referral CASH payouts multiply for the window. Also readable.
-  app.post('/v1/mod/referral/push', { preHandler: modAuth }, async (req) =>
-    G.startReferralPush(pool, req.body?.hours, req.body?.mult));
-  app.get('/v1/mod/referral/push', { preHandler: modAuth }, async () => G.referralPushStatus(pool));
-  app.get('/v1/mod/invariants', { preHandler: modAuth }, async () => runLedgerInvariants(pool));
-  app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
-  app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot
-  app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
-  app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
-    const cid = req.query?.characterId;
-    const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
-    const rng = await pool.query('SELECT * FROM rng_audit WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);
-    return { transactions: tx.rows, rng: rng.rows };
-  });
 
   // ── THE RESERVE BOND (Protocol-Owned Liquidity; off-chain accounting, chain DORMANT / mainnet-gated) ──
   app.get('/v1/bonds', { preHandler: auth }, async (req) => Bonds.bondBoard(pool, req.user.sub));
@@ -2064,33 +1597,10 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Bonds.pledgeTreasury(ch, req.body?.omr, client, h)));
   app.post('/v1/bonds/charter', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Bonds.commissionCharter(ch, client, h)));
-  app.get('/v1/leaderboard/underwriters', { preHandler: auth }, async () => Bonds.underwriterLeaderboard(pool));
-  // the EIP-712 bond QUOTE SIGNER — a player requests a signed BondQuote (bound to their linked wallet),
-  // then submits bond(quote, signature) to the on-chain OmertaBond contract; the Bonded watcher books it.
-  // Chain-dormant: 400s chain_unconfigured unless the bond chain (CHAIN_ID + OMERTA_BOND_ADDRESS + signer) is set.
   app.post('/v1/bond/quote', { preHandler: auth }, async (req) => Chain.quoteBond(pool, req.user.sub, req.body?.principalEth));
   // server-encode the bond() submission so an injected browser wallet (MetaMask / Robinhood Wallet / etc.)
   // can `eth_sendTransaction` it without the zero-dep client hand-rolling ABI (viem does it server-side).
   app.post('/v1/bond/calldata', { preHandler: auth }, async (req) => Chain.bondCalldata(pool, req.user.sub, req.body?.nonce));
-  app.get('/v1/mod/bonds', { preHandler: modAuth }, async () => Bonds.bondStatus(pool)); // the ops/invariant view
-  // THE FLOAT — the RWA buy-bot seat (mod-driven until the mainnet Uniswap bot; the runVigBuyback
-  // twin: spend ≤ rwa_revenue, priceEth = the oracle param, txHash marks a REAL swap) + the
-  // real-value invariant view (allocated ≤ held — the anti-Ponzi check — spend ≤ revenue, unit sums)
-  app.get('/v1/mod/rwa', { preHandler: modAuth }, async () => Rwa.runRwaInvariants(pool));
-  app.post('/v1/mod/rwa/buy', { preHandler: modAuth }, async (req) =>
-    // AUDIT F1: txHash rides the modRealTxHash gate (route parity with mod/fees/record +
-    // mod/bond/simulate) — a mod comp can't stamp a simulated buy real=true and poison the
-    // real-vs-simulated unit ledger R3 extraction reconciles against
-    Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: modRealTxHash(req) }));
-  app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
-  app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
-    // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit
-    // MED — else a comp fabricates Vig revenue the buyback spends, unbacking the withdrawal reserve).
-    // AUDIT-full-system-v2 D-MED2: real-ETH revenue must ONLY come from the on-chain watcher observing
-    // a genuine event — never a caller-supplied txHash on a mod route. So the route STRIPS txHash unless
-    // ALLOW_MOD_REAL_REVENUE=on (a QA-only escape hatch, default OFF — the X_TRUST_USER_TOKEN posture),
-    // making the production comp path incapable of booking real revenue no matter what the caller sends.
-    Bonds.recordBond(pool, { nonce: req.body?.nonce, accountId: req.body?.account, payer: req.body?.payer, principalEth: req.body?.principalEth, priceOmrPerEth: req.body?.price, discountBps: req.body?.discountBps, txHash: modRealTxHash(req) }));
 
   // ── M6-B: the chain service (§11, EVM) — withdrawals, gear mint, SIWE wallet link ──
   app.post('/v1/wallet/challenge', { preHandler: auth }, async (req) => Chain.walletChallenge(pool, req.user.sub));
@@ -2113,11 +1623,6 @@ export async function buildServer() {
         nonce: Number(v.nonce), status: v.status, claimed: v.claimed_onchain,
         payload: v.signed_payload ? JSON.parse(v.signed_payload) : null })) };
   });
-  // Mod/ops: mirror an on-chain tranche funding into the reserve (drains the queue),
-  // read the reserve gauge, and (for tests/ops) mark a voucher claimed.
-  app.post('/v1/mod/reserve/fund', { preHandler: modAuth }, async (req) => Chain.fundReserve(pool, req.body?.amount));
-  app.get('/v1/mod/reserve', { preHandler: modAuth }, async () => Chain.reserveStatus(pool));
-  app.post('/v1/mod/reserve/claimed', { preHandler: modAuth }, async (req) => Chain.markClaimed(pool, Number(req.body?.nonce)));
 
   // ── §11 entry/revive fees (paid on-chain to OmertaFees → dev wallet) ──
   // Spend a paid mint credit to make your character permanent (the two-tier upgrade).
@@ -2126,11 +1631,6 @@ export async function buildServer() {
   // rng_audit'd, infinitely repeatable (one credit per re-roll).
   app.post('/v1/character/reroll', { preHandler: auth }, async (req) => Fees.rerollCharacter(pool, req.user.sub));
   app.get('/v1/fees/status', { preHandler: auth }, async (req) => Fees.feeStatus(pool, req.user.sub));
-  // Ops/manual reconciliation of an on-chain payment (the worker's watcher does this live from
-  // MintFeePaid/RespawnFeePaid events; this endpoint is the manual + test path for the same call).
-  app.post('/v1/mod/fees/record', { preHandler: modAuth }, async (req) =>
-    Fees.recordFeePayment(pool, { nonce: req.body?.nonce, kind: req.body?.kind,
-      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: modRealTxHash(req) })); // D-MED2: strip caller txHash unless the QA flag is set
 
   // ── Risk-to-Earn Phase 2: THE VIG (off-chain core) ──
   // PLEX bridge — pay a real-money fee from EARNED $OMR instead of ETH (burns $OMR → the same
@@ -2142,31 +1642,14 @@ export async function buildServer() {
   // the live market-linked quote (fee-ETH × latest buyback price × premium; static floor pre-market)
   app.get('/v1/plex/price', async () => ({
     mint: await Vig.plexQuote(pool, 'mint'), respawn: await Vig.plexQuote(pool, 'respawn') }));
-  // Mod/ops: the Vig gauge + the extraction-≤-inflow invariant, and the buyback trigger (on
-  // mainnet the DEX bot runs this with a TWAP price; here it's the manual/test path).
-  app.get('/v1/mod/vig', { preHandler: modAuth }, async () =>
-    ({ status: await Vig.vigStatus(pool), invariants: await Vig.runVigInvariants(pool) }));
-  app.post('/v1/mod/vig/buyback', { preHandler: modAuth }, async (req) =>
-    Vig.runVigBuyback(pool, { priceOmrPerEth: req.body?.priceOmrPerEth, maxEth: req.body?.maxEth }));
-  app.post('/v1/mod/vig/prizes', { preHandler: modAuth }, async (req) => Vig.payPrizes(pool, req.body?.winners));
 
   // ── THE STORE (ETH revenue packages) ──
   // The catalog + your live entitlements. Purchases are made ON-CHAIN at the OmertaFees paywall
   // (dormant); the watcher observes StorePaid and calls recordStorePurchase (the mint/respawn fee
   // pattern). §10.4-neutral — the Store grants only entitlements/access/status, never currency.
   app.get('/v1/store', { preHandler: auth }, async (req) => Store.storeBoard(pool, req.user.sub));
-  // THE PATRON PROGRAM (Tier-4) — the read-derived Benefactors league + Patron Families + The House's Favor
-  app.get('/v1/leaderboard/patrons', { preHandler: auth }, async () => Store.benefactorLeaderboard(pool));
-  // PLEX-for-packages — buy a Store SKU with EARNED $OMR (burns $OMR for the same entitlement)
   app.post('/v1/store/plex/:sku', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Store.payPackagePlex(ch, req.params.sku, client, h)));
-  // Mod/ops: the founder's three-way revenue split (founder / buyback / RWA), and the comp/simulate
-  // path — drives recordStorePurchase with a synthetic nonce (for comps, QA, and until the paywall
-  // ships). `nonce` must be unique; a duplicate is the idempotent no-op.
-  app.get('/v1/mod/revenue', { preHandler: modAuth }, async () => Store.revenueStatus(pool));
-  app.post('/v1/mod/store/grant', { preHandler: modAuth }, async (req) =>
-    Store.recordStorePurchase(pool, { nonce: req.body?.nonce, sku: req.body?.sku,
-      payer: req.body?.payer, amountWei: req.body?.amountWei, txHash: modRealTxHash(req) })); // D-MED2: strip caller txHash unless the QA flag is set
 
   // THE LEDGER — the Season Pass reward track. The daily-claim track (status/consumables in the
   // claim txn; the $OMR stipend is paid post-commit through the BACKED prize-pool rail — pool-bounded,
@@ -2184,59 +1667,6 @@ export async function buildServer() {
   });
 
   // ── Risk-to-Earn Phase 4: BACKED EMISSION (the staking reward pool) ──
-  // Gauge: pool balance + effective-APY runway; and an ops/test top-up (the buyback funds it live).
-  // THE DEV FUND — the founder's revenue bucket (fed by the withdrawal exit toll's tax:dev share).
-  app.get('/v1/mod/dev', { preHandler: modAuth }, async () => {
-    const d = (await pool.query('SELECT omr, lifetime FROM dev_fund WHERE id=1')).rows[0] || { omr: 0, lifetime: 0 };
-    return { omr: Number(d.omr), lifetime: Number(d.lifetime), taxBps: withdrawTaxBps(), devBps: TAX.DEV_BPS };
-  });
-  // claim the dev fund to an account (a bucket TRANSFER — tax:dev:claim rides the tax: vocabulary,
-  // never a mint); the founder then withdraws like any player (paying the toll like anyone).
-  app.post('/v1/mod/dev/claim', { preHandler: modAuth }, async (req) => {
-    const accountId = String(req.body?.accountId || '');
-    if (!accountId) return { error: 'account', message: 'accountId required' };
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const acct = (await client.query('SELECT account_id FROM account_persistent WHERE account_id=$1 FOR UPDATE', [accountId])).rows[0];
-      if (!acct) { await client.query('ROLLBACK'); return { error: 'no_account' }; }
-      const d = (await client.query('SELECT omr FROM dev_fund WHERE id=1 FOR UPDATE')).rows[0];
-      const amt = Number(d?.omr || 0);
-      if (!(amt > 0)) { await client.query('ROLLBACK'); return { error: 'empty', message: 'nothing to claim' }; }
-      await client.query('UPDATE dev_fund SET omr = 0 WHERE id=1');
-      await client.query('UPDATE account_persistent SET omr = omr + $2 WHERE account_id=$1', [accountId, amt]);
-      await client.query('INSERT INTO transactions (id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5,$6)',
-        [crypto.randomUUID(), accountId, 'omr', amt, 'tax:dev:claim', 'dev_fund']);
-      await client.query('COMMIT');
-      return { claimed: amt };
-    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
-    finally { client.release(); }
-  });
-  app.get('/v1/mod/emission', { preHandler: modAuth }, async () => {
-    const sp = (await pool.query('SELECT balance, lifetime_funded, lifetime_paid FROM stake_pool WHERE id=1')).rows[0] || {};
-    const staked = Number((await pool.query('SELECT COALESCE(SUM(staked),0) s FROM account_persistent')).rows[0].s);
-    const pending = Number((await pool.query('SELECT COALESCE(SUM(rewards),0) s FROM account_persistent')).rows[0].s);
-    return { poolBalance: Number(sp.balance || 0), lifetimeFunded: Number(sp.lifetime_funded || 0),
-      lifetimePaid: Number(sp.lifetime_paid || 0), totalStaked: staked, pendingRewards: pending,
-      backed: pending > 0 ? Math.min(1, Number(sp.balance || 0) / pending) : 1 };
-  });
-  // Ops top-up: MOVE $OMR from the event fund into the staking pool (a §10.4 transfer, both
-  // buckets inside the $OMR conservation set — never a mint). The buyback funds the pool live;
-  // this is the manual twin for moving surplus event-fund $OMR into staker yield.
-  app.post('/v1/mod/emission/fund', { preHandler: modAuth }, async (req) => {
-    const amt = Number(req.body?.amount);
-    if (!(amt > 0)) throw new G.GameError('amount', 'Positive amounts only.');
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const f = (await client.query('SELECT fund FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-      if (Number(f.fund) < amt) throw new G.GameError('fund', `The event fund holds ${Math.floor(Number(f.fund))} $OMR — not ${amt}.`);
-      await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [amt]);
-      await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [amt]);
-      await client.query('COMMIT');
-      return { ok: true, funded: amt, fromEventFund: true };
-    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
-  });
 
   // ── M2: deterministic market board (§7.11) — public, server-computed ──
   app.get('/v1/market/prices', async () => {
@@ -2287,8 +1717,6 @@ export async function buildServer() {
   app.post('/v1/megaproject/omr', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Mega.giveOmr(ch, req.body?.amount, client, h)));
   // ── THE MEGAPROJECT → Tier 4 ──
-  app.get('/v1/leaderboard/builders', async () => Mega.builderLeaderboard(pool));
-  app.get('/v1/leaderboard/family-build', async () => Mega.familyBuildLeaderboard(pool));
 
   // ── THE DUELING LADDER (slate #5) — ranked ELO PvP on the audited casino:pvp transfer ──
   app.get('/v1/duels', { preHandler: auth }, async (req) =>
@@ -2300,21 +1728,16 @@ export async function buildServer() {
   app.post('/v1/duels/:targetId', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId,
       (ch, opponent, client, h) => Duels.challenge(ch, opponent, req.body?.amount, client, h)));
-  app.get('/v1/leaderboard/duels', { preHandler: auth }, async () => Duels.duelLeaderboard(pool));
 
   // ── CLUE SCROLLS (slate #4) — treasure trails off the §7.11 seed; the casket is the one faucet ──
   app.get('/v1/clues', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Clues.clueBoard(client, ch, h.acct)));
   app.post('/v1/clues/dig', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Clues.dig(ch, client, h)));
-  app.get('/v1/leaderboard/clues', { preHandler: auth }, async () => Clues.clueLeaderboard(pool));
-  // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(client, ch, h)));
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
-  app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
-  // step three — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest leaderboard)
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => World.raidBoard(client, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>
@@ -2325,8 +1748,6 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.leaveRaid(ch, req.params.id, client, h)));
   app.post('/v1/world/raids/:id/go', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.executeRaid(ch, req.params.id, client, h)));
-  app.get('/v1/leaderboard/frontier', { preHandler: auth }, async () => World.frontierLeaderboard(pool)); // THE FRONTIER board
-  // step four — THE FRONTIER MADE REAL: collect a held outpost's tribute + invade a rival-held outpost
   app.post('/v1/world/collect', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.collectFrontier(ch, client, h)));
   app.post('/v1/world/:npcId/invade', { preHandler: auth }, async (req) =>
