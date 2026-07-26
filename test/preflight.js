@@ -12,17 +12,15 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { preflight, isHardened, CLASSIFIED, TEST_ONLY_ENV, REQUIRED_ENV, EXPLICIT_ENV } from '../src/preflight.js';
+import { walkSrc } from './lib/srcfiles.js';
 
 // ════════════ THE DRIFT DETECTOR ════════════
 const used = new Set();
 // preflight.js is the classifier, not a consumer — it only ever reads the `env` object it is
 // handed, and its prose mentions `process.env.X` generically, which the scanner would take literally
-// Walked RECURSIVELY: the scan used to be flat over src/, so when the route modules were split out
-// of server.js an env var read from one of them became invisible to this detector — which is the
-// exact drift this file exists to catch.
-const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-  (e.isDirectory() ? walk(`${dir}/${e.name}`) : e.name.endsWith('.js') ? [`${dir}/${e.name}`] : []));
-for (const f of walk('src').filter((f) => f !== 'src/preflight.js'))
+// Walked RECURSIVELY via the shared helper — a flat listing of src/ stops seeing a file the moment
+// it moves into a subdirectory, which is the exact drift this detector exists to catch.
+for (const f of walkSrc('src', { exclude: ['src/preflight.js'] }))
   for (const m of fs.readFileSync(f, 'utf8').matchAll(/process\.env\.([A-Z_0-9]+)/g)) used.add(m[1]);
 
 const unclassified = [...used].filter((v) => !CLASSIFIED.has(v)).sort();

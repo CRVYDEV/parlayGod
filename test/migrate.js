@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newDb } from 'pg-mem';
 import { columnMigrations, migrateColumns } from '../src/db.js';
+import { srcText } from './lib/srcfiles.js';
 
 const SCHEMA = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'schema.sql'), 'utf8');
 
@@ -119,7 +120,7 @@ const stale = Object.keys(DISPOSITION).filter((t) => !charTables.has(t));
 assert.equal(stale.length, 0, `stale DISPOSITION entr(y/ies) no longer a character_id table: ${stale.join(', ')}`);
 // (b) every 'wiped'/'special' table actually has a DELETE FROM somewhere in src/ (classification ⇒ code)
 const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const allSrc = fs.readdirSync(srcDir).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(srcDir, f), 'utf8')).join('\n');
+const allSrc = srcText();  // RECURSIVE — a flat listing missed src/social/ and hid the whole estate wipe
 for (const [t, kind] of Object.entries(DISPOSITION)) {
   // a table is "cleaned on death" if it's DELETE'd by name (custom wipers: DELETE FROM fighters) OR it
   // appears as a quoted name in the runEstate wipe-loop array (`for (const t of ['businesses', …])` →
