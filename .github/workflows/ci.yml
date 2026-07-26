@@ -43,6 +43,28 @@ jobs:
       - name: economy sim (§10.4 drift-0)
         run: npm run sim
 
+      # THE CLIENT. The suite tests the API; nothing tested the screens. On 2026-07-26 a driven pass
+      # found that a new player's guided onboarding showed NONE of its own content above the fold on
+      # a phone — the three-column grid stacks the ~1000px character sheet above the tab content —
+      # plus a horizontal-overflow bug that had been live for months. Neither was reachable from any
+      # existing check. This runs a real browser at a real phone size over every screen.
+      #
+      # playwright-core downloads nothing on install (a browser per `npm ci` is a heavy tax on a repo
+      # where most work never touches the client), so the browser is fetched here, in the one job
+      # that needs it. The harness FAILS rather than skips when there is no browser — a layout guard
+      # that quietly does nothing still goes green, and everyone assumes the screens were checked.
+      - name: install chromium for the client harness
+        run: npx playwright-core install --with-deps chromium
+
+      - name: mobile (every screen at phone size — overflow, the fold, nav targets, page errors)
+        env:
+          JWT_SECRET: ci-jwt-secret-not-a-real-one
+          MOD_KEY: ci-mod-key-long-enough-to-pass-preflight
+          MARKET_SEED: ciMarketSeed7Qx2mVb9PwLn4RtY6hJc
+          SOCIAL_VERIFY_MODE: 'off'
+          POPULATION_OFF: 'on'      # residents on the streets roster would vary the screens run to run
+        run: npm run mobile
+
   pgcheck:
     name: real Postgres
     runs-on: ubuntu-latest
