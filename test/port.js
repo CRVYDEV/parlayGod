@@ -296,7 +296,7 @@ assert.equal(app2ok.statusCode, 200, 'the captain sleeps with the fishes');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM boats WHERE character_id='${cap.id}'`)).rows[0].c), 0, 'the fleet died with the street');
 
 // ── §10.4: every port:* row is character_id'd → the per-character cash check reconciles ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `port: rides the cash vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const cashCheck = inv.checks.find((c) => c.name === 'character cash');

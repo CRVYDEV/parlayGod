@@ -31,7 +31,7 @@ const mk = async (name, body = {}) => {
 // absolute zero drift, we assert an ACTION adds no NEW drift on top of the baseline —
 // which, combined with hardening.js proving zero drift on a fully-earned economy,
 // proves the fix. Drift values are rounded to 1e-6, so unchanged state compares equal.
-const driftOf = async (name) => (await runLedgerInvariants(pool)).checks.find((c) => c.name === name).drift;
+const driftOf = async (name) => (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === name).drift;
 const addsNoDrift = async (name, action, label) => {
   const before = await driftOf(name); await action(); const after = await driftOf(name);
   assert.equal(after, before, `${label}: ${name} drift moved ${before} → ${after}`);
@@ -107,7 +107,7 @@ const addsNoDrift = async (name, action, label) => {
 // ═══ FINDING (contract-board): post/cancel/expiry all keep the §10.4 escrow bucket exact ═══
 {
   const { sweepExpiredBounties } = await import('../src/social.js');
-  const escrowDrift = async () => (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'bounty escrow').drift;
+  const escrowDrift = async () => (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'bounty escrow').drift;
   const P = await mk('Contractor P'); const T = await mk('Mark T');
   await seedCh(P.id, 'cash = 50000');
   const d0 = await escrowDrift();

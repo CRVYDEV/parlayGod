@@ -86,7 +86,7 @@ assert.equal(r.code, 200, 'Bob raises himself');
 assert.equal(await omrOf(b.token), 5000 - self, 'a self-raise nets to just the new bid (old refunded in-memory)');
 
 // ── §10.4 mid-auction: escrow == the live standing bid; bids/refunds are transfers ──
-let inv = await runLedgerInvariants(pool);
+let inv = await runLedgerInvariants(pool, { alert: false });
 let esc = inv.checks.find((c) => c.name === 'auction escrow');
 assert(esc.ok, `auction escrow reconciles: ${JSON.stringify(esc)}`);
 assert.equal(esc.lhs, self, 'the escrow bucket == the one live standing bid');
@@ -114,7 +114,7 @@ assert.notEqual(heir.id, b.id, 'a new street');
 assert(( await call('GET', '/v1/auction', { token: b.token })).body.wins.some((w) => w.lot === lot.id), 'the heir inherits the auction trophy');
 
 // ── §10.4 after settle: escrow empty, the win is a burn, vocabulary closed ──
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 esc = inv.checks.find((c) => c.name === 'auction escrow');
 assert(esc.ok && esc.lhs === 0, 'the escrow is empty after settle');
 // the winning bid left the game, but the BURN is properly ledgered: omrBuckets dropped by `self`
@@ -167,7 +167,7 @@ assert.equal(await omrOf(a.token), alBefore, 'Al got his bid back too');
 assert.equal((await call('POST', `/v1/auction/consign/${cid}/cancel`, { token: sellerTok })).body.error, 'has_bid', 'no pulling a lot with a standing bid');
 
 // ── §10.4 mid-listing: the escrow bucket now spans BOTH auctions + consignments ──
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 esc = inv.checks.find((c) => c.name === 'auction escrow');
 assert(esc.ok, `escrow reconciles mid-consignment: ${JSON.stringify(esc)}`);
 assert.equal(esc.lhs, top, 'the escrow bucket == the one live consignment bid');
@@ -190,7 +190,7 @@ assert(clb.collectors.some((x) => x.steward === 'Collector Carl'), 'Carl (bought
 assert(clb.patron && clb.patron.sunk > 0, 'a Patron of the Season is crowned by this-season spend');
 
 // ── §10.4 after the consignment settle: escrow empty, conservation still only the grants ──
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 esc = inv.checks.find((c) => c.name === 'auction escrow');
 assert(esc.ok && esc.lhs === 0, 'the consignment escrow is empty after settle');
 assert.equal(inv.checks.find((c) => c.name === '$OMR conservation').drift, grantDrift, 'conservation drift is still only the test grants (consign = transfer, take + fee = proper burns)');

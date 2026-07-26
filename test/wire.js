@@ -358,7 +358,7 @@ assert.equal(r.code, 200, 'the standing watch is dropped'); assert.equal(r.body.
 assert.equal((await call('DELETE', `/v1/wire/watch/${w1.id}`, { token: ss.token })).body.error, 'no_watch', 'a second cancel has nothing to drop');
 
 // ── §10.4: intel:* is a recognized burn; the ONLY drift is the unledgered SQL grant ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `intel: rides the omr vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');

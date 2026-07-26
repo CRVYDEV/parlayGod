@@ -99,7 +99,7 @@ assert.ok(board.you.enrolled, 'the board shows enrollment');
 assert.ok(board.endowment.emitted > 0 && board.endowment.remaining < EMISSION.ENDOWMENT_OMR, 'emitted tracks');
 
 // ── §10.4: EXACT conservation (no SQL $OMR grants in this test) + the endowment ceiling check ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');
 assert.ok(omrCheck.ok, `$OMR conservation holds with emission ledgered as a mint (drift ${omrCheck.drift})`);
 const endow = inv.checks.find((c) => c.name === 'emission within endowment');
@@ -120,7 +120,7 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   const poolAfter = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
   assert.ok(Math.abs((devAfter - devBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the dev fund');
   assert.ok(Math.abs((poolAfter - poolBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the buyback/yield pool');
-  const inv2 = await runLedgerInvariants(pool);
+  const inv2 = await runLedgerInvariants(pool, { alert: false });
   const omr2 = inv2.checks.find((c) => c.name === '$OMR conservation');
   assert.ok(omr2.ok, `conservation exact with the surcharge as bucket transfers (drift ${omr2.drift})`);
 }
@@ -150,7 +150,7 @@ assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
   assert.equal(await omrOf(pB.id), 4, 'the survivor draws budget − already-minted (4), not the full-budget share (5)');
   const epochMint = 4 + Number(rr.paid); // pA's simulated 4 + what the resume actually paid
   assert.ok(epochMint <= 8 + 1e-9, `a crash-resume never mints past the epoch budget (minted ${epochMint})`);
-  const inv3 = await runLedgerInvariants(pool);
+  const inv3 = await runLedgerInvariants(pool, { alert: false });
   assert.ok(inv3.checks.find((c) => c.name === '$OMR conservation').ok, 'conservation stays exact across the resume');
 }
 

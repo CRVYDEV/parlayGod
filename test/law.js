@@ -332,7 +332,7 @@ await seedCh(gil.id, 'jail_until=NULL');
 // ─────────────────────────────────────────────────────────────────────────────
 // §10.4 — the law: vocabulary is closed (law:* cash sinks + law:jury/envelope $OMR burns enrolled)
 // ─────────────────────────────────────────────────────────────────────────────
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `law:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 
 console.log('✅ test/law.js — the Law/RICO/informants across all four phases + THE ENVELOPE (the standing graft: a $OMR sink that slows the case build, ledgered law:envelope burn, window extends on re-pay, jailed/broke gates)');

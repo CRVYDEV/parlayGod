@@ -130,7 +130,7 @@ assert(lb.racers[0] && lb.racers[0].racer === 'Grey Ghost', 'Grey Ghost tops the
 assert(lb.legend.find((m) => m.owner === 'Diamond Jim' && m.wins === 2), 'the owner legend ranks Diamond Jim by career wins');
 
 // ── §10.4 (mid-life): the per-character cash check reconciles stable: incl. the circuit faucet ──
-let inv = await runLedgerInvariants(pool);
+let inv = await runLedgerInvariants(pool, { alert: false });
 assert.equal(inv.checks.find((c) => c.name === 'character cash').drift, cashDrift, `the only cash drift is the test grants (${cashDrift}) — stable: (buy/train/fee/purse/race) all reconcile`);
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'stable: rides the §10.4 vocabulary');
 
@@ -181,7 +181,7 @@ await call('POST', `/v1/stable/stakes/${r3}`, { token: st3.token });
 const poolAmt = Number((await pool.query(`SELECT pool FROM stakes_races WHERE id='${raceId}'`)).rows[0].pool);
 assert.equal(poolAmt, 3 * STABLE.STAKES.BUYIN, 'the purse holds all three buy-ins');
 // mid-open §10.4: the stakes-escrow check reconciles (pool == Σ buyin)
-const invMid = await runLedgerInvariants(pool);
+const invMid = await runLedgerInvariants(pool, { alert: false });
 const skMid = invMid.checks.find((c) => c.name === 'stakes escrow');
 assert(skMid?.ok, `stakes escrow reconciles mid-open (drift ${skMid?.drift})`);
 // resolve: Secretariat (form 75) tops a field of 75+rand vs ~24/30 — a lock; the top places split net of rake
@@ -197,7 +197,7 @@ const skWins = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM t
 const skTake = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:take'")).rows[0].s));
 const skRef = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:refund'")).rows[0].s);
 assert.equal(skPosted - skWins - skTake - skRef, 0, 'the stakes escrow closes (buyins == wins + take + refunds, both races)');
-const invSk = await runLedgerInvariants(pool);
+const invSk = await runLedgerInvariants(pool, { alert: false });
 assert(invSk.checks.find((c) => c.name === 'stakes escrow').ok, 'the stakes-escrow §10.4 check holds after settle');
 
 // ── red-team regressions: a DEAD entrant's stake BURNS (not refunds), and a BRED-AWAY entered parent
@@ -233,7 +233,7 @@ const skWin2 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM t
 const skTake2 = -(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:take'")).rows[0].s));
 const skRef2 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='stable:stakes:refund'")).rows[0].s);
 assert.equal(skPost2 - skWin2 - skTake2 - skRef2 - skDeathAll, 0, 'escrow closes with the dead-entrant burn in the mix');
-assert((await runLedgerInvariants(pool)).checks.find((c) => c.name === 'stakes escrow').ok, 'the §10.4 stakes-escrow check holds after a death-in-field settle');
+assert((await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'stakes escrow').ok, 'the §10.4 stakes-escrow check holds after a death-in-field settle');
 
 // ── DEATH: a dead owner's whole stable is done (survives-death is the LEGEND, not the animals) ──
 const before = Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE character_id='${aa.id}'`)).rows[0].n);
@@ -243,7 +243,7 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM racers WHERE chara
 assert.equal(await racerWins(aa.aid), 2, 'but the OWNER legend survives death (account-level)');
 
 // ── §10.4 final: the whole session reconciles ──
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'the vocabulary still closes');
 
 console.log('✅ The Stable test passed — own the dogs & the ponies: buy (level/kind/name/cash/full gates + the ledgered sink), train (bad-stat/energy/cap/ownership + sink), the PvE circuit (bad-meet/cooldown gates, a win\'s purse faucet + a loss\'s fee-only burn + injury, the owner legend), the PvP match race (self/kind/limit gates, the casino:pvp taxed transfer + the rake split half-to-the-street, injury-on-loss, the legend), the board + leaderboard, STEP TWO — BREEDING (same/kind gates, a foal inheriting a head-start-not-a-cap-skip, the two parents consumed, the ledgered stud-fee sink) + THE STAKES (buy-in escrow, a short-field refund, one-runner-per-owner gate, the worker settling a full field to the top places net of rake, and the stakes-escrow §10.4 check reconciling), DEATH (the stable wiped, the legend survives), and the §10.4 per-character cash reconcile + vocabulary');

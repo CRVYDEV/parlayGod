@@ -183,7 +183,7 @@ assert.equal(Number((await pool.query(`SELECT caskets FROM account_persistent WH
   2, 'the lifetime legend survives to the heir (1 easy + 1 master casket)');
 
 // ── §10.4: clue: vocabulary + the faucet reconciles per character ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `clue: rides the cash vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const cash = inv.checks.find((c) => c.name === 'character cash');

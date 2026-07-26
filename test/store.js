@@ -142,7 +142,7 @@ assert.equal(r.body.granted, false, 'a zero-wei payment grants no entitlement');
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.mintCredits, 1, 'still one mint credit (unchanged)');
 
 // ── §10.4 NEUTRALITY: the Store minted no currency — every in-game check holds at drift-0 ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.every((c) => c.ok), `every §10.4 check holds — the Store moved no in-game currency (${JSON.stringify(inv.checks.filter((c) => !c.ok))})`);
 
 // ── the buyback share rides the EXISTING vig_revenue; the real-value invariant absorbs it ──
@@ -263,7 +263,7 @@ await app.inject({ method: 'POST', url: '/v1/mod/kill', headers: { 'x-mod-key': 
 assert.equal((await call('GET', '/v1/store', { token: alice.token })).body.owned.patronStanding.spentEth, aliceSpentBefore, 'patron_spent survives death');
 
 // (F) §10.4 STILL NEUTRAL — the whole patron program minted nothing (the PLEX burns are ledgered)
-const inv2 = await runLedgerInvariants(pool);
+const inv2 = await runLedgerInvariants(pool, { alert: false });
 assert(inv2.checks.find((c) => c.name === 'reason vocabulary').ok, 'no unknown-reason alarm from the patron program');
 
 console.log('✅ THE PATRON PROGRAM (Store Tier-4) test passed — the patron ladder (a REAL purchase bumps patron_spent, a COMP does not, the tier climbs Friend→Benefactor), the PLEX contribution bump, the (ship-at-0) PLEX discount lever, THE BENEFACTORS league + THE HOUSE\'S FAVOR crown (agents excluded, families aggregate a roster), THE LEDGER PRESTIGE (a completed-then-renewed track bumps pass_seasons, an unfinished one does not), and DEATH SURVIVAL of both status axes');

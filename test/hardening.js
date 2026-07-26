@@ -124,27 +124,31 @@ if (bossCashPre >= 100) { // a normal (ledgered) confiscation still works
 }
 
 // the sweep: every bucket reconciles to the ledger exactly
-let inv = await runLedgerInvariants(pool);
+let inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.ok, `§10.4 invariants hold: ${JSON.stringify(inv.checks.filter((c) => !c.ok))}`);
 
-// drift detection: an unledgered mint must trip the character-cash check + alert
+// drift detection: an unledgered mint must trip the character-cash check + alert.
+// THIS ONE ALERTS ON PURPOSE — it is the only place in the suite that proves the alarm actually
+// fires (the telemetry row asserted three lines down). Everywhere else passes `{alert: false}`,
+// because the suites seed by SQL and every sweep was printing a red 🚨 banner on a GREEN run — 140
+// of them, which is precisely how a real drift alarm goes unnoticed in CI.
 await seedCh(boss.id, 'cash = cash + 12345');
 inv = await runLedgerInvariants(pool);
 assert(!inv.ok, 'drift detected');
 assert(inv.checks.find((c) => c.name === 'character cash' && !c.ok), 'the right check tripped');
 assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='invariant_drift'")).rows[0].n) >= 1, 'drift alert recorded');
 await seedCh(boss.id, 'cash = cash - 12345');
-assert((await runLedgerInvariants(pool)).ok, 'clean again after revert');
+assert((await runLedgerInvariants(pool, { alert: false })).ok, 'clean again after revert');
 
 // (red-team R21) prove drift detection for the $OMR bucket too — the extraction-backing currency, not just
 // cash. An unledgered $OMR mint (bucket up, no `mint` ledger row) MUST trip the $OMR conservation check; this
 // validates the omrBuckets reconstruction actually detects a leak (else a miscoded RHS could pass forever).
 const bossAcct = (await pool.query(`SELECT account_id a FROM characters WHERE id='${boss.id}'`)).rows[0].a;
 await pool.query(`UPDATE account_persistent SET omr = omr + 777 WHERE account_id='${bossAcct}'`);
-inv = await runLedgerInvariants(pool);
+inv = await runLedgerInvariants(pool, { alert: false });
 assert(!inv.ok && inv.checks.find((c) => c.name === '$OMR conservation' && !c.ok), 'an unledgered $OMR mint trips the $OMR conservation check');
 await pool.query(`UPDATE account_persistent SET omr = omr - 777 WHERE account_id='${bossAcct}'`);
-assert((await runLedgerInvariants(pool)).ok, '$OMR clean again after revert');
+assert((await runLedgerInvariants(pool, { alert: false })).ok, '$OMR clean again after revert');
 
 // ═══════ idempotency keys (§5) ═══════
 const idemKey = { 'idempotency-key': 'dep-001' };
@@ -207,7 +211,7 @@ m = await meOf(boss.token);
 assert.equal(m.respect, 0, 'respect reset for the new season');
 assert.equal(m.prestige, prestigeBefore + Math.floor(lvlBefore / 2), 'level converted to prestige');
 assert(Number((await pool.query("SELECT COUNT(*) n FROM telemetry WHERE event='season_convert'")).rows[0].n) >= 1, 'conversion telemetered');
-assert((await runLedgerInvariants(pool)).ok, 'invariants still hold after rollover');
+assert((await runLedgerInvariants(pool, { alert: false })).ok, 'invariants still hold after rollover');
 
 // ═══════ rate limits (§10.2) — flipped on for this section ═══════
 process.env.RATE_LIMIT = 'on';

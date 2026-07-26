@@ -1195,7 +1195,7 @@ await pool.query(`UPDATE territory_rackets SET last_income_at = now() - interval
 assert.equal((await call('GET', '/v1/territory', { token: raider.token })).body.territory.find((t) => t.district === 'docks').cold, false, 'the pad squared → warm again');
 assert.equal((await call('POST', '/v1/territory/collect', { token: raider.token })).body.collected, 16000, 'and the take flows to the treasury again');
 // §10.4: the treasury check still reconciles with the upkeep sink in the mix
-const terrTreas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const terrTreas = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(terrTreas.ok, `the treasury check reconciles territory:upkeep (drift ${terrTreas.drift})`);
 
 // ══ TERRITORY STEP THREE — per-district racket TYPE + the BUREAU CRACKDOWN ══
@@ -1232,7 +1232,7 @@ delete process.env.TERRITORY_RAID_P;
 // the type surfaces on the view; §10.4 treasury reconciles with territory:raid in the mix
 const tView = (await call('GET', '/v1/territory', { token: tboss.token })).body.territory.find((t) => t.district === 'canal');
 assert.equal(tView.kind, 'numbers', 'the view carries the operation type');
-const t3Treas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const t3Treas = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(t3Treas.ok, `the treasury check reconciles territory:raid (drift ${t3Treas.drift})`);
 
 // ══ TERRITORY STEP FOUR — FORTIFICATION + RIVAL RAIDS (the racket-wars layer) ══
@@ -1286,7 +1286,7 @@ assert.equal((await call('GET', `/v1/gangs/${rg}`, {})).body.gang.treasury, rgPr
 assert(((await meOf(raider.token)).health || 100) < 100, "the raider's health dropped on the failed raid");
 delete process.env.TERRITORY_RIVAL_RAID_P;
 // §10.4: the treasury check reconciles with territory:fortify (sink) + territory:muscle (faucet) in the mix
-const t4Treas = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const t4Treas = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(t4Treas.ok, `the treasury check reconciles territory:fortify + territory:muscle (drift ${t4Treas.drift})`);
 
 // ══ MAKE RISK PAY (sim-audit package): in-transit deposits + unbonding $OMR are lootable;
@@ -1440,7 +1440,7 @@ assert.equal(r.code, 200, 'vince parks $50k in a buy-order'); assert.equal(r.bod
 await seedCh(vvince.id, `safe_until = now() + interval '1 hour'`);
 assert.equal((await call('POST', '/v1/market/order', { token: vvince.token, body: { goodId: 'gin', qty: 10, price: 100 } })).body.error, 'safe', 'no parking cash from a safehouse');
 await seedCh(vvince.id, 'safe_until=NULL');
-const escLootPre = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'market escrow');
+const escLootPre = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'market escrow');
 assert(escLootPre.ok, 'market escrow starts reconciled with the parked order');
 const donPreLoot = (await meOf(don.token)).cash;
 const deathPre = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s);
@@ -1450,9 +1450,9 @@ const expLoot = Math.floor(50000 * M3.CASH_LOOT_RATE);
 assert.equal(kvo.orderLoot, expLoot, `the killer loots CASH_LOOT_RATE of the parked escrow ($${expLoot})`);
 assert.equal((await meOf(don.token)).cash, donPreLoot + kvo.chop + kvo.loot + expLoot, "the order loot landed in don's pocket alongside chop + cash loot");
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='market:death'")).rows[0].s), deathPre - (50000 - expLoot), 'the un-looted remainder burned (dead-funder precedent)');
-const escLootPost = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'market escrow');
+const escLootPost = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'market escrow');
 assert(escLootPost.ok, `market escrow still exact after the loot+burn (${JSON.stringify(escLootPost)})`);
-const vocabLoot = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocabLoot = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocabLoot.ok, `market:loot rides the vocabulary (${JSON.stringify(vocabLoot.unknown || [])})`);
 
 // ── STEP FOUR: WANTED — a defaulter forfeits omertà (family may hit them); NPC hunters come ──

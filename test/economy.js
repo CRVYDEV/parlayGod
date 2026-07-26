@@ -328,7 +328,7 @@ assert.equal(Number(held.rows[0].n), faucet - sinks, `car conservation: ${faucet
 //     the whole $OMR total is still genesis 20,000 (no mint from staking). (Only the $OMR check —
 //     the cash check is intentionally broken by this file's SQL cash-seeds.)
 const { runLedgerInvariants } = await import('../src/invariants.js');
-const omrCheck = (await runLedgerInvariants(pool)).checks.find((x) => x.name === '$OMR conservation');
+const omrCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((x) => x.name === '$OMR conservation');
 assert(omrCheck.ok, `$OMR conservation holds with the stake pool + stake:reward-as-transfer (drift ${omrCheck.drift})`);
 const ammFinal = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
 assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'AMM reserves stay positive');
@@ -631,7 +631,7 @@ assert(!lbL.launderers.some((x) => x.name === cidName), 'an agent-flagged launde
 await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 
 // (G) §10.4 — the vocabulary stays closed with business:spec (omr) + takeover/buyout (cash) in the mix
-const inv3 = await runLedgerInvariants(pool);
+const inv3 = await runLedgerInvariants(pool, { alert: false });
 assert(inv3.checks.find((c) => c.name === 'reason vocabulary').ok, `no unknown-reason alarm (${JSON.stringify(inv3.checks.find((c) => c.name === 'reason vocabulary').unknown || [])})`);
 
 console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no laundering / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend on a wash + rank/board + agent exclusion, THE ACCOUNTANT spec halving scrutiny + business:spec $OMR burn + not_maxed/bad_spec gates, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');

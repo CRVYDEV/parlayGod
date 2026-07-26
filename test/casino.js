@@ -412,7 +412,7 @@ const places = (await pool.query(`SELECT character_id, place, hand FROM poker_en
 assert.equal(places.length, 2, 'both live players were ranked'); assert(places.every((r) => r.hand), 'each got a dealt hand');
 assert.equal(Number(places[0].place), 1, 'a first place'); assert.equal(Number(places[1].place), 2, 'and a second');
 // the §10.4 escrow check reconciles across every tournament (open + settled)
-const invT = await runLedgerInvariants(pool);
+const invT = await runLedgerInvariants(pool, { alert: false });
 const trEsc = invT.checks.find((c) => c.name === 'poker tourney escrow');
 assert(trEsc?.ok, `poker tourney escrow reconciles (drift ${trEsc?.drift})`);
 
@@ -628,7 +628,7 @@ assert.equal(betA.code, 200, 'Punter A backs the favorite'); assert.equal(betA.b
 assert.equal((await call('POST', '/v1/casino/futurity/bet', { token: spec[0].t, body: { racerId: fu[1].racer, amount: 500 } })).body.error, 'already_bet', 'one bet per bettor');
 await call('POST', '/v1/casino/futurity/bet', { token: spec[1].t, body: { racerId: fu[1].racer, amount: 1000 } });
 // §10.4 MID-window: the futurity escrow == the two live bets ($2000)
-let invMid = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'futurity escrow');
+let invMid = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'futurity escrow');
 assert(invMid.ok && Math.abs(invMid.lhs - 2000) < 1, `mid-window escrow == the live pool (lhs ${invMid.lhs})`);
 // backdate the window + settle via the worker
 await pool.query(`UPDATE futurities SET resolves_at='${new Date(Date.now() - 1000).toISOString()}' WHERE id='${fid}'`);
@@ -649,7 +649,7 @@ assert.equal((await meOf(fu[0].t)).cash, favOwnerPre + 25, 'the winning owner to
 assert.equal(-(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:futurity:take'`)).rows[0].s)), 25, 'the house vig ledgered (NULL take)');
 await sweepFuturity(pool); // idempotent — a second sweep settles nothing
 // §10.4 POST-settle: the futurity escrow closes to 0 (posted − wins − refunds − purse − take − death == 0, no open pool)
-const invFut = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'futurity escrow');
+const invFut = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'futurity escrow');
 assert(invFut && invFut.ok, `futurity escrow reconciles post-settle (lhs ${invFut?.lhs}, rhs ${invFut?.rhs})`);
 
 // ── §10.4: the per-character cash identity holds EXACTLY over the whole gambling session ──
@@ -658,7 +658,7 @@ assert(invFut && invFut.ok, `futurity escrow reconciles post-settle (lhs ${invFu
 const me = await meOf(token);
 const ledgerAll = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='cash' AND character_id='${cid}'`)).rows[0].s);
 assert(Math.abs((me.cash + me.bank - seededCash) - ledgerAll) <= 1, `every gambled dollar reconciles (drift ${(me.cash + me.bank - seededCash) - ledgerAll})`);
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `casino:* reasons are in the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
 const treas = inv.checks.find((c) => c.name === 'gang treasuries');

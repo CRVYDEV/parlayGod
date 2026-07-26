@@ -31,7 +31,7 @@ const bonder = await (async () => {
 })();
 
 // ── the in-game §10.4 sweep is clean at the start (bonds must never perturb it) ──
-const inGameOk = async () => (await runLedgerInvariants(pool)).checks.every((c) => c.ok);
+const inGameOk = async () => (await runLedgerInvariants(pool, { alert: false })).checks.every((c) => c.ok);
 assert(await inGameOk(), 'in-game §10.4 clean before bonds');
 
 // ── FUND the tranche + record a bond ──
@@ -200,7 +200,7 @@ assert.equal(syn.backers, 2, 'both backers counted');
 assert.equal(syn.score, 11000 + 25000, "the syndicate sums its roster's scores (whale 11000 + titan 25000)");
 
 // ── (F) §10.4 — the vocabulary knows bond:; the burns reconcile; only the SQL grant drifts ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.find((c) => c.name === 'reason vocabulary').ok, 'bond: is enumerated (no unknown-reason alarm)');
 const bondBurns = -Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE currency='omr' AND reason LIKE 'bond:%'")).rows[0].s);
 const totalSpent = 500 + 100 + 1000 + 50000 + 25000; // alice pledge+charters, whale pledge, spook pledge, titan pledge

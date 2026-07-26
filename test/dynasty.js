@@ -268,7 +268,7 @@ let a, b;
   // seed BEFORE the snapshot so the measured window holds ONLY ledgered actions
   const p = await mk('LgA'); const q = await mk('LgB');
   await setCash(p.id, 200000); await setCash(q.id, 200000);
-  const before = await runLedgerInvariants(pool);
+  const before = await runLedgerInvariants(pool, { alert: false });
   assert.ok(before.checks.find((c) => c.name === 'reason vocabulary')?.ok,
     'the vocabulary stays closed with dynasty:/soldier: live');
   const cashBefore = driftOf(before, 'character cash');
@@ -278,7 +278,7 @@ let a, b;
   await call('POST', `/v1/dynasty/consigliere/${q.id}`, { token: p.token });
   const r = await call('POST', '/v1/soldiers/hire', { token: q.token });
   assert.equal(r.code, 200, 'ledger soldier hire');
-  const after = await runLedgerInvariants(pool);
+  const after = await runLedgerInvariants(pool, { alert: false });
   assert.ok(after.checks.find((c) => c.name === 'reason vocabulary')?.ok, 'vocabulary still closed');
   assert.equal(driftOf(after, 'character cash') - cashBefore, 0,
     'every dynasty:/soldier: sink ledgers exactly — zero new character-cash drift');

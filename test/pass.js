@@ -96,7 +96,7 @@ assert.equal((await call('POST', '/v1/pass/claim', { token: alice.token })).body
 assert.equal((await meOf(alice.token)).omr, 10, 'the stipends totalled 10 $OMR — funded by the pass buyback, never minted');
 
 // ── §10.4: every earned $OMR is a backed prize:omr faucet — conservation holds at drift-0 ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 assert(inv.checks.every((c) => c.ok), `§10.4 holds — pass rewards move no unbacked currency (${JSON.stringify(inv.checks.filter((c) => !c.ok))})`);
 
 // ── DEATH SURVIVAL: the account-level track carries to the heir ──

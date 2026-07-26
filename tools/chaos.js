@@ -273,6 +273,206 @@ if (!PG_CTL) {
   check(moved.length === 0, '§10.4 unmoved across the whole outage', moved.join('; '));
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+console.log('\n4. THE WAGE EPOCH IS KILLED HALFWAY THROUGH PAYING');
+// The highest-stakes resume in the codebase. `runWageEpoch` MINTS $OMR — real value, on a fixed
+// schedule, against a lifetime endowment — and it pays one character per transaction in a loop. A
+// crash halfway leaves some paid and some not.
+//
+// A previous audit found that a resumed run re-granted the WHOLE epoch budget to whoever had not yet
+// been paid: endowment-bounded, so the lifetime invariant stayed quiet, but a silent breach of the
+// signed halving schedule. The fix subtracts what this epoch already minted (`emittedThisEpoch`)
+// before splitting. It has never been crash-tested — until now it was an argument, not a fact.
+//
+// The arithmetic is meant to be self-correcting: with k already paid, the survivors split
+// `budget − consumed` between them, which works out to exactly the share they would have had in an
+// uninterrupted run. So the assertion is an EQUALITY against the uninterrupted total, not merely
+// "≤ budget" — an inequality would pass even if the crash silently paid everyone half.
+{
+  const { EMISSION } = await import('../src/rules.js');
+  const { emittedThisEpoch } = await import('../src/emission.js');
+  const CREW = 24;
+  const epoch = Math.floor(Date.now() / 86400000);
+  const workers = [];
+  for (let i = 0; i < CREW; i++) workers.push(await mk(`Chaos W${RUN}${i}`));
+
+  // Make them eligible: minted (the D1 Sybil wall), past the level floor, and enrolled with a
+  // baseline stamped LAST epoch so this epoch scores a real gain. Respect is the only thing seeded —
+  // wage eligibility is derived from it, and the payout itself is what is under test.
+  const ids = workers.map((w) => w.id);
+  await pool.query(`UPDATE characters SET respect = 5000 WHERE id = ANY($1::text[])`, [ids]);
+  await pool.query(`UPDATE account_persistent SET minted = true WHERE account_id IN
+    (SELECT account_id FROM characters WHERE id = ANY($1::text[]))`, [ids]);
+  await pool.query('DELETE FROM wage_snapshots WHERE character_id = ANY($1::text[])', [ids]);
+  for (const id of ids)
+    await pool.query('INSERT INTO wage_snapshots (character_id, epoch, respect) VALUES ($1,$2,$3)',
+      [id, epoch - 1, 100]);
+
+  // THE BUDGET MUST BIND, NOT THE CAP — or this scenario tests nothing.
+  //
+  // First cut ran on the real epoch budget (500 $OMR) with 24 workers. Each share came out at
+  // 500/24 ≈ 20.8, clamped to the 5 $OMR per-account cap, so EVERY worker got exactly 5 whether or
+  // not the resume subtracted what the crash had already spent. Deleting the guard entirely from
+  // `runWageEpochInner` still passed all six checks. The scenario was measuring the cap.
+  //
+  // With the budget overridden so each share (budget/CREW) sits UNDER the cap, the arithmetic is
+  // load-bearing again: drop the guard and the survivors split the full budget a second time, which
+  // the equality below catches. The assertion right here keeps it that way — raise WAGE_CAP_OMR or
+  // change the crew and this fails loudly instead of going quietly vacuous.
+  //
+  // The budget is set RELATIVE to what this epoch has already minted, because `emittedThisEpoch`
+  // counts every wage row written today — including ones an earlier run of this harness wrote
+  // against a different crew. A flat budget looked fine on a clean database and paid absolutely
+  // nobody on the second run (`payable` went negative), which the guards above caught. Offsetting
+  // by the standing total makes the run self-contained on a shared throwaway DB, and the arithmetic
+  // is unchanged: the crew starts with exactly CREW to split, and each resume sees it shrink by
+  // precisely what the crash already paid.
+  const spentToday = await emittedThisEpoch(pool, epoch);
+  const BUDGET = spentToday + CREW; // → 1 $OMR each, comfortably under the cap
+  const share = (BUDGET - spentToday) / CREW;
+  check(share < EMISSION.WAGE_CAP_OMR,
+    `the budget binds, not the per-account cap (${share} < ${EMISSION.WAGE_CAP_OMR}) — the crash-resume arithmetic is what is under test`,
+    'shares are cap-clamped, so this scenario would pass with the resume guard deleted');
+  const expected = CREW * share; // what THIS crew should draw — not BUDGET, which carries the offset
+  const paidRows = async () => (await pool.query(
+    `SELECT character_id, count(*)::int n, sum(amount)::numeric s FROM transactions
+      WHERE reason='emission:wage' AND character_id = ANY($1::text[]) GROUP BY character_id`, [ids])).rows;
+
+  const before = await drift();
+  // Run the epoch in a CHILD process and SIGKILL it mid-loop. A child, not the worker, because the
+  // worker's schedule would make the timing a lottery — and the failure under test is the process
+  // dying, which cannot be simulated from inside the process that is dying.
+  //
+  // The child announces READY on stdout the instant its pool is up, and the kill timer starts from
+  // THERE. Timing from spawn instead was the first cut and it never once landed inside the loop:
+  // `makeDb()` applies the whole schema plus ~1,035 ADD COLUMN statements, so the child spends
+  // almost its entire short life booting, and every kill landed before the first payment. The
+  // scenario reported 0/24 paid — which the guard below caught, but only because the guard exists.
+  const runner = `import('${new URL('../src/emission.js', import.meta.url).pathname}').then(async (m) => {
+    const { makeDb } = await import('${new URL('../src/db.js', import.meta.url).pathname}');
+    const pool = await makeDb();
+    process.stdout.write('READY\\n');
+    await m.runWageEpoch(pool, { epoch: ${epoch}, budget: ${BUDGET} });
+    process.exit(0);
+  });`;
+  const runEpoch = (killAfterReadyMs) => new Promise((resolve) => {
+    const c = spawn('node', ['-e', runner], { env: process.env, stdio: ['ignore', 'pipe', 'ignore'] });
+    let timer = null;
+    c.stdout.on('data', (d) => {
+      if (killAfterReadyMs && !timer && String(d).includes('READY'))
+        timer = setTimeout(() => c.kill('SIGKILL'), killAfterReadyMs);
+    });
+    c.on('exit', () => { if (timer) clearTimeout(timer); resolve(); });
+  });
+
+  // Find kill points that actually land INSIDE the loop. A crash before the first payment or after
+  // the last one exercises nothing and would pass this scenario while proving nothing — the same
+  // trap the load harness hit twice. The sweep is fine-grained because the loop is milliseconds long,
+  // and it keeps killing while the epoch is part-paid so the RESUME path runs repeatedly rather than
+  // once: each survivor's share is computed against a different already-consumed amount.
+  const progression = [];
+  for (const ms of [4, 8, 12, 18, 25, 35, 50, 70, 100, 150, 220]) {
+    await runEpoch(ms);
+    const n = (await paidRows()).length;
+    if (n > 0) progression.push(n);
+    if (n >= CREW) break; // it ran to completion; the no-double-pay checks below still apply
+  }
+  const partials = progression.filter((n) => n < CREW);
+  check(partials.length > 0,
+    `the epoch was genuinely interrupted mid-payment — resumed from ${partials.join(', ')} of ${CREW} paid`,
+    'no kill landed inside the loop — this scenario proved nothing, widen the crew or the timings');
+
+  // now let it finish
+  await runEpoch(0);
+  const rows = await paidRows();
+  const total = rows.reduce((a, r) => a + Number(r.s), 0);
+  const twice = rows.filter((r) => r.n > 1);
+
+  check(rows.length === CREW, `every worker was paid after the resume: ${rows.length}/${CREW}`);
+  check(twice.length === 0, 'nobody was paid twice across the crash', `${twice.length} double payment(s)`);
+  // THE EQUALITY. Over-payment means the resume re-granted budget the crash had already spent;
+  // under-payment means a killed run lost a share the resume never picked up.
+  check(Math.abs(total - expected) < 0.01,
+    `the crashed-then-resumed epoch minted EXACTLY the uninterrupted amount: ${total} $OMR`,
+    `expected ${expected}`);
+
+  // a third run must be a no-op — the epoch is done, and re-running the worker must not print money
+  await runEpoch(0);
+  const after3 = (await paidRows()).reduce((a, r) => a + Number(r.s), 0);
+  check(Math.abs(after3 - total) < 0.01, 're-running a finished epoch mints nothing further',
+    `${after3} vs ${total}`);
+  const moved = deltas(before, await drift());
+  check(moved.length === 0, '§10.4 holds across the whole interrupted epoch (the mint reconciles)', moved.join('; '));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+console.log('\n5. TWO-PARTY TRANSFERS, INTERRUPTED');
+// Scenario 2 kills backends under a PvE load. This aims the same weapon at the two-party path
+// specifically, where a torn transaction is not merely a failed request but MONEY IN ONE PLACE AND
+// NOT THE OTHER: `withTwoCharacters` debits one player and credits another inside a single
+// transaction, and the whole §10.4 argument rests on that being atomic under interruption.
+{
+  const a = await mk(`Chaos T${RUN}a`);
+  const b = await mk(`Chaos T${RUN}b`);
+  // The back-room dice: a taxed player-to-player transfer, consent by listing, and REPEATABLE.
+  // The bodyguard market was the first choice and it measured almost nothing — a hire persists until
+  // a lethal hit consumes it, so 229 of 230 attempts came back `guarded` and exactly ONE transfer
+  // actually happened while the reaper ran. A scenario that lands one sample reads exactly like a
+  // scenario that passes.
+  await api('POST', '/v1/casino/fade', { token: b.token, body: { limit: 5000 } });
+
+  const startA = Number((await pool.query('SELECT cash + bank AS w FROM characters WHERE id=$1', [a.id])).rows[0].w);
+  const before = await drift();
+  let kills = 0;
+  const reaper = setInterval(async () => {
+    try {
+      const r = await pool.query(
+        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+          WHERE datname = current_database() AND pid <> pg_backend_pid()
+            AND state IN ('active','idle in transaction') LIMIT 2`);
+      kills += r.rowCount;
+    } catch { /* the reaper's own connection can be the casualty */ }
+  }, 120);
+
+  // nerve is the back room's throttle. Topping it up keeps the transfer path saturated, and nerve is
+  // not a §10.4 currency, so seeding it cannot contaminate the ledger assertion below — which is the
+  // whole reason the medic touches nerve and never cash.
+  const medic = setInterval(() => {
+    pool.query('UPDATE characters SET nerve = 100 WHERE id = $1', [a.id]).catch(() => {});
+  }, 300);
+
+  const codes = new Map();
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const r = await api('POST', `/v1/casino/dice/${b.id}`, { token: a.token, body: { amount: 500 } });
+    const k = r.err ? `net:${r.err}` : (r.body?.error ? `${r.code}:${r.body.error}` : String(r.code));
+    codes.set(k, (codes.get(k) || 0) + 1);
+  }
+  clearInterval(medic);
+  clearInterval(reaper);
+  await sleep(500);
+
+  console.log(`     outcomes: ${[...codes].sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k}×${n}`).join('  ')}`);
+  const ok = codes.get('200') || 0;
+  check(ok > 0, `${ok} two-party transfer(s) completed while ${kills} backend(s) were being killed`,
+    'none completed — the scenario proved nothing');
+  const moved = deltas(before, await drift());
+  check(moved.length === 0, '§10.4 unmoved: no transfer was left half-applied', moved.join('; '));
+  // and the payer's books agree with their ledger to the cent — the §10.4 sweep above is the formal
+  // version over every character at once; this is the same claim for one player, in a form a human
+  // can read. It is CASH + BANK, matching invariant (a): the cash-currency ledger spans both, so
+  // bank interest is a cash-currency row that lands in `bank`. Comparing against `cash` alone was
+  // the first cut, and it "failed" by exactly the ~$2.36 of interest that five seconds pays on a
+  // $1M balance — an instrument disagreeing with the authoritative check, which is always the way
+  // round to bet: the sweep was right and the reading was wrong.
+  const endA = Number((await pool.query('SELECT cash + bank AS w FROM characters WHERE id=$1', [a.id])).rows[0].w);
+  const ledgerA = Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id=$1 AND currency='cash'", [a.id])).rows[0].s);
+  check(Math.abs((startA + ledgerA) - endA) < 0.01,
+    `the payer's books match their ledger exactly after the killings ($${Math.round(endA)})`,
+    `start ${startA} + ledger ${ledgerA} != ${endA}`);
+}
+
 await app.close();
 for (const n of notes) console.log(`\nNOTE: ${n}`);
 if (fails.length) {

@@ -459,6 +459,23 @@ Verified by removing the handler and confirming the harness fails (it does, loud
 fix: interrupted sweeps settle each lot exactly once, ~80 killed backends leave §10.4 unmoved, and a full
 database outage produces 503s rather than 500s and **recovers unaided** with no redeploy.
 
+**Then the same weapon was aimed at the two places where being wrong costs real value.** `runWageEpoch`
+MINTS $OMR against a lifetime endowment, one character per transaction; a resumed run is supposed to
+split only what the crash had not already spent. Killed at five points mid-payment and resumed, it pays
+every worker exactly once and mints exactly the uninterrupted total. That claim is now **proven
+load-bearing rather than merely asserted**: deleting the resume guard makes the same run mint **five
+times the schedule**, and the scenario fails. The first version of the scenario did *not* catch it —
+running on the real 500 $OMR budget, every share clamped to the 5 $OMR per-account cap, so the guard
+was irrelevant and the mutation passed. The budget now binds instead of the cap, with an assertion that
+keeps it that way. Separately, ~155 two-party `withTwoCharacters` transfers were driven through a
+backend reaper: none was left half-applied, and the payer's books match their ledger to the cent.
+
+One seam confirmed reachable and correct: an interruption between a committed action and the storing of
+its idempotency result leaves that key reserved. A retry gets `409 in_progress` until the 7-day prune
+rather than being released, because releasing could run the action twice. That is fail-closed and
+deliberate; `AGENTS.md` now tells agents what a persistent `409` means and to read their state rather
+than spin.
+
 ---
 
 ## 5. Is a rewrite needed?

@@ -212,7 +212,7 @@ assert.equal(kill.statusCode, 200, 'the Commission retires wil');
 const heir = await meOf(wil.token);
 assert.equal((heir.skills || []).length, 0, 'a prestige-0 heir starts unschooled — skills died with the street');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM character_skills WHERE character_id='${wil.id}'`)).rows[0].n), 0, 'the rows are gone');
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `respec:skills rides the respec prefix (${JSON.stringify(vocab.unknown || [])})`);
 
 console.log('✅ Skills test passed — twelve-skill tree (three branches × four tiers), level-derived points (6 @ lvl 25), learn gates (bad/owned/prereq/points), FAST TALKER laylow ×0.8 ledger-exact, BROKER half listing fees, PACK MULE trunk 13, ROAD CAPTAIN 480s road, GETAWAY stints ≤80%, EXECUTIONER ~8s search clock, DOC\'S FRIEND heal ×0.75, respec (ledgered 10 $OMR burn, points restored, shared daily cooldown), STEP TWO: MADE MAN capstone (needs lvl 40 / 10 points, unlocks Adrenaline Rush), active-ability gates + energy burst to the level-scaled cap + shared cooldown, per-skill respec (leaf-first, not_known, ledgered, daily cooldown), STEP FOUR: GRANDMASTERY (two maxed branches → a Grandmaster: the combined ULTIMATE fires energy AND nerve to the cap, the locked ultimate is refused, the shared active cooldown is shorter), STEP THREE: prestige points (+2 @ prestige 24) + MUSCLE MEMORY (the heir keeps the three tier-1 basics; a prestige-0 line stays unschooled), estate wipes the build, vocabulary closed');

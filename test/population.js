@@ -35,7 +35,7 @@ const mk = async (name) => {
 };
 const one = async (q, p = []) => Number((await pool.query(q, p)).rows[0].n);
 const driftOf = async (name) => {
-  const r = await runLedgerInvariants(pool);
+  const r = await runLedgerInvariants(pool, { alert: false });
   const c = r.checks.find((x) => x.name === name);
   assert(c, `check ${name} exists`);
   return Number(c.drift);
@@ -166,7 +166,7 @@ assert(await population(pool) <= before + POPULATION.SPAWN_PER_TICK, 'headcount 
 // point of sale. So every behaviour below is either zero-value (consent limits, drift) or parks
 // already-seeded cash in an EXISTING audited escrow — NO new faucet, NO new §10.4 reason.
 const escrowDrift = async () => {
-  const r = await runLedgerInvariants(pool);
+  const r = await runLedgerInvariants(pool, { alert: false });
   return r.checks.filter((c) => /escrow/.test(c.name)).map((c) => `${c.name}:${c.drift}`).join(' ');
 };
 const escrow0 = await escrowDrift();
@@ -383,7 +383,7 @@ assert.equal(await driftOf('character cash'), cashDrift0, 'and the cash check ST
 assert.equal(await escrowDrift(), escrow0, 'as does every escrow check');
 
 // ════════════ THE VOCABULARY ════════════
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab && vocab.ok, `npc: reasons are in the §10.4 cash vocabulary (${JSON.stringify(vocab)})`);
 const retires = await one("SELECT COUNT(*) n FROM transactions WHERE reason='npc:retire'");

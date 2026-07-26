@@ -45,6 +45,11 @@ process.on('warning', (w) => { if (/pg|client\.query/i.test(w.message)) deprecat
 const { buildServer } = await import('../src/server.js');
 const app = await buildServer();
 const pool = app.pool;
+// WAS THIS DATABASE ALREADY IN USE? Read before this harness creates anything, so it is a fact about
+// what it was handed rather than about what it did. Only §6 cares: unlike the other harnesses, which
+// SQL-seed and therefore assert a before/after DELTA, §6 asserts the ledger identities ABSOLUTELY —
+// which is only meaningful on a database nothing has seeded value into behind its back.
+const preExistingChars = Number((await pool.query('SELECT count(*) n FROM characters')).rows[0].n);
 const call = async (method, url, { token, body } = {}) => {
   const res = await app.inject({ method, url,
     headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': crypto.randomUUID() },
@@ -238,10 +243,27 @@ console.log('\n6. §10.4 HOLDS on real Postgres');
 // re-asserted on the engine that actually stores the money.
 {
   const { runLedgerInvariants } = await import('../src/invariants.js');
-  const inv = await runLedgerInvariants(pool);
-  const broken = (inv.checks || []).filter((c) => !c.ok);
-  check(inv.ok, `all ${(inv.checks || []).length} ledger identities hold`,
-    broken.map((c) => `${c.name} drift ${c.drift}`).join('; '));
+  // SKIPPED, LOUDLY, on a database that was already in use — never quietly reported as a bug.
+  //
+  // This leg asserts the identities ABSOLUTELY, so it only means anything on a database nothing has
+  // seeded into. Point it at one `loadtest` or `chaos` has run against and it reports a nine-figure
+  // "ledger failure" that is entirely their SQL seeding. That happened during this session and cost
+  // real time chasing it — a false bug report is worse than no report.
+  //
+  // Detecting it by guessing at the drift was the first cut, and it was worse than useless: the
+  // heuristic would have fired on a GENUINE drift too, printing "probably just seeding, ignore" over
+  // the exact finding this harness exists to surface. Skipping on a fact known before the run starts
+  // — the database was not empty — can't misclassify anything.
+  if (preExistingChars > 0) {
+    console.log(`  ⃠ SKIPPED — this database already held ${preExistingChars} character(s) when pgcheck`
+      + ' started, so the absolute ledger identities are not meaningful here (another harness seeds by'
+      + ' SQL). Run `createdb omerta_check` and point pgcheck at a FRESH database to exercise this.');
+  } else {
+    const inv = await runLedgerInvariants(pool, { alert: false });
+    const broken = (inv.checks || []).filter((c) => !c.ok);
+    check(inv.ok, `all ${(inv.checks || []).length} ledger identities hold`,
+      broken.map((c) => `${c.name} drift ${c.drift}`).join('; '));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,5 +342,9 @@ if (fails.length) {
   for (const f of fails) console.error('  • ' + f);
   process.exit(1);
 }
-console.log('✅ pgcheck passed — the loop, the locks, the safety valves, the ledger, the migration and the lock-free read path all hold on real Postgres.');
+// The summary must not claim what was skipped. Saying "the ledger holds" after §6 declined to run is
+// exactly the overclaim this harness keeps catching elsewhere.
+console.log(`✅ pgcheck passed — the loop, the locks, the safety valves, ${preExistingChars > 0
+  ? 'the migration and the lock-free read path hold on real Postgres. THE LEDGER LEG WAS SKIPPED (this database was not fresh) — re-run against an empty database to check it'
+  : 'the ledger, the migration and the lock-free read path all hold on real Postgres'}.`);
 process.exit(0);

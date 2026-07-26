@@ -151,7 +151,7 @@ r = await call('GET', '/v1/megaproject', { token: don.token });
 assert.equal(r.body.skyline[0].architect.length > 0, true, 'the skyline still names the line');
 
 // ── §10.4: vocabulary closed + both burns reconcile (drift == the SQL grants only) ──
-const inv = await runLedgerInvariants(pool);
+const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `megaproject: rides both vocabularies (${JSON.stringify(vocab.unknown || [])})`);
 const omrCheck = inv.checks.find((c) => c.name === '$OMR conservation');

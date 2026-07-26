@@ -39,7 +39,7 @@ assert.equal((await call('POST', '/v1/path', { token: chef.token, body: { path: 
 // the §10.4 cash vocabulary, so EVERY production account tripped a permanent false drift alarm
 {
   const { runLedgerInvariants } = await import('../src/invariants.js');
-  const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+  const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
   assert(vocab.ok, `a path pick must not trip the vocabulary alarm (${JSON.stringify(vocab.unknown || [])})`);
 }
 

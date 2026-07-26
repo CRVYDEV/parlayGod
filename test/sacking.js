@@ -64,7 +64,7 @@ const rVal = BUSINESSES.find((b) => b.kind === 'restaurant').tiers[1].incomePerH
 const richerKind = lVal >= rVal ? 'laundromat' : 'restaurant';
 const richerTier = lVal >= rVal ? 3 : 2;
 
-const d0 = driftMap(await runLedgerInvariants(pool));
+const d0 = driftMap(await runLedgerInvariants(pool, { alert: false }));
 const k = await whack(mark.id);
 assert.ok(k.kill, 'the mogul is dead');
 assert.ok(k.empireLoot, 'the kill sacked a front');
@@ -82,7 +82,7 @@ assert.equal((await pool.query(`SELECT scrutiny FROM businesses WHERE character_
 
 // §10.4 — a front is an ownership object, not a currency: the sacking-kill moved zero NEW value on the
 // stable buckets (every kill flow is a ledgered transfer/burn; the seize adds nothing)
-const d1 = driftMap(await runLedgerInvariants(pool));
+const d1 = driftMap(await runLedgerInvariants(pool, { alert: false }));
 for (const k of stable) assert.equal(d1[k], d0[k], `the sacking is §10.4-neutral on ${k} (drift unchanged)`);
 
 // ── the OCCUPIED-SLOT gate: the killer now runs a laundromat/restaurant; a fresh mark with the SAME kinds
@@ -103,7 +103,7 @@ await seedFront(whale.id, 'casino', 3);        // lvl58 to run
 await seedCh(whale.id, "respect=1000, hosp_until=NULL, jail_until=NULL, safe_until=NULL, loc='docks'");
 await seedCh(rookie.id, "energy=200, ammo=8000, nerve=50, jail_until=NULL, shoot_cd_until=NULL, hosp_until=NULL, loc='docks'");
 await call('POST', `/v1/streets/${whale.id}/search`, { token: rookie.token });
-const d2 = driftMap(await runLedgerInvariants(pool));
+const d2 = driftMap(await runLedgerInvariants(pool, { alert: false }));
 const k3 = (await call('POST', `/v1/streets/${whale.id}/fire`, { token: rookie.token, body: { rounds: 8000 } })).body;
 assert.ok(k3.kill, 'the whale is dead');
 assert.ok(!k3.empireLoot, 'the rookie could not HOLD a casino front (level gate) — no seize');
@@ -111,7 +111,7 @@ assert.equal((await frontsOf(rookie.id)).length, 0, 'the rookie inherited nothin
 assert.equal((await pool.query(`SELECT count(*)::int n FROM businesses WHERE character_id='${whale.id}'`)).rows[0].n, 0, 'the casino still died with the street');
 
 // the no-seize (level-gated) kill is §10.4-neutral on the stable buckets too
-const d3 = driftMap(await runLedgerInvariants(pool));
+const d3 = driftMap(await runLedgerInvariants(pool, { alert: false }));
 for (const kk of stable) assert.equal(d3[kk], d2[kk], `no-seize kill is §10.4-neutral on ${kk}`);
 
 console.log('ok - THE SACKING (L3a): fire-kill seizes the most-valuable holdable front (survives the wipe, rest die), occupied-slot + level gates fall through clean, §10.4-neutral');

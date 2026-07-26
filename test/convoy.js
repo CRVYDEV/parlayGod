@@ -115,7 +115,7 @@ const expectToll = Math.floor(10 * goodPriceOf('gin', 'docks') * CONVOY.TOLL_BPS
 assert.equal(r.body.toll, expectToll, `the Barons take ${CONVOY.TOLL_BPS / 100}% of what lands on their docks ($${expectToll})`);
 assert.equal(Number((await pool.query(`SELECT treasury FROM gangs WHERE id='${rbId}'`)).rows[0].treasury), rbPre + expectToll, 'the toll reached the treasury');
 assert.equal(Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='convoy:toll'`)).rows[0].s), -expectToll, 'convoy:toll is the ledgered transfer');
-const checks1 = (await runLedgerInvariants(pool)).checks;
+const checks1 = (await runLedgerInvariants(pool, { alert: false })).checks;
 assert(checks1.find((c) => c.name === 'gang treasuries').ok, 'the treasury §10.4 check reconciles the toll');
 
 // ── STEP TWO: insured freight + degrading multi-ambush (only WINS spend the convoy's slots) ──
@@ -171,7 +171,7 @@ assert.equal(r.code, 200, 'the empty run settles'); assert.equal(r.body.collecte
 assert.equal(r.body.insurance, premium, 'the payout is CAPPED at his own lifetime premiums — not the fattened pool');
 assert.equal((await meOf(sam.token)).cash, samPreClaim + premium, 'the claim landed');
 assert.equal(Number((await pool.query('SELECT pool FROM convoy_insurance WHERE id=1')).rows[0].pool), hPremium, "harry's premium is untouched — colluders can't drain other shippers");
-const checks2 = (await runLedgerInvariants(pool)).checks;
+const checks2 = (await runLedgerInvariants(pool, { alert: false })).checks;
 assert(checks2.find((c) => c.name === 'convoy insurance pool').ok, 'the insurance-pool §10.4 check reconciles (premiums − payouts)');
 
 // ── STEP THREE — NPC TRUCKING: worker-run unmarked trucks players can hijack (the ambush loop's PvE target) ──
@@ -342,10 +342,10 @@ assert(cbTC.reputation && cbTC.reputation.tollBreak && cbTC.reputation.coolsFast
 assert(cbTC.mine && cbTC.mine.notoriety > 0, 'the active shipment shows the lane heat');
 
 // ── §10.4: the vocabulary knows the convoy reasons (cash + ammo) ──
-const vocab = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'reason vocabulary');
+const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `convoy:* is enumerated (${JSON.stringify(vocab.unknown || [])})`);
 // the reputation toll is a TRANSFER (a discounted convoy:toll) — the gang-treasuries check reconciles
-const treC = (await runLedgerInvariants(pool)).checks.find((c) => c.name === 'gang treasuries');
+const treC = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'gang treasuries');
 assert(treC.ok, `the discounted convoy:toll transfer reconciles the treasury (drift ${treC.drift})`);
 
 console.log('✅ Convoy test passed — bulk loading beyond the trunk, guard-fee sink ledgered, band-only road board, ambush gates (own/family/safehouse/once/spent), deterministic hijack (trunk-capped transfer, remainder rolls on, shipper notified), deterministic repel (hospital, freight untouched), arrival + at-destination collect + STEP TWO: destination toll (treasury credit, §10.4 exact), degrading multi-ambush (per-character once, 3-cap, wear in the audit), insured freight (premium → pool, pool-capped claim, §10.4 pool check), vocabulary; STEP THREE: NPC TRUCKING (the worker tops the road to TARGET unmarked trucks, no over-spawn, an NPC truck on the public board, a deterministic hijack landing goods in the raider trunk with no owner to notify, and an arrived NPC convoy despawning with its cargo — no faucet on a delivered truck)');
