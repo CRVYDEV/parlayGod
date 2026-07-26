@@ -82,6 +82,16 @@
   #whoami { margin-left: auto; color: var(--dim); font-size: 13.5px; }
   #whoami b { color: var(--ink); }
 
+  /* the phone-only vitals strip: desktop keeps the full sheet in its own column and needs no summary */
+  #vitals { display: none; }
+  /* an unbroken run of characters (the Collection's ◇◇◇ tracker) is a word to the layout engine, and one
+     long enough to out-measure the viewport makes the WHOLE PAGE scroll sideways. Cards wrap anywhere. */
+  /* break-word, NOT anywhere: `anywhere` also shrinks min-content, which collapses flex columns and
+     stacked a section heading one letter per line. break-word still breaks the long run. */
+  .card, .panel { overflow-wrap: break-word; }
+  /* a <select> sizes to its LONGEST OPTION, so one wordy entry ("The Corner Store — 2 crew, lvl 4, …")
+     drags the element past the viewport and scrolls the page sideways. Never let a control out-grow it. */
+  select, input, textarea { max-width: 100%; }
   #layout { display: grid; grid-template-columns: 300px 1fr 320px; gap: 14px; padding: 14px 16px; }
   /* grid-blowout guard: a no-wrap child (the tab rail) must scroll INSIDE its column, never widen it —
      without min-width:0 the rail's ~2100px intrinsic width blows out the 1fr track, and mobile Chrome
@@ -343,9 +353,35 @@
   @media (max-width: 760px) {
     :root { font-size: 15px; }
     #layout { padding: 8px; gap: 10px; }
-    #top { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
-    #top h1 { font-size: 17px; letter-spacing: 4px; }
-    #whoami { flex-basis: 100%; margin-left: 0; order: 3; }
+    /* THE TOP BAR was eating ~370px of a 667px phone — masthead, five buttons, a full-width language
+       select and the identity line, all before a single pixel of the game. Trim it to one compact row. */
+    #top { flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
+    #top h1 { font-size: 16px; letter-spacing: 3px; }
+    #top .sub { display: none; }                        /* decorative on a phone */
+    #top .act { padding: 7px 9px; min-height: 34px; font-size: 12px; }
+    #top .langglobe { display: none; }                  /* the select itself carries the affordance */
+    #top .langpick { width: auto; max-width: 116px; min-height: 34px; padding: 6px 6px; font-size: 12px; }
+    #whoami { flex-basis: 100%; margin-left: 0; order: 3; font-size: 12.5px; }
+    /* a section heading is a flex row of TITLE + a long "— what this is" note; on a narrow screen the
+       two fight for width and the title gets squeezed to a few characters. Let the note drop below. */
+    .panel h2 { flex-wrap: wrap; }
+    .panel h2 .d { flex-basis: 100%; }
+    /* THE PHONE ORDER. Stacked, the left column (a ~1000px sheet) pushed every tab's content below the
+       fold — on Start Here a new player saw a stats table and a debug viewer, and none of the checklist
+       they came for. The screen you PICKED leads; the sheet and the wire follow. */
+    #tabpanel { order: -1; } #leftcol { order: 1; } #wirepanel { order: 2; }
+    #coachwrap:not(:empty) { padding: 8px 8px 0; }
+    /* the vitals strip replaces the sheet at a glance while the sheet itself sits lower down */
+    #vitals { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+      padding: 7px 12px; margin: 0; border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      position: sticky; top: 0; z-index: 11; font-size: 13px; }
+    #vitals .v-cash { color: var(--neon); font-size: 16px; letter-spacing: .5px; }
+    #vitals .v-i { color: var(--dim); } #vitals .v-i b { color: var(--ink); font-weight: normal; margin-right: 2px; }
+    /* thumb-sized navigation — 32px rail buttons are the primary nav on a phone */
+    #grouprail button { flex: 0 0 auto; min-height: 40px; padding: 9px 13px; }
+    #wiretabs button { min-height: 38px; }
     #tabs, #grouprail { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px;
       scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
       mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
@@ -535,9 +571,13 @@
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
     <button class="act" id="btn-logout" title="sign out of this account">sign out</button>
   </div>
+  <!-- the coach + a compact vitals strip live ABOVE the layout: on a phone the sheet is a long column,
+       so the one line telling you what to do next must not be buried inside it. -->
+  <div id="coachwrap"></div>
+  <div id="vitals"></div>
   <div id="layout">
 
-    <div>
+    <div id="leftcol">
       <div class="panel" id="sheet">
         <h2 data-i18n="w_sheet">The Sheet</h2>
         <div id="sheet-body">…</div>
@@ -554,7 +594,7 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="tabpanel">
       <div id="grouprail"></div>
       <div id="tabs"></div>
       <div id="tabbodies"></div>
@@ -1483,9 +1523,16 @@
     if (me.law?.stage && me.law.stage !== 'clean') chips.push(['cold', me.law.stage.toUpperCase()]);
     if (me.guardedBy) chips.push(['good', 'GUARDED']);
     // THE COACH — the server-computed single next step (guides new players; quietly absent for vets)
-    const coach = me.coach ? `<div id="coach"><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
+    $('#coachwrap').innerHTML = me.coach ? `<div id="coach"><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
       <button class="act" id="coach-go" style="padding:5px 12px;font-size:12.5px">${T('b_takeme')}</button></div>` : '';
-    $('#sheet-body').innerHTML = coach + `
+    // the phone strip: the four numbers you glance at, always in reach, so the full sheet can sit below
+    // the tab content without costing you your vitals. Hidden by CSS on desktop, where the sheet is a column.
+    $('#vitals').innerHTML = `<span class="v-cash">$${fmt(me.cash)}</span>`
+      + `<span class="v-i" title="health"><b>♥</b>${me.health}</span>`
+      + `<span class="v-i" title="energy — gym, garage, crews"><b>⚡</b>${me.energy}</span>`
+      + `<span class="v-i" title="nerve — crime"><b>✦</b>${me.nerve}</span>`
+      + `<span class="v-i" title="law heat"><b>🔥</b>${me.heat}</span>`;
+    $('#sheet-body').innerHTML = `
       <div class="money">$${fmt(me.cash)}</div>
       <div class="row"><span class="k">${T('k_bank')}</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} ${T('k_intransit')})</span>` : ''}</span></div>
       <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} ${T('k_liquid')} · ${fmt(me.staked)} ${T('k_staked')}</span></div>
@@ -4204,7 +4251,7 @@
       <h2 style="margin-top:14px">The Collection <span class="d" style="font-size:11px">(everything your bloodline has EVER touched — survives death, selling, seizure · ${col.have || 0}/${col.total || 0} · ${col.pct || 0}%)</span></h2>
       <div class="grid">${(col.categories || []).map((c) => `
         <div class="card"><span class="t">${c.name}</span> <span class="chip ${c.have === c.total ? 'good' : ''}">${c.have}/${c.total}${c.have === c.total ? ' ✦ COMPLETE' : ''}</span>
-          <div class="d" style="font-size:11px;line-height:1.7">${c.items.map((it) => `<span style="${it.got ? '' : 'opacity:.35'}" title="${it.name}">${it.got ? '◆' : '◇'}</span>`).join('')}</div>
+          <div class="d" style="font-size:11px;line-height:1.7">${c.items.map((it) => `<span style="${it.got ? '' : 'opacity:.35'}" title="${it.name}">${it.got ? '◆' : '◇'}</span>`).join('​')}</div>
           ${c.have < c.total ? `<div class="d" style="font-size:10.5px;color:var(--dim)">missing: ${c.items.filter((it) => !it.got).slice(0, 4).map((it) => it.name).join(', ')}${c.total - c.have > 4 ? ` +${c.total - c.have - 4} more` : ''}</div>` : ''}</div>`).join('')}</div>
       <div class="d" style="margin-top:4px"><a href="#" id="col-lb-link">the completionist board →</a></div>
       <div id="col-lb"></div>`;

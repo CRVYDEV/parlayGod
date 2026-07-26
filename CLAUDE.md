@@ -3133,6 +3133,29 @@ directly. Verified in Chromium against real Postgres across five scenarios — n
 unhandled errors. Desktop needs no config; **mobile is dormant until `WALLETCONNECT_PROJECT_ID` is set** (a free
 public id from dashboard.reown.com — documented in `render.yaml` / `.env.example` / `CHAIN-DEPLOY.md`).
 
+**THE MOBILE PASS — driven and looked at (2026-07-26).** Prior mobile work was a CSS breakpoint pass; this
+one drove a real phone viewport in Chromium across all 33 screens, measured each (horizontal overflow,
+tap-target height, text size) and READ the screenshots. The measurement alone would not have found the
+headline defect, and the screenshots alone would not have found the overflow — both were needed.
+**The headline: on a 375×667 phone a brand-new player's "Start Here" screen showed NONE of its own
+content above the fold** — ~370px of top chrome (masthead, five buttons, a full-width language select,
+the identity line), then the character sheet, the claim card and a raw-JSON debug viewer. The guided
+checklist that exists to tell a new player what to do was entirely below the fold with no cue it was
+there. Cause: `#layout` is a 3-column grid whose LEFT column (the ~1000px sheet) stacks ABOVE the tab
+content on a phone. Fixed by **ordering the tab panel first on mobile** (`#tabpanel{order:-1}`), hoisting
+the coach out of the sheet into a full-width `#coachwrap` banner (better on desktop too), and adding a
+phone-only sticky **`#vitals` strip** (cash/health/energy/nerve/heat) so moving the sheet down costs no
+at-a-glance numbers. Top chrome trimmed to one compact row. Also fixed: **two horizontal-overflow bugs** —
+the Collection's `◇◇◇` tracker (+187px; the spans were `.join('')`, giving the layout engine NO legal
+break point in the run — fixed at the source with a U+200B joiner, not a CSS hack) and a Big Scores
+`<select>` sized to its longest option (+259px → `select,input,textarea{max-width:100%}`); section
+headings squeezed to a few characters by their own "— what this is" note (`h2{flex-wrap:wrap}`); and the
+32px group rail (the primary phone navigation) raised to 40px. **A regression I introduced and the
+screenshot caught:** `overflow-wrap:anywhere` also shrinks min-content, which collapsed a flex heading to
+ONE LETTER PER LINE — `break-word` breaks long runs without that side effect, and the real fix was the
+zero-width joiner. Verified after: **0 horizontal overflow across 33 screens at 375×667 and 360×780, zero
+page errors**, desktop unchanged (3 columns, vitals correctly absent, coach present).
+
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,
 §10.4 untouched, suite 30/30 + sim drift-0). A three-lens max-effort review (console UX, onboarding + flow,
