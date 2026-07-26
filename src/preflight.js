@@ -161,6 +161,15 @@ export function preflight(env = process.env) {
       warnings.push('SOCIAL_VERIFY_MODE=live with X_BEARER_TOKEN but no X_TARGET_USER_ID — post checks work, '
         + 'but "Follow on X" cannot be verified, so it is dropped from the First-Week checklist.');
   }
+  // WHERE DO SHARE LINKS POINT? With neither var set, every referral link, brag prompt and social
+  // card is built from a hardcoded default domain that is almost certainly not yours — which is
+  // exactly what a live server did, mailing every recruit to a domain that did not resolve while
+  // looking perfectly healthy from the inside. Nothing in-process can detect it: the URL is
+  // well-formed and only DNS disagrees. So say it at boot, where someone is already reading.
+  if (!env.SOCIAL_GAME_URL && !env.PUBLIC_URL)
+    warnings.push('Neither PUBLIC_URL nor SOCIAL_GAME_URL is set — every referral link, share prompt '
+      + 'and social card will point at the built-in default domain, not yours. Set PUBLIC_URL to this '
+      + "server's own origin (it is also what one-click X sign-in derives its callback from).");
   if (env.WS_ALLOW_QUERY_TOKEN === 'on')
     warnings.push('WS_ALLOW_QUERY_TOKEN=on puts player tokens in URLs, where proxies and access logs keep them.');
   if (!env.TRUST_PROXY && env.RATE_LIMIT !== 'off')

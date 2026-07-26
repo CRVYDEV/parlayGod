@@ -2525,7 +2525,15 @@ export const auctionLotsOf = (week = weekOf()) => {
 // their referral code (referrals resolve by name, §7.13) — a recruit who uses it pays the sharer
 // real referral cash + $OMR on qualification, so this feeds the existing referral loop. ALL
 // numbers are founder sign-off levers. Deploy sets SOCIAL_GAME_URL / SOCIAL_X_HANDLE.
-export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || 'https://playomerta.com'
+// FALLS BACK TO PUBLIC_URL, and that is not tidiness — it is the difference between a working
+// referral loop and a dead one. Every share link, brag prompt, profile deep link and card URL is
+// built from this. A live server had PUBLIC_URL set (for X sign-in) and SOCIAL_GAME_URL unset, so
+// every one of them pointed at the hardcoded default below — a domain that did not resolve. The
+// growth loop looked healthy from the inside and sent every recruit into thin air. Nothing could
+// have caught it in-process: the string is well-formed, the routes all work, and only DNS disagrees.
+// PUBLIC_URL is already the server's own origin (the OAuth callback is derived from it), so
+// preferring it means the common single-domain deploy is correct with nothing extra to remember.
+export const SOCIAL_GAME_URL = process.env.SOCIAL_GAME_URL || process.env.PUBLIC_URL || 'https://playomerta.com'
 export const SOCIAL_X_HANDLE = (process.env.SOCIAL_X_HANDLE || 'OmertaOnRH').replace(/^@/, '')
 export const SOCIAL_TASKS = {
   CASH: 300,       // petty cash per task

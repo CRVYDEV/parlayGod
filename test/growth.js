@@ -653,6 +653,38 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     assert.deepEqual([ov.social.posts, ov.social.x], [false, false],
       'per-provider capability is surfaced, so it is obvious WHICH token is missing');
 
+    // WHERE SHARE LINKS POINT. A live server ran with PUBLIC_URL set (X sign-in needs it) and
+    // SOCIAL_GAME_URL unset, so every referral link, brag prompt and card URL was built from the
+    // hardcoded default — a domain that did not resolve. The growth loop looked healthy from inside
+    // the process and mailed every recruit into thin air; only DNS knew. So the share base now
+    // prefers the server's own origin, and preflight says so when neither is set.
+    {
+      const mod = await import('../src/rules.tail.js?share=' + Date.now());   // re-eval with env set
+      assert.equal(mod.SOCIAL_GAME_URL, 'https://playomerta.com', 'with neither var set, the default stands');
+      process.env.PUBLIC_URL = 'https://omerta.example.com';
+      const withPub = await import('../src/rules.tail.js?share=' + (Date.now() + 1));
+      assert.equal(withPub.SOCIAL_GAME_URL, 'https://omerta.example.com',
+        "PUBLIC_URL alone is enough — share links follow the server's own origin");
+      // socialShareUrl returns an X intent with the game link URL-encoded inside it. Pull it out of
+      // `url` rather than regexing the whole string, so a stray substring can't pass. searchParams
+      // decodes exactly ONE layer, and the player's name was already encoded when the link was built
+      // — so the name stays percent-encoded here, and that is correct, not a bug to decode away.
+      const intent = withPub.socialShareUrl('referral', 'Tony Two-Times');
+      const inner = new URL(intent).searchParams.get('url') || '';  // searchParams already decodes
+      assert.match(inner, /^https:\/\/omerta\.example\.com\/u\/Tony%20Two-Times\?ref=/,
+        'and the referral deep link inside the share intent is built from it, not the built-in default');
+      process.env.SOCIAL_GAME_URL = 'https://vanity.example.com';
+      const withBoth = await import('../src/rules.tail.js?share=' + (Date.now() + 2));
+      assert.equal(withBoth.SOCIAL_GAME_URL, 'https://vanity.example.com',
+        'an explicit SOCIAL_GAME_URL still wins, for a separate marketing domain');
+      delete process.env.PUBLIC_URL; delete process.env.SOCIAL_GAME_URL;
+    }
+    const { preflight: pf0 } = await import('../src/preflight.js');
+    assert(pf0({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(20), MOD_KEY: 'y'.repeat(20),
+      MARKET_SEED: 'YqB7#tR2vLx9Kp4Wm6Zn8Cf3Hj5Ds1Ge', SOCIAL_VERIFY_MODE: 'off', TRUST_PROXY: 'on' })
+      .warnings.some((w) => /PUBLIC_URL/.test(w) && /referral link/.test(w)),
+    'and with neither set, preflight warns that shares point at somebody else\'s domain');
+
     // preflight names the missing var rather than failing the boot (a fatal error here would take a
     // running server down to fix a dormant faucet — strictly worse than the dormant faucet)
     const { preflight } = await import('../src/preflight.js');
