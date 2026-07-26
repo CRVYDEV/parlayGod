@@ -1501,7 +1501,7 @@ export async function buildServer() {
   app.post('/v1/daily/:id/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.get('/v1/onboard', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h, client)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));

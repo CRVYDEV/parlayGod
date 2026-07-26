@@ -779,7 +779,7 @@ function coachOf(ch, acct, owned) {
   const obGameplay = ONBOARD_TASKS.filter((t) => !t.social && t.id !== 'ob_wallet' && t.id !== 'ob_family');
   // The count quotes the tasks this rung actually GATES on, not `ONBOARD_TASKS.length`. Two reasons:
   // a player who claimed the socials but no gameplay task read "3/8" while the gate was elsewhere,
-  // and on a server without X/Discord configured those tasks are not offered at all, so the old
+  // and on a server without X configured that task is not offered at all, so the old
   // denominator promised a total nobody could reach. Counting the gate is true under every config
   // (and needs no import from verify.js, which imports game.js — the one-way rule holds).
   const obGameplayDone = obGameplay.filter((t) => onboard[t.id]).length;

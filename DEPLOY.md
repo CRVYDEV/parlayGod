@@ -98,8 +98,8 @@ collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particula
       error, on purpose: preflight errors are fatal, and taking a running server down to fix a dormant
       faucet is worse than the dormant faucet. **`/admin` → "Growth loop" says PAYING or NOT PAYING**,
       which is the check that actually gets read. Per provider: `X_BEARER_TOKEN` enables post checks
-      (the one that matters), `+ X_TARGET_USER_ID` the follow task, `DISCORD_BOT_TOKEN +
-      DISCORD_GUILD_ID` the Discord task.
+      (the one that matters), `+ X_TARGET_USER_ID` the follow task — and that one only pays off for
+      players who signed in WITH X, since the follow check reads their X identity.
 
 ## 2. Recommended production config
 - [ ] `MOD_KEY=<secret>` — gates the mod tools + the `/admin` ops dashboard (timing-safe compared). Without

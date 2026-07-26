@@ -2,8 +2,7 @@
 //   'off'   (default) — social claims are rejected until verification is configured
 //   'trust' — honor system for the invite-code alpha (rewards are cash-only anyway)
 //   'live'  — real API checks; requires the provider credentials below
-// Production MUST run 'live': X follow via the OAuth'd relationship check,
-// Discord join via bot member lookup.
+// Production MUST run 'live': the X follow check via the OAuth'd relationship lookup.
 import { GameError } from './game.js';
 
 // ── X-API bulletproofing (the X-integrations hardening pass) ──
@@ -26,9 +25,9 @@ export async function xfetch(url, opts = {}) {
 }
 
 // ── WHICH SOCIAL CHECKS THIS SERVER CAN ACTUALLY PERFORM ────────────────────────────────────────
-// A live server can be configured for X, for Discord, for both, or (the case that shipped) for
-// NEITHER while still running SOCIAL_VERIFY_MODE=live. The old behaviour was that every claim then
-// threw `verify_unavailable` — so the First-Week checklist showed two rewards nobody could ever
+// A live server can be configured for X or (the case that shipped) NOT, while still running
+// SOCIAL_VERIFY_MODE=live. The old behaviour was that every claim then
+// threw `verify_unavailable` — so the First-Week checklist showed a reward nobody could ever
 // collect, which also made the all-done capstone unreachable, and the Spread-the-Word faucet paid
 // nothing. The failure was invisible: no error at boot, no dashboard row, nothing in the game.
 //
@@ -38,25 +37,76 @@ export async function xfetch(url, opts = {}) {
 // `off` pays nothing by design (a misconfigured server must never leak a faucet).
 export function socialProviders() {
   const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
-  if (mode === 'off') return { mode, x: false, discord: false, posts: false };
+  if (mode === 'off') return { mode, x: false, posts: false };
   if (mode === 'trust') {
     const prod = process.env.NODE_ENV === 'production';   // trust is refused in production below
-    return { mode, x: !prod, discord: !prod, posts: !prod };
+    return { mode, x: !prod, posts: !prod };
   }
   return {
     mode,
     x: !!(process.env.X_BEARER_TOKEN && process.env.X_TARGET_USER_ID),
-    discord: !!(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_GUILD_ID),
     posts: !!process.env.X_BEARER_TOKEN,                  // verifyPostUp needs only the bearer token
   };
 }
 
 // which provider a First-Week social task needs, so one map serves the board, the claim and the coach
-export const TASK_PROVIDER = { ob_x: 'x', ob_discord: 'discord' };
-export const socialTaskAvailable = (taskId) => {
+export const TASK_PROVIDER = { ob_x: 'x' };
+
+// CAN **THIS PLAYER** COMPLETE IT — not merely "is the server configured for it". Two axes, and the
+// second was missed the first time round: a check needs credentials on the SERVER *and* an identity
+// on the ACCOUNT, because verification asks the provider about this player specifically. `ob_x`
+// reads the follow list of `acct.auth_subject`, so it needs an account that signed in WITH X — a
+// guest was shown the task, claimed it, and got `verify_provider`, which also stranded the all-done
+// capstone. That is the exact defect the server-config filter was added to fix, on the axis it did
+// not cover; it went live the moment X credentials were configured.
+//
+// Only bites in LIVE mode: `trust` is the honour system and returns true without asking any provider
+// anything, so an identity requirement there would hide tasks that genuinely are claimable.
+export const socialTaskAvailable = (taskId, acct = null) => {
   const p = TASK_PROVIDER[taskId];
-  return !p || !!socialProviders()[p];
+  if (!p) return true;                                   // not a social task
+  if (!socialProviders()[p]) return false;               // server cannot perform the check
+  if ((process.env.SOCIAL_VERIFY_MODE || 'off') !== 'live') return true;  // honour system: anyone
+  return !!acct && acct.auth_provider === p;             // live: the account must BE that identity
 };
+
+// ── THE X CALL BUDGET ───────────────────────────────────────────────────────────────────────────
+// Reads against X are metered and paid for, and both verification paths were unbounded on RETRY —
+// which is where the spend actually goes, not on the happy path:
+//
+//   follow  — paginates up to X_FOLLOW_PAGES × 1000 accounts. A player who has NOT followed burns
+//             EVERY page and throws, and can click again a second later. Worst case per click.
+//   post    — one call, but a `post_gone` or `verify_busy` answer is retryable, and `verify_busy`
+//             specifically means X is already rate-limiting us, so an instant retry is the worst
+//             possible response to it.
+//
+// A batch job was the obvious idea and is the wrong one: following lists are per-user, so sweeping
+// every account daily would cost strictly MORE calls than asking when a player actually claims. What
+// is cheap is not asking the same question twice. So a check's answer stands for X_CHECK_CD_MS and
+// repeat attempts inside that window are answered from the database for zero calls.
+//
+// Recorded BEFORE the call, deliberately: a check that fails must still spend the window, or the
+// retry loop this exists to stop just continues. Only negatives are ever re-asked — a followed
+// account marks the task claimed forever and a paid share is marked paid, so the happy path costs
+// exactly one call, once, and never comes back.
+export const xCheckCdMs = () => Number(process.env.X_CHECK_CD_MS ?? 30 * 60_000);
+export const xFollowPages = () => Number(process.env.X_FOLLOW_PAGES ?? 5);
+
+export async function throttleXCheck(client, accountId, kind) {
+  const cd = xCheckCdMs();
+  if (!(cd > 0) || !client || !accountId) return;
+  const prev = (await client.query(
+    'SELECT checked_at FROM x_checks WHERE account_id=$1 AND kind=$2', [accountId, kind])).rows[0];
+  const age = prev ? Date.now() - new Date(prev.checked_at).getTime() : Infinity;
+  if (age < cd) {
+    const mins = Math.ceil((cd - age) / 60000);
+    throw new GameError('verify_cooldown',
+      `We just checked with X. Give it ${mins} minute${mins === 1 ? '' : 's'} and try again — do the thing first, then come back.`);
+  }
+  await client.query(
+    `INSERT INTO x_checks (account_id, kind, checked_at) VALUES ($1,$2,now())
+     ON CONFLICT (account_id, kind) DO UPDATE SET checked_at=now()`, [accountId, kind]);
+}
 
 export async function verifySocial(taskId, acct) {
   const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
@@ -78,7 +128,7 @@ export async function verifySocial(taskId, acct) {
     // PAGINATE (the >1000-follows fix): a player following more than one page of accounts used to
     // get a false "Follow not found" — walk up to 5 pages (5000 follows) via pagination_token.
     let next = null;
-    for (let page = 0; page < 5; page++) {
+    for (let page = 0; page < xFollowPages(); page++) {
       const u = new URL(`https://api.x.com/2/users/${acct.auth_subject}/following`);
       u.searchParams.set('max_results', '1000');
       if (next) u.searchParams.set('pagination_token', next);
@@ -90,14 +140,6 @@ export async function verifySocial(taskId, acct) {
       if (!next) break;
     }
     throw new GameError('verify_failed', 'Follow not found.');
-  }
-  if (taskId === 'ob_discord') {
-    // Bot member lookup: DISCORD_BOT_TOKEN + DISCORD_GUILD_ID; account must carry a Discord id.
-    if (!process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_GUILD_ID) throw new GameError('verify_unavailable', 'Discord verification not configured.');
-    const res = await fetch(`https://discord.com/api/v10/guilds/${process.env.DISCORD_GUILD_ID}/members/${acct.auth_subject}`, {
-      headers: { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } });
-    if (!res.ok) throw new GameError('verify_failed', 'Discord could not confirm membership.');
-    return true;
   }
   throw new GameError('bad_task', 'Unknown social task.');
 }

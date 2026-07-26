@@ -311,7 +311,7 @@ for (let i = 0; i < 3; i++) {
 await seedCh(chef.id, 'cash=500000, energy=50, jail_until=NULL');
 // the guided board (the client's Start Here funnel): eight tasks, none claimed, crime not yet ready
 let ob = (await call('GET', '/v1/onboard', { token: chef.token })).body;
-assert.equal(ob.total, 8, 'eight first-week tasks on the board');
+assert.equal(ob.total, 7, 'seven first-week tasks on the board (Discord retired as a growth funnel)');
 assert.equal(ob.claimed, 0, 'a fresh street has claimed nothing');
 assert.equal(ob.allDone, false, 'and is not done');
 assert.equal(ob.tasks.find((t) => t.id === 'ob_crime').ready, false, 'pull-a-job is not ready before any crime');
@@ -337,13 +337,13 @@ assert.equal((await call('POST', '/v1/wallet', { token: chef.token, body: { addr
 await pool.query(`UPDATE account_persistent SET wallet_address='0x1111111111111111111111111111111111111111' WHERE account_id=(SELECT account_id FROM characters WHERE id='${chef.id}')`);
 await seedCh(chef.id, 'jail_until=NULL, cash=500000');
 assert.equal((await call('POST', '/v1/gangs', { token: chef.token, body: { name: 'The Kitchen Cartel', tag: 'KC' } })).code, 200);
-for (const t of ['ob_boost', 'ob_bank', 'ob_wallet', 'ob_path', 'ob_family', 'ob_x']) {
+for (const t of ['ob_boost', 'ob_bank', 'ob_wallet', 'ob_path', 'ob_family']) {
   r = await call('POST', `/v1/onboard/${t}/claim`, { token: chef.token });
   assert.equal(r.code, 200, `claimed ${t}`);
-  assert.equal(r.body.capstone, false, 'capstone waits for all eight');
+  assert.equal(r.body.capstone, false, 'capstone waits for all seven');
 }
-r = await call('POST', '/v1/onboard/ob_discord/claim', { token: chef.token });
-assert.equal(r.code, 200, 'eighth (final) claim');
+r = await call('POST', '/v1/onboard/ob_x/claim', { token: chef.token });
+assert.equal(r.code, 200, 'seventh (final) claim');
 assert.equal(r.body.capstone, true, 'THE FIRST WEEK IS DONE');
 assert.equal(r.body.cash, 1500 + 5000, 'task + capstone cash (cash-only, never $OMR)');
 
@@ -620,7 +620,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
 }
 
 // ── LIVE MODE WITH NOTHING TO VERIFY WITH — the configuration production actually shipped in ──────
-// render.yaml set SOCIAL_VERIFY_MODE=live (correct) and no X or Discord token (not). Every social
+// render.yaml set SOCIAL_VERIFY_MODE=live (correct) and no X token (not). Every social
 // claim then threw `verify_unavailable`: the Spread-the-Word cash faucet paid nobody, and 2 of the 8
 // First-Week tasks were listed-but-unclaimable, which made the all-done capstone UNREACHABLE. Nothing
 // announced it — no boot error, no dashboard row, and the suite only ever ran `trust`, which is why
@@ -632,13 +632,12 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
   const prevMode = process.env.SOCIAL_VERIFY_MODE;
   process.env.SOCIAL_VERIFY_MODE = 'live';                  // …and deliberately NO tokens
   delete process.env.X_BEARER_TOKEN; delete process.env.X_TARGET_USER_ID;
-  delete process.env.DISCORD_BOT_TOKEN; delete process.env.DISCORD_GUILD_ID;
   try {
     const dud = await mk('Unverified Ulla');
     const board = (await call('GET', '/v1/onboard', { token: dud.token })).body;
-    assert.equal(board.total, 6, 'the two unverifiable social tasks are DROPPED, not offered and refused');
-    assert.equal(board.tasks.some((t) => t.id === 'ob_x' || t.id === 'ob_discord'), false,
-      'neither X nor Discord appears on a server that cannot check either');
+    assert.equal(board.total, 6, 'the unverifiable social task is DROPPED, not offered and refused');
+    assert.equal(board.tasks.some((t) => t.id === 'ob_x'), false,
+      'the follow task does not appear on a server that cannot check it');
     // the capstone is now REACHABLE: every remaining task is one this player can actually finish
     assert.equal((await call('POST', '/v1/onboard/ob_x/claim', { token: dud.token })).body.error, 'task_unavailable',
       'and claiming one says why, instead of the generic verify_unavailable');
@@ -651,7 +650,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     const ov = (await app.inject({ method: 'GET', url: '/v1/mod/overview', headers: { 'x-mod-key': 'test-mod-key' } })).json();
     assert.equal(ov.social.rewardsLive, false, 'the ops dashboard reports the loop as NOT PAYING');
     assert.equal(ov.social.mode, 'live', '…while still reporting the configured mode honestly');
-    assert.deepEqual([ov.social.posts, ov.social.x, ov.social.discord], [false, false, false],
+    assert.deepEqual([ov.social.posts, ov.social.x], [false, false],
       'per-provider capability is surfaced, so it is obvious WHICH token is missing');
 
     // preflight names the missing var rather than failing the boot (a fatal error here would take a
@@ -664,8 +663,7 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
       'but it must warn, naming the exact variable and the consequence');
 
     // ONE token changes the picture: posts verify, so the faucet is live again, while the FOLLOW check
-    // still cannot run — so ob_x stays off the checklist and ob_discord stays off too. Per-provider,
-    // not all-or-nothing.
+    // still cannot run — so ob_x stays off the checklist. Per-capability, not all-or-nothing.
     process.env.X_BEARER_TOKEN = 'test-bearer';
     const partial = (await app.inject({ method: 'GET', url: '/v1/mod/overview', headers: { 'x-mod-key': 'test-mod-key' } })).json().social;
     assert.equal(partial.posts, true, 'a bearer token alone enables post checks');
@@ -698,7 +696,68 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     assert.equal(last.body.cash, 500 + CONSTANTS.ONBOARD_CAPSTONE.cash, 'and the bonus cash is actually paid');
     assert.equal((await call('GET', '/v1/onboard', { token: finisher.token })).body.allDone, true,
       'board and payout agree');
+
+    // ── AND THE SECOND AXIS: CONFIGURED ON THE SERVER IS NOT THE SAME AS CLAIMABLE BY THIS PLAYER ──
+    // The filter above asks "can the SERVER check this". It also has to ask "can it check THIS
+    // ACCOUNT", because verification interrogates the provider about one specific player:
+    // `ob_x` reads the follow list of acct.auth_subject, so it needs an X-signed-in account — a guest
+    // was shown the task and got `verify_provider` on claim, leaving a reward on screen they could
+    // never collect and stranding the capstone again. This is the exact configuration a live server
+    // runs once X credentials are added, which is when it went live.
+    process.env.X_BEARER_TOKEN = 'test-bearer';
+    process.env.X_TARGET_USER_ID = '1234567890';
+    const guest = await mk('Guest Gus');
+    const gb = (await call('GET', '/v1/onboard', { token: guest.token })).body;
+    assert.equal(gb.tasks.some((t) => t.id === 'ob_x'), false,
+      'a GUEST is not offered "Follow on X" — the follow check reads an X identity they do not have');
+    assert.equal(gb.total, 6, 'the guest checklist stays the six tasks they can actually finish');
+    assert.equal((await call('POST', '/v1/onboard/ob_x/claim', { token: guest.token })).body.error,
+      'task_unavailable', 'and claiming it anyway is refused with a reason, not a provider error');
+
+    // an X-SIGNED-IN account DOES get it — the gate is identity, not a blanket ban
+    await pool.query("UPDATE accounts SET auth_provider='x', auth_subject='555' WHERE id=(SELECT account_id FROM characters WHERE id=$1)", [guest.id]);
+    const xb = (await call('GET', '/v1/onboard', { token: guest.token })).body;
+    assert.equal(xb.tasks.some((t) => t.id === 'ob_x'), true,
+      'the same player, signed in with X, IS offered the follow task');
+
+    // …AND CAN ACTUALLY CLAIM IT. The deeper half of the same defect: `verifySocial` reads
+    // `auth_provider`/`auth_subject` off whatever it is handed, and it was handed `h.acct` — the
+    // account_persistent row, which has NEITHER column. So it compared `undefined !== 'x'` and threw
+    // `verify_provider` at every player alive, and had it got past that it would have called
+    // `/2/users/undefined/following`. Nothing caught it because the suite only ran `trust`, which
+    // returns before either field is read. Stub X and assert the real id reaches the request.
+    const realFetch2 = global.fetch;
+    let askedFor = null;
+    global.fetch = async (url) => {
+      askedFor = String(url);
+      return { ok: true, status: 200, json: async () => ({ data: [{ id: '1234567890' }] }) };
+    };
+    try {
+      const claim = await call('POST', '/v1/onboard/ob_x/claim', { token: guest.token });
+      assert.equal(claim.code, 200, 'an X-signed-in player who follows can finally claim the task');
+      assert.match(askedFor || '', /\/2\/users\/555\/following/,
+        'and X was asked about THIS account (555), not about `undefined`');
+      // THE CALL BUDGET: a repeat check inside the window must cost ZERO outbound calls. The follow
+      // path paginates up to 5 pages and a player who has NOT followed burns every one of them and
+      // can click again immediately — that retry loop, not the happy path, is where paid credits go.
+      const dud2 = await mk('Clicky Cliff');
+      await pool.query("UPDATE accounts SET auth_provider='x', auth_subject='90210' WHERE id=(SELECT account_id FROM characters WHERE id=$1)", [dud2.id]);
+      let calls = 0;
+      global.fetch = async () => {                          // a follower list that never contains us
+        calls += 1;
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 'somebody-else' }] }) };
+      };
+      const first = await call('POST', '/v1/onboard/ob_x/claim', { token: dud2.token });
+      assert.equal(first.body.error, 'verify_failed', 'not following → the check runs and says so');
+      const spent = calls;
+      assert(spent > 0, 'the first attempt really did ask X');
+      const again = await call('POST', '/v1/onboard/ob_x/claim', { token: dud2.token });
+      assert.equal(again.body.error, 'verify_cooldown', 'clicking again is answered from the database');
+      assert.equal(calls, spent, `and cost NO further X calls (still ${spent})`);
+      assert.match(again.body.message || '', /minute/, 'and says when to come back');
+    } finally { global.fetch = realFetch2; }
   } finally {
+    delete process.env.X_TARGET_USER_ID;
     delete process.env.X_BEARER_TOKEN; process.env.SOCIAL_VERIFY_MODE = prevMode;
   }
 }

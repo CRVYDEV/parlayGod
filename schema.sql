@@ -2201,3 +2201,19 @@ CREATE TABLE IF NOT EXISTS auction_consignments (
 );
 CREATE INDEX IF NOT EXISTS ix_consign_live ON auction_consignments (status, closes_at);
 CREATE INDEX IF NOT EXISTS ix_consign_seller ON auction_consignments (seller_account);
+
+-- ═══ X API CALL BUDGET — the answer is cached, so retries cost credits once ═══════════════════
+-- Every X read costs against a paid tier, and the two verification paths were both unbounded on
+-- RETRY: a follow check paginates up to 5 pages and a player who has not followed burns all five and
+-- can click again immediately; a post check whose tweet is gone re-asks on every attempt. Neither is
+-- abuse — it is what a confused player does — but it is where the credits actually go.
+--
+-- So a check's ANSWER is remembered for a window and served from here. Keyed per (account, kind), so
+-- one player's spam cannot spend another's budget. Only NEGATIVE answers need storing: a positive
+-- follow marks the task claimed forever, and a paid share is marked paid — neither is ever re-asked.
+CREATE TABLE IF NOT EXISTS x_checks (
+  account_id TEXT NOT NULL,
+  kind       TEXT NOT NULL,               -- 'follow' | 'post'
+  checked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, kind)
+);
