@@ -55,7 +55,12 @@ collapses a pacing timer server-wide; `TRAIN_CD_MS`/`MISSION_CD_MS` in particula
 - [ ] `TRUST_PROXY=on` — **only if** behind a load balancer / reverse proxy, so per-IP throttles key on the
       real client IP (`X-Forwarded-For`), not the proxy. Leave OFF if the app is internet-facing directly.
 - [ ] `PG_POOL_MAX=20` (default) — raise with instance count / concurrency.
-- [ ] `INVARIANT_WEBHOOK_URL=<url>` — §10.4 drift + reserve alerts from the nightly worker job (recommended).
+- [ ] `INVARIANT_WEBHOOK_URL=<url>` — §10.4 drift, Vig/Bond, and backup-watchdog alerts (recommended).
+      **Must be set on the WORKER process** — every automatic alarm lives there (`src/worker.js`); the api
+      only alerts on a manual `GET /v1/mod/invariants` or an `/admin` load. On Render, put it on the shared
+      env group so both get it. A Slack or Discord webhook URL works as-is: the payload carries `text` and
+      `content` alongside the structured fields, because those services 400 a body with neither and
+      `alertDrift` swallows the error — a webhook that looked configured would have delivered nothing.
 
 ## 3. The X integrations — the full checklist (one-click sign-in + social verification)
 All from https://developer.x.com (create a Project + App once). Every X surface degrades cleanly

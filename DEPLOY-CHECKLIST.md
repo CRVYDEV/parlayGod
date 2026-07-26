@@ -64,8 +64,17 @@ database) + your domain. No blockchain, minimal risk.
 ## PART B — day-to-day running (yours, ongoing)
 - **Watch the numbers:** `your-url/admin` is your control room — player counts, the economy gauges, the
   onboarding funnel (who's dropping off), and the mod actions (ban, mint invites, etc.).
-- **Get alerted:** set `INVARIANT_WEBHOOK_URL` (a Slack or Discord "incoming webhook" URL) in the api service's
-  Environment, and the nightly job pings you if the economy ever drifts. Recommended.
+- **Get alerted (strongly recommended — do this once):** set `INVARIANT_WEBHOOK_URL` to a Slack or Discord
+  webhook URL, and you get pinged if the economy ever drifts or if your database backups stop shipping.
+  Put it on the **`omerta-secrets` environment group**, not on one service: Render dashboard → *Env Groups*
+  → `omerta-secrets` → *Add Environment Variable* → key `INVARIANT_WEBHOOK_URL`, paste the URL → *Save*.
+  Both services then get it and both restart on their own.
+  **It must reach the WORKER.** Every automatic alarm — the nightly §10.4 sweep, the Vig/Bond checks, the
+  backup watchdog — runs in `omerta-worker`. The api only alerts when a human loads `/admin`, and by then
+  you are already looking. Setting it on the api alone means nothing ever pages you.
+  Getting a URL, in Discord: *Server Settings → Integrations → Webhooks → New Webhook*, pick a channel,
+  *Copy Webhook URL*. In Slack: create an app → *Incoming Webhooks* → *Add New Webhook to Workspace*.
+  Nothing arrives until something is actually wrong, so a quiet channel means the game is fine.
 - **Ship updates:** any change pushed to your connected branch auto-redeploys (a minute or two). Your data
   survives — the database back-fills new columns automatically on boot (no migration step).
 - **The economy dials** live in `SIGN-OFF.md`. The game ships fine on the defaults; only change them

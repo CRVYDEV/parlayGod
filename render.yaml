@@ -21,6 +21,13 @@ envVarGroups:
         generateValue: true      # the secret seed behind Numbers/Track/Fight/goods price draws (§7.11)
       - key: MOD_KEY
         generateValue: true      # gates the /admin dashboard + mod tools — reveal it in the Render dashboard
+      - key: INVARIANT_WEBHOOK_URL
+        sync: false              # YOU paste this one: a Slack or Discord webhook URL. It is how the game
+                                 # TELLS you something is wrong — the nightly §10.4 economy check and the
+                                 # backup watchdog post to it. Leave it blank and those alarms have nowhere
+                                 # to shout; you would only find out by reading logs. Discord: Server
+                                 # Settings → Integrations → Webhooks → New Webhook → Copy URL.
+                                 # It is in the SHARED group on purpose: the alarms run in the worker.
 
 services:
   # 1) the game server — serves the website (/), the admin dashboard (/admin), the wiki (/wiki), and the API

@@ -431,7 +431,29 @@ export async function alertDrift(pool, failed, kind = 'ledger') {
     try {
       await fetch(process.env.INVARIANT_WEBHOOK_URL, { method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed }) });
+        // `text` is what Slack incoming webhooks require; `content` is what Discord requires. Both REJECT
+        // a body carrying neither (400) — and this function swallows that, so the original payload of
+        // `{alert, failed}` alone meant the two services the deploy docs recommend would silently deliver
+        // NOTHING: configured, no visible error, no alerts. The structured fields are kept alongside for
+        // anything custom. test/hardening.js asserts both keys are present, since a missing one fails
+        // exactly where nobody is looking.
+        body: JSON.stringify({ alert: `${kind}_invariant_drift`, failed, text: webhookText(kind, failed), content: webhookText(kind, failed) }) });
     } catch (e) { console.error('invariant webhook failed', e.message); }
   }
+}
+
+// One human-readable line per failed check, clamped under Discord's 2,000-char message limit. Every alert
+// shape passed to alertDrift carries a `name`; the ledger ones add lhs/rhs/drift, so those are named
+// explicitly and anything else falls back to its own JSON rather than printing "[object Object]".
+export function webhookText(kind, failed = []) {
+  const head = kind === 'backup' ? '🚨 OMERTÀ — BACKUPS ARE NOT RUNNING'
+    : `🚨 OMERTÀ — ${kind === 'ledger' ? '§10.4 ledger' : kind} invariant drift`;
+  const lines = (Array.isArray(failed) ? failed : [failed]).map((f) => {
+    if (!f || typeof f !== 'object') return `• ${String(f)}`;
+    if (f.drift !== undefined) return `• ${f.name}: drift ${f.drift} (balances ${f.lhs} vs ledger ${f.rhs})`;
+    const rest = Object.entries(f).filter(([k]) => k !== 'name').map(([k, v]) => `${k}=${v}`).join(', ');
+    return `• ${f.name || 'check'}${rest ? `: ${rest}` : ''}`;
+  });
+  const body = `${head}\n${lines.join('\n')}`;
+  return body.length > 1900 ? `${body.slice(0, 1880)}\n… (truncated)` : body;
 }
