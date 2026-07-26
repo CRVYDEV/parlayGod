@@ -17,7 +17,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Client | **4,631** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
-| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres) |
+| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency) |
 | Design + audit docs | **127** markdown files, **26231** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
@@ -374,10 +374,22 @@ Both are measured, not hypothesised — the pre-split extractor was run and the 
 `ob_repo` removal was then applied to the PROTOTYPE (the car-catalog precedent), so it now survives a
 regeneration; `test/rules.js` asserts that it stays retired.
 
-### D6 — Lock discipline is enforced by convention **(MEDIUM, accepted)**
+### D6 — Lock discipline is enforced by convention **(MEDIUM, accepted — now MEASURED)**
 200+ `FOR UPDATE` sites obey a global lock order maintained by comments, code review and ~30 red-team
 passes. It has held, and the audits keep finding the exceptions — but it is enforced by discipline, not
 by the type system or a shared helper.
+
+**It now has evidence rather than only argument.** `tools/loadtest.js` drives 5–50 concurrent players
+through a contention-heavy mix against real Postgres and reads `pg_stat_database.deadlocks` before and
+after — the only place a deadlock is visible, since the codebase maps `40P01` to a retryable
+`contention` error, so a lock-order bug can fire constantly while every request still succeeds.
+Measured at every level up to 50 players, with hundreds of two-party `withTwoCharacters` acquisitions
+converging on a handful of victims: **zero deadlocks, zero `contention` retries, and §10.4 unmoved.**
+
+The same run answered a question that could not be reasoned about: throughput is FLAT (~175 req/s) from
+5 players to 50 while latency rises roughly linearly — a saturated CPU queue, not a lock wall (which
+looks superlinear and produces deadlocks). So capacity here is bought with CPU, not with a locking
+rewrite. D6 stays accepted-as-is; the convention is now known to hold under load, not just under review.
 
 ### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
 127 markdown files, 26k lines, with CLAUDE.md alone 5368 lines of dense prose. Two codices already
