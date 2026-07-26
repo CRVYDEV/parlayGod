@@ -3155,6 +3155,21 @@ screenshot caught:** `overflow-wrap:anywhere` also shrinks min-content, which co
 ONE LETTER PER LINE — `break-word` breaks long runs without that side effect, and the real fix was the
 zero-width joiner. Verified after: **0 horizontal overflow across 33 screens at 375×667 and 360×780, zero
 page errors**, desktop unchanged (3 columns, vitals correctly absent, coach present).
+**Made permanent — `tools/mobile.js` (`npm run mobile`, the SIXTH harness, wired into CI's pg-mem job).**
+Boots the real server on pg-mem, drives real Chromium at 375×667 and 360×780 through every screen (54
+checks) and fails the build on exactly the classes that shipped undetected: **(A)** any screen that
+scrolls sideways (naming the offending elements), **(B)** a picked screen whose own content starts below
+the fold — the headline defect stated as an assertion, **(C)** a PRIMARY nav target (group rail / tabs /
+thumb bar only — deliberately not every button, or the guard nags and gets deleted, the `test/docs.js`
+argument) under 36px, **(D)** any page error. **Mutation-verified against all three fixes**: revert the
+phone tab order → 45 failures naming each screen and its fold offset; revert the ◇ joiner → the estate
+overflow; revert the 40px rail → 48 nav-target failures. The first mutation attempt was WRONG and passed
+(removing `#tabpanel{order:-1}` still leaves `#leftcol{order:1}`, and a default order of 0 sorts first) —
+worth remembering, since a bad mutation reads exactly like a vacuous check. Dependency is
+`playwright-core` (downloads NO browser on install); the browser is resolved from `CHROMIUM_PATH` → a
+Playwright cache glob → system paths, and with none the harness **fails loudly and exits non-zero rather
+than skipping** — a layout guard that quietly does nothing still goes green. Honest scope, stated in the
+file: layout only. Whether a screen reads WELL still needs a person opening it.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,
