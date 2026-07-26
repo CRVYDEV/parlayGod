@@ -3170,6 +3170,28 @@ worth remembering, since a bad mutation reads exactly like a vacuous check. Depe
 Playwright cache glob → system paths, and with none the harness **fails loudly and exits non-zero rather
 than skipping** — a layout guard that quietly does nothing still goes green. Honest scope, stated in the
 file: layout only. Whether a screen reads WELL still needs a person opening it.
+**THE CLIENT'S WIRING — `test/client.js` (the 53rd suite) — and FOUR dead buttons it found on its first
+run.** The mobile harness proves screens LAY OUT; nothing proved the buttons WORK. This checks the two
+ways a control dies silently, both of which had shipped: **(1) the route does not exist** — every
+`METHOD /v1/...` the console can issue (`data-do`, `api()`/`act()` calls, the raw deck's tuples; 481 of
+them) must resolve to a really-mounted route, matched SEGMENT-WISE against fastify's own registry so
+`/v1/streets/:id/jump` cannot match `/v1/streets/roster`; **(2) the value is not real** — every
+catalog-backed literal the client hardcodes (`approach`/`intent`/`play`/`path`/`tier`/`role`/`job`/
+`drugId`/`goodId`/`to`/`direction`) must be an id the server recognises, which is the `{path:'earner'}`
+and npchit-`tier:'local'` class. **Found + fixed, all live in production:** `POST /v1/diplomacy/pact/:id/break`
+(the server mounts `DELETE …/pact/:gangId`), `POST /v1/diplomacy/coalition/:id/leave` (`DELETE …/coalition/:id`),
+`POST /v1/sov/:district/upkeep` (upkeep is family-wide: `POST /v1/sov/upkeep`), and the Speakeasy tab's
+`POST /v1/travel {district}` (the district rides the PATH). Each was verified to point at the RIGHT
+handler (`breakPact`/`leaveCoalition`/`paySovUpkeep`), not merely an existing one — the test explicitly
+does not check that. Deliberately STATIC (no side effects, no flake): firing every control at a live
+server cannot tell "the client sent nonsense" from "you can't afford it", and a check that can't tell
+those apart reports noise until someone deletes it. Three extraction traps, each of which had produced a
+false alarm before being handled: a template literal with quotes inside `${}` truncates under a naive
+regex (so paths are read by a balanced-brace scan), `'/v1/phone/dm/' + id` concatenation reads as the
+parent route (a trailing `/` becomes `:p`), and a runtime-chosen ACTION segment (`/v1/garage/${id}/${act}`)
+is unverifiable — those are counted and REPORTED (5 of 481), never silently passed. Mutation-verified on
+both checks. The catalog reader handles arrays-of-`{id}` AND id-keyed objects and asserts the result is
+non-trivial, because `Object.keys()` on an array yields `0,1,2` and would have made every value look bogus.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,

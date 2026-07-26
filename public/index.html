@@ -2032,14 +2032,14 @@
     t.querySelectorAll('[data-terrop]').forEach((b) => b.onclick = () => act('POST', `/v1/territory/${b.dataset.terrop}/op`, {}).then(() => renderFamily()));
     // diplomacy
     t.querySelectorAll('[data-pactaccept]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/pact/${b.dataset.pactaccept}/accept`, {}).then(() => renderFamily()));
-    t.querySelectorAll('[data-pactbreak]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/pact/${b.dataset.pactbreak}/break`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-pactbreak]').forEach((b) => b.onclick = () => act('DELETE', `/v1/diplomacy/pact/${b.dataset.pactbreak}`, {}).then(() => renderFamily()));
     t.querySelectorAll('[data-coaljoin]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/coalition/${b.dataset.coaljoin}/join`, {}).then(() => renderFamily()));
-    t.querySelectorAll('[data-coalleave]').forEach((b) => b.onclick = () => act('POST', `/v1/diplomacy/coalition/${b.dataset.coalleave}/leave`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-coalleave]').forEach((b) => b.onclick = () => act('DELETE', `/v1/diplomacy/coalition/${b.dataset.coalleave}`, {}).then(() => renderFamily()));
     { const b = $('#pact-go'); if (b) b.onclick = () => { const gid = $('#pact-gang').value.trim(); if (gid) act('POST', `/v1/diplomacy/pact/${gid}`, {}).then(() => renderFamily()); }; }
     { const b = $('#coal-go'); if (b) b.onclick = () => { const gid = $('#coal-gang').value.trim(); if (gid) act('POST', `/v1/diplomacy/coalition/${gid}`, {}).then(() => renderFamily()); }; }
     // sovereignty
     t.querySelectorAll('[data-sovup]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovup}/upgrade`, {}).then(() => renderFamily()));
-    t.querySelectorAll('[data-sovkeep]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovkeep}/upkeep`, {}).then(() => renderFamily()));
+    t.querySelectorAll('[data-sovkeep]').forEach((b) => b.onclick = () => act('POST', '/v1/sov/upkeep', {}).then(() => renderFamily()));
     t.querySelectorAll('[data-sovsiege]').forEach((b) => b.onclick = () => act('POST', `/v1/sov/${b.dataset.sovsiege}/siege`, {}).then(() => renderFamily()));
     { const b = $('#sov-build'); if (b) b.onclick = () => { const d = $('#sov-dist')?.value; if (d) act('POST', `/v1/sov/${d}/build`, { windowHour: Number($('#sov-hour').value) }).then(() => renderFamily()); }; }
     { const lb = $('#sov-lb-link'); if (lb) lb.onclick = async (e) => { e.preventDefault(); const b = (await api('GET', '/v1/leaderboard/sov')).body?.families || [];
@@ -3490,7 +3490,7 @@
     const ng = $('#sp-name-go'); if (ng) ng.onclick = () => act('POST', '/v1/speakeasy/name', { name: $('#sp-name').value.trim() }).then(() => renderSpeakeasy());
     t.querySelectorAll('[data-round]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/round`, { round: x.dataset.round }).then(() => renderSpeakeasy()));
     t.querySelectorAll('[data-bottle]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/bottle`, { bottle: x.dataset.bottle }).then(() => renderSpeakeasy()));
-    t.querySelectorAll('[data-travel]').forEach((x) => x.onclick = () => act('POST', '/v1/travel', { district: x.dataset.travel }).then(() => renderSpeakeasy()));
+    t.querySelectorAll('[data-travel]').forEach((x) => x.onclick = () => act('POST', `/v1/travel/${x.dataset.travel}`, {}).then(() => renderSpeakeasy()));
     const tb = $('#sp-table'); if (tb) tb.onclick = () => act('POST', `/v1/speakeasy/${me.loc}/table`, { bet: Number($('#sp-bet').value) }).then(() => renderSpeakeasy());
     t.querySelectorAll('[data-decor]').forEach((x) => x.onclick = () => act('POST', '/v1/speakeasy/decor', { style: x.dataset.decor || null }).then(() => renderSpeakeasy()));
     const li = $('#sp-list'); if (li) li.onclick = () => act('POST', '/v1/speakeasy/list', { price: Number($('#sp-sale').value) }).then(() => renderSpeakeasy());
