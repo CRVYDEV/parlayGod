@@ -4,7 +4,14 @@ You are building the production backend for OMERTÀ, a multiplayer noir mafia RP
 
 ## Ground rules
 1. **`omerta-backend-spec.md` is the contract.** Every formula, table, and timer is specified there with production values. Do not invent mechanics or "improve" balance — the numbers were sim-audited.
-2. **`src/rules.js` is generated, never edited.** Regenerate from the prototype via `tools/extract-rules.js` if v25+ ships.
+2. **The rules live in two files and the seam is enforced, not remembered.**
+   `src/rules.generated.js` is MACHINE-OWNED — only the prototype's 22 data tables, overwritten
+   wholesale by `node tools/extract-rules.js <prototype>.jsx`. `src/rules.tail.js` is HAND-WRITTEN —
+   every helper, catalog, ladder and founder-signed lever — and the extractor never opens it.
+   `src/rules.js` re-exports both, so every import site is unchanged. To change a TABLE, edit the
+   PROTOTYPE and re-extract (the car-catalog precedent); to change anything else, edit the tail.
+   `test/rules.js` fails if hand-written code appears in the generated half, if it grows an import,
+   if the extractor addresses any other file, or if both halves export the same name.
 3. **Server-authoritative always.** Client input is a choice, never a value. All randomness server-side and logged to `rng_audit`.
 4. **Every value movement writes to `transactions`.** The §10.4 invariants are sacred. AMENDED by the
    founder-directed VALUE-CREATION pivot (2026-07-23, `omerta-value-creation-design.md`): value transfers,

@@ -289,11 +289,35 @@ bodyguards, the sacking. It is the highest-risk file in the tree to change, and 
 it is the most consequential code in the game. A split along death/estate | contracts | gangs/turf |
 combat lines would reduce blast radius.
 
-### D5 — The `rules.js` tail has outgrown its generated head **(MEDIUM)**
-1,091 generated lines vs ~2,500 hand-written. The "generated, never edit" rule now covers 30% of the
-file, and re-running `tools/extract-rules.js` requires hand-preserving the tail plus known overrides
-(`levelOf`'s divisor, the pacing pass). A physical split — `rules.generated.js` + `rules.tail.js` —
-would make the contract enforceable instead of remembered.
+### D5 — The `rules.js` tail had outgrown its generated head — **RESOLVED**
+Split into `src/rules.generated.js` (the prototype's 22 data tables, machine-owned) +
+`src/rules.tail.js` (every helper, catalog, ladder and founder-signed lever), with `src/rules.js`
+re-exporting both so no import site changed. `tools/extract-rules.js` now writes ONE file and never
+opens the hand-written half; `test/rules.js` enforces the seam and each of its five tripwires was
+verified to fire.
+
+Two corrections came out of doing it, both worth recording because the old notes were wrong in ways
+that would have misled the next person:
+
+- **The generated region was 454 lines, not 1,091.** The extractor only ever emitted the 22 tables and
+  then re-appended everything from `export const CONSTANTS` onward verbatim. So the hand-written half
+  was 3,134 lines — nearly 90% of the file, not 70%.
+- **`levelOf`'s "RE-APPLY THIS LINE after any regeneration" warning was false.** `levelOf` sits below
+  `CONSTANTS`, in the re-appended region, so the pacing override was already preserved automatically.
+  A warning that describes a hazard that does not exist is worse than none: it tells a maintainer to
+  hand-patch a line that is already correct.
+
+The real hazard was the opposite of the documented one, and it was live in **both** directions.
+Running the old extractor today would have:
+
+- **deleted `recruitRankOf`** — a hand-written function used by the recruiters leaderboard, which sat
+  in the gap between the last table and `CONSTANTS` that the extractor overwrote; and
+- **resurrected the retired "Star the repo" First-Week task**, because `ONBOARD_TASKS` was re-emitted
+  from the prototype, silently undoing a founder decision with nothing in the diff to notice.
+
+Both are measured, not hypothesised — the pre-split extractor was run and the diff inspected. The
+`ob_repo` removal was then applied to the PROTOTYPE (the car-catalog precedent), so it now survives a
+regeneration; `test/rules.js` asserts that it stays retired.
 
 ### D6 — Lock discipline is enforced by convention **(MEDIUM, accepted)**
 200+ `FOR UPDATE` sites obey a global lock order maintained by comments, code review and ~30 red-team
@@ -359,7 +383,8 @@ onboarding docs — not for retyping 55,000 lines.
    evidence. Still the highest architectural payoff.
 3. ~~**Split `server.js`** into domain route modules (D3).~~ **DONE** — 220 routes into 17 modules,
    2,396 → 1,771 lines, route table proven identical, two new guards for what that diff can't see.
-4. **Split `rules.js`** into generated + tail (D5). Hours. Makes ground rule #2 mechanically enforceable.
+4. ~~**Split `rules.js`** into generated + tail (D5).~~ **DONE** — machine-owned tables in one file,
+   hand-written everything in another, the extractor writes only the first, `test/rules.js` enforces it.
 5. **Split `social.js`** along death/estate | contracts | gangs | combat (D4). Days, carefully, with the
    existing suites as the harness. Do this last of the splits — highest risk, highest reward.
 6. **Consolidate the docs** (D7): one architecture doc (this file), one balance sheet, one deploy
