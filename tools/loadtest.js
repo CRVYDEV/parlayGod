@@ -54,11 +54,24 @@
 // (3) The absolute req/s is a property of THIS BOX and means nothing for production — server, database
 //     and 50 clients were all competing for the same cores. Do not quote it as capacity.
 //
-// ONE FINDING WORTH ACTING ON: `/v1/me` costs about 3× a board read when uncontended (15ms vs 5ms at
-// N=5; the ratio compresses as the box saturates, which is why the small-N number is the honest one).
-// It is the most-called endpoint in the game — the console polls it on every WS event and every 30s —
-// and `loadOwned` issues over a dozen queries to build it. Fewer round trips there is the single
-// highest-leverage latency win available, and this harness is how to tell whether a change helped.
+// THE FINDING THIS PRODUCED, AND WHAT IT WAS WORTH. The first run showed `/v1/me` costing ~3× a board
+// read uncontended (15ms vs 5ms at N=5) — the most-called endpoint in the game, and `loadOwned` was
+// issuing 16 sequential round trips to build it. Folding those into ONE union query, measured with this
+// harness on the same box back to back:
+//
+//                     before      after
+//   N=5   req/s          188        246   (+31%)
+//         /v1/me p50      14          9   (−36%)
+//   N=30  req/s          222        296   (+33%)
+//         /v1/me p50      74         47   (−36%)
+//         /v1/me p95     175        103   (−41%)
+//         board  p50      37         28   (boards call loadOwned too, so they moved as well)
+//
+// Note the throughput number moved, not just the latency: `loadOwned` runs on EVERY authed request, so
+// its round-trip count was a third of the server's total database traffic. That is the value of having
+// an instrument — the change was one function, and without measuring it there would be no way to tell
+// a real 30% from a plausible-sounding refactor. Run the A/B (stash the change, same box, same run) for
+// any future change to this path.
 import crypto from 'node:crypto';
 
 if (!process.env.DATABASE_URL) {
