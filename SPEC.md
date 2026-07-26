@@ -255,9 +255,33 @@ hung CI job is a worse signal than a failed one.
 Residual: the divergence itself remains (the suites are still pg-mem, and that is the right trade for
 their speed). CI narrows the blast radius; it does not close the gap.
 
-### D3 — `server.js` is 2,396 lines registering 491 routes **(MEDIUM)**
-One file wires every route. It works and is consistently structured, but it is the natural next split
-(per-domain route modules). Cost is low; the risk is churn in a file every system touches.
+### D3 — `server.js` is 2,396 lines registering 491 routes — **MOSTLY ADDRESSED**
+**Now 1,771 lines; 220 of ~279 routes live in `src/routes/*.js` by domain** (casino, pen, speakeasy,
+port, kitchen, territory, boxing, races, law, estate, stable, convoy, heists, underworld, diplomacy,
+sov, leaderboards, modtools). Handler bodies moved verbatim; each module exports
+`register(app, deps)` taking the same closure the handlers already read.
+
+Verified by diffing fastify's own route table — method, url, `hasAuth`, `isMod`, sorted — before and
+after every step, so what is mounted and how it is authenticated is provably unchanged.
+
+Two things the route-table diff **cannot** see, both now guarded:
+
+- **A moved handler still reading a `server.js` import registers fine and throws on first call.**
+  `test/routes.js` scans each route module for identifiers it reads but never binds. This found four
+  real breaks during the split (`crypto`, `TAX`, `withdrawTaxBps`, and the two websocket close
+  helpers) and is verified to fail when an import is removed.
+- **`test/preflight.js` listed `src/` flat**, so a `process.env` read moving into `src/routes/` became
+  invisible to the drift detector that exists to catch exactly that. It now walks recursively.
+
+Two things had to move rather than be re-derived: the websocket close helpers are declared above the
+registrations so they can be passed in (a `const` further down is in its temporal dead zone at
+register time), and `modRealTxHash` moved into the mod module, its only caller.
+
+Residual: ~59 routes stay in `server.js` — the ones that are genuinely infrastructure (auth, the
+websocket gateway, static files, health, openapi) plus small scattered families (`/v1/gangs`,
+`/v1/streets`, `/v1/market`, `/v1/wire`, `/v1/world`, `/v1/business`, `/v1/loans`, `/v1/dynasty`)
+whose registrations are interleaved with the code they sit next to. Those are worth moving only
+alongside a reason to touch them.
 
 ### D4 — `social.js` is 2,003 lines **(MEDIUM)**
 The PvP god-module: gangs, wars, turf, jumps, hits, death, the estate, bounties, vendettas, safehouse,
@@ -333,8 +357,9 @@ onboarding docs — not for retyping 55,000 lines.
 2. **Finish the lock-free read path** (D1). Days. Now blocked on a **design choice between three
    measured options** (see D1), not on implementation — two attempts were built and rejected on
    evidence. Still the highest architectural payoff.
-3. **Split `rules.js`** into generated + tail (D5). Hours. Makes ground rule #2 mechanically enforceable.
-4. **Split `server.js`** into domain route modules (D3). A day. Pure mechanical relief.
+3. ~~**Split `server.js`** into domain route modules (D3).~~ **DONE** — 220 routes into 17 modules,
+   2,396 → 1,771 lines, route table proven identical, two new guards for what that diff can't see.
+4. **Split `rules.js`** into generated + tail (D5). Hours. Makes ground rule #2 mechanically enforceable.
 5. **Split `social.js`** along death/estate | contracts | gangs | combat (D4). Days, carefully, with the
    existing suites as the harness. Do this last of the splits — highest risk, highest reward.
 6. **Consolidate the docs** (D7): one architecture doc (this file), one balance sheet, one deploy
