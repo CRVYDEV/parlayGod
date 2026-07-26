@@ -117,6 +117,11 @@ export async function buildServer() {
     const methods = Array.isArray(r.method) ? r.method : [r.method];
     for (const m of methods) if (m !== 'HEAD' && m !== 'OPTIONS') routeRegistry.push({ method: m, url: r.url, hasAuth, isMod });
   });
+  // Exposed so tests can assert the mounted surface directly. /openapi.json is derived from the same
+  // registry but deliberately omits /v1/mod, so it cannot stand in for the whole table — and the one
+  // invariant worth enforcing (every /v1 route is authed unless explicitly declared public) is about
+  // exactly the routes a refactor is most likely to drop on the floor.
+  app.decorate('routes', routeRegistry);
   const baseUrl = process.env.PUBLIC_URL || SOCIAL_GAME_URL;
 
   // ── the playable console: one static file, no build step, no new deps (public/index.html) ──
