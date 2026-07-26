@@ -37,6 +37,20 @@ are set). Two Node processes over one Postgres DB. No build step.
       — a CPU-bound queue, not a lock wall — **zero deadlocks at every level**, and §10.4 unmoved. Run it
       after anything that touches a lock, a transaction boundary, or the pool. Absolute req/s is a
       property of the machine and is not a capacity figure.
+- [ ] **`npm run chaos`** against a throwaway Postgres you are allowed to STOP AND START — the only check
+      that interrupts anything. It SIGKILLs the worker mid-sweep and verifies the resumed run pays exactly
+      once (twenty sweeps in this codebase claim to be idempotent; this is what makes that claim true),
+      terminates ~80 backends mid-transaction under load, and stops Postgres entirely underneath a running
+      server. Exits non-zero on drift, a double payout, or the process dying.
+      ```
+      DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
+        MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off \
+        PG_CTL='/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main' npm run chaos
+      ```
+      `PG_CTL` is optional — without it the full-outage scenario is SKIPPED and says so, rather than
+      silently passing. On its first run it found the other half of the 2026-07-25 outage bug (see §7b):
+      a connection dying mid-transaction still killed the whole API. Run it after anything that touches
+      the pool, a transaction boundary, or a worker sweep.
 - [ ] (chain path only — not needed for off-chain alpha) `cd omerta-contracts && forge test` on a real
       Foundry toolchain. **Still the pre-mainnet gate; egress-blocked in CI here.**
 
@@ -158,6 +172,13 @@ That is now separated:
   reconnects on its own when Postgres returns — no redeploy, no manual restart. (Before this was fixed
   the process *died* on every DB bounce, which is the likeliest real cause of the "Internal on every
   crime" report.) Verified by stopping a real Postgres under a running server.
+- **…and it survives a connection dying MID-TRANSACTION**, which is a different code path and was still
+  fatal after the fix above. `pool.on('error')` covers connections sitting idle in the pool; a connection
+  a request is actively using raises the error on itself, and with no listener that killed the process
+  just the same. You will now see `[db] in-flight client error (this request fails; the process
+  survives)` — that request 503s, everything else carries on. It fires on a failover landing mid-request,
+  on an admin `pg_terminate_backend`, and on our own 30s idle-transaction timeout. Found by
+  `npm run chaos`, which kills ~80 backends mid-transaction under load specifically to provoke it.
 - **The worker** skips a tick with one line (`worker: database unreachable … skipping this tick`)
   instead of dumping ~60 stack traces, and logs `database back after N skipped tick(s)` on recovery.
   Every sweep is idempotent, so nothing is lost by skipping.

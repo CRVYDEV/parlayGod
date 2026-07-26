@@ -126,6 +126,39 @@ export async function makeDb() {
     pool.on('error', (err) => {
       console.error('[db] idle client error (pool recovers on next checkout):', err.message);
     });
+    // …AND THE OTHER HALF OF THE SAME CLASS, which the handler above does NOT cover and which the
+    // comment above was right to say so. `pool.on('error')` fires for clients sitting IDLE in the pool.
+    // A client that a request has CHECKED OUT (`pool.connect()`, ~73 sites, every transaction in the
+    // game) emits 'error' on ITSELF when its connection dies mid-transaction — and an EventEmitter with
+    // no listener THROWS, so the process dies exactly as it did before the idle handler existed.
+    //
+    // Found by `tools/chaos.js`: terminating backends mid-transaction under load killed the API with
+    // `Unhandled 'error' event: Connection terminated unexpectedly`. Same symptom as the 2026-07-25
+    // outage, different code path — the earlier fix closed half the door.
+    //
+    // This is not exotic. It fires on any Postgres restart or failover that lands while a transaction
+    // is open, on a network blip, on an admin `pg_terminate_backend` — and, pointedly, on our OWN
+    // `idle_in_transaction_session_timeout` (30s, set below), which exists to stop a leaked transaction
+    // holding row locks forever. That safety valve terminates the backend, so before this handler it
+    // could take the whole server down with it.
+    //
+    // Logging is the entire correct response. node-pg already rejects the in-flight query's promise, so
+    // the request still fails through the normal path and answers 503 db_down; the client is discarded
+    // rather than returned to the pool. All this prevents is the unhandled throw. Attached ONCE per
+    // client (a pooled client is checked out many times — re-attaching would leak listeners until
+    // Node's MaxListeners warning fires).
+    const HANDLED = Symbol.for('omerta.clientErrorHandled');
+    const rawConnect = pool.connect.bind(pool);
+    pool.connect = async (...args) => {
+      const client = await rawConnect(...args);
+      if (client && !client[HANDLED]) {
+        client[HANDLED] = true;
+        client.on('error', (err) => {
+          console.error('[db] in-flight client error (this request fails; the process survives):', err.message);
+        });
+      }
+      return client;
+    };
     // (deploy R31) SERIALIZE first-boot schema creation ACROSS PROCESSES. In a multi-process deploy (the API
     // + the worker), both boot at the same instant against a FRESH DB and BOTH run `CREATE TABLE IF NOT
     // EXISTS` concurrently — Postgres races on its internal type catalog and one process crashes with

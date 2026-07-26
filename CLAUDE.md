@@ -5378,3 +5378,50 @@ the read path was reverted whole. The production symptom it targeted is already 
 client-side serialization (measured peak 6 → 1). **If it is picked up again**, the shape is: keep
 `withCharacterRead` + `ctx.preview`, and give `withCharacter` a two-phase commit where accrual's
 side-effects (raid, income, interest) commit even when `fn` rejects — then the read path is safe.
+
+**THE MAINTENANCE SESSION — five harnesses, and the other half of the outage bug (2026-07-26).** A
+run of non-feature work; the full record is in `SPEC.md` (debt register) and `DEPLOY.md`, so this is
+the precedent index. **(1) D7 — the docs are now machine-checked** (`test/docs.js`, the 52nd suite):
+stale prose does not fail loudly, it makes the next maintainer confidently do the wrong thing, and
+the pass found five live examples including a comment telling the reader to re-apply a line by hand
+after every extractor run (a hazard that had not existed since the rules split). Every figure in
+SPEC §1 is now asserted against the tree — file COUNTS exactly, line TOTALS within 2%, because a
+test that asserts its own line count chases itself. `docs/AUDITS.md` indexes all 57 audit reports as
+point-in-time. **(2) The alarm reaches a human**: `INVARIANT_WEBHOOK_URL` posted `{alert, failed}`,
+which has neither `text` nor `content`, so Slack AND Discord both 400 it and the error is swallowed
+— the §10.4 drift alarm was firing into nothing. Now `webhookText()` renders a readable message on
+both keys, clamped under 2000 chars. **(3) The growth loop paid nobody**: `SOCIAL_VERIFY_MODE=live`
+without `X_BEARER_TOKEN` means every Spread-the-Word claim fails verification forever. Now
+`socialProviders()` degrades honestly — unavailable tasks are hidden from the board rather than
+offered and refused — and the ops dashboard reads PAYING / NOT PAYING. Deliberately a preflight
+WARNING, not an error: making it fatal would take a live server down on its next deploy. **(4)
+`tools/loadtest.js` (4th harness, `npm run loadtest`)** — 5–50 concurrent players against real
+Postgres, reading `pg_stat_database.deadlocks` before and after, since `40P01` is retried as
+`contention` and a lock-order bug is otherwise invisible. Zero deadlocks at every level; throughput
+FLAT ~175 req/s from 5 to 50 players with linear latency — CPU-bound, not a lock wall. It also
+produced three false findings before it produced a true one: 94 deadlocks that were the harness's
+OWN bulk `WHERE id = ANY(...)` medic locking rows in Postgres's order instead of the game's sorted
+order; a singleton-contention leg that measured nothing because the players stood in the wrong
+district; and a PvP leg where 531/722 calls died on an ammo gate INSIDE `withTwoCharacters`, so the
+locks were taken and released before anything contended. **A harness that measures nothing reads
+exactly like a harness that passes.** **(5) `loadOwned`: 16 sequential round trips → one UNION ALL**
+(+31% throughput, measured). pg-mem's UNION type unification is pairwise left-to-right and types a
+bare `NULL` as `text`, where Postgres infers from the first branch — so EVERY branch carries an
+explicit cast. A 4-branch spike passed only because its timestamp branch happened to be last.
+**(6) `tools/chaos.js` (5th harness, `npm run chaos`)** — the first thing here that interrupts
+anything: SIGKILL the worker mid-sweep and check the resumed run pays exactly once, terminate ~80
+backends mid-transaction under load, stop and start Postgres under a live server. Twenty sweeps
+claim to be idempotent in comments; that claim only becomes true when something kills them in the
+middle. **It found the other half of the 2026-07-25 outage.** `pool.on('error')` covers IDLE pooled
+clients. A CHECKED-OUT client (`pool.connect()`, ~73 sites, every transaction in the game) emits
+`'error'` on ITSELF when its connection dies mid-transaction — no listener, unhandled throw, process
+dead, exactly as before the earlier fix. Not exotic: it fires on any failover landing mid-request,
+on `pg_terminate_backend`, and pointedly on our OWN `idle_in_transaction_session_timeout`, the valve
+that exists to kill leaked transactions. Fixed in `src/db.js` — a logging handler attached ONCE per
+client (re-attaching leaks listeners); node-pg still rejects the in-flight query so the request 503s
+normally. Verified by removing the handler and confirming chaos fails loudly and non-zero — the
+harness installs `uncaughtException`/`unhandledRejection` handlers that NAME the crash and then
+`process.exit(1)`, never swallow it, since swallowing would convert the one finding this harness has
+made into a green run. `runLedgerInvariants(pool, {alert:false})` is new for the two measurement
+harnesses: they SQL-seed, so their baseline drift is non-zero by construction and they assert a
+before/after DELTA — firing the production alarm on a measurement buried the real result.
