@@ -159,8 +159,9 @@ row and held it for the whole request, so a player's own requests serialized aga
 each held a pooled connection throughout. **Observed in production:** four of one player's requests
 queued on their own row for 1.0s / 2.1s / 2.3s / 4.3s.
 
-**Shipped:** `withCharacterRead` / `readCharacter` in `game.js`, wired to `GET /v1/me` — the most-polled
-route in the game and the one production caught queueing.
+**Shipped:** `withCharacterRead` / `readCharacter` in `game.js`, wired to **all 24 authed read GETs** —
+`/v1/me` plus the 23 board routes the console polls on every WS event and every 30s. No authed GET
+takes the character write lock any more.
 
 The blocker was never the locking, it was that reads PERSIST accrual, and §7.1 accrual is gameplay:
 it fires the Bureau raid, which sets `jail_until`. Stop reads persisting and the raid can only land
@@ -188,10 +189,16 @@ answers while another session holds `FOR UPDATE` on that row, and answers prompt
 against the same row *does* block and abort on the pool's `lock_timeout`, which is what makes the read
 result meaningful rather than vacuous.
 
-**Remaining, in value order:**
-1. The other ~23 pure-read GETs. Each needs verifying side-effect free before it is moved; the guard
-   makes a mistake loud, but it is a runtime guard, not a proof.
-2. A compare-and-swap would make even the *dirty* reads lock-free. It needs a version column: the
+**How the 23 board routes were cleared to move** — three independent passes, because the runtime guard
+is a backstop, not a proof:
+1. Every route's handler resolves to exactly one board function (1:1, no shared helpers).
+2. Each of those 23 call graphs was walked transitively for `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`,
+   including every awaited helper. **No writes anywhere**, at any depth.
+3. All 23 are exercised by the suites (1–25 references each), and a full run trips the write guard
+   **zero** times. Five of them are additionally proven lock-free against real Postgres in pgcheck §8.
+
+**Remaining:**
+1. A compare-and-swap would make even the *dirty* reads lock-free. It needs a version column: the
    obvious CAS key, `last_accrued_at`, round-trips through node-pg at millisecond precision and would
    never match Postgres's microseconds, so it must be an integer `accrual_seq` bumped on every persist.
    Worth doing only if reads after a real gap show up in production waits.

@@ -986,7 +986,7 @@ export async function buildServer() {
 
   // ── STREET RACES — the deep car catalog as a competitive loop (PvE circuit + PvP wagers + tuning) ──
   app.get('/v1/races', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.raceBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Races.raceBoard(ch, client, h)));
   app.post('/v1/races/npc', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Races.raceNpc(ch, req.body?.car, req.body?.tier, req.body?.nos, client, h)));
   app.post('/v1/races/tune/:carId', { preHandler: auth }, async (req) =>
@@ -1012,7 +1012,7 @@ export async function buildServer() {
 
   // ── THE PORT — maritime smuggling (boats + the run + the Coast Guard) ──
   app.get('/v1/port', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.portBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Port.portBoard(ch, client, h)));
   app.post('/v1/port/boat/:kind', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Port.buyBoat(ch, req.params.kind, client, h)));
   app.post('/v1/port/boat/:boatId/sell', { preHandler: auth }, async (req) =>
@@ -1050,7 +1050,7 @@ export async function buildServer() {
 
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.skillsBoard(ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Skills.skillsBoard(ch, h)));
   app.post('/v1/skills/respec', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
   // step two: fire a capstone-unlocked ACTIVE ability, and per-skill (leaf-first) respec.
@@ -1064,7 +1064,7 @@ export async function buildServer() {
   // THE LAW — the state antagonist. GET /v1/law is the rap sheet + docket; the sinks are the
   // escapes (bribe/lawyer), the courtroom is plea/jury/trial, and the flip turns state's evidence.
   app.get('/v1/law', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.lawBoard(ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Law.lawBoard(ch, h)));
   app.post('/v1/law/bribe', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Law.bribe(ch, client, h)));
   app.post('/v1/law/retainer', { preHandler: auth }, async (req) =>
@@ -1085,7 +1085,7 @@ export async function buildServer() {
 
   // THE PEN — the prison meta-game. Every action requires being in lockup; the shank is two-party.
   app.get('/v1/pen', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.penBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Pen.penBoard(ch, client, h)));
   app.post('/v1/pen/work', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.workYard(ch, client, h)));
   app.post('/v1/pen/buy/:item', { preHandler: auth }, async (req) =>
@@ -1173,7 +1173,7 @@ export async function buildServer() {
 
   // THE UNDERWORLD — named NPCs: standing earned by doing business, perks at 25/60/90.
   app.get('/v1/underworld', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Underworld.underworldBoard(ch, client, h)));
   app.post('/v1/underworld/discharge', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Underworld.discharge(ch, client, h)));
   app.post('/v1/underworld/gun/:gunId/sell', { preHandler: auth }, async (req) =>
@@ -1192,7 +1192,7 @@ export async function buildServer() {
   // R1 — THE PORTFOLIO ("going legit"): burn clean $OMR into legit, death-proof RWA/blue-chip
   // holdings (pure STATUS in R1 — no sell, no cash-out; the only §10.4 flow is the 'rwa:invest' burn).
   app.get('/v1/portfolio', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.portfolioBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.portfolioBoard(ch, client, h)));
   app.post('/v1/portfolio/invest', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Portfolio.invest(ch, req.body?.ticker, req.body?.omr, client, h)));
   app.post('/v1/gangs/portfolio/invest', { preHandler: auth }, async (req) =>
@@ -1220,7 +1220,7 @@ export async function buildServer() {
 
   // THE ESTATE ("the compound"): the deep personal $OMR sink + a "home" that displays your legend.
   app.get('/v1/estate', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.estateBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Estate.estateBoard(ch, client, h)));
   app.post('/v1/estate/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Estate.upgradeEstate(ch, client, h)));
   app.post('/v1/estate/feature/:id', { preHandler: auth }, async (req) =>
@@ -1242,7 +1242,7 @@ export async function buildServer() {
 
   // THE AUCTION HOUSE ("the sit-down"): weekly $OMR auctions of unique prestige items — highest bid burns.
   app.get('/v1/auction', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.auctionBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Auction.auctionBoard(ch, client, h)));
   app.post('/v1/auction/:lotId/bid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Auction.bidAuction(ch, req.params.lotId, req.body?.amount, client, h)));
   // Tier-4 — THE BLOCK (RESALE): consign a won trophy, bid on / pull a consignment; the collectors board
@@ -1261,7 +1261,7 @@ export async function buildServer() {
 
   // THE WIRE — the intelligence terminal: wiretaps on rivals + the Street Wire premium feed ($OMR sinks).
   app.get('/v1/wire', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.wireBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Wire.wireBoard(ch, client, h)));
   app.post('/v1/wire/tap/:targetId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Wire.placeTap(ch, req.params.targetId, client, h)));
   app.post('/v1/wire/sweep', { preHandler: auth }, async (req) =>
@@ -1916,14 +1916,14 @@ export async function buildServer() {
   app.post('/v1/daily/:id/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.get('/v1/onboard', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
 
   // ── FIVE PILLARS: diplomacy (#2), sovereignty (#3), campaigns (#4), the bloodline (#5) ──
   app.get('/v1/diplomacy', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.diplomacyBoard(client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.diplomacyBoard(client, h)));
   app.post('/v1/diplomacy/pact/:gangId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.proposePact(ch, req.params.gangId, client, h)));
   app.post('/v1/diplomacy/pact/:gangId/accept', { preHandler: auth }, async (req) =>
@@ -1937,7 +1937,7 @@ export async function buildServer() {
   app.delete('/v1/diplomacy/coalition/:id', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Diplomacy.leaveCoalition(ch, req.params.id, client, h)));
   app.get('/v1/sov', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.sovBoard(client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Sov.sovBoard(client, h)));
   app.post('/v1/sov/:district/build', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.buildSov(ch, req.params.district, req.body?.windowHour, client, h)));
   app.post('/v1/sov/:district/upgrade', { preHandler: auth }, async (req) =>
@@ -1950,7 +1950,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Sov.collectSov(ch, client, h)));
   app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
   app.get('/v1/campaigns', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.campaignBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.campaignBoard(ch, client, h)));
   app.post('/v1/campaigns/:id/start', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.startCampaign(ch, req.params.id, client, h)));
   app.post('/v1/campaigns/:id/choose', { preHandler: auth }, async (req) =>
@@ -1958,13 +1958,13 @@ export async function buildServer() {
   app.post('/v1/campaigns/:id/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Campaigns.claimCampaign(ch, req.params.id, client, h)));
   app.get('/v1/bloodline', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Bloodline.bloodlineBoard(ch, client, h)));
   app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
   // FIVE PILLARS → Tier 4 — THE REPUTATION BOARDS (the honor legend: Men of Honor + the Most Feared)
   app.get('/v1/leaderboard/honor', async () => Honor.honorLeaderboard(pool));
   // DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3 — account-level ties on the Bloodline)
   app.get('/v1/dynasty', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.dynastyBoard(ch, client)));
+    G.readCharacter(pool, req.user.sub, (ch, client) => Dynasty.dynastyBoard(ch, client)));
   app.post('/v1/dynasty/propose/:characterId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Dynasty.proposeMarriage(ch, req.params.characterId, client, h)));
   app.post('/v1/dynasty/accept/:accountId', { preHandler: auth }, async (req) =>
@@ -1979,7 +1979,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client) => Dynasty.endConsigliere(ch, client, req.query?.role || req.body?.role || null)));
   // NAMED SOLDIERS (XCOM — recruit / assign / dismiss; the assists live inside crime/heist/raids)
   app.get('/v1/soldiers', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.soldierBoard(ch, client, h.acct)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.soldierBoard(ch, client, h.acct)));
   app.get('/v1/leaderboard/commanders', { preHandler: auth }, async () => Soldiers.commanderLeaderboard(pool));
   app.post('/v1/soldiers/hire', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Soldiers.hireSoldier(ch, client, h)));
@@ -1991,7 +1991,7 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client) => Soldiers.dismissSoldier(ch, req.params.id, client)));
   // BLACKMAIL & SECRETS (CK3 intrigue — dig / extort / pay the hush / expose)
   app.get('/v1/secrets', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client) => Secrets.secretsBoard(ch, client)));
+    G.readCharacter(pool, req.user.sub, (ch, client) => Secrets.secretsBoard(ch, client)));
   app.post('/v1/wire/dig/:targetId', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Secrets.digSecret(ch, req.params.targetId, client, h)));
   app.post('/v1/secrets/:id/extort', { preHandler: auth }, async (req) =>
@@ -2358,7 +2358,7 @@ export async function buildServer() {
 
   // ── THE DUELING LADDER (slate #5) — ranked ELO PvP on the audited casino:pvp transfer ──
   app.get('/v1/duels', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch) => Duels.duelBoard(pool, ch)));
+    G.readCharacter(pool, req.user.sub, (ch) => Duels.duelBoard(pool, ch)));
   app.post('/v1/duels/list', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Duels.listDuel(ch, req.body?.limit, client)));
   app.post('/v1/duels/style', { preHandler: auth }, async (req) =>
@@ -2370,19 +2370,19 @@ export async function buildServer() {
 
   // ── CLUE SCROLLS (slate #4) — treasure trails off the §7.11 seed; the casket is the one faucet ──
   app.get('/v1/clues', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Clues.clueBoard(client, ch, h.acct)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Clues.clueBoard(client, ch, h.acct)));
   app.post('/v1/clues/dig', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Clues.dig(ch, client, h)));
   app.get('/v1/leaderboard/clues', { preHandler: auth }, async () => Clues.clueLeaderboard(pool));
   // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
   app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
   // step three — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest leaderboard)
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch) => World.raidBoard(pool, ch.id)));
+    G.readCharacter(pool, req.user.sub, (ch) => World.raidBoard(pool, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.planRaid(ch, req.params.npcId, client, h)));
   app.post('/v1/world/raids/:id/join', { preHandler: auth }, async (req) =>
