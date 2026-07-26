@@ -111,37 +111,81 @@ const itemMap = (rows) => Object.fromEntries(rows.map((r) => [r.item_id, Number(
 
 // Everything a character owns or belongs to, loaded inside the caller's txn.
 export async function loadOwned(client, ch) {
-  // (found by the real-Postgres probe) These ran as a Promise.all over ONE pooled client. node-pg
-  // has deprecated overlapping queries on a single client and REMOVES them in pg@9 — and the
-  // "parallelism" bought nothing in the first place: a single connection executes one query at a
-  // time, so pg was silently queueing them. Sequential awaits are identical wall-clock against
-  // Postgres and free of the deprecation.
+  // ONE ROUND TRIP FOR FOURTEEN LOOKUPS. This runs on EVERY authed request in the game, read or
+  // write, so its round-trip count is the single largest lever on total database traffic — and
+  // `tools/loadtest.js` measured the cost: `/v1/me` was ~3× a board read (15ms vs 5ms uncontended),
+  // which is what a stack of sequential round trips looks like.
   //
-  // The whole suite was blind to this because it runs on pg-mem, which has no such constraint.
-  // `tools/pgcheck.js` is the repeatable guard: it drives the core loop against a real Postgres and
-  // FAILS on any pg deprecation warning, so the next one of these can't reach a deploy unnoticed.
-  const rows = [];
-  for (const [sql, params] of [
-    ['SELECT racket_id, level FROM character_rackets WHERE character_id=$1', [ch.id]],
-    ['SELECT asset_id FROM character_assets WHERE character_id=$1', [ch.id]],
-    ['SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]],
-    ['SELECT good_id, qty FROM character_cargo WHERE character_id=$1 AND qty>0', [ch.id]],
-    ['SELECT item_id, qty FROM character_items WHERE character_id=$1 AND qty>0', [ch.id]],
-    ['SELECT gear_id FROM account_gear WHERE account_id=$1', [ch.account_id]],
-    ['SELECT gun_id FROM character_guns WHERE character_id=$1', [ch.id]],
-    ['SELECT gang_id, role, joined_at FROM gang_members WHERE character_id=$1', [ch.id]],
-    ['SELECT drug_id, qty FROM makings WHERE character_id=$1 AND qty>0', [ch.id]],
-    ['SELECT drug_id, qty, quality FROM stash WHERE character_id=$1', [ch.id]],
-    ['SELECT * FROM batches WHERE character_id=$1', [ch.id]],
-    ['SELECT skill_id FROM character_skills WHERE character_id=$1', [ch.id]],
-    ['SELECT npc_id, standing, touched_at FROM npc_standing WHERE character_id=$1', [ch.id]],
-    ['SELECT npc_id, count, since FROM npc_grudges WHERE character_id=$1 AND count > 0', [ch.id]],
-    // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
-    ['SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id]],
-    // THE ESTATE — account-level too (survives death; the heir inherits the compound)
-    ['SELECT name, tier, spent_omr FROM estates WHERE account_id=$1', [ch.account_id]],
-  ]) rows.push(await client.query(sql, params));
-  const [rk, as, cars, cargo, items, gear, guns, gm, mk, st, batch, sk, npc, grudge, pf, est] = rows;
+  // Two earlier shapes, and why neither survived:
+  //   * a `Promise.all` over ONE pooled client — node-pg deprecates overlapping queries on a single
+  //     client and REMOVES them in pg@9, and it bought nothing anyway: one connection executes one
+  //     query at a time, so pg was silently queueing them. Found by the real-Postgres probe; pg-mem
+  //     has no such constraint, so the whole suite was blind to it. `tools/pgcheck.js` now FAILS on
+  //     any pg deprecation warning, so that class cannot reach a deploy again.
+  //   * sequential awaits — correct, but 16 network round trips to fetch 16 tiny result sets.
+  //
+  // So: fetch them in a single UNION ALL over a shared narrow shape and demultiplex in JS. The column
+  // shape (src, k, k2, n, n2, ts) is padded with typed NULLs — proven to behave IDENTICALLY on pg-mem
+  // and real Postgres. `json_agg` was the more obvious encoding and is a trap: pg-mem returns it
+  // double-nested (`[[{…}]]` where Postgres gives `[{…}]`), so the suite would have passed over a
+  // production bug. `to_jsonb`/`row_to_json` aren't implemented by pg-mem at all.
+  //
+  // Each group is mapped back to its ORIGINAL column names and types below, so `loadOwned`'s return
+  // value is unchanged and no caller needed touching. The explicit `Number()` matters: a `numeric`
+  // union column comes back from node-pg as a STRING (precision), where the original `int` columns
+  // came back as numbers — coercing here keeps the shape identical instead of relying on all
+  // fourteen downstream consumers to keep wrapping.
+  //
+  // `cars` and `batches` stay separate: both are `SELECT *`, so they do not fit a narrow shape, and
+  // `cars` carries an ORDER BY that callers rely on.
+  // EVERY null is cast, in EVERY branch — not just the first. pg-mem unifies UNION column types
+  // PAIRWISE LEFT-TO-RIGHT and types a bare `NULL` as text, so a branch carrying a timestamp followed
+  // by a branch with an untyped NULL in that position fails with "UNION types timestamp with time zone
+  // and text cannot be matched". Postgres infers from the first branch and does not care. A 4-branch
+  // spike passed precisely because its timestamp branch happened to be LAST — the shape only breaks at
+  // the point where an untyped NULL follows a typed value. Casting everywhere removes the dependence on
+  // either engine's inference rules, which is the only version that is safe to rely on.
+  const bulk = await client.query(`
+    SELECT 'rk' AS src, racket_id AS k, NULL::text AS k2, level::numeric AS n, NULL::numeric AS n2, NULL::timestamptz AS ts
+      FROM character_rackets WHERE character_id=$1
+    UNION ALL SELECT 'as', asset_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_assets WHERE character_id=$1
+    UNION ALL SELECT 'cargo', good_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM character_cargo WHERE character_id=$1 AND qty>0
+    UNION ALL SELECT 'items', item_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM character_items WHERE character_id=$1 AND qty>0
+    UNION ALL SELECT 'gear', gear_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM account_gear WHERE account_id=$2
+    UNION ALL SELECT 'guns', gun_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_guns WHERE character_id=$1
+    UNION ALL SELECT 'gm', gang_id, role, NULL::numeric, NULL::numeric, joined_at FROM gang_members WHERE character_id=$1
+    UNION ALL SELECT 'mk', drug_id, NULL::text, qty::numeric, NULL::numeric, NULL::timestamptz FROM makings WHERE character_id=$1 AND qty>0
+    UNION ALL SELECT 'st', drug_id, NULL::text, qty::numeric, quality::numeric, NULL::timestamptz FROM stash WHERE character_id=$1
+    UNION ALL SELECT 'sk', skill_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_skills WHERE character_id=$1
+    UNION ALL SELECT 'npc', npc_id, NULL::text, standing::numeric, NULL::numeric, touched_at FROM npc_standing WHERE character_id=$1
+    UNION ALL SELECT 'grudge', npc_id, NULL::text, count::numeric, NULL::numeric, since FROM npc_grudges WHERE character_id=$1 AND count > 0
+    UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
+    UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2`,
+  [ch.id, ch.account_id]);
+  // demultiplex — one entry per original query, in its original column names/types. Kept as
+  // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
+  const grp = new Map();
+  for (const r of bulk.rows) (grp.get(r.src) || grp.set(r.src, []).get(r.src)).push(r);
+  const of = (src, map) => ({ rows: (grp.get(src) || []).map(map) });
+  const n = (v) => (v === null || v === undefined ? null : Number(v));
+  const rk = of('rk', (r) => ({ racket_id: r.k, level: n(r.n) }));
+  const as = of('as', (r) => ({ asset_id: r.k }));
+  const cargo = of('cargo', (r) => ({ good_id: r.k, qty: n(r.n) }));
+  const items = of('items', (r) => ({ item_id: r.k, qty: n(r.n) }));
+  const gear = of('gear', (r) => ({ gear_id: r.k }));
+  const guns = of('guns', (r) => ({ gun_id: r.k }));
+  const gm = of('gm', (r) => ({ gang_id: r.k, role: r.k2, joined_at: r.ts }));
+  const mk = of('mk', (r) => ({ drug_id: r.k, qty: n(r.n) }));
+  const st = of('st', (r) => ({ drug_id: r.k, qty: n(r.n), quality: n(r.n2) }));
+  const sk = of('sk', (r) => ({ skill_id: r.k }));
+  const npc = of('npc', (r) => ({ npc_id: r.k, standing: n(r.n), touched_at: r.ts }));
+  const grudge = of('grudge', (r) => ({ npc_id: r.k, count: n(r.n), since: r.ts }));
+  // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
+  const pf = of('pf', (r) => ({ ticker: r.k, shares: n(r.n), cost_omr: n(r.n2) }));
+  // THE ESTATE — account-level too (survives death; the heir inherits the compound)
+  const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
+  const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
+  const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
   let gang = null, held = [];
   if (gangId) {
