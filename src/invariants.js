@@ -61,7 +61,12 @@ const one = async (pool, q) => Number((await pool.query(q)).rows[0].s);
 // in time. Without it, a player action committing between the two halves of a check (e.g. charWealth
 // SUM then charLedger SUM) tears the read into a FALSE drift → a false webhook alarm at the founder.
 // Run every read inside a single REPEATABLE READ, READ ONLY transaction; alert AFTER, on the pool.
-export async function runLedgerInvariants(pool) {
+// `opts.alert` exists for the MEASUREMENT harnesses (tools/loadtest.js, tools/chaos.js). They seed cash
+// and ammo by SQL, so their baseline drift is non-zero BY CONSTRUCTION and they assert a before/after
+// DELTA instead — but every read still fired the production alarm, burying the actual ✓/✗ lines under
+// 🚨 banners that are true and irrelevant. A harness measuring is not a production drift; the alarm's
+// job is production, so it stays on by default and only a deliberate caller turns it off.
+export async function runLedgerInvariants(pool, { alert = true } = {}) {
   let client = pool.connect ? await pool.connect() : null;
   if (client) {
     // best-effort snapshot — real Postgres runs every read in one MVCC snapshot; pg-mem (single-
@@ -72,7 +77,7 @@ export async function runLedgerInvariants(pool) {
   try {
     const res = await collectLedgerChecks(client || pool);
     if (client) await client.query('COMMIT');
-    if (!res.ok) await alertDrift(pool, res.checks.filter((c) => !c.ok));
+    if (alert && !res.ok) await alertDrift(pool, res.checks.filter((c) => !c.ok));
     return res;
   } catch (e) {
     if (client) { try { await client.query('ROLLBACK'); } catch { /* already gone */ } }

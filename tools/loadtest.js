@@ -213,7 +213,9 @@ const medic = setInterval(() => {
 
 // ── the §10.4 baseline + the deadlock counter ───────────────────────────────────────────────────
 const driftOf = async () => {
-  const { checks } = await runLedgerInvariants(pool);
+  // alert:false — this harness seeds by SQL, so its baseline drift is non-zero by construction and it
+  // asserts a DELTA. Firing the production alarm on a measurement would bury the real result.
+  const { checks } = await runLedgerInvariants(pool, { alert: false });
   return checks.reduce((m, c) => m.set(c.name, Number(c.drift || 0)), new Map());
 };
 // pg_stat_database.deadlocks is the only place a real deadlock is VISIBLE. The codebase maps 40P01 to

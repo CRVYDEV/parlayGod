@@ -17,7 +17,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Client | **4,631** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
-| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency) |
+| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption) |
 | Design + audit docs | **127** markdown files, **26231** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
@@ -431,6 +431,33 @@ track them; the last sweep resolved every open row. This is process debt, not co
 
 ### D10 — The client is one 4,631-line file **(LOW, deliberate)**
 Zero dependencies, zero build step — a real asset for deployment. It is at the edge of comfortable.
+
+### D11 — Nothing had ever been interrupted **(MEDIUM → ADDRESSED)**
+Around twenty worker sweeps carry a comment claiming they are idempotent, per-row transactional, or safe
+to re-run. Not one had ever been killed mid-run and then run again. "Idempotent" is a claim about a code
+path that only becomes true once something interrupts it and the second run is checked.
+
+The cost of not checking was already paid once. On 2026-07-25 the API process **died on every database
+restart** — an unhandled Pool `'error'` event — and the only signal was a tester reporting "Internal
+error on every crime". That was found by accident, after the fact, from a log.
+
+`tools/chaos.js` (`npm run chaos`, the fifth harness, real Postgres only) now does it deliberately:
+SIGKILLs the worker mid-sweep at three different points and checks the resumed run pays exactly once;
+`pg_terminate_backend`s ~80 backends mid-transaction under load; and stops and starts Postgres entirely
+underneath a running server.
+
+It immediately found **the other half of the 2026-07-25 bug**. `pool.on('error')` covers clients sitting
+IDLE in the pool. A client a request has CHECKED OUT — `pool.connect()`, ~73 sites, every transaction in
+the game — emits `'error'` on *itself* when its connection dies mid-transaction, and an EventEmitter with
+no listener throws, so the process died exactly as before. The earlier fix had closed half the door. It
+is not exotic: it fires on any restart or failover landing while a transaction is open, and pointedly on
+our own `idle_in_transaction_session_timeout`, the safety valve that exists to kill leaked transactions.
+Fixed in `src/db.js` by attaching a logging handler once per client; node-pg still rejects the in-flight
+query, so the request fails through the normal path and answers 503 `db_down`.
+
+Verified by removing the handler and confirming the harness fails (it does, loudly, non-zero). With the
+fix: interrupted sweeps settle each lot exactly once, ~80 killed backends leave §10.4 unmoved, and a full
+database outage produces 503s rather than 500s and **recovers unaided** with no redeploy.
 
 ---
 
