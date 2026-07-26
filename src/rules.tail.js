@@ -253,7 +253,9 @@ export const numbersDrawOf = (day = dayOf()) => Math.floor(hash01(`numbers:${day
 export const btkOf=(lvl=1,m=5,vm=1)=>Math.round((250+lvl*80+m*12)*vm);
 // PACING override (founder-directed, see the PACING block below): the prototype's `/4` made levels
 // far too cheap. Reads PACING.LEVEL_DIVISOR at CALL time, so the const being declared later in the
-// module is fine. RE-APPLY THIS LINE after any tools/extract-rules.js regeneration.
+// module is fine. This line used to warn that it must be re-applied by hand after every extractor run;
+// that is no longer true — since the rules split, `levelOf` lives in the HAND-WRITTEN half, which the
+// extractor never opens, so a regeneration cannot clobber it. test/docs.js fails if the warning returns.
 export const levelOf=(respect)=>Math.floor(Math.sqrt(Math.max(0,respect)/PACING.LEVEL_DIVISOR))+1;
 export const trimOf=(id)=>TRIMS.find(t=>t.id===id)||TRIMS[1];
 export const carOf=(id)=>CARS.find(c=>c.id===id);
