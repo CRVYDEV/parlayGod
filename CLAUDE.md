@@ -3192,6 +3192,20 @@ parent route (a trailing `/` becomes `:p`), and a runtime-chosen ACTION segment 
 is unverifiable — those are counted and REPORTED (5 of 481), never silently passed. Mutation-verified on
 both checks. The catalog reader handles arrays-of-`{id}` AND id-keyed objects and asserts the result is
 non-trivial, because `Object.keys()` on an array yields `0,1,2` and would have made every value look bogus.
+**Step two — the THIRD way a button dies, and `/admin`.** The first cut could not see a field the handler
+never READS (`{price:50}` when it reads `req.body?.unitPrice` — route exists, value is sane, server gets
+undefined every call). Now each route registration's source is sliced out and scanned for this codebase's
+actual read shapes (`req.body?.x`, `req.body.x`, destructuring), and every client body field is checked
+against ITS OWN route — not a global pool, since `qty` being read *somewhere* says nothing about whether
+THIS handler reads it. Routes handed the whole `req.body` to a module (5) are unresolvable here and are
+COUNTED, never silently passed. **`/admin` is now covered too** (its own `j(method,path)` helper) — the
+dashboard is what the founder holds during an incident, so a dead button there surfaces at the worst
+moment; all 15 of its calls check out. **Found + fixed:** `POST /v1/exchange/list` sent `price` where the
+handler reads `unitPrice` (a genuinely broken action), and four bodies advertised fields the handler
+ignores — `unstake {amount:1}` the worst of them, since unstake takes no amount and returns the WHOLE
+position, so the deck read as "unstake 1". Both new checks mutation-verified (re-introduce the
+price/unitPrice mismatch → caught; point an /admin button at `/v1/mod/banish` → caught). 496 routes,
+50 bodies, suite 53 green.
 
 **UX / FLOW AUDIT + ONBOARDING REFRESH + THE CODEX — BUILT** (`AUDIT-ux-gameplay-flow.md`, `docs/WIKI.md`,
 `public/wiki.html`, `public/index.html`, `src/game.js`, `src/server.js`; UI/docs only — no mechanic retuned,

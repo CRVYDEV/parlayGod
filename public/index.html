@@ -2664,19 +2664,19 @@
   const DECK = {
     'Garage & Workshop': [
       ['POST', '/v1/garage/boost', {}], ['POST', '/v1/garage/:carId/melt', {}], ['POST', '/v1/garage/:carId/repair', {}],
-      ['POST', '/v1/garage/:carId/fence', {}], ['POST', '/v1/workshop/craft/:id', {}], ['POST', '/v1/workshop/ammo', { qty: 1 }],
+      ['POST', '/v1/garage/:carId/fence', {}], ['POST', '/v1/workshop/craft/:id', {}], ['POST', '/v1/workshop/ammo', {}],
       ['POST', '/v1/goods/buy', { goodId: 'gin', qty: 1 }], ['POST', '/v1/goods/sell', { goodId: 'gin', qty: 1 }],
       ['GET', '/v1/market/prices'],
     ],
     'Money & $OMR': [
       ['POST', '/v1/swap', { direction: 'buy', amount: 1000 }], ['POST', '/v1/stake', { amount: 1 }],
-      ['POST', '/v1/unstake', { amount: 1 }], ['POST', '/v1/claim-rewards', {}],
+      ['POST', '/v1/unstake', {}], ['POST', '/v1/claim-rewards', {}],
       ['POST', '/v1/rackets/:id/buy', {}], ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
       ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
     ],
     'Armory & Fights': [
       ['POST', '/v1/armory/gun/:id/buy', {}], ['POST', '/v1/armory/gun/:id/equip', {}],
-      ['POST', '/v1/armory/vest/:id', {}], ['POST', '/v1/armory/ammo', { qty: 10 }],
+      ['POST', '/v1/armory/vest/:id', {}], ['POST', '/v1/armory/ammo', {}],
       ['POST', '/v1/streets/:targetId/search', {}], ['POST', '/v1/streets/:targetId/fire', {}],
       ['POST', '/v1/streets/:targetId/jump', {}], ['POST', '/v1/streets/:targetId/bust', {}],
       ['POST', '/v1/streets/:targetId/npchit', { tier: 'legbreaker' }], ['POST', '/v1/safehouse', {}],
@@ -2708,7 +2708,7 @@
       ['POST', '/v1/market/:id/bid', { amount: 1000 }], ['POST', '/v1/market/:id/buy', {}],
       ['POST', '/v1/market/:id/cancel', {}], ['POST', '/v1/market/order', { goodId: 'gin', qty: 10, price: 100 }],
       ['POST', '/v1/market/:id/fill', { qty: 1 }], ['POST', '/v1/market/:id/claim', {}],
-      ['GET', '/v1/exchange'], ['POST', '/v1/exchange/list', { kind: 'ammo', qty: 10, price: 50 }],
+      ['GET', '/v1/exchange'], ['POST', '/v1/exchange/list', { kind: 'ammo', qty: 10, unitPrice: 50 }],
     ],
     'Convoys & Heists': [
       ['GET', '/v1/convoys'], ['POST', '/v1/convoy', { to: 'docks', goodId: 'gin', qty: 1 }], ['POST', '/v1/convoy/load', { goodId: 'gin', qty: 1 }],
@@ -2781,7 +2781,7 @@
       ['GET', '/v1/notifications'],
     ],
     'Chain': [
-      ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', { address: '' }],
+      ['GET', '/v1/session'], ['POST', '/v1/wallet/challenge', {}],
       ['POST', '/v1/wallet/verify', { address: '', signature: '' }], ['POST', '/v1/withdraw', { amount: 1 }],
       ['GET', '/v1/withdraw/status'], ['POST', '/v1/character/mint', {}], ['POST', '/v1/character/reroll', {}], ['GET', '/v1/fees/status'],
       ['GET', '/v1/bonds'], ['POST', '/v1/bond/quote', { principalEth: 1 }],
