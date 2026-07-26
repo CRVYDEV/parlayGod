@@ -10,8 +10,8 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **73** files, **29,652** lines (`src/`) |
-| Test suites | **48** files, **15,435** lines (`test/`) — ratio 0.52 test:src |
+| Backend modules | **100** files, **30353** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **51** files, **15885** lines (`test/`) — ratio 0.52 test:src |
 | HTTP routes | **491** registrations |
 | Database tables | **161** (`schema.sql`, 2,203 lines) |
 | Client | **4,631** lines (`public/index.html`, single file, zero dependencies) |
@@ -284,11 +284,29 @@ websocket gateway, static files, health, openapi) plus small scattered families 
 whose registrations are interleaved with the code they sit next to. Those are worth moving only
 alongside a reason to touch them.
 
-### D4 — `social.js` is 2,003 lines **(MEDIUM)**
-The PvP god-module: gangs, wars, turf, jumps, hits, death, the estate, bounties, vendettas, safehouse,
-bodyguards, the sacking. It is the highest-risk file in the tree to change, and the estate path inside
-it is the most consequential code in the game. A split along death/estate | contracts | gangs/turf |
-combat lines would reduce blast radius.
+### D4 — `social.js` was 2,003 lines — **RESOLVED**
+Split into a layered package under `src/social/` — combat, estate, contracts, defense, gangs,
+exchange, shared — with `social.js` as a facade re-exporting the same 37 names EXPLICITLY (not by
+star, so the package's private helpers stay private). No call site changed.
+
+The layering is the point: nothing lower imports anything higher, so the package is acyclic by
+construction. `combat` reaches down into contracts (a kill pays the pot), defense (a bodyguard
+absorbs it), the estate (the body) and gangs (war scoring); the estate reaches into gangs
+(`removeMember`) and contracts (`refundPot`); nothing reaches back up. `runEstate` — the most
+consequential function in the game — now sits in a 435-line file rather than buried mid-way through
+a 2,000-line one.
+
+Verified as a LOGIC move, which needs more than the route-table diff the other splits used: all 61
+definitions are present byte-identical, the public surface is unchanged (same names, kinds and
+arity, compared against the pre-split module loaded side by side), every module imports every
+dependency it still uses, and suite + sim + pgcheck are green.
+
+**A guard went quiet rather than failing, and that is the finding worth keeping.** `test/migrate.js`
+proves every estate-wiped table really has a `DELETE FROM` somewhere in `src/`, and it listed `src/`
+FLAT — so moving `runEstate` into a subdirectory made the entire estate wipe invisible to it. This
+was the second occurrence (`test/preflight.js` did the same when the route modules moved), so the
+recursive walk now lives in `test/lib/srcfiles.js` and both scanners use it; both were then verified
+to fire against a file in `src/social/`. Any future guard that scans the tree should use it.
 
 ### D5 — The `rules.js` tail had outgrown its generated head — **RESOLVED**
 Split into `src/rules.generated.js` (the prototype's 22 data tables, machine-owned) +
@@ -386,7 +404,7 @@ onboarding docs — not for retyping 55,000 lines.
    2,396 → 1,771 lines, route table proven identical, two new guards for what that diff can't see.
 4. ~~**Split `rules.js`** into generated + tail (D5).~~ **DONE** — machine-owned tables in one file,
    hand-written everything in another, the extractor writes only the first, `test/rules.js` enforces it.
-5. **Split `social.js`** along death/estate | contracts | gangs | combat (D4). Days, carefully, with the
-   existing suites as the harness. Do this last of the splits — highest risk, highest reward.
+5. ~~**Split `social.js`** along death/estate | contracts | gangs | combat (D4).~~ **DONE** — seven
+   layered modules under `src/social/`, byte-identical bodies, unchanged public surface.
 6. **Consolidate the docs** (D7): one architecture doc (this file), one balance sheet, one deploy
    runbook, and archive the 25 point-in-time audit reports.
