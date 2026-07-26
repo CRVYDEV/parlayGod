@@ -253,7 +253,46 @@ console.log('\n7. THE SCHEMA IS RE-APPLIABLE (in-place upgrade)');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-console.log('\n8. NO node-pg DEPRECATIONS');
+console.log('\n8. A READ DOES NOT WAIT FOR THE WRITE LOCK (D1)');
+// The whole point of the lock-free read path, and a property pg-mem cannot express: it has no real
+// row locks, so on the suites a read "not blocking" is true whether or not the code takes the lock.
+// Here a second session holds SELECT … FOR UPDATE on the player's own character row — exactly what a
+// concurrent action does — and the read must still answer. Before D1 it would have queued behind it
+// (production measured 1.0s/2.1s/2.3s/4.3s waits) and, past the pool's lock_timeout, failed outright.
+{
+  const cid = (await call('GET', '/v1/me', { token })).body.character.id;
+  // section 5 left them in a cell; the write below must be refused by the LOCK, not by the jail gate
+  await pool.query('UPDATE characters SET jail_until = NULL, nerve = 20 WHERE id=$1', [cid]);
+  const holder = await pool.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query('SELECT * FROM characters WHERE id=$1 FOR UPDATE', [cid]);
+
+    const t0 = Date.now();
+    const me = await call('GET', '/v1/me', { token });
+    const ms = Date.now() - t0;
+    check(me.code === 200, 'a read answers while another session holds the row lock', `got ${me.code}`);
+    // the pool's lock_timeout is the floor a blocked read would have hit; well under it means it
+    // never queued at all rather than merely getting lucky.
+    const lockMs = Number((await pool.query("SELECT setting FROM pg_settings WHERE name='lock_timeout'")).rows[0].setting);
+    check(ms < Math.max(500, lockMs / 4), 'and answers promptly — it never queued on the lock',
+      `took ${ms}ms, lock_timeout ${lockMs}ms`);
+
+    // the contrast that proves the lock is genuinely held: a WRITE against the same row does wait,
+    // and gives up on the pool's own lock_timeout rather than hanging forever.
+    const t1 = Date.now();
+    const act = await call('POST', '/v1/crimes/pick', { token, body: {} });
+    const actMs = Date.now() - t1;
+    check(act.code !== 200, 'a write against the same locked row is refused, not served', `got ${act.code}`);
+    check(actMs >= lockMs * 0.5, 'and it waited on the lock before giving up', `waited ${actMs}ms`);
+  } finally {
+    await holder.query('ROLLBACK').catch(() => {});
+    holder.release();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n9. NO node-pg DEPRECATIONS');
 await app.close();
 await new Promise((r) => setTimeout(r, 200));                // let any late warning land
 check(deprecations.length === 0, 'no deprecated driver usage',
@@ -266,5 +305,5 @@ if (fails.length) {
   for (const f of fails) console.error('  • ' + f);
   process.exit(1);
 }
-console.log('✅ pgcheck passed — the loop, the locks, the safety valves, the ledger and the migration all hold on real Postgres.');
+console.log('✅ pgcheck passed — the loop, the locks, the safety valves, the ledger, the migration and the lock-free read path all hold on real Postgres.');
 process.exit(0);

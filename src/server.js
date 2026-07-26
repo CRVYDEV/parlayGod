@@ -518,8 +518,12 @@ export async function buildServer() {
     return { ok: true, id };
   });
 
+  // The sheet — the single most-polled route in the game, and the one production caught queueing on
+  // its own player's row. Its handler is empty: it exists to return the accrued view, nothing else,
+  // so it is the clearest possible case for the lock-free read path (D1). readCharacter takes no lock
+  // and writes nothing when accrual has not moved, and falls through to withCharacter when it has.
   app.get('/v1/me', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, async () => ({})));
+    G.readCharacter(pool, req.user.sub, async () => ({})));
 
   // Lightweight pre-character session probe: a freshly-authed client can ask "am I set up?"
   // without eating a no_character 400 from /v1/me. Surfaces the whole gate state at a glance.

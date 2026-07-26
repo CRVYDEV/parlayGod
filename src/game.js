@@ -379,10 +379,25 @@ export const trunkCap = (h) => cargoCapacity(h.owned.assets)
   + (hasSkill(h, 'pack_mule') ? SKILLS.FX.TRUNK_BONUS : 0)
   + (hasSkill(h, 'road_boss') ? SKILLS.FX.ROAD_BOSS_TRUNK : 0); // step-two capstone: even bigger haul
 
-async function accrueAndLedger(client, ch, acct, owned) {
+// The IN-MEMORY half of accrual. accrue() itself is pure — accrual.js makes zero database calls, it
+// only mutates the loaded rows and leaves markers (_accruedIncome, _raid, …) for the caller to write.
+// Splitting the two halves is what lets a pure read accrue without a transaction and decide, from the
+// result, whether it has anything worth persisting at all.
+export function accrueInMemory(ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,
     racketLevels: owned.racketLevels, // Tier-4 — per-racket upgrade levels multiply the drip
     foundationTier: owned.gang?.foundation || 0 }); // THE FOUNDATION step two: the family charity speeds the exposure bleed
+}
+
+// Did accrual actually move anything? accrue() returns early under one second, so a client polling
+// every few seconds changes NOTHING — but the two Make-Risk-Pay releases (a cleared bank deposit, an
+// unbonded stake) sit ABOVE that early return and run on the wall clock, so "no time passed" is not
+// the same question as "nothing happened". Fingerprint all three.
+const accrualMark = (ch, acct) =>
+  `${+new Date(ch.last_accrued_at)}|${Number(ch.bank_intransit || 0)}|${Number(acct?.unbonding || 0)}`;
+
+async function accrueAndLedger(client, ch, acct, owned) {
+  accrueInMemory(ch, acct, owned);
   // §7.1 accrued racket/front income is a faucet — record it so the ledger balances
   if (ch._accruedIncome > 0) {
     await ledger(client, { characterId: ch.id, currency: 'cash', amount: ch._accruedIncome, reason: 'racket:income' });
@@ -492,6 +507,76 @@ export async function withCharacter(pool, accountId, fn) {
     return { character, events: h.events, ...result };
   } catch (e) { await client.query('ROLLBACK'); throw deadlockToRetry(e); }
   finally { client.release(); }
+}
+
+// A pure-read GET does not need the write lock — but it cannot simply skip accrual either, because
+// §7.1 accrual is GAMEPLAY, not bookkeeping: it fires the Bureau raid, which sets jail_until. Reads
+// are what land that on an idle player. Two earlier designs tried to make reads never persist and
+// both were rejected on measurement (see SPEC.md D1) — pg-mem implements no SAVEPOINT syntax at all,
+// and pg-mem's ROLLBACK is a no-op, so a "roll the action back and re-settle" scheme applied accrual
+// twice and drifted §10.4 in every suite while passing them.
+//
+// So this takes the cut that needs neither: accrue IN MEMORY with no lock, then look at what moved.
+//
+//   • Nothing moved  → there is nothing to persist. Return having taken NO lock and written NOTHING.
+//   • Something moved → hand off to withCharacter, which re-reads under FOR UPDATE and behaves
+//                       exactly as it always has, raid included.
+//
+// Every outcome is therefore either "changed nothing, wrote nothing" or "the audited path, verbatim".
+// There is no third behaviour to reason about, no new schema, and no new failure mode.
+//
+// This is aimed squarely at the measured symptom: production showed four of ONE player's requests
+// queued on their own row for 1.0s/2.1s/2.3s/4.3s. Requests that close together are precisely the
+// case where accrue() hits its one-second early return and does nothing — so exactly the traffic that
+// was piling up stops taking the lock. A read after a real gap still takes it, and is no worse than
+// before. (A compare-and-swap could make even those lock-free; it needs a version column, because
+// last_accrued_at round-trips through node-pg at millisecond precision and would never match
+// Postgres's microseconds. Left for later — this cut carries the measured win without that risk.)
+export async function withCharacterRead(pool, accountId, fn) {
+  const client = await pool.connect();
+  try {
+    const r = await client.query('SELECT * FROM characters WHERE account_id = $1 AND alive', [accountId]);
+    if (!r.rows.length) throw new GameError('no_character', 'Create a character first.');
+    const ch = r.rows[0];
+    const acct = (await client.query('SELECT * FROM account_persistent WHERE account_id = $1', [accountId])).rows[0];
+    const owned = await loadOwned(client, ch);
+
+    const before = accrualMark(ch, acct);
+    accrueInMemory(ch, acct, owned);
+    if (accrualMark(ch, acct) !== before) return null; // caller re-runs under the lock (see below)
+
+    // Nothing accrued, so nothing to write. The handler gets a client that REFUSES to write: these
+    // routes are only ever registered here because they were verified side-effect free, and a guard
+    // turns a future mistake into a loud failure instead of a silent unaudited write — one that
+    // would land outside any transaction, since there is no BEGIN on this path.
+    const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId, readOnly: true };
+    const result = await fn(ch, readOnlyClient(client), h);
+    let character = null;
+    try { character = view(ch, acct, owned); } catch (e) { console.error('view render (read, non-fatal)', e?.code || e); }
+    return { character, events: h.events, ...result };
+  } catch (e) { throw deadlockToRetry(e); }
+  finally { client.release(); }
+}
+
+// Reads are declared side-effect free; this makes the declaration enforceable rather than a comment.
+const WRITE_SQL = /^\s*(?:insert|update|delete|truncate|drop|alter|create|grant|revoke)\b/i;
+function readOnlyClient(client) {
+  return {
+    query: (text, params) => {
+      const sql = typeof text === 'string' ? text : text?.text || '';
+      if (WRITE_SQL.test(sql)) {
+        throw new Error(`read path attempted a write: ${sql.slice(0, 80)}`);
+      }
+      return client.query(text, params);
+    },
+  };
+}
+
+// The wrapper routes actually use: try the lock-free path, fall back to the locked one when accrual
+// moved. Kept as one call so a route cannot accidentally take only half of the contract.
+export async function readCharacter(pool, accountId, fn) {
+  const fast = await withCharacterRead(pool, accountId, fn);
+  return fast !== null ? fast : withCharacter(pool, accountId, fn);
 }
 
 async function persistAccount(client, accountId, a) {
