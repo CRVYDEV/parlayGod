@@ -278,6 +278,16 @@ console.log('\n8. A READ DOES NOT WAIT FOR THE WRITE LOCK (D1)');
     check(ms < Math.max(500, lockMs / 4), 'and answers promptly — it never queued on the lock',
       `took ${ms}ms, lock_timeout ${lockMs}ms`);
 
+    // The board routes moved onto the same path, and answering at all while the row is locked is
+    // itself the proof that the lock-free branch is the one being taken — a delegated read would be
+    // sitting in the queue behind this holder, not returning.
+    for (const url of ['/v1/skills', '/v1/law', '/v1/wire', '/v1/estate', '/v1/world']) {
+      const t = Date.now();
+      const r = await call('GET', url, { token });
+      check(r.code === 200 && Date.now() - t < Math.max(500, lockMs / 4),
+        `${url} answers without the lock`, `got ${r.code} in ${Date.now() - t}ms`);
+    }
+
     // the contrast that proves the lock is genuinely held: a WRITE against the same row does wait,
     // and gives up on the pool's own lock_timeout rather than hanging forever.
     const t1 = Date.now();
