@@ -22,6 +22,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { walkSrc } from './lib/srcfiles.js';
 
 const read = (p) => fs.readFileSync(p, 'utf8');
@@ -73,14 +74,33 @@ const [tableCount] = row('Database tables');
 const tables = (schema.match(/^CREATE TABLE IF NOT EXISTS \w+/gm) || []).length;
 assert.equal(tableCount, tables, `SPEC says ${tableCount} tables; schema.sql creates ${tables}`);
 
-const mdFiles = [];
-(function md(dir) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === 'node_modules' || e.name === '.git') continue;
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) md(p); else if (e.name.endsWith('.md')) mdFiles.push(p);
-  }
-}('.'));
+// COUNT THE REPOSITORY, NOT THE WORKING TREE. SPEC describes what is committed; a walk of the disk
+// describes whatever happens to be sitting there.
+//
+// The first version walked the tree, and it broke CI for ten commits — in the very commit that added
+// this file to keep the docs honest. The sandbox it was written in had vendored OpenZeppelin sources
+// (gitignored, fetched for tools/compile-contracts.js) carrying one README.md, so the tree held 127
+// markdown files and a fresh clone held 126. It passed locally every single time and failed on every
+// push. That is precisely the failure this file exists to catch — a claim that is true in one
+// environment and false in another — and I did not notice because I never opened CI.
+//
+// `git ls-files` is the fix and the lesson: any guard that asserts a number about "the project" has
+// to ask git what the project is. Falls back to the walk when git is unavailable (a tarball, a
+// vendored copy), which is the only case where the disk is the best answer available.
+let mdFiles;
+try {
+  mdFiles = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+    .split('\0').filter((f) => f.endsWith('.md'));
+} catch {
+  mdFiles = [];
+  (function md(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git') continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) md(p); else if (e.name.endsWith('.md')) mdFiles.push(p);
+    }
+  }('.'));
+}
 const [mdCount, mdLines] = row('Design + audit docs');
 assert.equal(mdCount, mdFiles.length, `SPEC says ${mdCount} markdown files; there are ${mdFiles.length}`);
 near(mdLines, countLines(mdFiles), 'markdown lines');
