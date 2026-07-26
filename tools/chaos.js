@@ -26,7 +26,21 @@
 //
 // PG_CTL is optional: without it scenario 3 (full database restart) is SKIPPED rather than faked, and
 // says so. A skipped scenario that announces itself is honest; one that silently passes is the failure
-// mode this whole repo keeps finding.
+// mode this whole repo keeps finding. (CI skips it — a service container gives no pg_ctl on the
+// database host — so scenario 3 only ever runs when someone points this at a local Postgres.)
+//
+// On a Debian/Ubuntu package install, pg_ctl must run as the postgres user and be told where the
+// config lives, which the packaged layout separates from the data directory. A two-line wrapper does
+// it, and PG_CTL takes any command, not just a literal pg_ctl:
+//
+//   printf '%s\n' '#!/bin/sh' \
+//     'exec su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main \
+//        -o \x27-c config_file=/etc/postgresql/16/main/postgresql.conf\x27 $*"' > /tmp/pgctl.sh
+//   chmod +x /tmp/pgctl.sh && PG_CTL=/tmp/pgctl.sh npm run chaos
+//
+// Run it that way before any deploy that touches the pool, a transaction boundary, or db.js. It is the
+// only check that exercises the 2026-07-25 outage end to end: the process surviving the database going
+// away, 503 rather than 500 while it is gone, and recovery with no redeploy.
 import crypto from 'node:crypto';
 import { spawn, execSync } from 'node:child_process';
 
