@@ -152,9 +152,16 @@ console.log('1. THE WORKER IS KILLED MID-SWEEP, THEN RUNS AGAIN');
   }
   console.log(`  … worker SIGKILLed mid-tick at ${killAt.join('ms, ')}ms`);
 
-  // now let one run to completion
+  // now let one run to completion — POLLED, not a fixed sleep. A flat timeout has to be sized for the
+  // slowest machine that will ever run this, and if it is wrong the harness fails for being slow
+  // rather than for being broken. A CI check that goes flaky gets ignored, which is worse than not
+  // having it: the worker boots the whole schema (~1,035 ALTERs) before it sweeps anything, and that
+  // alone can outlast a naive 6s window on a shared runner. So: wait for the WORK to be done, with a
+  // generous ceiling for the case where it genuinely never completes.
   const done = spawn('node', ['src/worker.js'], { env: process.env, stdio: 'ignore' });
-  await sleep(6000);
+  const settledCount = async () => Number((await pool.query(
+    `SELECT count(*) n FROM auctions WHERE status='settled' AND lot_id = ANY($1::text[])`, [bidLots])).rows[0].n);
+  for (let waited = 0; waited < 60000 && await settledCount() < bidLots.length; waited += 500) await sleep(500);
   done.kill('SIGKILL');
   await new Promise((r) => done.on('exit', r));
 
@@ -370,8 +377,13 @@ console.log('\n4. THE WAGE EPOCH IS KILLED HALFWAY THROUGH PAYING');
   // trap the load harness hit twice. The sweep is fine-grained because the loop is milliseconds long,
   // and it keeps killing while the epoch is part-paid so the RESUME path runs repeatedly rather than
   // once: each survivor's share is computed against a different already-consumed amount.
+  // The sweep runs long at the top end deliberately. The loop walks EVERY living character in id
+  // order, doing a transaction each even for the ones earning nothing, and the crew's ids are random
+  // — so the first actual payment can be many no-op iterations in. On a slow shared runner that is
+  // hundreds of milliseconds, and a window that stopped early would fail the guard for being slow
+  // rather than for being wrong. Stopping at the first partial costs nothing when it lands early.
   const progression = [];
-  for (const ms of [4, 8, 12, 18, 25, 35, 50, 70, 100, 150, 220]) {
+  for (const ms of [4, 8, 12, 18, 25, 35, 50, 70, 100, 150, 220, 400, 700, 1200]) {
     await runEpoch(ms);
     const n = (await paidRows()).length;
     if (n > 0) progression.push(n);
@@ -479,5 +491,11 @@ if (fails.length) {
   console.error(`\n❌ chaos FAILED\n   - ${fails.join('\n   - ')}`);
   process.exit(1);
 }
-console.log(`\n✅ chaos passed — interrupted sweeps resume without paying twice, killed backends leave the `
-  + `ledger unmoved, and the API survives a database restart with a legible 503 and recovers unaided.`);
+// The summary must not claim what was skipped. Without PG_CTL the outage scenario never ran, and
+// saying "the API survives a database restart" on the back of a skipped test is the same overclaim
+// this harness exists to catch — it would read as green for the exact failure that started all this.
+console.log(`\n✅ chaos passed — interrupted sweeps resume without paying twice, an interrupted wage epoch `
+  + `mints exactly the uninterrupted amount, killed backends leave no transfer half-applied, `
+  + (PG_CTL
+    ? 'and the API survives a database restart with a legible 503 and recovers unaided.'
+    : 'and §10.4 is unmoved throughout. THE FULL-OUTAGE SCENARIO DID NOT RUN (no PG_CTL) — that path is unmeasured here.'));

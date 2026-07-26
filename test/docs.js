@@ -141,6 +141,52 @@ const phantom = [...index.matchAll(/`(AUDIT-[a-z0-9.-]+\.md)`/g)].map((m) => m[1
   .filter((f) => !audits.includes(f));
 assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that do not exist: ${phantom.join(', ')}`);
 
+// ── §6 must not send anyone back to finished work ────────────────────────────────────────────────
+// SPEC has two places that talk about the same debt items: §4 describes each one's state, and §6 is
+// the "do this next" list. They drifted: §6 said "Finish the lock-free read path (D1) — blocked on a
+// design choice" for a while AFTER D1 was shipped, wired to all 24 read GETs, verified on real
+// Postgres and red-teamed twice. The figures in this file were all correct; the two sections simply
+// disagreed, which is the kind of staleness that costs a developer a day re-doing finished work.
+//
+// The rule is mechanical: if §4's entry for an item announces **Shipped:** / **DONE** / **RESOLVED**
+// in its BODY, §6's entry for the same item must be struck through. Keying on the item's HEADING was
+// the first attempt and it was pure decoration — D1's heading reads "**(HIGH → PARTLY ADDRESSED)**",
+// which no reasonable "is it done" pattern matches, so the guard skipped the one case it was written
+// for and passed the mutation test. The body marker is what actually distinguishes shipped work, and
+// it fires on D1 exactly (verified by re-staling the entry and watching it fail).
+{
+  const section = (from, to) => spec.slice(spec.indexOf(from), to ? spec.indexOf(to) : undefined);
+  const debt = section('## 4. Technical debt register', '## 5.');
+  const next = section('## 6. Recommended sequence');
+  const heads = [...debt.matchAll(/^### (D\d+) — (.+)$/gm)];
+  let checked = 0;
+  for (const [i, m] of heads.entries()) {
+    const [, id, headline] = m;
+    const body = debt.slice(m.index, i + 1 < heads.length ? heads[i + 1].index : undefined);
+    if (!/\*\*(Shipped|DONE|RESOLVED)\b/.test(body)) continue;
+    const entry = next.split('\n').find((l) => new RegExp(`\\(${id}\\)`).test(l));
+    if (!entry) continue; // §6 has no opinion about this item — nothing to contradict
+    checked++;
+    assert(entry.includes('~~') || /\*\*DONE\*\*/.test(entry),
+      `SPEC §4 says ${id} is shipped ("${headline.trim()}") but §6 still lists it as work to do:\n    ${entry.trim()}\n`
+      + '  Strike it through. A "what to do next" list that points at finished work sends the next reader to re-do it.');
+  }
+  assert(checked >= 3, `only ${checked} debt items were cross-checked between §4 and §6 — the pairing `
+    + 'broke (a heading format or an item numbering changed), so this guard is no longer guarding anything.');
+}
+
+// ── a harness that stops running protects nothing ────────────────────────────────────────────────
+// Every harness here exists because something it checks was once broken, and two of chaos's checks
+// are mutation-verified against real regressions (the wage-epoch resume guard; the checked-out-client
+// error handler). None of that matters if CI quietly stops invoking them, so the workflow is checked
+// for each one by name.
+{
+  const ci = read('.github/workflows/ci.yml');
+  for (const script of ['npm test', 'npm run sim', 'npm run pgcheck', 'npm run chaos', 'npm run loadtest'])
+    assert(ci.includes(script), `.github/workflows/ci.yml no longer runs \`${script}\` — a harness that `
+      + 'does not run is not a guard, it is a file. Re-add it or delete the harness honestly.');
+}
+
 console.log(`✅ docs test passed — every number in SPEC.md's size table checked against the tree `
   + `(${srcFiles.length} src files / ${countLines(srcFiles)} lines, ${testFiles.length} suites, `
   + `${tables} tables, ${mdFiles.length} markdown files), the rules-seam figures are current, the false `

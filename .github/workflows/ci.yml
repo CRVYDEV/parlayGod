@@ -5,7 +5,7 @@ name: ci
 # that killed the API process on every database restart reached production. That bug was reachable
 # ONLY from real Postgres, so `pgcheck` below is the one that would have caught it.
 #
-#   npm test   — the 47 suites, on pg-mem, in-process. No database, no network.
+#   npm test   — every suite under test/, on pg-mem, in-process. No database, no network.
 #   pgcheck    — the same server against REAL Postgres: pooling, row locks, timeouts, the migration.
 #   sim        — the economy harness; asserts the §10.4 ledger sweep is drift-0 end to end.
 
@@ -37,7 +37,7 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: npm test (47 suites)
+      - name: npm test (the full suite, on pg-mem)
         run: npm test
 
       - name: economy sim (§10.4 drift-0)
@@ -87,3 +87,61 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
         run: npm run backup:selftest
+
+      # chaos and loadtest each need their OWN database. Both seed value by SQL, and pgcheck's ledger
+      # leg asserts the identities ABSOLUTELY — it skips on a database that was not empty when it
+      # started. Sharing one database would silently disable that leg. Created with the pg client the
+      # project already depends on rather than psql, so this does not rely on what the runner image
+      # happens to ship.
+      - name: create throwaway databases for the interruption + concurrency harnesses
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
+        run: |
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: process.env.DATABASE_URL });
+              await c.connect();
+              for (const db of ['omerta_chaos', 'omerta_load']) {
+                await c.query('DROP DATABASE IF EXISTS ' + db);
+                await c.query('CREATE DATABASE ' + db);
+              }
+              await c.end();
+            })().catch((e) => { console.error(e.message); process.exit(1); });
+          "
+
+      # THE CRASH TESTS. ~20 worker sweeps in this codebase claim to be idempotent; that claim only
+      # becomes true when something kills them halfway and the second run is checked. Two of these
+      # checks are mutation-verified — delete the wage-epoch resume guard and the interrupted epoch
+      # mints 5x the signed schedule; delete the src/db.js checked-out-client error handler and the
+      # whole process dies. Neither was protected by anything that runs automatically until now.
+      #
+      # Scenario 3 (stop and start Postgres entirely) needs pg_ctl on the database host, which a
+      # service container does not give us. The harness SKIPS it and says so rather than faking it,
+      # and its summary line stops claiming the outage path was covered. Run it by hand against a
+      # local Postgres before a deploy that touches the pool or a transaction boundary.
+      - name: chaos (interrupted sweeps, killed backends, wage-epoch crash-resume)
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_chaos
+          JWT_SECRET: ci-jwt-secret-not-a-real-one
+          MOD_KEY: ci-mod-key-long-enough-to-pass-preflight
+          MARKET_SEED: ciMarketSeed7Qx2mVb9PwLn4RtY6hJc
+          SOCIAL_VERIFY_MODE: 'off'
+          POPULATION_OFF: 'on'      # resident spawning would race the harness's own fixtures
+        run: npm run chaos
+
+      # Concurrency. Every other §10.4 proof in the repo is SEQUENTIAL, and lost updates live in the
+      # overlap between requests. This also reads pg_stat_database.deadlocks directly, because 40P01
+      # is retried as `contention` — a lock-order bug can fire constantly while every request succeeds.
+      # Deliberately a small field: this is a correctness gate, not a benchmark, and a shared runner's
+      # req/s figure means nothing anyway.
+      - name: loadtest (concurrent players, deadlock counter, §10.4 delta)
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_load
+          JWT_SECRET: ci-jwt-secret-not-a-real-one
+          MOD_KEY: ci-mod-key-long-enough-to-pass-preflight
+          MARKET_SEED: ciMarketSeed7Qx2mVb9PwLn4RtY6hJc
+          SOCIAL_VERIFY_MODE: 'off'
+          POPULATION_OFF: 'on'
+          LOAD_PLAYERS: '8'
+        run: npm run loadtest
