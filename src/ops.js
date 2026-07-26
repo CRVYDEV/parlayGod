@@ -6,6 +6,8 @@
 import { POPULATION } from './rules.js';
 import { seededToday } from './population.js';
 import { archiverHealth } from './dbhealth.js';
+import { socialProviders } from './verify.js';
+import { socialRewardsLive } from './growth.js';
 
 const num = (v) => Number(v || 0);
 const safeParse = (p) => { try { return typeof p === 'string' ? JSON.parse(p) : (p || {}); } catch { return {}; } };
@@ -61,6 +63,12 @@ export async function opsOverview(pool) {
     // itself — the database serves fine while its recovery chain rots. Read straight from Postgres's
     // own pg_stat_archiver, so the dashboard shows it without anyone reading the host's log stream.
     backups: await archiverHealth(pool),
+    // IS THE GROWTH LOOP ON? Same class as `backups` above — a question the game could not answer
+    // about itself. A server can run SOCIAL_VERIFY_MODE=live with no provider token, in which case
+    // Spread-the-Word pays nobody and the First-Week socials are dropped; nothing about that was
+    // visible anywhere. `rewardsLive` is the bottom line: false means the word-of-mouth cash faucet
+    // is inert right now, whatever the mode says.
+    social: { ...socialProviders(), rewardsLive: socialRewardsLive() },
     players,
     economy: {
       ammPrice: Math.round(ammPrice * 100) / 100,

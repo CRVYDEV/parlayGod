@@ -25,6 +25,39 @@ export async function xfetch(url, opts = {}) {
   return res;
 }
 
+// ── WHICH SOCIAL CHECKS THIS SERVER CAN ACTUALLY PERFORM ────────────────────────────────────────
+// A live server can be configured for X, for Discord, for both, or (the case that shipped) for
+// NEITHER while still running SOCIAL_VERIFY_MODE=live. The old behaviour was that every claim then
+// threw `verify_unavailable` — so the First-Week checklist showed two rewards nobody could ever
+// collect, which also made the all-done capstone unreachable, and the Spread-the-Word faucet paid
+// nothing. The failure was invisible: no error at boot, no dashboard row, nothing in the game.
+//
+// So availability is now a QUESTION THE SERVER CAN ANSWER, asked in one place. Callers use it to
+// degrade honestly — a task whose provider is unconfigured is not offered, rather than offered and
+// refused. In `trust` mode outside production everything is claimable, which is the alpha posture.
+// `off` pays nothing by design (a misconfigured server must never leak a faucet).
+export function socialProviders() {
+  const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
+  if (mode === 'off') return { mode, x: false, discord: false, posts: false };
+  if (mode === 'trust') {
+    const prod = process.env.NODE_ENV === 'production';   // trust is refused in production below
+    return { mode, x: !prod, discord: !prod, posts: !prod };
+  }
+  return {
+    mode,
+    x: !!(process.env.X_BEARER_TOKEN && process.env.X_TARGET_USER_ID),
+    discord: !!(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_GUILD_ID),
+    posts: !!process.env.X_BEARER_TOKEN,                  // verifyPostUp needs only the bearer token
+  };
+}
+
+// which provider a First-Week social task needs, so one map serves the board, the claim and the coach
+export const TASK_PROVIDER = { ob_x: 'x', ob_discord: 'discord' };
+export const socialTaskAvailable = (taskId) => {
+  const p = TASK_PROVIDER[taskId];
+  return !p || !!socialProviders()[p];
+};
+
 export async function verifySocial(taskId, acct) {
   const mode = process.env.SOCIAL_VERIFY_MODE || 'off';
   // 'trust' is an honor-system faucet — never let it run in production, where it

@@ -733,8 +733,14 @@ function coachOf(ch, acct, owned) {
   // masking the whole mid-game ladder below. The task still exists and still pays on Start Here; it
   // just can't be a gate. What's left is the four tasks any player can finish alone.
   const obGameplay = ONBOARD_TASKS.filter((t) => !t.social && t.id !== 'ob_wallet' && t.id !== 'ob_family');
+  // The count quotes the tasks this rung actually GATES on, not `ONBOARD_TASKS.length`. Two reasons:
+  // a player who claimed the socials but no gameplay task read "3/8" while the gate was elsewhere,
+  // and on a server without X/Discord configured those tasks are not offered at all, so the old
+  // denominator promised a total nobody could reach. Counting the gate is true under every config
+  // (and needs no import from verify.js, which imports game.js — the one-way rule holds).
+  const obGameplayDone = obGameplay.filter((t) => onboard[t.id]).length;
   if (obGameplay.some((t) => !onboard[t.id]))
-    return { label: `Finish your First Week (${obDone}/${ONBOARD_TASKS.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
+    return { label: `Finish your First Week (${obGameplayDone}/${obGameplay.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
   // the bridge into the deep game — a ladder of "what next" so the coach never goes silent mid-game
   const hasEarner = !!ch.lab || (owned.businesses || []).length || (owned.rackets || []).length
     || (owned.assets || []).length || (owned.fighters || []).length || !!owned.speakeasy;

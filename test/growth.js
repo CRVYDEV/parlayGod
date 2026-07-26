@@ -618,6 +618,65 @@ assert.equal(socialRewardsLive(), true, "'trust' stays live in the alpha (non-pr
     global.fetch = realFetch; delete process.env.X_BEARER_TOKEN; process.env.SOCIAL_VERIFY_MODE = 'trust';
   }
 }
+
+// ── LIVE MODE WITH NOTHING TO VERIFY WITH — the configuration production actually shipped in ──────
+// render.yaml set SOCIAL_VERIFY_MODE=live (correct) and no X or Discord token (not). Every social
+// claim then threw `verify_unavailable`: the Spread-the-Word cash faucet paid nobody, and 2 of the 8
+// First-Week tasks were listed-but-unclaimable, which made the all-done capstone UNREACHABLE. Nothing
+// announced it — no boot error, no dashboard row, and the suite only ever ran `trust`, which is why
+// the tests were green over a dead growth loop for weeks.
+//
+// The rule now: a check the server cannot perform is not offered. Asserted here in the exact broken
+// configuration, so it cannot come back.
+{
+  const prevMode = process.env.SOCIAL_VERIFY_MODE;
+  process.env.SOCIAL_VERIFY_MODE = 'live';                  // …and deliberately NO tokens
+  delete process.env.X_BEARER_TOKEN; delete process.env.X_TARGET_USER_ID;
+  delete process.env.DISCORD_BOT_TOKEN; delete process.env.DISCORD_GUILD_ID;
+  try {
+    const dud = await mk('Unverified Ulla');
+    const board = (await call('GET', '/v1/onboard', { token: dud.token })).body;
+    assert.equal(board.total, 6, 'the two unverifiable social tasks are DROPPED, not offered and refused');
+    assert.equal(board.tasks.some((t) => t.id === 'ob_x' || t.id === 'ob_discord'), false,
+      'neither X nor Discord appears on a server that cannot check either');
+    // the capstone is now REACHABLE: every remaining task is one this player can actually finish
+    assert.equal((await call('POST', '/v1/onboard/ob_x/claim', { token: dud.token })).body.error, 'task_unavailable',
+      'and claiming one says why, instead of the generic verify_unavailable');
+
+    // the Spread-the-Word faucet reports itself OFF rather than taking registrations it can never settle
+    const sw = await call('POST', '/v1/social/sw_post/claim', { token: dud.token, body: { proof: 'https://x.com/x/status/12345678901234' } });
+    assert.equal(sw.body.error, 'social_off', 'live-without-a-token pays nobody, and SAYS so up front');
+
+    // and the founder can see it without reading a log: /admin's Growth-loop panel reads this
+    const ov = (await app.inject({ method: 'GET', url: '/v1/mod/overview', headers: { 'x-mod-key': 'test-mod-key' } })).json();
+    assert.equal(ov.social.rewardsLive, false, 'the ops dashboard reports the loop as NOT PAYING');
+    assert.equal(ov.social.mode, 'live', '…while still reporting the configured mode honestly');
+    assert.deepEqual([ov.social.posts, ov.social.x, ov.social.discord], [false, false, false],
+      'per-provider capability is surfaced, so it is obvious WHICH token is missing');
+
+    // preflight names the missing var rather than failing the boot (a fatal error here would take a
+    // running server down to fix a dormant faucet — strictly worse than the dormant faucet)
+    const { preflight } = await import('../src/preflight.js');
+    const pf = preflight({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(20), MOD_KEY: 'y'.repeat(20),
+      MARKET_SEED: 'YqB7#tR2vLx9Kp4Wm6Zn8Cf3Hj5Ds1Ge', SOCIAL_VERIFY_MODE: 'live', TRUST_PROXY: 'on' });
+    assert.deepEqual(pf.errors, [], 'live-without-tokens must NOT be fatal');
+    assert(pf.warnings.some((w) => /X_BEARER_TOKEN/.test(w) && /pays nobody/.test(w)),
+      'but it must warn, naming the exact variable and the consequence');
+
+    // ONE token changes the picture: posts verify, so the faucet is live again, while the FOLLOW check
+    // still cannot run — so ob_x stays off the checklist and ob_discord stays off too. Per-provider,
+    // not all-or-nothing.
+    process.env.X_BEARER_TOKEN = 'test-bearer';
+    const partial = (await app.inject({ method: 'GET', url: '/v1/mod/overview', headers: { 'x-mod-key': 'test-mod-key' } })).json().social;
+    assert.equal(partial.posts, true, 'a bearer token alone enables post checks');
+    assert.equal(partial.x, false, '…but not the follow check, which also needs X_TARGET_USER_ID');
+    assert.equal(partial.rewardsLive, true, 'so Spread-the-Word starts paying');
+    assert.equal((await call('GET', '/v1/onboard', { token: dud.token })).body.total, 6,
+      'ob_x is still dropped — the follow check is what it needs, and that is still unconfigured');
+  } finally {
+    delete process.env.X_BEARER_TOKEN; process.env.SOCIAL_VERIFY_MODE = prevMode;
+  }
+}
 // ── FIX M1: the tier-2 "family tree" reconcile sweep — a grandrecruiter who had no living street at the
 // qualifying instant lost the finder's fee forever (the one-shot post-commit hook never retried). The
 // worker sweep pays it once they're reachable again, idempotently. ──

@@ -6,7 +6,7 @@ import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
 } from './rules.js';
-import { verifySocial, verifyPostUp } from './verify.js';
+import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable } from './verify.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -329,11 +329,19 @@ export async function agentLeaderboard(pool, limit = 25) {
 // each task carries claimed (paid already), ready (the gate passes — claim now), and the social url.
 export function onboardBoard(ch, h) {
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
-  const tasks = ONBOARD_TASKS.map((t) => ({
-    id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: SOCIAL_LINKS[t.id] || t.social || null,
-    claimed: !!onboard[t.id],
-    ready: t.social ? true : !!(CHECKS[t.id] && CHECKS[t.id](ch, h)), // social tasks verify at claim time
-  }));
+  // A social task whose PROVIDER is not configured on this server is dropped from the checklist
+  // entirely — not listed-and-unclaimable. Offering a reward that always throws is worse than not
+  // offering it: the player reads it as a bug, and it made the all-done capstone unreachable, which
+  // is the state the live server shipped in (SOCIAL_VERIFY_MODE=live with no X or Discord tokens).
+  // A task ALREADY CLAIMED stays visible whatever the config now says, so nobody's completed
+  // checklist silently shrinks if a token is later removed.
+  const tasks = ONBOARD_TASKS
+    .filter((t) => !!onboard[t.id] || socialTaskAvailable(t.id))
+    .map((t) => ({
+      id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: SOCIAL_LINKS[t.id] || t.social || null,
+      claimed: !!onboard[t.id],
+      ready: t.social ? true : !!(CHECKS[t.id] && CHECKS[t.id](ch, h)), // social tasks verify at claim time
+    }));
   return { tasks, claimed: tasks.filter((t) => t.claimed).length, total: tasks.length,
     allDone: tasks.every((t) => t.claimed), capstone: CONSTANTS.ONBOARD_CAPSTONE };
 }
@@ -343,6 +351,10 @@ export async function claimOnboard(ch, taskId, client, h) {
   if (!t) throw new GameError('bad_task', 'Not on the checklist.');
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
   if (onboard[taskId]) throw new GameError('claimed', 'Already claimed.');
+  // the board hides an unconfigured provider's task, but the route is public — say WHY rather than
+  // letting verifySocial's generic `verify_unavailable` stand in for "this server has no Discord"
+  if (!socialTaskAvailable(taskId))
+    throw new GameError('task_unavailable', "That one isn't part of the checklist on this server.");
   if (t.social) await verifySocial(taskId, h.acct);         // §4: verifies once
   else if (!CHECKS[taskId] || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
   onboard[taskId] = true;
@@ -374,6 +386,13 @@ export function socialRewardsLive() {
   // 'live' pays NOBODY the Spread-the-Word cash rather than paying the whole base on zero proof; the alpha
   // (non-production) keeps 'trust' live as documented.
   if (mode === 'trust' && process.env.NODE_ENV === 'production') return false;
+  // …and in LIVE mode the check has to be PERFORMABLE. `live` with no X_BEARER_TOKEN reached
+  // verifyPostUp and threw `verify_unavailable` on every claim — the faucet was advertised, players
+  // registered shares against it, and nobody was ever paid. That is the state the production
+  // blueprint shipped in (render.yaml sets SOCIAL_VERIFY_MODE=live and no token). Reporting the
+  // faucet as OFF is honest and the client already handles it; the alternative was a route that
+  // takes a registration it can never settle.
+  if (mode === 'live' && !socialProviders().posts) return false;
   return true;
 }
 
