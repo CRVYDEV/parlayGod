@@ -301,6 +301,53 @@ dump is never kept in place of a good one), but a cron that starts refusing good
 untrue reason is its own incident. If you ever see that message, check the table really is absent
 before believing it.
 
+#### Rehearsing the restore — do this ONCE, now, not on the bad night
+Everything above proves the dump is *readable*. It does not prove **you** can turn it back into a
+running game, and that is the only property that matters. A backup nobody has restored is a hope with
+a filename. The first restore should not be attempted under pressure, at night, with players waiting
+— rehearse it while nothing is wrong and the outcome does not matter.
+
+It restores into a **scratch database on your own machine**. Nothing touches production, so there is
+nothing here you can break.
+
+```bash
+# 1. a throwaway target — any local Postgres 16
+createdb omerta_restore_drill
+
+# 2. restore the dump you just took (30s–2min depending on size)
+pg_restore --no-owner --clean --if-exists -d omerta_restore_drill ./backups/omerta-<stamp>.dump
+
+# 3. did the people and the money come back?
+psql -d omerta_restore_drill -c \
+  "SELECT (SELECT count(*) FROM accounts) accounts,
+          (SELECT count(*) FROM characters) characters,
+          (SELECT count(*) FROM transactions) ledger_rows;"
+
+# 4. does the GAME run on it? this is the real test — schema present is not the same as usable
+DATABASE_URL=postgres://localhost/omerta_restore_drill JWT_SECRET=drill \
+  MOD_KEY=drill-mod-key-long-enough MARKET_SEED='<your real MARKET_SEED>' npm run invariants
+
+# 5. clean up
+dropdb omerta_restore_drill
+```
+
+Step 4 is the one people skip and the one that counts: it boots the real server against the restored
+copy and runs the §10.4 sweep over it. Every identity holding means the ledger came back *coherent*,
+not merely present.
+
+Use your **real `MARKET_SEED`** for the drill. It is the secret behind every price and prize draw, so
+a restore with the wrong seed would produce a game whose economy silently disagrees with the one your
+players were living in — which is worth knowing now rather than discovering mid-recovery.
+
+**A successful restore is completely silent.** Measured, not assumed — `--if-exists` is exactly what
+suppresses the "cannot drop, does not exist" errors `--clean` would otherwise raise on an empty
+database, so step 2 prints nothing at all and exits 0. Anything it does print is worth reading rather
+than waving through. (An earlier draft of this section said to expect that noise. It was wrong, and
+wrong in the direction that gets people hurt: told to expect errors, you learn to ignore the real one.)
+
+The whole rehearsal, run end to end on 2026-07-26 against a dump of a live database: restore silent,
+step 3 returned the true counts, step 4 came back `"ok": true` with every §10.4 identity at drift 0.
+
 ## 8. Post-deploy smoke check
 - [ ] `GET /health` → `200 {"ok":true,"db":"up"}`.
 - [ ] `GET /v1/session` → 200 (server up).
