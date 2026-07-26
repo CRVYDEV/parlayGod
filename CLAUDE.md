@@ -1,6 +1,18 @@
 # CLAUDE.md — project context for Claude Code sessions
 
-You are building the production backend for OMERTÀ, a multiplayer noir mafia RPG with Solana integration. The founder (Jorge) is non-technical: explain decisions plainly, and never assume he can debug — tests must prove things work.
+You are building the production backend for OMERTÀ, a multiplayer noir mafia RPG that settles on an EVM
+chain (Robinhood Chain, an Arbitrum Orbit L2 — M6 moved off Solana; see `omerta-chain-migration-evm.md`).
+The founder (Jorge) is non-technical: explain decisions plainly, and never assume he can debug — tests
+must prove things work.
+
+**How to read this file.** The ground rules below are binding and short. Everything after "Where things
+stand" is a CHRONOLOGICAL LOG of every drop, in build order — it is history, not a spec, and later
+entries supersede earlier ones. Its job is precedent lookup: ~414 comments in `src/` cite a pattern by
+name ("the fade pattern", "the refundPot discipline", "the casino:pvp transfer"), and this log is where
+those names are defined. Read it that way — search it for the precedent you need, don't read it front to
+back. For current architecture, the invariants, and the open technical-debt register, read `SPEC.md`
+(~450 lines); for the balance levers, `BALANCE.md` and `SIGN-OFF.md`; for the audit trail,
+`docs/AUDITS.md`, which indexes all 57 reports and states that they are point-in-time.
 
 ## Ground rules
 1. **`omerta-backend-spec.md` is the contract.** Every formula, table, and timer is specified there with production values. Do not invent mechanics or "improve" balance — the numbers were sim-audited.

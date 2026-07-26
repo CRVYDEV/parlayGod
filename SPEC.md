@@ -10,15 +10,15 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **100** files, **30353** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **51** files, **15885** lines (`test/`) — ratio 0.52 test:src |
+| Backend modules | **100** files, **30362** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **52** files, **16078** lines (`test/`) — ratio 0.53 test:src |
 | HTTP routes | **491** registrations |
 | Database tables | **161** (`schema.sql`, 2,203 lines) |
 | Client | **4,631** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres) |
-| Design + audit docs | **117** markdown files, 24,254 lines |
+| Design + audit docs | **127** markdown files, **26231** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
@@ -30,8 +30,8 @@ Roughly **55,000 lines** of code, tests, schema and contracts.
 Everything is built on five load-bearing decisions. None has needed revision in ~47 systems.
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
-tables (454 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (3,134 lines) and the extractor never opens it. `rules.js`
+tables (455 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
+catalog, ladder and founder-signed lever (3154 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the
@@ -379,9 +379,34 @@ regeneration; `test/rules.js` asserts that it stays retired.
 passes. It has held, and the audits keep finding the exceptions — but it is enforced by discipline, not
 by the type system or a shared helper.
 
-### D7 — Documentation mass **(LOW-MEDIUM)**
-117 markdown files, 24k lines, with `CLAUDE.md` alone ~1,000 lines of dense prose. Two codices already
+### D7 — Documentation mass **(LOW-MEDIUM, partly addressed)**
+127 markdown files, 26k lines, with CLAUDE.md alone 5368 lines of dense prose. Two codices already
 drifted once (a test now guards it). Onboarding a second developer means reading a novel.
+
+**Addressed: the prose that a reader could ACT on is now machine-checked.** Stale prose does not fail
+loudly — it makes the next maintainer confidently do the wrong thing, and this pass found five live
+examples, including a comment instructing the reader to re-apply a line by hand after every extractor
+run (the hazard had not existed since the rules split), a "1,091 auto-generated lines" figure whose real
+value was 454, a module count that under-reported by 27 the moment code moved into subdirectories, and
+the `~1,000 lines` self-description this very section carried while being 5,368. So `test/docs.js` (the
+52nd suite) asserts every figure in §1 against the tree, the rules-seam split, that no doc misstates its
+own size, that the false by-hand warning cannot return, and that `docs/AUDITS.md` indexes every audit
+report; `test/routes.js` asserts the route count, which needs the app booted. All nine tripwires were
+mutation-tested. File COUNTS are exact; LINE totals get a 2% band, because a guard that nags on every
+unrelated edit gets deleted, and every error worth catching here was off by 27%, 140% or 5×.
+
+`docs/AUDITS.md` indexes all 57 audit reports with dates and subjects, and says plainly that they are
+point-in-time records while this file is what is current. They were deliberately NOT relocated: 68
+source comments name a design doc and 32 name an audit report, so moving them would stale 100 references
+to gain a tidier root. CLAUDE.md's chronological drop log was likewise kept in place, for a sharper
+reason — ~414 comments in `src/` cite a pattern by name ("the fade pattern", "the refundPot discipline"),
+and that log is where those names are defined, so it is the codebase's precedent lookup table and it
+only works because it is the file a session loads automatically. It instead gained a header saying what
+it is and how to read it (search it; do not read it front to back), and its stale opening claim that the
+chain is Solana was corrected.
+
+What remains is the mass itself. 26k lines of markdown is a lot to hand a second developer, and the only
+real reduction would be deleting history, which costs more than it saves.
 
 ### D8 — No real migration tooling **(LOW, guarded)**
 `schema.sql` is all `CREATE TABLE IF NOT EXISTS` plus a derived `ADD COLUMN IF NOT EXISTS` pass. It
@@ -436,11 +461,19 @@ onboarding docs — not for retyping 55,000 lines.
 2. **Finish the lock-free read path** (D1). Days. Now blocked on a **design choice between three
    measured options** (see D1), not on implementation — two attempts were built and rejected on
    evidence. Still the highest architectural payoff.
-3. ~~**Split `server.js`** into domain route modules (D3).~~ **DONE** — 220 routes into 17 modules,
+3. ~~**Split `server.js`** into domain route modules (D3).~~ **DONE** — 220 routes into 18 modules,
    2,396 → 1,771 lines, route table proven identical, two new guards for what that diff can't see.
 4. ~~**Split `rules.js`** into generated + tail (D5).~~ **DONE** — machine-owned tables in one file,
    hand-written everything in another, the extractor writes only the first, `test/rules.js` enforces it.
 5. ~~**Split `social.js`** along death/estate | contracts | gangs | combat (D4).~~ **DONE** — seven
    layered modules under `src/social/`, byte-identical bodies, unchanged public surface.
-6. **Consolidate the docs** (D7): one architecture doc (this file), one balance sheet, one deploy
-   runbook, and archive the 25 point-in-time audit reports.
+6. ~~**Consolidate the docs** (D7).~~ **DONE, differently than planned** — the plan was to archive the
+   audit reports; measurement said not to (100 source comments cite a design doc or an audit by name, and
+   CLAUDE.md's log is the precedent lookup table for ~414 more). So the docs were INDEXED rather than
+   moved (`docs/AUDITS.md`, which states they are point-in-time), and every load-bearing figure is now
+   machine-checked by `test/docs.js` + `test/routes.js` — five stale claims found and fixed, nine
+   tripwires mutation-tested. See D7.
+
+**What is left.** D1 is the only substantial item, and it is waiting on a design decision rather than
+implementation. D6 (lock discipline by convention) and D8–D10 are accepted as-is with guards. Everything
+else on this list is done.

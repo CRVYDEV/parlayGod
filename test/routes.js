@@ -75,6 +75,20 @@ assert.deepEqual(stale, [],
 const modLeaks = v1.filter((r) => r.url.startsWith('/v1/mod') && !r.isMod).map(key).sort();
 assert.deepEqual(modLeaks, [], `/v1/mod routes must use modAuth, not the player token:\n  ${modLeaks.join('\n  ')}`);
 
+// ── SPEC.md's stated route count ────────────────────────────────────────────────────────────────
+// test/docs.js machine-checks every other figure in SPEC's size table against the tree, but this one
+// needs the app booted to know it — so it lives here, where the real number already exists. Within 2%,
+// the same band docs.js uses for figures that move on ordinary work: the error worth catching is a
+// count that has drifted by dozens, not by one route added this morning.
+{
+  const specRoutes = readFileSync(new URL('../SPEC.md', import.meta.url), 'utf8')
+    .match(/^\| HTTP routes \|[^|]*?\*\*([\d,]+)\*\*/m);
+  assert(specRoutes, 'SPEC.md must state the route count in its size table (row "HTTP routes")');
+  const claimed = Number(specRoutes[1].replace(/,/g, ''));
+  assert(Math.abs(claimed - app.routes.length) / app.routes.length < 0.02,
+    `SPEC says ${claimed} route registrations; there are ${app.routes.length} — restate it`);
+}
+
 // ── no duplicate registrations ─────────────────────────────────────────────────────────────────
 // Fastify throws on an exact duplicate, but a split that registers a module twice would surface here
 // first and more legibly than as a boot crash in production.
