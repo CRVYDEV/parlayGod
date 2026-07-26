@@ -14,6 +14,7 @@
     "pgcheck": "node tools/pgcheck.js",
     "sim": "node tools/sim.js",
     "playthrough": "node tools/playthrough.js",
+    "loadtest": "node tools/loadtest.js",
     "backup": "bash tools/backup.sh ${BACKUP_DIR:-./backups}",
     "backup:selftest": "bash tools/backup-selftest.sh"
   },

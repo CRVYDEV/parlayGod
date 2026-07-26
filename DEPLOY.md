@@ -24,6 +24,19 @@ are set). Two Node processes over one Postgres DB. No build step.
       DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=y \
         MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off npm run pgcheck
       ```
+- [ ] **`npm run loadtest`** against the same throwaway Postgres — many players at once, which no other
+      check exercises. Every §10.4 proof elsewhere is SEQUENTIAL, and lost updates live in the overlap
+      between requests; this one asserts the ledger is unmoved by thousands of concurrent operations and
+      reads `pg_stat_database.deadlocks` directly, because the codebase retries `40P01` as `contention`
+      so a lock-order bug is otherwise invisible. Exits non-zero on drift, a 5xx, or pool exhaustion.
+      ```
+      DATABASE_URL=postgres://localhost/omerta_check JWT_SECRET=x MOD_KEY=yyyyyyyyyyyy \
+        MARKET_SEED='<32 random chars>' SOCIAL_VERIFY_MODE=off LOAD_PLAYERS=30 npm run loadtest
+      ```
+      First measurement (2026-07-26): flat ~175 req/s from 5 to 50 players with latency rising linearly
+      — a CPU-bound queue, not a lock wall — **zero deadlocks at every level**, and §10.4 unmoved. Run it
+      after anything that touches a lock, a transaction boundary, or the pool. Absolute req/s is a
+      property of the machine and is not a capacity figure.
 - [ ] (chain path only — not needed for off-chain alpha) `cd omerta-contracts && forge test` on a real
       Foundry toolchain. **Still the pre-mainnet gate; egress-blocked in CI here.**
 
