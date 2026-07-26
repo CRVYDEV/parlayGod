@@ -39,6 +39,16 @@ envVarGroups:
                                  # The callback to register on the X app is EXACTLY this + the path:
                                  #   https://omerta.example.com/v1/auth/x/callback
                                  # X compares it byte-for-byte; a trailing slash or http:// is a mismatch.
+      # ── MOBILE WALLETS (optional; the option is DORMANT until this is set) ──
+      # Desktop players already get every browser wallet automatically (MetaMask, Coinbase, Trust,
+      # Rabby, Phantom, Crypto.com, Rainbow, OKX, Zerion, Robinhood Wallet — the console discovers
+      # whatever is installed, no per-wallet work). But a phone browser has NO wallet extension, so
+      # without this a mobile player simply cannot link a wallet at all. Set it and they get a
+      # "WalletConnect (mobile)" option that shows a QR (desktop) or opens their wallet app (phone).
+      # Get one free in 2 minutes: https://dashboard.reown.com → sign in → Create Project → copy the
+      # Project ID. It is PUBLIC by design (it ships in the page) — it is not a secret.
+      - key: WALLETCONNECT_PROJECT_ID
+        sync: false
       - key: INVARIANT_WEBHOOK_URL
         sync: false              # YOU paste this one: a Slack or Discord webhook URL. It is how the game
                                  # TELLS you something is wrong — the nightly §10.4 economy check and the
