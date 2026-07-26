@@ -2555,10 +2555,9 @@ export const socialShareUrl = (kind, code = '') => {
 }
 // The real First-Week social DESTINATIONS (deploy-configurable) — the OMERTÀ handle / community /
 // repo, not the bare platform homepages (the L1 fix). ob_x always resolves to the known handle;
-// discord/repo use env when set (else the static ONBOARD_TASKS fallback stands).
+// (Discord was retired as a growth funnel — it was never verifiable: there is no Discord sign-in.)
 export const SOCIAL_LINKS = {
   ob_x: `https://x.com/${SOCIAL_X_HANDLE}`,
-  ob_discord: process.env.SOCIAL_DISCORD_URL || null,
 }
 
 // ═══ EMISSION — THE STREET WAGE (the value-creation pivot, founder-directed 2026-07-23;

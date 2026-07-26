@@ -73,9 +73,8 @@ export const OPERATIONAL_ENV = [
   'RATE_READ_PER_SEC', 'WS_ALLOW_QUERY_TOKEN',
   // identity providers (dormant until configured)
   'PRIVY_APP_ID', 'X_BEARER_TOKEN', 'X_CLIENT_ID', 'X_CLIENT_SECRET', 'X_TARGET_USER_ID',
-  'DISCORD_BOT_TOKEN', 'DISCORD_GUILD_ID',
   // marketing / share surfaces
-  'SOCIAL_DISCORD_URL', 'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID',
+  'SOCIAL_GAME_URL', 'SOCIAL_X_HANDLE', 'WALLETCONNECT_PROJECT_ID', 'X_CHECK_CD_MS', 'X_FOLLOW_PAGES',
   // the chain layer — every one dormant unless set (mainnet is legal + audit gated regardless)
   'CHAIN_CONFIRMATIONS', 'CHAIN_ID', 'CHAIN_POLL_MS', 'CHAIN_RPC_URL', 'CHAIN_START_BLOCK',
   'DAILY_CAP_OMR', 'OMERTA_BOND_ADDRESS', 'OMERTA_FEES_ADDRESS', 'TRADE_FEE_HOOK_ADDRESS',
@@ -161,9 +160,6 @@ export function preflight(env = process.env) {
     else if (!env.X_TARGET_USER_ID)
       warnings.push('SOCIAL_VERIFY_MODE=live with X_BEARER_TOKEN but no X_TARGET_USER_ID — post checks work, '
         + 'but "Follow on X" cannot be verified, so it is dropped from the First-Week checklist.');
-    if (!env.DISCORD_BOT_TOKEN || !env.DISCORD_GUILD_ID)
-      warnings.push('SOCIAL_VERIFY_MODE=live without DISCORD_BOT_TOKEN + DISCORD_GUILD_ID — "Join the community" '
-        + 'is dropped from the First-Week checklist (harmless if you do not run a Discord).');
   }
   if (env.WS_ALLOW_QUERY_TOKEN === 'on')
     warnings.push('WS_ALLOW_QUERY_TOKEN=on puts player tokens in URLs, where proxies and access logs keep them.');

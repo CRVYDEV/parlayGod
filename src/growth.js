@@ -6,7 +6,7 @@ import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
 } from './rules.js';
-import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable } from './verify.js';
+import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throttleXCheck } from './verify.js';
 import { spendOmr } from './vanity.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -330,19 +330,32 @@ export async function agentLeaderboard(pool, limit = 25) {
 // THE CHECKLIST THIS SERVER CAN ACTUALLY OFFER. A social task whose PROVIDER is not configured is
 // dropped entirely — not listed-and-unclaimable. Offering a reward that always throws is worse than
 // not offering it: the player reads it as a bug, and it made the all-done capstone unreachable,
-// which is the state the live server shipped in (SOCIAL_VERIFY_MODE=live with no X or Discord
-// tokens). A task ALREADY CLAIMED stays on the list whatever the config now says, so nobody's
+// which is the state the live server shipped in (SOCIAL_VERIFY_MODE=live with no X token). A task ALREADY CLAIMED stays on the list whatever the config now says, so nobody's
 // completed checklist silently shrinks if a token is later removed.
 //
 // ONE function, because the board and the PAYOUT must agree. They did not: the board filtered and
-// the claim path computed its capstone over the unfiltered `ONBOARD_TASKS`, so on a server without
-// Discord the checklist read "complete" and the capstone bonus never fired. A promise the UI makes
+// the claim path computed its capstone over the unfiltered `ONBOARD_TASKS`, so on a server that
+// could not verify X the checklist read "complete" and the capstone bonus never fired. A promise the UI makes
 // and the ledger never keeps is worse than the unreachable capstone it replaced.
-const offeredTasks = (onboard) => ONBOARD_TASKS.filter((t) => !!onboard[t.id] || socialTaskAvailable(t.id));
+const offeredTasks = (onboard, ident) => ONBOARD_TASKS.filter((t) => !!onboard[t.id] || socialTaskAvailable(t.id, ident));
 
-export function onboardBoard(ch, h) {
+// THE SIGN-IN IDENTITY, which is NOT on `h.acct`. `h.acct` is the `account_persistent` row — prestige,
+// $OMR, the onboard blob — and the provider lives on `accounts`. That mismatch was a real bug, not a
+// tidiness point: `verifySocial` reads `acct.auth_provider` and `acct.auth_subject` off whatever it is
+// handed, and handed `h.acct` both are `undefined`. So in live mode the follow check compared
+// `undefined !== 'x'` and threw `verify_provider` at EVERY player, including genuine X accounts — and
+// had it got past that it would have fetched `/2/users/undefined/following`. "Follow on X" was
+// unclaimable by anyone, and nothing said so, because the suite only ever ran `trust` (which returns
+// before either field is touched). `verifyPostUp` already reads the row directly; this does the same.
+// One indexed PK lookup, only on the social paths — never on the hot per-request path.
+async function signInIdentity(client, accountId) {
+  return (await client.query('SELECT auth_provider, auth_subject FROM accounts WHERE id=$1', [accountId])).rows[0] || null;
+}
+
+export async function onboardBoard(ch, h, client) {
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
-  const tasks = offeredTasks(onboard)
+  const ident = client ? await signInIdentity(client, h.accountId) : null;
+  const tasks = offeredTasks(onboard, ident)
     .map((t) => ({
       id: t.id, name: t.name, desc: t.desc, reward: t.reward, social: SOCIAL_LINKS[t.id] || t.social || null,
       claimed: !!onboard[t.id],
@@ -358,16 +371,23 @@ export async function claimOnboard(ch, taskId, client, h) {
   const onboard = typeof h.acct.onboard === 'string' ? JSON.parse(h.acct.onboard || '{}') : (h.acct.onboard || {});
   if (onboard[taskId]) throw new GameError('claimed', 'Already claimed.');
   // the board hides an unconfigured provider's task, but the route is public — say WHY rather than
-  // letting verifySocial's generic `verify_unavailable` stand in for "this server has no Discord"
-  if (!socialTaskAvailable(taskId))
+  // letting verifySocial's generic `verify_unavailable` stand in for "not on this server"
+  // the sign-in identity, read from `accounts` — see signInIdentity. Both the availability gate and
+  // verifySocial itself need the real provider/subject; `h.acct` carries neither.
+  const ident = await signInIdentity(client, h.accountId);
+  if (!socialTaskAvailable(taskId, ident))
     throw new GameError('task_unavailable', "That one isn't part of the checklist on this server.");
-  if (t.social) await verifySocial(taskId, h.acct);         // §4: verifies once
+  // one outbound X call per player per window — see throttleXCheck. Skipped entirely outside live
+  // mode, where verifySocial answers without touching the network.
+  if (t.social && (process.env.SOCIAL_VERIFY_MODE || 'off') === 'live')
+    await throttleXCheck(client, h.accountId, 'follow');
+  if (t.social) await verifySocial(taskId, ident);          // §4: verifies once
   else if (!CHECKS[taskId] || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
   onboard[taskId] = true;
   h.acct.onboard = JSON.stringify(onboard);
   // the same list the board showed — see offeredTasks. `onboard` already carries THIS claim, so a
   // task just completed counts, and an unofferable task is not held against the player.
-  const allDone = offeredTasks(onboard).every((x) => onboard[x.id]);
+  const allDone = offeredTasks(onboard, ident).every((x) => onboard[x.id]);
   const cash = (t.reward.cash || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.cash : 0);
   const cb = (t.reward.cb || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.cb : 0);
   const en = (t.reward.en || 0) + (allDone ? CONSTANTS.ONBOARD_CAPSTONE.en : 0);
@@ -459,6 +479,8 @@ export async function claimSocial(ch, taskId, proof, client, h) {
     // live mode: the post must STILL be up AND (for an X-linked account) come from THEIR handle —
     // pass ctx so verifyPostUp's D2 author-binding activates on the real claim path (was dead code:
     // it only fired via a direct unit call). Trust mode short-circuits before touching ctx.
+    if ((process.env.SOCIAL_VERIFY_MODE || 'off') === 'live')
+      await throttleXCheck(client, h.accountId, 'post');    // the retry loop, not the happy path
     await verifyPostUp(pend.proof ?? proof, { client, accountId: h.accountId });
     await client.query('UPDATE social_claims SET paid=true WHERE account_id=$1 AND day=$2 AND task_id=$3',
       [h.accountId, pend.day, taskId]);

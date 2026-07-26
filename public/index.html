@@ -720,6 +720,8 @@
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
     verify_busy: "X is busy right now — try again in a few minutes (nothing is lost)",
+    verify_cooldown: "we just checked with X — do the thing first, then come back in a bit",
+    task_unavailable: "that one isn't on the checklist on this server",
     x_busy: "X is busy right now — try again in a minute",
     post_gone: "that post is gone — it has to stand to pay",
     not_your_post: "that post has to come from YOUR linked X account to pay",
