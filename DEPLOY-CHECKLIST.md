@@ -75,6 +75,21 @@ database) + your domain. No blockchain, minimal risk.
   Getting a URL, in Discord: *Server Settings → Integrations → Webhooks → New Webhook*, pick a channel,
   *Copy Webhook URL*. In Slack: create an app → *Incoming Webhooks* → *Add New Webhook to Workspace*.
   Nothing arrives until something is actually wrong, so a quiet channel means the game is fine.
+- **Take your own backup (once now, then whenever you remember):** Render keeps its own copy, but the
+  2026-07-25 incident was Render's backup chain failing *silently*, so hold one yourself.
+  On **your computer**, not on Render (a Render disk is wiped on the next deploy, and the whole point is
+  a copy that survives a problem at Render):
+  1. Install the Postgres 16 tools — macOS `brew install libpq` (then the PATH line it prints), Windows
+     the official Postgres installer. Check with `pg_dump --version`; it must say **16** or higher.
+  2. Render dashboard → `omerta-db` → *Connections* → copy the **External Database URL**.
+     (The internal one only works inside Render and will fail from your laptop.)
+  3. In the project folder: `DATABASE_URL='<paste it>' npm run backup`
+     (Windows PowerShell: `$env:DATABASE_URL='<paste it>'; npm run backup`)
+
+  It prints `backup verified: ./backups/omerta-….dump (… bytes, 161 tables)`. That word *verified*
+  matters — it read the dump back and confirmed real player rows are inside, because the one thing worse
+  than no backup is one that looks fine and isn't. If it says `'accounts' holds 0 rows`, the URL is
+  pointing at the wrong database. The file is a complete copy of everything — keep it somewhere private.
 - **Ship updates:** any change pushed to your connected branch auto-redeploys (a minute or two). Your data
   survives — the database back-fills new columns automatically on boot (no migration step).
 - **The economy dials** live in `SIGN-OFF.md`. The game ships fine on the defaults; only change them
