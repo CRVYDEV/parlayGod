@@ -18,7 +18,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption) |
-| Design + audit docs | **127** markdown files, **26231** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
+| Design + audit docs | **126** markdown files, **26522** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
 Roughly **55,000 lines** of code, tests, schema and contracts.
