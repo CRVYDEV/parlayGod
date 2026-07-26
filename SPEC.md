@@ -197,6 +197,37 @@ is a backstop, not a proof:
 3. All 23 are exercised by the suites (1–25 references each), and a full run trips the write guard
    **zero** times. Five of them are additionally proven lock-free against real Postgres in pgcheck §8.
 
+**Red-teamed after shipping** (the three clearing passes above were all static; none of them was
+someone trying to break it). Two findings, both fixed in-commit with regressions:
+
+- **The guard did not cover every route it was claimed to.** Three reads (`/v1/duels`, `/v1/world`,
+  `/v1/world/raids`) handed their board the raw `pool` instead of the guarded client, so the write
+  guard never saw them. No live bug — all three are statically write-free — but "the guard makes the
+  claim enforceable" was true of 20 routes, not 23, and the commit message said otherwise. All three
+  now pass `client`; none of them calls `.connect()` or `Promise.all`, so it is a drop-in. A
+  source-level tripwire now fails the suite if any read route hands its board the pool again
+  (verified to fire, not merely present).
+- **A leading SELECT does not make a statement a read.** The guard anchored at the start of the SQL,
+  so `SELECT 1; INSERT …` and `WITH x AS (…) INSERT …` both sailed past it. It now also scans for the
+  multi-word write forms anywhere in the statement — which do not appear by accident in a SELECT the
+  way a bare `update` can (a column named `last_update` is safe: `_` is a word character, so `\b`
+  does not match inside it). Regressions cover both bypasses AND the false-positive case.
+
+**Accepted, and worth stating because it is a real behaviour change:** a read is no longer serialized
+against that player's own actions, so a board can now render the character row as it was before an
+action with child rows as they were after — the read holds no lock and spans several statements. It
+is cosmetic (boards only render; nothing decides on it, and there is no §10.4 surface because nothing
+is written), it self-corrects on the next poll, and the console already serializes its own authed
+requests. A `REPEATABLE READ` transaction would close it at the cost of a snapshot held per read;
+not worth it unless a torn board is actually observed.
+
+**Verified clean under the same pass:** the decline→delegate path discards its in-memory mutations
+(`loadOwned` returns fresh objects and `withCharacter` re-reads from scratch); no double connection
+hold (the `finally` releases before delegating); the post-commit referral hooks are not lost by
+skipping them on a clean read, because every gate they check only advances on an action — and the
+worker sweep reconciles regardless; and the raid/indictment notifications still fire, because they
+only ever exist on the dirty path that delegates.
+
 **Remaining:**
 1. A compare-and-swap would make even the *dirty* reads lock-free. It needs a version column: the
    obvious CAS key, `last_accrued_at`, round-trips through node-pg at millisecond precision and would

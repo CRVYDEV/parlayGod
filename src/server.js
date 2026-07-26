@@ -2358,7 +2358,7 @@ export async function buildServer() {
 
   // ── THE DUELING LADDER (slate #5) — ranked ELO PvP on the audited casino:pvp transfer ──
   app.get('/v1/duels', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch) => Duels.duelBoard(pool, ch)));
+    G.readCharacter(pool, req.user.sub, (ch, client) => Duels.duelBoard(client, ch)));
   app.post('/v1/duels/list', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client) => Duels.listDuel(ch, req.body?.limit, client)));
   app.post('/v1/duels/style', { preHandler: auth }, async (req) =>
@@ -2376,13 +2376,13 @@ export async function buildServer() {
   app.get('/v1/leaderboard/clues', { preHandler: auth }, async () => Clues.clueLeaderboard(pool));
   // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.
   app.get('/v1/world', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(pool, ch, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => World.worldBoard(client, ch, h)));
   app.post('/v1/world/:npcId/raid', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.raidNpc(ch, req.params.npcId, client, h)));
   app.get('/v1/leaderboard/world', { preHandler: auth }, async () => World.worldLeaderboard(pool)); // THE WAR EFFORT board
   // step three — CO-OP CREW RAIDS on the apex outfits + THE FRONTIER (family conquest leaderboard)
   app.get('/v1/world/raids', { preHandler: auth }, async (req) =>
-    G.readCharacter(pool, req.user.sub, (ch) => World.raidBoard(pool, ch.id)));
+    G.readCharacter(pool, req.user.sub, (ch, client) => World.raidBoard(client, ch.id)));
   app.post('/v1/world/:npcId/plan', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => World.planRaid(ch, req.params.npcId, client, h)));
   app.post('/v1/world/raids/:id/join', { preHandler: auth }, async (req) =>
