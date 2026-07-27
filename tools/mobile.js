@@ -98,7 +98,7 @@ const fail = (screen, vp, msg) => failures.push(`[${vp.w}x${vp.h}] ${screen}: ${
 let screensChecked = 0;
 
 // Everything measured in one pass in the page, so a screen is only laid out once.
-const MEASURE = () => {
+const MEASURE = (minTap) => {
   const de = document.documentElement;
   const vw = de.clientWidth, vh = window.innerHeight;
   const over = de.scrollWidth - vw;
@@ -125,7 +125,7 @@ const MEASURE = () => {
   for (const el of document.querySelectorAll('#grouprail button, #tabs button, #bnav button')) {
     const r = el.getBoundingClientRect();
     if (r.height === 0 && r.width === 0) continue;              // hidden tabs of other groups
-    if (r.height < 36) smallNav.push({ h: Math.round(r.height),
+    if (r.height < minTap) smallNav.push({ h: Math.round(r.height),
       text: (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 22) });
   }
 
@@ -139,7 +139,9 @@ const MEASURE = () => {
 const check = async (page, screen, vp, { contentMustShow = false } = {}) => {
   await page.waitForTimeout(260);
   screensChecked++;
-  const m = await page.evaluate(MEASURE);
+  const m = await page.evaluate(MEASURE, MIN_TAP);   // passed in — MEASURE runs in the page, so a
+                                                     // literal here would silently diverge from the
+                                                     // constant the failure message quotes.
   if (SHOTS) {
     fs.mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: path.join(SHOTS, `${vp.w}-${screen}.png`) });
@@ -166,6 +168,9 @@ for (const vp of VIEWPORTS) {
   const browser = await chromium.launch({ executablePath: exe });
   const ctx = await browser.newContext({
     viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    // PINNED. The console auto-detects the browser locale and switches language pack, so an
+    // unpinned locale would change every label on the page — and with it what this harness sees.
+    locale: 'en-US',
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 ' +
       '(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
   });
@@ -197,8 +202,13 @@ for (const vp of VIEWPORTS) {
   // open the whole city and walk every screen in every group
   if (await page.locator('#tabs-more:not(.hidden)').count()) await page.click('#tabs-more');
   await page.waitForTimeout(400);
-  for (const g of await page.locator('#grouprail [data-group]').allTextContents()) {
-    await page.click(`#grouprail [data-group]:has-text("${g}")`);
+  // Selected by the data-group ID, never by the button's TEXT: the labels come from the i18n
+  // dictionary, and `:has-text()` is a SUBSTRING match, so text matching is wrong twice over.
+  const groups = await page.locator('#grouprail [data-group]').evaluateAll(
+    (els) => els.map((e) => e.dataset.group));
+  if (!groups.length) fail('(nav)', vp, 'no group rail buttons found — the walk below covers nothing');
+  for (const g of groups) {
+    await page.click(`#grouprail [data-group="${g}"]`);
     await page.waitForTimeout(200);
     for (const t of await page.locator('#tabs [data-tab]:not(.hidden)').all()) {
       const id = await t.getAttribute('data-tab');
