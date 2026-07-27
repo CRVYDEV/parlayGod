@@ -124,6 +124,19 @@ assert.equal(gA.treasury, treasuryBefore + r.body.tithe * 30, 'treasury credited
 
 // ── exchange (§5.4): Mook escrows crates, Don buys the lot ──
 assert.equal((await call('POST', '/v1/exchange/list', { token: mook.token, body: { kind: 'product', qty: 1, unitPrice: 1 } })).code, 400, 'product rejected');
+// A price the server cannot read must be REFUSED, never defaulted. This used to floor to $1 a
+// unit, so misnaming the field (the console's own deck sent `price`), omitting it, or sending
+// something negative or non-numeric put your goods on the board at $1 each and answered 200 — a
+// 500x loss reported as success. $1 is still a legal price; not naming one is not.
+for (const bad of [{ kind: 'cb', qty: 5, price: 200 }, { kind: 'cb', qty: 5 },
+  { kind: 'cb', qty: 5, unitPrice: -200 }, { kind: 'cb', qty: 5, unitPrice: 'cheap' }]) {
+  const bd = await call('POST', '/v1/exchange/list', { token: mook.token, body: bad });
+  assert.equal(bd.code, 400, `unreadable price refused: ${JSON.stringify(bad)}`);
+  assert.equal(bd.body.error, 'price', 'refused for the price, and says so');
+}
+assert.equal((await call('POST', '/v1/exchange/list', { token: mook.token, body: { kind: 'cb', unitPrice: 200 } })).body.error,
+  'qty', 'and a missing quantity is refused too, rather than silently listing one');
+assert.equal((await meOf(mook.token)).cb, 5, 'nothing escrowed by any of the refused attempts');
 r = await call('POST', '/v1/exchange/list', { token: mook.token, body: { kind: 'cb', qty: 5, unitPrice: 200 } });
 assert.equal(r.code, 200, 'listed'); assert.equal(r.body.character.cb, 0, 'crates escrowed');
 const listing = r.body.listingId;
