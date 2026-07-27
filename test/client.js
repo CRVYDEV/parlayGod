@@ -32,7 +32,8 @@ process.env.MOD_KEY = 'test-mod-key';
 import assert from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { buildServer } from '../src/server.js';
-import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS } from '../src/rules.js';
+import { M3, M4, PATHS, NPC_HITMEN, HEIST_ROLES, HEIST_JOBS, DRUGS, GOODS, DISTRICTS,
+  COMMISSION, CONVOY, DUELS, TERRITORY_TYPES } from '../src/rules.js';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const admin = readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8');
@@ -147,6 +148,41 @@ const dead = unresolved.filter(([ref]) => !matches(ref, true));
 assert.deepEqual(dead.map(([r, w]) => `${r}  (${w})`), [],
   `the client calls ${dead.length} route(s) that are NOT mounted — those buttons 404 for every player`);
 
+// ── 1b. the routes whose ACTION the client picks at runtime ─────────────────────────────────────
+// `act('POST', `/v1/garage/${id}/${what}`)` cannot be named statically, so the check above could
+// only count it as unverifiable — a polite way of saying five real surfaces went unchecked. They
+// ARE enumerable: `what` comes from a data-attribute whose values are written in this same file.
+// Each base path is listed with the source of its actions, every value is read out of the HTML, and
+// every resulting CONCRETE route is checked. The unverifiable list must then come out EMPTY — so a
+// new runtime-built call fails the run until it is listed here, rather than quietly going uncovered.
+const attrValues = (name) => {
+  const vals = [...new Set([...html.matchAll(new RegExp(`data-${name}="([a-z]+):`, 'g'))].map((m) => m[1]))];
+  assert(vals.length, `no data-${name} values found — the action extraction broke, not the client`);
+  return vals;
+};
+const RUNTIME_ACTIONS = new Map([
+  ['POST /v1/garage/:p/:p',     () => attrValues('cardo')],
+  ['POST /v1/armory/gun/:p/:p', () => attrValues('gundo')],
+  ['POST /v1/heists/:p/:p',     () => attrValues('heistdo')],
+  ['POST /v1/loans/:p/:p',      () => attrValues('loando')],
+  // this one is a for-of over literal [attribute, path] pairs, not a data-attribute prefix
+  ['POST /v1/underworld/:p/:p', () => [...html.matchAll(/\['uw[a-z]+', '([a-z]+)'\]/g)].map((m) => m[1])],
+]);
+const unlisted = dynamic.filter(([ref]) => !RUNTIME_ACTIONS.has(ref)).map(([r, w]) => `${r}  (${w})`);
+assert.deepEqual(unlisted, [], `${unlisted.length} route(s) build their action at runtime and are ` +
+  `not listed in RUNTIME_ACTIONS, so nothing checks them — add them there with the source of their actions`);
+const runtimeDead = [], runtimeChecked = [];
+for (const [ref, source] of RUNTIME_ACTIONS) {
+  const actions = source();
+  assert(actions.length, `${ref} resolved to zero actions — the extraction broke`);
+  for (const a of actions) {
+    const concrete = ref.replace(/:p$/, a);
+    runtimeChecked.push(concrete);
+    if (!matches(concrete, false)) runtimeDead.push(concrete);
+  }
+}
+assert.deepEqual(runtimeDead, [], `${runtimeDead.length} runtime-built route(s) are NOT mounted`);
+
 // ── 2. every value the client hardcodes must be one the server recognises ────────────────────────
 // Only fields whose valid set is a CATALOG the server publishes. A field is listed here or it is
 // skipped, and the count of skipped fields is printed, so the coverage this check has is visible
@@ -173,7 +209,28 @@ const CATALOGS = {
   goodId: ids(GOODS),
   to: ids(DISTRICTS),                          // travel / convoy destination
   direction: new Set(['buy', 'sell']),         // the swap — server-side literals, not a catalog
+  decree: new Set(COMMISSION.DECREES.map((d) => d.id)),
+  guards: new Set(CONVOY.GUARD_TIERS.map((t) => t.id)),
+  style: new Set(DUELS.STYLES.map((s) => s.id)),
+  side: new Set(['a', 'b']),                   // the fight/main-event book — server-side literals
+  // `kind` is POLYMORPHIC: contracts take kill|hospitalize, the exchange cb|ammo|item, territory a
+  // racket type. Check 2 scans literals without route context, so this is the UNION — it catches
+  // the real failure (a typo, `hospitalise`) but not a value that belongs to a different route.
+  // Binding a value to its own route is check 3's job, and it does that for the field NAMES.
+  kind: new Set(['kill', 'hospitalize', 'cb', 'ammo', 'item', ...TERRITORY_TYPES.map((t) => t.id)]),
 };
+// Everything else the two literal regexes pick up is NOT an API value: the i18n dictionary (k_*
+// labels, b_* buttons — these grow with every translated string, so they go by prefix) and a
+// handful of browser/client-internal keys. Listing them is the point: an unlisted field means
+// somebody added a catalog-backed literal and it would otherwise be skipped in silence, which is
+// exactly how `{path:'earner'}` survived. Catalog it, or declare it here as not-an-API-value.
+const NOT_API = new Set([
+  'block',      // scrollIntoView({block:'nearest'})
+  'error',      // the client's own {error:'offline'} shape
+  'inline',     // scrollIntoView({inline:'center'})
+  'method',     // window.ethereum.request({method:'personal_sign'}) — EIP-1193, not our API
+  'saved',      // the language picker's localStorage value
+]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];
 for (const m of html.matchAll(/([a-zA-Z_]+)\s*:\s*'([a-z0-9_]+)'/g)) literals.push([m[1], m[2]]);
@@ -189,6 +246,11 @@ for (const [field, value] of literals) {
 assert.deepEqual(bogus, [],
   `the client hardcodes ${bogus.length} value(s) the server does not recognise — those controls fail for every player`);
 assert(checked.length > 10, `only ${checked.length} catalog values checked — the extraction broke`);
+// i18n dictionary keys grow with every translated string, so they go by prefix; everything else
+// has to be catalogued or declared. A field landing here is a decision to make, not a silent skip.
+const undeclared = [...skipped].filter((f) => !NOT_API.has(f) && !/^[kb]_/.test(f)).sort();
+assert.deepEqual(undeclared, [], `${undeclared.length} literal field(s) are neither catalog-backed ` +
+  `nor declared as non-API, so their values go unchecked — add them to CATALOGS or to NOT_API`);
 
 // ── 3. every body field the client sends must be one its route actually reads ────────────────────
 // The class the two checks above CANNOT see: `{drug: 'vim'}` when the handler reads `req.body?.drugId`.
@@ -199,9 +261,83 @@ assert(checked.length > 10, `only ${checked.length} catalog values checked — t
 // says nothing about whether THIS handler reads it. Each registration's source text is sliced out and
 // scanned for the shapes this codebase actually uses: `req.body?.x`, `req.body.x`, and destructuring.
 const srcFiles = ['src/server.js', ...readdirSync(new URL('../src/routes', import.meta.url)).map((f) => `src/routes/${f}`)];
+const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+
+// THE SECOND HOP. Some handlers hand the WHOLE `req.body` to a module — `Market.listItem(ch,
+// req.body, …)` — so the fields are read a file away and the scan above sees none. Leaving those
+// unresolved is leaving the exact place this bug class hides. So follow the call: the alias map
+// comes off server.js's own imports, the function is located in that module, the argument POSITION
+// says which parameter the body lands in, and that parameter's reads are what the route accepts.
+const aliases = new Map([...read('src/server.js').matchAll(/import \* as (\w+) from '\.\/([\w.]+)'/g)]
+  .map((m) => [m[1], `src/${m[2]}`]));
+const cache = new Map();
+const modSrc = (f) => { if (!cache.has(f)) { try { cache.set(f, read(f)); } catch { cache.set(f, null); } } return cache.get(f); };
+const splitArgs = (s) => {                    // top-level commas only — `f(a, g(b, c), {d: 1})`
+  const out = []; let depth = 0, cur = '';
+  for (const c of s) {
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    if (c === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  if (cur.trim()) out.push(cur);
+  return out.map((a) => a.trim());
+};
+const paramFields = (src, fn, argIdx, from = 'src/x.js', depth = 0) => {
+  const def = new RegExp(`export (?:async )?function ${fn}\\s*\\(([^)]*)\\)`).exec(src);
+  // social.js is a BARREL — `export { listItem } from './social/exchange.js'` — so the function is
+  // one more file down. Following that is the difference between resolving a route and recording
+  // it as unresolvable, and the barrel pattern spreads: miss it and coverage quietly shrinks.
+  if (!def && depth < 3) {
+    for (const re of src.matchAll(/export \{([^}]*)\} from '\.\/([\w./]+)'/g)) {
+      if (!re[1].split(',').some((n) => n.trim() === fn)) continue;
+      const dir = from.slice(0, from.lastIndexOf('/'));
+      const sub = modSrc(`${dir}/${re[2]}`);
+      if (sub) return paramFields(sub, fn, argIdx, `${dir}/${re[2]}`, depth + 1);
+    }
+  }
+  if (!def) return null;
+  const param = splitArgs(def[1])[argIdx]?.split('=')[0].trim();
+  if (!param || !/^[a-zA-Z_$][\w$]*$/.test(param)) return null;
+  const after = src.indexOf('\nexport ', def.index + 1);
+  const fnBody = src.slice(def.index, after < 0 ? src.length : after);
+  const fields = new Set();
+  for (const f of fnBody.matchAll(new RegExp(`\\b${param}\\s*\\??\\.\\s*([a-zA-Z_][\\w]*)`, 'g'))) fields.add(f[1]);
+  for (const d of fnBody.matchAll(new RegExp(`const\\s*\\{([^}]*)\\}\\s*=\\s*${param}\\b`, 'g')))
+    for (const n of d[1].split(',')) { const k = n.split(':')[0].trim(); if (k) fields.add(k); }
+  // A COMPUTED read over a literal list is still a field set, just not spelled `param.field`:
+  // `for (const s of ['muscle','cunning','speed']) … Number(alloc?.[s])` is exactly the three
+  // fields /v1/respec accepts. Only counted when the loop variable is what indexes the parameter.
+  for (const loop of fnBody.matchAll(/for \(const (\w+) of \[([^\]]*)\]\)/g)) {
+    if (!new RegExp(`\\b${param}\\s*\\??\\.?\\s*\\[\\s*${loop[1]}\\s*\\]`).test(fnBody)) continue;
+    for (const lit of loop[2].matchAll(/'([a-zA-Z_][\w]*)'/g)) fields.add(lit[1]);
+  }
+  return fields.size ? fields : null;
+};
+const followBody = (handler) => {
+  const call = /(\w+)\.(\w+)\(([^)]*req\.body[^)]*)\)/.exec(handler);
+  if (!call) return null;
+  const file = aliases.get(call[1]) || '';
+  const src = modSrc(file);
+  if (!src) return null;
+  const idx = splitArgs(call[3]).findIndex((a) => /req\.body/.test(a));
+  return idx < 0 ? null : paramFields(src, call[2], idx, file);
+};
+
+// Self-check the two resolvers on shapes the tree does not currently contain, so they are not
+// shipped unverified: no whole-body route goes through a barrel TODAY, and the day one does is
+// exactly the day this would silently stop resolving. Synthetic sources primed into the cache.
+cache.set('src/_barrel.js', "export { doThing } from './_sub/impl.js';\n");
+cache.set('src/_sub/impl.js', 'export async function doThing(ch, opts, client) { return opts.alpha + opts?.beta; }\n');
+assert.deepEqual([...(paramFields(cache.get('src/_barrel.js'), 'doThing', 1, 'src/_barrel.js') || [])].sort(),
+  ['alpha', 'beta'], 'the barrel hop stopped resolving re-exported handlers');
+cache.set('src/_loop.js', "export function f(ch, a) { for (const s of ['x', 'y']) g(a?.[s]); }\n");
+assert.deepEqual([...(paramFields(cache.get('src/_loop.js'), 'f', 1, 'src/_loop.js') || [])].sort(), ['x', 'y'],
+  'the computed-read resolver stopped reading fields indexed by a literal list');
+
 const handlerFields = new Map();              // "METHOD /path" → Set(field) | null when unresolvable
 for (const rel of srcFiles) {
-  const src = readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+  const src = read(rel);
   const regs = [...src.matchAll(/\bapp\.(get|post|put|delete)\(\s*'([^']+)'/g)];
   regs.forEach((m, i) => {
     const body = src.slice(m.index, i + 1 < regs.length ? regs[i + 1].index : src.length);
@@ -210,10 +346,8 @@ for (const rel of srcFiles) {
     for (const d of body.matchAll(/const\s*\{([^}]*)\}\s*=\s*req\.body/g)) {
       for (const name of d[1].split(',')) { const n = name.split(':')[0].trim(); if (n) fields.add(n); }
     }
-    // handed the whole object (`Mod.fn(ch, req.body, …)`) — the fields are read a module away, so
-    // this route cannot be resolved here. Recorded as null and COUNTED, never silently passed.
     const wholeBody = /req\.body\s*(?:\|\|\s*\{\})?\s*[,)]/.test(body);
-    handlerFields.set(`${m[1].toUpperCase()} ${m[2]}`, wholeBody && !fields.size ? null : fields);
+    handlerFields.set(`${m[1].toUpperCase()} ${m[2]}`, wholeBody && !fields.size ? followBody(body) : fields);
   });
 }
 
@@ -288,14 +422,19 @@ for (const [method, rawPath, keys, where] of sends) {
 }
 assert.deepEqual(unread, [],
   `the client sends ${unread.length} body field(s) its route never reads — those actions get undefined every time`);
+assert.deepEqual(unresolvable, [], `${unresolvable.length} route(s) the client posts a body to hand ` +
+  `that body to a module this cannot follow, so their fields go unchecked — teach followBody() the shape`);
 
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
-  `/v1/streets/:id/jump cannot match /v1/streets/roster) and ${dynamic.length} build their action at ` +
-  `runtime and cannot be checked statically; all ${checked.length} catalog-backed values they hardcode ` +
+  `/v1/streets/:id/jump cannot match /v1/streets/roster) and the ${dynamic.length} that build their ` +
+  `action at runtime are expanded over every value the client can pick — ${runtimeChecked.length} ` +
+  `concrete routes, all mounted, none left unverifiable; all ${checked.length} catalog-backed values they hardcode ` +
   `are ids the server recognises; and every field in ${sends.length} request bodies is one its own ` +
-  `route actually reads (${unresolvable.length} handed the whole body to a module, so unresolvable here). ` +
+  `route actually reads — including the ones that hand the whole body to a module, followed a file ` +
+  `deeper to the parameter it lands in — through a barrel re-export if it takes one. ` +
   `Those are the three ways a button dies silently — this found four dead routes and five ignored ` +
   `fields, one of them a broken action, across two runs. ${Object.keys(CATALOGS).length} fields have ` +
-  `catalogs; ${skipped.size} other literal fields are not catalog-backed and go unchecked.`);
+  `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
+  `new one forces that decision instead of being skipped in silence.`);
