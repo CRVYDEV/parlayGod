@@ -5597,3 +5597,34 @@ parameter the shadow blanking removes by design, and 12 of the 16 list boards co
 a single-character fixture, so there is nothing to compare against; covering them needs a fixture
 rich enough that every list has a row in it. That is the next step and it is where most board
 rendering lives — the check must not be read as "every read is verified".
+
+**THE FLAKE WAS A MONEY BUG — ring poker's all-in rule (2026-07-27).** A ~1-in-20 failure in
+`test/ring.js` was chased on the assumption it was a test artifact. It was two separate things, and
+the more interesting one was in the product. **The bug: an ALL-IN player was handed the action.**
+`advance()` picked the next actor from every un-acted seat regardless of stack. A player with no
+chips has no decision to make and no reason to click, so the turn clock reached him and
+`enforceDeadline` set `in_hand = false` — **folding him out of a pot he had put his entire stack
+into**, while an opponent simply waited him out. Reproduced deterministically before any fix: three
+seats, one short, the preflop raise capped at the smallest live stack (which is exactly what puts the
+short stack all-in), a $9,000 pot, and the short stack folded off it by the clock. **The first fix
+was incomplete and its regression passed anyway** — filtering the *pending* list left the next-street
+assignment picking `live[0]` unconditionally, so the bug survived whenever the all-in player sat at
+the lowest seat, and the test only went green because the short stack happened to sit second. Probing
+the shapes the regression did *not* cover then found a worse one: **with every seat all-in, the clock
+folded them one by one and the last seat standing took the pot with no showdown** — the cards never
+decided it. `dealHand` had the same hole from the first card (a seat whose whole stack was the ante).
+The rule is now stated once and applied everywhere: **a seat with no chips is never asked to act, and
+a betting round only opens while at least TWO live seats have chips** — the raise cap is the smallest
+live stack, so the moment anyone is all-in the cap is 0 and `check` is the only legal action for
+anybody; real poker runs the board out there, and now so does this (`openBetting`/`runOut`/
+`dealStreet`, plus a `settleFinish` after a deal that resolves instantly, or its rake never reaches
+the ledger and the ring-escrow §10.4 identity drifts on COMMIT). Five shapes are regression-tested and
+each was mutation-verified against its own distinct assertion. **The other half — the actual flake —
+was the test's own clock:** `RING_TURN_MS` was 200ms while every hand is a dozen sequential HTTP
+round-trips against pg-mem, so any pair that straddled 200ms had the clock fold the actor mid-hand and
+the next check came back `400 folded`. The failure message named the seat, not the cause, which is why
+it read as a state-machine bug. Fixed by running the suite on a generous clock and **backdating
+`act_deadline`** where the clock is under test (`expireTurn` — the `closeReg` pattern already in the
+file): same `act_deadline < now()` predicate the sweep really uses, deterministic, no wall clock in
+the loop. Mutation-verified that the clock is still genuinely exercised, because a flake silenced by
+making its test vacuous is worse than the flake. 111 consecutive runs green, from ~7% failing.
