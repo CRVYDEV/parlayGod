@@ -517,13 +517,35 @@ read against an id-keyed map, a district read as a commodity, and a `unitPrice` 
 handler does not read (it takes `price`; the neighbouring `/v1/exchange/list` is the one taking
 `unitPrice`).
 
-**What it found, at 36 players over 5 days:** every market reachable, §10.4 exact, and liquidity that is
-real but thin — 100% of goods lots taken, 20% of loan offers, 20% of bodyguard offers, 19% of duel
-listings, 12% of contracts. Wealth stayed flat (top 10% hold 12%). The take rates are a **finding for
-balance, not a failure** — a market can be perfectly reachable and still unattractive — so the harness
-prints them and asserts nothing about them. Empty-at-the-end is reported with its take rate attached,
-because a market that CLEARED (everything posted got taken) and a market nobody wanted both read as
-"empty" and mean opposite things.
+**A measurement I published and then had to correct.** The first version reported `taken / posted` as
+"liquidity" and it was wrong — not slightly, structurally. `taken` is bounded by PER-PLAYER caps (one
+debt at a time, one bodyguard, a duel cooldown), so it can never exceed the number of distinct
+shoppers; with posts scaling as players/6 per round the ratio collapses to **3/rounds, independent of
+population**. It matched the data exactly (6 rounds → 50%, 15 rounds → 20%), which is how a number
+that says nothing about the game can look like a finding about it.
+
+The honest metric is per-ATTEMPT **AVAILABILITY**: when a player went looking, was there an eligible
+counterparty on the board at all? That is density-sensitive by construction, and it separates the two
+reasons a trade does not happen — nobody was there (a dead market) versus a gate said no (the game
+working). `SCALE_SWEEP=8,16,32,64` runs the town at each population and prints the curve.
+
+**The answer, measured: liquidity does not gate the launch.**
+
+| market | 8p | 16p | 32p | 64p |
+|---|---|---|---|---|
+| goods lots | 50% | 38% | 38% | 34% |
+| loan offers | 79% | 88% | 82% | 84% |
+| bodyguards | 88% | 100% | 100% | 100% |
+| duel listings | 100% | 100% | 100% | 100% |
+| buy orders | 50% | 38% | 38% | 34% |
+| contracts | 88% | 100% | 95% | 95% |
+
+Flat from 8 players to 64. The reason is the NPC residents: they post consent limits, loan offers and
+buy orders regardless of how many humans are online, so the boards have a floor under them. That is a
+direct validation of the population system — it was built so an empty alpha would still feel
+inhabited, and this is the measurement that it does. The mild DECLINE in goods lots and buy orders is
+contention, not emptiness: supply is one listing per trader per round while shoppers scale with N, so
+the first shopper takes the lot. **There is no minimum invite wave to clear.**
 
 Honest scope: car auctions and speakeasies are censused but not driven, and are labelled as such.
 

@@ -472,13 +472,8 @@ assert.deepEqual(unresolvable, [], `${unresolvable.length} route(s) the client p
 //   · JS builtins excluded — `.map`/`.length` are not response fields.
 // Anything still unattributable is COUNTED and asserted to be zero, never quietly dropped.
 //
-// SCOPE, stated plainly so a green run is not read as more than it is: this covers the TOP-LEVEL
-// fields of each response. It does NOT yet cover the fields of LIST ELEMENTS — `b.paper.map((p) =>
-// p.owed)` — because those reads live inside a lambda whose parameter the shadow blanking removes
-// by design, and because 12 of the 16 list boards come back EMPTY for a single-character fixture,
-// so there is no element to compare against. Covering them means a much richer fixture (a listing,
-// a loan, a fighter, a racer, a contract...) so every list has a row in it. That is the next step,
-// and it is where most board rendering lives — do not read "275 fields checked" as "every read".
+// This covers the TOP-LEVEL fields of each response; check 4b below covers the fields of LIST
+// ELEMENTS, which is where most board rendering actually lives.
 const BUILTIN = new Set(['map','length','sort','filter','slice','join','find','some','every','forEach','reduce',
   'includes','indexOf','toFixed','toLowerCase','toUpperCase','split','trim','concat','push','pop','shift','flat',
   'flatMap','keys','values','entries','hasOwnProperty','toString','then','catch','finally','padStart','padEnd',
@@ -547,6 +542,66 @@ const blankShadows = (src, v) => {            // blank every region where `v` is
   }
   return { src: out, unresolved };
 };
+// ── 4b. the fields of LIST ELEMENTS ──────────────────────────────────────────────────────────────
+// Where most board rendering actually lives: `b.paper.map((p) => p.owed)`. The pass above cannot see
+// these BY DESIGN — its shadow blanking deletes exactly these regions so a lambda parameter is not
+// mistaken for the response binding. So this is the mirror of that: find the same regions and read
+// what the element is asked for.
+//
+// Two iterable shapes, both real in this client:
+//   · `b.listings.map((l) => …)` / `(b.listings || []).map(…)` / `for (const l of b.listings)`
+//   · the binding IS the array — `const rows = (…).body.contracts; rows.map((c) => …)`
+// Anything whose lambda body cannot be delimited is COUNTED and asserted zero, same rule as above.
+const listReads = new Map(), listWhere = new Map();
+let listUnresolved = 0;
+const bodyAfter = (src, from) => {             // extent of a lambda body starting at `from`
+  let k = from;
+  while (k < src.length && /\s/.test(src[k])) k++;
+  if (src[k] === '{' || src[k] === '(') {
+    const open = src[k], close = open === '{' ? '}' : ')';
+    let d = 0;
+    for (let j = k; j < src.length; j++) { if (src[j] === open) d++; else if (src[j] === close && --d === 0) return [k, j + 1]; }
+    return null;
+  }
+  let d = 0;
+  for (let j = k; j < src.length; j++) {
+    const c = src[j];
+    if ('([{'.includes(c)) d++;
+    else if (')]}'.includes(c)) { if (d === 0) return [k, j]; d--; }
+    else if ((c === ',' || c === ';') && d === 0) return [k, j];
+  }
+  return [k, src.length];
+};
+const collectList = (src, v, key, fn) => {
+  // `<v>.<field>` (optionally `|| []`) piped into an iterator, or the binding itself
+  const V = v.replace('$', '\\$');
+  const ITER = new RegExp(
+    `(?<![\\w$.])${V}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)(?:\\s*\\|\\|\\s*\\[\\]\\s*\\))?\\s*\\.\\s*`
+    + '(?:map|forEach|flatMap|filter|find|some|every|sort|reduce)\\s*\\(\\s*\\(?\\s*([a-zA-Z_$][\\w$]*)\\s*\\)?\\s*=>', 'g');
+  const SELF = new RegExp(
+    `(?<![\\w$.])${V}\\s*\\.\\s*(?:map|forEach|flatMap|filter|find|some|every|sort)\\s*\\(\\s*\\(?\\s*([a-zA-Z_$][\\w$]*)\\s*\\)?\\s*=>`, 'g');
+  const FOROF = new RegExp(`for\\s*\\(\\s*(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s+of\\s+\\(?\\s*${V}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g');
+  const add = (listField, param, at) => {
+    const ext = bodyAfter(src, at);
+    if (!ext) { listUnresolved++; return; }
+    const k = `${key}|${listField}`;
+    for (const r of src.slice(ext[0], ext[1])
+      .matchAll(new RegExp(`(?<![\\w$.])${param.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
+      if (BUILTIN.has(r[1])) continue;
+      if (!listReads.has(k)) { listReads.set(k, new Set()); listWhere.set(k, fn); }
+      listReads.get(k).add(r[1]);
+    }
+  };
+  let m;
+  while ((m = ITER.exec(src))) add(m[1], m[2], m.index + m[0].length);
+  while ((m = SELF.exec(src))) add('', m[1], m.index + m[0].length);
+  while ((m = FOROF.exec(src))) {
+    const close = src.indexOf(')', FOROF.lastIndex);
+    if (close < 0) { listUnresolved++; continue; }
+    add(m[2], m[1], close + 1);
+  }
+};
+
 const GETBIND = /(?:const|let|var)?\s*([a-zA-Z_$][\w$]*)\s*=\s*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\2\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
 const reads = new Map(), readWhere = new Map();
 let unscoped = 0, shadowUnresolved = 0;
@@ -570,6 +625,8 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     const re2 = new RegExp(`(?:const|let|var)\\s+${v.replace('$', '\\$')}\\s*=`, 'g'); re2.lastIndex = 1;
     const nxt = re2.exec(src);
     const key = `${path}|${b[5] || ''}`;
+    // the list pass reads the UNBLANKED region — the lambdas blanking removes are exactly its subject
+    collectList(body.slice(b.index, scope[1]), v, key, m[1]);
     for (const r of (nxt ? src.slice(0, nxt.index) : src)
       .matchAll(new RegExp(`(?<![\\w$.])${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
       if (BUILTIN.has(r[1])) continue;
@@ -581,6 +638,7 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
 assert.equal(unscoped, 0, `${unscoped} response binding(s) could not be scoped to a block, so their reads go unchecked`);
 assert.equal(shadowUnresolved, 0, `${shadowUnresolved} shadow region(s) could not be resolved, so reads may be misattributed`);
 assert(reads.size > 40, `only ${reads.size} (route, binding) pairs found — the read extraction broke`);
+
 
 const inject = async (method, url, token, payload) => {
   const res = await app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload });
@@ -603,6 +661,188 @@ const PARAM_FIXTURES = new Map([
   ['/v1/feud/:p', async () => charId],
   ['/v1/casino/ring/:p', async () => (await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 })).body?.tableId],
 ]);
+// Check 4b needs every list to HAVE a row, or its fields are never compared. This is the price of
+// that check being honest — each entry exists because a list came back empty and the run said so.
+// Check 4b needs every list to HAVE a row or its element fields are never compared, and an empty
+// list must never read as a pass. So this makes one of everything. It is long because the game is
+// large; each line exists because a specific list came back empty and the run said which.
+//
+// Two kinds of seeding, both legitimate here:
+//   · API calls, which is most of it — found a family, buy a front, recruit a fighter.
+//   · direct SQL for the account-level LEGEND columns the leaderboards rank by. Those are status
+//     counters, not currency, and 4b asserts no ledger identity, so this cannot mask an economy
+//     defect the way seeding in the sim would.
+const seedNotes = [];
+// mod routes take the key header, not a bearer token
+const modInject = async (method, url, payload) => {
+  const res = await app.inject({ method, url, headers: { 'x-mod-key': process.env.MOD_KEY }, payload });
+  let out; try { out = { code: res.statusCode, body: res.json() }; } catch { out = { code: res.statusCode, body: null }; }
+  // a mod seed that 4xx's must name itself too — a silent one cost a debugging round
+  if (out.code >= 400) seedNotes.push(`${seedTag}: ${method} ${url} → ${out.code} ${out.body?.error || ''}`);
+  return out;
+};
+const trySeed = async (what, fn) => { seedTag = what; try { await fn(); } catch (e) { seedNotes.push(`${what}: threw ${e.message}`); } };
+// A seed step that 4xx's does not throw — it just quietly seeds nothing, and the list stays empty
+// with no clue why. Every seed call goes through this so a refused step names itself.
+let seedTag = '';
+const si = async (method, url, token, payload) => {
+  const r = await inject(method, url, token, payload);
+  if (r.code >= 400) seedNotes.push(`${seedTag}: ${method} ${url} → ${r.code} ${r.body?.error || ''}`);
+  return r;
+};
+async function seedLists() {
+  const q = (sql, args) => app.pool.query(sql, args);
+  const acct = (await q('SELECT account_id FROM characters WHERE id=$1', [charId])).rows[0].account_id;
+
+  // a second street, so two-party boards (offers made TO you, contracts on someone else) have rows
+  const t2 = (await si('POST', '/v1/auth/guest')).body.token;
+  await si('POST', '/v1/character', t2, { name: 'Mirror Two ' + Math.random().toString(36).slice(2, 6) });
+  const two = (await si('GET', '/v1/me', t2)).body.character.id;
+  const acct2 = (await q('SELECT account_id FROM characters WHERE id=$1', [two])).rows[0].account_id;
+  await q('UPDATE characters SET cash=50000000, respect=500000, loc=$2 WHERE id=$1', [two, 'neon']);
+
+  // the LEGEND columns every "biggest ever" board ranks by — status counters, never currency
+  await q(`UPDATE account_persistent SET product_moved=5000000, tycoon_earned=4000000, monument_built=900000,
+             freight_delivered=800000, freight_hijacked=700000, prestige_sunk=600, season_sunk=300,
+             honor_peak=70, honor_low=-70, statecraft=40, racer_wins=3, boxing_wins=3, smuggled=900000,
+             heists_pulled=4, caskets=3, duel_wins=3, intel_ops=12, cartel_damage=500000, soldiers_led=4
+           WHERE account_id IN ($1,$2)`, [acct, acct2]);
+  await q(`UPDATE characters SET honor=70 WHERE id=$1`, [charId]);
+
+  // ── the family, and everything that hangs off holding turf ──
+  const gid = await paramId('/v1/gangs/:p');
+  await trySeed('territory', async () => {
+    await q("UPDATE districts SET holder_gang=$1, npc_holder=NULL WHERE id='neon'", [gid]);
+    await q('UPDATE gangs SET treasury=90000000, omr_reserve=5000 WHERE id=$1', [gid]);
+    await si('POST', '/v1/territory/neon/establish', token, { kind: 'numbers' });
+    await si('POST', '/v1/sov/neon/build', token, { windowHour: new Date().getUTCHours() });
+  });
+  await trySeed('commission', async () => {
+    await q('UPDATE gangs SET lifetime_tribute=9000000, season_tribute=9000000, wars_won=5, season_wars=5 WHERE id=$1', [gid]);
+    await si('POST', '/v1/commission/propose', token, { decree: 'open_season' });
+    await si('POST', '/v1/commission/vote', token, { decree: 'open_season' });
+  });
+  await trySeed('diplomacy', async () => {
+    const g2 = (await si('POST', '/v1/gangs', t2,
+      { name: 'Mirror Rival ' + Math.random().toString(36).slice(2, 6), tag: 'RV' + Math.floor(Math.random() * 90 + 10) })).body?.gangId;
+    await q('UPDATE gangs SET treasury=9000000, lifetime_tribute=100000, season_tribute=100000 WHERE id=$1', [g2]);
+    await q('UPDATE gangs SET lifetime_tribute=90000000, season_tribute=90000000 WHERE id=$1', [gid]);
+    await si('POST', `/v1/diplomacy/pact/${g2}`, token, {});
+    await si('POST', `/v1/diplomacy/coalition/${gid}`, t2, {});
+  });
+
+  // ── the personal empire, the vices, the crews ──
+  await trySeed('business', () => si('POST', '/v1/business/laundromat/buy', token, {}));
+  await trySeed('speakeasy', () => si('POST', '/v1/speakeasy/neon/open', token, {}));
+  await trySeed('soldiers', async () => {
+    await si('POST', '/v1/soldiers/hire', token, {});
+    await si('POST', '/v1/soldiers/hire', token, {});
+    // the memorial keeps only the DEAD, and permadeath needs a failed job — pin one directly
+    const dead = (await q('SELECT id FROM soldiers WHERE character_id=$1 ORDER BY id LIMIT 1', [charId])).rows[0];
+    if (dead) await q("UPDATE soldiers SET alive=false, cause='a job that went wrong' WHERE id=$1", [dead.id]);
+  });
+  await trySeed('boxing', async () => {
+    await si('POST', '/v1/boxing/recruit', token, { name: 'Mirror Kid' });
+    const f2 = (await si('POST', '/v1/boxing/recruit', t2, { name: 'Rival Kid' })).body?.id
+      ?? (await si('GET', '/v1/boxing', t2)).body?.stable?.[0]?.id;
+    await si('POST', '/v1/boxing/list', t2, { fighter: f2, stake: 50000 });
+    const f1 = (await si('GET', '/v1/boxing', token)).body?.stable?.[0]?.id;
+    await si('POST', `/v1/boxing/announce/${two}`, token, { myFighter: f1, theirFighter: f2 });
+  });
+  await trySeed('stable', async () => {
+    await si('POST', '/v1/stable/buy', t2, { kind: 'dog', name: 'Mirror Runner' });
+    const r2 = (await si('POST', '/v1/stable/buy', t2, { kind: 'dog', name: 'Second Runner' })).body?.id;
+    await si('POST', `/v1/stable/list/${r2}`, t2, { limit: 50000 });
+  });
+  await trySeed('port', async () => {
+    await q("UPDATE characters SET loc='docks' WHERE id=$1", [two]);
+    await si('POST', '/v1/port/boat/skiff', t2, {});
+    const b = (await si('GET', '/v1/port', t2)).body?.fleet?.[0]?.id;
+    await si('POST', `/v1/port/run/${b}`, t2, { route: 'coastal' });
+  });
+  await trySeed('heists', () => si('POST', '/v1/heists/plan', token, { job: 'payroll', role: 'muscle' }));
+  await trySeed('convoy', async () => {
+    await q("UPDATE characters SET loc='docks' WHERE id=$1", [charId]);
+    await si('POST', '/v1/goods/buy', token, { goodId: 'gin', qty: 8 });
+    await si('POST', '/v1/convoy', token, { to: 'neon', goodId: 'gin', qty: 8 });
+    await si('POST', '/v1/convoy/depart', token, { guards: 'none' });
+    await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
+  });
+  await trySeed('pen break', async () => {
+    await q("UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id=$1", [two]);
+    await si('POST', '/v1/pen/buy/cutkit', t2, {});
+    await si('POST', '/v1/pen/break/plan', t2, {});
+    await q('UPDATE characters SET jail_until=NULL WHERE id=$1', [two]);
+  });
+
+  // ── the boards that need another player to have acted ──
+  await trySeed('contracts', () => si('POST', `/v1/streets/${two}/bounty`, token, { amount: 5000, kind: 'hospitalize' }));
+  await trySeed('loans', async () => {
+    await si('POST', '/v1/loans', t2, { amount: 20000, rate: 0.25, hours: 24 });   // an offer from someone else
+    await si('POST', '/v1/loans', token, { amount: 30000, rate: 0.2, hours: 24 }); // one of ours to sell as paper
+    const mine = (await si('GET', '/v1/loans', token)).body?.offers?.find((o) => o.mine);
+    if (mine) { await si('POST', `/v1/loans/${mine.id}/take`, t2); await si('POST', `/v1/loans/${mine.id}/sell`, token, { price: 25000 }); }
+  });
+  await trySeed('secrets', async () => {
+    await q('UPDATE account_persistent SET omr=500 WHERE account_id IN ($1,$2)', [acct, acct2]);
+    await q('UPDATE characters SET bank=900000, season_kills=3 WHERE id=$1', [two]);
+    await si('POST', `/v1/wire/dig/${two}`, token, {});
+    const s = (await si('GET', '/v1/secrets', token)).body?.held?.[0];
+    if (s) await si('POST', `/v1/secrets/${s.id}/extort`, token, { demand: 5000 });
+    await q('UPDATE characters SET bank=900000, season_kills=3 WHERE id=$1', [charId]);
+    await si('POST', `/v1/wire/dig/${charId}`, t2, {});
+    const s2 = (await si('GET', '/v1/secrets', t2)).body?.held?.[0];
+    if (s2) await si('POST', `/v1/secrets/${s2.id}/extort`, t2, { demand: 5000 });   // one ON us
+  });
+  await trySeed('dynasty', async () => {
+    await si('POST', `/v1/dynasty/propose/${two}`, token, {});      // a proposal we made
+    await si('POST', `/v1/dynasty/consigliere/${two}`, token, {});
+    await si('POST', `/v1/dynasty/consigliere/${charId}`, t2, {});  // one where we are the adviser
+    await si('POST', `/v1/dynasty/consigliere/accept/${acct2}`, token, {});
+    const t3 = (await si('POST', '/v1/auth/guest')).body.token;
+    await si('POST', '/v1/character', t3, { name: 'Mirror Three ' + Math.random().toString(36).slice(2, 6) });
+    const three = (await si('GET', '/v1/me', t3)).body.character.id;
+    await q('UPDATE characters SET cash=9000000, respect=200000 WHERE id=$1', [three]);
+    await si('POST', `/v1/dynasty/consigliere/${charId}`, t3, {});   // an offer left STANDING, unaccepted
+  });
+
+  // ── going legit: the vault, the bonds, the block ──
+  await trySeed('vault', async () => {
+    await q("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('seed', 'mirror-rev', 5)");
+    await modInject('POST', '/v1/mod/rwa/buy', { ticker: 'GLD', eth: 1, priceEth: 0.001 });
+    await q('UPDATE account_persistent SET minted=true, omr=5000 WHERE account_id=$1', [acct]);
+    await si('POST', '/v1/vault/claim', token, { ticker: 'GLD', omr: 100 });
+  });
+  await trySeed('bonds', async () => {
+    await modInject('POST', '/v1/mod/bond/fund', { omr: 100000 });
+    await modInject('POST', '/v1/mod/bond/simulate', { account: acct, principalEth: 1, price: 1000, nonce: 1 });
+  });
+  await trySeed('auction', async () => {
+    await q('UPDATE account_persistent SET omr=200000 WHERE account_id=$1', [acct]);
+    const lots = (await si('GET', '/v1/auction', token)).body?.lots || [];
+    if (lots[0]) await si('POST', `/v1/auction/${lots[0].id}/bid`, token, { amount: lots[0].minNext });
+    // a WON trophy, so `wins` has a row, then consigned so `consignments` does too
+    await q(`INSERT INTO auction_wins (account_id, lot_id, archetype, name, serial, price, won_at)
+             VALUES ($1,'mirror:w','crown','A Mirror Crown','W0-M',500,now())`, [acct]);
+    await si('POST', '/v1/auction/consign', token, { lotId: 'mirror:w', reserve: 100 });
+  });
+  await trySeed('estate', async () => {
+    await q('UPDATE account_persistent SET omr=200000 WHERE account_id=$1', [acct]);
+    await si('POST', '/v1/estate/upgrade', token, {});   // the board joins `estates`, so one must exist
+  });
+  await trySeed('megaproject', () => si('POST', '/v1/megaproject/cash', token, { amount: 25000000 }));
+  await trySeed('kitchen', () => q('UPDATE characters SET trade_rep=5000 WHERE id=$1', [charId]));
+}
+
+// Fixtures are memoized because several are SINGLE-USE — a player may only have one ring table open,
+// so calling the fixture a second time (check 4b re-resolving the same path) returns undefined and
+// the run fails on a URL with `undefined` in it rather than on anything about the client.
+const paramCache = new Map();
+const paramId = async (rawPath) => {
+  if (!paramCache.has(rawPath)) paramCache.set(rawPath, await PARAM_FIXTURES.get(rawPath)());
+  return paramCache.get(rawPath);
+};
+
 const unlistedParam = [...reads.keys()].filter((k) => k.split('|')[0].includes(':p') && !PARAM_FIXTURES.has(k.split('|')[0]));
 assert.deepEqual(unlistedParam, [], `${unlistedParam.length} route(s) the client reads from carry an id ` +
   `with no way to obtain one listed in PARAM_FIXTURES, so their fields go unchecked — add a fixture`);
@@ -612,7 +852,7 @@ for (const [key, fields] of reads) {
   const [rawPath, sub] = key.split('|');
   let path = rawPath;
   if (rawPath.includes(':p')) {
-    const id = await PARAM_FIXTURES.get(rawPath)();
+    const id = await paramId(rawPath);
     assert(id, `the PARAM_FIXTURES entry for ${rawPath} produced no id — the fixture broke, not the client`);
     path = rawPath.replace(':p', id);
   }
@@ -631,6 +871,40 @@ assert.deepEqual(unobservable, [], `${unobservable.length} binding(s) resolved t
   `so their fields could not be observed — enrich the fixture above rather than leaving them unchecked`);
 const readCount = [...reads.values()].reduce((n, s) => n + s.size, 0);
 
+// ── 4b verification: fetch each list and compare an ELEMENT ──────────────────────────────────────
+// This is where a green run stops being cheap: a list that comes back EMPTY has no element to check,
+// so the fixture below has to make one exist. An empty list is NOT a pass — it is recorded and the
+// run fails, because "we looked and there was nothing there" reading as "verified" is the exact
+// dishonesty this file exists to prevent.
+assert.equal(listUnresolved, 0, `${listUnresolved} iterator body/bodies could not be delimited, so element reads go unchecked`);
+assert(listReads.size > 15, `only ${listReads.size} list bindings found — the element extraction broke`);
+await seedLists();
+const listMissing = [], listEmpty = [];
+for (const [key, fields] of listReads) {
+  const [rawPath, sub, listField] = key.split('|');
+  let path = rawPath;
+  if (rawPath.includes(':p')) path = rawPath.replace(':p', await paramId(rawPath));
+  const r = await inject('GET', path, token);
+  assert(r.code < 400 && r.body, `${path} answered ${r.code} — 4b cannot read a board it cannot fetch`);
+  let arr = sub ? r.body[sub] : r.body;
+  if (listField) arr = arr?.[listField];
+  if (!Array.isArray(arr) || !arr.length || typeof arr[0] !== 'object' || arr[0] === null) {
+    listEmpty.push(`${key} (${listWhere.get(key)}) — reads ${[...fields].slice(0, 5).join(',')}`); continue;
+  }
+  // a list is heterogeneous often enough (market listings are car|good|order) that one element is
+  // not the population — a field present on ANY element is a field the route really returns
+  const have = new Set(arr.flatMap((e) => (e && typeof e === 'object' ? Object.keys(e) : [])));
+  const gone = [...fields].filter((f) => !have.has(f));
+  if (gone.length) listMissing.push(`${listWhere.get(key)} reads ${gone.join(',')} off each element of ${key} — the elements carry ${[...have].slice(0, 8).join(',')}…`);
+}
+assert.deepEqual(listMissing, [], `the client reads ${listMissing.length} field(s) off list elements that the ` +
+  `route's elements do not carry — every row renders that as undefined`);
+if (seedNotes.length) console.log('seed notes:\n  ' + seedNotes.join('\n  '));
+assert.deepEqual(listEmpty, [], `${listEmpty.length} list(s) came back EMPTY, so their element fields were ` +
+  `never actually compared. An empty list is not a pass — extend seedLists() so each has a row:\n  ` +
+  `${listEmpty.join('\n  ')}`);
+const listCount = [...listReads.values()].reduce((n, s) => n + s.size, 0);
+
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
@@ -641,10 +915,12 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `route actually reads — including the ones that hand the whole body to a module, followed a file ` +
   `deeper to the parameter it lands in — through a barrel re-export if it takes one. And the mirror: ` +
   `the ${readCount} TOP-LEVEL fields the screens read off ${reads.size} boards are fields those ` +
-  `boards really return, observed by fetching each one (list ELEMENT fields are not covered yet — ` +
-  `see the scope note above). ` +
-  `Those are the four ways a button dies silently — this has found four dead routes and seven ` +
-  `ignored fields, among them a broken action, an ammo box sold by a control that asked for a ` +
+  `boards really return, observed by fetching each one — plus the ${listCount} fields they read off ` +
+  `the ELEMENTS of ${listReads.size} lists, which is where most board rendering lives and which needed ` +
+  `a fixture that makes one of everything, because an empty list must never read as a pass. ` +
+  `Those are the four ways a button dies silently — this has found four dead routes, seven ` +
+  `ignored fields and two element fields the board never sent (a LEGENDARY chip that had never ` +
+  `once rendered), among them a broken action, an ammo box sold by a control that asked for a ` +
   `quantity it could not honour, and an unstake box that emptied the whole stake whatever you typed. ` +
   `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +

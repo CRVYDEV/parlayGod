@@ -23,7 +23,10 @@ export async function auctionBoard(ch, client, h) {
     const r = byLot[l.id];
     const bid = r ? Number(r.current_bid) : 0;
     const minNext = bid > 0 ? Math.ceil(bid * (1 + AUCTION.MIN_RAISE_BPS / 10000)) : l.min;
-    return { id: l.id, name: l.name, serial: l.serial, blurb: l.blurb, minBid: l.min,
+    // `rarity` carries the marquee lot's LEGENDARY billing. It was set on the lot by auctionLotsOf
+    // and then dropped here, so the client's LEGENDARY chip had never once rendered — found by
+    // test/client.js check 4b (the first thing it looked at that no other check could see).
+    return { id: l.id, name: l.name, serial: l.serial, blurb: l.blurb, minBid: l.min, rarity: l.rarity || null,
       currentBid: bid, minNext, youLead: !!(r && r.bidder === ch.account_id), status: r?.status || 'open' };
   });
   const winRows = (await client.query('SELECT lot_id, archetype, name, serial, price, listed, won_at FROM auction_wins WHERE account_id=$1 ORDER BY won_at DESC', [ch.account_id])).rows;
