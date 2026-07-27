@@ -17,7 +17,7 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 | Client | **4,727** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **839** lines Solidity, 6 contracts, 73 Foundry tests passing |
-| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size) |
+| Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale) |
 | Design + audit docs | **127** markdown files, **26522** lines — indexed in `docs/AUDITS.md`, which states they are point-in-time |
 | Ledger invariants | 18 named escrow/identity checks + per-currency conservation, **drift-0** |
 
@@ -483,6 +483,49 @@ its idempotency result leaves that key reserved. A retry gets `409 in_progress` 
 rather than being released, because releasing could run the action twice. That is fail-closed and
 deliberate; `AGENTS.md` now tells agents what a persistent `409` means and to read their state rather
 than spin.
+
+### D12 — Nothing had ever checked the economy has a COUNTERPARTY **(MEDIUM → ADDRESSED)**
+Every economic proof here is about one player or about conservation. `sim.js` measures faucet sizes and
+proves §10.4 holds; `playthrough.js` measures what one person experiences. Neither can see the failure
+mode the whole Risk-to-Earn thesis rests on: **a market with perfect accounting and nobody on the other
+side.** A dead market conserves value beautifully.
+
+The shape of the risk was already measured from the other end — a plausible player reaches level 128 and
+$51M in thirty days having never once interacted with another human.
+
+`tools/scale.js` (`npm run scale`, the seventh harness) drives a town — 36 players across six
+archetypes, five warped days, plus the NPC residents — through every player-to-player market, then
+takes a census: how many have a live counterparty, and of what got posted, what got taken.
+
+It asserts three things and reports the rest:
+1. **§10.4 drift DELTA is zero.** The harness seeds starting cash so players can reach the markets at
+   all, so the baseline is non-zero by construction; what must not move is the delta.
+2. **Every driven market is reachable.** A market that took zero posts across the whole run, with 36
+   funded and levelled players trying, is a gate bug rather than a quiet town.
+3. **The census reconciles with the flow.** If more went into a market than came out of it, something
+   must still be standing — and if the count says zero, the count is reading the wrong table.
+
+That third check exists because it caught its own author. A first cut queried the loans table for
+`status='offered'`; the word is `'open'`. It counted zero every run and was one commit away from
+publishing "the Shylock ended EMPTY" as a finding about the *game* rather than about a typo in a SQL
+string. **A census that reads a column wrong reports confident nonsense, and nothing else here would
+notice.** Mutation-verified — and the first mutation attempt PASSED, because at 12 players every loan
+offer gets taken, `posted == taken`, and the check is vacuous. CI runs 18×2, the smallest size where it
+bites. The same discipline runs through the harness: any branch that cannot even attempt is counted and
+printed (`SKIPPED`), never silently nothing, which is how three dead branches were found — a `goods[0]`
+read against an id-keyed map, a district read as a commodity, and a `unitPrice` field the market
+handler does not read (it takes `price`; the neighbouring `/v1/exchange/list` is the one taking
+`unitPrice`).
+
+**What it found, at 36 players over 5 days:** every market reachable, §10.4 exact, and liquidity that is
+real but thin — 100% of goods lots taken, 20% of loan offers, 20% of bodyguard offers, 19% of duel
+listings, 12% of contracts. Wealth stayed flat (top 10% hold 12%). The take rates are a **finding for
+balance, not a failure** — a market can be perfectly reachable and still unattractive — so the harness
+prints them and asserts nothing about them. Empty-at-the-end is reported with its take rate attached,
+because a market that CLEARED (everything posted got taken) and a market nobody wanted both read as
+"empty" and mean opposite things.
+
+Honest scope: car auctions and speakeasies are censused but not driven, and are labelled as such.
 
 ---
 

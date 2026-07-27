@@ -5628,3 +5628,36 @@ it read as a state-machine bug. Fixed by running the suite on a generous clock a
 file): same `act_deadline < now()` predicate the sweep really uses, deterministic, no wall clock in
 the loop. Mutation-verified that the clock is still genuinely exercised, because a flake silenced by
 making its test vacuous is worse than the flake. 111 consecutive runs green, from ~7% failing.
+
+**IS ANYONE ON THE OTHER SIDE? — `tools/scale.js` (`npm run scale`, the 7th harness), and the census
+that nearly lied.** Every economic proof in the repo is about ONE player or about CONSERVATION —
+`sim.js` sizes each faucet and proves §10.4, `playthrough.js` measures what a person experiences.
+Neither can see the failure the whole Risk-to-Earn thesis rests on: **a market with perfect accounting
+and no counterparty.** A dead market conserves value beautifully. The progression harness had already
+measured the shape of it from the other end — a plausible player reaches level 128 and $51M in thirty
+days having never once met another human. So this drives a TOWN (36 players over six archetypes —
+grinder/trader/lender/killer/gambler/idler, the idler load-bearing because a town where everyone plays
+optimally is not a town — five warped days, NPC residents acting alongside) through every
+player-to-player market and takes a census: how many have a live counterparty, and of what got POSTED,
+what got TAKEN. It asserts three things and REPORTS the rest, because liquidity is a finding for
+balance, not a pass/fail: **(1)** §10.4 drift DELTA is zero (the loadtest discipline — the harness
+seeds starting cash so players can reach the markets at all, so the baseline is non-zero by
+construction and what must not move is the delta); **(2)** every driven market is REACHABLE — one that
+took zero posts with 36 funded, levelled players trying is a gate bug, not a quiet town; **(3)** the
+CENSUS reconciles with the FLOW. That third check exists because it caught its own author: a first cut
+queried the loans table for `status='offered'` when the word is `'open'`, counted zero every run, and
+was one commit from publishing "the Shylock ended EMPTY" as a finding about the GAME rather than about
+a typo in a SQL string. The rule that catches it is simple — if more went in than came out, something
+must still be standing. Mutation-verified, and **the first mutation attempt PASSED**: at 12 players
+every loan offer gets taken, `posted == taken`, and the check is vacuous — a bad mutation reads exactly
+like a clean bill of health (the same trap `tools/mobile.js` sprang). CI runs 18×2, the smallest size
+where it bites. The same "counted, never silently nothing" discipline found three dead branches before
+they could report zeroes as findings: a `goods[0]` read against an id-keyed map, a district read as a
+commodity (`prices.goods` is keyed by DISTRICT then good), and a `unitPrice` body field the market
+handler does not read — it takes `price`; the neighbouring `/v1/exchange/list` is the one taking
+`unitPrice`, which is precisely the class `test/client.js` check 3 exists for. **Measured at 36 players
+/ 5 days:** every market reachable, §10.4 exact across 23 checks, liquidity real but thin — goods lots
+100% taken (CLEARED, not dead — the output now says which, since a market that sold out and a market
+nobody wanted both read as "empty"), loan offers 20%, bodyguards 20%, duels 19%, contracts 12%, and
+wealth flat (top 10% hold 12%). Honest scope, stated in the output: car auctions and speakeasies are
+censused but NOT driven, and are labelled so an undriven zero never reads as a finding.

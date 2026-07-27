@@ -202,7 +202,8 @@ assert.deepEqual([...new Set(phantom)], [], `docs/AUDITS.md lists reports that d
 // for each one by name.
 {
   const ci = read('.github/workflows/ci.yml');
-  for (const script of ['npm test', 'npm run sim', 'npm run pgcheck', 'npm run chaos', 'npm run loadtest'])
+  for (const script of ['npm test', 'npm run sim', 'npm run pgcheck', 'npm run chaos', 'npm run loadtest',
+    'npm run scale'])
     assert(ci.includes(script), `.github/workflows/ci.yml no longer runs \`${script}\` — a harness that `
       + 'does not run is not a guard, it is a file. Re-add it or delete the harness honestly.');
 }
