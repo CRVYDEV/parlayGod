@@ -140,7 +140,10 @@ export async function secretsBoard(ch, client) {
       WHERE s.target_account=$1 AND s.extort_deadline IS NOT NULL AND s.expires_at > now()`, [ch.account_id])).rows;
   const secondsTo = (t) => Math.max(0, Math.floor((new Date(t) - Date.now()) / 1000));
   return {
-    digOmr: SECRETS.DIG_OMR, maxHeld: SECRETS.MAX_HELD,
+    // windowHours is what the extortion card quotes as the deadline. /v1/rules also publishes it,
+    // but the Wire tab reads it off THIS board — and got undefined, so it rendered a hardcoded 24
+    // and would have gone on saying "24h" whatever EXTORT_WINDOW_MS was retuned to.
+    digOmr: SECRETS.DIG_OMR, maxHeld: SECRETS.MAX_HELD, windowHours: SECRETS.EXTORT_WINDOW_MS / 3600e3,
     kinds: Object.fromEntries(Object.entries(SECRETS.KINDS).map(([id, k]) => [id, { name: k.name, hushCap: k.hushCap, exposeHeat: k.exposeHeat }])),
     held: held.map((s) => ({
       id: s.id, on: s.target_name, kind: s.kind, kindName: secretKindOf(s.kind)?.name || s.kind,
