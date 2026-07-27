@@ -30,7 +30,8 @@
 //      bug, not a quiet town, and it fails.
 //
 // Runs on pg-mem by default (portable, like sim.js); set DATABASE_URL to drive real Postgres.
-// Knobs: SCALE_PLAYERS (36), SCALE_DAYS (5).
+// Knobs: SCALE_PLAYERS (36), SCALE_DAYS (5), SCALE_SWEEP (a comma list of populations — runs each and
+// prints the DENSITY CURVE, which is what answers "how many people does this game need to feel alive").
 process.env.MOD_KEY = process.env.MOD_KEY || 'scale-mod-key';
 process.env.MARKET_SEED = process.env.MARKET_SEED || 'scale-harness-seed-000000000000';
 process.env.SOCIAL_VERIFY_MODE = 'off';
@@ -41,6 +42,15 @@ import { runPopulation, runResidentBehaviour } from '../src/population.js';
 
 const PLAYERS = Number(process.env.SCALE_PLAYERS || 36);
 const DAYS = Number(process.env.SCALE_DAYS || 5);
+const SWEEP = (process.env.SCALE_SWEEP || '').split(',').map((n) => Number(n.trim())).filter(Boolean);
+
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+const pct = (num, den) => (den ? Math.round((num / den) * 100) : null);
+
+// One whole run of the town, start to finish, on its own database. Returns the numbers rather than
+// printing them, so the sweep can run it at several populations and compare.
+async function runTown({ players: PLAYERS, days: DAYS, verbose = true }) {
 const app = await buildServer();
 const pool = app.pool;
 
@@ -49,8 +59,6 @@ const call = async (method, url, token, body) => {
   let json = null; try { json = res.json(); } catch { /* empty body */ }
   return { code: res.statusCode, body: json || {} };
 };
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 
 // ── the population ──────────────────────────────────────────────────────────────────────────────
 // Archetypes, not optimal play. A real town is a mix, and a market's liquidity depends on whether the
@@ -89,6 +97,23 @@ const errors = new Map();
 const skipped = new Map();   // a branch that could not even ATTEMPT — counted, never silently nothing
 const note = (r) => { if (r.code !== 200 && r.body?.error) errors.set(r.body.error, (errors.get(r.body.error) || 0) + 1); return r; };
 const skip = (why) => skipped.set(why, (skipped.get(why) || 0) + 1);
+
+// ── AVAILABILITY: the measurement that actually answers the question ────────────────────────────
+// The first version of this harness reported `taken / posted` as "liquidity" and it was WRONG — not
+// slightly, structurally. `taken` is bounded by PER-PLAYER caps (one debt at a time, one bodyguard,
+// a duel cooldown), so over a run it can never exceed the number of distinct shoppers. With posts
+// scaling as players/6 per round and takes capped at players/2 for the whole run, the ratio collapses
+// to 3/rounds — INDEPENDENT OF POPULATION. It matched the data exactly (6 rounds → 50%, 15 → 20%),
+// which is how a number that says nothing about the game can look like a finding about it.
+//
+// What actually answers "is anyone on the other side" is per-ATTEMPT: when a player went looking,
+// was there an eligible counterparty on the board at all? That is density-sensitive by construction,
+// and it separates the two reasons a trade does not happen — nobody was there (a dead market) versus
+// a gate said no (the game working as designed).
+const shopped = {};   // market -> { looked, found, took, blocked }
+const look = (m) => (shopped[m] ||= { looked: 0, found: 0, took: 0, blocked: 0 });
+const attempt = (m, counterparty) => { const s = look(m); s.looked++; if (counterparty) s.found++; return !!counterparty; };
+const result = (m, ok) => { const s = look(m); if (ok) s.took++; else s.blocked++; };
 
 async function act(p) {
   const other = pick(players.filter((x) => x.id !== p.id));
@@ -153,19 +178,31 @@ async function shop(p) {
   // `seller` on the board is a NAME, not a {id} — a first cut compared `l.seller?.id` and so never
   // filtered anything, and the run reported the resulting self-buys as `own` refusals.
   const lot = (board.listings || []).find((l) => l.kind === 'good' && l.seller !== p.name);
-  if (lot) { const r = note(await call('POST', `/v1/market/${lot.id}/buy`, p.token, { qty: 1 })); if (r.code === 200) taken.listing++; }
+  if (attempt('goods lots', lot)) {
+    const r = note(await call('POST', `/v1/market/${lot.id}/buy`, p.token, { qty: 1 }));
+    result('goods lots', r.code === 200); if (r.code === 200) taken.listing++;
+  }
 
   const loans = (await call('GET', '/v1/loans', p.token)).body;
   const offer = (loans.offers || []).find((l) => l.lender?.id !== p.id);
-  if (offer) { const r = note(await call('POST', `/v1/loans/${offer.id}/take`, p.token)); if (r.code === 200) taken.loan++; }
+  if (attempt('loan offers', offer)) {
+    const r = note(await call('POST', `/v1/loans/${offer.id}/take`, p.token));
+    result('loan offers', r.code === 200); if (r.code === 200) taken.loan++;
+  }
 
   const guards = (await call('GET', '/v1/streets', p.token)).body;
   const guard = (guards.streets || []).find((s) => s.guardPrice && s.id !== p.id);
-  if (guard) { const r = note(await call('POST', `/v1/bodyguard/hire/${guard.id}`, p.token)); if (r.code === 200) taken.guard++; }
+  if (attempt('bodyguards', guard)) {
+    const r = note(await call('POST', `/v1/bodyguard/hire/${guard.id}`, p.token));
+    result('bodyguards', r.code === 200); if (r.code === 200) taken.guard++;
+  }
 
   const duels = (await call('GET', '/v1/duels', p.token)).body;
   const rival = (duels.board || duels.duelists || []).find((d) => d.id !== p.id && d.limit);
-  if (rival) { const r = note(await call('POST', `/v1/duels/${rival.id}`, p.token, { amount: 1000 })); if (r.code === 200) taken.duel++; }
+  if (attempt('duel listings', rival)) {
+    const r = note(await call('POST', `/v1/duels/${rival.id}`, p.token, { amount: 1000 }));
+    result('duel listings', r.code === 200); if (r.code === 200) taken.duel++;
+  }
 
   // A buy order's counterparty is a SELLER standing at the pinned dock with the goods in the trunk.
   // Without this the order row read "0% taken", which says nothing about the game and everything
@@ -176,14 +213,19 @@ async function shop(p) {
   const cargo = (await call('GET', '/v1/me', p.token)).body.character?.cargo || {};
   const order = (board.listings || []).find((l) => l.kind === 'order' && l.seller !== p.name
     && (cargo[l.good] || 0) > 0 && l.district === p.loc);
-  if (order) { const r = note(await call('POST', `/v1/market/${order.id}/fill`, p.token, { qty: 1 })); if (r.code === 200) taken.order++; }
-  else if ((board.listings || []).some((l) => l.kind === 'order')) skip('no goods on hand at the order\'s dock to fill with');
+  if (attempt('buy orders', order)) {
+    const r = note(await call('POST', `/v1/market/${order.id}/fill`, p.token, { qty: 1 }));
+    result('buy orders', r.code === 200); if (r.code === 200) taken.order++;
+  } else if ((board.listings || []).some((l) => l.kind === 'order')) skip('no goods on hand at the order\'s dock to fill with');
 
   // A contract's counterparty is whoever collects it. A hospitalize pot pays on a jump, so the
   // shopper goes looking for a mark with money on their head — the actual liquidity question.
   const pots = (await call('GET', '/v1/contracts', p.token)).body.contracts || [];
   const mark = pots.find((c) => c.kind === 'hospitalize' && c.target?.id !== p.id);
-  if (mark) { const r = note(await call('POST', `/v1/streets/${mark.target.id}/jump`, p.token)); if (r.code === 200 && r.body?.bounty) taken.contract++; }
+  if (attempt('contracts', mark)) {
+    const r = note(await call('POST', `/v1/streets/${mark.target.id}/jump`, p.token));
+    result('contracts', r.code === 200 && !!r.body?.bounty); if (r.code === 200 && r.body?.bounty) taken.contract++;
+  }
 }
 
 const ROUNDS_PER_DAY = 3;
@@ -228,19 +270,30 @@ const wealth = (await pool.query(`SELECT cash FROM characters WHERE alive AND NO
 const total = wealth.reduce((a, b) => a + b, 0);
 const topTenth = wealth.slice(0, Math.max(1, Math.floor(wealth.length / 10))).reduce((a, b) => a + b, 0);
 
+if (verbose) {
 console.log(`\n════ POPULATION-SCALE CENSUS — ${humans} players + ${residents} residents, ${DAYS} days ════\n`);
 console.log('LIQUIDITY — is anyone on the other side?');
 for (const [name, live, driven] of MARKETS) {
   const flag = !driven ? '  · not driven by this harness' : live === 0 ? '  ✗ EMPTY' : live < 3 ? '  ~ thin' : '  ✓';
   console.log(`  ${name.padEnd(34)} ${String(live).padStart(4)} live${flag}`);
 }
-console.log('\nFLOW — of what got posted, what got taken?');
-for (const k of Object.keys(posted)) {
-  const t = taken[k] ?? null;
-  console.log(`  ${k.padEnd(12)} posted ${String(posted[k]).padStart(4)}`
-    + (t === null ? '   (no take path driven)' : `   taken ${String(t).padStart(4)}`
-      + (posted[k] ? `   (${Math.round((t / posted[k]) * 100)}%)` : '')));
+
+// AVAILABILITY is the honest measurement. `found/looked` is the share of shopping trips that had a
+// counterparty on the board at all, and it is what moves with population. `took/found` is what
+// happened once one existed — and that one IS mostly gates (one debt at a time, already guarded,
+// on cooldown), which is the game working, not a market failing.
+console.log('\nAVAILABILITY — when a player went looking, was anyone there?');
+for (const [m, s] of Object.entries(shopped)) {
+  console.log(`  ${m.padEnd(16)} looked ${String(s.looked).padStart(4)}   found a counterparty `
+    + `${String(s.found).padStart(4)} (${pct(s.found, s.looked)}%)   of those, closed `
+    + `${String(s.took).padStart(4)} (${pct(s.took, s.found) ?? '—'}%)`);
 }
+console.log('\nPOSTED (supply side — what the town put on the boards)');
+console.log('  ' + Object.entries(posted).map(([k, v]) => `${k} ${v}`).join(' · '));
+console.log('  NOTE: posted-vs-taken is NOT a liquidity measure. Takes are bounded by per-player caps');
+console.log('  (one debt, one bodyguard, a duel cooldown), so the ratio is ~3/rounds whatever the');
+console.log('  population. Read AVAILABILITY above for density, not this.');
+
 console.log('\nWEALTH');
 console.log(`  total player cash            ${money(total)}`);
 console.log(`  top 10% hold                 ${total ? Math.round((topTenth / total) * 100) : 0}%`);
@@ -255,6 +308,7 @@ if (errors.size) {
   [...errors.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
     .forEach(([e, c]) => console.log(`  ${String(c).padStart(5)} × ${e}`));
 }
+}
 
 // ── the assertions ──────────────────────────────────────────────────────────────────────────────
 // (1) conservation: the DELTA, not the absolute — this harness seeds so players can reach the markets.
@@ -262,7 +316,7 @@ const after = await runLedgerInvariants(pool, { alert: false });
 const moved = after.checks.filter((c) => Math.abs(c.drift - (baseline[c.name] ?? 0)) > 0.01)
   .map((c) => `${c.name}: ${baseline[c.name] ?? 0} → ${c.drift}`);
 assert.equal(moved.length, 0, `§10.4 MOVED during the run — a lost update or torn transfer:\n  ${moved.join('\n  ')}`);
-console.log(`\n✓ §10.4 held: all ${after.checks.length} checks moved by exactly nothing across ${DAYS} simulated days`);
+if (verbose) console.log(`\n✓ §10.4 held: all ${after.checks.length} checks moved by exactly nothing across ${DAYS} simulated days`);
 
 // (2) reachability: a market nobody could even POST into is a gate bug, not a quiet town. Reported
 // per-market above; asserted here only for the ones this harness actually drives a post for.
@@ -271,7 +325,7 @@ const unreachable = Object.entries(drivable).filter(([k]) => posted[k] === 0).ma
 assert.equal(unreachable.length, 0,
   `${unreachable.length} market(s) took ZERO posts across the whole run — with ${players.length} funded, `
   + `levelled players that is a gate bug, not a quiet town: ${unreachable.join(', ')}`);
-console.log(`✓ every driven market is reachable — all ${Object.keys(drivable).length} took real posts`);
+if (verbose) console.log(`✓ every driven market is reachable — all ${Object.keys(drivable).length} took real posts`);
 
 // (3) the census reads what it claims to read. A first cut queried the loans table for
 // `status='offered'` — the word is 'open' — so it counted zero every run and was about to publish
@@ -287,23 +341,58 @@ const miscounted = MARKETS.filter(([, live, driven, key]) =>
 assert.equal(miscounted.length, 0,
   'the CENSUS disagrees with the FLOW — more went in than came out, so the query is reading the wrong '
   + `table, column or status word:\n  ${miscounted.join('\n  ')}`);
-console.log('✓ the census reconciles with the flow — nothing posted has vanished from the count');
+if (verbose) console.log('✓ the census reconciles with the flow — nothing posted has vanished from the count');
 
 // Empty at the end has two completely different meanings and the flow tells them apart: a market
 // that CLEARED (everything posted got taken) is the healthiest possible reading, and a market nobody
 // wanted is the finding. Printing "EMPTY" without that distinction would report the first as the second.
 const dead = MARKETS.filter(([, live, driven]) => driven && live === 0);
-if (!dead.length) console.log('\n✓ every driven market ended with a live counterparty');
-else {
-  console.log(`\n⚠ ${dead.length} driven market(s) ended EMPTY:`);
-  for (const [name, , , key] of dead) {
-    const rate = key && posted[key] ? Math.round(((taken[key] ?? 0) / posted[key]) * 100) : null;
-    console.log(`  ${name.padEnd(34)} ${rate === 100 ? 'CLEARED — everything posted was taken, which is the healthy reading'
-      : rate === null ? 'nothing was posted into it' : `only ${rate}% was taken — the rest went unwanted or lapsed`}`);
+if (verbose) {
+  if (!dead.length) console.log('\n✓ every driven market ended with a live counterparty');
+  else {
+    console.log(`\n⚠ ${dead.length} driven market(s) ended EMPTY:`);
+    for (const [name, , , key] of dead) {
+      const rate = key && posted[key] ? Math.round(((taken[key] ?? 0) / posted[key]) * 100) : null;
+      console.log(`  ${name.padEnd(34)} ${rate === 100 ? 'CLEARED — everything posted was taken, which is the healthy reading'
+        : rate === null ? 'nothing was posted into it' : `only ${rate}% was taken — the rest went unwanted or lapsed`}`);
+    }
   }
+  console.log('  (emptiness is a FINDING for balance/design, not a failure — a market can be reachable and still unattractive)\n');
 }
-console.log('  (emptiness is a FINDING for balance/design, not a failure — a market can be reachable and still unattractive)\n');
 
 await app.close();
-console.log('✅ scale complete — the multiplayer economy was driven at population scale, every market '
-  + 'censused for a live counterparty, and §10.4 moved by exactly nothing.');
+return { players: players.length, residents, days: DAYS, shopped, posted, taken, wealth: { total, topTenth } };
+}   // ── end runTown ────────────────────────────────────────────────────────────────────────────────
+
+// ── the density curve ───────────────────────────────────────────────────────────────────────────
+// THE QUESTION THIS ANSWERS: how many people does the city need before it feels inhabited? That sets
+// the invite-wave size, and nothing else here could answer it.
+//
+// The measurement is sound because each player acts ONCE PER ROUND regardless of N: posting scales
+// with N and looking scales with N, so if AVAILABILITY stays flat then density genuinely does not
+// matter, and if it climbs there is a floor below which a real person finds an empty board.
+if (SWEEP.length) {
+  const rows = [];
+  for (const n of SWEEP) {
+    process.stdout.write(`  running ${n} players…\n`);
+    rows.push([n, await runTown({ players: n, days: DAYS, verbose: false })]);
+  }
+  console.log(`\n════ THE DENSITY CURVE — availability vs population, ${DAYS} days each ════\n`);
+  const markets = [...new Set(rows.flatMap(([, r]) => Object.keys(r.shopped)))];
+  console.log(`  ${'market'.padEnd(16)}${rows.map(([n]) => `${n}p`.padStart(8)).join('')}`);
+  for (const m of markets) {
+    const cells = rows.map(([, r]) => {
+      const s = r.shopped[m];
+      return (s && s.looked ? `${pct(s.found, s.looked)}%` : '—').padStart(8);
+    });
+    console.log(`  ${m.padEnd(16)}${cells.join('')}`);
+  }
+  console.log('\n  (each cell: the share of shopping trips that found a counterparty on the board.');
+  console.log('   Flat across the row = population-independent. Climbing = there is a floor below');
+  console.log('   which the city reads as empty, and that floor is your minimum invite wave.)\n');
+  console.log('✅ density sweep complete.');
+} else {
+  await runTown({ players: PLAYERS, days: DAYS });
+  console.log('✅ scale complete — the multiplayer economy was driven at population scale, every market '
+    + 'censused for a live counterparty, and §10.4 moved by exactly nothing.');
+}

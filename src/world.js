@@ -11,7 +11,10 @@ import { GameError, bus, assignedSoldier, soldierResult } from './game.js';
 import { WORLD_NPCS, worldNpcOf, worldRankOf, WORLD, LIVING, levelOf, effStat, cityHourOf, frontierTributePerHr, cartelUprisingOf, dayOf, soldierFxOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
-const enragedNow = (enragedUntil, now = new Date()) => enragedUntil && new Date(enragedUntil) > now;
+// `!!` matters: without it an outfit that has never been enraged yields `undefined`, JSON.stringify
+// DROPS undefined keys, and `enraged` simply vanishes from the board for that outfit. Harmless to
+// render (undefined is falsy) but an inconsistent API shape — found by test/client.js check 4b.
+const enragedNow = (enragedUntil, now = new Date()) => !!(enragedUntil && new Date(enragedUntil) > now);
 const risingNow = (fixture, day = dayOf()) => cartelUprisingOf(day)?.id === fixture.id; // step six: is this outfit rising today
 const canCommand = (h) => h.owned.gangRole === 'boss' || h.owned.gangRole === 'underboss';
 // step four: a held outfit's accrued tribute to its overlord family (lazy §7.1, capped at TRIBUTE_CAP_MS).
