@@ -264,6 +264,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
     await h.ledger(client, { currency: 'cash', amount: -openBounty, reason: 'death:bounty', counterparty: victim.id });
   await client.query('DELETE FROM bounties WHERE target_character=$1', [victim.id]);
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1', [victim.id]);
+  await client.query('DELETE FROM bounty_gang_roster WHERE target_character=$1', [victim.id]);
   // …and any DIRECTED pot that named the DECEASED as its exclusive hitman (on a LIVING mark) OPENS to
   // all claimers — otherwise `claimBounty` skips a hospitalize pot in its window for anyone but the named
   // hitman, so a dead man's contract would lock the pot (and `postBounty` blocks re-naming) for up to

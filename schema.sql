@@ -387,6 +387,19 @@ CREATE TABLE IF NOT EXISTS bounty_contributors (
   funder_gang BOOLEAN NOT NULL DEFAULT false,    -- true = contributor is a gang id; refund → treasury
   PRIMARY KEY (target_character, kind, contributor)
 );
+-- SIGN-OFF 2.4 — FAMILY-CONTRACT LAUNDERING. The funder lockout in claimBounty matched the killer's
+-- CURRENT gang, so leave → kill for the pot → rejoin routed gang treasury into a personal wallet.
+-- This snapshots who was in the funding family at the moment family money went in; that roster is
+-- locked out for the pot's life regardless of where anyone's membership stands when the shot lands.
+-- Re-snapshotted on every top-up, so a member who joins before the NEXT tranche is covered too.
+-- Torn down wherever the pot is (claim, cancel, refund/expiry sweep, the target's estate).
+CREATE TABLE IF NOT EXISTS bounty_gang_roster (
+  target_character TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'kill',
+  gang_id TEXT NOT NULL,
+  character_id TEXT NOT NULL,                    -- a made man of the funding family at funding time
+  PRIMARY KEY (target_character, kind, character_id)
+);
 -- M7 Phase 2 — one row per confirmed gameplay kill. Drives repeat-bloodline rep diminishing
 -- (killer_account × victim_account) and the kill feed. victim_account = the bloodline (heirs
 -- keep the account); rep is what the killer earned (0 for rookie targets / agents).

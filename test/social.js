@@ -765,6 +765,33 @@ const jr = (await call('POST', `/v1/streets/${carla.id}/jump`, { token: frank.to
 assert(jr.win, 'the freelancer took the job');
 assert.equal(jr.bounty, 3000, 'an outsider collects the family contract in full');
 
+// ── SIGN-OFF 2.4 — FAMILY-CONTRACT LAUNDERING: leaving does not unlock the family's own pot ──
+// The lockout used to test the killer's CURRENT gang, so the whole exploit was: be in the family
+// when it funds a contract, LEAVE, kill the mark, pocket the family's money personally, rejoin.
+// Gang treasury laundered into a wallet. The roster is now snapshotted when family money goes in,
+// so membership at FUNDING time is what counts — walk the exact exploit and prove it pays nothing.
+{
+  const mark = await mk('Launder Mark'); await seedCh(mark.id, "respect=1000, muscle=1, speed=1, loc='docks'");
+  const rat = await mk('Launder Rick'); await seedCh(rat.id, "muscle=900, speed=900, energy=200, cash=200000, loc='docks'");
+  assert.equal((await call('POST', `/v1/gangs/${gangA}/join`, { token: rat.token })).code, 200, 'the launderer is a made man of the family');
+  assert.equal((await call('POST', `/v1/gangs/contract/${mark.id}`, { token: don.token, body: { amount: 8000, kind: 'hospitalize' } })).code, 200,
+    'the family funds a contract while he is inside');
+  // he walks out before doing the job — under the old lockout this is all it took
+  assert.equal((await call('POST', '/v1/gangs/leave', { token: rat.token })).code, 200, 'he leaves the family');
+  assert.equal((await call('GET', '/v1/me', { token: rat.token })).body.character.gang, null, 'and is genuinely gangless');
+  await seedCh(mark.id, "hosp_until=NULL, loc='docks', cash=1000");
+  const cashBefore = (await call('GET', '/v1/me', { token: rat.token })).body.character.cash;
+  const lj = (await call('POST', `/v1/streets/${mark.id}/jump`, { token: rat.token })).body;
+  assert(lj.win, 'he does the job');
+  assert.equal(lj.bounty, 0, 'but collects NOTHING — he was in the family when its money went in');
+  assert(Number((await call('GET', '/v1/me', { token: rat.token })).body.character.cash) <= cashBefore + (lj.stolen || 0),
+    'no family money reached his pocket (only what he mugged off the mark)');
+  // and the pot is still standing for someone who was never in the family
+  const stillUp = (await call('GET', '/v1/contracts', { token: don.token })).body.contracts
+    .find((c) => c.target.id === mark.id && c.kind === 'hospitalize');
+  assert(stillUp && stillUp.pot === 8000, 'the family pot is intact for a genuine outsider');
+}
+
 // ── M7 Phase 4 remainder: BODYGUARDS — the player-to-player defense market ──
 const barry = await mk('Bullet Barry'); const paula = await mk('Principal Paula');
 assert.equal((await call('POST', '/v1/bodyguard/offer', { token: barry.token, body: { price: 400 } })).body.error, 'min', 'nobody eats a bullet for pocket change');
