@@ -43,6 +43,17 @@ jobs:
       - name: economy sim (§10.4 drift-0)
         run: npm run sim
 
+      # THE OTHER SIDE OF THE TRADE. Every other economic proof here is about one player or about
+      # conservation; neither can see a market that is perfectly accounted and completely dead. This
+      # drives a town through the player-to-player markets and fails if one of them cannot be posted
+      # into at all. Kept small in CI — it is a correctness gate (reachability + §10.4 under many
+      # actors), not the liquidity measurement, which is what the full-size local run is for.
+      - name: scale (population-scale market reachability + §10.4)
+        env:
+          SCALE_PLAYERS: '18'
+          SCALE_DAYS: '2'
+        run: npm run scale
+
       # THE CLIENT. The suite tests the API; nothing tested the screens. On 2026-07-26 a driven pass
       # found that a new player's guided onboarding showed NONE of its own content above the fold on
       # a phone — the three-column grid stacks the ~1000px character sheet above the tab content —

@@ -1,0 +1,309 @@
+// THE POPULATION-SCALE HARNESS — does the SOCIAL economy function with a town in it?
+//
+// The seventh harness, and it measures the one axis the other six cannot:
+//
+//   tools/sim.js         — does the economy conserve, and how big is each faucet   (sequential, few)
+//   tools/playthrough.js — what does one person experience                          (one player)
+//   tools/pgcheck.js     — the node-pg + real-Postgres contract                     (a few pairs)
+//   tools/loadtest.js    — many players at once: deadlocks, torn transfers          (concurrency)
+//   tools/chaos.js       — what survives being interrupted                          (crash/restart)
+//   tools/mobile.js      — do the screens lay out at phone size                     (layout)
+//   tools/scale.js       — DOES THE MULTIPLAYER ECONOMY HAVE A COUNTERPARTY         (this file)
+//
+// Why it exists. Every economic proof in this repo is about one player or about conservation. Neither
+// asks the question the whole Risk-to-Earn thesis rests on: with a town's worth of people in the
+// city, is there anyone on the OTHER SIDE of a trade? A market with perfect accounting and no
+// counterparty is a dead market, and nothing here would have noticed. The progression harness already
+// measured the shape of the problem from the other end — a plausible player reaches level 44 and
+// $1.9M in seven days having never once interacted with another human.
+//
+// This drives a POPULATION through a mixed diet of behaviour over warped days, then takes a census of
+// every player-to-player market: how many have a live counterparty, how much of what got posted got
+// taken, and where the money ended up. It reports rather than prescribes — liquidity numbers are a
+// finding for the founder, not a pass/fail. What it DOES assert is the two things that would be bugs
+// rather than balance:
+//
+//   1. §10.4 drift DELTA is zero across the whole run (the loadtest discipline — this harness seeds
+//      starting cash so players can reach the markets at all, so the baseline is non-zero by
+//      construction; what must not move is the delta).
+//   2. Every market is REACHABLE — if a market ends with nobody able to post at all, that is a gate
+//      bug, not a quiet town, and it fails.
+//
+// Runs on pg-mem by default (portable, like sim.js); set DATABASE_URL to drive real Postgres.
+// Knobs: SCALE_PLAYERS (36), SCALE_DAYS (5).
+process.env.MOD_KEY = process.env.MOD_KEY || 'scale-mod-key';
+process.env.MARKET_SEED = process.env.MARKET_SEED || 'scale-harness-seed-000000000000';
+process.env.SOCIAL_VERIFY_MODE = 'off';
+import assert from 'node:assert';
+import { buildServer } from '../src/server.js';
+import { runLedgerInvariants } from '../src/invariants.js';
+import { runPopulation, runResidentBehaviour } from '../src/population.js';
+
+const PLAYERS = Number(process.env.SCALE_PLAYERS || 36);
+const DAYS = Number(process.env.SCALE_DAYS || 5);
+const app = await buildServer();
+const pool = app.pool;
+
+const call = async (method, url, token, body) => {
+  const res = await app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload: body });
+  let json = null; try { json = res.json(); } catch { /* empty body */ }
+  return { code: res.statusCode, body: json || {} };
+};
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const money = (n) => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+
+// ── the population ──────────────────────────────────────────────────────────────────────────────
+// Archetypes, not optimal play. A real town is a mix, and a market's liquidity depends on whether the
+// people who WANT to be on each side actually exist — which a single scripted optimum cannot show.
+const ARCHETYPES = ['grinder', 'trader', 'lender', 'killer', 'gambler', 'idler'];
+const NAMES = ['Vito', 'Sal', 'Nico', 'Rocco', 'Enzo', 'Gino', 'Bruno', 'Carmine', 'Dante', 'Fabio',
+  'Marco', 'Paulie', 'Silvio', 'Tommy', 'Angelo', 'Bobby', 'Chris', 'Donnie', 'Eddie', 'Frankie'];
+
+const players = [];
+for (let i = 0; i < PLAYERS; i++) {
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  const name = `${NAMES[i % NAMES.length]} Scale${i}`;
+  await call('POST', '/v1/character', token, { name });
+  const me = (await call('GET', '/v1/me', token)).body.character;
+  if (!me) continue;
+  players.push({ token, id: me.id, name, loc: me.loc, kind: ARCHETYPES[i % ARCHETYPES.length] });
+}
+assert(players.length >= PLAYERS * 0.9, `only ${players.length}/${PLAYERS} characters were created`);
+
+// Seed reachability, not outcomes. Players need a stake and a level to be ALLOWED into the markets
+// (level floors, minimum stakes, garage caps). Seeding is why the assertion below is a DELTA: the
+// baseline drift is whatever this SQL created, and the run must not move it.
+const ids = players.map((p) => `'${p.id}'`).join(',');
+await pool.query(`UPDATE characters SET respect=2500, cash=400000, energy=100, nerve=50, muscle=60, cunning=60, speed=60 WHERE id IN (${ids})`);
+
+const before = await runLedgerInvariants(pool, { alert: false });
+const baseline = Object.fromEntries(before.checks.map((c) => [c.name, c.drift]));
+
+// ── the days ────────────────────────────────────────────────────────────────────────────────────
+// Each round: every player takes one archetype action, then the world ticks (NPC residents act, the
+// clock warps a day). Failures are EXPECTED and counted — a gate refusing a bad move is the game
+// working, and a harness that treated every 4xx as fatal would only ever test the happy path.
+const posted = { listing: 0, order: 0, loan: 0, contract: 0, guard: 0, duel: 0, fade: 0 };
+const taken = { listing: 0, order: 0, loan: 0, contract: 0, guard: 0, duel: 0 };
+const errors = new Map();
+const skipped = new Map();   // a branch that could not even ATTEMPT — counted, never silently nothing
+const note = (r) => { if (r.code !== 200 && r.body?.error) errors.set(r.body.error, (errors.get(r.body.error) || 0) + 1); return r; };
+const skip = (why) => skipped.set(why, (skipped.get(why) || 0) + 1);
+
+async function act(p) {
+  const other = pick(players.filter((x) => x.id !== p.id));
+  switch (p.kind) {
+    case 'grinder': {
+      note(await call('POST', '/v1/crimes/pick', p.token));
+      break;
+    }
+    case 'trader': {
+      // buy goods at the local price, then put them on the board for someone else
+      // `prices.goods` is an id -> price MAP, not an array. A first cut read `goods[0]`, got
+      // undefined, and this whole branch did nothing for the entire run while reporting no error —
+      // which is why `skip()` exists: a branch that cannot attempt is counted, not silent.
+      // `prices.goods` is keyed by DISTRICT and THEN by good — two layers, and goods are pinned to
+      // the dock you are standing on. A first cut read the outer map's first entry and cheerfully
+      // tried to buy a district ('docks') as a commodity; the run reported 54 × bad_good rather than
+      // silence, which is the only reason it was findable.
+      const prices = (await call('GET', '/v1/market/prices', p.token)).body;
+      const here = Object.entries(prices?.goods?.[p.loc] || {});
+      if (!here.length) { skip(`no goods priced at ${p.loc}`); break; }
+      // The field is `price`, not `unitPrice` — the neighbouring /v1/exchange/list takes `unitPrice`
+      // and a first cut sent that here. The handler read `undefined`, floored it to 0 and threw
+      // min_price on EVERY attempt, so both black-market branches posted nothing for a whole run.
+      // Exactly the class test/client.js check 3 exists for, and the reason `posted` is asserted.
+      const [goodId, price] = here[0];
+      // Buy one, list one: the trunk is capped (cargoCap), and a net-positive diet fills it and then
+      // spends the rest of the run refusing with `cargo` instead of measuring anything.
+      note(await call('POST', '/v1/goods/buy', p.token, { goodId, qty: 1 }));
+      const r = note(await call('POST', '/v1/market', p.token, { kind: 'good', goodId, qty: 1, price: Math.round(price * 1.1) }));
+      if (r.code === 200) posted.listing++;
+      const o = note(await call('POST', '/v1/market/order', p.token, { goodId, qty: 1, price: Math.round(price * 0.9) }));
+      if (o.code === 200) posted.order++;
+      break;
+    }
+    case 'lender': {
+      const r = note(await call('POST', '/v1/loans', p.token, { amount: 20000, rate: 0.25, hours: 24 }));
+      if (r.code === 200) posted.loan++;
+      break;
+    }
+    case 'killer': {
+      const r = note(await call('POST', `/v1/streets/${other.id}/bounty`, p.token, { amount: 3000, kind: 'hospitalize' }));
+      if (r.code === 200) posted.contract++;
+      const g = note(await call('POST', '/v1/bodyguard/offer', p.token, { price: 15000 }));
+      if (g.code === 200) posted.guard++;
+      break;
+    }
+    case 'gambler': {
+      const d = note(await call('POST', '/v1/duels/list', p.token, { limit: 5000 }));
+      if (d.code === 200) posted.duel++;
+      const f = note(await call('POST', '/v1/casino/fade', p.token, { limit: 5000 }));
+      if (f.code === 200) posted.fade++;
+      break;
+    }
+    default: break;   // the idler is load-bearing: a town where everyone plays optimally is not a town
+  }
+}
+
+// The other side of every trade. Liquidity is not "somebody posted", it is "somebody took" — so each
+// round a slice of the population goes shopping against whatever the board is actually offering.
+async function shop(p) {
+  const board = (await call('GET', '/v1/market', p.token)).body;
+  // `seller` on the board is a NAME, not a {id} — a first cut compared `l.seller?.id` and so never
+  // filtered anything, and the run reported the resulting self-buys as `own` refusals.
+  const lot = (board.listings || []).find((l) => l.kind === 'good' && l.seller !== p.name);
+  if (lot) { const r = note(await call('POST', `/v1/market/${lot.id}/buy`, p.token, { qty: 1 })); if (r.code === 200) taken.listing++; }
+
+  const loans = (await call('GET', '/v1/loans', p.token)).body;
+  const offer = (loans.offers || []).find((l) => l.lender?.id !== p.id);
+  if (offer) { const r = note(await call('POST', `/v1/loans/${offer.id}/take`, p.token)); if (r.code === 200) taken.loan++; }
+
+  const guards = (await call('GET', '/v1/streets', p.token)).body;
+  const guard = (guards.streets || []).find((s) => s.guardPrice && s.id !== p.id);
+  if (guard) { const r = note(await call('POST', `/v1/bodyguard/hire/${guard.id}`, p.token)); if (r.code === 200) taken.guard++; }
+
+  const duels = (await call('GET', '/v1/duels', p.token)).body;
+  const rival = (duels.board || duels.duelists || []).find((d) => d.id !== p.id && d.limit);
+  if (rival) { const r = note(await call('POST', `/v1/duels/${rival.id}`, p.token, { amount: 1000 })); if (r.code === 200) taken.duel++; }
+
+  // A buy order's counterparty is a SELLER standing at the pinned dock with the goods in the trunk.
+  // Without this the order row read "0% taken", which says nothing about the game and everything
+  // about the harness. But it must only be ATTEMPTED by someone who actually holds the good —
+  // a first cut fired it from every shopper, most of them idlers with empty trunks, and the 8%
+  // that came back measured "did a random player happen to be carrying that" rather than the
+  // market's depth. A shopper with nothing to sell is a skip, not a failed fill.
+  const cargo = (await call('GET', '/v1/me', p.token)).body.character?.cargo || {};
+  const order = (board.listings || []).find((l) => l.kind === 'order' && l.seller !== p.name
+    && (cargo[l.good] || 0) > 0 && l.district === p.loc);
+  if (order) { const r = note(await call('POST', `/v1/market/${order.id}/fill`, p.token, { qty: 1 })); if (r.code === 200) taken.order++; }
+  else if ((board.listings || []).some((l) => l.kind === 'order')) skip('no goods on hand at the order\'s dock to fill with');
+
+  // A contract's counterparty is whoever collects it. A hospitalize pot pays on a jump, so the
+  // shopper goes looking for a mark with money on their head — the actual liquidity question.
+  const pots = (await call('GET', '/v1/contracts', p.token)).body.contracts || [];
+  const mark = pots.find((c) => c.kind === 'hospitalize' && c.target?.id !== p.id);
+  if (mark) { const r = note(await call('POST', `/v1/streets/${mark.target.id}/jump`, p.token)); if (r.code === 200 && r.body?.bounty) taken.contract++; }
+}
+
+const ROUNDS_PER_DAY = 3;
+for (let day = 0; day < DAYS; day++) {
+  for (let round = 0; round < ROUNDS_PER_DAY; round++) {
+    for (const p of players) await act(p);
+    for (const p of players.slice(0, Math.ceil(players.length / 2))) await shop(p);
+  }
+  await runPopulation(pool);          // the city tops itself up and retires drained residents
+  await runResidentBehaviour(pool);   // residents advertise consent limits, post offers/orders
+  // Warp a day. Everything here is lazy-accrual off `last_accrued_at`, so pulling that clock back IS
+  // moving time — the same trick tools/sim.js uses. Energy and nerve are refilled because a real day
+  // regenerates them; without that the population starves after round one and measures nothing.
+  await pool.query("UPDATE characters SET last_accrued_at = last_accrued_at - interval '1 day', energy=100, nerve=50 WHERE NOT is_npc");
+}
+
+// ── the census ──────────────────────────────────────────────────────────────────────────────────
+const n = async (q) => Number((await pool.query(q)).rows[0]?.n || 0);
+// Columns: name, live count, whether THIS harness drives a post into it, and which flow row it
+// corresponds to. The `driven` flag matters because an undriven market reading EMPTY says nothing
+// about the game and would otherwise read as a finding. The flow key powers the census self-check
+// at the bottom.
+const MARKETS = [
+  ['black market — car auctions', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='car' AND status='live'"), false, null],
+  ['black market — goods lots', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='good' AND status='live'"), true, 'listing'],
+  ['black market — buy orders', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='order' AND status='live'"), true, 'order'],
+  // 'open', not 'offered' — a first cut guessed the status word, counted zero every time and would
+  // have published "the Shylock ended EMPTY" as a finding about the game. A census that reads a
+  // column wrong reports confident nonsense, so each of these was checked against the module.
+  ['the shylock — open loan offers', await n("SELECT COUNT(*) n FROM loans WHERE status='open'"), true, 'loan'],
+  ['the shylock — active debts', await n("SELECT COUNT(*) n FROM loans WHERE status='active'"), true, null],
+  ['the contract board — live pots', await n('SELECT COUNT(*) n FROM bounties'), true, 'contract'],
+  ['bodyguards for hire', await n('SELECT COUNT(*) n FROM characters WHERE guard_price IS NOT NULL AND alive'), true, 'guard'],
+  ['the dueling ladder — listed', await n('SELECT COUNT(*) n FROM characters WHERE duel_limit IS NOT NULL AND alive'), true, 'duel'],
+  ['back-room dice — faders', await n('SELECT COUNT(*) n FROM characters WHERE fade_limit IS NOT NULL AND alive'), true, 'fade'],
+  ['speakeasies open', await n('SELECT COUNT(*) n FROM speakeasies'), false, null],
+];
+
+const humans = await n(`SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc`);
+const residents = await n('SELECT COUNT(*) n FROM characters WHERE alive AND is_npc');
+const wealth = (await pool.query(`SELECT cash FROM characters WHERE alive AND NOT is_npc ORDER BY cash DESC`)).rows.map((r) => Number(r.cash));
+const total = wealth.reduce((a, b) => a + b, 0);
+const topTenth = wealth.slice(0, Math.max(1, Math.floor(wealth.length / 10))).reduce((a, b) => a + b, 0);
+
+console.log(`\n════ POPULATION-SCALE CENSUS — ${humans} players + ${residents} residents, ${DAYS} days ════\n`);
+console.log('LIQUIDITY — is anyone on the other side?');
+for (const [name, live, driven] of MARKETS) {
+  const flag = !driven ? '  · not driven by this harness' : live === 0 ? '  ✗ EMPTY' : live < 3 ? '  ~ thin' : '  ✓';
+  console.log(`  ${name.padEnd(34)} ${String(live).padStart(4)} live${flag}`);
+}
+console.log('\nFLOW — of what got posted, what got taken?');
+for (const k of Object.keys(posted)) {
+  const t = taken[k] ?? null;
+  console.log(`  ${k.padEnd(12)} posted ${String(posted[k]).padStart(4)}`
+    + (t === null ? '   (no take path driven)' : `   taken ${String(t).padStart(4)}`
+      + (posted[k] ? `   (${Math.round((t / posted[k]) * 100)}%)` : '')));
+}
+console.log('\nWEALTH');
+console.log(`  total player cash            ${money(total)}`);
+console.log(`  top 10% hold                 ${total ? Math.round((topTenth / total) * 100) : 0}%`);
+console.log(`  richest / median             ${money(wealth[0])} / ${money(wealth[Math.floor(wealth.length / 2)])}`);
+
+if (skipped.size) {
+  console.log('\nSKIPPED (a branch that could not attempt — a silent zero here would be a harness bug)');
+  [...skipped.entries()].sort((a, b) => b[1] - a[1]).forEach(([w, c]) => console.log(`  ${String(c).padStart(5)} × ${w}`));
+}
+if (errors.size) {
+  console.log('\nREFUSALS (gates doing their job — high counts show what a real town runs into)');
+  [...errors.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .forEach(([e, c]) => console.log(`  ${String(c).padStart(5)} × ${e}`));
+}
+
+// ── the assertions ──────────────────────────────────────────────────────────────────────────────
+// (1) conservation: the DELTA, not the absolute — this harness seeds so players can reach the markets.
+const after = await runLedgerInvariants(pool, { alert: false });
+const moved = after.checks.filter((c) => Math.abs(c.drift - (baseline[c.name] ?? 0)) > 0.01)
+  .map((c) => `${c.name}: ${baseline[c.name] ?? 0} → ${c.drift}`);
+assert.equal(moved.length, 0, `§10.4 MOVED during the run — a lost update or torn transfer:\n  ${moved.join('\n  ')}`);
+console.log(`\n✓ §10.4 held: all ${after.checks.length} checks moved by exactly nothing across ${DAYS} simulated days`);
+
+// (2) reachability: a market nobody could even POST into is a gate bug, not a quiet town. Reported
+// per-market above; asserted here only for the ones this harness actually drives a post for.
+const drivable = { listing: 'black market goods', order: 'buy orders', loan: 'loan offers', contract: 'contracts', guard: 'bodyguard offers', duel: 'duel listings', fade: 'fade limits' };
+const unreachable = Object.entries(drivable).filter(([k]) => posted[k] === 0).map(([, label]) => label);
+assert.equal(unreachable.length, 0,
+  `${unreachable.length} market(s) took ZERO posts across the whole run — with ${players.length} funded, `
+  + `levelled players that is a gate bug, not a quiet town: ${unreachable.join(', ')}`);
+console.log(`✓ every driven market is reachable — all ${Object.keys(drivable).length} took real posts`);
+
+// (3) the census reads what it claims to read. A first cut queried the loans table for
+// `status='offered'` — the word is 'open' — so it counted zero every run and was about to publish
+// "the Shylock ended EMPTY" as a finding about the GAME rather than about a typo in a SQL string.
+// A census that reads a column wrong reports confident nonsense, and nothing else here would notice.
+// So: if more got POSTED into a market than got TAKEN out of it, something must still be standing.
+// Size matters here: below ~18 players every loan offer gets taken, posted == taken, and the check
+// is vacuous — the first mutation run passed for exactly that reason and read like a clean bill of
+// health. CI runs 18×2, which is the smallest size where it actually bites.
+const miscounted = MARKETS.filter(([, live, driven, key]) =>
+  driven && key && posted[key] > (taken[key] ?? 0) && live === 0)
+  .map(([name, , , key]) => `${name}: posted ${posted[key]}, taken ${taken[key] ?? 0}, yet the census sees 0 live`);
+assert.equal(miscounted.length, 0,
+  'the CENSUS disagrees with the FLOW — more went in than came out, so the query is reading the wrong '
+  + `table, column or status word:\n  ${miscounted.join('\n  ')}`);
+console.log('✓ the census reconciles with the flow — nothing posted has vanished from the count');
+
+// Empty at the end has two completely different meanings and the flow tells them apart: a market
+// that CLEARED (everything posted got taken) is the healthiest possible reading, and a market nobody
+// wanted is the finding. Printing "EMPTY" without that distinction would report the first as the second.
+const dead = MARKETS.filter(([, live, driven]) => driven && live === 0);
+if (!dead.length) console.log('\n✓ every driven market ended with a live counterparty');
+else {
+  console.log(`\n⚠ ${dead.length} driven market(s) ended EMPTY:`);
+  for (const [name, , , key] of dead) {
+    const rate = key && posted[key] ? Math.round(((taken[key] ?? 0) / posted[key]) * 100) : null;
+    console.log(`  ${name.padEnd(34)} ${rate === 100 ? 'CLEARED — everything posted was taken, which is the healthy reading'
+      : rate === null ? 'nothing was posted into it' : `only ${rate}% was taken — the rest went unwanted or lapsed`}`);
+  }
+}
+console.log('  (emptiness is a FINDING for balance/design, not a failure — a market can be reachable and still unattractive)\n');
+
+await app.close();
+console.log('✅ scale complete — the multiplayer economy was driven at population scale, every market '
+  + 'censused for a live counterparty, and §10.4 moved by exactly nothing.');
