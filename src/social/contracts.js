@@ -143,9 +143,16 @@ export async function claimBounty(client, h, ch, victimId, kinds) {
     const contributed = (await client.query('SELECT 1 FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND (contributor=$3 OR contributor=$4)',
       [victimId, p.kind, ch.id, h.owned.gangId || ch.id])).rows.length;
     if (contributed) continue;
+    // SIGN-OFF 2.4: and anyone who was IN the funding family when its money went in, wherever their
+    // membership stands now. The current-gang test above is still needed (it catches a member who
+    // joined AFTER the funding), but on its own it was defeated by leaving before the kill.
+    const wasFamily = (await client.query('SELECT 1 FROM bounty_gang_roster WHERE target_character=$1 AND kind=$2 AND character_id=$3',
+      [victimId, p.kind, ch.id])).rows.length;
+    if (wasFamily) continue;
     if (p.hitman === ch.id) directed = true; // fulfilled a contract they were named on
     await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
     await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
+    await client.query('DELETE FROM bounty_gang_roster WHERE target_character=$1 AND kind=$2', [victimId, p.kind]);
     total += Math.floor(Number(p.amount));
   }
   if (total > 0) {
@@ -245,6 +252,16 @@ export async function postFamilyContract(ch, targetCharacterId, amount, client, 
   const mine = (await client.query('SELECT amount FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, gangId])).rows[0];
   if (mine) await client.query('UPDATE bounty_contributors SET amount = amount + $4 WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, kind, gangId, amt]);
   else await client.query('INSERT INTO bounty_contributors (target_character, kind, contributor, amount, funder_gang) VALUES ($1,$2,$3,$4,true)', [targetCharacterId, kind, gangId, amt]);
+  // SIGN-OFF 2.4 — snapshot WHO is in the family right now. The lockout in claimBounty used to test
+  // the killer's CURRENT gang, so a made man could leave, kill for the family's own pot, pocket it
+  // personally, and rejoin — treasury laundered into a wallet. Membership at FUNDING time is the
+  // honest test: the family ordered the job while you were in it, so doing it is duty, not payday.
+  // Re-snapshotted on every top-up (ON CONFLICT DO NOTHING) so anyone who joins before the next
+  // tranche of family money is covered by that tranche.
+  await client.query(
+    `INSERT INTO bounty_gang_roster (target_character, kind, gang_id, character_id)
+     SELECT $1, $2, $3, gm.character_id FROM gang_members gm WHERE gm.gang_id=$3
+     ON CONFLICT DO NOTHING`, [targetCharacterId, kind, gangId]);
 
   await h.ledger(client, { currency: 'cash', amount: -amt, reason: 'gang:contract', counterparty: targetCharacterId });
   await h.ledger(client, { currency: 'cash', amount: -(fee + tax), reason: 'gang:contract:take', counterparty: targetCharacterId });
@@ -277,6 +294,7 @@ export async function cancelFamilyContract(ch, targetCharacterId, kind, client, 
   if (!mine || !(Number(mine.amount) > 0)) throw new GameError('no_contract', "The family hasn't funded that contract.");
   const refund = Math.floor(Number(mine.amount));
   await client.query('DELETE FROM bounty_contributors WHERE target_character=$1 AND kind=$2 AND contributor=$3', [targetCharacterId, k, gangId]);
+      await client.query('DELETE FROM bounty_gang_roster WHERE target_character=$1 AND kind=$2 AND gang_id=$3', [targetCharacterId, k, gangId]);
   const remaining = Number(pot.amount) - refund;
   if (remaining > 0) await client.query('UPDATE bounties SET amount=$3 WHERE target_character=$1 AND kind=$2', [targetCharacterId, k, remaining]);
   else await client.query('DELETE FROM bounties WHERE target_character=$1 AND kind=$2', [targetCharacterId, k]);

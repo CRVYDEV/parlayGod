@@ -92,6 +92,11 @@ const DISPOSITION = {
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)
   chat_messages: 'log', // troll-box lines keep their name snapshot — a dead man's words stand (7d worker retention)
+  // SIGN-OFF 2.4: the funding family's roster snapshot, keyed to the POT rather than to the listed
+  // member — so it is torn down with the pot (claim / the family cancelling its share / the expiry
+  // sweep / the target's estate), not with the member. A listed member's own death leaves a row that
+  // can never do anything (a corpse cannot claim), and the pot's own teardown reaps it.
+  bounty_gang_roster: 'special',
 };
 // SCOPE: this guard covers the literal `character_id` column convention (42 tables). Tables that
 // reference a character via a DIFFERENTLY-NAMED column (npc_hits payer/target, searches hunter/target,
