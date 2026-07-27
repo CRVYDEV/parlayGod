@@ -11,6 +11,7 @@ import * as Fees from '../fees.js';
 import * as G from '../game.js';
 import * as Loans from '../loans.js';
 import * as Ops from '../ops.js';
+import { opsEngagement } from '../engagement.js';
 import * as Rwa from '../rwa.js';
 import * as S from '../social.js';
 import * as Store from '../store.js';
@@ -122,6 +123,9 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
     app.get('/v1/mod/funnel', { preHandler: modAuth }, async () => W.funnelStats(pool)); // new-player onboarding drop-off
     app.get('/v1/mod/overview', { preHandler: modAuth }, async () => Ops.opsOverview(pool)); // live-ops economy + player snapshot
     app.get('/v1/mod/activity', { preHandler: modAuth }, async (req) => Ops.opsActivity(pool, req.query?.limit)); // the live event feed
+    // which systems anyone actually uses + whether players come back. Reads telemetry that was
+    // already being written — the reader was the missing half, not the instrumentation.
+    app.get('/v1/mod/engagement', { preHandler: modAuth }, async (req) => opsEngagement(pool, req.query?.days));
     app.get('/v1/mod/audit', { preHandler: modAuth }, async (req) => {
       const cid = req.query?.characterId;
       const tx = await pool.query('SELECT * FROM transactions WHERE ($1::text IS NULL OR character_id=$1) ORDER BY at DESC LIMIT 100', [cid || null]);

@@ -97,9 +97,16 @@ r = await call('POST', `/v1/port/collect/${cutter}`, { token: cap.token });
 assert.equal(r.body.interdicted, true, 'the Coast Guard was waiting'); assert.equal(r.body.sunk, false, 'the boat made it home');
 assert.equal(r.body.fine, Math.floor(coastalCost * PORT.FINE_RATE), 'a fine of FINE_RATE × the cargo cost (port:fine sink)');
 assert.equal(await cashOf(cap.token), cashB - r.body.fine, 'the fine came off the top');
-assert((await meOf(cap.token)).heat > heatBefore, 'the bust spiked the heat');
-// STEP FIVE — the Coast Guard bust builds a FEDERAL case: it feeds the RICO investigation meter
+// STEP FIVE — the Coast Guard bust builds a FEDERAL case: it feeds the RICO investigation meter.
+// READ THIS BEFORE ANY FURTHER AUTHED REQUEST. The bust spikes heat, and every subsequent request
+// runs the captain's accrual — which, with heat now HIGH, adds `(heat − WATCH) × dtMin × …` to the
+// meter. dtMin is real elapsed milliseconds, so on a fast machine it rounds to nothing and the
+// exact-equality below holds, while under a loaded full-suite run it becomes a small positive
+// fraction and the assertion fails. That is a wall-clock race in the test, not a defect in the
+// meter: within the collect's own transaction accrual ran with heat still zeroed, so immediately
+// after the bust the meter has moved by exactly BUST_EXPOSURE and nothing else.
 assert.equal(Number((await pool.query(`SELECT heat_exposure e FROM characters WHERE id='${cap.id}'`)).rows[0].e), expBefore + PORT.STEP5.BUST_EXPOSURE, 'the bust fed the Law meter (heat_exposure) — repeat smuggling draws the Bureau');
+assert((await meOf(cap.token)).heat > heatBefore, 'the bust spiked the heat');
 assert.equal(Number((await pool.query(`SELECT COUNT(*) c FROM boats WHERE id='${cutter}'`)).rows[0].c), 1, 'the surviving boat is back in the fleet');
 
 // ── the SUPPLY CAP: sourcing past the daily cap is refused ──

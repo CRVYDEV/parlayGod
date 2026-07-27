@@ -72,6 +72,7 @@
     <div class="panel" id="p-economy"><h2>The Economy</h2><div class="body">…</div></div>
     <div class="panel" id="p-players"><h2>Players</h2><div class="body">…</div></div>
     <div class="panel" id="p-funnel"><h2>Onboarding Funnel</h2><div class="body">…</div></div>
+    <div class="panel" id="p-engage"><h2>Engagement &amp; Retention</h2><div class="body">…</div></div>
     <div class="panel" id="p-top"><h2>The Powerful</h2><div class="body">…</div></div>
     <div class="panel" id="p-chain"><h2>Chain · Reserve · Vig</h2><div class="body">…</div></div>
     <div class="panel" id="p-activity"><h2>Live Activity</h2><div class="feed body">…</div></div>
@@ -116,14 +117,15 @@
   }
 
   async function refreshAll() {
-    const [ov, inv, fn, res, vig, em, act, rev] = await Promise.all([
+    const [ov, inv, fn, res, vig, em, act, rev, eng] = await Promise.all([
       j('GET', '/v1/mod/overview'), j('GET', '/v1/mod/invariants'), j('GET', '/v1/mod/funnel'),
       j('GET', '/v1/mod/reserve'), j('GET', '/v1/mod/vig'), j('GET', '/v1/mod/emission'),
       j('GET', '/v1/mod/activity?limit=60'), j('GET', '/v1/mod/revenue'),
+      j('GET', '/v1/mod/engagement'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
-    renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body);
+    renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
     renderBackups(ov.body); renderSocial(ov.body);
     renderActivity(act.body); renderMod();
@@ -252,6 +254,34 @@
     const alive = Math.max(1, (fn.characters || {}).alive || 1);
     const barRow = (k, n) => { const pct = Math.round(100 * n / alive);
       return `<div class="row"><span class="k">${k}</span><span class="v">${fmt(n)} (${pct}%)</span></div><div class="bar"><i style="width:${pct}%"></i></div>`; };
+  // ENGAGEMENT — which systems anyone actually uses, and whether players come back. The DEAD list is
+  // the point: with 35 systems, knowing which have never been opened by a human is what decides what
+  // to build next. Untracked systems are shown separately so an instrumentation gap is never read as
+  // a player verdict.
+  function renderEngagement(e) {
+    if (!e || !e.systems) { $('#p-engage').querySelector('.body').innerHTML = '<div class="note">no data</div>'; return; }
+    const p = e.players, r = e.retention;
+    const pct = (c) => (c.rate === null ? `<span style="color:var(--dim)">pending (${fmt(c.pending)} too new)</span>` : `${c.rate}%`);
+    const live = e.systems.filter((s) => s.accounts > 0);
+    const top = live.slice(0, 12).map((s) =>
+      `<div class="row"><span class="k">${s.system}</span><span class="v">${fmt(s.accounts)} player(s) · ${fmt(s.events)} events</span></div>`).join('');
+    const deadList = e.dead.length
+      ? `<div class="note" style="margin-top:10px;color:var(--bad)">NEVER TOUCHED BY A PLAYER (${e.dead.length}/${e.systems.length}): ${e.dead.join(' · ')}</div>`
+      : '<div class="note" style="margin-top:10px;color:var(--good)">every tracked system has been used by at least one player</div>';
+    const untracked = e.untracked.length
+      ? `<div class="note" style="color:var(--dim)">untracked (no telemetry declared, so no verdict): ${e.untracked.join(' · ')}</div>` : '';
+    const uncat = e.uncatalogued.length
+      ? `<div class="note" style="color:var(--bad)">${e.uncatalogued.length} event type(s) no system claims — the catalog in src/engagement.js is behind the code</div>` : '';
+    $('#p-engage').querySelector('.body').innerHTML =
+      `<div class="row"><span class="k">humans / agents</span><span class="v">${fmt(p.humans)} / ${fmt(p.agents)}</span></div>`
+      + `<div class="row"><span class="k">active in ${e.window}d</span><span class="v">${fmt(p.activeInWindow)} <span style="color:var(--dim)">(${fmt(p.neverActive)} never played)</span></span></div>`
+      + `<div class="row"><span class="k">D1 return</span><span class="v">${pct(r.d1)}</span></div>`
+      + `<div class="row"><span class="k">D7 return</span><span class="v">${pct(r.d7)}</span></div>`
+      + `<div class="row"><span class="k">median active days</span><span class="v">${fmt(r.medianActiveDays)}</span></div>`
+      + `<div class="note" style="margin-top:10px">MOST-USED SYSTEMS (${live.length} of ${e.systems.length} used at all)</div>` + top
+      + deadList + untracked + uncat;
+  }
+
     $('#p-funnel').querySelector('.body').innerHTML =
       `<div class="note">of ${fmt((fn.characters || {}).alive)} living streets</div>`
       + barRow('pulled a job', pr.pulled_a_job || 0)
