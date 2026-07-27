@@ -15,14 +15,24 @@
 //   3. THE FIELD IS NEVER READ. `{price: 50}` when the handler reads `req.body?.unitPrice`. Route
 //      exists, value is sane, and the field is simply ignored — the server gets undefined on every
 //      call. This is the `{drugId}` vs `{drug}` class, and checks 1 and 2 are both blind to it.
+//   4. THE FIELD IS NEVER SENT — the mirror image, and the one the first three are blind to. The
+//      client reads `b.book` off a board that returns `active`, or `SEC.windowHours` off a board
+//      that never had it. No error is thrown: the screen renders `undefined`, or silently takes a
+//      hardcoded fallback, or shows its empty-state coaching on a screen that is not empty. Both
+//      of those shipped and are fixed; this now checks every field the client reads.
 //
 // Both the player console and /admin are covered. The dashboard is the one the founder would be
 // holding during an incident, so a dead button there surfaces at the worst possible moment.
 //
-// Both are checked STATICALLY against the server's own truth — fastify's mounted-route registry and
-// the rules catalogs — so there are no side effects, no ordering, and no flake. The alternative,
-// firing every control at a live server, cannot tell "the client sent nonsense" apart from "you
-// can't afford it", and a check that cannot tell those apart reports noise until someone deletes it.
+// Checks 1-3 are STATIC, against the server's own truth — fastify's mounted-route registry and the
+// rules catalogs — so there are no side effects, no ordering, and no flake. Firing every control at
+// a live server instead cannot tell "the client sent nonsense" apart from "you can't afford it",
+// and a check that cannot tell those apart reports noise until someone deletes it.
+//
+// Check 4 is RUNTIME, by necessity: a response shape is assembled across many lines with spreads
+// and conditionals, so reading it out of the source is guesswork, and guesswork here reports
+// confident nonsense. It boots the server on pg-mem in-process, builds its own fixture, and looks
+// at the actual JSON. No network, no shared state, deterministic.
 //
 // WHAT THIS DOES NOT CHECK, so a green run is not read as more than it is: whether a button is
 // wired to the RIGHT route (only that its route exists — the four dead ones found on the first run
@@ -447,6 +457,180 @@ assert.deepEqual(unread, [],
 assert.deepEqual(unresolvable, [], `${unresolvable.length} route(s) the client posts a body to hand ` +
   `that body to a module this cannot follow, so their fields go unchecked — teach followBody() the shape`);
 
+// ── 4. every field the client READS must be one its route actually returns ───────────────────────
+// The mirror of check 3, and the class the other three cannot see: the client reads `b.book` off a
+// board that returns `active`. Nothing throws — the screen renders undefined, or quietly falls back
+// to a hardcoded number, or shows its "nothing here yet" card on a screen full of the player's
+// loans. Both of those were live and are fixed.
+//
+// Four extraction disciplines, each of which produced a FALSE finding before it was added, and any
+// one of which missing turns this into noise:
+//   · innermost-BLOCK scope, not the enclosing named function — a `const b` inside one arrow is
+//     block-scoped, and reusing the name in a sibling arrow is ordinary JS.
+//   · shadow blanking — `.map((b) => …)` and `for (const b of …)` re-bind the same short names.
+//   · a `(?<![\w$.])` lookbehind — without it `m.b.pool` reads as `b.pool`.
+//   · JS builtins excluded — `.map`/`.length` are not response fields.
+// Anything still unattributable is COUNTED and asserted to be zero, never quietly dropped.
+//
+// SCOPE, stated plainly so a green run is not read as more than it is: this covers the TOP-LEVEL
+// fields of each response. It does NOT yet cover the fields of LIST ELEMENTS — `b.paper.map((p) =>
+// p.owed)` — because those reads live inside a lambda whose parameter the shadow blanking removes
+// by design, and because 12 of the 16 list boards come back EMPTY for a single-character fixture,
+// so there is no element to compare against. Covering them means a much richer fixture (a listing,
+// a loan, a fighter, a racer, a contract...) so every list has a row in it. That is the next step,
+// and it is where most board rendering lives — do not read "275 fields checked" as "every read".
+const BUILTIN = new Set(['map','length','sort','filter','slice','join','find','some','every','forEach','reduce',
+  'includes','indexOf','toFixed','toLowerCase','toUpperCase','split','trim','concat','push','pop','shift','flat',
+  'flatMap','keys','values','entries','hasOwnProperty','toString','then','catch','finally','padStart','padEnd',
+  'replace','match','startsWith','endsWith','repeat','at','reverse','findIndex','charAt','substring','splice']);
+// readLiteral() above stops at a newline — right for a PATH, which never spans lines, and it must
+// keep doing that or an unterminated quote would swallow the rest of the file. But this client is
+// built out of multi-line template literals, and every `{` inside one would be counted as a block,
+// so scoping needs a reader that lets backticks run on. Same shape, one deliberate difference.
+// It must also track `${}` depth: this client nests templates inside templates
+// (`${rows.map((r) => `<div>${r.name}</div>`).join('')}`), and a reader that stops at the first
+// backtick ends the outer literal in the middle, leaving its braces to corrupt the block map.
+const strEnd = (src, i) => {
+  const q = src[i];
+  let d = 0;
+  for (let j = i + 1; j < src.length; j++) {
+    const c = src[j];
+    if (c === '\\') { j++; continue; }
+    if (q === '`' && c === '$' && src[j + 1] === '{') { d++; j++; continue; }
+    if (d > 0) { if (c === '{') d++; else if (c === '}') d--; continue; }
+    if (c === q) return j;
+    if (c === '\n' && q !== '`') return null;
+  }
+  return null;
+};
+const blocksOf = (src) => {                   // string-aware: the client is mostly template literals
+  const out = [], stack = [];
+  for (let j = 0; j < src.length; j++) {
+    const c = src[j];
+    if (c === "'" || c === '"' || c === '`') { const e = strEnd(src, j); if (e == null) continue; j = e; continue; }
+    if (c === '/' && src[j + 1] === '/') { const nl = src.indexOf('\n', j); if (nl < 0) break; j = nl; continue; }
+    if (c === '{') stack.push(j);
+    else if (c === '}') { const st = stack.pop(); if (st != null) out.push([st, j]); }
+  }
+  return out;
+};
+const blankShadows = (src, v) => {            // blank every region where `v` is RE-bound
+  const esc = v.replace('$', '\\$');
+  const binders = [new RegExp(`\\(\\s*${esc}\\s*(?:,[^)]*)?\\)\\s*=>`, 'g'), new RegExp(`(?<![\\w$.])${esc}\\s*=>`, 'g'),
+    new RegExp(`for\\s*\\(\\s*(?:const|let|var)\\s+${esc}\\s+of`, 'g'), new RegExp(`catch\\s*\\(\\s*${esc}\\s*\\)`, 'g'),
+    new RegExp(`function\\s*\\(\\s*${esc}\\s*(?:,[^)]*)?\\)`, 'g')];
+  let out = src, unresolved = 0;
+  for (const re of binders) {
+    let m;
+    while ((m = re.exec(out))) {
+      let k = m.index + m[0].length;
+      while (k < out.length && /\s/.test(out[k])) k++;
+      let end = -1;
+      if (out[k] === '{' || out[k] === '(') {
+        const open = out[k], close = open === '{' ? '}' : ')';
+        let d = 0;
+        for (let j = k; j < out.length; j++) { if (out[j] === open) d++; else if (out[j] === close && --d === 0) { end = j + 1; break; } }
+      } else {
+        let d = 0;
+        for (let j = k; j < out.length; j++) {
+          const c = out[j];
+          if ('([{'.includes(c)) d++;
+          else if (')]}'.includes(c)) { if (d === 0) { end = j; break; } d--; }
+          else if ((c === ',' || c === ';') && d === 0) { end = j; break; }
+        }
+        if (end < 0) end = out.length;
+      }
+      if (end < 0) { unresolved++; break; }
+      out = out.slice(0, m.index) + ' '.repeat(end - m.index) + out.slice(end);
+      re.lastIndex = m.index;
+    }
+  }
+  return { src: out, unresolved };
+};
+const GETBIND = /(?:const|let|var)?\s*([a-zA-Z_$][\w$]*)\s*=\s*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\2\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
+const reads = new Map(), readWhere = new Map();
+let unscoped = 0, shadowUnresolved = 0;
+for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(/g)) {
+  const open = html.indexOf('{', m.index + m[0].length);
+  if (open < 0) continue;
+  let d = 0, body = null;
+  for (let j = open; j < html.length; j++) {
+    if (html[j] === '{') d++;
+    else if (html[j] === '}' && --d === 0) { body = html.slice(open, j + 1); break; }
+  }
+  if (!body) continue;
+  const blks = blocksOf(body);
+  for (const b of body.matchAll(GETBIND)) {
+    const v = b[1], path = b[3].replace(/\$\{[^}]*\}/g, ':p');
+    let scope = null;
+    for (const [s, e] of blks) if (s < b.index && b.index < e && (!scope || (e - s) < (scope[1] - scope[0]))) scope = [s, e];
+    if (!scope) { unscoped++; continue; }
+    const { src, unresolved } = blankShadows(body.slice(b.index, scope[1]), v);
+    shadowUnresolved += unresolved;
+    const re2 = new RegExp(`(?:const|let|var)\\s+${v.replace('$', '\\$')}\\s*=`, 'g'); re2.lastIndex = 1;
+    const nxt = re2.exec(src);
+    const key = `${path}|${b[5] || ''}`;
+    for (const r of (nxt ? src.slice(0, nxt.index) : src)
+      .matchAll(new RegExp(`(?<![\\w$.])${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
+      if (BUILTIN.has(r[1])) continue;
+      if (!reads.has(key)) { reads.set(key, new Set()); readWhere.set(key, m[1]); }
+      reads.get(key).add(r[1]);
+    }
+  }
+}
+assert.equal(unscoped, 0, `${unscoped} response binding(s) could not be scoped to a block, so their reads go unchecked`);
+assert.equal(shadowUnresolved, 0, `${shadowUnresolved} shadow region(s) could not be resolved, so reads may be misattributed`);
+assert(reads.size > 40, `only ${reads.size} (route, binding) pairs found — the read extraction broke`);
+
+const inject = async (method, url, token, payload) => {
+  const res = await app.inject({ method, url, headers: token ? { authorization: `Bearer ${token}` } : {}, payload });
+  try { return { code: res.statusCode, body: res.json() }; } catch { return { code: res.statusCode, body: null }; }
+};
+const token = (await inject('POST', '/v1/auth/guest')).body.token;
+await inject('POST', '/v1/character', token, { name: 'Mirror ' + Math.random().toString(36).slice(2, 8) });
+const meRes = await inject('GET', '/v1/me', token);
+const charId = meRes.body.character.id;
+// A fresh street cannot found a family or sit at a ring table — both are level-gated, and the
+// fixture exists to REACH boards, not to earn its way there. Seeded directly; check 4 asserts no
+// ledger identity, so this cannot mask an economy defect the way seeding in the sim would.
+await app.pool.query('UPDATE characters SET cash=50000000, respect=500000, loc=$2 WHERE id=$1', [charId, 'neon']);
+// Routes whose path carries an id cannot be fetched without one. Each is listed with how to get a
+// real one, and the list must COVER them — an unlisted param route fails the run rather than being
+// counted as unverifiable, the same rule check 1b applies to runtime-built paths.
+const PARAM_FIXTURES = new Map([
+  ['/v1/gangs/:p', async () => (await inject('POST', '/v1/gangs', token,
+    { name: 'Mirror Family ' + Math.random().toString(36).slice(2, 6), tag: 'MR' + Math.floor(Math.random() * 90 + 10) })).body?.gangId],
+  ['/v1/feud/:p', async () => charId],
+  ['/v1/casino/ring/:p', async () => (await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 })).body?.tableId],
+]);
+const unlistedParam = [...reads.keys()].filter((k) => k.split('|')[0].includes(':p') && !PARAM_FIXTURES.has(k.split('|')[0]));
+assert.deepEqual(unlistedParam, [], `${unlistedParam.length} route(s) the client reads from carry an id ` +
+  `with no way to obtain one listed in PARAM_FIXTURES, so their fields go unchecked — add a fixture`);
+
+const notReturned = [], unobservable = [];
+for (const [key, fields] of reads) {
+  const [rawPath, sub] = key.split('|');
+  let path = rawPath;
+  if (rawPath.includes(':p')) {
+    const id = await PARAM_FIXTURES.get(rawPath)();
+    assert(id, `the PARAM_FIXTURES entry for ${rawPath} produced no id — the fixture broke, not the client`);
+    path = rawPath.replace(':p', id);
+  }
+  const r = await inject('GET', path, token);
+  assert(r.code < 400 && r.body, `${path} answered ${r.code} for the fixture character — check 4 cannot read a board it cannot fetch`);
+  const obj = sub ? r.body[sub] : r.body;
+  const target = Array.isArray(obj) ? obj[0] : obj;
+  if (!target || typeof target !== 'object') { unobservable.push(`${key} (${readWhere.get(key)})`); continue; }
+  const have = new Set(Object.keys(target));
+  const gone = [...fields].filter((f) => !have.has(f));
+  if (gone.length) notReturned.push(`${readWhere.get(key)} reads ${gone.join(',')} off ${key} — the route returns ${[...have].slice(0, 8).join(',')}…`);
+}
+assert.deepEqual(notReturned, [], `the client reads ${notReturned.length} field(s) its route does not return — ` +
+  `those render as undefined, or silently take a fallback, with no error anywhere`);
+assert.deepEqual(unobservable, [], `${unobservable.length} binding(s) resolved to an empty list or a non-object, ` +
+  `so their fields could not be observed — enrich the fixture above rather than leaving them unchecked`);
+const readCount = [...reads.values()].reduce((n, s) => n + s.size, 0);
+
 await app.close();
 console.log(`✅ client wiring test passed — across the console AND /admin: of ${refs.size} routes they can ` +
   `call, ${refs.size - dynamic.length} resolve to a really-mounted route (segment-wise, so ` +
@@ -455,8 +639,11 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `concrete routes, all mounted, none left unverifiable; all ${checked.length} catalog-backed values they hardcode ` +
   `are ids the server recognises; and every field in ${sends.length} request bodies is one its own ` +
   `route actually reads — including the ones that hand the whole body to a module, followed a file ` +
-  `deeper to the parameter it lands in — through a barrel re-export if it takes one. ` +
-  `Those are the three ways a button dies silently — this has found four dead routes and seven ` +
+  `deeper to the parameter it lands in — through a barrel re-export if it takes one. And the mirror: ` +
+  `the ${readCount} TOP-LEVEL fields the screens read off ${reads.size} boards are fields those ` +
+  `boards really return, observed by fetching each one (list ELEMENT fields are not covered yet — ` +
+  `see the scope note above). ` +
+  `Those are the four ways a button dies silently — this has found four dead routes and seven ` +
   `ignored fields, among them a broken action, an ammo box sold by a control that asked for a ` +
   `quantity it could not honour, and an unstake box that emptied the whole stake whatever you typed. ` +
   `${Object.keys(CATALOGS).length} fields have ` +

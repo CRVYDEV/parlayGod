@@ -157,6 +157,18 @@ assert.equal((await meOf(cy.token)).cash, cyCash0 + cyStack, 'and lands in pocke
 await escrowOk('after the cash-out');
 
 // ── DEATH: the dead man's stack BURNS; the live hand resolves to the survivor ──
+// Bo's stack here is whatever the RANDOMLY dealt hands above left him, and runEstate writes the
+// burn row only `if (stack > 0)` — correct, since a player with nothing has nothing to burn. So
+// roughly one run in twenty the antes below took Bo to zero and this block failed on its own
+// premise rather than on a defect. Reset him to a known stack the honest way, through leave +
+// re-sit: both are ledgered, so the escrow identity (Σ stacks + Σ pots == sit − leave − take −
+// death) stays exact. Writing the stack by SQL would have fixed the flake and broken the identity.
+{
+  await call('POST', `/v1/casino/ring/${tid}/leave`, { token: bo.token });
+  const back = await call('POST', `/v1/casino/ring/${tid}/sit`, { token: bo.token, body: { buyin: 20000 } });
+  assert.equal(back.code, 200, 'Bo buys back in with a known stack, so the burn below has something to burn');
+  await escrowOk('after the re-buy');
+}
 r = await call('POST', `/v1/casino/ring/${tid}/deal`, { token: al.token });
 assert.equal(r.code, 200, 'a heads-up hand deals');
 const boStack = (await call('GET', `/v1/casino/ring/${tid}`, { token: bo.token })).body.yourSeat.stack;

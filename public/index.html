@@ -3907,7 +3907,7 @@
     const b = (await api('GET', '/v1/loans')).body || {};
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
     t.innerHTML = `
-      ${!(b.offers || []).length && !(b.book || []).length ? coachCard('The Shylock — predatory lending', 'Lend cash at a rate for a fixed term and collect the vig — or default and get leg-broken and marked a welsher. High trust, high risk. Nothing on the wire right now; post an offer below or wait for borrowers.') : ''}
+      ${!(b.offers || []).length && !(b.active || []).length ? coachCard('The Shylock — predatory lending', 'Lend cash at a rate for a fixed term and collect the vig — or default and get leg-broken and marked a welsher. High trust, high risk. Nothing on the wire right now; post an offer below or wait for borrowers.') : ''}
       ${b.house ? `<h2>The House Window <span class="d" style="font-size:11px">(the lender of last resort — bad terms, always open, lends only what it holds)</span></h2>
       <div class="card">${b.house.yourMarker
         ? `<span class="t">Your marker: $${fmt(b.house.yourMarker.owed)} owed</span> ${b.house.yourMarker.overdue ? '<span class="chip bad">OVERDUE — the house ALWAYS collects</span>' : `<span class="d">due in ${Math.ceil(b.house.yourMarker.dueSeconds / 3600)}h</span>`}

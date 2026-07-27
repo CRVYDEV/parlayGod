@@ -5562,3 +5562,38 @@ price; not naming one is refused. **The lesson worth keeping: a coverage test th
 what it cannot parse is worse than no test, because the green run is read as proof. Every extraction
 in both guards now counts what it could not read and asserts that count is zero.** Every new
 assertion mutation-verified. Suite 53/53, mobile 54/54, sim drift-0.
+
+**THE MIRROR — checking what the client READS, not just what it sends (2026-07-27).** The wiring
+test covered the three ways a control dies on the way OUT. The way back was unguarded: 442 distinct
+field reads across 96 boards, and if a server field is renamed or a board stops returning one,
+nothing throws — the screen renders `undefined`, or silently takes a hardcoded fallback, or shows
+its "nothing here yet" card on a screen that is full. Check 4 closes it, and found both of those
+live: **THE SHYLOCK** tested `b.book` for emptiness against a board that returns `active`, so a
+lender with active loans and no open offers got the beginner coaching card on a screen full of their
+own book; **THE WIRE**'s extortion card read `SEC.windowHours` off a board that never had it (it is
+published by `/v1/rules`), so it rendered a hardcoded `|| 24` and would have gone on saying "24h"
+whatever `EXTORT_WINDOW_MS` was retuned to. The check is **RUNTIME by necessity** — a response shape
+is assembled across many lines with spreads and conditionals, so reading it out of the source is
+guesswork, and guesswork here reports confident nonsense; it boots the server on pg-mem, builds its
+own fixture, and looks at the actual JSON. **Four extraction disciplines, each added only after it
+produced a FALSE finding, and any one missing turns the check into noise:** innermost-BLOCK scope
+rather than the enclosing named function (a `const b` inside one arrow is block-scoped, and reusing
+the name in a sibling arrow is ordinary JS — this alone accounted for 3 of the first 8 "findings");
+shadow blanking for `.map((b) => …)` / `for (const b of …)` re-binding the same short names (which
+is why `onclick` and `dataset` were being reported as missing leaderboard fields); a `(?<![\w$.])`
+lookbehind, because without it `m.b.pool` reads as `b.pool` and a main-event fighter's fields get
+charged to whatever the outer `b` holds; and excluding JS builtins, since `.map`/`.length` are not
+response fields. Two further traps cost real time: the shared `readLiteral` stops at a newline —
+correct for a path, fatal for a block scanner in a client made of multi-line template literals — and
+the replacement must also track `${}` depth, or a NESTED template ends the outer literal mid-way and
+its braces corrupt every scope. Nothing is left admitted-but-unchecked: bindings that cannot be
+scoped, shadows that cannot be resolved, param routes with no fixture, and boards that resolve to an
+empty list are each COUNTED and asserted to be zero, so the fixture has to be enriched rather than
+the gap tolerated. Mutation-verified three ways (restore either real bug, or invent a field, and the
+run names the screen, the field, and what the route actually returns). **Honest scope, stated in
+the file and in the pass line: 275 TOP-LEVEL fields across 57 boards — list ELEMENT fields
+(`b.paper.map((p) => p.owed)`) are NOT covered yet.** Those reads sit inside a lambda whose
+parameter the shadow blanking removes by design, and 12 of the 16 list boards come back EMPTY for
+a single-character fixture, so there is nothing to compare against; covering them needs a fixture
+rich enough that every list has a row in it. That is the next step and it is where most board
+rendering lives — the check must not be read as "every read is verified".
