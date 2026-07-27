@@ -66,27 +66,58 @@ const readLiteral = (src, i) => {
     if (c === '\\') { out += src[j + 1] ?? ''; j++; continue; }
     if (quote === '`' && c === '$' && src[j + 1] === '{') { depth++; out += '${'; j++; continue; }
     if (depth > 0) { if (c === '{') depth++; else if (c === '}') depth--; out += c; continue; }
-    if (c === quote) return out;
+    if (c === quote) return { value: out, end: j };
     if (c === '\n') return null;              // an unterminated literal is not a path
     out += c;
   }
   return null;
 };
 
+// Not every call NAMES its path with a literal. `api('GET', room === 'family' ? '/v1/gangs/chat'
+// : '/v1/chat')` picks between two, and readLiteral returns null because the argument does not
+// start with a quote. Silently skipping those is the worst possible failure for a coverage test —
+// four chat routes went entirely unchecked and the run still printed "passed". So the whole
+// argument expression is walked instead, collecting every /v1 literal it could evaluate to, and
+// anything STILL unreadable is counted and asserted to be zero rather than dropped.
+const pathsInArg = (src, i) => {
+  const out = [];
+  let depth = 0;
+  for (let j = i; j < src.length; j++) {
+    const c = src[j];
+    if (c === "'" || c === '"' || c === '`') {
+      const lit = readLiteral(src, j);
+      if (!lit) break;
+      if (lit.value.startsWith('/v1')) out.push(lit.value);
+      j = lit.end;
+      continue;
+    }
+    if (c === '(' || c === '[' || c === '{') { depth++; continue; }
+    if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; continue; }
+    if (c === ',' && depth === 0) break;       // end of the path argument
+  }
+  return out;
+};
+
+let unreadable = 0;
+const addCall = (src, m, where) => {
+  const at = m.index + m[0].length;
+  const lit = readLiteral(src, at);
+  if (lit) { addRef(m[1], lit.value, where); return; }
+  const branches = pathsInArg(src, at);
+  if (!branches.length) { unreadable++; return; }
+  for (const p of branches) addRef(m[1], p, `${where} (branch)`);
+};
+
 for (const m of html.matchAll(/data-do="(GET|POST|PUT|DELETE)\s+([^"]+)"/g)) addRef(m[1], m[2], 'data-do');
 for (const m of html.matchAll(/\[\s*'(GET|POST|PUT|DELETE)'\s*,\s*'([^']+)'/g)) addRef(m[1], m[2], 'the deck');
-for (const m of html.matchAll(/\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
-  const lit = readLiteral(html, m.index + m[0].length);
-  if (lit) addRef(m[1], lit, 'api()/act()');
-}
+for (const m of html.matchAll(/\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) addCall(html, m, 'api()/act()');
 // THE OPS DASHBOARD is a second client against the same server, and the one the founder would be
 // holding during an incident — a dead button there is discovered at the worst possible moment. It
 // calls through its own j(method, path) helper, so it needs its own extraction or it goes unchecked.
-for (const m of admin.matchAll(/\bj\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
-  const lit = readLiteral(admin, m.index + m[0].length);
-  if (lit) addRef(m[1], lit, '/admin');
-}
+for (const m of admin.matchAll(/\bj\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) addCall(admin, m, '/admin');
 
+assert.equal(unreadable, 0, `${unreadable} api()/act() call site(s) name their path in a way this ` +
+  `cannot read, so those routes go UNCHECKED while the run still passes — extend pathsInArg()`);
 assert(refs.size > 150, `only ${refs.size} client route references found — the extraction broke, ` +
   `which would make every assertion below vacuous`);
 
@@ -188,20 +219,43 @@ for (const rel of srcFiles) {
 
 // what the client SENDS: the deck's third tuple element, and data-body="{…}".
 const sends = [];                             // [method, path, [field…], where]
-const objectAt = (src, i) => {                // read a balanced {…} and return its top-level keys
+// The keys of a body object — at the TOP level only. A regex over the object's text would report a
+// nested object's keys as fields of the request (`{a:{b:1}}` → a,b), and `b` would then be compared
+// against a handler that never sees it: a manufactured failure. Walked properly instead, so quoted
+// keys, shorthand (`{amount}`), computed values and spreads all land where they belong.
+const topKeys = (src, i) => {
   if (src[i] !== '{') return null;
-  let depth = 0;
-  for (let j = i; j < src.length; j++) {
-    if (src[j] === '{') depth++;
-    else if (src[j] === '}' && --depth === 0) {
-      const inner = src.slice(i + 1, j);
-      return [...inner.matchAll(/(?:^|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g)].map((m) => m[1]);
+  const out = [];
+  let j = i + 1;
+  const ws = () => { while (j < src.length && /\s/.test(src[j])) j++; };
+  const skipValue = () => {                   // forward past one value to its ',' or the closing '}'
+    let d = 0;
+    for (; j < src.length; j++) {
+      const c = src[j];
+      if (c === "'" || c === '"' || c === '`') { const l = readLiteral(src, j); if (!l) return; j = l.end; continue; }
+      if (c === '{' || c === '[' || c === '(') d++;
+      else if (c === '}' || c === ']' || c === ')') { if (d === 0) return; d--; }
+      else if (c === ',' && d === 0) return;
     }
+  };
+  while (j < src.length) {
+    ws();
+    if (src[j] === '}' || j >= src.length) break;
+    if (src[j] === ',') { j++; continue; }
+    let key = null;
+    if (src[j] === "'" || src[j] === '"' || src[j] === '`') {
+      const l = readLiteral(src, j); if (!l) break; key = l.value; j = l.end + 1;
+    } else if (/[a-zA-Z_$]/.test(src[j])) {
+      const w = /^[a-zA-Z_$][a-zA-Z0-9_$]*/.exec(src.slice(j)); key = w[0]; j += w[0].length;
+    } else { skipValue(); continue; }         // `...spread`, a computed key, anything else
+    ws();
+    out.push(key);
+    if (src[j] === ':') { j++; ws(); skipValue(); }   // else shorthand `{amount}` — key is the field
   }
-  return null;
+  return out;
 };
 for (const m of html.matchAll(/\[\s*'(GET|POST|PUT|DELETE)'\s*,\s*'([^']+)'\s*,\s*/g)) {
-  const keys = objectAt(html, m.index + m[0].length);
+  const keys = topKeys(html, m.index + m[0].length);
   if (keys?.length) sends.push([m[1], m[2], keys, 'the deck']);
 }
 for (const m of html.matchAll(/data-do="(GET|POST|PUT|DELETE)\s+([^"]+)"[^>]*?data-body='(\{[^']*\})'/g)) {
@@ -215,12 +269,19 @@ const unread = [], unresolvable = [];
 for (const [method, rawPath, keys, where] of sends) {
   const path = rawPath.replace(/\$\{[^}]*\}/g, ':p').split('?')[0];
   const seg = path.split('/');
-  const hit = [...handlerFields.entries()].find(([k]) => {
-    const [hm, hp] = k.split(' ');
-    if (hm !== method) return false;
-    const hs = hp.split('/');
-    return hs.length === seg.length && hs.every((s, i) => s.startsWith(':') || s === seg[i]);
-  });
+  // TWO handlers can match one path: `/v1/skills/respec` is shadowed by `/v1/skills/:id`, and
+  // there are eight such pairs. fastify serves the most specific one, so this has to pick the same
+  // one — taking the first match compares the body against the WRONG handler's fields, which is
+  // both a missed bug and a possible false alarm depending on which way the file happens to be ordered.
+  const params = (k) => k.split('/').filter((s) => s.startsWith(':')).length;
+  const hit = [...handlerFields.entries()]
+    .filter(([k]) => {
+      const [hm, hp] = k.split(' ');
+      if (hm !== method) return false;
+      const hs = hp.split('/');
+      return hs.length === seg.length && hs.every((s, i) => s.startsWith(':') || s === seg[i]);
+    })
+    .sort((a, b) => params(a[0]) - params(b[0]))[0];
   if (!hit) continue;                                    // route-existence is check 1's job
   if (hit[1] === null) { unresolvable.push(hit[0]); continue; }
   for (const k of keys) if (!hit[1].has(k)) unread.push(`${method} ${path} sends '${k}' — the handler reads ${[...hit[1]].join('|') || 'no body at all'}`);
