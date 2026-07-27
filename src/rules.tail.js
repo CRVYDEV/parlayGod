@@ -3161,3 +3161,51 @@ POPULATION.TURNOVER = {
   DRAINED_BPS: 1500,  // 15% of what they arrived with
   PER_DAY: 24,        // residents replaced per day — half the city, ≈$500k/day of npc:seed at the mean
 };
+
+// ── TOKENOMICS v2 (founder-directed 2026-07-27) ──────────────────────────────────────────────────
+// The thesis: cash → OMR is severed, so in-game cash inflation stops being a token-price decision.
+// Design: omerta-tokenomics-v2-design.md. Every number here is a founder sign-off lever.
+export const EXCHANGE = {
+  // Cash paid per OMR burned. Anchored at the retired AMM's genesis spot. THE NUMBER THAT WILL NEED
+  // REVISITING: it is fixed while cash inflates (a maxed passive stack measures $21.6M/day), so the
+  // window gets progressively less attractive in real terms. That self-limits rather than breaking,
+  // but it wants a look each season — indexing it to the pool's own growth is the obvious v2.1.
+  RATE: 500,
+  MIN_OMR: 1,                  // no dust redemptions
+  // THE INTERLOCK. The design's claim that "arbitrage is impossible by construction" holds ONLY
+  // once cash → OMR is severed (design §2): while the AMM buy side is still live and spot sits
+  // below RATE, anyone can buy $OMR with cash and redeem it here for more cash — a money pump.
+  // So the window stays SHUT until step 2 retires the buy direction, and this flips true in that
+  // same commit. `test/tokenomics.js` asserts the interlock directly (it tries a swap buy: if
+  // cash → $OMR still works, the window MUST be closed), so opening it early fails the suite
+  // rather than quietly printing money. `EXCHANGE_OPEN=on` overrides for tests — never production.
+  OPEN: false,
+  DAILY_CAP_OMR: 250,          // per account, rolling 24h — the wash-cap token-bucket pattern
+  // The pool is FED, never created: this share of the street-tax pool (which every in-game take
+  // already feeds) moves across on the same 12h tick the buyback runs on. A dry pool refuses
+  // cleanly and burns nothing — the Phase-4 stake-pool discipline: a claim on what was funded,
+  // never a promise.
+  FUND_BPS: 3000,
+};
+
+// What individual staking rewards and personal RWA dividends are repurposed into. Standing already
+// buys Commission seats (status); now it pays, so tribute, wars and the seasonal standing reset
+// carry a real economic prize — and OMR gains a reason to be held by an ORGANISATION rather than
+// sold by a person. Paid into gangs.omr_reserve, which already funds seals, foundations and the
+// family RWA book. A pure TRANSFER (pool → reserve, both in omrBuckets) — nothing is minted.
+// Read PER CALL, never at import (the RATE_LIMIT / SEASON_MODS precedent) so a test can open the
+// window without a module-cache reload. Production runs on EXCHANGE.OPEN alone.
+export const exchangeOpen = () => EXCHANGE.OPEN || process.env.EXCHANGE_OPEN === 'on';
+
+export const FAMILY_YIELD = {
+  SEATS: 5,
+  WEIGHTS: [5, 4, 3, 2, 1],    // descending by standing rank (the Commission-levy pattern)
+  MIN_PAYOUT: 0.01,            // don't write dust rows
+  // THE MIGRATION DIAL, and it ships at ZERO on purpose. This share of each 12h buyback is carved
+  // into the family pot. At 0 the buyback behaves EXACTLY as it does today, so this drop changes no
+  // signed balance number — the mechanism is live and provably correct, and the switchover from
+  // individual yield becomes one number the founder turns up deliberately rather than a cliff.
+  // Raise it as `stake:reward` / `dividend:omr` are retired (design §3), so the yield moves across
+  // rather than being duplicated: funding this while individual yield still pays would pay twice.
+  FUND_BPS: 0,
+};

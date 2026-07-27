@@ -48,6 +48,7 @@ import * as Loans from './loans.js';
 import * as Portfolio from './portfolio.js';
 import * as Emission from './emission.js';
 import * as Rwa from './rwa.js';
+import * as Exchange from './exchange.js';
 import { register as registerCasino } from './routes/casino.js';
 import { register as registerPen } from './routes/pen.js';
 import { register as registerSpeakeasy } from './routes/speakeasy.js';
@@ -642,6 +643,19 @@ export async function buildServer() {
   app.post('/v1/rackets/:id/upgrade', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => E.upgradeRacket(ch, req.params.id, client, h)));
   registerLeaderboards(app, { pool, auth, modAuth });
+
+  // ── TOKENOMICS v2 — THE EXCHANGE (the one-way window) + THE FAMILY YIELD ──
+  // Burn $OMR, take cash from a pool real sinks fed. Cash never runs the other way in v2; see
+  // omerta-tokenomics-v2-design.md for why a one-directional AMM cannot be the mechanism.
+  app.get('/v1/window', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Exchange.exchangeBoard(pool, h)));
+  app.post('/v1/window/redeem', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Exchange.redeem(ch, req.body?.amount, client, h)));
+  app.get('/v1/yield', async () => Exchange.yieldBoard(pool));           // public: who draws the family yield
+  app.get('/v1/mod/exchange', { preHandler: modAuth }, async () => ({
+    exchange: await Exchange.exchangePool(pool), familyYield: await Exchange.familyYieldPool(pool),
+    invariants: await Exchange.runExchangeInvariants(pool),
+  }));
 
   // ── M2: swap, staking, gear (§7.12 / §5.4) ──
   app.post('/v1/swap', { preHandler: auth }, async (req) =>

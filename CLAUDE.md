@@ -5661,3 +5661,54 @@ handler does not read — it takes `price`; the neighbouring `/v1/exchange/list`
 nobody wanted both read as "empty"), loan offers 20%, bodyguards 20%, duels 19%, contracts 12%, and
 wealth flat (top 10% hold 12%). Honest scope, stated in the output: car auctions and speakeasies are
 censused but NOT driven, and are labelled so an undriven zero never reads as a finding.
+
+**TOKENOMICS v2 — THE EXCHANGE + THE FAMILY YIELD (founder-directed 2026-07-27; step 1 of
+`omerta-tokenomics-v2-design.md`).** The founder ruled: cash → OMR is severed, OMR supply becomes
+unbounded with **bonds as the only mint**, individual yield is repurposed to a **family** yield,
+the sell tax is **9% sell-only** (LP / stock-buying / founder), and burn-to-redeem of real stock
+tokens is **legal-cleared and Robinhood-approved** (recorded as a founder assertion; the mechanical
+`allocated ≤ held` anti-Ponzi wall is kept regardless). The thesis: today every cash faucet is
+secretly a token-price decision, because cash converts to OMR — a measured **$21.6M/day** maxed
+passive stack sits one swap from sell pressure. Sever the link and cash becomes purely internal.
+This drop is the off-chain core, `src/exchange.js` + `test/tokenomics.js` (the **57th suite**).
+**THE EXCHANGE** replaces the AMM rather than half-disabling it — a one-directional constant-product
+AMM is not a market but a draining bucket (every trade removes cash, nothing refills it, reserves
+skew monotonically until the price nears zero). So: **burn X $OMR → X × `RATE` cash, out of a pool
+only real cash SINKS fill** (`EXCHANGE.FUND_BPS` of the street take, carved inside the buyback's own
+transaction so the 12h due-check and the `street_tax` lock are already held — ONE implementation,
+`carveExchange`, shared with the standalone path). The Phase-4 stake-pool discipline applied to cash:
+**a dry pool refuses cleanly and burns NOTHING** — a claim on what was funded, never a promise. Per-
+account rolling-24h cap (the D3 wash bucket). §10.4: `window:burn` an $OMR BURN, `window:payout` a
+character_id'd cash FAUCET, plus a new real-value invariant **`exchange pool backed`** (paid ≤
+funded) proving the cash side is a redistribution, not inflation (the `runVigInvariants` shape). The
+prefix is `window:` NOT `exchange:` — the M3 cb/ammo barter board already owns that, and two systems
+sharing a reason prefix is how a vocabulary check stops meaning anything. **THE FAMILY YIELD**
+(`family_yield_pool` → `gangs.omr_reserve`, ledgered `yield:family`) is a pure TRANSFER between two
+buckets already inside `omrBuckets`, weighted 5-4-3-2-1 across the top `SEATS` families by **this
+season's** standing (the econ-pass formula that made seats re-contestable), skipping a family that
+dissolved between the read and the write so its share stays in the pot. So standing stops being only
+a badge, and $OMR gains a reason to be held by an ORGANISATION rather than sold by a person.
+**THE INTERLOCK — found while building, and load-bearing.** The design's claim that arbitrage is
+impossible "by construction" holds only ONCE cash → $OMR is gone; while the AMM buy side is live, a
+fixed-rate window is a **money pump** whenever spot sits below `RATE` (buy low, redeem at `RATE`). So
+the window ships **SHUT** (`EXCHANGE.OPEN: false`) and opens in the same change that retires the buy
+direction — and that is ENFORCED, not remembered: the test performs a swap buy and, if it succeeds,
+asserts the window is closed, so opening it early fails the suite rather than quietly printing money.
+`EXCHANGE_OPEN=on` (the test override) is classified TEST_ONLY in `preflight.js`, so it cannot reach
+production by being forgotten either. **Nothing signed was retuned:** `carveExchange` returns 0 while
+shut (the 30% buyback diversion arrives with step 2, and wants a re-sim then), and
+`FAMILY_YIELD.FUND_BPS` ships at **0** — the buyback splits exactly as before. That zero is the
+MIGRATION DIAL: raise it as `stake:reward`/`dividend:omr` retire, or the yield pays twice. Four
+mutations, four caught at their own assertion (burn-before-the-dry-gate; `window:burn` dropped from
+`omrBurns` → drift reads 190 not 200, i.e. the exact number proves the burn is accounted; the family
+yield minting instead of transferring; the interlock). One thing worth remembering from the mutation
+run: **under pg-mem ROLLBACK is a no-op**, so a burn written before a gate leaves its ledger row
+behind even though the balance looks untouched — the dry-pool check therefore asserts the LEDGER, not
+just the balance, or it would pass for the wrong reason. Two guards caught their own classes en route
+(`test/routes.js` on the new public `/v1/yield`; `test/preflight.js` on the unclassified knob). Suite
+57/57 + sim drift-0. Console: a Window + Family Yield card on Going Legit; both codices updated and
+`the family yield` added to the drift detector. **NEXT** (design §7): retire cash → OMR and the
+laundering surface (this is what opens the window), re-source the RWA float from the tax + bond
+slices, then the contracts (`OMR.mint()` + the 9% three-way tax; `OmertaBond` minting behind the
+daily cap / discount ceiling / accretive-only walls) — both reset the audit clock. Then **re-sim
+everything**: the entire cash economy was balanced against an extraction threat model that v2 removes.

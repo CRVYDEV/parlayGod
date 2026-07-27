@@ -47,6 +47,9 @@ const PUBLIC = new Set([
   'GET /v1/rules',
   'GET /v1/u/:name',
   'GET /v1/ws',
+  // TOKENOMICS v2: the family-yield board is a public status board (the /v1/gangs precedent) —
+  // it names who draws the yield and moves nothing.
+  'GET /v1/yield',
   'POST /v1/auth/guest',
   'POST /v1/auth/privy',
   'POST /v1/auth/x',

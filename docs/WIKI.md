@@ -691,6 +691,19 @@ legal rule; a real KYC extraction is a future phase behind legal approval). `GET
 
 Leaderboards: `/v1/leaderboard/portfolio`, `/family-portfolio`, `/foundation`.
 
+### The Window and the Family Yield (tokenomics v2 — building)
+
+A change to how $OMR works is being built (`omerta-tokenomics-v2-design.md`). Two pieces are in already:
+
+- **The Window** (`GET /v1/window`, `/v1/window/redeem`) — burn $OMR, take in-game cash at a published
+  rate, from a till that the street take fills. It runs **one way only**: cash never becomes $OMR again.
+  The till can run dry, and a short window refuses and **burns nothing**. There is a daily limit per
+  account. **It is shut right now** and opens when cash stops buying $OMR — until then the two together
+  would be a money pump, so the game refuses to run both.
+- **The Family Yield** (`GET /v1/yield`) — the top families by this season's standing split a pot of $OMR
+  into their reserve. It is what staking rewards and personal dividends become: standing stops being only
+  a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
+
 ---
 
 ## 28. The Estate & Auction House
