@@ -401,17 +401,23 @@ for (const m of html.matchAll(/data-do="(GET|POST|PUT|DELETE)\s+([^"]+)"[^>]*?da
 // whose handler takes no body and always unstakes EVERYTHING, so a player who typed a number into
 // the box emptied their whole stake and the field was silently dropped. The deck and the
 // attributes were checked; the buttons a player actually presses were not.
-for (const m of html.matchAll(/\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
-  const at = m.index + m[0].length;
-  const lit = readLiteral(html, at);
-  const paths = lit ? [lit.value] : pathsInArg(html, at);
-  if (!paths.length) continue;
-  let j = (lit ? lit.end + 1 : at);
-  while (j < html.length && /[\s,]/.test(html[j])) j++;   // to the body argument
-  const keys = topKeys(html, j);
-  if (!keys?.length) continue;
-  for (const p of paths) if (p.startsWith('/v1')) sends.push([m[1], p, keys, 'api()/act()']);
-}
+const callBodies = (src, re, where) => {
+  for (const m of src.matchAll(re)) {
+    const at = m.index + m[0].length;
+    const lit = readLiteral(src, at);
+    const paths = lit ? [lit.value] : pathsInArg(src, at);
+    if (!paths.length) continue;
+    let j = (lit ? lit.end + 1 : at);
+    while (j < src.length && /[\s,]/.test(src[j])) j++;   // to the body argument
+    const keys = topKeys(src, j);
+    if (!keys?.length) continue;
+    for (const p of paths) if (p.startsWith('/v1')) sends.push([m[1], p, keys, where]);
+  }
+};
+callBodies(html, /\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g, 'api()/act()');
+// /admin's bodies too — the route check already covers the dashboard for the reason stated above,
+// and a mod action that quietly drops its field is found during the incident it was meant to fix.
+callBodies(admin, /\bj\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g, '/admin');
 assert(sends.length > 20, `only ${sends.length} client bodies found — the extraction broke`);
 
 // match a sent body to its route the same segment-wise way, then compare field by field
