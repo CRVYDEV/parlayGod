@@ -134,5 +134,55 @@ for (const [t, kind] of Object.entries(DISPOSITION)) {
   if (kind === 'wiped' || kind === 'special') assert(new RegExp(`DELETE FROM ${t}\\b|['"]${t}['"]`).test(allSrc), `${t} is classified '${kind}' but is not referenced by any death-cleanup DELETE in src/ — the estate wipe is missing`);
 }
 
+// ── (c) DISTRICT → GANG lock order (full-sweep red-team, lens B) ──────────────────────────────
+// Three paths hold BOTH a `districts` and a `gangs` row lock: seizeDistrict (social/gangs.js),
+// establishRacket (territory.js) and buildSov (sov.js). Two took districts first; buildSov took
+// gangs first, on the reasoning that "no sov path ever locks district THEN gang" — which analysed
+// the wrong pair. A cycle needs ANY path in the tree to take the other order, and both siblings do,
+// so a boss seizing a district while an underboss built on it was a live AB-BA (masked by the
+// 40P01 → `contention` retry). Reasoning about this by hand is what produced the bug; this derives
+// it. Anything holding both must take DISTRICTS first.
+//
+// Anchored on COLUMN-0 function declarations: an earlier hand-rolled version of this analysis bound
+// locks to inner arrow-function names and reported fake cycles.
+{
+  const files = [['src/sov.js'], ['src/territory.js'], ['src/social/gangs.js'], ['src/economy.js'],
+    ['src/world.js'], ['src/commission.js'], ['src/diplomacy.js']].map(([p]) => p);
+  const offenders = [], both = [], unreadable = [];
+  for (const rel of files) {
+    const text = fs.readFileSync(path.join(srcDir, '..', rel), 'utf8');
+    const lines = text.split('\n');
+    let fn = null, body = [];
+    const flush = () => {
+      if (!fn) return;
+      const src = body.join('\n');
+      // a lock = `FROM <table> … FOR UPDATE` in one statement; record first occurrence of each table
+      const at = (t) => {
+        const m = src.match(new RegExp(`FROM ${t}\\b[\\s\\S]{0,200}?FOR UPDATE`));
+        return m ? m.index : -1;
+      };
+      const dIdx = at('districts'), gIdx = at('gangs');
+      if (dIdx >= 0 && gIdx >= 0) {
+        both.push(`${rel}:${fn}`);
+        if (gIdx < dIdx) offenders.push(`${rel}:${fn} locks gangs before districts`);
+      }
+      fn = null; body = [];
+    };
+    for (const line of lines) {
+      const m = line.match(/^(?:export )?(?:async )?function (\w+)\s*\(/);
+      if (m) { flush(); fn = m[1]; }
+      else if (/^(?:export )?(?:const|let|class) /.test(line)) flush();
+      if (fn) body.push(line);
+    }
+    flush();
+    // "counted, never silently skipped": a file we scan that declares no top-level function at all
+    // would silently contribute nothing — assert we actually parsed something out of each.
+    if (!/^(?:export )?(?:async )?function \w+\s*\(/m.test(text)) unreadable.push(rel);
+  }
+  assert.equal(unreadable.length, 0, `lock-order scan parsed no top-level function from: ${unreadable.join(', ')} — the scanner, not the code, is broken`);
+  assert(both.length >= 3, `expected ≥3 functions holding both a districts and a gangs lock, found ${both.length} (${both.join(', ')}) — the scanner stopped seeing the pair, so this guard has gone vacuous`);
+  assert.equal(offenders.length, 0, `districts→gangs lock-order inversion (AB-BA deadlock vs seizeDistrict/establishRacket): ${offenders.join('; ')}`);
+}
+
 console.log(`✅ Schema-integrity test passed — MED-1: ${stmts.length} idempotent ADD COLUMN IF NOT EXISTS statements derived from schema.sql (no leakage, clean no-op on a fresh DB, a dropped later-added column is RE-ADDED). MED-2: all ${charTables.size} character_id tables have a documented death disposition (${Object.values(DISPOSITION).filter((v) => v === 'wiped').length} wiped / ${Object.values(DISPOSITION).filter((v) => v === 'special').length} special / ${Object.values(DISPOSITION).filter((v) => v === 'escrow').length} escrow / ${Object.values(DISPOSITION).filter((v) => v === 'ledger' || v === 'log').length} ledger — a new unclassified table fails CI closed, and every wiped/special table has a DELETE FROM in src).`);
 process.exit(0);
