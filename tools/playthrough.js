@@ -18,6 +18,7 @@
 // Run: node tools/playthrough.js            (default schedule)
 //      node tools/playthrough.js --days 14  (longer horizon)
 import { buildServer } from '../src/server.js';
+import { opsEngagement } from '../src/engagement.js';
 import { CRIMES, MISSIONS, GUNS, BUSINESSES, CONSTANTS, PACING } from '../src/rules.js';
 
 const argOf = (name, dflt) => {
@@ -325,6 +326,27 @@ console.log(`  the coach says: "${end.coach?.label || '—'}"`);
 console.log(`\nTHE SOLO CEILING  (crime + gym + garage + Score + missions ONLY, ${DAYS} days)`);
 console.log(`  level ${end.level} · $${fmt(end.cash + end.bank)} · ${doneMissions.size}/${MISSIONS.length} of the story`
   + ` — with zero contact with another player`);
+
+// WHICH SYSTEMS DID THEY EVER SEE? The paragraph above ASSERTS the player never opened the family,
+// the Kitchen, the Den or going-legit — true, because the ladder above never calls them. This
+// MEASURES it instead, off the same telemetry the ops dashboard reads, so the claim is evidence
+// rather than a restatement of the script.
+//
+// READ THE CAVEAT: this is partly a measurement of the ladder, not only of the game. A system the
+// ladder never tries cannot show up. What it is genuinely evidence FOR is the funnel — a plausible
+// player, following the coach and the checklist, arrives at a small number of the built systems and
+// nothing pushes them toward the rest. That is a discoverability read, not a verdict on the content.
+{
+  const eng = await opsEngagement(pool, Math.max(30, DAYS + 2));
+  const touched = eng.systems.filter((s) => s.events > 0);
+  console.log(`\nSYSTEMS THEY ACTUALLY TOUCHED  (measured from telemetry, ${touched.length} of ${eng.systems.length})`);
+  for (const s of touched) console.log(`  ${s.system.padEnd(24)} ${String(s.events).padStart(5)} events`);
+  const never = eng.systems.filter((s) => !s.events).map((s) => s.system);
+  console.log(`  never opened: ${never.length ? never.join(' · ') : 'none'}`);
+  console.log('  (this measures the LADDER as much as the game — a system this harness never tries');
+  console.log('   cannot appear. What it is evidence for is the FUNNEL: what a plausible player,');
+  console.log('   following the coach and the checklist, actually arrives at.)');
+}
 
 // the headline: the alpha speedrun metric, measured
 const atPlayed = (mins) => {

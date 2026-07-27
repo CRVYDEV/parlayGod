@@ -211,6 +211,47 @@ That is now separated:
   fix a database — it just adds a restart loop on top of an outage. Alerting on it is the point;
   auto-restarting on it usually is not.
 
+## 7d. "Something looks wrong" — the one path to follow
+
+Rehearsed end to end on 2026-07-27 against a real Postgres that was then stopped, in a real browser.
+Three defects were found doing it and are fixed; what follows is the path as it now behaves.
+
+**1. Is it up?  →  `https://your-domain/health`**
+Keyless, answers in one line. `200 {"ok":true,"db":"up"}` means the game is serving players.
+`503 {"db":"unreachable"}` means the API is alive but the database is not — see step 3.
+Nothing at all means the API process itself is down; your host's dashboard is the place to look.
+
+**2. What is wrong?  →  `https://your-domain/admin`, enter your `MOD_KEY`**
+The dashboard leads with three banners, in the order you care about them:
+  · **THE DATABASE IS UNREACHABLE** — the game is down for players. Everything below is stale.
+  · **BACKUPS ARE FAILING** — the game is fine; your ability to RESTORE it is not. Do not ignore this.
+  · **§10.4 DRIFT** — the ledger does not reconcile. Money is being created or destroyed somewhere.
+No banner means all three are clear.
+
+You can still log in while the database is down. That is deliberate and was a real bug: the login
+required a `200`, a DB-down server returns `503`, and the correct key produced "Error 503." with no
+way in — locked out of the ops console in exactly the situation it exists for. `modAuth` is a pure
+header compare that never touches the database, so a `503` PROVES the key was accepted (a wrong key
+`401`s first) and you are let in to see the banner.
+
+**3. If the database is unreachable**
+The game server does NOT need redeploying — it recovers on its own the moment the database returns
+(§7b). Check your database provider's status page first. Do not restart the API in a loop: it
+refuses to boot while the database is down, so a restart turns a recoverable outage into a dead
+service. This is also why `/health` must NOT be your platform's own health check (§7b).
+
+**4. If §10.4 has drifted**
+The game is still playable and players are unaffected in the moment, but stop and read it — the
+per-check drift on the Integrity panel names which currency and which reconciliation failed. It has
+never drifted in the built system; if it does, it is a real defect, not a rounding artifact.
+
+**5. Where the alarms reach you**
+Both the §10.4 sweep and the backup watchdog post to `INVARIANT_WEBHOOK_URL` (Slack or Discord).
+If that is unset, nothing shouts and you are relying on opening the dashboard yourself. Set it.
+The Growth-loop panel has a drill button that sends a test message so you can confirm it arrives.
+
+---
+
 ## 7c. Backups — you are told when they break, and you keep your own
 **The game now watches its own backups.** Postgres ships write-ahead-log segments to the backup
 service; when that stops, the database keeps serving perfectly while your ability to *restore* it
