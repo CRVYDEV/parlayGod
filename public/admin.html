@@ -57,6 +57,7 @@
 </div>
 
 <div id="dash" class="hidden">
+  <div id="dbbanner" class="banner hidden">…</div>
   <div id="bkbanner" class="banner hidden">…</div>
   <div id="banner" class="banner">…</div>
   <div id="top">
@@ -103,7 +104,12 @@
   async function tryLogin() {
     mkey = $('#mkey').value.trim();
     const r = await j('GET', '/v1/mod/overview');
-    if (r.code === 200) { sessionStorage.setItem('omerta_mod_key', mkey); showDash(); }
+    // A 503 means the DATABASE is down, not that the key is wrong — `modAuth` is a pure timing-safe
+    // header compare that never touches the database, so a wrong key 401s before the handler runs
+    // and a 503 PROVES the key was accepted. Requiring a 200 locked the founder out of the ops
+    // dashboard in exactly the situation it exists for: rehearsed on 2026-07-27 against a real
+    // Postgres that was then stopped, the correct key returned "Error 503." and there was no way in.
+    if (r.code === 200 || r.code === 503) { sessionStorage.setItem('omerta_mod_key', mkey); showDash(); }
     else { $('#err').textContent = r.code === 401 ? 'Wrong key.' : `Error ${r.code}.`; }
   }
   $('#logout').onclick = () => { sessionStorage.removeItem('omerta_mod_key'); location.reload(); };
@@ -124,6 +130,28 @@
       j('GET', '/v1/mod/engagement'),
     ]);
     if (ov.code === 401) return $('#logout').onclick();
+
+    // THE 2AM CASE. Rehearsed on 2026-07-27 against a real Postgres that was then stopped: the
+    // server survives correctly and every panel gets a clean `503 db_down` — but this function
+    // only handled 401, so the render functions were handed {error:'db_down'} and drew blanks and
+    // dashes with NOTHING saying why. A dashboard full of empty panels is indistinguishable from a
+    // quiet night, which is the worst possible thing to show someone at 2am. Now it says so, in
+    // plain words, and stops rendering nonsense over the top of it.
+    const down = [ov, inv, fn, res, vig, em, act, rev, eng].filter((r) => r.code === 503
+      || r.body?.error === 'db_down' || r.code === 0);
+    const dbn = $('#dbbanner');
+    if (down.length >= 3) {                       // a couple of 503s is a slow route; all of them is the database
+      dbn.className = 'banner bad';
+      dbn.innerHTML = 'THE DATABASE IS UNREACHABLE — the game is down for players right now.'
+        + '<div style="letter-spacing:0;font-size:13px;opacity:.85;margin-top:6px">'
+        + 'The game server is alive (it answered this page) and will recover on its own the moment the '
+        + 'database comes back — you do NOT need to redeploy. Check your database host\'s status page '
+        + 'first. Numbers below are stale.</div>';
+      $('#stamp').textContent = 'STALE — database unreachable';
+      return;                                     // do not paint stale numbers as if they were live
+    }
+    dbn.className = 'banner hidden';
+
     $('#stamp').textContent = 'as of ' + new Date().toLocaleTimeString();
     renderIntegrity(inv.body); renderEconomy(ov.body, em.body); renderPlayers(ov.body); renderEngagement(eng.body);
     renderFunnel(fn.body); renderTop(ov.body); renderChain(res.body, vig.body, em.body, rev.body);
@@ -254,6 +282,18 @@
     const alive = Math.max(1, (fn.characters || {}).alive || 1);
     const barRow = (k, n) => { const pct = Math.round(100 * n / alive);
       return `<div class="row"><span class="k">${k}</span><span class="v">${fmt(n)} (${pct}%)</span></div><div class="bar"><i style="width:${pct}%"></i></div>`; };
+    $('#p-funnel').querySelector('.body').innerHTML =
+      `<div class="note">of ${fmt((fn.characters || {}).alive)} living streets</div>`
+      + barRow('pulled a job', pr.pulled_a_job || 0)
+      + barRow('declared a Path', pr.declared_path || 0)
+      + barRow('in a family', pr.in_a_family || 0)
+      + barRow('linked a wallet', pr.linked_wallet || 0)
+      + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
+      + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
+      + renderBroadcast(fn.broadcast)
+      + renderReferral(fn.referral);
+  }
+
   // ENGAGEMENT — which systems anyone actually uses, and whether players come back. The DEAD list is
   // the point: with 35 systems, knowing which have never been opened by a human is what decides what
   // to build next. Untracked systems are shown separately so an instrumentation gap is never read as
@@ -280,18 +320,6 @@
       + `<div class="row"><span class="k">median active days</span><span class="v">${fmt(r.medianActiveDays)}</span></div>`
       + `<div class="note" style="margin-top:10px">MOST-USED SYSTEMS (${live.length} of ${e.systems.length} used at all)</div>` + top
       + deadList + untracked + uncat;
-  }
-
-    $('#p-funnel').querySelector('.body').innerHTML =
-      `<div class="note">of ${fmt((fn.characters || {}).alive)} living streets</div>`
-      + barRow('pulled a job', pr.pulled_a_job || 0)
-      + barRow('declared a Path', pr.declared_path || 0)
-      + barRow('in a family', pr.in_a_family || 0)
-      + barRow('linked a wallet', pr.linked_wallet || 0)
-      + `<div class="note" style="margin-top:6px">levels — 1–4: ${fmt(lv.lvl_1_4)} · 5–9: ${fmt(lv.lvl_5_9)} · 10–19: ${fmt(lv.lvl_10_19)} · 20+: ${fmt(lv.lvl_20_plus)}</div>`
-      + `<div class="note">first-week capstones: ${fmt(fw.capstone)}</div>`
-      + renderBroadcast(fn.broadcast)
-      + renderReferral(fn.referral);
   }
   function renderBroadcast(bc) {
     if (!bc) return '';

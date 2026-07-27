@@ -82,7 +82,7 @@ assert(players.length >= PLAYERS * 0.9, `only ${players.length}/${PLAYERS} chara
 // (level floors, minimum stakes, garage caps). Seeding is why the assertion below is a DELTA: the
 // baseline drift is whatever this SQL created, and the run must not move it.
 const ids = players.map((p) => `'${p.id}'`).join(',');
-await pool.query(`UPDATE characters SET respect=2500, cash=400000, energy=100, nerve=50, muscle=60, cunning=60, speed=60 WHERE id IN (${ids})`);
+await pool.query(`UPDATE characters SET respect=25000, cash=4000000, energy=100, nerve=50, muscle=60, cunning=60, speed=60 WHERE id IN (${ids})`);
 
 const before = await runLedgerInvariants(pool, { alert: false });
 const baseline = Object.fromEntries(before.checks.map((c) => [c.name, c.drift]));
@@ -91,7 +91,7 @@ const baseline = Object.fromEntries(before.checks.map((c) => [c.name, c.drift]))
 // Each round: every player takes one archetype action, then the world ticks (NPC residents act, the
 // clock warps a day). Failures are EXPECTED and counted — a gate refusing a bad move is the game
 // working, and a harness that treated every 4xx as fatal would only ever test the happy path.
-const posted = { listing: 0, order: 0, loan: 0, contract: 0, guard: 0, duel: 0, fade: 0 };
+const posted = { listing: 0, order: 0, loan: 0, contract: 0, guard: 0, duel: 0, fade: 0, car: 0, club: 0 };
 const taken = { listing: 0, order: 0, loan: 0, contract: 0, guard: 0, duel: 0 };
 const errors = new Map();
 const skipped = new Map();   // a branch that could not even ATTEMPT — counted, never silently nothing
@@ -120,6 +120,13 @@ async function act(p) {
   switch (p.kind) {
     case 'grinder': {
       note(await call('POST', '/v1/crimes/pick', p.token));
+      // and the iron: boost a car, then put it on the block. This is the CAR AUCTION market — it
+      // was censused but never driven, so "every market reachable" only ever covered 7 of 9.
+      const car = (await call('GET', '/v1/me', p.token)).body.character?.cars?.find((c) => !c.listed && !c.pledged);
+      if (car) {
+        const r = note(await call('POST', '/v1/market', p.token, { kind: 'car', carId: car.id, minBid: 5000, hours: 24 }));
+        if (r.code === 200) posted.car++;
+      } else note(await call('POST', '/v1/garage/boost', p.token));
       break;
     }
     case 'trader': {
@@ -161,6 +168,12 @@ async function act(p) {
       break;
     }
     case 'gambler': {
+      // the club: one per district, so most attempts refuse — which is the point, a market with a
+      // hard supply cap still has to be REACHABLE by whoever gets there first.
+      if (!p.club) {
+        const c = note(await call('POST', `/v1/speakeasy/${p.loc}/open`, p.token));
+        if (c.code === 200) { posted.club++; p.club = true; }
+      }
       const d = note(await call('POST', '/v1/duels/list', p.token, { limit: 5000 }));
       if (d.code === 200) posted.duel++;
       const f = note(await call('POST', '/v1/casino/fade', p.token, { limit: 5000 }));
@@ -249,7 +262,7 @@ const n = async (q) => Number((await pool.query(q)).rows[0]?.n || 0);
 // about the game and would otherwise read as a finding. The flow key powers the census self-check
 // at the bottom.
 const MARKETS = [
-  ['black market — car auctions', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='car' AND status='live'"), false, null],
+  ['black market — car auctions', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='car' AND status='live'"), true, 'car'],
   ['black market — goods lots', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='good' AND status='live'"), true, 'listing'],
   ['black market — buy orders', await n("SELECT COUNT(*) n FROM market_listings WHERE kind='order' AND status='live'"), true, 'order'],
   // 'open', not 'offered' — a first cut guessed the status word, counted zero every time and would
@@ -261,7 +274,7 @@ const MARKETS = [
   ['bodyguards for hire', await n('SELECT COUNT(*) n FROM characters WHERE guard_price IS NOT NULL AND alive'), true, 'guard'],
   ['the dueling ladder — listed', await n('SELECT COUNT(*) n FROM characters WHERE duel_limit IS NOT NULL AND alive'), true, 'duel'],
   ['back-room dice — faders', await n('SELECT COUNT(*) n FROM characters WHERE fade_limit IS NOT NULL AND alive'), true, 'fade'],
-  ['speakeasies open', await n('SELECT COUNT(*) n FROM speakeasies'), false, null],
+  ['speakeasies open', await n('SELECT COUNT(*) n FROM speakeasies'), true, 'club'],
 ];
 
 const humans = await n(`SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc`);
@@ -320,7 +333,7 @@ if (verbose) console.log(`\n✓ §10.4 held: all ${after.checks.length} checks m
 
 // (2) reachability: a market nobody could even POST into is a gate bug, not a quiet town. Reported
 // per-market above; asserted here only for the ones this harness actually drives a post for.
-const drivable = { listing: 'black market goods', order: 'buy orders', loan: 'loan offers', contract: 'contracts', guard: 'bodyguard offers', duel: 'duel listings', fade: 'fade limits' };
+const drivable = { listing: 'black market goods', order: 'buy orders', loan: 'loan offers', contract: 'contracts', guard: 'bodyguard offers', duel: 'duel listings', fade: 'fade limits', car: 'car auctions', club: 'speakeasies' };
 const unreachable = Object.entries(drivable).filter(([k]) => posted[k] === 0).map(([, label]) => label);
 assert.equal(unreachable.length, 0,
   `${unreachable.length} market(s) took ZERO posts across the whole run — with ${players.length} funded, `
