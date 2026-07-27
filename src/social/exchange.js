@@ -16,8 +16,18 @@ const KIND_OK = ['cb', 'ammo', 'item'];
 
 export async function listItem(ch, kind, itemId, qty, unitPrice, client, h) {
   if (!KIND_OK.includes(kind)) throw new GameError('bad_kind', 'Sellable: cb, ammo, item. Product moves on the street, not the board.');
-  const n = Math.max(1, Math.floor(Number(qty) || 0));
-  const price = Math.max(1, Math.floor(Number(unitPrice) || 0));
+  // REFUSE a missing/garbage price instead of defaulting. This used to read
+  // `Math.max(1, Math.floor(Number(unitPrice) || 0))`, so a caller that misnamed the field (`price`
+  // — which the console's own raw deck did), omitted it, or sent a negative or non-numeric value
+  // got a 200 and their goods on the board at $1 A UNIT, escrowed, for anyone to sweep. Listing 10
+  // rounds meant to go at $500 for $1 each is a 500x loss reported as success. Every sibling setter
+  // (listRace, listSpeakeasy, offerBodyguard, sellPaper) already validates and throws; this one
+  // silently proceeded with a default, which is the worst of the three ways a control dies.
+  // $1 stays a LEGAL price — what is refused is not saying one.
+  const n = Math.floor(Number(qty));
+  if (!Number.isFinite(n) || n < 1) throw new GameError('qty', 'Say how many you are selling.');
+  const price = Math.floor(Number(unitPrice));
+  if (!Number.isFinite(price) || price < 1) throw new GameError('price', 'Name a price — at least $1 a unit.');
   if (kind === 'item' && !CONSUMABLES.find((c) => c.id === itemId)) throw new GameError('bad_item', 'No such item.');
   const have = kind === 'cb' ? Number(ch.cb) : kind === 'ammo' ? Number(ch.ammo) : (h.owned.items[itemId] || 0);
   if (have < n) throw new GameError('short', "You can't sell what you don't have.");
