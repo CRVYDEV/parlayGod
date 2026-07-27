@@ -168,43 +168,62 @@ export async function payFamilyYield(pool) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // LOCK ORDER (red-team F1). Rank UNLOCKED, then lock the payee GANGS in a stable id order, and
+    // only THEN the pool singleton — the codebase's global order (characters → accounts → gangs →
+    // singletons), and specifically the order runBuyback already takes: it holds gang locks and then
+    // writes family_yield_pool once FUND_BPS > 0. Locking the pool first (as this did) is an AB-BA
+    // deadlock against the buyback — and one ARMED BY THE MIGRATION ITSELF, since it only becomes
+    // reachable the moment the founder raises the very dial the design says to raise.
+    const ranked = (await client.query(
+      `SELECT id, name, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
+         FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows
+      .filter((g) => num(g.standing) > 0);
+    if (!ranked.length) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
+
+    // Weights come from RANK across the whole ranked set, so a family that dissolves between the read
+    // and the lock simply drops out and its share stays in the pot rather than being redistributed.
+    // Sorted with the codepoint comparator the rest of the tree uses (`.sort()` / `a.id < b.id`), NOT
+    // localeCompare: for canonical UUIDs the two agree, but two lock paths ordering the same rows by
+    // different comparators is how a deadlock hides, so there is one comparator.
+    const live = [];
+    for (const g of [...ranked].sort((a, b) => (a.id < b.id ? -1 : 1)))
+      if ((await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [g.id])).rows[0]) live.push(g.id);
+    if (!live.length) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
+
+    // now the singleton, LAST
     const p = (await client.query('SELECT balance FROM family_yield_pool WHERE id=1 FOR UPDATE')).rows[0];
     const bal = num(p?.balance);
     if (bal < FAMILY_YIELD.MIN_PAYOUT) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
 
-    // the chamber's own ladder: this season's tribute + 10k per war won this season
-    const top = (await client.query(
-      `SELECT id, name, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
-         FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows
-      .filter((g) => num(g.standing) > 0);
-    if (!top.length) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
-
-    const weights = top.map((_, i) => FAMILY_YIELD.WEIGHTS[i] ?? 1);
-    const total = weights.reduce((a, b) => a + b, 0);
+    const total = ranked.reduce((a, _, i) => a + (FAMILY_YIELD.WEIGHTS[i] ?? 1), 0);
     const out = [];
     let paid = 0;
-    // gangs are locked in a stable id order (the codebase-wide gang lock convention)
-    for (const g of [...top].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
-      const i = top.findIndex((t) => t.id === g.id);
-      const share = round2(bal * weights[i] / total);
+    // pay in RANK order (the locks are already held, so order here is free) — the head seat gets its
+    // full share and the tail seat absorbs any rounding
+    for (let i = 0; i < ranked.length; i++) {
+      const g = ranked[i];
+      if (!live.includes(g.id)) continue;      // dissolved under the lock — share stays in the pot
+      // CLAMP to what the pot actually holds (red-team F2). Rounding each share to 2dp can sum to a
+      // cent MORE than the balance — measured at 53 of the first 400 cent-values — which drives the
+      // pool NEGATIVE and trips this system's own `family yield backed` invariant. Never pay out
+      // more than is there.
+      const share = Math.min(round2(bal * (FAMILY_YIELD.WEIGHTS[i] ?? 1) / total), round2(bal - paid));
       if (share < FAMILY_YIELD.MIN_PAYOUT) continue;
-      const live = (await client.query('SELECT id FROM gangs WHERE id=$1 FOR UPDATE', [g.id])).rows[0];
-      if (!live) continue;                 // dissolved between the read and the write — share stays in the pool
       await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [g.id, share]);
       // the headless-ledger convention (emission.js): a JS-generated id, because pg-mem has no
       // gen_random_uuid(). NULL character_id + the gang as counterparty — the `gang:contract` shape.
       await client.query(
         'INSERT INTO transactions (id, character_id, account_id, currency, amount, reason, counterparty) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [crypto.randomUUID(), null, null, 'omr', share, 'yield:family', g.id]);
-      paid += share;
+      paid = round2(paid + share);
       out.push({ gang: g.id, name: g.name, share, rank: i + 1 });
     }
     if (paid > 0) {
       await client.query(
-        'UPDATE family_yield_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [round2(paid)]);
+        'UPDATE family_yield_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [paid]);
     }
     await client.query('COMMIT');
-    return { paid: round2(paid), families: out.sort((a, b) => a.rank - b.rank) };
+    return { paid, families: out };
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 
@@ -243,6 +262,13 @@ export async function runExchangeInvariants(pool) {
       note: 'balance == funded - paid' },
     { name: 'family yield backed', lhs: fy.paid, rhs: fy.funded, ok: fy.paid <= fy.funded + 0.01,
       note: '$OMR paid to families <= $OMR funded into the pot' },
+    // (red-team F7) The pot needs the SAME identity the exchange pool has. `backed` alone is not
+    // enough: it carries a 0.01 tolerance, which is exactly the size of the per-share rounding
+    // over-pay it would have to catch — so a pot driven NEGATIVE reads ok:true and the alarm never
+    // fires. This is the check that actually sees it. Verified against the unclamped code.
+    { name: 'family yield balance', lhs: round2(fy.balance), rhs: round2(fy.funded - fy.paid),
+      ok: Math.abs(fy.balance - (fy.funded - fy.paid)) < 0.01 && fy.balance >= -0.001,
+      note: 'balance == funded - paid, and never negative' },
   ];
   return { ok: checks.every((c) => c.ok), checks };
 }

@@ -34,6 +34,7 @@ const mk = async (name) => {
 // break the "no leak" claim by shifting a magic number. (SET cash=X REPLACES the $500 creation
 // base, which is itself un-ledgered and already counted in the invariant's own baseline.)
 let sqlCash = 0;
+let sqlOmr = 0;   // same discipline for the $OMR grants (see the conservation assertions below)
 const setCash = async (id, amt) => {
   await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [id, amt]);
   sqlCash += amt - 500;
@@ -75,7 +76,7 @@ const sumOmrBuckets = async () => Number((await pool.query(
 // Everything below exercises the window as it will behave once step 2 lands, via the test override.
 process.env.EXCHANGE_OPEN = 'on';
 const a = await mk('Window Walker');
-await pool.query('UPDATE account_persistent SET omr=100 WHERE account_id=$1', [a.acct]);
+await pool.query('UPDATE account_persistent SET omr=100 WHERE account_id=$1', [a.acct]); sqlOmr += 100;
 
 { // the board is honest about the direction, before anything is funded
   const b = (await call('GET', '/v1/window', a.token)).body;
@@ -159,8 +160,21 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   const client = await pool.connect();
   try { await client.query('BEGIN'); await fundFamilyYield(client, 100); await client.query('COMMIT'); }
   finally { client.release(); }
+  sqlOmr += 100;
   assert.equal(await sumOmrBuckets(), bucketsBefore + 100, 'the pot is inside the bucket sum');
   assert.equal((await familyYieldPool(pool)).balance, 100);
+
+  // (red-team F4) The check above uses this file's OWN bucket sum, which proves nothing about the
+  // PRODUCTION one — and the §10.4 assertion at the bottom runs after distribution, when the $OMR
+  // has already moved to gangs (also counted), so it cannot tell a counted pot from an uncounted
+  // one either. Mutation-verified: dropping family_yield_pool from invariants.js left the whole
+  // file GREEN. So assert conservation HERE, with the $OMR sitting in the pot and nowhere else —
+  // this is the only moment the pot's membership is observable.
+  const midInv = await runLedgerInvariants(pool, { alert: false });
+  const midOmr = midInv.checks.find((c) => c.name === '$OMR conservation');
+  assert.ok(Math.abs(midOmr.drift - sqlOmr) < 0.01,
+    `with 100 $OMR parked in the pot, the REAL conservation check must still see it — if this reads `
+    + `${sqlOmr - 100} the pot is missing from omrBuckets and every funded pot looks like a burn: ${midOmr.drift}`);
 }
 
 { // the distribution is a TRANSFER: the family gains exactly what the pot loses, and the total is unmoved
@@ -177,6 +191,27 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   const led = Number((await pool.query(
     "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='yield:family'")).rows[0].s);
   assert.equal(Math.round(led * 100), Math.round(out.paid * 100), 'ledgered exactly');
+}
+
+{ // (red-team F2/F7) A pot whose per-share rounding sums to MORE than it holds. 0.23 across the
+  // 5-4-3-2-1 weights rounds to 0.24 — measured at 53 of the first 400 cent-values — which drove the
+  // pool NEGATIVE. `family yield backed` could not see it: its 0.01 tolerance is exactly the size of
+  // the overpay, so it read ok. The balance identity is the check that actually catches it.
+  // FIVE seats are required to reproduce it: with one family the single share is the whole pot and
+  // nothing rounds. (The first cut of this regression seeded one gang, so it passed under the
+  // mutation — a vacuous check that read exactly like a clean bill of health.)
+  await pool.query(`INSERT INTO gangs (id,name,tag,season_tribute) VALUES
+    ('fy2','Seat Two','FY2',400),('fy3','Seat Three','FY3',300),
+    ('fy4','Seat Four','FY4',200),('fy5','Seat Five','FY5',100)`);
+  await pool.query('UPDATE family_yield_pool SET balance=0.23, lifetime_funded = lifetime_funded + 0.23');
+  sqlOmr += 0.23;
+  const out = await payFamilyYield(pool);
+  const potNow = (await familyYieldPool(pool)).balance;
+  assert.ok(out.paid <= 0.23 + 1e-9, `never pay out more than the pot holds: paid ${out.paid} of 0.23`);
+  assert.ok(potNow >= -1e-9, `and the pot can never go negative: ${potNow}`);
+  const inv = await runExchangeInvariants(pool);
+  const bal = inv.checks.find((c) => c.name === 'family yield balance');
+  assert.ok(bal && bal.ok, `the balance identity must hold: ${JSON.stringify(bal)}`);
 }
 
 { // the public board names who is drawing it and what their share is
@@ -209,8 +244,9 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   // `omrBurns` this would read 190 — i.e. the exact number proves the burn is accounted, and the
   // family-yield transfer proves it moved no supply.
   const omr = inv.checks.find((c) => c.name === '$OMR conservation');
-  assert.ok(Math.abs(omr.drift - 200) < 0.01,
-    `drift should be exactly the two SQL grants — the burn cancels and the transfer moves nothing: ${omr.drift}`);
+  assert.ok(Math.abs(omr.drift - sqlOmr) < 0.01,
+    `drift should be exactly this file's own $OMR grants ($${sqlOmr}) — the burn cancels and the `
+    + `transfer moves nothing: ${omr.drift}`);
 }
 
 await app.close();
