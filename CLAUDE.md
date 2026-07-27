@@ -5518,3 +5518,47 @@ harness installs `uncaughtException`/`unhandledRejection` handlers that NAME the
 made into a green run. `runLedgerInvariants(pool, {alert:false})` is new for the two measurement
 harnesses: they SQL-seed, so their baseline drift is non-zero by construction and they assert a
 before/after DELTA — firing the production alarm on a measurement buried the real result.
+
+**AUDITING MY OWN CHECKS — and the four real bugs that fell out (2026-07-27).** After a run of
+sessions that each found "an insane number of bugs", the founder asked for a line-by-line pass over
+everything written recently. The most productive part was not re-reading the product code — it was
+auditing the two NEW GUARDS, because both had holes that made them report a pass over surface they
+never looked at. **`test/client.js` (the wiring test) had three:** two `api()` sites choose their
+path with a TERNARY, so `readLiteral` returned null and four chat routes went unchecked while the
+run still printed "passed" (now the whole argument expression is walked for every `/v1` literal it
+can produce, and anything still unreadable is COUNTED and asserted zero); eight literal routes are
+shadowed by a param route (`/v1/skills/respec` by `/v1/skills/:id`), and the body check resolved
+with `find` — the FIRST match — so it could compare against the wrong handler entirely, passing
+today only because server.js happens to register the literal first (now most-specific wins, the same
+one fastify serves; verified EXERCISED, not defensive — two real bodies match two handlers each);
+and — the one that mattered — bodies were read from the raw deck and `data-body` attributes but NOT
+from the `api()/act()` calls the curated screens actually use, so **a third of the surface was
+unchecked**. Closing that took bodies 50 → 172 and immediately found two live defects: **THE VAULT**
+sent `{amount}` to `/v1/unstake`, whose handler takes no body and always unstakes EVERYTHING (type
+100, lose your whole stake, silently), and **THE ARMORY** showed a "rounds" input and sent `{qty}` to
+`buyAmmo`, which sells a fixed box of 50 for $2,000 and reads no quantity. Both controls lied about
+what they did; both are fixed and browser-verified. The test also stopped ADMITTING gaps: the 5
+runtime-built routes (`/v1/garage/${id}/${what}`) are now expanded over every value the client can
+pick (18 concrete routes, all mounted, and an unlisted one fails the run), the 5 whole-body routes
+are followed a file deeper to the parameter the body lands in — through a barrel re-export, and
+through a computed read over a literal list, both unit-checked against synthetic sources since the
+tree contains neither shape — and the 25 unchecked literal fields are now either catalog-backed (5
+were real API values) or declared not-an-API-value. **`tools/mobile.js` had three:** `MIN_TAP` was
+declared, quoted in the failure message, and DEAD (the check used a literal 36 inside the page, so
+changing the knob changed nothing); groups were selected by their button TEXT, which is both a
+substring match and an i18n-translated string on a client that auto-detects browser locale — an
+unpinned run in another language would have walked zero screens and still passed; and check D was
+never proven to fire at all, so `weberror` was confirmed empirically for both an uncaught throw and
+an unhandled rejection, plus end-to-end with a real error injected into the client. **The fourth bug
+was in the product, found by RUNTIME-verifying the session's client fixes instead of trusting the
+static pass:** `POST /v1/exchange/list` read `Math.max(1, Math.floor(Number(unitPrice) || 0))`, so a
+caller who misnamed the field (the console's own deck did), omitted it, or sent something negative
+or non-numeric got a 200 and their goods on the board **at $1 a unit**, escrowed, for anyone to
+sweep — 10 rounds meant for $500 listed at $1 each, a 500× loss reported as success. Swept the tree:
+it was the only one — every sibling setter (`listRace`, `listSpeakeasy`, `listBout`, `listDuel`,
+`listRacer`, `setFadeLimit`, `setPokerLimit`, `offerBodyguard`, `sellPaper`) already validates and
+throws, and the other `Math.max` floors are server-COMPUTED costs, not user input. $1 stays a legal
+price; not naming one is refused. **The lesson worth keeping: a coverage test that silently skips
+what it cannot parse is worse than no test, because the green run is read as proof. Every extraction
+in both guards now counts what it could not read and asserts that count is zero.** Every new
+assertion mutation-verified. Suite 53/53, mobile 54/54, sim drift-0.
