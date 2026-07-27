@@ -287,7 +287,7 @@ r = await call('GET', '/v1/commission');
 assert(Array.isArray(r.body.record) && r.body.record.length, 'the chamber keeps a record of recent weeks');
 assert(r.body.record.every((w) => 'week' in w && 'name' in w), 'each week names its decree (or Deadlock/Vetoed)');
 assert(Array.isArray(r.body.statesmenTop), 'the top statesmen ride the board');
-const lb = (await call('GET', '/v1/leaderboard/statesmen')).body.statesmen;
+const lb = (await call('GET', '/v1/leaderboard/statesmen', { token: civilian.token })).body.statesmen;
 assert(lb.length >= 3, 'the statesmen board ranks the political operators');
 assert.equal(lb[0].name, 'Boss Number 1', 'F1 (vote+veto) tops the board');
 assert(lb[0].rank && lb[0].statecraft === COMMISSION.STATECRAFT_VOTE + COMMISSION.STATECRAFT_VETO, 'with the lifetime capital + a derived rank');

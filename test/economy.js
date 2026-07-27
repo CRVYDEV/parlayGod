@@ -622,11 +622,11 @@ assert.equal((await call('POST', `/v1/business/${biz3}/takeover`, { token: t2 })
 delete process.env.BUSINESS_TAKEOVER_P;
 
 // (F) THE LAUNDERER leaderboard — ranked by lifetime washed; agents excluded
-let lbL = (await call('GET', '/v1/leaderboard/launderers')).body;
+let lbL = (await call('GET', '/v1/leaderboard/launderers', { token })).body;
 assert(lbL.launderers.some((x) => x.washed > 0), 'the launderer board lists a washman');
 const cidName = (await meOf(token)).name;
 await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
-lbL = (await call('GET', '/v1/leaderboard/launderers')).body;
+lbL = (await call('GET', '/v1/leaderboard/launderers', { token })).body;
 assert(!lbL.launderers.some((x) => x.name === cidName), 'an agent-flagged launderer is excluded from the board');
 await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 

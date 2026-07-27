@@ -1017,8 +1017,13 @@ attacker (`FAIL_HOSP_MS`). Arrival is lazy (`arrives_at`); the owner collects AT
 trunk-capacity at a time. The ambush never touches the OWNER's character row (the manifest is the
 contested object) — locks are characters → convoys, acyclic. Estate: a dead shipper's freight
 scatters (`status='lost'`, cargo deleted). **pg-mem quirk discovered here: arithmetic UPDATEs on
-INT columns (`SET qty = qty - $n`) mis-evaluate to `0 − n` — use absolute writes computed in JS
-(the setCargo DELETE+INSERT precedent); NUMERIC columns are fine.** Numbers are sign-off levers.
+INT columns mis-evaluate — use absolute writes computed in JS (the setCargo DELETE+INSERT
+precedent).** *(MEASURED PRECISELY by AUDIT-full-sweep 2026-07-27 — the original wording here said
+"`SET qty = qty - $n` mis-evaluates to `0 − n`", which is wrong in both directions. The quirk is
+narrow: **INT column, SUBTRACTION, bound PARAMETER**, and the result is SIGN-FLIPPED (`100−5` → `−95`),
+not `0−n`. `col = col + $1` is FINE, literals are FINE, NUMERIC and BIGINT are FINE. The genuinely
+dangerous form the old note failed to warn about: `GREATEST(0, col - $1)` silently returns **0** —
+it reads exactly like a clamp working. Swept: zero affected sites in the tree.)* Numbers are sign-off levers.
 Suite 12/12 + sim drift-0. **Step two — BUILT**: **destination tolls** — collecting at docks
 held by ANOTHER family pays `TOLL_BPS` (5%) of the collected goods' base value from the
 shipper's pocket to the holder's treasury (`convoy:toll`, a ledgered transfer on the tribute

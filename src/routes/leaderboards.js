@@ -35,9 +35,9 @@ import * as Wire from '../wire.js';
 import * as World from '../world.js';
 
 export function register(app, { pool, auth, modAuth }) {
-    app.get('/v1/leaderboard/tycoons', async () => E.tycoonLeaderboard(pool));
+    app.get('/v1/leaderboard/tycoons', { preHandler: auth }, async () => E.tycoonLeaderboard(pool));
     app.get('/v1/leaderboard/territory', { preHandler: auth }, async () => Territory.territoryLeaderboard(pool)); // THE EMPIRE board
-    app.get('/v1/leaderboard/launderers', async () => ({ launderers: await Business.laundererLeaderboard(pool) }));
+    app.get('/v1/leaderboard/launderers', { preHandler: auth }, async () => ({ launderers: await Business.laundererLeaderboard(pool) }));
     app.get('/v1/leaderboard/nightlife', { preHandler: auth }, async (req) => {
       const cid = (await pool.query('SELECT id FROM characters WHERE account_id=$1 AND alive', [req.user.sub])).rows[0]?.id;
       return Speakeasy.nightlifeLeaderboard(pool, cid || '');
@@ -49,7 +49,7 @@ export function register(app, { pool, auth, modAuth }) {
     app.get('/v1/leaderboard/stable', { preHandler: auth }, async () => Stable.stableLeaderboard(pool));
     app.get('/v1/leaderboard/races', { preHandler: auth }, async () => Races.raceLeaderboard(pool));
     app.get('/v1/leaderboard/port', { preHandler: auth }, async () => Port.portLeaderboard(pool)); // THE SMUGGLER'S LEGEND board
-    app.get('/v1/leaderboard/statesmen', async () => Commission.statesmenLeaderboard(pool)); // the survives-death political legend
+    app.get('/v1/leaderboard/statesmen', { preHandler: auth }, async () => Commission.statesmenLeaderboard(pool)); // the survives-death political legend
     app.get('/v1/leaderboard/family-portfolio', { preHandler: auth }, async () => Portfolio.familyPortfolioLeaderboard(pool));
     app.get('/v1/leaderboard/portfolio', { preHandler: auth }, async () => Portfolio.portfolioLeaderboard(pool));
     app.get('/v1/leaderboard/foundation', { preHandler: auth }, async () => V.foundationLeaderboard(pool));
@@ -57,7 +57,7 @@ export function register(app, { pool, auth, modAuth }) {
     app.get('/v1/leaderboard/collectors', { preHandler: auth }, async () => Estate.collectorLeaderboard(pool)); // the survives-death Collector legend + the Patron
     app.get('/v1/leaderboard/wire', { preHandler: auth }, async () => Wire.wireLeaderboard(pool));
     // Wire step three: DISINFORMATION (feed your tappers lies) + THE INFORMANT (a standing human source)
-    app.get('/v1/leaderboard/convoy', async () => Convoy.convoyLeaderboard(pool));
+    app.get('/v1/leaderboard/convoy', { preHandler: auth }, async () => Convoy.convoyLeaderboard(pool));
     app.get('/v1/leaderboard/heists', { preHandler: auth }, async () => Heists.heistLeaderboard(pool));
     // The feared-assassin leaderboard (M7 Phase 2): lifetime legend + this season's kill streak.
     app.get('/v1/leaderboard/hitmen', { preHandler: auth }, async () => S.hitmanLeaderboard(pool));
@@ -75,11 +75,11 @@ export function register(app, { pool, auth, modAuth }) {
     // skill-loop with EV/risk signals, in ONE read. Read-only; the caller's character scopes filters.
     app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));
     // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
-    app.get('/v1/leaderboard/kingpins', async () => K.kingpinLeaderboard(pool));
+    app.get('/v1/leaderboard/kingpins', { preHandler: auth }, async () => K.kingpinLeaderboard(pool));
     app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
     app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
     // FIVE PILLARS → Tier 4 — THE REPUTATION BOARDS (the honor legend: Men of Honor + the Most Feared)
-    app.get('/v1/leaderboard/honor', async () => Honor.honorLeaderboard(pool));
+    app.get('/v1/leaderboard/honor', { preHandler: auth }, async () => Honor.honorLeaderboard(pool));
     // DYNASTIC MARRIAGES & THE CONSIGLIERE (CK3 — account-level ties on the Bloodline)
     app.get('/v1/leaderboard/commanders', { preHandler: auth }, async () => Soldiers.commanderLeaderboard(pool));
     app.get('/v1/leaderboard/collection', { preHandler: auth }, async () => Collection.collectionLeaderboard(pool));
@@ -90,8 +90,8 @@ export function register(app, { pool, auth, modAuth }) {
     // THE PATRON PROGRAM (Tier-4) — the read-derived Benefactors league + Patron Families + The House's Favor
     app.get('/v1/leaderboard/patrons', { preHandler: auth }, async () => Store.benefactorLeaderboard(pool));
     // PLEX-for-packages — buy a Store SKU with EARNED $OMR (burns $OMR for the same entitlement)
-    app.get('/v1/leaderboard/builders', async () => Mega.builderLeaderboard(pool));
-    app.get('/v1/leaderboard/family-build', async () => Mega.familyBuildLeaderboard(pool));
+    app.get('/v1/leaderboard/builders', { preHandler: auth }, async () => Mega.builderLeaderboard(pool));
+    app.get('/v1/leaderboard/family-build', { preHandler: auth }, async () => Mega.familyBuildLeaderboard(pool));
     app.get('/v1/leaderboard/duels', { preHandler: auth }, async () => Duels.duelLeaderboard(pool));
     app.get('/v1/leaderboard/clues', { preHandler: auth }, async () => Clues.clueLeaderboard(pool));
     // NPC RIVAL FAMILIES — the server-wide common enemy. GET is the board (odds tonight); raid is co-op.

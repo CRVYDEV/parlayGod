@@ -19,56 +19,56 @@ import { buildServer } from '../src/server.js';
 
 const app = await buildServer();
 
-// Deliberately public. Boards and catalogs the console reads before sign-in, the auth entry points
-// themselves, and the websocket — which authenticates IN-BAND on connect rather than by preHandler.
-const PUBLIC = new Set([
-  'GET /v1/art/:kind/:id',
-  'GET /v1/auth/x/callback',
-  'GET /v1/catalog',
-  'GET /v1/city',
-  'GET /v1/commission',
-  'GET /v1/districts',
-  'GET /v1/exchange',
-  'GET /v1/gangs',
-  'GET /v1/gangs/:id',
-  'GET /v1/landmarks',
-  'GET /v1/leaderboard/builders',
-  'GET /v1/leaderboard/convoy',
-  'GET /v1/leaderboard/family-build',
-  'GET /v1/leaderboard/honor',
-  'GET /v1/leaderboard/kingpins',
-  'GET /v1/leaderboard/launderers',
-  'GET /v1/leaderboard/statesmen',
-  'GET /v1/leaderboard/tycoons',
-  'GET /v1/market',
-  'GET /v1/market/prices',
-  'GET /v1/online',
-  'GET /v1/plex/price',
-  'GET /v1/rules',
-  'GET /v1/u/:name',
-  'GET /v1/ws',
-  // TOKENOMICS v2: the family-yield board is a public status board (the /v1/gangs precedent) —
-  // it names who draws the yield and moves nothing.
-  'GET /v1/yield',
-  'POST /v1/auth/guest',
-  'POST /v1/auth/privy',
-  'POST /v1/auth/x',
-  'POST /v1/auth/x/start',
-]);
+// Deliberately public — each with the REASON it is public, not just its name.
+//
+// This was a bare Set of strings, and the full-sweep red-team found what that costs: eight
+// /v1/leaderboard/* routes sat in here while their 27 siblings required auth. All eight are read
+// only from authed console tabs, so the header's stated rationale ("boards the console reads before
+// sign-in") did not apply to any of them — they were added to the allowlist to make this test pass
+// rather than given the auth their siblings have. The guard did its job: it forced a diff. But it
+// could not tell a considered exemption from a silencing one, because a bare string carries no
+// reason. Now an entry costs a sentence, so the cheapest way past this test is to add `auth`.
+const PUBLIC = {
+  'GET /v1/art/:kind/:id': 'card/profile art rendered into unfurls by crawlers with no token',
+  'GET /v1/auth/x/callback': 'the OAuth return leg — the caller has no token yet, by definition',
+  'GET /v1/catalog': 'the public item catalog (agent/LLM discovery surface, AGENTS.md)',
+  'GET /v1/city': 'the city board the landing page shows before sign-in',
+  'GET /v1/commission': 'public politics: seats, votes and the decree in force are on the record',
+  'GET /v1/districts': 'the map, incl. NPC occupation + liberation cost — shown pre-sign-in',
+  'GET /v1/exchange': 'the M3 cb/ammo barter board — a public order book',
+  'GET /v1/gangs': 'the families board the landing page shows before sign-in',
+  'GET /v1/gangs/:id': 'a family page is public (the /u/:name profile precedent)',
+  'GET /v1/landmarks': 'district monuments are public by construction — the point is being seen',
+  'GET /v1/market': 'the Black Market board is a public order book',
+  'GET /v1/market/prices': 'the deterministic §7.11 price surface — knowable by design',
+  'GET /v1/online': 'the "N in the city" presence badge on the landing page',
+  'GET /v1/plex/price': 'the public PLEX quote (market-linked, moves nothing)',
+  'GET /v1/rules': 'the public rulebook — server stays authoritative, odds knowledge moves no roll',
+  'GET /v1/u/:name': 'THE BROADCAST public profile — a share link works without an account',
+  'GET /v1/ws': 'authenticates IN-BAND on connect (JWT via Sec-WebSocket-Protocol), not by preHandler',
+  'GET /v1/yield': 'TOKENOMICS v2 family-yield board — a public status board (the /v1/gangs precedent)',
+  'POST /v1/auth/guest': 'an auth entry point — there is no token to present yet',
+  'POST /v1/auth/privy': 'an auth entry point — there is no token to present yet',
+  'POST /v1/auth/x': 'an auth entry point — there is no token to present yet',
+  'POST /v1/auth/x/start': 'an auth entry point — there is no token to present yet',
+};
+for (const [route, why] of Object.entries(PUBLIC))
+  assert(typeof why === 'string' && why.trim().length >= 20,
+    `PUBLIC entry ${route} needs a real reason it is unauthenticated, not a placeholder`);
 
 const v1 = app.routes.filter((r) => r.url.startsWith('/v1'));
 const key = (r) => `${r.method} ${r.url}`;
 
 // ── the invariant ──────────────────────────────────────────────────────────────────────────────
 const unauthed = v1.filter((r) => !r.hasAuth).map(key).sort();
-const surprises = unauthed.filter((k) => !PUBLIC.has(k));
+const surprises = unauthed.filter((k) => !(k in PUBLIC));
 assert.deepEqual(surprises, [],
   `these /v1 routes are PUBLIC and not declared so — if that is intended, add them to PUBLIC in this\n`
   + `file (a deliberate diff); if not, they have lost their auth preHandler:\n  ${surprises.join('\n  ')}`);
 
 // …and the other direction: a declared-public route that no longer exists is stale bookkeeping, and
 // a stale allowlist is how a future route silently inherits permission it was never granted.
-const stale = [...PUBLIC].filter((k) => !unauthed.includes(k)).sort();
+const stale = Object.keys(PUBLIC).filter((k) => !unauthed.includes(k)).sort();
 assert.deepEqual(stale, [],
   `declared public but not actually mounted-and-public (route renamed, removed, or since authed):\n  ${stale.join('\n  ')}`);
 
@@ -156,7 +156,7 @@ assert.deepEqual(unbound, [],
   + `through the register() deps if they are buildServer closures:\n  ${unbound.join('\n  ')}`);
 
 console.log(`✅ Mounted-surface test passed — ${app.routes.length} registrations, ${v1.length} under /v1: `
-  + `every one authenticated except the ${PUBLIC.size} declared public (checked BOTH ways, so neither a `
+  + `every one authenticated except the ${Object.keys(PUBLIC).length} declared public, each with a stated reason, (checked BOTH ways, so neither a `
   + `dropped auth preHandler nor a stale allowlist entry can hide), every /v1/mod route behind modAuth `
   + `rather than a player token, and no route registered twice; plus every src/routes module self-contained (no identifier read that it never binds).`);
 await app.close();
