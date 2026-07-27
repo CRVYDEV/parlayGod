@@ -3330,7 +3330,7 @@
             : `<button class="act" data-gundo="equip:${g.id}">carry it</button>`)
             : `<button class="act" data-gundo="buy:${g.id}">buy</button>`}</div>`).join('')}</div>
       <div style="margin-top:8px">
-        <input id="ammo-qty" placeholder="rounds" size="8"> <button class="act" id="ammo-buy">buy ammo</button>
+        <button class="act" id="ammo-buy">buy a box of ammo (50 rounds — $2,000)</button>
         <select id="vest-id">${(rules?.vests || []).map((v) => `<option value="${v.id}">${v.name} (${v.omr} $OMR)</option>`).join('')}</select>
         <button class="act" id="vest-buy">buy vest</button></div>`;
     t.querySelectorAll('[data-cardo]').forEach((b) => b.onclick = () => {
@@ -3342,7 +3342,7 @@
       act('POST', `/v1/armory/gun/${id}/${what}`, {}).then(() => renderGarage());
     });
     t.querySelector('#ammo-buy').onclick = () =>
-      act('POST', '/v1/armory/ammo', { qty: Number(t.querySelector('#ammo-qty').value) || 10 }).then(() => renderGarage());
+      act('POST', '/v1/armory/ammo', {}).then(() => renderGarage());   // a fixed box — the armory sells no other size
     t.querySelector('#vest-buy').onclick = () =>
       act('POST', `/v1/armory/vest/${t.querySelector('#vest-id').value}`, {}).then(() => renderGarage());
   }
@@ -4042,11 +4042,11 @@
         <button class="act" id="swap-buy">wash cash → $OMR</button>
         <button class="act" id="swap-sell">$OMR → cash</button></div>
 
-      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(stake $OMR for yield — staked is loot-proof; unstaking unbonds 6h before it's liquid)</span></h2>
+      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(stake $OMR for yield — staked is loot-proof; unstaking pulls it ALL and unbonds 6h before it's liquid)</span></h2>
       <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR · rewards ${fmt(Math.floor(me.rewards || 0))}${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
         <input id="stake-amt" placeholder="$OMR" size="8">
         <button class="act" id="stake-in">stake</button>
-        <button class="act" id="stake-out">unstake</button>
+        <button class="act" id="stake-out">unstake it all</button>
         <button class="act" data-do="POST /v1/claim-rewards">claim rewards</button></div>
 
       ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested treasury $OMR — deepens the OMR-ETH pool', `
@@ -4129,7 +4129,9 @@
     $('#swap-buy').onclick = () => act('POST', '/v1/swap', { direction: 'buy', amount: swapAmt() }).then(() => renderPortfolio());
     $('#swap-sell').onclick = () => act('POST', '/v1/swap', { direction: 'sell', amount: swapAmt() }).then(() => renderPortfolio());
     $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
-    $('#stake-out').onclick = () => act('POST', '/v1/unstake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
+    // unstaking is ALL-OR-NOTHING server-side — it takes no amount. Sending one made the box look
+    // like a partial withdrawal, and a player who typed 100 emptied their whole stake instead.
+    $('#stake-out').onclick = () => act('POST', '/v1/unstake', {}).then(() => renderPortfolio());
     t.querySelectorAll('[data-bondclaim]').forEach((b) => b.onclick = () => act('POST', `/v1/bonds/${b.dataset.bondclaim}/claim`, {}).then(() => renderPortfolio()));
     { const p = $('#uw-pledge-go'); if (p) p.onclick = () => act('POST', '/v1/bonds/pledge', { omr: Number($('#uw-pledge').value) }).then(() => renderPortfolio()); }
     { const c = $('#uw-charter-go'); if (c) c.onclick = () => act('POST', '/v1/bonds/charter', {}).then(() => renderPortfolio()); }

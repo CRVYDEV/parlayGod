@@ -396,6 +396,22 @@ for (const m of html.matchAll(/data-do="(GET|POST|PUT|DELETE)\s+([^"]+)"[^>]*?da
   const keys = [...m[3].matchAll(/"([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g)].map((k) => k[1]);
   if (keys.length) sends.push([m[1], m[2], keys, 'data-body']);
 }
+// AND the api()/act() calls — the third source, and the one the curated screens actually use. It
+// was missing, and that hole was not theoretical: the Vault screen sent `{amount}` to /v1/unstake,
+// whose handler takes no body and always unstakes EVERYTHING, so a player who typed a number into
+// the box emptied their whole stake and the field was silently dropped. The deck and the
+// attributes were checked; the buttons a player actually presses were not.
+for (const m of html.matchAll(/\b(?:api|act)\(\s*'(GET|POST|PUT|DELETE)'\s*,\s*/g)) {
+  const at = m.index + m[0].length;
+  const lit = readLiteral(html, at);
+  const paths = lit ? [lit.value] : pathsInArg(html, at);
+  if (!paths.length) continue;
+  let j = (lit ? lit.end + 1 : at);
+  while (j < html.length && /[\s,]/.test(html[j])) j++;   // to the body argument
+  const keys = topKeys(html, j);
+  if (!keys?.length) continue;
+  for (const p of paths) if (p.startsWith('/v1')) sends.push([m[1], p, keys, 'api()/act()']);
+}
 assert(sends.length > 20, `only ${sends.length} client bodies found — the extraction broke`);
 
 // match a sent body to its route the same segment-wise way, then compare field by field
@@ -434,7 +450,9 @@ console.log(`✅ client wiring test passed — across the console AND /admin: of
   `are ids the server recognises; and every field in ${sends.length} request bodies is one its own ` +
   `route actually reads — including the ones that hand the whole body to a module, followed a file ` +
   `deeper to the parameter it lands in — through a barrel re-export if it takes one. ` +
-  `Those are the three ways a button dies silently — this found four dead routes and five ignored ` +
-  `fields, one of them a broken action, across two runs. ${Object.keys(CATALOGS).length} fields have ` +
+  `Those are the three ways a button dies silently — this has found four dead routes and seven ` +
+  `ignored fields, among them a broken action, an ammo box sold by a control that asked for a ` +
+  `quantity it could not honour, and an unstake box that emptied the whole stake whatever you typed. ` +
+  `${Object.keys(CATALOGS).length} fields have ` +
   `catalogs and every other literal field is either an i18n key or declared not-an-API-value, so a ` +
   `new one forces that decision instead of being skipped in silence.`);
