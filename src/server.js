@@ -647,8 +647,12 @@ export async function buildServer() {
   // ── TOKENOMICS v2 — THE EXCHANGE (the one-way window) + THE FAMILY YIELD ──
   // Burn $OMR, take cash from a pool real sinks fed. Cash never runs the other way in v2; see
   // omerta-tokenomics-v2-design.md for why a one-directional AMM cannot be the mechanism.
+  // readCharacter (the lock-free read path), and the CLIENT — not the pool. Passing `pool` to a
+  // function running inside a held transaction checks out a SECOND connection while the first is
+  // still held: with every connection in flight doing that, the pool deadlocks against itself. It
+  // also read outside the caller's snapshot. Every sibling board (wage, portfolio) passes `client`.
   app.get('/v1/window', { preHandler: auth }, async (req) =>
-    G.withCharacter(pool, req.user.sub, (ch, client, h) => Exchange.exchangeBoard(pool, h)));
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Exchange.exchangeBoard(client, h)));
   app.post('/v1/window/redeem', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Exchange.redeem(ch, req.body?.amount, client, h)));
   app.get('/v1/yield', async () => Exchange.yieldBoard(pool));           // public: who draws the family yield

@@ -13,7 +13,7 @@ import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION, F
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
-import { carveExchange, payFamilyYield } from './exchange.js';
+import { carveExchange, fundFamilyYield, payFamilyYield } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
@@ -136,9 +136,10 @@ export async function runBuyback(pool, opts = {}) {
     // ledger row, nothing minted. FUND_BPS ships at 0, so today this is a no-op and the buyback
     // splits exactly as it always has; it is the dial that moves yield from individuals to families
     // as `stake:reward`/`dividend:omr` are retired (design §3).
-    const yieldShare = bought * (FAMILY_YIELD.FUND_BPS || 0) / 10000;
-    if (yieldShare > 0)
-      await client.query('UPDATE family_yield_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [yieldShare]);
+    // through fundFamilyYield, not an inline UPDATE — ONE implementation of the funding arithmetic
+    // (the carveExchange discipline). Two copies in two transaction contexts is how the balance and
+    // the lifetime_funded counter drift apart, and `family yield backed` is what would then fire.
+    const yieldShare = await fundFamilyYield(client, bought * (FAMILY_YIELD.FUND_BPS || 0) / 10000);
     const forSplit = bought - stakeShare - yieldShare;
 
     // remaining: 50% pro-rata to the top-25 families by standing; the rest (plus any

@@ -5712,3 +5712,40 @@ laundering surface (this is what opens the window), re-source the RWA float from
 slices, then the contracts (`OMR.mint()` + the 9% three-way tax; `OmertaBond` minting behind the
 daily cap / discount ceiling / accretive-only walls) — both reset the audit clock. Then **re-sim
 everything**: the entire cash economy was balanced against an extraction threat model that v2 removes.
+
+**RED-TEAM over tokenomics v2 step 1 (`AUDIT-tokenomics-v2.md`).** Five lenses (§10.4, locks,
+exploit, cross-system, and the tests themselves). **No CRITICAL/HIGH, no §10.4 drift.** Verified
+sound: the burn cannot mint (`spendOmr` guards finite-and-positive AND balance, and runs BEFORE the
+pool decrement), the window's cash side is doubly bounded, `yield:family` is a real transfer, and —
+importantly — the window's LACK of a jail/safehouse gate is CORRECT, not an omission: `economy.js`
+documents the sell direction ($OMR → cash) as deliberately ungated ("bringing money back in-game…
+only extraction prep carries risk"), and the window IS that direction. Fixed in-commit, each
+mutation-verified: **F1 (MED)** `payFamilyYield` locked the pool BEFORE the gangs while `runBuyback`
+holds gangs and then writes the pool — an AB-BA between two functions on the same worker tick, and
+one **armed by the migration itself** (with FUND_BPS at 0 the buyback skips the pool write, so the
+cycle appears exactly when the founder raises the dial the design says to raise); now ranks unlocked
+→ locks gangs in id order → pool LAST. **F2 (LOW-MED)** per-share `round2` across the 5-4-3-2-1
+weights could sum to a cent MORE than the pot (measured: 53 of the first 400 cent-values; a 0.23 pot
+paid 0.24 and went NEGATIVE) → each share now clamps to `bal − paid`. **F7 (LOW-MED)** and the
+invariant could not SEE F2: `family yield backed` carries a `+0.01` tolerance, exactly the size of the
+overpay, so a negative pot read `ok:true`; added `family yield balance` (identity + never-negative),
+the check the exchange pool already had. **F3 (MED)** `/v1/window` passed the connection POOL to a
+function running inside a held transaction — a second connection acquired while the first is held,
+which deadlocks the pool against itself under load — and took a write lock for a pure read the console
+polls every render; now `readCharacter` + `client`, matching every sibling board. **F5 (LOW)** the
+buyback had its own inline funding UPDATE beside the exported `fundFamilyYield` — the exact drift
+hazard avoided for `carveExchange` and reintroduced next to it; now one implementation. **F6**
+(hardening, NOT a bug) the only `localeCompare` id-sort before a `FOR UPDATE` in the tree — tested
+rather than assumed (**200,000/200,000 canonical-UUID pairs agree with codepoint order**, so never
+reachable), unified anyway. **F4 — against MY OWN TEST:** the §10.4 assertion ran AFTER distribution,
+when the $OMR had already moved to gangs (also counted), so it could not see bucket membership —
+**mutation-verified: deleting `family_yield_pool` from `invariants.js` left the file GREEN**;
+conservation is now asserted with the $OMR parked in the pot and nowhere else. Two further
+self-inflicted lessons recorded in the report: a verification probe that MISREPORTED because
+`sed 's/a/b/'` without `/g` replaced only the first of two occurrences on a line (the printed label
+said one check while the code read another), and a first F2 regression that was **vacuous** because it
+seeded ONE family when the overpay needs five — it passed under the mutation. Same lesson the harnesses
+keep teaching: a check that cannot fail reads exactly like a clean bill of health. Flagged, not changed
+(ground rule #1): `payFamilyYield` runs hourly rather than on the 12h buyback cadence (harmless, but
+tail seats fall under MIN_PAYOUT on a tiny pot), the fixed `EXCHANGE.RATE` against cash inflation, and
+the 30% buyback diversion that lands when the window opens.
