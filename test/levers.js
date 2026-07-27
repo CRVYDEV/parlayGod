@@ -146,6 +146,19 @@ const SIGNED = [
   ['DUELS.RAKE_BPS', 500],
   ['DUELS.STYLE_EDGE', 1.15],
   ['DUELS.VARIANCE', 40],
+  // TOKENOMICS v2 (the one-way window). OPEN is pinned FALSE deliberately: opening it is a real
+  // economic event (it is what severs cash → $OMR), so it must be an explicit edit here, in the
+  // same change — not a flag someone flips. FUND_BPS diverts 30% of the buyback the day it opens.
+  ['EXCHANGE.OPEN', false],
+  ['EXCHANGE.RATE', 500],
+  ['EXCHANGE.MIN_OMR', 1],
+  ['EXCHANGE.DAILY_CAP_OMR', 250],
+  ['EXCHANGE.FUND_BPS', 3000],
+  // the migration dial — 0 means the buyback splits exactly as before; raising it moves yield from
+  // individuals to families and must happen as stake:reward/dividend:omr retire, or it pays twice
+  ['FAMILY_YIELD.FUND_BPS', 0],
+  ['FAMILY_YIELD.SEATS', 5],
+  ['FAMILY_YIELD.WEIGHTS', [5, 4, 3, 2, 1]],
   ['EMISSION.DECAY_EVERY', 180],
   ['EMISSION.EPOCH_OMR', 500],
   ['EMISSION.WAGE_CAP_OMR', 5],

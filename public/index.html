@@ -3985,6 +3985,8 @@
     const bd = (await api('GET', '/v1/bonds')).body || {};
     const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
     const flb = (await api('GET', '/v1/leaderboard/family-portfolio')).body || {};
+    const win = (await api('GET', '/v1/window')).body || {};
+    const yld = (await api('GET', '/v1/yield')).body || {};
     const mkt = pf.market || [];
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
@@ -4041,6 +4043,23 @@
         <input id="swap-amt" placeholder="amount" size="9">
         <button class="act" id="swap-buy">wash cash → $OMR</button>
         <button class="act" id="swap-sell">$OMR → cash</button></div>
+
+      ${win.rate ? `
+      <h2 style="margin-top:12px">The Window <span class="d" style="font-size:11px">(one way: burn $OMR, take cash — cash never runs back the other way)</span></h2>
+      <div class="card"${win.open ? '' : ' style="opacity:.75"'}>
+        <div class="d">${win.note}</div>
+        ${win.open ? `<div class="d">rate $${fmt(win.rate)} cash per $OMR · the till holds $${fmt(win.pool)} (${fmt(win.poolOmr)} $OMR worth) · your allowance today ${fmt(win.yourHeadroomOmr)} of ${fmt(win.dailyCapOmr)} $OMR</div>
+        <input id="win-amt" placeholder="$OMR" size="8"> <button class="act" id="win-go">burn it for cash</button>
+        <div class="d" style="font-size:11px;color:var(--dim)">the till is filled from the street take, so it can run dry — a short window refuses and burns nothing.</div>`
+        : `<div class="d" style="font-size:11px;color:var(--dim)">rate will be $${fmt(win.rate)} cash per $OMR, capped at ${fmt(win.dailyCapOmr)} $OMR a day.</div>`}
+      </div>` : ''}
+
+      ${yld.families?.length ? `
+      <h2 style="margin-top:12px">The Family Yield <span class="d" style="font-size:11px">(the top ${yld.seats} families by this season's standing split the pot)</span></h2>
+      <div class="card"><div class="d">pot ${fmt(yld.pool)} $OMR · paid out so far ${fmt(yld.lifetimePaid)}</div>
+        <table><tr><th>#</th><th>family</th><th>share</th><th>next</th></tr>
+        ${yld.families.map((f) => `<tr><td>${f.rank}</td><td>${esc(f.name)} <span class="chip">${esc(f.tag)}</span></td><td>${(f.shareBps / 100).toFixed(0)}%</td><td>${fmt(f.nextPayout)}</td></tr>`).join('')}</table>
+        <div class="d" style="font-size:11px;color:var(--dim)">${yld.note}</div></div>` : ''}
 
       <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(stake $OMR for yield — staked is loot-proof; unstaking pulls it ALL and unbonds 6h before it's liquid)</span></h2>
       <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR · rewards ${fmt(Math.floor(me.rewards || 0))}${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
@@ -4128,6 +4147,9 @@
     const swapAmt = () => Number($('#swap-amt').value);
     $('#swap-buy').onclick = () => act('POST', '/v1/swap', { direction: 'buy', amount: swapAmt() }).then(() => renderPortfolio());
     $('#swap-sell').onclick = () => act('POST', '/v1/swap', { direction: 'sell', amount: swapAmt() }).then(() => renderPortfolio());
+    // the one-way window (TOKENOMICS v2) — only rendered when it is open, hence the guard
+    { const w = $('#win-go'); if (w) w.onclick = () =>
+        act('POST', '/v1/window/redeem', { amount: Number($('#win-amt').value) }).then(() => renderPortfolio()); }
     $('#stake-in').onclick = () => act('POST', '/v1/stake', { amount: Number($('#stake-amt').value) }).then(() => renderPortfolio());
     // unstaking is ALL-OR-NOTHING server-side — it takes no amount. Sending one made the box look
     // like a partial withdrawal, and a player who typed 100 emptied their whole stake instead.

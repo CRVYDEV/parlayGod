@@ -2230,3 +2230,32 @@ CREATE TABLE IF NOT EXISTS x_checks (
   checked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (account_id, kind)
 );
+
+-- ── TOKENOMICS v2 (2026-07-27) ────────────────────────────────────────────────────────────────────
+-- THE EXCHANGE. Cash → OMR is gone, so the constant-product AMM cannot survive: a one-directional
+-- AMM drains its cash side monotonically and shuts itself. This replaces it — burn OMR, receive cash
+-- from a pool that only real cash sinks feed, at a published rate, clamped to what was funded.
+-- `lifetime_funded`/`lifetime_paid` are what the `exchange pool backed` invariant reconciles.
+-- the redemption window's per-account rolling-24h cap (the D3 wash-bucket pattern, on the account).
+-- Direct-SQL columns: absent from persistAccount's positional UPDATE, so they cannot be clobbered.
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS exchange_used NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE account_persistent ADD COLUMN IF NOT EXISTS exchange_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS exchange_pool (
+  id INT PRIMARY KEY,
+  balance NUMERIC NOT NULL DEFAULT 0,        -- cash available to pay redemptions
+  lifetime_funded NUMERIC NOT NULL DEFAULT 0,
+  lifetime_paid NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO exchange_pool (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+-- THE FAMILY YIELD. What individual staking rewards and personal RWA dividends are repurposed into:
+-- a pot distributed to the top families by standing, so family politics carries a real economic
+-- prize and OMR has a reason to be held by an organisation rather than sold by a person.
+CREATE TABLE IF NOT EXISTS family_yield_pool (
+  id INT PRIMARY KEY,
+  balance NUMERIC NOT NULL DEFAULT 0,        -- soft $OMR awaiting distribution
+  lifetime_funded NUMERIC NOT NULL DEFAULT 0,
+  lifetime_paid NUMERIC NOT NULL DEFAULT 0
+);
+INSERT INTO family_yield_pool (id) VALUES (1) ON CONFLICT DO NOTHING;

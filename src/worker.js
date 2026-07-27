@@ -9,10 +9,11 @@
 import crypto from 'node:crypto';
 import { makeDb } from './db.js';
 import { pingDb, archiverHealth } from './dbhealth.js';
-import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION } from './rules.js';
+import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION, FAMILY_YIELD } from './rules.js';
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
+import { carveExchange, payFamilyYield } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
@@ -92,7 +93,12 @@ export async function runBuyback(pool, opts = {}) {
       if ((await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [p.id])).rows[0]) payees.push(p);
     // now the singleton — authoritative pool under lock
     const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-    const cashPool = Number(tax.pool);
+    // TOKENOMICS v2 — THE EXCHANGE takes its slice of the take FIRST, inside this transaction:
+    // the street_tax lock is already held and the 12h due-check has already passed, so the window
+    // is funded exactly once per cycle. Returns 0 while the window is shut (EXCHANGE.OPEN), so
+    // today this diverts nothing and the buyback still spends the whole pool.
+    const toWindow = await carveExchange(client, Number(tax.pool));
+    const cashPool = Number(tax.pool) - toWindow;
     if (cashPool <= 0) { await client.query('COMMIT'); return null; }
     let c = Number(amm.cash_reserve), o = Number(amm.omr_reserve);
 
@@ -125,7 +131,15 @@ export async function runBuyback(pool, opts = {}) {
     const stakeShare = bought * (CONSTANTS.STAKE_POOL_BPS || 0) / 10000;
     if (stakeShare > 0)
       await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [stakeShare]);
-    const forSplit = bought - stakeShare;
+    // TOKENOMICS v2 — the family-yield carve. Same shape as the stake-pool carve above and the same
+    // §10.4 status: a bucket transfer inside the $OMR set (amm reserve → family_yield_pool), no
+    // ledger row, nothing minted. FUND_BPS ships at 0, so today this is a no-op and the buyback
+    // splits exactly as it always has; it is the dial that moves yield from individuals to families
+    // as `stake:reward`/`dividend:omr` are retired (design §3).
+    const yieldShare = bought * (FAMILY_YIELD.FUND_BPS || 0) / 10000;
+    if (yieldShare > 0)
+      await client.query('UPDATE family_yield_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [yieldShare]);
+    const forSplit = bought - stakeShare - yieldShare;
 
     // remaining: 50% pro-rata to the top-25 families by standing; the rest (plus any
     // undistributed remainder) rolls to the event fund.
@@ -145,7 +159,7 @@ export async function runBuyback(pool, opts = {}) {
     await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
     await client.query('COMMIT');
     return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: payees.length, levy,
-      lpCash, lpOmr };
+      lpCash, lpOmr, toWindow };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
@@ -264,7 +278,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     }
     if (dbDownTicks) { console.log(`worker: database back after ${dbDownTicks} skipped tick(s) — resuming`); dbDownTicks = 0; }
     const r = await safe('buyback', () => runBuyback(pool));
-    if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)})`);
+    if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)}${r.toWindow ? `, window +$${Math.round(r.toWindow)}` : ''})`);
+    // TOKENOMICS v2 — THE FAMILY YIELD. A no-op on an empty pot, so this is safe to run every tick
+    // and is live the moment FAMILY_YIELD.FUND_BPS is turned up (design §3).
+    const fy = await safe('family yield', () => payFamilyYield(pool));
+    if (fy?.paid > 0) console.log(`👑 family yield: ${fy.paid} $OMR split across ${fy.families.length} famil${fy.families.length === 1 ? 'y' : 'ies'}`);
     const s = await safe('season rollover', () => runSeasonRollover(pool));
     if (s?.converted > 0) console.log(`📅 season ${s.season}: converted ${s.converted} characters`);
     // THE STREET WAGE — the daily emission epoch (idempotent per epoch, safe at any tick frequency)

@@ -417,6 +417,17 @@ const SECTIONS = [
       share, a season SPCX prize.</p>
       ${R(`GET /v1/portfolio [public] · POST /v1/portfolio/invest · /portfolio/dividend · /dynasty/name · /landmarks/:id · GET /v1/leaderboard/portfolio`)}` },
 
+  { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'tokenomics v2 — building',
+    html: `<p>A change to how $OMR works is being built. Two pieces are in already.</p>
+      <p><b>The Window</b> — burn $OMR, take in-game cash at a published rate, out of a till the street take fills. It runs
+      <b>one way only</b>: cash never becomes $OMR again. The till can run dry, and a short window refuses and
+      <b>burns nothing</b>; there is a daily limit per account. <b>It is shut right now</b> and opens when cash stops buying
+      $OMR — until then the two together would be a money pump, so the game refuses to run both.</p>
+      <p><b>The Family Yield</b> — the top families by this season's standing split a pot of $OMR into their reserve. It is
+      what staking rewards and personal dividends become: standing stops being only a badge and starts paying, so tribute,
+      wars and the Commission are worth real money to a family.</p>
+      ${R(`GET /v1/window · POST /v1/window/redeem · GET /v1/yield [public]`)}` },
+
   { id: 'estate', group: 'Endgame & Going Legit', title: 'The Estate & Auction House', tag: 'status sinks',
     html: `<p><b>The Estate</b> — a deep, account-level (death-proof) $OMR cost and a home: buy levels (Safe House 40 to The
       Compound 2500 $OMR), unlock features, name it, and show <b>trophies</b> from your real holdings.</p>

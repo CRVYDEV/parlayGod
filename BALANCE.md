@@ -2183,3 +2183,28 @@ hundred dollars against a **signed $10,000** floor), `duel_limit` only when 9% o
 `DUELS.STAKE_MIN` (below it the ladder entry is an empty window — unchallengeable decoration), and
 `fade_limit` bounded by `CASINO.MIN_BET/MAX_BET`. Consequence: **fewer but legal listings** — the
 duelling ladder now needs a resident holding ≥ ~$11.1k, so it draws from the made band up.
+
+---
+
+## TOKENOMICS v2 — THE EXCHANGE + THE FAMILY YIELD (built 2026-07-27, founder-directed)
+
+Design: `omerta-tokenomics-v2-design.md`. Step 1 of the sequencing. All numbers are founder sign-off
+levers. **Nothing signed was retuned in this drop** — the two new carves both default to no-op:
+
+| lever | value | what it does | status |
+|---|---|---|---|
+| `EXCHANGE.OPEN` | **false** | the interlock — the window is SHUT until cash → $OMR is retired | ships shut; `test/tokenomics.js` fails the suite if it opens while the AMM buy side still works |
+| `EXCHANGE.RATE` | 500 | cash paid per $OMR burned | anchored at the AMM genesis spot; fixed while cash inflates, so review each season |
+| `EXCHANGE.DAILY_CAP_OMR` | 250 | per account, rolling 24h | the wash-cap token bucket |
+| `EXCHANGE.FUND_BPS` | 3000 | share of the street take that fills the till | **diverts nothing today** — `carveExchange` returns 0 while the window is shut. When it opens this is a real 30% reduction of buyback revenue (stake pool + family split + event fund all shrink) — re-sim then |
+| `FAMILY_YIELD.FUND_BPS` | **0** | share of each buyback carved to the family pot | ships at 0, so the buyback splits exactly as before. This is the MIGRATION DIAL: raise it as `stake:reward`/`dividend:omr` are retired, or the yield pays twice |
+| `FAMILY_YIELD.SEATS` / `WEIGHTS` | 5 / 5-4-3-2-1 | who splits the pot, by this season's standing | the Commission-levy weighting |
+
+**§10.4:** `window:burn` is an $OMR BURN, `window:payout` a character_id'd cash FAUCET bounded by the
+pool, `yield:family` a pure pool→reserve TRANSFER (both sides already in `omrBuckets`). New real-value
+invariant `exchange pool backed` (paid ≤ funded) proves the cash side is a redistribution rather than
+inflation — the `runVigInvariants` shape. Sim drift-0.
+
+**The one thing to know before opening the window:** the design's claim that arbitrage is impossible
+"by construction" is true only once cash → $OMR is gone. Until then a fixed-rate window is a money
+pump whenever AMM spot sits below `RATE`. That is why `OPEN` is false and why the interlock is a test.

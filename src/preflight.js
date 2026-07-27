@@ -36,6 +36,11 @@ export const TEST_ONLY_ENV = [
   'TRAIN_CD_MS',
   // QA escape hatches — these let a mod route fabricate value or bypass an auth check
   'ALLOW_MOD_REAL_REVENUE', 'X_TRUST_USER_TOKEN',
+  // TOKENOMICS v2 — opens the redemption window while cash can still BUY $OMR, which is a money
+  // pump (buy under RATE, redeem at RATE). The interlock exists precisely to stop that reaching
+  // production, so the override must never boot there. Production opens the window via
+  // EXCHANGE.OPEN, in the same change that retires the buy side.
+  'EXCHANGE_OPEN',
 ];
 
 // ── REQUIRED in production. Each one fails CLOSED today (the server refuses to boot, or the feature
