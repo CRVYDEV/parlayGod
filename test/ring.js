@@ -8,7 +8,15 @@
 // stage, and THE BRACKET (format at materialization, a 8-runner field playing rounds of heats down
 // to a final that pays net of rake — the tourney escrow identity intact).
 process.env.MOD_KEY = 'test-mod-key';
-process.env.RING_TURN_MS = '200';       // TEST-ONLY turn clock (boot-guard rejects it in production)
+// TEST-ONLY turn clock (the boot-guard rejects it in production). Set GENEROUS on purpose: this
+// used to be 200ms, and every hand played below is a dozen sequential HTTP round-trips against
+// pg-mem, so any pair of them that straddled 200ms had the clock fold the actor mid-hand and the
+// next check came back 400 `folded`. That flaked ~5% of runs and looked exactly like a state-machine
+// bug — the failure message named the seat, not the cause. The clock is still tested, and tested
+// harder, by BACKDATING act_deadline (expireTurn below) instead of sleeping: it drives the same
+// `act_deadline < now()` predicate the sweep really uses, deterministically, with no wall clock in
+// the loop. Same reason TOURNEY_MS below is wide and closeReg forces the window shut by SQL.
+process.env.RING_TURN_MS = '60000';
 process.env.BRACKET_ROUND_MS = '1';     // TEST-ONLY round pacing
 process.env.TOURNEY_MS = '5000';        // GENEROUS registration window (test-only): the 8 sequential
 // registration round-trips must all land before the window closes — a tight 300ms raced pg-mem load
@@ -41,6 +49,11 @@ const escrowOk = async (label) => {
   assert.equal(c.drift, 0, `${label}: ring escrow reconciles (${c.drift})`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// deterministically run the TURN CLOCK out on whoever holds the action — the sweep folds a table
+// whose `act_deadline < now()`, so backdating it is the same event a real stall produces, minus the
+// race. Never sleep for this: the sleep has to outlast the clock but every round-trip in between
+// also races it, which is what made this file flaky.
+const expireTurn = (tid) => pool.query(`UPDATE poker_tables SET act_deadline = now() - interval '1 second' WHERE id='${tid}'`);
 // deterministically CLOSE a tournament's registration window (no wall-clock race): the sweep picks up
 // any tournament whose resolves_at <= now(), so backdating it forces registration closed on the spot.
 const closeReg = (tid) => pool.query(`UPDATE poker_tournaments SET resolves_at = now() - interval '1 second' WHERE id='${tid}'`);
@@ -107,7 +120,7 @@ const checkAround = async () => {
     const seat = v.table.actingSeat;
     const who = [al, bo, cy][seat];
     const res = await call('POST', `/v1/casino/ring/${tid}/act`, { token: who.token, body: { action: 'check' } });
-    assert.equal(res.code, 200, `seat ${seat} checks`);
+    assert.equal(res.code, 200, `seat ${seat} checks (${res.body.error}: ${res.body.message})`);
   }
 };
 await checkAround(); // flop
@@ -131,7 +144,7 @@ r = await call('POST', `/v1/casino/ring/${tid}/deal`, { token: bo.token });
 assert.equal(r.code, 200, 'a second hand deals');
 let v = (await call('GET', `/v1/casino/ring/${tid}`, { token: al.token })).body;
 const stallerSeat = v.table.actingSeat;
-await sleep(300); // RING_TURN_MS=200 — the clock runs out on the actor
+await expireTurn(tid); // the clock runs out on the actor
 const sweep1 = await sweepRingTables(pool);
 assert(sweep1.resolvedStalls >= 1, 'the sweep folds the staller');
 v = (await call('GET', `/v1/casino/ring/${tid}`, { token: al.token })).body;
@@ -194,7 +207,7 @@ await escrowOk('after the table folded');
   await call('POST', `/v1/casino/ring/${ht}/sit`, { token: hy.token, body: { buyin: 10000 } });
   await call('POST', `/v1/casino/ring/${ht}/deal`, { token: hx.token });
   const takesBefore = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:ring:take' AND counterparty='${ht}'`)).rows[0].s);
-  await sleep(300); // the acting player's 200ms clock expires — the hand is a full stall (folding the actor leaves one)
+  await expireTurn(ht); // the acting player's clock runs out — a full stall (folding the actor leaves one)
   const dr = await call('POST', `/v1/casino/ring/${ht}/deal`, { token: hx.token });
   assert.equal(dr.code, 200, 'the next deal resolves the stall AND deals fresh');
   const takesAfter = Number((await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='casino:ring:take' AND counterparty='${ht}'`)).rows[0].s);
@@ -261,5 +274,126 @@ assert.equal(trCheck.drift, 0, `the tourney escrow identity holds through the br
   await sleep(10); await sweepTournaments(pool); // settle the final so the one-open slot frees
 }
 
+// ── ALL-IN: a player with no chips is never asked to act, so the clock cannot fold him off a pot ──
+// `advance()` used to pick the next actor from every un-acted seat REGARDLESS of stack, so on the
+// street after an all-in the action landed on a player holding zero chips — no decision to make and
+// no reason to click — and the turn clock reached him and folded him out of a pot he had put his
+// ENTIRE stack into. An opponent only had to wait him out.
+//
+// THREE shapes, because the first fix only looked complete: filtering the *pending* list left the
+// NEXT-STREET assignment picking `live[0]` unconditionally, so it kept the bug whenever the all-in
+// player sat at the lowest seat — and the original regression passed anyway, because the short
+// stack happened to sit second. Each shape below is a reproduction that failed before the fix.
+const allInTable = async (tag, buyins) => {
+  const ps = [];
+  for (let i = 0; i < buyins.length; i++) ps.push(await mk(`${tag} ${i}`));
+  const t = (await call('POST', '/v1/casino/ring/open', { token: ps[0].token, body: { bb: 100, buyin: buyins[0] } })).body.tableId;
+  for (let i = 1; i < ps.length; i++) await call('POST', `/v1/casino/ring/${t}/sit`, { token: ps[i].token, body: { buyin: buyins[i] } });
+  await call('POST', `/v1/casino/ring/${t}/deal`, { token: ps[0].token });
+  const table = async () => (await pool.query('SELECT acting_seat, street, pot, last_result FROM poker_tables WHERE id=$1', [t])).rows[0];
+  const seatOf = async (id) => (await pool.query('SELECT * FROM poker_ring_seats WHERE table_id=$1 AND character_id=$2', [t, id])).rows[0];
+  const actor = async () => {
+    const tb = await table();
+    const s = tb.acting_seat === null ? null
+      : (await pool.query('SELECT * FROM poker_ring_seats WHERE table_id=$1 AND seat=$2', [t, tb.acting_seat])).rows[0];
+    return { tb, s };
+  };
+  // the raise is capped at the smallest live stack, so this puts the short stack all-in and the
+  // others can always call — the cap is exactly why an all-in player never faces an unpayable bet
+  for (let i = 0; i < ps.length; i++) {
+    const { tb, s } = await actor();
+    if (!tb.street || !s) break;
+    const me = ps.find((x) => x.id === s.character_id);
+    await call('POST', `/v1/casino/ring/${t}/act`, { token: me.token, body: { action: i === 0 ? 'raise' : 'call', amount: 999999 } });
+  }
+  return { t, ps, table, seatOf, actor };
+};
+
+// (1) the short stack sits SECOND — the shape the first fix did cover
+// (2) the short stack sits FIRST (seat 0) — the shape it did not
+// FOUR seats on purpose: the clock has to fold two chipped stallers and still leave two players
+// with chips, so the hand is STILL LIVE when we check. On a three-handed table the second fold
+// drops the table below two chipped seats, the board runs out, and `in_hand` goes false for
+// everyone — which would make the assertion pass for the wrong reason.
+for (const [tag, buyins, shortIdx] of [
+  ['Allin', [20000, 3000, 20000, 20000], 1],
+  ['Lowseat', [3000, 20000, 20000, 20000], 0],
+]) {
+  const { t, ps, table, seatOf, actor } = await allInTable(tag, buyins);
+  const short = ps[shortIdx];
+  const sh = await seatOf(short.id);
+  assert.equal(Number(sh.stack), 0, `${tag}: the short stack is all-in`);
+  assert.equal(sh.in_hand, true, `${tag}: and still in the hand`);
+  // the new street opened on someone who can still bet — never on the man with no chips
+  assert.notEqual((await actor()).s.character_id, short.id,
+    `${tag}: an ALL-IN player is never handed the action (the clock would fold him off the pot)`);
+  // let the clock take two chipped stallers; each fold re-points the action, and it must never
+  // land on him either. Two rounds, because pre-fix the first fold is what handed it to him.
+  for (let i = 0; i < 2; i++) {
+    await expireTurn(t);
+    await sweepRingTables(pool);
+    const { tb, s } = await actor();
+    assert.ok(tb.street, `${tag}: the hand is still live after the clock took a staller`);
+    assert.notEqual(s.character_id, short.id, `${tag}: the clock never re-points the action at the all-in player`);
+    assert.equal((await seatOf(short.id)).in_hand, true,
+      `${tag}: the turn clock did not fold the all-in player off his own pot`);
+  }
+  await escrowOk(`after the all-in street (${tag})`);
+  void table;
+}
+
+// (3) EVERY live seat all-in — the worst shape. Nobody can act at all (the raise cap is 0), so the
+// board must RUN OUT and the CARDS decide. Before the fix the clock folded the seats one by one and
+// the last one standing took a $9,000 pot with no showdown.
+{
+  const { table, seatOf, ps } = await allInTable('Allsin', [3000, 3000, 3000]);
+  const tb = await table();
+  assert.equal(tb.street, null, 'everyone all-in: the hand resolved immediately — no betting round is possible');
+  const res = typeof tb.last_result === 'string' ? JSON.parse(tb.last_result) : tb.last_result;
+  assert.equal(res.showdown, true, 'everyone all-in: the CARDS decided it, not the turn clock');
+  assert.equal(res.pot, 9000, 'the whole pot was contested');
+  const stacks = [];
+  for (const p of ps) stacks.push(Number((await seatOf(p.id)).stack));
+  assert.equal(stacks.reduce((a, b) => a + b, 0), res.pot - res.rake, 'the pot net of rake went back to the seats');
+  assert.equal(stacks.filter((s) => s > 0).length, res.winners.length, 'and only the winner(s) hold chips');
+  await escrowOk('after an all-in run-out');
+}
+
+// (4) + (5) THE ALL-IN RULE from the FIRST CARD — a seat whose whole stack is the ante is all-in
+// before anyone acts, and `dealHand` used to point the action at `live[0]` regardless of stack just
+// like the street branch did. Reaching this state legitimately means grinding down to exactly the
+// big blind, and the buy-in floor is 20bb, so the stacks are set directly here. That breaks the
+// absolute escrow identity (chips appear/vanish with no ledger row behind them), so these two cases
+// come LAST in the file and assert the escrow DELTA across the deal instead — which is the part
+// that matters: an immediate run-out resolves a hand, and its rake has to be ledgered inside the
+// same transaction or the identity drifts on COMMIT. Verified load-bearing: drop the settleFinish
+// after the deal and case (5) drifts by exactly its $9 rake.
+{
+  const ringDrift = async () => (await runLedgerInvariants(pool, { alert: false }))
+    .checks.find((x) => x.name === 'ring poker escrow').drift;
+  for (const [tag, seeded, expectRunOut] of [['Ante', [100, 20000, 20000], false], ['Broke', [100, 100, 20000], true]]) {
+    const ps = [];
+    for (let i = 0; i < seeded.length; i++) ps.push(await mk(`${tag} ${i}`));
+    const t = (await call('POST', '/v1/casino/ring/open', { token: ps[0].token, body: { bb: 100, buyin: 20000 } })).body.tableId;
+    for (let i = 1; i < ps.length; i++) await call('POST', `/v1/casino/ring/${t}/sit`, { token: ps[i].token, body: { buyin: 20000 } });
+    for (let i = 0; i < seeded.length; i++) {
+      await pool.query('UPDATE poker_ring_seats SET stack=$1 WHERE table_id=$2 AND character_id=$3', [seeded[i], t, ps[i].id]);
+    }
+    const before = await ringDrift();
+    await call('POST', `/v1/casino/ring/${t}/deal`, { token: ps[0].token });
+    const tb = (await pool.query('SELECT acting_seat, street, last_result FROM poker_tables WHERE id=$1', [t])).rows[0];
+    if (expectRunOut) {
+      assert.equal(tb.street, null, `${tag}: only one seat could bet after the ante — the board ran out`);
+      const r = typeof tb.last_result === 'string' ? JSON.parse(tb.last_result) : tb.last_result;
+      assert.equal(r.showdown, true, `${tag}: and the cards decided it`);
+      assert.ok(r.rake > 0, `${tag}: it took a rake, which is what must be ledgered in the same txn`);
+    } else {
+      const s = (await pool.query('SELECT * FROM poker_ring_seats WHERE table_id=$1 AND seat=$2', [t, tb.acting_seat])).rows[0];
+      assert.ok(Number(s.stack) > 0, `${tag}: the preflop action opened on a seat that can still bet, not the ante-all-in seat`);
+    }
+    assert.equal(await ringDrift(), before, `${tag}: the deal moved the escrow identity by nothing it did not ledger`);
+  }
+}
+
 await app.close();
-console.log('✅ RING POKER + THE BRACKET test passed — the lobby + stakes/buy-in/one-table gates, the ESCROW boundary (sit/leave ledgered, stacks+pots reconciling at every stage), a full 3-handed hand (antes, order enforcement, the raise CLAMPED to the smallest live stack so every call is affordable — no side pots, hole-card redaction, showdown paying the winner\'s STACK net of a capped ledgered rake), the fold-win, THE TURN CLOCK auto-folding a staller, cash-out, DEATH (the stack burns casino:ring:death + the hand resolves), an empty table folding up, and THE BRACKET (format locked at materialization, an 8-runner field cut by heats then settled by a final paying winners + take == every buy-in — the tourney escrow §10.4 identity intact)');
+console.log('✅ RING POKER + THE BRACKET test passed — the lobby + stakes/buy-in/one-table gates, the ESCROW boundary (sit/leave ledgered, stacks+pots reconciling at every stage), a full 3-handed hand (antes, order enforcement, the raise CLAMPED to the smallest live stack so every call is affordable — no side pots, hole-card redaction, showdown paying the winner\'s STACK net of a capped ledgered rake), the fold-win, THE TURN CLOCK auto-folding a staller, cash-out, DEATH (the stack burns casino:ring:death + the hand resolves), an empty table folding up, THE ALL-IN RULE in all five shapes it can take (a short stack all-in at seat 1 and at seat 0, a whole table all-in, and all-in from the ante at seat 0 or across the table) — a player with no chips is never handed the action, so the turn clock can never fold him off a pot he is already all-in in, and when nobody can bet the board RUNS OUT and the cards decide, its rake ledgered in the same transaction, and THE BRACKET (format locked at materialization, an 8-runner field cut by heats then settled by a final paying winners + take == every buy-in — the tourney escrow §10.4 identity intact)');

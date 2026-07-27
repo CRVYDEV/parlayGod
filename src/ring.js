@@ -98,12 +98,54 @@ function showdown(t, seats) {
   finishHand(t, seats, winners, names);
 }
 
+// deal the next community street off the deck
+function dealStreet(t) {
+  const deck = P(t.deck), board = P(t.board) || [];
+  const n = t.street === 'preflop' ? 3 : 1;
+  for (let i = 0; i < n; i++) board.push(deck.shift());
+  t.deck = J(deck); t.board = J(board);
+  t.street = t.street === 'preflop' ? 'flop' : t.street === 'flop' ? 'turn' : 'river';
+}
+
+// ── THE ALL-IN RULE ──────────────────────────────────────────────────────────────────────────
+// A seat with NO CHIPS is never asked to act, and a betting round only opens while at least TWO
+// live seats still have chips. Both halves matter, and the second is the one that bites: the raise
+// cap (`act`, below) is the smallest live stack, so the moment ANYONE is all-in the cap is 0 and
+// `check` is the only legal action left for anybody. Real poker runs the board out in that spot.
+//
+// Handing the action to an all-in player instead is a money bug, not a cosmetic one: they have no
+// decision and no reason to click, so the turn clock reaches them and `enforceDeadline` sets
+// `in_hand = false` — FOLDING THEM OUT OF A POT THEY PUT THEIR ENTIRE STACK INTO, while an
+// opponent simply waits them out. Reproduced deterministically three ways before this was fixed:
+// a short stack all-in preflop at seat 1, the same at seat 0 (the first cut of this fix filtered
+// the pending list but still handed the NEXT STREET to `live[0]` regardless of stack, so it only
+// looked fixed while the short stack sat second), and — worst — a table where every seat is
+// all-in, where the clock folded them one by one and the LAST SEAT STANDING took a $9,000 pot
+// without a showdown. The cards decide, or the game is not poker.
+//
+// Returns false when no betting round is possible; the caller then runs the board out.
+function openBetting(t, live) {
+  t.current_bet = 0;
+  for (const s of live) { s.bet_street = 0; s.acted = false; }
+  const actors = live.filter((s) => Number(s.stack) > 0);
+  if (actors.length < 2) { t.acting_seat = null; t.act_deadline = null; return false; }
+  t.acting_seat = actors[0].seat;
+  t.act_deadline = new Date(Date.now() + turnMs());
+  return true;
+}
+
+// no decisions left anywhere — deal out the rest of the board and show it down
+function runOut(t, seats) {
+  while (t.street !== 'river') dealStreet(t);
+  showdown(t, seats);
+}
+
 // advance the action pointer / the street / the hand — called after every applied action
 function advance(t, seats, fromSeat) {
   const live = inHand(seats);
   if (live.length === 0) { finishHand(t, seats, [], null); return; }          // every live seat died mid-hand
   if (live.length === 1) { finishHand(t, seats, [live[0]], null); return; }   // the last man standing takes it
-  const pending = live.filter((s) => !s.acted);
+  const pending = live.filter((s) => !s.acted && Number(s.stack) > 0);        // all-in seats have nothing to decide
   if (pending.length) { // next pending seat in cyclic order after the seat that just acted
     const after = pending.filter((s) => s.seat > fromSeat);
     const next = (after.length ? after : pending)[0];
@@ -113,15 +155,8 @@ function advance(t, seats, fromSeat) {
   }
   // street complete
   if (t.street === 'river') { showdown(t, seats); return; }
-  const deck = P(t.deck), board = P(t.board) || [];
-  const dealN = t.street === 'preflop' ? 3 : 1;
-  for (let i = 0; i < dealN; i++) board.push(deck.shift());
-  t.deck = J(deck); t.board = J(board);
-  t.street = t.street === 'preflop' ? 'flop' : t.street === 'flop' ? 'turn' : 'river';
-  t.current_bet = 0;
-  for (const s of live) { s.bet_street = 0; s.acted = false; }
-  t.acting_seat = live[0].seat;
-  t.act_deadline = new Date(Date.now() + turnMs());
+  dealStreet(t);
+  if (!openBetting(t, live)) runOut(t, seats);
 }
 
 // fold out a stalled (or vanished) acting seat until the table is healthy — the never-wedge rule
@@ -235,8 +270,14 @@ export async function dealHand(ch, tableId, client, h) {
   t.street = 'preflop'; t.deck = J(deck); t.board = J([]); t.pot = pot; t.current_bet = 0;
   t.hand_no = Number(t.hand_no) + 1;
   const live = inHand(seats);
-  t.acting_seat = live[0].seat; t.act_deadline = new Date(Date.now() + turnMs());
+  // THE ALL-IN RULE applies from the first card: a seat whose whole stack was the ante is already
+  // all-in, so the action goes to the first seat that can still bet — and if fewer than two can,
+  // the board runs out and the hand shows down immediately with no betting at all.
+  if (!openBetting(t, live)) runOut(t, seats);
   await persist(client, t, seats);
+  // if it ran out and resolved right here, its rake/dead pot must be ledgered NOW or the ring-escrow
+  // §10.4 identity drifts on COMMIT (the same reason settleFinish is called above). No-op otherwise.
+  await settleFinish(client, t);
   await h.rngLog(client, ch.id, `casino:ring:${tableId}`, Math.random(),
     `hand ${t.hand_no} dealt · ${live.length} players · pot $${pot}`);
   await h.track(client, ch.account_id, 'ring_deal', { table: tableId, players: live.length });
