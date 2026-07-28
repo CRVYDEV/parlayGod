@@ -19,7 +19,8 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION } from '../src/rules.js';
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION,
+         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -742,6 +743,63 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
     `step three: the city renews itself, so npc:seed is a rate. Bounded by headcount in population_state — the same band as a territory racket (~$300-400k/day) or the boxing purse, and ~${Math.round(perDay / 21600000 * 1000) / 10}% of the passive stack`);
   note('population', 'drained threshold', `${POPULATION.TURNOVER.DRAINED_BPS / 100}% of arrival stake`,
     'measured against what a resident ARRIVED with (npc_seed), never a flat cash floor — a flat floor would recycle the cheap bands on spawn, forever');
+}
+
+// ════════ P9.22 THE SEVERANCE — can the Exchange window absorb what the game emits? ════════
+// TOKENOMICS v2 severs cash→$OMR. Two features are already built and switched OFF waiting for it:
+// the Exchange window (EXCHANGE.OPEN false) and the family yield (FUND_BPS 0). Before building the
+// severance, measure whether the window can actually carry the load — because once the AMM buy side
+// is gone, the window is the ONLY cash exit for $OMR, and a claim the pool cannot honour is a
+// promise the game breaks every time a player clicks it.
+//
+// The funding side cannot be derived from the constants: the street take is fed by 45 sites across
+// 22 modules. So it is MEASURED off a driven population by tools/scale.js and passed in here as a
+// per-player-per-day rate (which that harness verified is population-INVARIANT: $34/player/day at
+// 12 players, $35 at 36 — so it is a real per-player rate, not an artifact of one size). It is a
+// FLOOR: scale.js players follow a fixed script, and a real player trades more than a scripted one.
+phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics v2, pre-build)');
+{
+  const TAKE_PER_PLAYER_DAY = 35;   // MEASURED, tools/scale.js — see its census line
+  const toWindow = TAKE_PER_PLAYER_DAY * EXCHANGE.FUND_BPS / 10000;
+  const omrPerPlayerDay = toWindow / EXCHANGE.RATE;   // what one player's activity can redeem
+  const emitPerDay = EMISSION.EPOCH_OMR;              // the wage budget, base-wide
+
+  note('severance', 'street take (measured floor)', `$${TAKE_PER_PLAYER_DAY}/player/day`,
+    `driven population, tools/scale.js; population-invariant across 12 and 36 players. A FLOOR — scripted players trade less than real ones`);
+  note('severance', 'reaches the Exchange window', `$${toWindow.toFixed(2)}/player/day`,
+    `EXCHANGE.FUND_BPS ${EXCHANGE.FUND_BPS / 100}% of the take (the rest funds the buyback, the stake pool and protocol LP)`);
+  note('severance', 'absorbable at RATE', `${omrPerPlayerDay.toFixed(4)} $OMR/player/day`,
+    `at $${EXCHANGE.RATE} cash per $OMR — this is the ONLY cash exit once cash→$OMR is severed`);
+
+  // the headline: how big must the base be for the window to clear what the wage emits?
+  const playersToClear = Math.round(emitPerDay / omrPerPlayerDay);
+  note('severance', 'EMISSION vs ABSORPTION', `${emitPerDay} emitted vs ${(omrPerPlayerDay * 1000).toFixed(1)} absorbed per 1,000 players`,
+    `the wage budget is base-wide and fixed; absorption is per-player — so the gap CLOSES with population and nothing else`);
+  note('severance', 'players needed to clear the wage', `~${playersToClear.toLocaleString()}`,
+    `at the measured floor. Even assuming a real player generates 10× a scripted one's take, ~${Math.round(playersToClear / 10).toLocaleString()}`);
+
+  // the per-account cap is not the binding constraint — the pool is. Worth stating, because a cap
+  // that never binds reads like a safety rail while the real limit is elsewhere.
+  const capCash = EXCHANGE.DAILY_CAP_OMR * EXCHANGE.RATE;
+  note('severance', 'per-account daily cap', `${EXCHANGE.DAILY_CAP_OMR} $OMR = $${capCash.toLocaleString()}/day`,
+    `~${Math.round(EXCHANGE.DAILY_CAP_OMR / omrPerPlayerDay).toLocaleString()}× what one player's own activity funds — so the POOL binds first and the cap is decorative at any realistic base. Players meet 'dry', never the cap`);
+
+  // THE REFRAME: the window is not where $OMR goes. The sink catalog is. Measure that side, because
+  // it decides whether a small window is a design choice or a broken promise.
+  const wireDay = WIRE.SUB_TIERS[0].omr / (WIRE.SUB_MS / 864e5);
+  const staffDay = ESTATE.STAFF.reduce((a, x) => a + (x.wageOmrDay || 0), 0);
+  const recurringDay = wireDay + staffDay;
+  const oneOff = ESTATE.TIERS.reduce((a, t) => a + (t.omr || t.cost || 0), 0);
+  note('severance', 'RECURRING $OMR sinks per heavy player', `~${recurringDay.toFixed(1)} $OMR/day`,
+    `Street Wire ${wireDay.toFixed(1)}/day (base tier) + a full estate staff ${staffDay.toFixed(1)}/day — before auctions, portfolio, megaproject, respec or vanity, which are unbounded`);
+  note('severance', 'one-off personal $OMR sinks', `${oneOff.toLocaleString()} $OMR`,
+    `the estate ladder alone; family seals ${GANG_SEALS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} and the foundation ${FOUNDATION.TIERS.reduce((a, t) => a + (t.omr || t.cost || 0), 0)} sit on top, per family`);
+  const sinkAtWageBase = recurringDay * (emitPerDay / EMISSION.WAGE_CAP_OMR);
+  note('severance', 'sinks vs emission at the wage-sized base', `~${Math.round(sinkAtWageBase)} $OMR/day of sink vs ${emitPerDay} emitted`,
+    `the wage caps at ${EMISSION.WAGE_CAP_OMR}/account, so its ${emitPerDay}/day budget is sized for ~${emitPerDay / EMISSION.WAGE_CAP_OMR} max-earning players; their recurring sinks alone ${sinkAtWageBase >= emitPerDay ? 'MORE than cover' : 'do not cover'} what they earn`);
+
+  note('severance', 'READ THIS BEFORE BUILDING STEP 2', 'the window is a relief valve, not the exit',
+    `$OMR's real exit is the SINK CATALOG (which comfortably absorbs the wage) and, for real value, the reserve-backed CHAIN withdrawal. The Exchange at RATE ${EXCHANGE.RATE} × FUND_BPS ${EXCHANGE.FUND_BPS / 100}% clears a few percent of emission until the base is in the thousands — so as sized it will read as permanently 'dry' to players. Levers, in order of directness: FUND_BPS (how much take reaches it), RATE (a LOWER rate serves more $OMR per pool dollar), EPOCH_OMR (emit less). This is a founder call — none of it is retuned here`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

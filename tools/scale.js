@@ -280,6 +280,14 @@ const MARKETS = [
 const humans = await n(`SELECT COUNT(*) n FROM characters WHERE alive AND NOT is_npc`);
 const residents = await n('SELECT COUNT(*) n FROM characters WHERE alive AND is_npc');
 const wealth = (await pool.query(`SELECT cash FROM characters WHERE alive AND NOT is_npc ORDER BY cash DESC`)).rows.map((r) => Number(r.cash));
+// THE STREET TAKE — measured, because tokenomics v2 needs it. The Exchange window pays cash for
+// burned $OMR out of a pool fed by EXCHANGE.FUND_BPS of the street take, so the take's real accrual
+// rate is what bounds how much $OMR the game can ever absorb. It is fed by 45 sites across 22
+// modules, which is far too broad to size analytically — so measure it off a driven population and
+// report it PER PLAYER PER DAY, which is the only form that scales to a launch estimate.
+const streetTake = Number((await pool.query('SELECT pool FROM street_tax WHERE id=1')).rows[0].pool);
+const takePerPlayerDay = streetTake / Math.max(1, humans) / Math.max(1, DAYS);
+
 const total = wealth.reduce((a, b) => a + b, 0);
 const topTenth = wealth.slice(0, Math.max(1, Math.floor(wealth.length / 10))).reduce((a, b) => a + b, 0);
 
@@ -295,6 +303,10 @@ for (const [name, live, driven] of MARKETS) {
 // counterparty on the board at all, and it is what moves with population. `took/found` is what
 // happened once one existed — and that one IS mostly gates (one debt at a time, already guarded,
 // on cooldown), which is the game working, not a market failing.
+console.log(`\nTHE STREET TAKE — what funds the Exchange window (tokenomics v2)`);
+console.log(`  pool after ${DAYS} days      $${Math.round(streetTake).toLocaleString()}`);
+console.log(`  per player per day        $${Math.round(takePerPlayerDay).toLocaleString()}  ← the rate that scales`);
+
 console.log('\nAVAILABILITY — when a player went looking, was anyone there?');
 for (const [m, s] of Object.entries(shopped)) {
   console.log(`  ${m.padEnd(16)} looked ${String(s.looked).padStart(4)}   found a counterparty `
