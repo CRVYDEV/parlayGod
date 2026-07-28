@@ -7,6 +7,7 @@
 //       KILL notice) that unfurl in a feed and pull clicks a text link never would.
 // PUBLIC + keyless + read-only; ZERO §10.4 surface (status/marketing only). Wealth is never exact
 // (the anti-precise-kill-EV rule) — a card flexes rank/level/kills/family, never a dollar figure.
+import { readFileSync } from 'node:fs';
 import { levelOf, hitmanRankOf, dynastyTierOf, SOCIAL_X_HANDLE } from './rules.js';
 
 const GOLD = '#c9a24b', DIM = '#8f7433', TEAL = '#4fd6c2', BLOOD = '#9b2f2f', INK = '#e8e2d4', BG = '#0c0d11';
@@ -41,10 +42,35 @@ export async function publicDossier(pool, name) {
 
 // ── shared poster frame (1200×630 — the OG-image ratio; unfurls in a feed) ──
 const W = 1200, H = 630;
+
+// THE PLATE. These are the highest-leverage art in the game: a share on X unfurls this, so it is
+// what someone who has never heard of OMERTÀ sees first. Each type gets its own generated plate
+// (docs/ART.md), read ONCE at boot and inlined as a data URI — the SVG has to be self-contained
+// because resvg rasterises it to PNG for feeds that will not unfurl an SVG, and it cannot fetch.
+//
+// The plates were generated with a deliberately EMPTY middle so the name and stat line land on
+// darkness. The scrim below is belt-and-braces on top of that: a photograph that is merely dim is
+// still busier than a flat fill, and legibility beats atmosphere on a card nobody chose to look at.
+// A missing file degrades to the old flat background rather than throwing — art is decoration here,
+// never a dependency.
+const PLATES = {};
+for (const [type, file] of Object.entries({
+  legend: 'card-legend', wanted: 'card-wanted', whacked: 'card-whacked', join: 'card-join',
+})) {
+  try {
+    const p = new URL(`../public/art/${file}.jpg`, import.meta.url);
+    PLATES[type] = `data:image/jpeg;base64,${readFileSync(p).toString('base64')}`;
+  } catch { /* no plate — the flat fill stands in */ }
+}
+
 function frame(inner, opts = {}) {
   const accent = opts.accent || GOLD;
+  const plate = PLATES[opts.plate];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="Georgia,'Times New Roman',serif">
     <rect width="${W}" height="${H}" fill="${BG}"/>
+    ${plate ? `<image href="${plate}" x="0" y="0" width="${W}" height="${H}"
+        preserveAspectRatio="xMidYMid slice" opacity="0.62"/>
+      <rect width="${W}" height="${H}" fill="${BG}" opacity="0.42"/>` : ''}
     <rect x="8" y="8" width="${W - 16}" height="${H - 16}" fill="none" stroke="${accent}" stroke-width="2" opacity="0.35"/>
     <rect x="20" y="20" width="${W - 40}" height="${H - 40}" fill="none" stroke="${DIM}" stroke-width="1" opacity="0.4"/>
     <g fill="${accent}" opacity="0.5">
@@ -77,21 +103,21 @@ export function card(type, d, ref) {
       <text x="${W / 2}" y="380" text-anchor="middle" fill="${INK}" font-size="64">${esc(d.name)}</text>
       <text x="${W / 2}" y="428" text-anchor="middle" fill="${GOLD}" font-size="30" letter-spacing="3">${price}</text>
       <text x="${W / 2}" y="470" text-anchor="middle" fill="${DIM}" font-size="22">${fam} · dead or alive</text>`,
-      { accent: BLOOD, cta });
+      { accent: BLOOD, cta, plate: 'wanted' });
   }
   if (type === 'whacked') {
     return frame(`
       <text x="${W / 2}" y="200" text-anchor="middle" fill="${BLOOD}" font-size="72" letter-spacing="8">ANOTHER BODY</text>
       <text x="${W / 2}" y="320" text-anchor="middle" fill="${INK}" font-size="52">${esc(d.name)}</text>
       <text x="${W / 2}" y="372" text-anchor="middle" fill="${DIM}" font-size="26">${esc(d.subject || 'put in the river')}</text>
-      ${fedora(W / 2, 470, 1.1, BLOOD)}`, { accent: BLOOD, cta });
+      ${fedora(W / 2, 470, 1.1, BLOOD)}`, { accent: BLOOD, cta, plate: 'whacked' });
   }
   if (type === 'join') {
     return frame(`
       ${fedora(W / 2, 220, 1.5)}
       <text x="${W / 2}" y="360" text-anchor="middle" fill="${INK}" font-size="52">${esc(d.name)} runs with ${fam}.</text>
       <text x="${W / 2}" y="418" text-anchor="middle" fill="${GOLD}" font-size="34" letter-spacing="2">Think you can take the city?</text>`,
-      { cta });
+      { cta, plate: 'join' });
   }
   // legend (default) — the proud-player flex + the profile's unfurl image
   const accent = d.dynastyTier ? TEAL : GOLD;
@@ -105,7 +131,7 @@ export function card(type, d, ref) {
     ${stat(W * 0.28, 'LVL ' + d.level, 'RESPECT')}
     ${stat(W * 0.5, d.kills, d.kills === 1 ? 'KILL' : 'KILLS')}
     ${stat(W * 0.72, d.wanted ? 'WANTED' : d.welsher ? 'WELSHER' : 'MADE', 'STANDING')}`,
-    { accent, cta });
+    { accent, cta, plate: 'legend' });
 }
 
 // ── the public profile page — the "champion" destination; a shared link lands here ──
