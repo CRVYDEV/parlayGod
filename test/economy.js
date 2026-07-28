@@ -5,7 +5,7 @@ process.env.EARLY_SELL_TAX_BPS = '0'; // legacy exact-amount swap assertions run
 process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mod-gated
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { runBuyback } from '../src/worker.js';
+import { runBuyback, mergeLegacyPools } from '../src/worker.js';
 import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, frontTitles, launderRankOf, businessMaxTier } from '../src/rules.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
@@ -225,16 +225,16 @@ assert(bb && bb.toWindow > 0, 'the take went to the window');
 assert.equal(bb.toWindow, Math.floor(Number(taxPre.pool)), 'the WHOLE take crosses (FUND_BPS 10000) — with no AMM there is nowhere else for it to go');
 const winPost = Number((await pool.query('SELECT balance FROM exchange_pool WHERE id=1')).rows[0].balance);
 assert.equal(winPost - winPre, bb.toWindow, 'and it landed in the window pool');
-// THE LEGACY POOL MERGE: both individual-yield pools drain into the family pot
-assert.equal(bb.merged, 50, 'the retired stake + dividend pools merged');
+// THE LEGACY POOL MERGE: both individual-yield pools drain into the family pot. Its OWN tick step,
+// not the buyback's (red-team A1) — gating a $OMR migration on the cash pool being non-empty is how
+// it never runs on a quiet server. test/tokenomics.js asserts that independence directly.
+assert.equal((await mergeLegacyPools(pool))?.merged, 50, 'the retired stake + dividend pools merged');
 assert.equal(Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance), 0, 'the stake pool is emptied');
 assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the dividend pool is emptied');
 assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance) - fyPre, 50,
   'and it all arrived in the family pot — a bucket-to-bucket transfer, nothing minted, nothing lost');
 // the merge is a DRAIN, so running it again is a no-op rather than double-applying
-await pool.query('UPDATE street_tax SET pool = 1000 WHERE id=1');
-const bbAgain = await runBuyback(pool, { force: true });
-assert.equal(bbAgain.merged, 0, 'a second tick merges nothing — the drain is idempotent by construction');
+assert.equal(await mergeLegacyPools(pool), null, 'a second tick merges nothing — the drain is idempotent by construction');
 
 // ── individual staking yield: RETIRED (repurposed to the family yield, design §3) ──
 // The principal is deliberately NOT touched by that: it still comes back whole.

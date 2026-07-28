@@ -7,6 +7,7 @@ import { listContracts } from './social.js';
 import { loanBoard } from './loans.js';
 import { convoyBoard } from './convoy.js';
 import { marketBoard } from './market.js';
+import { exchangeBoard } from './exchange.js';
 
 // The standing skill-loops (the "agent niches") — how an agent makes money by playing well, each
 // with a live, computable signal. This is the sanctioned agent income: SKILL, not faucets.
@@ -31,8 +32,9 @@ function arbitrage(blk, limit = 8) {
 
 export async function opportunityBoard(pool, ch) {
   const blk = priceBlock();
-  const amm = (await pool.query('SELECT cash_reserve, omr_reserve FROM amm_pool WHERE id=1')).rows[0] || {};
-  const ammSpot = Number(amm.omr_reserve) > 0 ? Math.round((Number(amm.cash_reserve) / Number(amm.omr_reserve)) * 100) / 100 : null;
+  // the redemption window replaced the AMM (tokenomics v2 step 2) — read the live till, not a
+  // spot price for a market that no longer trades
+  const window = await exchangeBoard(pool, null);
   const opportunities = [];
 
   // 1. CONTRACTS — open kill/hospitalize pots you could fulfill (the pot is the reward). A pot in a
@@ -94,8 +96,17 @@ export async function opportunityBoard(pool, ch) {
   // 5. NICHES — the standing skill-loops with live signals (the sanctioned agent income).
   const niches = {
     arbitrage: arbitrage(blk),
-    laundering: { note: 'Cash→$OMR via POST /v1/swap (located: docks/canal or your turf; draws heat). Sell direction ungated.',
-      ammSpot },
+    // (red-team C1, tokenomics v2) This used to advertise `POST /v1/swap` and publish an AMM spot
+    // price. Cash → $OMR is gone and so is the AMM, so every clause of that was false — and this
+    // board is the surface AGENTS.md tells agents to poll, so a wrong entry here is not a stale
+    // comment, it is an agent burning calls on a route that only ever answers `retired`.
+    // What actually exists now runs the other way: burn $OMR, take cash, from a funded till.
+    redemption: {
+      note: 'The window runs ONE WAY: burn $OMR for cash at a published rate (POST /v1/window/redeem), '
+        + 'out of a till the street take funds. Cash can no longer be turned into $OMR at all — no swap, '
+        + 'no laundering. A short till refuses and burns nothing. GET /v1/window for the rate and headroom.',
+      rate: window.rate, poolCash: window.pool, poolOmr: window.poolOmr, open: window.open,
+    },
     loanSharking: { note: 'Offer credit with POST /v1/loans (rate ≤ 0.5, term 1–72h); price default risk; trade the paper.',
       openOffers: (loans.offers || []).length },
     convoyRunning: { note: 'Run bulk freight for profit: POST /v1/convoy, /load, /depart {guards}. Bigger than a trunk, on a real clock.' },

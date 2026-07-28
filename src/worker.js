@@ -60,13 +60,6 @@ export async function runBuyback(pool, opts = {}) {
       await client.query('COMMIT');
       return null;
     }
-    // THE LEGACY POOL MERGE (design §3, "merge into"). `stake_pool` and `rwa_dividend_pool` paid
-    // individual yield; both are retired, and nothing feeds them any more, so whatever they still
-    // hold moves to the family pot. Written as a DRAIN rather than a one-shot migration on purpose:
-    // it is idempotent by construction (after the first tick both are empty and this is a no-op
-    // forever), so it needs no migration flag and cannot double-apply. All three are inside
-    // `omrBuckets`, so this is a bucket-to-bucket transfer — no ledger row, conservation untouched.
-    const merged = await mergeLegacyYieldPools(client);
     // now the singleton, authoritative under lock
     const tax = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
     // THE WINDOW takes the take. With the AMM retired (tokenomics v2 step 2) there is no longer any
@@ -79,10 +72,42 @@ export async function runBuyback(pool, opts = {}) {
     // carve. The family split's successor is the FAMILY YIELD (`payFamilyYield`), which pays $OMR
     // that reaches the pot through the exit toll and the RWA invest slice instead of through a market.
     const toWindow = await carveExchange(client, Number(tax.pool));
-    if (toWindow <= 0 && merged <= 0) { await client.query('COMMIT'); return null; }
-    if (toWindow > 0) await client.query('UPDATE street_tax SET last_buyback=$1 WHERE id=1', [now]);
+    if (toWindow <= 0) { await client.query('COMMIT'); return null; }
+    await client.query('UPDATE street_tax SET last_buyback=$1 WHERE id=1', [now]);
     await client.query('COMMIT');
-    return { toWindow, merged };
+    return { toWindow };
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// THE LEGACY POOL MERGE (design §3, "merge into"). `stake_pool` (Phase-4 backed staking yield) and
+// `rwa_dividend_pool` (the personal Dynasty dividend) paid INDIVIDUALS. Both payouts retired in step
+// 2, and nothing refills either, so whatever they still hold belongs to the family pot.
+//
+// (red-team A1) This ran INSIDE runBuyback, which returns early unless `street_tax.pool > 0` AND the
+// 12h buyback is due — so a $OMR migration was gated behind an unrelated CASH condition. Those two
+// pools now have no other drain at all (`claimDividend` is retired and `payStakeRewards` went with
+// it), so on a server whose take happens to be quiet the merge would never run and real,
+// player-earned $OMR would sit stranded forever. Nothing would alarm: both pools are inside
+// `omrBuckets`, so conservation stays exact the whole time it is unreachable. It gets its own tick
+// step, which is also what it always should have been — it is not the buyback's business.
+//
+// Deliberately a DRAIN, not a one-shot migration: draining an empty pool is a no-op, so running it
+// every tick is idempotent by construction — no migration flag to get wrong, no way to double-apply,
+// and it self-heals if a balance somehow lands in an old pool later. All three singletons are inside
+// `omrBuckets`, so this is a bucket-to-bucket TRANSFER: no ledger row, conservation untouched.
+//
+// Locks stake_pool → rwa_dividend_pool → family_yield_pool. Nothing else locks the first two (their
+// only other reader retired with them), and every other family_yield_pool writer takes it LAST, so
+// there is no cycle with payFamilyYield (gangs → pot) or the toll credit (account → pot).
+export async function mergeLegacyPools(pool) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const moved = await mergeLegacyYieldPools(client);
+    if (moved <= 0) { await client.query('COMMIT'); return null; }
+    await client.query('COMMIT');
+    return { merged: moved };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
@@ -201,7 +226,11 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     }
     if (dbDownTicks) { console.log(`worker: database back after ${dbDownTicks} skipped tick(s) — resuming`); dbDownTicks = 0; }
     const r = await safe('buyback', () => runBuyback(pool));
-    if (r) console.log(`🔁 street take: window +$${Math.round(r.toWindow)}${r.merged > 0 ? ` (legacy yield pools merged: ${r.merged.toFixed(3)} $OMR)` : ''}`);
+    if (r) console.log(`🔁 street take: window +$${Math.round(r.toWindow)}`);
+    // the legacy-pool merge is its OWN step, not the buyback's: gating a $OMR migration behind the
+    // cash pool being non-empty is how it never runs on a quiet server (red-team A1).
+    const lm = await safe('legacy pools', () => mergeLegacyPools(pool));
+    if (lm) console.log(`🔁 legacy yield pools merged: ${lm.merged.toFixed(3)} $OMR → the family pot`);
     // TOKENOMICS v2 — THE FAMILY YIELD. A no-op on an empty pot, so this is safe to run every tick
     // and is live the moment FAMILY_YIELD.FUND_BPS is turned up (design §3).
     const fy = await safe('family yield', () => payFamilyYield(pool));
