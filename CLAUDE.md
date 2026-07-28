@@ -5868,3 +5868,55 @@ keep teaching: a check that cannot fail reads exactly like a clean bill of healt
 (ground rule #1): `payFamilyYield` runs hourly rather than on the 12h buyback cadence (harmless, but
 tail seats fall under MIN_PAYOUT on a tiny pot), the fixed `EXCHANGE.RATE` against cash inflation, and
 the 30% buyback diversion that lands when the window opens.
+
+**TOKENOMICS v2 STEP 2 — cash → $OMR is SEVERED, and the window is open.** The retirements are
+deletions, not disables: `swap` (both directions), `launderAtBusiness`, `claimRewards` and
+`claimDividend` all throw a `retired` GameError that explains what replaced them; the AMM's cash
+reserve is dead weight and the two individual-yield pools are DRAINED into `family_yield_pool` by
+`mergeLegacyYieldPools` on the buyback tick (idempotent by construction — it moves a balance to zero,
+so a second run moves nothing). The 12h buyback's job changed completely: it no longer buys $OMR off
+an AMM, it carves the street take into the redemption window (`carveExchange`) and merges the legacy
+pools. `EXCHANGE.OPEN false → true` and `FUND_BPS 3000 → 10000` are the two signed levers that moved,
+recorded in BALANCE.md as `test/levers.js` demands. Business specs `accountant`/`fixer` (both scrutiny
+plays) now throw `retired` — with no laundering there is no scrutiny for them to work on. **The
+interlock test went VACUOUS when this landed** and that is the lesson worth keeping: `buySideLive`
+went false, the whole conditional block was skipped, and the file still printed a pass. It is now an
+unconditional assertion that the window and the buy side are never both live, plus a branch that
+asserts all four retirements really are retired. Mutation-verified twice. Fallout in the tail was
+~46 laundering-dependent assertions across economy/portfolio/social/chain/emission, and two of the
+fixes were real findings rather than mechanical edits: the `not_maxed` spec-gate test was pointed at
+`fixer`, which now throws before reaching the gate, so the gate had silently stopped being checked;
+and the Launderer leaderboard had nothing to rank, so it now seeds a historical `laundered_lifetime`,
+which is exactly the shape of a post-migration database. Suite 57/57 + sim drift-0 + mobile 54/54.
+
+**TOKENOMICS v2 STEP 3 — the float re-sourced (design §6/§7.3).** `rwa_revenue` — the pot the
+stock-buy bot draws on — was fed only by the Store earmark and `FEE_RWA_BPS`. Step 3 adds the two
+sources §6 names, and the reason it is TWO is the whole point: the DEX sell tax scales with TRADING
+VOLUME, bond ETH with PRIMARY INFLOW, and a one-way conversion is designed to produce a quiet market,
+so a tax-only float grows fastest exactly when it is needed least. **(1) The sell tax** —
+`rwa.js:recordSellTax` books one row per taxed episode in the new `sell_tax_events` (a `SellTaxTaken`
+log on mainnet; `POST /v1/mod/rwa/tax` until step 4 arms the contract), splits the ETH by the new
+`SELL_TAX` rules block (900 bps = dev 200 / rwa 400 / lp 300, load-time sum-validated against the
+contract's `MAX_SELL_TAX_BPS` 1000), and mirrors ONLY the RWA slice into `rwa_revenue` (source
+`tax`). The remainder rule sits on the LP slice — two of three slices round down at six decimals, so
+three "natural" slices of a 0.1-ETH gross sum to 0.099999; the test uses a gross that actually
+produces dust, because a gross that divides cleanly (0.18) proves nothing about the rule and my first
+cut used exactly that. **(2) Bond ETH** — a fourth slice (`BONDS.RWA_BPS` 2500) mirrored into
+`rwa_revenue` (source `bond`); `runBondInvariants` now reconciles POL + Dev + Vig + RWA == principal
+plus a new check that the slice reached the bucket, since the accumulator alone is not what gets
+spent. **The load-bearing property is the anti-fabrication gate**: a comp/QA episode records the
+episode and books ZERO revenue, because fake revenue buys real-looking units and `allocated ≤ held`
+compares allocation to HELD units — so fabricated backing is invisible to the very check that makes
+"the game only ever owes stock it already owns" true. Mutation-verified: drop the gate and the suite
+names the assertion. §10.4 is untouched by construction (zero `transactions` rows, no new reason —
+the suite asserts it by counting ledger rows across a full re-sourcing cycle), and both the invariant
+and the public `GET /v1/vault` board now publish revenue BY SOURCE, because "backed" is a claim a
+player is entitled to audit. **The one judgement call, flagged (BALANCE.md + design §7.3):** §4's
+table gives the whole remaining 6000 bps to LP and shows NO Vig slice — but the sentence directly
+under it names `BONDS.POL/VIG/DEV_BPS`, so the omission reads as an oversight, and taking it
+literally would defund the withdrawal reserve (`vig_revenue` → `runVigBuyback` → `fundReserve` → the
+full-reserve queue), which after step 2 is the only real-value exit anyone has. RWA 2500 / DEV 1500
+are the design's numbers as written; the remaining 6000 keeps the signed 5:3 POL:VIG (3750/2250)
+rather than zeroing one side. If the Vig slice really is meant to go it is one line
+(`BOND_POL_BPS=6000 BOND_VIG_BPS=0`). Both codices also had a stale "the window is shut right now"
+from step 2 — corrected in the same pass. **Still owed: the step-5 RE-SIM.**

@@ -1851,17 +1851,55 @@ export const BONDS = {
   DISCOUNT_BPS: Number(process.env.BOND_DISCOUNT_BPS || 800),   // 8% bonus OMR (the incentive)
   MAX_DISCOUNT_BPS: 2000,                                       // 20% hard cap (a rogue-discount backstop)
   VEST_HOURS: Number(process.env.BOND_VEST_HOURS || 120),      // 5-day linear vest (the Olympus default)
-  POL_BPS: Number(process.env.BOND_POL_BPS || 5000),           // 50% of bonded ETH → Protocol-Owned Liquidity
-  VIG_BPS: Number(process.env.BOND_VIG_BPS || 3000),           // 30% → the Vig buyback (reserve + prizes)
-  DEV_BPS: Number(process.env.BOND_DEV_BPS || 2000),           // 20% → the dev wallet (founder revenue). sum 10000
+  // ── THE FOUR-WAY ETH SPLIT (tokenomics v2 §4/§6, step 3) ──────────────────────────────────
+  // v2 gave bond ETH a fourth destination: the STOCK FLOAT. Bond ETH is PRIMARY inflow — it arrives
+  // whether or not anyone is trading — so it is what keeps the float growing when DEX volume is thin,
+  // and a quiet market is exactly what the one-way conversion produces (gameplay no longer makes
+  // sellers). The design calls this "the single largest gap in the original proposal".
+  //
+  // RWA 2500 and DEV 1500 are the design's own numbers, taken as written. The design's table then
+  // puts the whole remaining 6000 in LP and shows no Vig slice at all — but the sentence directly
+  // under that table names `BONDS.POL/VIG/DEV_BPS`, so the omission reads as an oversight rather than
+  // a decision, and taking it literally would DEFUND the withdrawal reserve (`vig_revenue` →
+  // runVigBuyback → fundReserve → the full-reserve queue), which in v2 is the only real-value exit a
+  // player has. So the remaining 6000 keeps the signed 5:3 POL:VIG relationship instead of zeroing
+  // one side of it. FOUNDER CALL, flagged in BALANCE.md — if the Vig slice really is meant to go, it
+  // is one env var (BOND_POL_BPS=6000 BOND_VIG_BPS=0), and the load-time sum check keeps it honest.
+  POL_BPS: Number(process.env.BOND_POL_BPS || 3750),           // 37.5% of bonded ETH → Protocol-Owned Liquidity
+  VIG_BPS: Number(process.env.BOND_VIG_BPS || 2250),           // 22.5% → the Vig buyback (reserve + prizes)
+  RWA_BPS: Number(process.env.BOND_RWA_BPS || 2500),           // 25% → the stock float (v2 §6 — primary inflow)
+  DEV_BPS: Number(process.env.BOND_DEV_BPS || 1500),           // 15% → the dev wallet (founder revenue). sum 10000
   MIN_PRINCIPAL_ETH: 0.01,
 };
 // the discounted OMR a bond pays: principal's market OMR value, scaled UP by the discount (cheaper OMR)
 export const bondPayout = (principalEth, price, discountBps) =>
   Math.round((Number(principalEth) * Number(price) / (1 - Number(discountBps) / 10000)) * 1e6) / 1e6;
 // validate the ETH split sums to 10000 at load (a misconfig would mis-route real revenue)
-(() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS + BONDS.DEV_BPS;
-  if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS + DEV_BPS must sum to 10000 (got ${t})`); })();
+(() => { const t = BONDS.POL_BPS + BONDS.VIG_BPS + BONDS.RWA_BPS + BONDS.DEV_BPS;
+  if (t !== 10000) throw new Error(`BOND POL_BPS + VIG_BPS + RWA_BPS + DEV_BPS must sum to 10000 (got ${t})`); })();
+
+// ── THE DEX SELL TAX (tokenomics v2 §5) — the OTHER float source ────────────────────────────────
+// `OMR.sol` already taxes transfers INTO registered AMM pairs (sell-only; buys and wallet→wallet stay
+// 1:1; hard-capped at MAX_SELL_TAX_BPS 1000; off until the Safe arms it). v2 sets the rate at 9% and
+// splits it THREE ways instead of the contract's current 50/50 dev/buyback. These constants are the
+// single source of truth BOTH layers read — the same discipline OmertaBond's immutable `polBps` has
+// with BONDS.POL_BPS — so the contract change (step 4) and this accounting can't silently diverge.
+//
+// Why sell-only, and no buy tax: a 10/10 is a 19% round trip, which kills price discovery, and taxing
+// entry taxes the money you most want to arrive. Bond ETH already captures 100% of primary inflow.
+//
+// DORMANT until step 4 arms the contract and a `SellTaxTaken` watcher records episodes; the ingest
+// (`recordSellTax`) and the mod/QA seat exist now so the accounting is testable ahead of the chain.
+export const SELL_TAX = {
+  BPS: Number(process.env.SELL_TAX_BPS || 900),                // 9% on a sell (contract cap: 1000)
+  DEV_BPS: Number(process.env.SELL_TAX_DEV_BPS || 200),        // 2% of the trade → founder revenue
+  RWA_BPS: Number(process.env.SELL_TAX_RWA_BPS || 400),        // 4% → the stock float
+  LP_BPS: Number(process.env.SELL_TAX_LP_BPS || 300),          // 3% → LP depth / buybacks. the three sum to BPS
+  MAX_BPS: 1000,                                               // OMR.sol's MAX_SELL_TAX_BPS — kept in lockstep
+};
+(() => { const t = SELL_TAX.DEV_BPS + SELL_TAX.RWA_BPS + SELL_TAX.LP_BPS;
+  if (t !== SELL_TAX.BPS) throw new Error(`SELL_TAX DEV+RWA+LP must sum to BPS ${SELL_TAX.BPS} (got ${t})`);
+  if (SELL_TAX.BPS > SELL_TAX.MAX_BPS) throw new Error(`SELL_TAX.BPS ${SELL_TAX.BPS} exceeds the contract cap ${SELL_TAX.MAX_BPS}`); })();
 
 // ── THE UNDERWRITER — the off-chain backer-prestige pillar layered over the chain bond. Purely
 // STATUS + $OMR sinks (zero new faucet, zero chain touch). The UNDERWRITER SCORE combines the

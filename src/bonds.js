@@ -30,7 +30,7 @@ async function oraclePrice(db) {
 // ── ingest one bond (the recordFeePayment / Store recordStorePurchase twin; chain-dormant, mod/test-driven).
 // Idempotent on nonce. Prices the payout, ENFORCES the tranche cap (committed + payout ≤ capacity), splits
 // the ETH (POL + the Vig buyback), and books the vesting bond. account_id null parks it for reconcile-at-link.
-export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps, txHash = null, onchainPayout = null, onchainPol = null, onchainVig = null, onchainDev = null }) {
+export async function recordBond(pool, { nonce, accountId = null, payer = null, principalEth, priceOmrPerEth, discountBps, txHash = null, onchainPayout = null, onchainPol = null, onchainVig = null, onchainDev = null, onchainRwa = null }) {
   const n = Number(nonce);
   if (!Number.isInteger(n) || n < 0) throw new GameError('bad_nonce', 'Bad bond nonce.');
   // the on-chain path supplies the depositing wallet; store it (normalized) so a pre-link bond can be
@@ -87,10 +87,14 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     // so the backend can't drift from the contract even if BONDS.POL_BPS ever diverges); the mod/simulate
     // path derives it from BONDS.POL_BPS, and books ZERO real-ETH accounting without a txHash (the audit
     // MED — a comp with no real ETH must not fabricate Vig revenue runVigBuyback would spend unbacked).
+    // v2 step 3: a FOURTH slice — the stock float. On the on-chain path every slice comes from the
+    // event (the contract is the source of truth); off-chain the remainder rule sits on the VIG slice
+    // so the four always sum to the principal exactly with no rounding dust.
     const real = !!txHash;
     const polEth = onchain ? round6(num(onchainPol)) : (real ? round6(eth * BONDS.POL_BPS / 10000) : 0);
     const devEth = onchain ? round6(num(onchainDev) || 0) : (real ? round6(eth * BONDS.DEV_BPS / 10000) : 0);
-    const vigEth = onchain ? round6(num(onchainVig)) : (real ? round6(eth - polEth - devEth) : 0);
+    const rwaEth = onchain ? round6(num(onchainRwa) || 0) : (real ? round6(eth * BONDS.RWA_BPS / 10000) : 0);
+    const vigEth = onchain ? round6(num(onchainVig)) : (real ? round6(eth - polEth - devEth - rwaEth) : 0);
     // THE QUOTE-SIGNER ENRICHMENT: the Bonded event omits the quote's price/discount (it emits only the
     // resolved payout + POL/Vig split), so the watcher's effective values (payout/eth, disc 0) are a
     // fallback. If the server-signed quote is on file (chain.js:quoteBond persisted it by nonce), recover
@@ -108,11 +112,15 @@ export async function recordBond(pool, { nonce, accountId = null, payer = null, 
     await client.query(
       'INSERT INTO bonds (id, nonce, account_id, payer_address, principal_eth, payout_omr, oracle_price, discount_bps, vest_ms, tx_hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
       [uid(), n, acct, addr, round6(eth), payout, recPrice, recDisc, vestMs, txHash]);
-    await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2, dev_eth = dev_eth + $3 WHERE id=1', [payout, polEth, devEth]);
+    await client.query('UPDATE bond_reserve SET committed_omr = committed_omr + $1, pol_eth = pol_eth + $2, dev_eth = dev_eth + $3, rwa_eth = rwa_eth + $4 WHERE id=1', [payout, polEth, devEth, rwaEth]);
     if (real && !(await client.query("SELECT 1 FROM vig_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
       await client.query("INSERT INTO vig_revenue (source, ref, kind, gross_eth, vig_eth) VALUES ('bond',$1,'bond',$2,$2)", [String(n), vigEth]);
+    // v2 step 3: the float's PRIMARY-INFLOW source. Same real-ETH gate as the Vig — a comp/QA bond
+    // books zero, so a simulate can never fabricate float backing the buy bot would then spend.
+    if (real && rwaEth > 0 && !(await client.query("SELECT 1 FROM rwa_revenue WHERE source='bond' AND ref=$1", [String(n)])).rows[0])
+      await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('bond',$1,$2)", [String(n), rwaEth]);
     await client.query('COMMIT');
-    return { recorded: true, payoutOmr: payout, polEth, devEth, vigEth, real, attributed: !!acct };
+    return { recorded: true, payoutOmr: payout, polEth, devEth, vigEth, rwaEth, real, attributed: !!acct };
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 
@@ -259,15 +267,15 @@ export async function underwriterLeaderboard(pool, limit = 25) {
 // ── GET /v1/bonds — public: the offering + remaining capacity + the oracle + your bonds. Informational
 // (real bonds are on-chain at the mainnet paywall — the Store's on-chain-note precedent). ──
 export async function bondBoard(pool, accountId) {
-  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
   const remaining = round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0)));
   const oracle = await oraclePrice(pool);
   const mine = accountId ? (await pool.query('SELECT * FROM bonds WHERE account_id=$1 ORDER BY opened_at DESC', [accountId])).rows : [];
   const now = Date.now();
   return {
-    offering: { discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS, polBps: BONDS.POL_BPS, vigBps: BONDS.VIG_BPS, devBps: BONDS.DEV_BPS, minEth: BONDS.MIN_PRINCIPAL_ETH },
+    offering: { discountBps: BONDS.DISCOUNT_BPS, vestHours: BONDS.VEST_HOURS, polBps: BONDS.POL_BPS, vigBps: BONDS.VIG_BPS, rwaBps: BONDS.RWA_BPS, devBps: BONDS.DEV_BPS, minEth: BONDS.MIN_PRINCIPAL_ETH },
     oracle, // OMR per ETH (null until a Vig buyback prints a price)
-    reserve: { capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)), remainingOmr: remaining, polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)) },
+    reserve: { capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)), remainingOmr: remaining, polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)), rwaEth: round6(Number(r.rwa_eth || 0)) },
     // an illustrative quote for 1 ETH at the current oracle + discount (display only)
     quote: oracle ? { forEth: 1, payoutOmr: bondPayout(1, oracle, BONDS.DISCOUNT_BPS) } : null,
     yours: mine.map((b) => {
@@ -287,7 +295,7 @@ export async function bondBoard(pool, accountId) {
 
 // ── ops view (the founder's bond dashboard) — capacity/committed/remaining + POL + the Vig share + the invariant. ──
 export async function bondStatus(pool) {
-  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || {};
   const bonds = Number((await pool.query('SELECT COUNT(*) n FROM bonds')).rows[0].n);
   const claimed = round6(Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s));
   const vigEth = round6(Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s));
@@ -295,7 +303,8 @@ export async function bondStatus(pool) {
   return {
     capacityOmr: round6(Number(r.capacity_omr || 0)), committedOmr: round6(Number(r.committed_omr || 0)),
     remainingOmr: round6(Math.max(0, Number(r.capacity_omr || 0) - Number(r.committed_omr || 0))),
-    polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)), vigEth, bonds, claimedOmr: claimed,
+    polEth: round6(Number(r.pol_eth || 0)), devEth: round6(Number(r.dev_eth || 0)),
+    rwaEth: round6(Number(r.rwa_eth || 0)), vigEth, bonds, claimedOmr: claimed,
     invariant: inv.ok, checks: inv.checks,
     chainDormant: true, // the OmertaBond contract + watcher + POL bot are the mainnet milestone (legal + audit gated)
   };
@@ -306,7 +315,7 @@ export async function bondStatus(pool) {
 export async function runBondInvariants(pool) {
   const checks = [];
   const push = (name, lhs, rhs, tol = 0.01) => checks.push({ name, lhs: round6(lhs), rhs: round6(rhs), ok: Math.abs(lhs - rhs) <= tol });
-  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth FROM bond_reserve WHERE id=1')).rows[0] || { capacity_omr: 0, committed_omr: 0, pol_eth: 0, dev_eth: 0 };
+  const r = (await pool.query('SELECT capacity_omr, committed_omr, pol_eth, dev_eth, rwa_eth FROM bond_reserve WHERE id=1')).rows[0] || { capacity_omr: 0, committed_omr: 0, pol_eth: 0, dev_eth: 0, rwa_eth: 0 };
   const sumPayout = Number((await pool.query('SELECT COALESCE(SUM(payout_omr),0) s FROM bonds')).rows[0].s);
   const sumClaimed = Number((await pool.query('SELECT COALESCE(SUM(claimed_omr),0) s FROM bonds')).rows[0].s);
   // REAL bonds only (tx_hash present): a mod comp/QA bond books no pol_eth/vig_eth, so the ETH-split
@@ -314,14 +323,20 @@ export async function runBondInvariants(pool) {
   const sumEth = Number((await pool.query('SELECT COALESCE(SUM(principal_eth),0) s FROM bonds WHERE tx_hash IS NOT NULL')).rows[0].s);
   const vigEth = Number((await pool.query("SELECT COALESCE(SUM(vig_eth),0) s FROM vig_revenue WHERE source='bond'")).rows[0].s);
   const committed = Number(r.committed_omr), capacity = Number(r.capacity_omr), polEth = Number(r.pol_eth), devEth = Number(r.dev_eth || 0);
+  const rwaEth = Number(r.rwa_eth || 0);
+  // v2 step 3: the float slice is mirrored into rwa_revenue, which is what the buy bot spends — so
+  // the accumulator and the mirror must agree, or the float could be funded twice or not at all.
+  const rwaMirror = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='bond'")).rows[0].s);
   // (1) committed matches the rows
   push('bond committed == Σ payout', committed, sumPayout);
   // (2) THE CAP: committed ≤ capacity (one-sided — never over-budget)
   checks.push({ name: 'bond committed ≤ capacity', lhs: round6(committed), rhs: round6(capacity), ok: committed <= capacity + 0.01 });
   // (3) never over-claimed
   checks.push({ name: 'bond claimed ≤ committed', lhs: round6(sumClaimed), rhs: round6(committed), ok: sumClaimed <= committed + 0.01 });
-  // (4) the ETH split reconciles (POL + Dev + Vig == principal — nothing skimmed, nothing hidden)
-  push('bond ETH split == principal', polEth + devEth + vigEth, sumEth);
+  // (4) the ETH split reconciles (POL + Dev + Vig + RWA == principal — nothing skimmed, nothing hidden)
+  push('bond ETH split == principal', polEth + devEth + vigEth + rwaEth, sumEth);
+  // (4b) the float slice reached the bucket the buy bot draws on
+  push('bond RWA slice == rwa_revenue', rwaEth, rwaMirror);
   // (5) discounts capped
   const badDisc = Number((await pool.query('SELECT COUNT(*) n FROM bonds WHERE discount_bps > $1', [BONDS.MAX_DISCOUNT_BPS])).rows[0].n);
   checks.push({ name: 'bond discounts ≤ MAX', lhs: badDisc, rhs: 0, ok: badDisc === 0 });

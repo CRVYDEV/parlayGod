@@ -2227,3 +2227,38 @@ moved. They are the two switches that turn the pivot on.
 extraction threat model — cash reaching $OMR reaching a market — that no longer exists. Every
 "sim + sign-off" faucet flag in this file needs re-reading in that light, because a cash faucet is
 now a purely internal number. That is the real prize of the pivot and it has NOT been done.
+
+---
+
+## TOKENOMICS v2 STEP 3 — the float's four-way bond split (2026-07-28)
+
+Step 3 points `rwa_revenue` — the pot the stock-buy bot draws on — at the two sources design §6
+names: the DEX sell tax's 4-point slice and a new slice of bond ETH. The tax slice needed no signed
+lever to move (there was no off-chain sell-tax accounting at all before this). The bond split did.
+
+| lever | was | now | why |
+|---|---|---|---|
+| `BONDS.RWA_BPS` | — | `2500` | NEW. Design §4's own number. Bond ETH is PRIMARY inflow — it arrives whether or not anyone is trading — so it is what keeps the float growing when DEX volume is thin. And a quiet market is precisely what the one-way conversion produces, since gameplay no longer manufactures sellers. The design calls the omission of this slice "the single largest gap in the original proposal". |
+| `BONDS.DEV_BPS` | `2000` | `1500` | Design §4's own number, taken as written. |
+| `BONDS.POL_BPS` | `5000` | `3750` | The remainder after the two fixed slices, keeping the signed 5:3 POL:VIG relationship (see below). |
+| `BONDS.VIG_BPS` | `3000` | `2250` | Same remainder, same ratio. |
+
+**The one judgement call, flagged for the founder.** Design §4's table gives the whole remaining
+6000 to LP and shows no Vig slice at all. I did not take that literally, for two reasons. The
+sentence directly beneath that table names `BONDS.POL/VIG/DEV_BPS` — so the author knew the Vig
+slice existed and still produced a table without it, which reads as an oversight rather than a
+decision. And taking it literally would DEFUND the withdrawal reserve: `vig_revenue` →
+`runVigBuyback` → `fundReserve` → the full-reserve queue is the chain a player's $OMR withdrawal
+travels, and in v2 that is the only real-value exit anyone has. The asymmetry decided it — shipping
+a slightly thinner LP than designed is recoverable; shipping a withdrawal queue that cannot sign is
+a product failure players feel immediately.
+
+**If the Vig slice really is meant to go, it is one line:** `BOND_POL_BPS=6000 BOND_VIG_BPS=0`. The
+load-time sum check keeps any setting honest, and `runBondInvariants` reconciles POL + Dev + Vig +
+RWA against the principal on every real bond.
+
+**No faucet moved.** This re-routes real ETH between out-of-band destinations; it writes zero
+`transactions` rows and touches no §10.4 vocabulary. `test/tokenomics.js` asserts that directly —
+a full re-sourcing cycle leaves the ledger row count unchanged.
+
+**The step-5 RE-SIM is still owed** and this drop does not touch it.
