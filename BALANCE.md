@@ -2208,3 +2208,22 @@ inflation — the `runVigInvariants` shape. Sim drift-0.
 **The one thing to know before opening the window:** the design's claim that arbitrage is impossible
 "by construction" is true only once cash → $OMR is gone. Until then a fixed-rate window is a money
 pump whenever AMM spot sits below `RATE`. That is why `OPEN` is false and why the interlock is a test.
+
+## TOKENOMICS v2 STEP 2 — the two signed levers that moved (2026-07-28)
+
+`test/levers.js` pins every founder-signed number and fails the suite when one moves without
+being re-pinned in the same commit. Two moved here, both deliberately, both part of the same
+interlocked change (design `omerta-tokenomics-v2-design.md` §2 and §7.2):
+
+| lever | was | now | why |
+|---|---|---|---|
+| `EXCHANGE.OPEN` | `false` | `true` | The redemption window was shipped SHUT because a fixed-rate window beside a live cash → $OMR buy side is a money pump. Step 2 retires the AMM in both directions, so the pump has no fuel and the window opens. This is the interlock DISCHARGED, not bypassed — `test/tokenomics.js` asserts the two are never both live, from both directions. |
+| `EXCHANGE.FUND_BPS` | `3000` | `10000` | The street-tax pool used to be spent buying $OMR off the AMM. There is no AMM, so the window is the take's only destination; leaving a share behind would grow a pile of dead cash and make the window needlessly thinner. The rule is now simply "every cut the house takes in the city is what the window pays out". |
+
+**Neither is a balance retune of a measured curve** — no faucet rate, income figure or drop weight
+moved. They are the two switches that turn the pivot on.
+
+**Still owed (design §7 step 5): THE RE-SIM.** The whole cash economy was balanced against an
+extraction threat model — cash reaching $OMR reaching a market — that no longer exists. Every
+"sim + sign-off" faucet flag in this file needs re-reading in that light, because a cash faucet is
+now a purely internal number. That is the real prize of the pivot and it has NOT been done.

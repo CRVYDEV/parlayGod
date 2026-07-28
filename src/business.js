@@ -320,7 +320,16 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
 // burn (deflationary sink). Three defensive/risk-shaping branches (NOT a faucet — income + launder
 // throughput untouched). Re-specializing overwrites (a fresh $OMR burn). §10.4: `business:spec` omr burn. ──
 export async function specializeBusiness(ch, businessId, spec, client, h) {
-  if (!BUSINESS_EMPIRE.SPECS[spec]) throw new GameError('bad_spec', 'Pick The Accountant, The Fortress, or The Fixer.');
+  if (!BUSINESS_EMPIRE.SPECS[spec]) throw new GameError('bad_spec', 'Pick The Fortress.');
+  // (tokenomics v2 step 2) THE ACCOUNTANT (scrutiny ×0.5) and THE FIXER (raid fine ×0.5, scrutiny
+  // decay ×2) both act only on the Bureau-raid layer, and that layer's only feed was laundering.
+  // With the wash retired they buy NOTHING — and they cost real $OMR, so leaving them on the shelf
+  // would be selling a dead effect. Refused rather than silently inert; THE FORTRESS (+40 defence
+  // against a hostile takeover) is untouched because takeovers still happen.
+  if (spec === 'accountant' || spec === 'fixer') {
+    throw new GameError('retired',
+      `${BUSINESS_EMPIRE.SPECS[spec].name} worked the Bureau, and the Bureau has nothing on your books now that cash can't be washed. Take The Fortress.`);
+  }
   const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
   if (!r) throw new GameError('not_yours', "That's not your business.");
   if (Number(r.tier) < businessMaxTier(r.kind)) throw new GameError('not_maxed', 'Only a fully-built front can specialize — max the tier first.');

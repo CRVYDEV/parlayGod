@@ -57,7 +57,11 @@ assert.equal((await meOf(boss.token)).omr, 7000, 'the account paid the full spen
 const divCut = Math.floor(3000 * PORTFOLIO.DIVIDEND_BPS / 10000);
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='rwa:invest'")).rows[0].s), -(3000 - divCut), 'the burn portion is ledgered rwa:invest');
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='dividend:fund'")).rows[0].s), -divCut, 'the dividend slice is a ledgered dividend:fund transfer');
-assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), divCut, 'and it landed in the dividend pool');
+// (tokenomics v2 step 2) …and it lands in the FAMILY yield pot, not a personal dividend pool.
+// Same reason, same transfer, same §10.4 posture — only the destination moved, because personal
+// yield is retired and standing is what earns it now (design §3).
+assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance), divCut, 'and it landed in the FAMILY yield pot');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the retired personal dividend pool stays empty');
 // the character view carries the book
 let me = await meOf(boss.token);
 assert.equal(me.portfolio.holdings.length, 1, 'the view shows the holding');
@@ -209,44 +213,19 @@ let board = (await call('GET', '/v1/portfolio', { token: boss.token })).body;
 assert.equal(board.dynasty.invested, 6000, 'cumulative invested tracked (3000 + 1000 + 2000)');
 assert.equal(board.dynasty.tier.name, 'Blue Blood', 'crossed the tier-3 floor');
 assert.equal(board.dynasty.nextTier.name, 'Old Money', 'the next rung is named');
-// the dividend: the pool is fed by every personal invest; a claim pays min(book × rate, pool)
-assert(board.dividend.pool > 0, 'the dividend pool was fed by the invests');
-assert.equal(board.dividend.claimable, true, 'a holder can claim (no cooldown yet)');
-const omrPreDiv = (await meOf(boss.token)).omr;
-const poolPre = Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool);
-let dr = await call('POST', '/v1/portfolio/dividend', { token: boss.token });
-assert.equal(dr.code, 200, 'claimed the dividend');
-assert(dr.body.paid > 0, 'the dividend paid $OMR');
-assert.equal((await meOf(boss.token)).omr, omrPreDiv + dr.body.paid, 'the yield landed in the account');
-assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), Math.round((poolPre - dr.body.paid) * 1e6) / 1e6, 'paid from the pool (a transfer, not a mint)');
-// the ~daily cooldown blocks an immediate re-claim
-assert.equal((await call('POST', '/v1/portfolio/dividend', { token: boss.token })).body.error, 'cooldown', 'the dividend pays about once a day');
-// cross-system audit HIGH: a FREE granted book (cost_omr=0 — the heist cut / season prize) earns NO
-// dividend — the yield is on invested principal, so a free-rider can't skim the pool investors fill
-const freebie = await mk('Freebie Fred');
-const ffid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${freebie.id}'`)).rows[0].a;
-await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${ffid}','AAPL',50,0)`); // a granted book, cost basis 0
-const ffBoard = (await call('GET', '/v1/portfolio', { token: freebie.token })).body;
-assert(ffBoard.portfolio.bookValue > 0, 'the free grant has market book value (a status holding)');
-assert.equal(ffBoard.dividend.claimable, false, 'but it is NOT dividend-claimable (no invested basis)');
-assert.equal((await call('POST', '/v1/portfolio/dividend', { token: freebie.token })).body.error, 'nothing', 'a free-grant book earns no dividend — the yield is on invested principal only');
-// the DRY-pool refusal — drained the §10.4-clean way (a whale claims the pool empty via a ledgered
-// transfer; shares aren't §10.4 currency, so the big book is a status grant with no ledger row)
-const drainer = await mk('Vault Vic');
-const daid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${drainer.id}'`)).rows[0].a;
-// cost_omr is NOT a §10.4 currency (just the invested-basis metric the dividend now accrues on) — seed a
-// huge basis so gross > pool and the whale drains it via a legit ledgered transfer (audit HIGH: the yield
-// is on invested principal, so a cost_omr=0 free-grant book would earn NOTHING — that's the point)
-await pool.query(`INSERT INTO portfolios (account_id, ticker, shares, cost_omr) VALUES ('${daid}','GLD',100000,10000000)`);
-assert(Number((await call('POST', '/v1/portfolio/dividend', { token: drainer.token })).body.paid) > 0, 'the whale drew a dividend');
-assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the whale drained the pool (a ledgered transfer, not a mint)');
-// a fresh holder now finds it dry — a clean refusal, not a wasted claim (the cooldown isn't burned)
-const latecomer = await mk('Late Larry');
-await acctOmr(latecomer.id, 200); grantDrift += 200;
-await call('POST', '/v1/portfolio/invest', { token: latecomer.token, body: { ticker: 'GLD', omr: 100 } }); // re-funds the pool a little
-await pool.query(`UPDATE account_persistent SET dividend_at=NULL WHERE account_id='${daid}'`); // reset the whale's cooldown to drain it again
-await call('POST', '/v1/portfolio/dividend', { token: drainer.token });
-assert.equal((await call('POST', '/v1/portfolio/dividend', { token: latecomer.token })).body.error, 'dry', 'a dry pool is a clean refusal');
+// THE PERSONAL DIVIDEND — RETIRED (tokenomics v2 step 2, design §3). Everything that made the
+// Dynasty Fund an endgame survives: the book, the tier ladder, the crest, the leaderboard, and the
+// fact that it outlives the man. What it loses is the personal payout — the yield is the FAMILY
+// yield now, so standing earns it into the family reserve instead.
+assert.equal(board.dividend, undefined, 'the board no longer advertises a personal dividend');
+assert.equal((await call('POST', '/v1/portfolio/dividend', { token: boss.token })).body.error, 'retired',
+  'and claiming it is refused');
+// the slice of each invest that used to fill the personal pool now fills the family pot — same
+// transfer, same §10.4 posture, different destination (asserted at the invest site above too)
+assert(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance) > 0,
+  'the invests fed the FAMILY pot');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0,
+  'and the retired personal pool stays empty — nothing feeds it and nothing pays from it');
 
 // ═══ THE FLOAT (omerta-rwa-float-design.md) — the full-reserve VAULTED book ═══
 // ETH tax revenue → buyback → real units held → players burn $OMR to claim allocation.

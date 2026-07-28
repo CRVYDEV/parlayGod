@@ -5,7 +5,8 @@
 process.env.CONVOY_MS = '600000';
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { M3, M4, COMMISSION, weekOf } from '../src/rules.js';
+import { M3, M4, COMMISSION, FAMILY_YIELD, weekOf } from '../src/rules.js';
+import { payFamilyYield } from '../src/exchange.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
 const app = await buildServer();
@@ -220,15 +221,21 @@ assert.equal((await call('GET', '/v1/commission')).body.decree.id, 'the_levy', '
 const seatsNow = (await call('GET', '/v1/commission')).body.seats;
 const reservesBefore = {};
 for (const s of (await pool.query('SELECT id, omr_reserve FROM gangs')).rows) reservesBefore[s.id] = Number(s.omr_reserve);
-await pool.query(`UPDATE street_tax SET pool = pool + 100000`); // seed the tax pool for a cycle (buyback input)
-r = await runBuyback(pool, { force: true });
-assert(r && r.levy === true, 'the buyback ran under the levy');
-assert.equal(r.families, seatsNow.length, 'the chamber collects — exactly the seated families');
+// (tokenomics v2 step 2) THE LEVY used to redirect the BUYBACK's family split. That split retired
+// with the AMM — there is no $OMR being bought — so the decree would have become inert. It now
+// redirects the FAMILY YIELD instead, which is the same prize reached a different way: while the
+// levy is in force the pot pays the SEATED CHAMBER in seat order rather than the standing board.
+await pool.query(`UPDATE family_yield_pool SET balance = 1000 WHERE id=1`);
+r = await payFamilyYield(pool);
+assert(r && r.paid > 0, 'the family yield paid out under the levy');
+assert.equal(r.families.length, seatsNow.length, 'the chamber collects — exactly the seated families');
 const headGang = bosses[0].gang, lastGang = bosses[5].gang; // F1 heads the table; F6 holds the last seat (F5 dissolved)
 const headTake = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${headGang}'`)).rows[0].omr_reserve) - reservesBefore[headGang];
 const lastTake = Number((await pool.query(`SELECT omr_reserve FROM gangs WHERE id='${lastGang}'`)).rows[0].omr_reserve) - reservesBefore[lastGang];
 assert(headTake > 0 && lastTake > 0, 'every seated family collected');
-assert(Math.abs(headTake / lastTake - 5) < 0.01, `the head seat takes 5× the last seat (${(headTake / lastTake).toFixed(2)})`);
+const wHead = FAMILY_YIELD.WEIGHTS[0], wLast = FAMILY_YIELD.WEIGHTS[seatsNow.length - 1];
+assert(Math.abs(headTake / lastTake - wHead / wLast) < 0.05,
+  `the head seat outdraws the last by the seat weights (${(headTake / lastTake).toFixed(2)} vs ${wHead / wLast})`);
 
 // ── no decree moves money: the vocabulary stays closed ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
