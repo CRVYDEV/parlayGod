@@ -92,7 +92,7 @@
   /* a <select> sizes to its LONGEST OPTION, so one wordy entry ("The Corner Store — 2 crew, lvl 4, …")
      drags the element past the viewport and scrolls the page sideways. Never let a control out-grow it. */
   select, input, textarea { max-width: 100%; }
-  #layout { display: grid; grid-template-columns: 300px 1fr 320px; gap: 14px; padding: 14px 16px; }
+  #layout { display: grid; grid-template-columns: 292px 1fr 272px; gap: 14px; padding: 14px 16px; }
   /* grid-blowout guard: a no-wrap child (the tab rail) must scroll INSIDE its column, never widen it —
      without min-width:0 the rail's ~2100px intrinsic width blows out the 1fr track, and mobile Chrome
      then expands the layout viewport, which un-applies the phone media query entirely. */
@@ -118,14 +118,20 @@
   #sheet .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
     margin: 4px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
   #sheet .row .k { color: var(--dim); font-size: 13.5px; }
-  .bar { height: 6px; background: #101017; border-radius: 6px; overflow: hidden; margin: 3px 0 9px;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,.6); }
+  .bar { height: 10px; background: #0d0d13; border-radius: 6px; overflow: hidden; margin: 4px 0 11px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.03); }
   .bar i { display: block; height: 100%; border-radius: 6px;
     background: linear-gradient(90deg, color-mix(in srgb, var(--neon) 70%, #7a5a1c), var(--neon));
     box-shadow: 0 0 10px var(--neon-soft); }
   .bar.health i { background: linear-gradient(90deg, #3e7a4c, var(--ok)); box-shadow: 0 0 10px rgba(99,179,113,.18); }
   .bar.heat i { background: linear-gradient(90deg, #7e2519, var(--blood)); box-shadow: 0 0 10px rgba(192,57,43,.22); }
 
+  /* THE VERB ROW — a three-way choice (safe / normal / loud) shown as one control, not three chips.
+     Bumping .card padding to 14/15px in this pass cost the crime card ~4px, which was exactly enough
+     to wrap the third verb onto its own line and leave the grid ragged; a compact, flexed row fixes
+     that at the source rather than clawing padding back everywhere. */
+  .verbrow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  .verbrow .act { padding: 7px 9px; margin: 0; font-size: 12.5px; flex: 1 1 auto; text-align: center; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
   .chip { font-size: 11px; letter-spacing: 1px; padding: 3px 9px; border-radius: 999px;
     border: 1px solid var(--line2); color: var(--dim); background: rgba(255,255,255,.02); }
@@ -180,6 +186,22 @@
     box-shadow: 0 2px 8px rgba(0,0,0,.45), 0 0 12px var(--neon-soft), inset 0 1px 0 rgba(255,255,255,.04); }
   button.act:active, a.act:active { transform: translateY(1px) scale(.985); box-shadow: 0 0 1px rgba(0,0,0,.4); }
   button.act:disabled { opacity: .35; cursor: default; transform: none; box-shadow: none; }
+  /* THE THREE WEIGHTS. Every control in the game rendered as the same grey chip, so a row like
+     `case it / do it / go loud` gave no clue which one is the ordinary move and which one calls the
+     Law down on you. Three classes, applied at the call sites that matter:
+       .prime  — the default action on a card. One per card, never two.
+       .risk   — the loud/violent/irreversible option. Reads as danger BEFORE you read the label.
+       (bare)  — everything else stays exactly as it was, so nothing regresses by omission. */
+  button.act.prime, a.act.prime { background: linear-gradient(180deg, #2a2113, #1d1810);
+    border-color: color-mix(in srgb, var(--neon) 55%, var(--line2)); color: var(--neon);
+    box-shadow: 0 1px 2px rgba(0,0,0,.5), 0 0 14px -4px var(--neon-glow), inset 0 1px 0 rgba(255,255,255,.06); }
+  button.act.prime:hover, a.act.prime:hover { border-color: var(--neon);
+    box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 20px -2px var(--neon-glow), inset 0 1px 0 rgba(255,255,255,.07); }
+  button.act.risk, a.act.risk { color: var(--bad);
+    border-color: color-mix(in srgb, var(--blood) 50%, var(--line2));
+    background: linear-gradient(180deg, #251518, #1a1013); }
+  button.act.risk:hover, a.act.risk:hover { border-color: var(--blood); color: #e8836f;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5), 0 0 18px -4px rgba(192,57,43,.5), inset 0 1px 0 rgba(255,255,255,.05); }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline: 2px solid var(--neon); outline-offset: 2px; border-radius: var(--r-sm); }
   input, select, textarea { background: #0e0e13; border: 1px solid var(--line); color: var(--ink);
@@ -192,7 +214,8 @@
   /* ── cards ── */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 10px; }
   .card { background: linear-gradient(180deg, var(--panel2), #14141b); border: 1px solid var(--line);
-    border-radius: var(--r-md); padding: 13px; font-size: 13.5px;
+    border-radius: var(--r-md); padding: 14px 15px; font-size: 13.5px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.4);
     transition: border-color .18s, transform .18s var(--ease), box-shadow .18s; }
   .card:hover { border-color: var(--line2); transform: translateY(-1px); box-shadow: var(--shadow); }
   .card .t { color: var(--ink); letter-spacing: .2px; } .card .d { color: var(--dim); font-size: 12.5px; margin: 4px 0; line-height: 1.45; }
@@ -255,7 +278,27 @@
     animation: bragIn .35s var(--ease); }
   @keyframes bragIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   #brag .bt { color: var(--neon); } #brag button { white-space: nowrap; }
-  @media (max-width: 760px) { #brag { left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); max-width: none; } }
+  @media (max-width: 760px) {
+    /* ── phone chrome diet ─────────────────────────────────────────────────────
+       The language picker is a <select> wide enough to force the masthead onto a
+       second row, for a control a player touches at most once. It stays reachable
+       on the landing and in the help panel; it does not deserve a permanent row
+       on a 390px screen. The tagline goes for the same reason. */
+    #top .langpick, #top .langglobe, #top .sub { display: none; }
+    /* Measured: the wordmark + CODEX + broadcast + phone + ? + "sign out" total ~420px against a
+       390px screen, so SOMETHING wraps no matter which one label you shorten — collapsing only the
+       sign-out just left a lone tiny button stranded on row two, which looks worse than the wrap did.
+       Two labels collapse to their glyphs (both keep their tooltips, and 📣/📱 already read as a pair)
+       and the wordmark gives back its wide letter-spacing. That fits, with room to spare. */
+    #top h1 { letter-spacing: 2px; font-size: 17px; }
+    #top #btn-logout, #top #btn-share { font-size: 0; padding: 7px 10px; }
+    #top #btn-logout::after { content: '⏻'; font-size: 15px; line-height: 1; }
+    #top #btn-share::after { content: '📣'; font-size: 15px; line-height: 1; }
+    /* the two scroll rails were chopping mid-character ("V…", "The…"), which reads as
+       broken rather than as scrollable. A mask fades the cut instead. */
+    #grouprail, #tabs { -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
+      mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%); }
+ #brag { left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); max-width: none; } }
 
   /* ── modals (welcome / glossary / wallet picker) ── */
   .modal-bg { position: fixed; inset: 0; background: rgba(5,5,8,.7); z-index: 20; display: flex;
@@ -442,7 +485,9 @@
       -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
       position: sticky; top: 0; z-index: 11; font-size: 13px; }
     #vitals .v-cash { color: var(--neon); font-size: 16px; letter-spacing: .5px; }
-    #vitals .v-i { color: var(--dim); } #vitals .v-i b { color: var(--ink); font-weight: normal; margin-right: 2px; }
+    #vitals .v-i { color: var(--faint); font-size: 11px; letter-spacing: .5px; }
+    #vitals .v-i b { color: var(--ink); font-weight: normal; font-size: 15px; margin-right: 2px; letter-spacing: 0; }
+    #vitals .v-i.hot b { color: var(--bad); }
     /* thumb-sized navigation — 32px rail buttons are the primary nav on a phone */
     #grouprail button { flex: 0 0 auto; min-height: 40px; padding: 9px 13px; }
     #wiretabs button { min-height: 38px; }
@@ -705,7 +750,8 @@
     </div>
 
     <div class="panel" id="wirepanel">
-      <h2><span data-i18n="w_panel">The Street</span> <span id="ws-dot" style="color:var(--bad)">●</span> <span id="online-badge" class="dim" style="float:right;font-weight:400"></span></h2>
+      <h2 style="margin-bottom:2px"><span data-i18n="w_panel">The Street</span> <span id="ws-dot" style="color:var(--bad)">●</span></h2>
+      <div id="online-badge" class="dim" style="font-size:11px;letter-spacing:.6px;margin:0 0 8px"></div>
       <div id="wiretabs">
         <button class="wtab on" data-wtab="feed" data-i18n="w_feed">LIVE FEED</button>
         <button class="wtab" data-wtab="city" data-i18n="w_city">CITY CHAT</button>
@@ -1632,10 +1678,10 @@
     // the phone strip: the four numbers you glance at, always in reach, so the full sheet can sit below
     // the tab content without costing you your vitals. Hidden by CSS on desktop, where the sheet is a column.
     $('#vitals').innerHTML = `<span class="v-cash">$${fmt(me.cash)}</span>`
-      + `<span class="v-i" title="health"><b>♥</b>${me.health}</span>`
-      + `<span class="v-i" title="energy — gym, garage, crews"><b>⚡</b>${me.energy}</span>`
-      + `<span class="v-i" title="nerve — crime"><b>✦</b>${me.nerve}</span>`
-      + `<span class="v-i" title="law heat"><b>🔥</b>${me.heat}</span>`;
+      + `<span class="v-i" title="health"><b>${me.health}</b>hp</span>`
+      + `<span class="v-i" title="energy — gym, garage, crews"><b>${me.energy}</b>nrg</span>`
+      + `<span class="v-i" title="nerve — the crime loop runs on this"><b>${me.nerve}</b>nrv</span>`
+      + `<span class="v-i${me.heat >= 60 ? ' hot' : ''}" title="law heat — the Bureau is watching"><b>${me.heat}</b>heat</span>`;
     $('#sheet-body').innerHTML = `
       <div class="money">$${fmt(me.cash)}</div>
       <div class="row"><span class="k">${T('k_bank')}</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} ${T('k_intransit')})</span>` : ''}</span></div>
@@ -1965,10 +2011,10 @@
         <div class="card"><span class="t">${drugName(s.drug)}</span>
           <div class="d">${s.qty} units · quality ${s.quality} · demand here ×${demandHere[s.drug] ?? '?'}</div>
           <input data-deal="${s.drug}" placeholder="qty" size="5">
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+          <div class="verbrow">
             <button class="act" style="opacity:.8" data-dealgo="${s.drug}" data-play="careful" title="work your regulars — half the heat, but it takes patience (double nerve)">quiet</button>
-            <button class="act" data-dealgo="${s.drug}" data-play="standard">deal</button>
-            <button class="act" style="color:#ff9a6a" data-dealgo="${s.drug}" data-play="flood" title="move weight — half the nerve, but DOUBLE the heat (and churn burns your name)">move weight</button>
+            <button class="act prime" data-dealgo="${s.drug}" data-play="standard">deal</button>
+            <button class="act risk" data-dealgo="${s.drug}" data-play="flood" title="move weight — half the nerve, but DOUBLE the heat (and churn burns your name)">move weight</button>
           </div>
           <button class="act" data-cut="${s.drug}" title="stretch the line — more units, weaker product">cut it ($${fmt(rules?.kitchen?.cut?.cost || 8000)})</button></div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">the stash is empty — cook something</span>'}
@@ -2424,10 +2470,10 @@
     const crimeCard = (c) => `
       <div class="card"><span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+        <div class="verbrow">
           <button class="act" style="opacity:.8" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"quiet"}'${dis(c)}>case it</button>
-          <button class="act" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"standard"}'${dis(c)}>do it</button>
-          <button class="act" style="color:#ff9a6a" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"loud"}'${dis(c)}>go loud</button>
+          <button class="act prime" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"standard"}'${dis(c)}>do it</button>
+          <button class="act risk" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"loud"}'${dis(c)}>go loud</button>
         </div></div>`;
     const allCrimes = [...(rules?.crimes || [])].sort((a, b) => a.lvl - b.lvl);
     const lvl = me?.level || 1;
@@ -2995,7 +3041,7 @@
       ${hunt ? `
         <div class="card"><span class="t">hunting ${hunt.name}</span>
           <div class="d">${huntReadyS > 0 ? `your people place them in ${mins(huntReadyS)}` : 'PLACED — take the shot'}${me.shootCdSeconds > 0 ? ` · trigger cools ${mins(me.shootCdSeconds)}` : ''}</div>
-          <button class="act" data-fire="${hunt.targetId}" ${huntReadyS > 0 ? 'disabled' : ''}>FIRE</button>
+          <button class="act risk" data-fire="${hunt.targetId}" ${huntReadyS > 0 ? 'disabled' : ''}>FIRE</button>
           <button class="act" id="hunt-off">call it off</button></div>`
         : '<span class="d" style="color:var(--dim)">nobody in the crosshairs — start a search from the roster below (3h to place a mark)</span>'}
 
@@ -3055,11 +3101,11 @@
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
           <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>
-          <button class="act" data-jump="${s.id}" data-intent="standard">jump</button>
-          <button class="act" style="color:#ff9a6a" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
+          <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
+          <button class="act risk" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
-          <button class="act" data-npchit="${s.id}">NPC hit</button>
+          <button class="act risk" data-npchit="${s.id}">NPC hit</button>
           ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
           <button class="act" data-feud="${s.id}">feud</button></div>`).join('')}</div>`;
 
@@ -4640,7 +4686,7 @@
       <h2 style="margin-top:10px">The Roster (${(p.yard || []).length})</h2>
       <div class="grid">${(p.yard || []).map((y) => `
         <div class="card"><span class="t">${y.name}</span> <span class="d">lvl ${y.level ?? '?'}${y.gang ? ' · made' : ''}</span>${y.faction ? ` <span class="chip">${y.faction}</span>` : ''}
-          <button class="act" data-shank="${y.id}" style="border-color:var(--blood)">shank</button>
+          <button class="act risk" data-shank="${y.id}">shank</button>
           <button class="act" data-burner="${y.id}">burner: outside hit</button></div>`).join('')}</div>`;
     t.querySelector('#pen-bribe').onclick = () =>
       act('POST', '/v1/pen/bribe', { seconds: Number(t.querySelector('#pen-secs').value) }).then(() => renderPen());
