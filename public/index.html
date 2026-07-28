@@ -161,6 +161,52 @@
     60%  { transform: rotate(20deg) scale(1.15); opacity: 1; }
     100% { transform: none; opacity: 1; }
   }
+  /* THE FELT — a blackjack resolve turns the hole card over. Every card shown is one the
+     server actually sent (casino.js returns the full `player` and `dealer` arrays on a
+     finished hand), so the flip reveals a real card and never invents one. */
+  .rv-cards { text-align: center;
+    background: linear-gradient(180deg, rgba(20,18,14,.96), rgba(10,9,7,.96));
+    border: 1px solid var(--line2); border-radius: var(--r-lg); padding: 14px 20px;
+    box-shadow: var(--shadow-pop), 0 0 40px rgba(0,0,0,.7); }
+  .rv-cards .lbl { font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+  .rv-cards .hand { display: flex; gap: 4px; justify-content: center; align-items: center;
+    margin: 5px 0 9px; min-height: 34px; }
+  .rv-cards b { font-size: 16px; letter-spacing: 3px; display: block; color: var(--neon); }
+  .rv-cards.win { border-color: var(--ok); box-shadow: var(--shadow-pop), 0 0 40px rgba(99,179,113,.3); }
+  .rv-cards.lose { border-color: var(--blood); box-shadow: var(--shadow-pop), 0 0 40px rgba(192,57,43,.25); }
+  .rv-cards.win b { color: var(--ok); } .rv-cards.lose b { color: var(--bad); }
+  .rv-cards.push b { color: var(--gold); }
+  .flip { perspective: 460px; width: 30px; height: 34px; flex: 0 0 auto; }
+  .flip .in { position: relative; width: 100%; height: 100%; transform-style: preserve-3d;
+    animation: flipover .5s var(--ease) both; }
+  .flip .f, .flip .b { position: absolute; inset: 0; backface-visibility: hidden;
+    display: flex; align-items: center; justify-content: center; border-radius: 3px;
+    font-size: 16px; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
+  .flip .f { color: #16130c; background: linear-gradient(180deg, #efe9da, #ddd5c2);
+    transform: rotateY(180deg); }
+  .flip .b { color: #6d5560; background: linear-gradient(135deg, #3a2c33, #241b21); }
+  @keyframes flipover { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+  /* THE LANES — a head-to-head result, drawn from the two scores the server sends
+     (`you {name,score}` / `them {name,score}`): boxing bouts and exhibitions, stable
+     circuits and match races all return exactly that. The bars are the real numbers. */
+  .rv-lanes { min-width: 270px;
+    background: linear-gradient(180deg, rgba(20,18,14,.96), rgba(10,9,7,.96));
+    border: 1px solid var(--line2); border-radius: var(--r-lg); padding: 13px 18px;
+    box-shadow: var(--shadow-pop), 0 0 40px rgba(0,0,0,.7); }
+  .rv-lanes .ln { margin: 7px 0; }
+  .rv-lanes .who { display: flex; justify-content: space-between; gap: 14px; font-size: 12.5px; color: var(--dim); }
+  .rv-lanes .who b { font-variant-numeric: tabular-nums; color: var(--ink); }
+  .rv-lanes .ln.mine .who, .rv-lanes .ln.mine .who b { color: var(--gold); }
+  .rv-lanes .trk { height: 8px; margin-top: 4px; border-radius: 4px;
+    background: rgba(255,255,255,.06); overflow: hidden; }
+  .rv-lanes .trk i { display: block; height: 100%; width: var(--w, 0); border-radius: 4px;
+    background: linear-gradient(90deg, #4a453c, var(--line2)); animation: lanefill .75s var(--ease) both; }
+  .rv-lanes .ln.mine .trk i { background: linear-gradient(90deg, var(--gold), var(--neon)); }
+  .rv-lanes .verdict { text-align: center; font-size: 15px; letter-spacing: 3px;
+    margin-top: 10px; color: var(--neon); animation: fadeIn .3s .75s both; }
+  .rv-lanes.win .verdict { color: var(--ok); } .rv-lanes.lose .verdict { color: var(--bad); }
+  .rv-lanes.win { border-color: var(--ok); } .rv-lanes.lose { border-color: var(--blood); }
+  @keyframes lanefill { from { width: 0; } }
   @media (prefers-reduced-motion: reduce) { #reveal { display: none; } }
   /* the bottle — armed reads as armed */
   .nosbtn.armed { color: #ffe9a8; border-color: var(--neon);
@@ -1261,6 +1307,60 @@
       <b>${won ? 'PASS' : point && rolls[rolls.length - 1] === 7 ? 'SEVEN OUT' : 'NO DICE'}</b></div>`,
       1200 + seq.length * 110);
   }
+  const CARD_RANK = (c) => c === 1 ? 'A' : c === 11 ? 'J' : c === 12 ? 'Q' : c === 13 ? 'K' : String(c);
+  // THE HOLE CARD. A finished hand comes back with the FULL `player` and `dealer` arrays, so
+  // the card that sat face-down all hand can finally turn over — and every card shown is one
+  // the server sent. The dealer's first card was always up; card 1 is the hole card and cards
+  // 2+ are what the dealer drew chasing 17, so they flip in dealing order.
+  function revealCards(b) {
+    if (REDUCED || !b?.dealer?.length) return;
+    const face = (c) => `<span class="pc" style="margin:0">${CARD_RANK(c)}</span>`;
+    const dealt = b.dealer.map((c, i) => i === 0 ? face(c)
+      : `<span class="flip"><span class="in" style="animation-delay:${(i - 1) * .26 + .15}s"
+           ><span class="b">?</span><span class="f">${CARD_RANK(c)}</span></span></span>`).join('');
+    const word = { blackjack: 'BLACKJACK', win: 'YOU TAKE IT', push: 'PUSH', bust: 'BUST',
+      dealer_bust: 'DEALER BUSTS', loss: 'THE HOUSE TAKES IT', dealer_blackjack: "DEALER'S NATURAL" }
+      [b.outcome] || String(b.outcome || '').replace(/_/g, ' ').toUpperCase();
+    const cls = b.outcome === 'push' ? 'push' : Number(b.net) > 0 ? 'win' : Number(b.net) < 0 ? 'lose' : 'push';
+    reveal(`<div class="rv-cards ${cls}">
+      <div class="lbl">THE DEALER${b.dealerTotal != null ? ` — ${b.dealerTotal}` : ''}</div>
+      <div class="hand">${dealt}</div>
+      <div class="lbl">YOU${b.playerTotal != null ? ` — ${b.playerTotal}` : ''}</div>
+      <div class="hand">${(b.player || []).map(face).join('')}</div>
+      <b>${word}</b></div>`, 1600 + b.dealer.length * 260);
+  }
+  // THE LANES. A head-to-head comes back as `you {name,score}` / `them {name,score}` — boxing
+  // bouts and exhibitions, stable circuits and match races all return exactly that shape — and
+  // until now the client threw both scores away and printed "won". The bars ARE those numbers,
+  // so a squeaker looks like a squeaker and a walkover looks like one.
+  function revealLanes(b, opts = {}) {
+    const a = b?.you, c = b?.them;
+    if (REDUCED || !a || !c || a.score == null || c.score == null) return;
+    const hi = Math.max(Number(a.score), Number(c.score)) || 1;
+    const lane = (s, mine) => `<div class="ln${mine ? ' mine' : ''}">
+      <div class="who"><span>${esc(s.name || (mine ? 'yours' : 'theirs'))}</span><b>${s.score}</b></div>
+      <div class="trk"><i style="--w:${Math.round(Number(s.score) / hi * 100)}%"></i></div></div>`;
+    reveal(`<div class="rv-lanes ${b.win ? 'win' : 'lose'}">
+      ${lane(a, true)}${lane(c, false)}
+      <div class="verdict">${b.win ? (opts.win || 'WON IT') : (opts.lose || 'LOST IT')}</div></div>`, 1800);
+  }
+  // One dispatcher, keyed on shapes only these results carry — so a reveal can never fire on
+  // an unrelated response, and a new head-to-head gets its lanes for free.
+  function revealFor(body) {
+    if (!body || REDUCED) return;
+    if (body.game === 'dice' && body.rolls) return revealRoll(body.rolls, body.point, body.win);
+    if (body.game === 'blackjack' && body.done) return revealCards(body);
+    // The pink-slip race sends the two scores as bare NUMBERS and everything else sends
+    // {name,score}; the PvE circuit calls them power/field. Same two real numbers either way.
+    const sc = (v) => typeof v === 'number' ? { score: v } : v;
+    let you = sc(body.you), them = sc(body.them);
+    if (you?.score == null && body.power != null && body.field != null)
+      { you = { name: 'your car', score: body.power }; them = { name: 'the field', score: body.field }; }
+    if (you?.score == null || them?.score == null || body.win == null) return;
+    const opts = body.belt ? { win: 'AND THE BELT' } : body.defended ? { win: 'TITLE DEFENDED' }
+      : body.forPinks ? { win: 'PINKS — IT’S YOURS', lose: 'PINKS — IT’S GONE' } : {};
+    revealLanes({ ...body, you, them }, opts);
+  }
 
   // one place that turns a spec into sound, light and motion
   function playCine(spec) {
@@ -1592,6 +1692,10 @@
         const spec = cineFor(r.body);
         if (spec) playCine(spec);
         else {
+          // THE REVEAL — the smaller sibling of the cinematic: where the DRAW is the drama
+          // (dice, a hand, a head-to-head) show what actually came up. Fires only on shapes
+          // that carry a real result, so it can never go off on an unrelated response.
+          revealFor(r.body);
           // no cinematic: still let a gain LAND somewhere, rather than only in a corner toast
           const d = Number(r.body?.earned ?? r.body?.payout ?? r.body?.take ?? r.body?.won ?? 0);
           if (d > 0) floatVal(`+$${fmt(d)}`, true, lastPressed);
@@ -3283,12 +3387,10 @@
     // Grouping is done here rather than in the template because the games are added and reordered
     // constantly, and a structural pass over the rendered DOM can't fall out of sync with them.
     feltify(t);
-    // the roll is drawn OUTSIDE the tab (see reveal()) — this handler re-renders the Den right
-    // after, and anything drawn into the tab would be destroyed before it could play
-    t.querySelector('#dice-go').onclick = async () => {
-      const r = await act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
-      if (r.code < 400) revealRoll(r.body?.rolls, r.body?.point, r.body?.win);
-    };
+    // the roll draws itself — act() hands every result to revealFor(), which shows the pass line
+    // OUTSIDE the tab (see reveal()), since this handler re-renders the Den right after and
+    // anything drawn into the tab would be destroyed before it could play
+    t.querySelector('#dice-go').onclick = () => act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
     t.querySelector('#num-go').onclick = () => act('POST', '/v1/casino/numbers', { pick: Number(t.querySelector('#num-pick').value), amount: Number(t.querySelector('#num-amt').value) });
     t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
