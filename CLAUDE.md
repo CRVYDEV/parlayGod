@@ -3638,6 +3638,47 @@ add. Client-patch lesson recorded: String.replace substitution patterns ($$→$)
 first pass — patchers must use replacement FUNCTIONS. Deferred (flagged): activity/chat i18n,
 translating game prose + describe(), the /wiki codex translation, a Privy one-click embed.
 
+**THE ART PASS — 42 generated plates, and the landing/console rebuilt around them (2026-07-28).**
+The game had no art. `tools/art.js` now generates every image it needs from one manifest against
+fal.ai's Flux endpoints — 42 plates for **$2.08** — with the model, seed, aspect, the *job the image
+has to do*, the exact prompt and the running spend recorded per-image in `public/art/manifest.json`,
+so any plate can be explained or reproduced. Spend is bounded by a hard `ART_CAP_USD`. Served by a new
+**`GET /art/:file`**: the directory is read into an ALLOWLIST at boot and a request is only ever a Map
+lookup, so there is **no path-traversal surface by construction** (`/art/../../etc/passwd` is a key
+that is not in the Map, not a path that gets sanitised).
+
+**Where it went.** The landing hero, a full-bleed mid-page break, the six feature pills, the four
+broadcast-card backgrounds (embedded as data URIs by `src/cards.js` — these are what unfurl on X), and
+— the largest win — **a header plate on every one of the 24 console screens** (`TAB_ART` +
+`#tabart`), each carrying that system's own art *and its name*. Until now the only thing telling you
+which of twenty-four screens you were on was which rail button happened to be lit.
+
+**Five things this pass got wrong first, all caught by looking at the output rather than the code:**
+**(1)** the art 404'd — there was no static route at all, and the "hero is mispositioned" diagnosis
+that preceded it was confidently wrong. **(2)** The pills stacked the photo TWICE at full opacity: an
+inline `style="background-image:url(…)"` beats the stylesheet's `background:` shorthand for the
+background-image longhand, so the card's own background became the photo and `::before{opacity:.22}`
+laid a second copy on top — three of six cards were genuinely unreadable, worse than no art. The url
+now rides a `--art` custom property that only `::before` reads. **(3)** A 108px band on a 16:9 source
+is a horizontal STRIPE, not a scene (the courtroom rendered as a row of window tops); 150px fixed it.
+**(4)** The hero image generated *for* the hero job lost it on the merits to one generated for drama —
+`hero-backdrop` has letterbox bars baked in and is too dark and too blue to read against a near-black
+page. **(5)** Five generations were rejected on review and re-rolled: a "1940s telephone exchange with
+patch panels and indicator lamps" came back a **modern server room**, and "one hard lamp" on a table
+came back a mid-century designer lamp shot like product photography. Prompt review does not catch
+these; a contact sheet does.
+
+**Two test assertions broke, and both were false positives worth understanding.** Cards now embed a
+~260KB base64 plate, and *every one of the four payloads contains the literal three characters "NaN"*
+— so `assert(!/undefined|NaN/.test(body))` failed on random binary rather than on anything rendered.
+It now scans the markup with data URIs stripped. Separately, `assert(body.length < 4000)` was a PROXY
+for "the oversized `?ref` was clamped" that only worked while a card was ~2KB of markup; it now
+measures the actual claim as a DELTA against a normal ref (clamped ⇒ grows ~48 bytes, unclamped ⇒
+~5000). Both repaired assertions were mutation-verified — and the first mutation attempt was VACUOUS
+(`sed` silently failed on a `||` inside a `|`-delimited expression and I read the resulting pass as a
+result), which is the same trap `tools/mobile.js` and `tools/scale.js` each sprang. Suite green, sim
+drift-0. Art direction, the prompts, and what went wrong in the real runs: `docs/ART.md`.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

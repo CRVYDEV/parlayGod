@@ -93,7 +93,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING } from './rules.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -158,6 +158,26 @@ export async function buildServer() {
   let wikiHtml = '<!doctype html><title>OMERTA codex</title><p>Codex file missing (public/wiki.html).</p>';
   try { wikiHtml = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'wiki.html'), 'utf8'); } catch { /* headless */ }
   app.get('/wiki', async (req, reply) => reply.type('text/html; charset=utf-8').send(wikiHtml));
+  // ── GENERATED ART (public/art/*.jpg): the landing hero, the district plates, the system interiors.
+  // Loaded into memory ONCE at boot as an ALLOWLIST keyed by filename, and the request only ever does a
+  // Map lookup — user input is never joined into a path, so there is no traversal surface by
+  // construction (`/art/../../etc/passwd` is simply a key that isn't in the Map). Immutable + a long
+  // max-age: the bytes for a given filename never change, and a re-roll ships under a new name.
+  // A missing directory degrades to an empty Map — the CSS falls back to its flat fills, never a crash.
+  const artDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'art');
+  const ART_FILES = new Map();
+  try {
+    for (const name of readdirSync(artDir)) {
+      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+      const type = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[ext];
+      if (type) ART_FILES.set(name, { body: readFileSync(join(artDir, name)), type });
+    }
+  } catch { /* no art shipped — the flat fills stand in */ }
+  app.get('/art/:file', async (req, reply) => {
+    const hit = ART_FILES.get(req.params.file);
+    if (!hit) return reply.code(404).send({ error: 'not_found' });
+    return reply.type(hit.type).header('cache-control', 'public, max-age=604800, immutable').send(hit.body);
+  });
   // ── ITEM ART: one procedural SVG per catalog entry (cosmetic; no ledger surface). Public + keyless,
   // heavily cacheable — the same id always renders the same icon. Shown in garage/port/kitchen/armory/
   // market. Unknown kind/id falls back to a neutral emblem, so a broken <img src> never 500s. ──

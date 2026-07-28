@@ -132,22 +132,40 @@ palette, film grain
 
 ---
 
-## Workflow
+## Workflow — it is automated now
 
-This environment's egress policy blocks every image-generation API (fal, Replicate, OpenAI, BFL all
-403 at the gateway), so generation happens in your browser and review happens here.
+`tools/art.js` generates every image in this document from one manifest, against fal.ai's Flux endpoints.
+The prompts here and the prompts in that file are the same prompts; the file is the source of truth,
+because it is what actually runs.
 
-1. Generate in fal's playground (or Midjourney) using a prompt above.
-2. Download the PNG.
-3. Get it to me, either way:
-   - **quick look** — attach it directly in chat; I can see images;
-   - **for the set** — commit to `public/art/` on the working branch and push.
-4. I open it, judge it against the console's real palette and the 375×667 mobile viewport, and revise
-   the prompt.
-5. Re-roll and repeat.
+```
+FAL_KEY=... node tools/art.js            # everything missing
+FAL_KEY=... node tools/art.js --list     # what exists and what each image has to survive
+FAL_KEY=... node tools/art.js --force interior-pvp   # re-roll one
+```
 
-Name files after what they are — `hero.png`, `district-docks.png`, `interior-kitchen.png`,
-`card-bg-wanted.png` — so review comments map to prompts without ambiguity.
+Spend is tracked in `public/art/manifest.json` (which also records every prompt and seed, so any image
+can be reproduced or explained) against a hard `ART_CAP_USD` so an unattended run cannot drain the
+account. At Flux-pro rates a full 42-image set costs about $2.
 
-Do the hero first and settle it before spending runs on the rest: everything downstream references it
-via `--sref`, so a hero you are lukewarm about costs you the whole set.
+Two environment notes, both paid for the hard way:
+
+- **Node's `fetch` ignores `HTTPS_PROXY`.** Behind a proxy every request 403s while `curl` to the same
+  host at the same moment returns 200 — which reads exactly like a network-policy problem and is not
+  one. `tools/art.js` re-execs itself once with `NODE_USE_ENV_PROXY=1` because undici reads that
+  variable at initialisation, before any line of the script runs, so assigning it in-process is too late.
+- **The generation endpoints are outbound HTTPS to `fal.run`.** If the environment's egress policy
+  blocks it, the run fails loudly rather than silently producing nothing.
+
+## Reviewing
+
+Generate, then *look at the images* — in a contact sheet, at the size they will actually appear, against
+the console's real palette. Prompts that read well produce images that are wrong in ways no prompt review
+catches. From the real runs behind this document: a "1940s telephone exchange with patch panels and
+indicator lamps" produced a **modern server room**, because those words have a contemporary meaning the
+model reaches for first; "one hard lamp" on a table produced a **mid-century designer desk lamp** shot
+like product photography; and an image generated specifically to sit behind a headline lost the job to
+one generated for drama, because it was too dark and too blue to read against a near-black page.
+
+Name files after what they are and what they are for. The `job` field in the manifest states what each
+image has to survive, and that is the thing to judge it against — not whether it is pretty.

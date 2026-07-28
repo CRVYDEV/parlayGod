@@ -329,7 +329,15 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
     const c = await app.inject({ method: 'GET', url: `/card/${t}/${encodeURIComponent('Broadcast Bruno')}` });
     assert.equal(c.statusCode, 200, `card ${t} → 200`);
     assert(/^<svg[\s\S]*<\/svg>\s*$/.test(c.body.trim()), `card ${t} is a well-formed <svg>`);
-    assert(!/undefined|NaN/.test(c.body), `card ${t} carries no undefined/NaN`);
+    // Scan the MARKUP, not the embedded photo. The cards now carry their background plate as a
+    // base64 data URI, and ~250KB of [A-Za-z0-9+/] is near-certain to contain the literal three
+    // characters "NaN" — every one of the four plates does. The check's intent has always been
+    // "no undefined/NaN reached rendered TEXT"; an opaque binary payload is not rendered text, and
+    // leaving it in scope makes this fail for a reason that has nothing to do with the card.
+    // Strip the payloads and assert on what a reader actually sees.
+    const markup = c.body.replace(/data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+/g, 'data:PLATE');
+    assert(markup.includes('data:PLATE'), `card ${t} embeds its background plate`);
+    assert(!/undefined|NaN/.test(markup), `card ${t} carries no undefined/NaN`);
     assert.equal(c.headers['content-type'], 'image/svg+xml; charset=utf-8', `card ${t} served as SVG`);
   }
   // (2b) the PNG variant — X/feeds won't unfurl an SVG; resvg rasterizes it (falls back to SVG if absent)
@@ -358,9 +366,17 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
   //     Fastify's URI cap the way a giant :name path is) is clamped before render, so it can't inflate
   //     the SVG / make resvg rasterize a giant string / poison the PNG cache. And any HTML/SVG
   //     metacharacter in the name is escaped (no injection into the SVG/HTML output).
+  // Measured as a DELTA against a normal ref, not against an absolute byte budget. The budget was a
+  // proxy — it worked only while a card was ~2KB of markup, and broke the moment cards started
+  // embedding a background plate as a base64 data URI (~260KB of fixed payload that has nothing to do
+  // with the ref). The delta measures the actual claim: an oversized ?ref must not inflate the render.
+  // server.js clips a ref to 48 chars, so a clamped 5000-char ref can add at most ~48 bytes; an
+  // unclamped one adds ~5000.
+  const refBase = await app.inject({ method: 'GET', url: '/card/legend/Bob?ref=Al' });
   const hc = await app.inject({ method: 'GET', url: `/card/legend/Bob?ref=${'B'.repeat(5000)}` });
   assert.equal(hc.statusCode, 200, 'oversized ?ref → 200 (clamped, no crash)');
-  assert(hc.body.length < 4000, `oversized ?ref is clamped before render (svg ${hc.body.length}b, not ~5000+)`);
+  const grew = hc.body.length - refBase.body.length;
+  assert(grew < 200, `oversized ?ref is clamped before render (grew ${grew}b over a normal ref, not ~5000)`);
   const xss = '<script>alert(1)</script>';
   const xc = await app.inject({ method: 'GET', url: `/card/legend/${encodeURIComponent(xss)}` });
   assert.equal(xc.statusCode, 200, 'injection name → 200');
