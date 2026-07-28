@@ -42,9 +42,11 @@ const SIGNED = [
   ['BLACK_MARKET.MIN_RAISE_BPS', 500],
   ['BLACK_MARKET.SNIPE_WINDOW_MS', 300000],
   ['BLACK_MARKET.TAKE_BPS', 200],
-  ['BONDS.DEV_BPS', 2000],
+  ['BONDS.DEV_BPS', 1500],   // v2 step 3: 2000 -> 1500, the design's own number (BALANCE.md)
   ['BONDS.MAX_DISCOUNT_BPS', 2000],
-  ['BONDS.VIG_BPS', 3000],
+  ['BONDS.POL_BPS', 3750],   // 5000 -> 3750: the remainder after the float slice, at the signed 5:3 POL:VIG
+  ['BONDS.RWA_BPS', 2500],   // NEW: bond ETH's stock-float slice (design 4)
+  ['BONDS.VIG_BPS', 2250],   // 3000 -> 2250: same remainder, ratio preserved rather than zeroed
   ['BOXING.BET_MAX', 250000],
   ['BOXING.BET_RAKE_BPS', 800],
   ['BOXING.DEFENSE_MS', 604800000],

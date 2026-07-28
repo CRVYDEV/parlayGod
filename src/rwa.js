@@ -1,6 +1,10 @@
 // ═══ THE FLOAT — the full-reserve RWA layer (omerta-rwa-float-design.md) ═══
 // The founder-approved R2 redesign. The principle: THE GAME ONLY EVER OWES STOCK IT ALREADY OWNS.
-// ETH tax slices (Store 20% + the gameplay-fee FEE_RWA_BPS slice) accumulate in rwa_revenue; a buy
+// ETH slices accumulate in rwa_revenue from FOUR sources — Store 20%, the gameplay-fee FEE_RWA_BPS
+// slice, and (tokenomics v2 step 3) the DEX sell tax's SELL_TAX.RWA_BPS slice + bond ETH's
+// BONDS.RWA_BPS slice, the last two being the pair the design turns on: the tax scales with trading
+// volume and bonds with primary inflow, and a one-way conversion makes quiet markets the norm — so
+// neither alone keeps the float growing. A buy
 // bot (mainnet: Uniswap TWAP; here a mod-driven param — the runVigBuyback twin) spends ≤ that
 // revenue on real tokenized-stock UNITS into rwa_reserve (the float); players burn earned $OMR
 // ('rwa:vault', riding the existing rwa:% vocabulary — ZERO invariants.js change) to CLAIM
@@ -12,7 +16,7 @@
 import crypto from 'node:crypto';
 import { GameError } from './game.js';
 import { spendOmr } from './vanity.js';
-import { PORTFOLIO, RWA_FLOAT, STORE, tickerOf } from './rules.js';
+import { BONDS, PORTFOLIO, RWA_FLOAT, SELL_TAX, STORE, tickerOf } from './rules.js';
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -22,6 +26,55 @@ async function omrPerEth(db) {
   const last = (await db.query(
     'SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
   return last ? Number(last.price_omr_per_eth) : STORE.PLEX_FLOOR_OMR_PER_ETH;
+}
+
+// ── THE DEX SELL TAX ingest (tokenomics v2 §5/§6, step 3) — the float's SECOND source ──
+// One row per taxed episode (a `SellTaxTaken` log on mainnet). The tax is charged in OMR at the pool;
+// the bot realizes it as ETH, and that ETH splits three ways (SELL_TAX.DEV/RWA/LP_BPS). Only the RWA
+// slice is mirrored into `rwa_revenue` (source='tax') — the bucket the buy bot actually draws on; the
+// dev and LP slices are recorded so the episode reconciles and the founder can see where it went.
+//
+// TWO SOURCES, DELIBERATELY. The tax scales with TRADING VOLUME; bond ETH scales with PRIMARY INFLOW.
+// A one-way conversion is designed to produce a quiet market (gameplay no longer makes sellers), so in
+// a quiet month the tax yields little and bonds are what keep the float growing. Neither alone is
+// enough — that gap is what step 3 closes.
+//
+// Idempotent on `ref` (txHash:logIndex on-chain). `txHash` marks a REAL episode — the store/bond
+// D-MED2 discipline: a mod/QA simulate records the episode but books ZERO revenue, so a comp can
+// never fabricate float backing that `runRwaBuyback` would then spend on units it can't cover.
+// Out-of-band real value: ZERO §10.4 rows. DORMANT until step 4 arms the contract's three-way split.
+export async function recordSellTax(pool, { ref, omrTaxed, priceOmrPerEth, txHash = null } = {}) {
+  const key = String(ref ?? '').trim();
+  if (!key) throw new GameError('ref', 'A tax episode needs a ref (txHash:logIndex).');
+  const omr = Number(omrTaxed), price = Number(priceOmrPerEth);
+  if (!(Number.isFinite(omr) && omr > 0)) throw new GameError('amount', 'omrTaxed must be > 0');
+  if (!(Number.isFinite(price) && price > 0)) throw new GameError('price', 'priceOmrPerEth must be > 0 (mainnet: the TWAP the bot realized).');
+  const real = !!txHash;
+  const gross = round6(omr / price);
+  // the remainder rule sits on the LP slice so the three always sum to gross with no rounding dust
+  const devEth = real ? round6(gross * SELL_TAX.DEV_BPS / SELL_TAX.BPS) : 0;
+  const rwaEth = real ? round6(gross * SELL_TAX.RWA_BPS / SELL_TAX.BPS) : 0;
+  const lpEth = real ? round6(gross - devEth - rwaEth) : 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if ((await client.query('SELECT 1 FROM sell_tax_events WHERE ref=$1', [key])).rows[0]) {
+      await client.query('COMMIT');
+      return { recorded: false, duplicate: true }; // a re-delivered log is a clean no-op
+    }
+    await client.query(
+      'INSERT INTO sell_tax_events (ref, omr_taxed, price_omr_per_eth, gross_eth, dev_eth, rwa_eth, lp_eth, tx_hash, real) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [key, round6(omr), price, gross, devEth, rwaEth, lpEth, txHash, real]);
+    if (real && rwaEth > 0)
+      await client.query("INSERT INTO rwa_revenue (source, ref, rwa_eth) VALUES ('tax',$1,$2)", [key, rwaEth]);
+    await client.query('COMMIT');
+    return { recorded: true, grossEth: gross, devEth, rwaEth, lpEth, real };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    // a concurrent re-delivery of the same log (23505) is the duplicate case, not an error
+    if (e?.code === '23505') return { recorded: false, duplicate: true };
+    throw e;
+  } finally { client.release(); }
 }
 
 // ── THE BUY BOT seat (mod-driven until mainnet; the runVigBuyback twin) ──
@@ -187,7 +240,17 @@ export async function vaultBoard(db, accountId) {
     'SELECT ticker, units, cost_omr FROM rwa_vault WHERE account_id=$1 ORDER BY ticker', [accountId])).rows
     .map((r) => ({ ticker: r.ticker, name: tickerOf(r.ticker)?.name || r.ticker,
       units: round6(Number(r.units)), costOmr: Number(r.cost_omr) })) : [];
+  // WHERE THE FLOAT'S MONEY COMES FROM (v2 §6) — published, because "backed" is a claim and a player
+  // is entitled to see what is behind it. Two sources by design: the DEX sell tax scales with trading
+  // volume, bond ETH with primary inflow, and a one-way conversion makes quiet markets the norm.
+  const bySource = {};
+  for (const s of (await db.query('SELECT source, SUM(rwa_eth) s FROM rwa_revenue GROUP BY source')).rows)
+    bySource[s.source] = round6(Number(s.s));
+  const spent = Number((await db.query('SELECT COALESCE(SUM(eth),0) s FROM rwa_buys')).rows[0].s);
+  const revenue = Object.values(bySource).reduce((a, b) => a + b, 0);
   return { float, mine, claimMin: RWA_FLOAT.CLAIM_MIN_OMR, claimDailyOmr: RWA_FLOAT.CLAIM_DAILY_OMR,
+    funding: { bySource, revenueEth: round6(revenue), spentEth: round6(spent), unspentEth: round6(Math.max(0, revenue - spent)),
+      sellTaxBps: SELL_TAX.RWA_BPS, bondBps: BONDS.RWA_BPS },
     note: 'Backed by tokenized stock the treasury actually holds — the game never owes a unit it does not own. No sell, no cash-out; extraction is a future KYC-gated phase.' };
 }
 
@@ -212,10 +275,23 @@ export async function runRwaInvariants(pool) {
     push(`held == bought (${r.ticker})`, Number(r.units), buysByTicker[r.ticker]?.units || 0, 'eq');
     push(`cost basis == spent (${r.ticker})`, Number(r.eth_spent), buysByTicker[r.ticker]?.eth || 0, 'eq');
   }
+  // v2 step 3: the DEX-tax episodes must reconcile — each episode's three slices sum to its gross,
+  // and the RWA slice reached rwa_revenue (the bucket the buy bot draws on). A silent mismatch here
+  // would mean the float is funded by more or less than the tax actually took.
+  const tax = (await pool.query(
+    'SELECT COALESCE(SUM(gross_eth),0) g, COALESCE(SUM(dev_eth),0) d, COALESCE(SUM(rwa_eth),0) r, COALESCE(SUM(lp_eth),0) l FROM sell_tax_events WHERE real')).rows[0];
+  const taxGross = Number(tax.g), taxSlices = Number(tax.d) + Number(tax.r) + Number(tax.l);
+  const taxMirror = Number((await pool.query("SELECT COALESCE(SUM(rwa_eth),0) s FROM rwa_revenue WHERE source='tax'")).rows[0].s);
+  push('sell-tax split == gross', taxSlices, taxGross, 'eq');
+  push('sell-tax RWA slice == rwa_revenue', Number(tax.r), taxMirror, 'eq');
+  // where the float's money came from — the founder's view of the two sources (§6's whole point)
+  const bySource = {};
+  for (const s of (await pool.query('SELECT source, SUM(rwa_eth) s FROM rwa_revenue GROUP BY source')).rows)
+    bySource[s.source] = round6(Number(s.s));
   // real-vs-simulated float: before R3 extraction ships, simulated units must reconcile to the Safe
   const realU = Number((await pool.query('SELECT COALESCE(SUM(units),0) s FROM rwa_buys WHERE real')).rows[0].s);
   const simU = Number((await pool.query('SELECT COALESCE(SUM(units),0) s FROM rwa_buys WHERE NOT real')).rows[0].s);
   return { ok: checks.every((c) => c.ok), checks,
-    revenueEth: round6(revenue), spentEth: round6(spent),
+    revenueEth: round6(revenue), spentEth: round6(spent), revenueBySource: bySource,
     realUnits: round6(realU), simulatedUnits: round6(simU) };
 }

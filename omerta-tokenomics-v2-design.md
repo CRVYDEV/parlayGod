@@ -228,8 +228,8 @@ Retained regardless of clearance, as cheap deploy-time config rather than a bloc
    (`src/exchange.js`, `test/tokenomics.js` — the 57th suite). Ships with the window **SHUT** and both
    funding carves at no-op, so this drop changed no signed balance number.
 2. **Retire cash → OMR and the laundering surface** — the content removal, once the window replaces it.
-   **This is what opens the window**, and the two must land in the SAME change (see the interlock below).
-3. **Re-source the float** — point `rwa_revenue` at the tax + bond slices.
+   **This is what opens the window**, and the two must land in the SAME change. **BUILT** (§7.2).
+3. **Re-source the float** — point `rwa_revenue` at the tax + bond slices. **BUILT** (§7.3).
 4. **Contracts** — `OMR.mint()` + the 9% three-way tax; `OmertaBond` mints with the three walls. Both
    reset the audit clock: `forge test` green, then third-party re-audit before mainnet.
 5. **Re-sim.** The entire cash economy was balanced against an extraction threat model that no longer
@@ -309,3 +309,70 @@ turns the distribution on.
 `EXCHANGE.OPEN` (the interlock) · `EXCHANGE.RATE` · `EXCHANGE.FUND_BPS` · `EXCHANGE.DAILY_CAP_OMR` ·
 `FAMILY_YIELD.FUND_BPS` (the migration dial, ships at 0) · `FAMILY_YIELD.SEATS` and weights ·
 the bond ETH split · the 900bps tax split · `dailyCapOMR` · premium-bond design (unresolved).
+
+---
+
+## 7.3 Step 3 as built — the float's two sources
+
+`rwa_revenue` was fed by the Store's 20% earmark and the gameplay-fee `FEE_RWA_BPS` slice. §6 adds
+the two that matter at scale.
+
+### The DEX sell tax (`recordSellTax`, `src/rwa.js`)
+
+One row per taxed episode in `sell_tax_events` — a `SellTaxTaken` log on mainnet, a mod/QA
+`POST /v1/mod/rwa/tax` until step 4 arms the contract's three-way split. The tax is charged in OMR
+at the pool; the bot realizes it as ETH; that ETH splits `SELL_TAX.DEV/RWA/LP_BPS`. Only the RWA
+slice mirrors into `rwa_revenue` (source `tax`) — the bucket the buy bot draws on. The other two are
+recorded so the episode reconciles and the founder can see where the money went.
+
+**The remainder rule sits on the LP slice.** Two of the three slices round down at six decimals, so
+three "natural" slices of a 0.1-ETH gross sum to 0.099999 — a wei belonging to nobody. Every real
+trade is that case, not a tidy one; the test uses a gross that actually produces dust, because a
+gross that divides cleanly proves nothing about the rule.
+
+### Bond ETH (`recordBond`, `src/bonds.js`)
+
+A fourth destination alongside POL / Dev / Vig, mirrored into `rwa_revenue` (source `bond`).
+`runBondInvariants` now reconciles **POL + Dev + Vig + RWA == principal** over real bonds, plus a new
+check that the RWA slice actually reached the bucket — the accumulator alone is not what gets spent.
+
+### Why both, and not just the tax
+
+The tax scales with **trading volume**. Bond ETH scales with **primary inflow**. A one-way conversion
+is *designed* to produce a quiet market — gameplay no longer manufactures sellers — so a tax-only
+float grows fastest exactly when it is needed least. §6 calls this the single largest gap in the
+original proposal, and it is the whole reason step 3 is two sources rather than one.
+
+### The anti-fabrication gate, restated because it is the load-bearing one
+
+A comp/QA episode records the episode and books **zero** revenue. This is not politeness about test
+data: fake revenue buys real-looking units, and `allocated ≤ held` compares allocation to HELD units,
+so fabricated backing is invisible to the very check that makes "the game only ever owes stock it
+already owns" true. The `txHash` gate is what keeps that sentence honest. Mutation-verified: drop the
+gate and the suite names the assertion.
+
+### The Vig slice: a discrepancy I resolved rather than took literally — FOUNDER CALL
+
+§4's table gives the whole remaining 6000 bps to LP and shows **no Vig slice at all**. I did not
+implement that, and the reasoning is worth checking rather than trusting:
+
+- The sentence directly under that table names `BONDS.POL/VIG/DEV_BPS`. The author knew the Vig slice
+  existed and still produced a table without it. That reads as an oversight.
+- Taking it literally defunds the withdrawal reserve. `vig_revenue` → `runVigBuyback` → `fundReserve`
+  → the full-reserve queue is the chain a player's $OMR withdrawal travels, and after step 2 that is
+  the only real-value exit anyone has.
+- The asymmetry decides it. A slightly thinner LP than designed is recoverable. A withdrawal queue
+  that cannot sign is a failure players feel the same day.
+
+So RWA 2500 and DEV 1500 are the design's numbers as written, and the remaining 6000 keeps the signed
+5:3 POL:VIG relationship (3750 / 2250) instead of zeroing one side of it.
+
+**If the Vig slice really is meant to go: `BOND_POL_BPS=6000 BOND_VIG_BPS=0`.** One line, load-time
+sum-validated, and `runBondInvariants` reconciles whatever is set.
+
+### What step 3 does NOT do
+
+It writes no `transactions` rows, adds no §10.4 reason, and moves no game-currency faucet — it routes
+real ETH between out-of-band destinations. The suite asserts that directly by counting ledger rows
+across a full re-sourcing cycle. The chain half (the contract's three-way tax, a `SellTaxTaken`
+watcher, the real buy bot) is step 4 and stays mainnet/legal-gated.

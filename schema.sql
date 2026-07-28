@@ -1493,6 +1493,7 @@ CREATE TABLE IF NOT EXISTS bond_reserve (
   committed_omr NUMERIC NOT NULL DEFAULT 0,  -- Σ payout_omr of all bonds (invariant: ≤ capacity_omr)
   pol_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ POL share of bonded ETH (deepens the OMR-ETH pool on mainnet)
   dev_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ dev share of bonded ETH (founder revenue — forwarded in-tx on-chain; recorded here)
+  rwa_eth NUMERIC NOT NULL DEFAULT 0,         -- Σ stock-float share of bonded ETH (v2 §6; mirrored as rwa_revenue source='bond')
   next_nonce BIGINT NOT NULL DEFAULT 1        -- monotonic quote-nonce allocator (OmertaBond's usedNonce space; independent of chain_reserve)
 );
 INSERT INTO bond_reserve (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM bond_reserve);
@@ -2259,3 +2260,30 @@ CREATE TABLE IF NOT EXISTS family_yield_pool (
   lifetime_paid NUMERIC NOT NULL DEFAULT 0
 );
 INSERT INTO family_yield_pool (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+-- THE FLOAT, RE-SOURCED (v2 step 3). Bond ETH gains a fourth destination — the stock float — because
+-- the DEX tax alone scales with trading volume and the one-way conversion is designed to produce a
+-- quiet market. Recorded alongside pol/dev; the same ETH also lands in rwa_revenue (source='bond'),
+-- which is what the buy bot actually draws on, so `bond ETH split == principal` reconciles.
+ALTER TABLE bond_reserve ADD COLUMN IF NOT EXISTS rwa_eth NUMERIC NOT NULL DEFAULT 0;
+
+-- THE DEX SELL-TAX LEDGER — one row per taxed episode (a `SellTaxTaken` log on mainnet; a mod/QA
+-- simulate until step 4 arms the contract). The tax is charged in OMR at the pool, so an episode
+-- records both the OMR taken and the ETH it was valued/realized at, then splits that ETH three ways
+-- (SELL_TAX.DEV/RWA/LP_BPS). Only the RWA slice is mirrored into rwa_revenue (source='tax'); the dev
+-- and LP slices are recorded here for reconciliation and for the founder's revenue view. Out-of-band
+-- real value like vig_revenue/rwa_revenue: ZERO §10.4 rows. `real` marks a genuine on-chain episode —
+-- a simulate books the episode but NO revenue, so a comp can never fabricate float backing (the
+-- store/bond txHash discipline).
+CREATE TABLE IF NOT EXISTS sell_tax_events (
+  ref TEXT PRIMARY KEY,                       -- the log key (txHash:logIndex on-chain; a mod ref off it)
+  omr_taxed NUMERIC NOT NULL,                 -- OMR the contract carved out of the sell
+  price_omr_per_eth NUMERIC NOT NULL,         -- what it was valued at (the TWAP the bot realized)
+  gross_eth NUMERIC NOT NULL,                 -- omr_taxed / price
+  dev_eth NUMERIC NOT NULL DEFAULT 0,
+  rwa_eth NUMERIC NOT NULL DEFAULT 0,         -- mirrored into rwa_revenue (source='tax') when real
+  lp_eth NUMERIC NOT NULL DEFAULT 0,
+  tx_hash TEXT,
+  real BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

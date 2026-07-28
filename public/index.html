@@ -4972,6 +4972,11 @@
             <input data-vaultamt="${f.ticker}" placeholder="$OMR" size="7"> <button class="act" data-vaultbuy="${f.ticker}">claim</button></div>`).join('')}</div>`
         : '<div class="d" style="color:var(--dim)">the float is empty — the next treasury buyback stocks it (the taxes are accumulating)</div>'}
         ${(vault.mine || []).length ? `<div class="d" style="margin-top:6px">your vaulted book: ${vault.mine.map((m) => `<b>${m.ticker}</b> ${m.units}u`).join(' · ')} <span class="chip good">BACKED</span></div>` : ''}
+        ${vault.funding ? `<div class="d" style="font-size:11px;margin-top:6px">WHAT'S BEHIND IT — ${
+          Object.entries(vault.funding.bySource || {}).map(([k, v]) =>
+            `${({ tax: 'the DEX sell tax', bond: 'treasury bonds', store: 'the store', fee: 'game fees' })[k] || k} ${v} ETH`).join(' · ')
+            || 'nothing yet'}${vault.funding.unspentEth > 0
+            ? ` · <b>${vault.funding.unspentEth} ETH</b> waiting on the buy bot` : ''}</div>` : ''}
         <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
 
       ${sect('legit-paper', 'The Paper Book', `the status collection — buy with clean $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `

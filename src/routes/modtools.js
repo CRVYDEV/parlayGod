@@ -142,6 +142,11 @@ export function register(app, { pool, auth, modAuth, closeAccountSockets }) {
       // mod/bond/simulate) — a mod comp can't stamp a simulated buy real=true and poison the
       // real-vs-simulated unit ledger R3 extraction reconciles against
       Rwa.runRwaBuyback(pool, { ticker: req.body?.ticker, eth: req.body?.eth, priceEth: req.body?.priceEth, txHash: modRealTxHash(req) }));
+    // v2 step 3: ingest a DEX sell-tax episode (a `SellTaxTaken` log on mainnet). Same modRealTxHash
+    // gate — a simulate records the episode for QA but books ZERO float revenue, so a comp can never
+    // fund the float with tax that was never taken.
+    app.post('/v1/mod/rwa/tax', { preHandler: modAuth }, async (req) =>
+      Rwa.recordSellTax(pool, { ref: req.body?.ref, omrTaxed: req.body?.omrTaxed, priceOmrPerEth: req.body?.price, txHash: modRealTxHash(req) }));
     app.post('/v1/mod/bond/fund', { preHandler: modAuth }, async (req) => Bonds.fundBondTranche(pool, req.body?.omr)); // top up the tranche
     app.post('/v1/mod/bond/simulate', { preHandler: modAuth }, async (req) => // QA/comp until the paywall (the Store precedent)
       // No txHash = a pure comp: books the bond + OMR tranche but NO real-ETH Vig/POL accounting (audit

@@ -691,18 +691,24 @@ legal rule; a real KYC extraction is a future phase behind legal approval). `GET
 
 Leaderboards: `/v1/leaderboard/portfolio`, `/family-portfolio`, `/foundation`.
 
-### The Window and the Family Yield (tokenomics v2 — building)
+### The Window and the Family Yield (tokenomics v2)
 
-A change to how $OMR works is being built (`omerta-tokenomics-v2-design.md`). Two pieces are in already:
+How $OMR works changed (`omerta-tokenomics-v2-design.md`). **Cash no longer buys $OMR** — the wash houses
+are shut, laundering at your own front is gone, and the swap says so plainly if you try it. In exchange:
 
 - **The Window** (`GET /v1/window`, `/v1/window/redeem`) — burn $OMR, take in-game cash at a published
   rate, from a till that the street take fills. It runs **one way only**: cash never becomes $OMR again.
-  The till can run dry, and a short window refuses and **burns nothing**. There is a daily limit per
-  account. **It is shut right now** and opens when cash stops buying $OMR — until then the two together
-  would be a money pump, so the game refuses to run both.
+  The till can run dry, and a short window refuses and **burns nothing** — it is a claim on what was
+  funded, never a promise. There is a daily limit per account. It is **open**, which it could not be
+  while cash still bought $OMR: the two together would be a money pump, and the game refuses to run both.
 - **The Family Yield** (`GET /v1/yield`) — the top families by this season's standing split a pot of $OMR
   into their reserve. It is what staking rewards and personal dividends become: standing stops being only
   a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
+- **What backs the stock float** (`GET /v1/vault`) — the float buys real tokenized shares with real ETH,
+  and the board now names where that ETH came from: the DEX sell tax, treasury bonds, the store, game
+  fees. Two of those matter at scale and they are deliberately different — the tax only earns when people
+  are trading, and bonds earn whether or not anyone is. The game never owes a share it has not already
+  bought, so you can read the funding and the holdings and check the claim yourself.
 
 ---
 
