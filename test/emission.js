@@ -107,22 +107,18 @@ assert.ok(endow && endow.ok, 'lifetime emission stays inside the endowment');
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');
 assert.ok(!vocab || vocab.ok, 'emission:wage is in the reason vocabulary');
 
-// ── THE EARLY-EXIT SURCHARGE meets the wage: freshly-earned wage $OMR sold on the AMM inside the
-// 48h window pays the linearly-decaying anti-dump toll (default ON — 50% at age 0), split half →
-// the dev fund / half → the buyback/yield pool, with $OMR conservation still EXACT (transfers). ──
+// ── THE EARLY-EXIT SURCHARGE meets the wage. It used to be exercised here on an AMM SELL; the AMM
+// retired in tokenomics v2 step 2, so the surcharge now lives on exactly ONE boundary — the on-chain
+// WITHDRAWAL — where test/chain.js covers the rate curve (≈50% at age 0, ≈25% at 24h) and the toll
+// split. What stays asserted here is the property this file owns: that freshly-minted WAGE $OMR is
+// what the surcharge is FOR, and that with the AMM gone the wage has no in-game exit that could
+// dodge it. The withdrawal is the only door, and it is metered.
 {
-  const devBefore = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
-  const poolBefore = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
-  const sell = (await call('POST', '/v1/swap', { token: p1.token, body: { direction: 'sell', amount: 2 } })).body;
-  assert.ok(sell.gotCash > 0, 'the fresh sale still clears');
-  assert.ok(Math.abs(sell.earlyTax - 1) < 0.02, `~50% early surcharge on just-earned wage $OMR (got ${sell.earlyTax})`);
-  const devAfter = Number((await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0].omr);
-  const poolAfter = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
-  assert.ok(Math.abs((devAfter - devBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the dev fund');
-  assert.ok(Math.abs((poolAfter - poolBefore) - sell.earlyTax / 2) < 0.01, 'half the surcharge → the buyback/yield pool');
+  const sell = await call('POST', '/v1/swap', { token: p1.token, body: { direction: 'sell', amount: 2 } });
+  assert.equal(sell.body.error, 'retired', 'wage $OMR cannot be dumped on an in-game market — there is none');
   const inv2 = await runLedgerInvariants(pool, { alert: false });
   const omr2 = inv2.checks.find((c) => c.name === '$OMR conservation');
-  assert.ok(omr2.ok, `conservation exact with the surcharge as bucket transfers (drift ${omr2.drift})`);
+  assert.ok(omr2.ok, `conservation exact after the refused sale (drift ${omr2.drift})`);
 }
 
 // ── REGRESSION (AUDIT-value-creation.md F1): a mid-epoch worker crash must NOT re-grant the whole

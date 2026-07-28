@@ -44,8 +44,12 @@ const { body: { token } } = await call('POST', '/v1/auth/guest');
 await call('POST', '/v1/character', { token, body: { name: 'Cash Out Carl' } });
 const cid = (await meOf(token)).id;
 await seedCh(cid, 'cash = 2000000'); // cash isn't the currency under test; $OMR is earned below
-let r = await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 200000 } });
-assert.equal(r.code, 200, 'swap buys $OMR'); assert(r.body.character.omr > 100, 'holds >100 $OMR');
+// $OMR is GRANTED here, not bought: cash → $OMR retired in tokenomics v2 step 2, so the only ways
+// in are bonds (real ETH) and the family yield. The conservation assertions below all measure a
+// before/after DELTA, so an unledgered seed sits in the baseline and proves nothing false.
+await pool.query(`UPDATE account_persistent SET omr = omr + 1000 WHERE account_id = (SELECT account_id FROM characters WHERE id='${cid}')`);
+let r = await call('GET', '/v1/me', { token });
+assert(r.body.character.omr > 100, 'holds >100 $OMR');
 
 // ── SIWE wallet link (§4 EVM) ──
 assert.equal((await call('POST', '/v1/withdraw', { token, body: { amount: 1 } })).code, 400, 'no wallet + unminted, no withdraw');
@@ -382,7 +386,7 @@ delete process.env.DAILY_CAP_OMR;
 {
   process.env.WITHDRAW_TAX_BPS = '200'; // 2%
   const omr0 = (await meOf(token)).omr;
-  const pool0 = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+  const pool0 = Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance);
   const d0 = await driftOf('$OMR conservation');
   const r = await call('POST', '/v1/withdraw', { token, body: { amount: 10 } });
   assert.equal(r.code, 200, 'tolled withdrawal accepted');
@@ -392,8 +396,10 @@ delete process.env.DAILY_CAP_OMR;
   assert.equal((await meOf(token)).omr, omr0 - 10, 'the account was debited the gross');
   const dev = (await pool.query('SELECT omr FROM dev_fund WHERE id=1')).rows[0];
   assert.equal(Number(dev.omr), 0.1, 'half the toll landed in the dev fund');
-  const pool1 = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
-  assert.equal(Math.round((pool1 - pool0) * 1e6) / 1e6, 0.1, 'half the toll landed in the buyback/yield pool');
+  // (tokenomics v2 step 2) the toll's non-dev half now lands in the FAMILY yield pot, not the
+  // retired individual stake pool — same transfer, both inside omrBuckets, different destination.
+  const pool1 = Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance);
+  assert.equal(Math.round((pool1 - pool0) * 1e6) / 1e6, 0.1, 'half the toll landed in the FAMILY yield pot');
   assert.equal(await driftOf('$OMR conservation'), d0, 'the toll is transfers + a net burn — conservation unmoved');
   // the founder claims the dev fund to an account (a bucket transfer, never a mint)
   const acctId = (await pool.query('SELECT account_id FROM account_persistent LIMIT 1')).rows[0].account_id;

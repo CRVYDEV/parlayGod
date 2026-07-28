@@ -67,7 +67,8 @@ export const SYSTEMS = {
   'the estate': ['estate_tier', 'estate_feature', 'estate_gala', 'estate_gala_attend', 'estate_staff_hire',
     'estate_staff_dismiss', 'estate_wages'],
   'the auction house': ['auction_bid', 'auction_consign', 'auction_consign_bid'],
-  'going legit (rwa)': ['rwa_invest', 'rwa_dividend', 'rwa_family_invest', 'rwa_family_dividend',
+  // ('rwa_dividend' retired with the personal dividend — tokenomics v2 step 2; the family one stays)
+  'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend',
     'rwa_vault_claim', 'dynasty_name'],
   'the megaproject': ['megaproject_give'],
   'landmarks': ['landmark'],

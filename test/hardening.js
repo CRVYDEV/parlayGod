@@ -96,8 +96,11 @@ await seedCh(boss.id, 'energy=200, jail_until=NULL, health=100');
 r = await call('POST', `/v1/streets/${rival.id}/jump`, { token: boss.token });
 assert.equal(r.code, 200, 'jump resolved');
 assert.equal(r.body.bounty || 0, 0, 'a bounty never pays its own poster');
-assert.equal((await call('POST', '/v1/swap', { token: boss.token, body: { direction: 'buy', amount: 1000 } })).code, 200);
-assert.equal((await call('POST', '/v1/stake', { token: boss.token, body: { amount: 0.5 } })).code, 200);
+// Staking is exercised elsewhere; it is skipped here deliberately. This file's whole point is that
+// its economy is EARNED — nothing SQL-seeded — so the §10.4 sweep must come back drift-0. Since
+// tokenomics v2 step 2 there is no in-game way to earn $OMR at this scale (bonds are real ETH), so
+// granting some to stake would put unledgered $OMR in the buckets and break exactly the invariant
+// this scenario exists to prove.
 await seedCh(boss.id, 'muscle=100');
 assert.equal((await call('POST', '/v1/missions/m1', { token: boss.token })).code, 200);
 
@@ -240,7 +243,10 @@ let swapLimited = null;
 for (let i = 0; i < 7; i++) {
   const s = await call('POST', '/v1/swap', { token: swapper.token, body: { direction: 'buy', amount: 500 } });
   if (s.code === 429) { swapLimited = { at: i + 1, res: s }; break; }
-  assert.equal(s.code, 200, `swap ${i + 1} fills`);
+  // the SWAP ITSELF is retired (400), but this is testing the swap RATE BUCKET, which sits in a
+  // preHandler ahead of the handler — so the call still counts against the limiter either way, and
+  // the seventh in a minute must still be throttled. That is the property under test, not the trade.
+  assert.equal(s.code, 400, `swap ${i + 1} reaches the handler (and is refused as retired)`);
 }
 assert(swapLimited && swapLimited.at === 7, 'the seventh swap in a minute → 429');
 process.env.RATE_LIMIT = 'off';

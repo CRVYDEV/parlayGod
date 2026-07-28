@@ -73,14 +73,19 @@ const addsNoDrift = async (name, action, label) => {
 {
   const t = await mk('Dust Seller');
   await seedCh(t.id, 'cash = 100000');
-  await call('POST', '/v1/swap', { token: t.token, body: { direction: 'buy', amount: 1000 } });
+  // The bug: a dust SELL yielded gross < fees, so the seller burned $OMR and was DEBITED cash.
+  // Since tokenomics v2 step 2 the AMM is retired in both directions, so the defect's path no
+  // longer exists at all — the strongest possible form of "fixed". Kept as a record, asserting
+  // the path is gone rather than deleting the finding from history.
   const before = await meOf(t.token);
-  // selling a dust amount would yield gross < fees → net ≤ 0; must be rejected, not paid
-  const r = await call('POST', '/v1/swap', { token: t.token, body: { direction: 'sell', amount: 0.0001 } });
-  assert.equal(r.code, 400, 'dust sale rejected');
+  for (const dir of ['buy', 'sell']) {
+    const r = await call('POST', '/v1/swap', { token: t.token, body: { direction: dir, amount: 0.0001 } });
+    assert.equal(r.code, 400, `the ${dir} side is gone`);
+    assert.equal(r.body.error, 'retired', 'and gone for the right reason');
+  }
   const after = await meOf(t.token);
-  assert(after.cash >= before.cash, 'seller cash was not debited by a dust sale');
-  assert.equal(after.omr, before.omr, 'no $OMR burned on the rejected sale');
+  assert.equal(after.cash, before.cash, 'no cash moved');
+  assert.equal(after.omr, before.omr, 'no $OMR moved');
 }
 
 // ═══ FINDING (social-3): a bounty must never pay ANY of its funders ═══

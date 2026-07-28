@@ -273,26 +273,23 @@ assert.equal((await meOf(token)).bankInTransit, 30000, 'the deposit rides in tra
 await seed("bank_intransit_at = now() - interval '3 hours'");
 assert.equal((await meOf(token)).bankInTransit, 0, 'cleared after the window — out of loot reach');
 
-// ORGANIC AMM DEPTH: with the event fund now holding $OMR, the next buyback carves AMM_LP_BPS of
-// the tax pool into protocol-owned liquidity — cash paired with fund-$OMR at spot, both reserves
-// grow, nothing minted (the file-end $OMR conservation check proves it)
-await seed("cash=4000000, loc='docks', heat=0, safe_until=NULL");
-// prime the event fund: a big taxed wash + a buyback whose LP slice is still unaffordable (all →
-// fund), so the NEXT cycle's fund can pair the $OMR side of the LP deposit
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 1000000 } })).code, 200, 'a big wash to prime the fund');
-await runBuyback(pool, { force: true });
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 100000 } })).code, 200, 'a wash to refill the tax pool');
-const fundPreLp = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
-const ammPreLp = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
-const bb2 = await runBuyback(pool, { force: true });
-assert(bb2 && bb2.lpCash > 0 && bb2.lpOmr > 0, `the buyback carved protocol-owned liquidity (${JSON.stringify(bb2)})`);
-assert(Math.abs(bb2.lpCash - bb2.spentCash * 0.25) < 1e-6, 'the LP slice is AMM_LP_BPS (25%) of the tax pool');
-const ammPostLp = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
-assert(Number(ammPostLp.cash_reserve) > Number(ammPreLp.cash_reserve), 'cash reserve deepened');
-const fundPostLp = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
-assert(Math.abs((fundPostLp - fundPreLp) - (bb2.toFund - bb2.lpOmr)) < 1e-6, 'the fund paid the $OMR side of the pair (net of its buyback share)');
-assert(Number(ammPostLp.cash_reserve) * Number(ammPostLp.omr_reserve) > Number(ammPreLp.cash_reserve) * Number(ammPreLp.omr_reserve) * 0.999,
-  'k (depth) grew — slippage falls with real activity');
+// PROTOCOL-OWNED LIQUIDITY — RETIRED with the AMM (tokenomics v2 step 2). The LP carve paired
+// tax-pool cash with event-fund $OMR into both reserves so depth grew with real activity. With no
+// pool to deepen there is nothing to carve, and the tick's whole job is moving the take to the
+// window (asserted above). The `fund` column keeps its $OMR — it is inside omrBuckets and the
+// file-end conservation check still accounts for it; it simply has no LP pairing to spend on.
+{
+  const fundPre = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
+  const ammPre2 = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+  await pool.query('UPDATE street_tax SET pool = 100000 WHERE id=1');
+  const bbLp = await runBuyback(pool, { force: true });
+  assert.equal(bbLp.lpCash, undefined, 'the tick no longer reports an LP carve — there is no pool to deepen');
+  const ammPost2 = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+  assert.equal(Number(ammPost2.cash_reserve), Number(ammPre2.cash_reserve), 'the retired pool gained no cash');
+  assert.equal(Number(ammPost2.omr_reserve), Number(ammPre2.omr_reserve), 'and no $OMR');
+  assert.equal(Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund), fundPre,
+    'and the event fund paid for nothing');
+}
 
 // ══════════ §10.4 INVARIANTS ══════════
 // (a) cash ledger: a SECOND character that only ever EARNS its cash (never SQL-seeded)
@@ -338,13 +335,18 @@ const held = await pool.query('SELECT COUNT(*) n FROM cars WHERE character_id=$1
 const faucet = Number(boosts.rows[0].n), sinks = Number(melts.rows[0].n) + Number(fences.rows[0].n);
 assert.equal(Number(held.rows[0].n), faucet - sinks, `car conservation: ${faucet} boosted − ${sinks} destroyed == ${held.rows[0].n} held`);
 
-// (c) $OMR conservation — run the real §10.4 job and assert the $OMR check holds after Phase 4:
-//     staking rewards are now a stake_pool TRANSFER (not a mint), the buyback funded the pool, and
-//     the whole $OMR total is still genesis 20,000 (no mint from staking). (Only the $OMR check —
-//     the cash check is intentionally broken by this file's SQL cash-seeds.)
+// (c) $OMR conservation — run the real §10.4 job and assert the $OMR total still reconciles.
+//     Since tokenomics v2 step 2 there is no way to BUY $OMR in-game, so this file grants what it
+//     needs by SQL (200 to the staker, 40 + 10 into the two legacy yield pools to give the merge
+//     something real to move). Those grants are deliberately UNLEDGERED, so they are exactly the
+//     expected drift — asserting the drift equals them is a stronger claim than `ok`, because it
+//     proves every OTHER $OMR movement in the file (the pool merge, the retired-yield paths) is
+//     conservation-neutral rather than merely that the total happens to land somewhere plausible.
+const SQL_OMR_GRANTED = 200 + 40 + 10;
 const { runLedgerInvariants } = await import('../src/invariants.js');
 const omrCheck = (await runLedgerInvariants(pool, { alert: false })).checks.find((x) => x.name === '$OMR conservation');
-assert(omrCheck.ok, `$OMR conservation holds with the stake pool + stake:reward-as-transfer (drift ${omrCheck.drift})`);
+assert(Math.abs(Number(omrCheck.drift) - SQL_OMR_GRANTED) < 1e-6,
+  `$OMR drift is EXACTLY this file's SQL grants (${SQL_OMR_GRANTED}), i.e. every real movement conserves — got ${omrCheck.drift}`);
 const ammFinal = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
 assert(Number(ammFinal.omr_reserve) > 0 && Number(ammFinal.cash_reserve) > 0, 'AMM reserves stay positive');
 
@@ -390,22 +392,13 @@ assert(Math.abs(((await meOf(token)).cash - bizCashPre) - (colUp - 600000)) <= 6
 await seed("cash=2000000, safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', `/v1/business/${bizId}/upgrade`, { token })).body.error, 'safe', "can't upgrade (bank income) from a safehouse");
 await seed("cash=2000000, safe_until=NULL");
-// private laundering — NOT district-gated (works from neon, a non-wash-house), LOWER heat than the street
+// PRIVATE LAUNDERING — RETIRED (tokenomics v2 step 2). Fronts used to be the game's best wash
+// rail: no district gate, a per-tier daily capacity, and LESS heat than the street. Nothing left
+// to wash into, so the whole rail is gone and the Business Empire keeps only its income half.
 await seed("cash=2000000, heat=0, safe_until=NULL, loc='neon'");
-r = await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 40000 } });
-assert.equal(r.code, 200, 'washed cash at your own front, off a wash-house district'); assert(r.body.gotOmr > 0, 'got $OMR');
-const meL = await meOf(token);
-assert(meL.heat >= 8 && meL.heat < CONSTANTS.LAUNDER_HEAT, `own-front laundering draws LESS heat than the street (${meL.heat} < ${CONSTANTS.LAUNDER_HEAT})`);
-// per-tier daily launder cap — tier 2 washes $50k/day, $40k used → only $10k headroom left
-assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 20000 } })).body.error, 'capacity', 'daily launder capacity is enforced');
-assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 10000 } })).code, 200, 'washing the remaining headroom clears');
-// the window resets after 24h
-await pool.query(`UPDATE businesses SET launder_at = now() - interval '25 hours' WHERE character_id='${cid}'`);
-assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 30000 } })).code, 200, 'the daily launder window rolls over after 24h');
-// still an extraction act — blocked from a safehouse (P1.3 shield-not-bunker)
-await seed("safe_until = now() + interval '1 hour'");
-assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 1000 } })).body.error, 'safe', "can't wash money while to ground");
-await seed("safe_until=NULL");
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 40000 } })).body.error,
+  'retired', 'the private wash rail is retired');
+assert.equal((await meOf(token)).heat, 0, 'and it draws no heat, because it does nothing');
 // §10.4: each movement is ledgered under the right reason (spends == sinks, income == faucet)
 const bizBuys = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:buy' AND character_id=$1", [cid])).rows[0].s);
 const bizUp = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:upgrade' AND character_id=$1", [cid])).rows[0].s);
@@ -414,44 +407,21 @@ assert.equal(bizBuys, -250000, 'business:buy is a ledgered cash sink');
 assert.equal(bizUp, -600000, 'business:upgrade is a ledgered cash sink');
 assert.equal(bizInc, col1 + colCap + colUp, 'business:income is a ledgered cash faucet (all three collects)');
 
-// ══════════ BUSINESS EMPIRE step two — the risk layer (scrutiny, raids, shakedowns) ══════════
-// the washes above (40k + 10k + 30k against a 50k/day tier-2 cap) drew (0.8+0.2+0.6)×45 = 72
-// scrutiny onto the front — sim-audit retune: max-throughput washing now CROSSES the threshold
-r = await call('GET', '/v1/business', { token });
-let lm = r.body.businesses.find((b) => b.id === bizId);
-assert(lm.scrutiny >= 65 && lm.scrutiny <= 75, `laundering drew scrutiny onto the front (got ${lm.scrutiny})`);
-assert.equal(lm.raidRisk, true, 'hard washing puts the front above the raid threshold (the risk layer is ALIVE)');
-// scrutiny decays ~1/hr while the front lies quiet
-await pool.query(`UPDATE businesses SET scrutiny=50, scrutiny_at = now() - interval '10 hours' WHERE id='${bizId}'`);
-lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
-assert(Math.abs(lm.scrutiny - 40) <= 1, `scrutiny decays ~1/hr (50 − 10 ≈ ${lm.scrutiny})`);
-// below the threshold, even a FORCED roll never raids (BUSINESS_RAID_P is the test-only env knob)
-process.env.BUSINESS_RAID_P = '1';
-await pool.query(`UPDATE businesses SET scrutiny=30, scrutiny_at=now(), last_collect_at = now() - interval '2 hours' WHERE id='${bizId}'`);
+// ══════════ THE PvE RISK LAYER IS NOW DORMANT — a founder-flagged consequence, asserted ══════════
+// Front scrutiny came ONLY from laundering; an income-only front was already explicitly never
+// raided ("their risk is PvP"). Retire the wash and every front is income-only, so the Bureau-raid
+// machinery is still wired up and simply never fires. This is asserted rather than left as prose
+// because it is exactly the kind of quiet capability loss that is easy to not notice: personal
+// fronts now carry NO PvE risk at all — only shakedown, takeover and the Sacking. If fronts should
+// still draw heat, scrutiny needs a NEW feed, which is content, not a retune (design §7.2).
+process.env.BUSINESS_RAID_P = '1';   // force ANY roll that happens to be reached
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '3 hours' WHERE id='${bizId}'`);
 r = await call('POST', '/v1/business/collect', { token });
-assert(!r.body.raids, 'no raid below the scrutiny threshold');
-assert(r.body.collected > 0, 'income still collects normally');
-// above it, the Bureau's raid seizes ALL pending income + levies a 10%-of-tier-cost fine
-await seed("cash=1000000");
-await pool.query(`UPDATE businesses SET scrutiny=100, scrutiny_at = now() - interval '1 hour', last_collect_at = now() - interval '3 hours' WHERE id='${bizId}'`);
-const cashPreRaid = (await meOf(token)).cash;
-r = await call('POST', '/v1/business/collect', { token });
-assert.equal(r.body.raids?.length, 1, 'the Bureau raided the hot front');
-assert.equal(r.body.raids[0].fine, 60000, 'fined 10% of the tier-2 cost ($60k)');
-assert(r.body.raids[0].seized > 0, 'pending income was seized (never banked, never minted)');
-assert.equal(r.body.collected, 0, 'nothing collected from the raided front');
-assert.equal((await meOf(token)).cash, cashPreRaid - 60000, 'the fine left the pocket');
-assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:raid' AND character_id=$1", [cid])).rows[0].s),
-  -60000, 'business:raid is a ledgered §10.4 cash sink');
-lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
-assert.equal(lm.scrutiny, 0, 'the raid cleared the scrutiny (the heat is off)');
-// the fine reaches the BANK once the pocket is empty (audit F7: banking no longer dodges it)
-await seed("cash=100, bank=1000000");
-await pool.query(`UPDATE businesses SET scrutiny=100, scrutiny_at = now() - interval '1 hour' WHERE id='${bizId}'`);
-r = await call('POST', '/v1/business/collect', { token });
-assert.equal(r.body.raids?.[0]?.fine, 60000, 'second raid fined the full 10% despite an empty pocket');
-const afterBankFine = await meOf(token);
-assert(afterBankFine.cash === 0 && Math.abs(afterBankFine.bank - (1000000 - 59900)) < 2, 'pocket drained first, the bank covered the rest');
+assert(!r.body.raids, 'no raid — with no wash there is no scrutiny to cross the threshold');
+assert(r.body.collected > 0, 'and the income half is untouched');
+let lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert.equal(lm.scrutiny, 0, 'scrutiny sits at zero and has nothing left to raise it');
+assert.equal(lm.raidRisk, false, 'so the front is never at risk from the Bureau');
 delete process.env.BUSINESS_RAID_P;
 await seed("cash=2000000"); // restore the pocket for the gang-founding + shakedown blocks below
 
@@ -519,7 +489,6 @@ assert.equal(biz.cold, true, 'four days unpaid → the front is COLD');
 r = await call('POST', '/v1/business/collect', { token });
 assert.equal(r.body.collected, 0, 'a cold front hands over no take');
 assert.equal(r.body.cold, 1, 'and reports itself cold');
-assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 20000 } })).body.error, 'cold', "a cold front won't wash");
 assert.equal((await call('POST', `/v1/business/${bizId}/upgrade`, { token })).body.error, 'cold', "and won't take an upgrade");
 // paying the pad THAWS it — income flows again (clock was reset by the seed, so a fresh 2h accrues)
 await call('POST', '/v1/business/upkeep', { token });
@@ -544,12 +513,12 @@ await seed("cash=100000, safe_until = now() + interval '1 hour'");
 assert.equal((await call('POST', '/v1/bank/deposit', { token, body: { amount: 1000 } })).body.error, 'safe', 'no deposits from a safehouse (the courier walks)');
 assert.equal((await call('POST', '/v1/business/collect', { token })).body.error, 'safe', 'no collecting the take from a safehouse');
 await seed("safe_until=NULL");
-// D3 — the public wash route is a per-account daily token bucket ($2.6M/day, = the top front tier)
+// D3 — the public wash cap is MOOT since tokenomics v2 step 2: there is no wash to cap. The
+// per-account bucket that bounded it (`wash_used`/`wash_at`) is inert rather than removed —
+// dropping live columns is a migration this change does not need to take on.
 await seed("cash=5000000, heat=0, loc='docks', wash_used=0, wash_at=NULL");
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 2000000 } })).code, 200, 'a big wash inside the daily cap clears');
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 700000 } })).body.error, 'wash_cap', 'the public route caps per face per day');
-await seed("wash_at = now() - interval '25 hours'");
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 700000 } })).code, 200, 'the bucket refills over a day');
+assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 2000000 } })).body.error,
+  'retired', 'the public wash route is gone, so its daily cap has nothing left to bound');
 // D5 — bank interest TAPERS above $10M: full rate on the first $10M, 10% of the rate beyond
 await seed("cash=0, bank=30000000, bank_credit_ms=0, last_accrued_at = now() - interval '4 hours', safe_until=NULL");
 const taperMe = await meOf(token);
@@ -565,32 +534,39 @@ await seed("cash=2000000, loc='docks', heat=0, safe_until=NULL, muscle=5, cunnin
 await pool.query(`UPDATE account_persistent SET omr=200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 const acctOf = async (col) => Number((await pool.query(`SELECT ${col} v FROM account_persistent WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`)).rows[0].v);
 
-// (A) THE LAUNDERER legend — a wash bumps laundered_lifetime (before/after delta; prior blocks laundered too)
+// (A) THE LAUNDERER legend is now a FROZEN historical board. It survives death and still ranks
+// what people washed while the rail existed — retiring a mechanic does not erase the record — but
+// nothing can add to it any more.
+// seeded, because nothing in the game can wash any more — this is exactly the shape of a real
+// database after the migration: a lifetime figure earned while the rail existed, and frozen since.
+await pool.query(`UPDATE account_persistent SET laundered_lifetime = 750000 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 const washed0 = await acctOf('laundered_lifetime');
-r = await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 100000 } });
-assert.equal(r.code, 200, `laundered: ${JSON.stringify(r.body)}`);
-assert.equal((await acctOf('laundered_lifetime')) - washed0, 100000, 'the wash bumped the LAUNDERER legend by exactly the amount');
+assert.equal(washed0, 750000, 'a pre-retirement launderer has a record');
+assert.equal((await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 100000 } })).body.error,
+  'retired', 'no more washing');
+assert.equal(await acctOf('laundered_lifetime'), washed0, 'so the launderer legend cannot grow');
 const meLaund = await meOf(token);
-assert.equal(meLaund.launderer.washed, await acctOf('laundered_lifetime'), 'the view surfaces the launderer legend');
-assert.equal(meLaund.launderer.rank, launderRankOf(meLaund.launderer.washed).name, 'the launderer rank matches the ladder');
+assert.equal(meLaund.launderer.washed, washed0, 'the view still surfaces the frozen legend');
+assert.equal(meLaund.launderer.rank, launderRankOf(meLaund.launderer.washed).name, 'and still ranks it on the ladder');
 
-// (B) THE ACCOUNTANT spec — HALVES the Bureau's scrutiny growth (vs an unspec control)
-await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now(), spec=NULL WHERE id='${bizId}'`);
-await seed("cash=2000000");
-await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 120000 } }); // some throughput → scrutiny
-const scrUnspec = (await meOf(token)).businesses.find((b) => b.id === bizId).scrutiny;
-// specialize accountant + repeat the same wash from a clean slate
-await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'accountant' } });
-await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), launder_used=0, launder_at=now() WHERE id='${bizId}'`);
-await seed("cash=2000000");
-await call('POST', `/v1/business/${bizId}/launder`, { token, body: { amount: 120000 } });
-const scrAcct = (await meOf(token)).businesses.find((b) => b.id === bizId).scrutiny;
-assert(Math.abs(scrAcct - scrUnspec * 0.5) <= 1, `THE ACCOUNTANT halves scrutiny growth (unspec ${scrUnspec} → accountant ${scrAcct})`);
+// (B) THE ACCOUNTANT and THE FIXER are REFUSED, not silently inert. Both acted only on the
+// Bureau-raid layer, whose only feed was laundering — so they buy nothing now, and they cost real
+// $OMR. Leaving them purchasable would be selling a dead effect, which is worse than dormancy.
+for (const dead of ['accountant', 'fixer']) {
+  assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: dead } })).body.error,
+    'retired', `${dead} is refused rather than sold for $OMR it cannot repay`);
+}
+const omrPreSpec = await acctOf('omr');
+// THE FORTRESS still works — hostile takeovers still happen, so its +40 defence is still real
+r = await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fortress' } });
+assert.equal(r.code, 200, 'the fortress is untouched — takeovers still happen');
+assert.equal(await acctOf('omr'), omrPreSpec - BUSINESS_EMPIRE.SPEC_OMR, 'and it charges the $OMR it always did');
 assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:spec' AND currency='omr'")).rows[0].s) <= -BUSINESS_EMPIRE.SPEC_OMR, 'business:spec is a ledgered $OMR burn');
 // gates: a bad spec, and specializing a NON-max-tier front
 assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'nope' } })).body.error, 'bad_spec', 'a bad spec is refused');
 await pool.query(`UPDATE businesses SET tier=2 WHERE id='${bizId}'`);
-assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fixer' } })).body.error, 'not_maxed', 'only a max-tier front can specialize');
+// (fortress, not fixer — the retired specs are refused before the tier is even looked at)
+assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fortress' } })).body.error, 'not_maxed', 'only a max-tier front can specialize');
 await pool.query(`UPDATE businesses SET tier=3 WHERE id='${bizId}'`);
 
 // (C) TYCOON fold-in — a collect bumps the account-level tycoon_earned by exactly the income banked
@@ -649,5 +625,5 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
 const inv3 = await runLedgerInvariants(pool, { alert: false });
 assert(inv3.checks.find((c) => c.name === 'reason vocabulary').ok, `no unknown-reason alarm (${JSON.stringify(inv3.checks.find((c) => c.name === 'reason vocabulary').unknown || [])})`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, swap (+laundering gate/heat), staking (real APY), gear, 12h buyback, ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, private lower-heat laundering + daily cap + window reset + safehouse block, §10.4 faucet/sink ledgering) + step-two risk layer (scrutiny accrual/decay, raid threshold gate, forced raid seizes pending + ledgered fine, shakedown gates/contest/cooldown, owner keeps ~70%) + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no laundering / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the $2.6M/day public wash bucket, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend on a wash + rank/board + agent exclusion, THE ACCOUNTANT spec halving scrutiny + business:spec $OMR burn + not_maxed/bad_spec gates, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, THE RETIRED AMM (both directions + the private wash rail refuse; the pool is left alone), staking (principal returns whole, yield retired to the families), gear, the 12h cash-sink tick (the whole take to the window) + the legacy-pool MERGE (idempotent), ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, §10.4 faucet/sink ledgering) + the step-two PvE risk layer now DORMANT (scrutiny had only one feed and it was laundering, so a front is never raided — asserted, because a quiet capability loss is easy to miss) with shakedown/takeover PvP intact + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend now a FROZEN historical board, THE ACCOUNTANT + THE FIXER specs REFUSED rather than sold for $OMR they can no longer repay while THE FORTRESS still works, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
 await app.close();

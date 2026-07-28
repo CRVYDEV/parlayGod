@@ -9,6 +9,7 @@ process.env.MOD_KEY = 'test-mod-key'; // for the mod-kill used in the directed-p
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
+import { payFamilyYield } from '../src/exchange.js';
 import { runBuyback } from '../src/worker.js';
 import { huntWanted } from '../src/social.js';
 import { familyTaskOf, weekOf, M3, BLACK_MARKET, bustProbOf, TERRITORY_RACKETS, territoryRankOf, territoryBuildCost, PORT } from '../src/rules.js';
@@ -397,11 +398,19 @@ assert(Math.abs((mookMe.cash + mookMe.bank - 500) - mookLedger) <= 1, `earn-only
 const orphans = await pool.query('SELECT COUNT(*) n FROM cars c JOIN characters ch ON ch.id = c.character_id WHERE NOT ch.alive');
 assert.equal(Number(orphans.rows[0].n), 0, 'no cars owned by the dead');
 
-// ── buyback family split (§7.12): standing = tribute + 10,000/war ──
+// ── the family's $OMR share (tokenomics v2 step 2) ──
+// The buyback's $OMR split retired with the AMM — there is nothing to buy $OMR with any more. The
+// FAMILY YIELD replaces it: the pot is fed by $OMR-denominated flows (the exit toll, the RWA invest
+// slice) and pays the top families by SEASONAL standing into their reserve. Same prize, sourced
+// without a market — which is the whole point of severing cash → $OMR.
 const bb = await runBuyback(pool, { force: true });
-assert(bb && bb.toFamilies > 0, 'families got their half');
+assert(bb && bb.toWindow > 0, 'the 12h tick moves the street take to the redemption window');
+assert.equal(bb.toFamilies, undefined, 'and buys no $OMR to split — there is no pool to buy from');
+await pool.query('UPDATE family_yield_pool SET balance = 100 WHERE id=1'); // stand in for the toll/invest feeds
+const fy = await payFamilyYield(pool);
+assert(fy.paid > 0, 'the family yield paid out');
 gA = (await call('GET', `/v1/gangs/${gangA}`, {})).body.gang;
-assert(gA.omrReserve > 0, 'top family reserve funded');
+assert(gA.omrReserve > 0, 'top family reserve funded — by standing, not by a buyback');
 
 // ── websocket (§5.6): live push on the me-channel ──
 await app.listen({ port: 0, host: '127.0.0.1' });
@@ -707,7 +716,9 @@ await seedCh(dave.id, "energy=200, ammo=8000, health=100, loc='docks'"); // stil
 await call('POST', `/v1/streets/${don.id}/search`, { token: dave.token }); // (search itself isn't gated; firing is)
 assert.equal((await call('POST', `/v1/streets/${don.id}/fire`, { token: dave.token, body: { rounds: 6000 } })).body.error, 'safe', "a safe-housed player can't fire (shield, not bunker)");
 assert.equal((await call('POST', `/v1/streets/${don.id}/jump`, { token: dave.token })).body.error, 'safe', "a safe-housed player can't jump");
-assert.equal((await call('POST', '/v1/swap', { token: dave.token, body: { direction: 'buy', amount: 1000 } })).body.error, 'safe', "a safe-housed player can't launder/extract");
+// (the P1.3 safehouse extraction gate had a third leg — laundering — which retired with the AMM
+// in tokenomics v2 step 2; the offence gates above are what remain of shield-not-bunker)
+assert.equal((await call('POST', '/v1/swap', { token: dave.token, body: { direction: 'buy', amount: 1000 } })).body.error, 'retired', 'laundering is gone entirely, safehouse or not');
 // once the safehouse lapses, they're fair game — and the hit draws law HEAT on the shooter
 await seedCh(dave.id, "safe_until = now() - interval '1 minute', loc='docks'");
 await seedCh(don.id, "energy=200, ammo=8000, shoot_cd_until=NULL, heat=0, loc='docks'");

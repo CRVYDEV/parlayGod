@@ -291,19 +291,12 @@ export async function portfolioBoard(ch, client, h) {
     nameCost: PORTFOLIO.DYNASTY_NAME_OMR, invested,
     tier: tier ? { tier: tier.tier, name: tier.name } : null,
     nextTier: nextTier ? { tier: nextTier.tier, name: nextTier.name, min: nextTier.min } : null };
-  // DIVIDENDS — a ~daily $OMR yield on the book, paid from the sink-fed pool (pool-bounded).
-  const now = Date.now();
-  const poolBal = round2(Number((await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0]?.pool || 0));
-  const cd = acct.dividend_at ? Math.max(0, Math.ceil((new Date(acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS - now) / 1000)) : 0;
-  // the dividend accrues on INVESTED PRINCIPAL (Σ cost_omr), not market book — free granted shares
-  // earn nothing (cross-system audit HIGH). Mirror the claimDividend basis here so the estimate is honest.
-  const basis = round2(mine.reduce((a, r) => a + Number(r.cost_omr || 0), 0));
-  const dividend = {
-    pool: poolBal, rateBps: PORTFOLIO.DIVIDEND_DAILY_BPS, basis,
-    estimate: round2(Math.min(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000, poolBal)),
-    claimable: basis > 0 && cd === 0 && poolBal > 0, cooldownSeconds: cd, // pool>0 so the board can't say claimable while the claim throws 'dry'
-  };
-  return { market, portfolio, family, dynasty, dividend };
+  // THE PERSONAL DIVIDEND — RETIRED (tokenomics v2 step 2, design §3). The board deliberately no
+  // longer carries a `dividend` block: advertising a yield that cannot be claimed is worse than
+  // removing it, because a player reads the number and plans around it. The slice of every invest
+  // that used to fill this pool now fills `family_yield_pool`, which pays the top families by
+  // standing into their reserve — so the yield still exists, it just belongs to the organisation.
+  return { market, portfolio, family, dynasty };
 }
 
 // The biggest legit books (a STATUS leaderboard — the hitmen-board precedent). Book value is the

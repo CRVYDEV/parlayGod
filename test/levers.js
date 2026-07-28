@@ -149,11 +149,11 @@ const SIGNED = [
   // TOKENOMICS v2 (the one-way window). OPEN is pinned FALSE deliberately: opening it is a real
   // economic event (it is what severs cash → $OMR), so it must be an explicit edit here, in the
   // same change — not a flag someone flips. FUND_BPS diverts 30% of the buyback the day it opens.
-  ['EXCHANGE.OPEN', false],
+  ['EXCHANGE.OPEN', true],      // OPENED by tokenomics v2 step 2 (the interlock discharged — see BALANCE.md)
   ['EXCHANGE.RATE', 500],
   ['EXCHANGE.MIN_OMR', 1],
   ['EXCHANGE.DAILY_CAP_OMR', 250],
-  ['EXCHANGE.FUND_BPS', 3000],
+  ['EXCHANGE.FUND_BPS', 10000], // the WHOLE street take — with the AMM retired it has nowhere else to go
   // the migration dial — 0 means the buyback splits exactly as before; raising it moves yield from
   // individuals to families and must happen as stake:reward/dividend:omr retire, or it pays twice
   ['FAMILY_YIELD.FUND_BPS', 0],
