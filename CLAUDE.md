@@ -5920,3 +5920,35 @@ are the design's numbers as written; the remaining 6000 keeps the signed 5:3 POL
 rather than zeroing one side. If the Vig slice really is meant to go it is one line
 (`BOND_POL_BPS=6000 BOND_VIG_BPS=0`). Both codices also had a stale "the window is shut right now"
 from step 2 — corrected in the same pass. **Still owed: the step-5 RE-SIM.**
+
+**RED-TEAM over tokenomics v2 steps 2+3 (`AUDIT-tokenomics-v2-steps-2-3.md`).** Step 1 had its own
+five-lens pass and it found a lock cycle **armed by the migration itself** — reachable only once
+`FUND_BPS` was raised off zero, which is exactly what step 2 then did. Steps 2 and 3 had shipped
+without one, so this ran before step 4 goes near `OMR.sol`. **No CRITICAL/HIGH, no §10.4 drift.** The
+central claim was checked at the source rather than by inspecting the retired routes: `omrMints` is
+the enumerated set of everything that can create $OMR (`mission:%`, `prize:omr`, `emission:%`) and
+**none of them takes cash as an input** — there is no path, direct or laundered through a third
+asset, from cash to token supply. Fixed, each mutation-verified: **A1 (MED)** the legacy-pool merge
+was gated on the buyback's CASH due-check, and step 2 had removed every other drain from
+`stake_pool`/`rwa_dividend_pool` — so on a server whose take is quiet, real player-earned $OMR would
+sit stranded forever while **nothing alarmed**, because both pools are inside `omrBuckets` and
+conservation stays exact the whole time the money is unreachable; the merge is now its own worker
+step (`mergeLegacyPools`). **C1 (MED)** `GET /v1/opportunities` — the surface AGENTS.md tells agents
+to POLL — still advertised `Cash→$OMR via POST /v1/swap` and published an AMM spot price for a market
+that no longer trades; an agent has no way to tell a dead niche from a live one except by burning
+calls on it. Replaced with a `redemption` niche carrying the window's live rate and till; AGENTS.md's
+earn-loops table fixed. **The test that should have caught C1 asserted the wrong property** —
+`typeof niches.laundering.ammSpot === 'number'` stayed TRUE for a whole release after the rail
+retired, because a stale niche still has a shape; it now asserts no niche anywhere sends an agent to
+`/v1/swap`. Plus three LOWs: `payStakeRewards` was dead code that read as the live drain for
+`stake_pool` (and A1 is exactly the bug you get from believing it), `STAKE_POOL_BPS`/`AMM_LP_BPS` are
+orphaned but PINNED levers so they are marked DEAD in place rather than deleted (a pin dangling at a
+deleted constant fails the register), and `chain.js` documented the exit toll as `tax:buyback →
+stake_pool` when step 2 had repointed it to `family_yield_pool`. Verified clean: `rwa_revenue` cannot
+be double-fed (PK `(source, ref)`, distinct sources, each idempotent), the window's clamp cannot be
+raced (pool locked before the check, burn after), no cycle around `family_yield_pool` (every other
+writer takes it last), and the whole re-sourcing writes zero ledger rows. Flagged not changed: the
+ops dashboard still shows AMM reserves (the founder's own screen, and the number is real — just no
+longer a price), and `/v1/rules` still lists the two retired business specs (a clean refusal, and
+removing them would erase the record of what an existing `accountant` front is). Suite 57/57 + sim
+drift-0. **The step-5 RE-SIM is unchanged by this pass and still the largest open item.**

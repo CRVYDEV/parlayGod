@@ -290,7 +290,17 @@ await call('POST', '/v1/character', { token: agtToken, body: { name: 'Machine Ma
 const opp = (await call('GET', '/v1/opportunities', { token: agtToken })).body;
 assert(opp.niches && Array.isArray(opp.niches.arbitrage) && opp.niches.arbitrage.length > 0, 'the opportunity board computes cross-district arbitrage spreads');
 assert(opp.niches.arbitrage[0].buyIn && opp.niches.arbitrage[0].sellIn && opp.niches.arbitrage[0].spread >= 0, 'each arbitrage row names a buy/sell district + spread');
-assert(Array.isArray(opp.opportunities) && opp.counts && typeof opp.niches.laundering.ammSpot === 'number', 'the board carries the ranked opportunities + AMM spot');
+assert(Array.isArray(opp.opportunities) && opp.counts, 'the board carries the ranked opportunities');
+// (red-team C1) This asserted `niches.laundering.ammSpot` was a number — which stayed TRUE for a
+// whole release after cash → $OMR was retired, because a stale niche still has a shape. Presence is
+// not the property that matters here. What matters is that the board an agent is told to POLL never
+// points at a route that only ever answers `retired`: an agent has no way to tell a dead niche from
+// a live one except by burning calls on it.
+assert(!opp.niches.laundering, 'the retired laundering niche is gone, not merely reshaped');
+assert(opp.niches.redemption && typeof opp.niches.redemption.rate === 'number',
+  'and the window that replaced it is what the board advertises');
+assert(!JSON.stringify(opp.niches).includes('/v1/swap'),
+  'no niche sends an agent to a retired route — the whole point of the board is that it is actionable');
 const agLb = (await call('GET', '/v1/leaderboard/agents', { token: agtToken })).body;
 assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine Malone'), 'the agent leaderboard lists agent_flag players');
 // audit: liquid is published as a BAND, not an exact figure (so a hunter can't compute precise kill-EV)

@@ -347,19 +347,11 @@ export function stake(ch, amount, client, h) {
   h.acct.staked = Number(h.acct.staked) + a;
   return { ok: true, staked: a }; // internal move, no faucet/sink
 }
-// Phase 4 (backed emission): staking rewards are paid FROM the funded stake_pool (a transfer, no
-// longer a mint), capped by the pool balance; the unpaid remainder stays PENDING (no forfeit),
-// payable once the buyback refills the pool. Returns the amount actually paid.
-async function payStakeRewards(client, h, rewards) {
-  if (!(rewards > 0)) return 0;
-  const p = (await client.query('SELECT balance FROM stake_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const paid = Math.floor(Math.min(rewards, Number(p.balance)) * 1e6) / 1e6;
-  if (!(paid > 0)) return 0;
-  await client.query('UPDATE stake_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [paid]);
-  h.acct.omr = Number(h.acct.omr) + paid;
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: paid, reason: 'stake:reward' }); // transfer (pool→acct), not a mint
-  return paid;
-}
+// (tokenomics v2 step 2, red-team A2) `payStakeRewards` lived here — the Phase-4 backed payout that
+// moved $OMR out of `stake_pool`. Both its callers retired with individual yield, leaving it
+// unreachable, and it MATTERED that it was gone rather than merely unused: it read as the live drain
+// for a pool that in fact has only one exit now, the legacy-pool merge on the worker tick. Deleted so
+// nobody reasons from it. `stake:reward` stays in the §10.4 vocabulary — historical rows are real.
 export async function unstake(ch, client, h) {
   const staked = Number(h.acct.staked), rewards = Number(h.acct.rewards);
   if (staked <= 0 && rewards <= 0) throw new GameError('none', 'Nothing staked.');

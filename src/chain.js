@@ -187,7 +187,7 @@ export async function requestWithdraw(pool, accountId, amount, toAddress) {
 
     // debit the in-game ledger NOW so the balance can't be double-spent while queued.
     // §10.4 shape: the NET is the burn (it leaves the game on-chain); the toll is two TRANSFERS —
-    // tax:dev → the dev_fund bucket, tax:buyback → stake_pool (both inside omrBuckets, so
+    // tax:dev → the dev_fund bucket, tax:buyback → family_yield_pool (both inside omrBuckets, so
     // conservation nets 0; 'tax:' sits in the vocabulary in neither the mint nor the burn term).
     await client.query('UPDATE account_persistent SET omr = omr - $2 WHERE account_id=$1', [accountId, amt]);
     await ledger(client, { accountId, currency: 'omr', amount: -net, reason: 'withdraw:omr' }); // legal §10.4 burn (leaves the game)

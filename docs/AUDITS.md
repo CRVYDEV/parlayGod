@@ -74,6 +74,7 @@ record of what was decided, not this file.
 | `AUDIT-world-frontier.md` | 2026-07-21 | 70 | AUDIT — World step four (THE FRONTIER MADE REAL) |
 | `AUDIT-world-occupation.md` | 2026-07-21 | 70 | AUDIT — World step five: THE OCCUPATION (NPC-held core districts) |
 | `AUDIT-tokenomics-v2.md` | 2026-07-27 | 112 | AUDIT — Tokenomics v2 step 1 (THE EXCHANGE + THE FAMILY YIELD) |
+| `AUDIT-tokenomics-v2-steps-2-3.md` | 2026-07-28 | 150 | RED-TEAM — Tokenomics v2 steps 2+3 (the retirements, the rewritten buyback, the re-sourced float) |
 | `AUDIT-full-sweep.md` | 2026-07-27 | 205 | AUDIT — the full line-by-line sweep (7 mechanical lenses over the whole tree) |
 | `AUDIT-world-uprising.md` | 2026-07-22 | 79 | AUDIT — World step six (THE UPRISING) |
 

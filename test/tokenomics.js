@@ -241,6 +241,42 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
   assert.ok(b.families[0].shareBps > 0, 'the top seat draws the biggest share');
 }
 
+// ── THE LEGACY POOL MERGE (red-team A1) ──────────────────────────────────────────────────────────
+// `stake_pool` and `rwa_dividend_pool` paid individual yield. Both payouts retired in step 2, and
+// with them went the ONLY things that drained those pools — so whatever they still hold has exactly
+// one way out: this merge. It used to run inside `runBuyback`, which returns early unless the CASH
+// pool is non-empty and the 12h timer is due, so a $OMR migration was gated on an unrelated cash
+// condition. On a server whose take is quiet that migration never happens and real, player-earned
+// $OMR sits stranded — and NOTHING alarms, because both pools are inside `omrBuckets` and
+// conservation stays exact the whole time it is unreachable.
+{
+  const { mergeLegacyPools, runBuyback } = await import('../src/worker.js');
+  await pool.query('UPDATE stake_pool SET balance=40 WHERE id=1');
+  await pool.query('UPDATE rwa_dividend_pool SET pool=10 WHERE id=1');
+  sqlOmr += 50;
+  const potBefore = (await familyYieldPool(pool)).balance;
+
+  // the condition that used to hide it: an empty cash pool. The buyback correctly does nothing…
+  await pool.query('UPDATE street_tax SET pool=0 WHERE id=1');
+  assert.equal(await runBuyback(pool, { force: true }), null, 'no take, no buyback — that part is right');
+
+  // …but the $OMR must still find its way home, because nothing else can move it.
+  const m = await mergeLegacyPools(pool);
+  assert.equal(m?.merged ?? 0, 50,
+    'both legacy pools must drain regardless of what the CASH pool is doing — a $OMR migration '
+    + 'gated on the street take being non-empty simply never runs on a quiet server, and nothing '
+    + 'alarms because the stranded $OMR is still inside omrBuckets');
+  assert.equal(Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance), 0);
+  assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0);
+  assert.equal((await familyYieldPool(pool)).balance, potBefore + 50, 'and lands in the family pot');
+
+  // a DRAIN, so a second run is a no-op — which is what makes running it every tick safe
+  assert.equal(await mergeLegacyPools(pool), null, 'draining an empty pool moves nothing');
+  const inv = await runExchangeInvariants(pool);
+  assert.ok(inv.checks.find((c) => c.name === 'family yield balance').ok,
+    'the pot identity survives the merge — it is a transfer, not a mint');
+}
+
 // ── STEP 3: THE FLOAT, RE-SOURCED ────────────────────────────────────────────────────────────────
 // The design's §6 gap, in one sentence: the DEX tax scales with TRADING VOLUME, and a one-way
 // conversion is designed to produce a quiet market — so a tax-only float grows fastest exactly when

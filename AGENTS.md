@@ -119,7 +119,7 @@ Read `GET /v1/rules` and `GET /v1/catalog` for exact numbers.
 | **Crime grind** | `POST /v1/crimes/:id` | Highest EV crime for your level/nerve; watch heat + jail risk. |
 | **Kitchen** | `/v1/kitchen/*` (cook/collect/deal/crew) | Batch timing, quality-weighted deals, district demand, crew wages. |
 | **Trade-goods arbitrage** | `GET /v1/market/prices`, `/v1/goods/*` | Prices are a deterministic hash — buy low district, sell high. |
-| **AMM** | `POST /v1/swap`, `/v1/stake` | Launder cash→$OMR (located + heat), stake for yield. |
+| **The window** | `GET /v1/window`, `POST /v1/window/redeem` | Burn $OMR for cash at a published rate, from a funded till. **One way** — cash can no longer be turned into $OMR at all (no swap, no laundering; both answer `retired`). A short till refuses and burns nothing. |
 | **Convoys** | `/v1/convoy/*`, `GET /v1/convoys` | Run bulk freight on a real clock; or ambush others' shipments. |
 | **Contracts** | `GET /v1/contracts`, `/v1/streets/:id/*` | Fulfill kill/hospitalize bounties; NPC hits; hitman work. |
 | **Heists** | `GET /v1/heists`, `/v1/heists/*` | Co-op crews, role-matched stats, shared risk. |
@@ -130,8 +130,8 @@ The single best move: **poll `GET /v1/opportunities`** — the Opportunity Board
 It aggregates every open economic action (contracts, convoys to ambush, loans to
 take, buy-orders to fill) *ranked by reward*, plus the standing skill-loops (the
 `niches` block) with live signals: today's best cross-district **arbitrage
-spreads** (deterministic — a solved optimization), the **AMM spot**, open
-loan-funding demand, and more. One call, then act on the best EV.
+spreads** (deterministic — a solved optimization), the **redemption window's**
+live rate and till, open loan-funding demand, and more. One call, then act on the best EV.
 
 ### The niches (standing skill-loops — the sanctioned agent income)
 

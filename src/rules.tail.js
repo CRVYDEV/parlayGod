@@ -93,6 +93,9 @@ export const CONSTANTS = {
   // routed to the staking reward pool (cash sinks → buyback → yield), so staking pays from a funded
   // pool instead of minting. APY stays the CEILING (you never earn more than the target rate; a thin
   // pool only throttles it down). New/tunable — sim + founder sign-off.
+  // DEAD as of tokenomics v2 step 2 (red-team A3): the 12h buyback no longer acquires any $OMR, so
+  // nothing reads this. Kept declared because it is a PINNED lever (test/levers.js) and a pin
+  // dangling at a deleted constant fails the register — but tuning it now does nothing at all.
   STAKE_POOL_BPS: 3000,
   // Business Empire — a personal front's income accrues lazily up to this bound (collected on
   // demand → pocket cash), so an uncollected business can't hoard unbounded income (the
@@ -142,6 +145,7 @@ export const CONSTANTS = {
   // OWNED LIQUIDITY — cash paired with event-fund $OMR at spot, deposited into BOTH reserves
   // (a §10.4 bucket transfer, fund → amm; nothing minted, price unmoved, depth compounds with
   // real activity). Skipped (falls through to the buyback) when the fund can't match the pair.
+  // DEAD as of tokenomics v2 step 2 (red-team A3) — same reason: there is no AMM to deepen.
   AMM_LP_BPS: 2500,
   // KITCHEN ON-RAMP (sim-audit): the entry-tier margin measured ~$243/cycle — the first risky
   // loop barely beat petty crime. Rank-0 dealers get the CORNER PREMIUM on gross (+50%): small
