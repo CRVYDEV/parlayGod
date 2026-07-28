@@ -219,8 +219,15 @@ assert.equal((await call('POST', `/v1/heists/${h6}/execute`, { token: hank.token
 await pool.query("UPDATE crew_heists SET status='abandoned' WHERE status='planning'");
 await pool.query('DELETE FROM crew_heist_members');
 const enOf = async (id) => Number((await pool.query(`SELECT energy FROM characters WHERE id='${id}'`)).rows[0].energy);
-const reset = async () => { await seedCh(hank.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=100000, heist_loot=0");
-  await seedCh(cara.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=1000"); };
+// Re-pins RESPECT as well as the rest. That matters: the loop above pays respect on every score,
+// so by here hank had drifted 5760 -> ~6730, i.e. level 25 -> 26, which lifts his energy CAP from
+// exactly 100 to 102. Seeded at 100 he then sits BELOW the cap, so §7.1's continuous regen (which
+// fires whenever >=1s has passed) leaks into the exact-equality energy assertion below — invisible
+// standalone, where the calls run in milliseconds, but a real intermittent failure under full-suite
+// load. Pinned back to lvl 25 the seeded 100 IS the cap, so Math.min clamps regen to zero however
+// long the gap: deterministic by construction rather than by racing the clock.
+const reset = async () => { await seedCh(hank.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=100000, heist_loot=0, respect=5760");
+  await seedCh(cara.id, "jail_until=NULL, heist_at=NULL, energy=100, cash=1000, respect=5760"); };
 
 // ── CASING PHASE: spend energy to case (once each), the board reflects it, no double-case ──
 await reset();
