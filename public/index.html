@@ -473,6 +473,17 @@
     border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
   #tabs button.on::after { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent); }
   #tabbodies h2::before, #tabbodies h3::before { background: var(--accent); }
+  /* district plates on the City tab's arbitrage board. Same recipe as the landing pills — art in
+     ::before, a directional scrim in ::after, content lifted above both — because the same failure
+     applies: a photo behind a price reading is worthless if you can't read the price. */
+  .distcard { position: relative; overflow: hidden; }
+  .distcard::before { content: ''; position: absolute; inset: 0; z-index: 0;
+    background-image: var(--art); background-size: cover; background-position: center;
+    filter: saturate(.5) brightness(.7) contrast(1.05); opacity: .55; }
+  .distcard::after { content: ''; position: absolute; inset: 0; z-index: 0;
+    background: linear-gradient(100deg, var(--panel) 0%, var(--panel) 26%,
+      color-mix(in srgb, var(--panel) 78%, transparent) 58%, color-mix(in srgb, var(--panel) 36%, transparent) 100%); }
+  .distcard > * { position: relative; z-index: 1; }
 
   /* ── THE SCREEN PLATE ──────────────────────────────────────────────────────────
      A header band per screen, carrying that system's own art and — for the first time —
@@ -1720,6 +1731,12 @@
     wire: 'interior-wire', family: 'interior-family', portfolio: 'interior-legit',
     estate: 'interior-estate', store: 'interior-store',
   };
+  // the six core districts have plates too — used on the landing pills, and on the City tab's Trade
+  // Winds board so the arbitrage map is a map rather than six identical grey boxes.
+  const DISTRICT_ART = {
+    docks: 'district-docks', neon: 'district-neon', cathedral: 'district-cathedral',
+    foundry: 'district-foundry', canal: 'district-canal', brick: 'district-brick',
+  };
   // which labeled cluster a tab belongs to (drives the per-screen accent + the mobile bottom nav)
   const groupOf = (id) => { for (const [g, ids] of TAB_GROUPS) if (ids.includes(id)) return g ? g.toLowerCase() : id; return ''; };
   const BNAV = [ // thumb-bar stops: the 7 group stops (full mode) + garage/city (simple mode only)
@@ -2578,7 +2595,7 @@
         <div class="d">goods run <b>cheapest in ${cheap[0]}</b> (×${cheap[1].toFixed(2)}) and <b>richest in ${rich[0]}</b> (×${rich[1].toFixed(2)})
         — a ~${spreadPct}% spread. Buy low there, haul, sell high here. Prices hold until midnight.</div></div>` : ''}
       <div class="grid">${shocks.map(([d, x]) =>
-        `<div class="card"><span class="t">${d}</span><div class="d">${x < 0.97 ? '<span style="color:var(--ok)">cheap — buy here</span>' : x > 1.03 ? '<span style="color:var(--gold, #d4af37)">rich — sell here</span>' : 'fair prices'} (×${x.toFixed(2)})</div></div>`).join('')}</div>
+        `<div class="card distcard"${DISTRICT_ART[d] ? ` style="--art:url(/art/${DISTRICT_ART[d]}.jpg)"` : ''}><span class="t">${d}</span><div class="d">${x < 0.97 ? '<span style="color:var(--ok)">cheap — buy here</span>' : x > 1.03 ? '<span style="color:var(--gold, #d4af37)">rich — sell here</span>' : 'fair prices'} (×${x.toFixed(2)})</div></div>`).join('')}</div>
       <h2 style="margin-top:12px">The Forecast <span class="d" style="font-size:11px">— the next days are knowable. Plan around them.</span></h2>
       <div class="grid">${(c.forecast || []).map((f) => {
         const dd = f.day - c.day;

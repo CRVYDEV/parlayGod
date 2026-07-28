@@ -3679,6 +3679,20 @@ measures the actual claim as a DELTA against a normal ref (clamped ⇒ grows ~48
 result), which is the same trap `tools/mobile.js` and `tools/scale.js` each sprang. Suite green, sim
 drift-0. Art direction, the prompts, and what went wrong in the real runs: `docs/ART.md`.
 
+**Step two — the referral landing and the arbitrage board.** `GET /u/:name` is the page every share
+link points at, and it was a flat gradient that showed a stranger their friend's stats and a button
+while **never saying what the game is** — that copy only existed on the not-found fallback, so the
+one visitor who most needed it was the one who never saw it. It now carries the hero plate as a
+backdrop plus a short what-this-is paragraph, on the FOUND path only (rendering it on both duplicated
+the fallback's own line). The backdrop is **root-relative on purpose**, unlike the `og:image` two
+lines above it: og:image is fetched by a crawler with no page context so it must be absolute off
+`baseUrl`, but the backdrop is fetched by the visitor's own browser from the origin it is already on,
+where a relative path cannot point at a different host and works whether or not `PUBLIC_URL` is set.
+The first cut used `baseUrl` for both and the backdrop simply failed to load. The City tab's Trade
+Winds board — the arbitrage map, six districts that were six identical grey boxes — now carries the
+six district plates on the same art-in-`::before` / scrim-in-`::after` recipe, since the same failure
+applies: a photo behind a price reading is worthless if you cannot read the price.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions
