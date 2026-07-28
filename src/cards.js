@@ -152,9 +152,22 @@ export function profilePage(d, baseUrl, ref) {
 <meta property="og:image" content="${esc(cardUrl)}"><meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@${esc(SOCIAL_X_HANDLE)}"><meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}"><meta name="twitter:image" content="${esc(cardUrl)}">
-<style>:root{color-scheme:dark}body{margin:0;background:radial-gradient(120% 90% at 50% -10%,#16181f,#0c0d11 60%);
-  color:${INK};font-family:'Helvetica Neue',Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:32px}
-.wrap{max-width:780px;width:100%;text-align:center}
+<style>:root{color-scheme:dark}body{margin:0;background:#0c0d11;
+  color:${INK};font-family:'Helvetica Neue',Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:32px;position:relative}
+/* THE BACKDROP. This page is the referral LANDING — every share link points here — so it was the one
+   surface where a flat gradient cost real conversion.
+   ROOT-RELATIVE on purpose, unlike og:image above. og:image is fetched by a CRAWLER with no page
+   context, so it has to be absolute off baseUrl; this is fetched by the VISITOR'S browser from the
+   origin it is already on, so a relative path is strictly more robust — it works whether or not
+   PUBLIC_URL happens to be set, and cannot point at a different host than the one serving the page.
+   If the file is ever missing the scrim below still stands on its own and nothing breaks. */
+body::before{content:'';position:fixed;inset:0;z-index:-2;
+  background:url('/art/hero-poster.jpg') center 62%/cover no-repeat;opacity:.5}
+body::after{content:'';position:fixed;inset:0;z-index:-1;
+  background:radial-gradient(120% 90% at 50% 40%,rgba(12,13,17,.70),rgba(12,13,17,.93) 62%,#0c0d11 100%)}
+.wrap{max-width:780px;width:100%;text-align:center;position:relative}
+.what{color:${DIM};font-size:13.5px;line-height:1.65;max-width:56ch;margin:20px auto 0}
+.what b{color:${GOLD};font-weight:400}
 .card{width:100%;border:1px solid #2a2d37;border-radius:6px;overflow:hidden;box-shadow:0 20px 60px #0009;margin-bottom:26px}
 .card svg{display:block;width:100%;height:auto}
 h1{font-family:Georgia,serif;font-size:15px;letter-spacing:.3em;color:${GOLD};text-transform:uppercase;margin:0 0 18px}
@@ -167,5 +180,8 @@ h1{font-family:Georgia,serif;font-size:15px;letter-spacing:.3em;color:${GOLD};te
 <div class="card">${inline}</div>
 <a class="enter" href="${esc(enter)}">ENTER THE CITY →</a>
 <p class="sub">${d.found ? `You're looking at ${esc(d.name)}'s sheet. Start your own street — free, no wallet needed${ref || d.name ? `, and ${esc(ref || d.name)} gets credit for bringing you in.` : '.'}` : 'A noir mob RPG — build a family, run the rackets, survive the street.'}</p>
+${d.found ? `<p class="what">A noir mafia RPG. Pull jobs, run a kitchen, take turf, and put a rival in the river —
+or <b>go legit</b> and die in bed. <b>Death is real</b>: your street dies, but the bloodline carries on.
+Everything runs on one honest ledger, and the city never stops moving.</p>` : ''}
 </div></body></html>`;
 }
