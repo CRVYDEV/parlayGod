@@ -139,6 +139,29 @@
   }
   .card.liveshot { border-color: var(--blood); }
   @media (prefers-reduced-motion: reduce) { .card.threat, .card.liveshot { animation: none; } }
+  /* THE REVEAL — outside the tab, so the re-render that follows a result can't destroy it */
+  #reveal { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%);
+    z-index: 2500; pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #reveal.on { opacity: 1; }
+  .rv-dice { display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(180deg, rgba(20,18,14,.96), rgba(10,9,7,.96));
+    border: 1px solid var(--line2); border-radius: var(--r-lg); padding: 14px 20px;
+    box-shadow: var(--shadow-pop), 0 0 40px rgba(0,0,0,.7); }
+  .rv-dice .die { min-width: 44px; padding: 8px 6px; text-align: center; font-size: 30px; line-height: 1;
+    color: #16130c; background: linear-gradient(180deg, #efe9da, #ddd5c2); border-radius: 5px;
+    box-shadow: 0 3px 7px rgba(0,0,0,.55); font-variant-numeric: tabular-nums;
+    animation: tumble .85s var(--ease) both; }
+  .rv-dice b { font-size: 17px; letter-spacing: 3px; color: var(--neon); margin-left: 8px;
+    animation: fadeIn .3s .85s both; }
+  .rv-dice.win b { color: var(--ok); } .rv-dice.lose b { color: var(--bad); }
+  .rv-dice.win { border-color: var(--ok); box-shadow: var(--shadow-pop), 0 0 40px rgba(99,179,113,.3); }
+  .rv-dice.lose { border-color: var(--blood); box-shadow: var(--shadow-pop), 0 0 40px rgba(192,57,43,.25); }
+  @keyframes tumble {
+    0%   { transform: rotate(-140deg) scale(.4); opacity: 0; }
+    60%  { transform: rotate(20deg) scale(1.15); opacity: 1; }
+    100% { transform: none; opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { #reveal { display: none; } }
   /* the bottle — armed reads as armed */
   .nosbtn.armed { color: #ffe9a8; border-color: var(--neon);
     background: linear-gradient(180deg, #3a2c10, #241a08);
@@ -1210,6 +1233,33 @@
       }
       if (box) box.appendChild(node);          // moves it out of root and into the open card
     }
+  }
+
+  // ── THE REVEAL ─────────────────────────────────────────────────────────────────
+  // Dice, a hand, a race — the moments where the DRAW is the drama. Every handler here
+  // calls renderX() straight after the result, which replaces the tab's whole innerHTML,
+  // so anything drawn INTO the tab is destroyed before it can play. The reveal therefore
+  // lives outside the tab, on <body>, where a re-render can't reach it.
+  let revealEl = null;
+  function reveal(html, hold = 1400) {
+    if (REDUCED) return;                                  // off means off
+    if (!revealEl) { revealEl = el('<div id="reveal"></div>'); document.body.appendChild(revealEl); }
+    revealEl.innerHTML = html;
+    revealEl.classList.remove('on'); void revealEl.offsetWidth; revealEl.classList.add('on');
+    clearTimeout(revealEl._h);
+    revealEl._h = setTimeout(() => revealEl.classList.remove('on'), hold);
+  }
+  // THE PASS LINE. The server sends `rolls` — the come-out roll and then every roll chasing
+  // the point — and the client threw all of it away for a one-line toast. Note it sends
+  // TOTALS, not two dice: rendering a pair would mean inventing which faces came up, which is
+  // not something to fabricate on a gambling screen. The sequence is the real story anyway.
+  function revealRoll(rolls, point, won) {
+    if (REDUCED || !rolls?.length) return;
+    const seq = rolls.slice(-6);                          // a long point chase truncates from the front
+    reveal(`<div class="rv-dice ${won ? 'win' : 'lose'}">
+      ${seq.map((r, i) => `<span class="die" style="animation-delay:${i * .1}s">${r}</span>`).join('')}
+      <b>${won ? 'PASS' : point && rolls[rolls.length - 1] === 7 ? 'SEVEN OUT' : 'NO DICE'}</b></div>`,
+      1200 + seq.length * 110);
   }
 
   // one place that turns a spec into sound, light and motion
@@ -2730,8 +2780,10 @@
   // ── START HERE: the guided First-Week funnel — the new-player on-ramp over the /v1/onboard board ──
   async function renderStart() {
     const t = $('#tab-start');
-    const ob = (await api('GET', '/v1/onboard')).body || { tasks: [], total: 0, claimed: 0 };
-    const sw = (await api('GET', '/v1/social')).body || { tasks: [] };
+    // two serial round trips before a single pixel painted — the tab showed nothing for both
+    const [obR, swR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social')]);
+    const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
+    const sw = swR.body || { tasks: [] };
     // task → [tab to jump to, the coaching line] for the not-yet-done "do it" button
     const go = {
       ob_crime: ['streets', 'Pull any job on the Streets'],
@@ -2745,11 +2797,14 @@
     // the single most actionable step: a reward that's ready to claim, else the first thing to go do
     const next = ob.tasks.find((x) => !x.claimed && x.ready) || ob.tasks.find((x) => !x.claimed && !x.social) || ob.tasks.find((x) => !x.claimed);
     t.innerHTML = `
-      <h2>The City Standing <span class="d" style="font-size:11px">— one score across everything you do. Blood, Empire, Power, Legit, Hustle, Honor. This is who's actually winning.</span></h2>
-      <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>
+      <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
+           at 0% and a leaderboard of strangers, with the checklist (the actual point) pushed below.
+           It leads only once the checklist is behind you; before that it's one honest line. -->
+      ${ob.allDone ? `<h2>The City Standing <span class="d" style="font-size:11px">— one score across everything you do. Blood, Empire, Power, Legit, Hustle, Honor. This is who's actually winning.</span></h2>
+      <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
       <h2>Make Your Bones <span class="d" style="font-size:12.5px">(${ob.claimed}/${ob.total} done — the first week pays cash to learn the ropes)</span></h2>
       ${!ob.allDone && next ? `<div id="coach"><div class="cl">▸ DO THIS NEXT: ${next.name}</div><div class="ch">${next.ready ? 'The reward\'s waiting — claim it below.' : next.desc}</div>
-        ${next.ready ? `<button class="act" data-obclaim="${next.id}" style="padding:5px 12px;font-size:12.5px">claim ${reward(next.reward)}</button>` : `<button class="act" data-obgo="${next.id}" style="padding:5px 12px;font-size:12.5px">${(go[next.id] || [, 'go do it'])[1]} →</button>`}</div>` : ''}
+        ${next.ready ? `<button class="act prime" data-obclaim="${next.id}" style="padding:5px 12px;font-size:12.5px">claim ${reward(next.reward)}</button>` : `<button class="act" data-obgo="${next.id}" style="padding:5px 12px;font-size:12.5px">${(go[next.id] || [, 'go do it'])[1]} →</button>`}</div>` : ''}
       ${ob.allDone ? `<div class="card" style="border-color:var(--neon)"><span class="t">✓ THE FIRST WEEK IS DONE</span>
         <div class="d">you've made your bones — the city's yours to take. this list is behind you now.</div></div>` : `
         <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:6px">Work down the list. Green means the reward is waiting — claim it. Grey means do the thing first; tap it to jump there.</div>`}
@@ -2760,10 +2815,13 @@
           <div class="d">${x.desc} · pays ${reward(x.reward)}</div>
           ${x.claimed ? ''
             : x.social ? `<a href="${x.social}" target="_blank" rel="noopener noreferrer"><button class="act">open</button></a> <button class="act" data-obclaim="${x.id}">claim</button>`
-            : x.ready ? `<button class="act" data-obclaim="${x.id}">claim reward</button>`
+            : x.ready ? `<button class="act prime" data-obclaim="${x.id}">claim reward</button>`
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+
+      ${!ob.allDone ? `<h2 style="margin-top:14px">The City Standing <span class="d" style="font-size:11px">— where you'll sit once you've made your bones</span></h2>
+      <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
 
       <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:11px">— daily: share OMERTÀ for petty cash. Your code is your name; a recruit who sticks pays you real cash + $OMR</span></h2>
       ${!sw.enabled ? '<div class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:4px">Reward payouts go live soon — but sharing still brings in new blood (and referral cash) right now.</div>' : ''}
@@ -3225,7 +3283,12 @@
     // Grouping is done here rather than in the template because the games are added and reordered
     // constantly, and a structural pass over the rendered DOM can't fall out of sync with them.
     feltify(t);
-    t.querySelector('#dice-go').onclick = () => act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
+    // the roll is drawn OUTSIDE the tab (see reveal()) — this handler re-renders the Den right
+    // after, and anything drawn into the tab would be destroyed before it could play
+    t.querySelector('#dice-go').onclick = async () => {
+      const r = await act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
+      if (r.code < 400) revealRoll(r.body?.rolls, r.body?.point, r.body?.win);
+    };
     t.querySelector('#num-go').onclick = () => act('POST', '/v1/casino/numbers', { pick: Number(t.querySelector('#num-pick').value), amount: Number(t.querySelector('#num-amt').value) });
     t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
     t.querySelector('#fight-b').onclick = () => act('POST', '/v1/casino/fight', { side: 'b', amount: Number(t.querySelector('#fight-amt').value) });
