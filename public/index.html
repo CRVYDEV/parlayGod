@@ -115,9 +115,15 @@
   #sheet .money.tick-down { animation: tickDown .9s var(--ease); }
   @keyframes tickUp { 0% { color: var(--ok); transform: translateY(-2px); } 100% { color: var(--neon); transform: none; } }
   @keyframes tickDown { 0% { color: var(--bad); transform: translateY(2px); } 100% { color: var(--neon); transform: none; } }
-  #sheet .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-    margin: 4px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
-  #sheet .row .k { color: var(--dim); font-size: 13.5px; }
+  /* .row was scoped to #sheet ONLY, but seven renderers use it (races, boxing, stable, portfolio…),
+     where it had no flex and no justify-content — the Circuit tiers, the Garage and the Strip all
+     collapsed into run-on inline text. The label/value pair is the shape; the sheet keeps its own
+     type sizes below. */
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .row .k { color: var(--dim); }
+  #sheet .row { font-size: 14px; }
+  #sheet .row .k { font-size: 13.5px; }
   .bar { height: 10px; background: #0d0d13; border-radius: 6px; overflow: hidden; margin: 4px 0 11px;
     box-shadow: inset 0 1px 3px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.03); }
   .bar i { display: block; height: 100%; border-radius: 6px;
@@ -125,6 +131,52 @@
     box-shadow: 0 0 10px var(--neon-soft); }
   .bar.health i { background: linear-gradient(90deg, #3e7a4c, var(--ok)); box-shadow: 0 0 10px rgba(99,179,113,.18); }
   .bar.heat i { background: linear-gradient(90deg, #7e2519, var(--blood)); box-shadow: 0 0 10px rgba(192,57,43,.22); }
+  /* THREAT — the two cards that mean someone is coming for you. They breathe; nothing else does. */
+  .card.threat, .card.liveshot { animation: threatBreath 2.6s ease-in-out infinite; }
+  @keyframes threatBreath {
+    0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
+    50%      { box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 0 18px rgba(192,57,43,.28); }
+  }
+  .card.liveshot { border-color: var(--blood); }
+  @media (prefers-reduced-motion: reduce) { .card.threat, .card.liveshot { animation: none; } }
+  /* the bottle — armed reads as armed */
+  .nosbtn.armed { color: #ffe9a8; border-color: var(--neon);
+    background: linear-gradient(180deg, #3a2c10, #241a08);
+    box-shadow: 0 0 14px var(--neon-soft), inset 0 0 12px rgba(232,179,75,.14);
+    animation: nosHum 1.1s ease-in-out infinite; }
+  @keyframes nosHum { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+  @media (prefers-reduced-motion: reduce) { .nosbtn.armed { animation: none; } }
+  /* the collection tracker — legible and touchable, not an 11px smear */
+  .colgrid { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .col-i { font-size: 14px; line-height: 1; padding: 2px; opacity: .3; }
+  .col-i.got { opacity: 1; color: var(--neon); text-shadow: 0 0 6px var(--neon-soft); }
+  /* a two-sided gauge: the fill is one side, the TRACK is the other — so both read at once */
+  #tabbodies .bar.tug { background: linear-gradient(90deg, #2a1a18, #3a2420); }
+  #tabbodies .bar.tug i { background: linear-gradient(90deg, var(--cold), #8fb3d0); box-shadow: 0 0 9px rgba(107,147,184,.3); }
+  /* THE FELT — every game in the Den sits on its own surface (see feltify()) */
+  .card.felt { padding: 13px 15px; margin: 0 0 11px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, var(--panel2)), var(--panel) 70%); }
+  .card.felt > h2 { margin: 0 0 9px !important; }
+  .card.felt > h2:first-child { margin-top: 0 !important; }
+  /* playing cards — the blackjack hand rendered as pasteboards instead of bare letters */
+  .pc { display: inline-block; min-width: 30px; padding: 7px 4px; margin-right: 4px; text-align: center;
+    background: linear-gradient(180deg, #efe9da, #ddd5c2); color: #16130c; border-radius: 3px;
+    font-size: 16px; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
+  .pc.down { background: linear-gradient(135deg, #3a2c33, #241b21); color: #6d5560; }
+  /* the LEVEL gauge — the sheet's spine. Reads brighter than the four self-refilling bars. */
+  #sheet .lvlnum { color: var(--neon); font-size: 17px; letter-spacing: 1.5px; }
+  .bar.lvl { height: 7px; margin: 2px 0 11px; }
+  .bar.lvl i { background: linear-gradient(90deg, #6a4d16, var(--neon)); box-shadow: 0 0 9px var(--neon-soft); }
+  #sheet.lvlup { animation: lvlup 1.5s var(--ease); }
+  @keyframes lvlup {
+    0%   { box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.03); }
+    18%  { box-shadow: var(--shadow), inset 0 0 60px var(--neon-soft), 0 0 30px var(--neon-soft); border-color: var(--neon); }
+    100% { box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.03); }
+  }
+  /* threshold marks ON the track — for a gauge where the LINES matter more than the fill */
+  .bar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--line2);
+    box-shadow: 0 0 4px rgba(0,0,0,.8); }
+  .bar .tick.bad { background: var(--bad); box-shadow: 0 0 7px rgba(192,57,43,.6); }
 
   /* THE VERB ROW — a three-way choice (safe / normal / loud) shown as one control, not three chips.
      Bumping .card padding to 14/15px in this pass cost the crime card ~4px, which was exactly enough
@@ -315,6 +367,20 @@
   .modal .dim { color: var(--dim); font-size: 13.5px; }
   .modal dl { margin: 8px 0; } .modal dt { color: var(--neon); font-size: 13.5px; margin-top: 9px; }
   .modal dd { margin: 1px 0 0; color: var(--ink); font-size: 13.5px; line-height: 1.5; }
+  .modal input, .modal select { background: #0b0b10; border: 1px solid var(--line2); color: var(--ink);
+    border-radius: var(--r-sm); padding: 9px 10px; font: inherit; font-size: 15px; }
+  /* ranked rows — what eleven alert()s were doing with \n and a join() */
+  .ranks { margin-top: 4px; }
+  .rank { display: grid; grid-template-columns: 26px 1fr auto auto; gap: 10px; align-items: baseline;
+    padding: 7px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .rank:last-child { border-bottom: 0; }
+  .rank .n { color: var(--faint); font-size: 12.5px; text-align: right; font-weight: normal; }
+  .rank .who { color: var(--ink); font-size: 14.5px; }
+  .rank .d { color: var(--dim); font-size: 12.5px; }
+  .rank .v { color: var(--neon); font-size: 14px; }
+  .rank.me { background: color-mix(in srgb, var(--neon) 9%, transparent); border-radius: var(--r-sm); }
+  .rank.me .who::after { content: ' ← you'; color: var(--neon); font-size: 11.5px; letter-spacing: 1px; }
+  .rank:nth-child(1) .n { color: var(--gold, var(--neon)); }
 
   /* ── the coach line + helpers ── */
   #coach { background: linear-gradient(90deg, var(--neon-soft), transparent 70%);
@@ -518,6 +584,19 @@
     border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
   #tabs button.on::after { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent); }
   #tabbodies h2::before, #tabbodies h3::before { background: var(--accent); }
+  /* The accent used to stop at the rail and the section tick — every heading, chip and gauge INSIDE
+     a tab still hardcoded amber, so the group colour was a 1px detail nobody read. These four rules
+     carry it into the content, which is the only place it can actually do its job: tell you at a
+     glance whether you are in the money screens or the killing ones. */
+  #tabbodies h2 { color: color-mix(in srgb, var(--accent) 42%, var(--dim)); }
+  #tabbodies .bar i { background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 60%, #2a2418), var(--accent));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 26%, transparent); }
+  #tabbodies .bar.health i, #tabbodies .bar.heat i { background: none; }  /* these two keep their own meaning */
+  #tabbodies .bar.health i { background: linear-gradient(90deg, #3e7a4c, var(--ok)); }
+  #tabbodies .bar.heat i { background: linear-gradient(90deg, #7e2519, var(--blood)); }
+  #tabbodies .card:hover { border-color: color-mix(in srgb, var(--accent) 26%, var(--line)); }
+  #tabart::after { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 45%, transparent); }
   /* district plates on the City tab's arbitrage board. Same recipe as the landing pills — art in
      ::before, a directional scrim in ::after, content lifted above both — because the same failure
      applies: a photo behind a price reading is worthless if you can't read the price. */
@@ -624,6 +703,55 @@
   /* a fresh feed line gets a one-shot neon wash down its edge — the wire feels live */
   @keyframes evFlash { 0%{box-shadow:inset 2px 0 0 var(--neon), -6px 0 10px -6px var(--neon-soft)} 100%{box-shadow:none} }
   .wpane .ev.fresh { animation: evIn .3s var(--ease), evFlash 1.5s var(--ease); }
+
+  /* ══ THE CINEMATIC ═════════════════════════════════════════════════════════════
+     A short full-screen beat for the moments that actually matter — a kill, a bust,
+     a big score, a level. Everything else stays a toast; a cinematic that fires on
+     every pickpocket is a cinematic nobody watches.
+
+     Rules it obeys: ~1.7s and self-dismissing, skippable by touching anywhere,
+     NON-BLOCKING (the refresh runs behind it), and completely absent under
+     prefers-reduced-motion — the reduce block below already kills every animation,
+     and cine() early-returns so the overlay never even mounts. */
+  #cine { position: fixed; inset: 0; z-index: 3000; display: none; place-items: center;
+    background: radial-gradient(80% 70% at 50% 45%, rgba(0,0,0,.72), rgba(0,0,0,.93));
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); cursor: pointer;
+    animation: fadeIn .16s var(--ease); }
+  #cine.on { display: grid; }
+  #cine .cbox { text-align: center; padding: 0 24px; max-width: 620px; animation: cineIn .5s var(--ease); }
+  #cine .ckicker { font-family: var(--mono); font-size: 12px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 10px; }
+  #cine .ctitle { font-family: var(--serif); font-size: clamp(34px, 8vw, 62px); letter-spacing: 6px;
+    line-height: 1.05; color: var(--cine-accent, var(--neon)); text-transform: uppercase;
+    text-shadow: 0 0 44px var(--cine-glow, var(--neon-glow)), 0 3px 20px #000; }
+  #cine .csub { color: var(--ink); font-size: 16px; margin-top: 14px; line-height: 1.5; }
+  #cine .clines { margin-top: 16px; display: flex; flex-direction: column; gap: 5px; align-items: center; }
+  #cine .clines span { font-family: var(--mono); font-size: 14px; color: var(--cine-accent, var(--neon));
+    opacity: 0; animation: cineLine .4s var(--ease) forwards; }
+  #cine .cskip { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 2px;
+    color: var(--faint); text-transform: uppercase; }
+  /* the rule that cuts across the frame — a title card, not a dialog */
+  #cine .crule { height: 1px; margin: 18px auto 0; width: 62%;
+    background: linear-gradient(90deg, transparent, var(--cine-accent, var(--neon)), transparent); opacity: .55; }
+  @keyframes cineIn { 0% { opacity: 0; transform: scale(.94); letter-spacing: 16px; }
+                     60% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+  @keyframes cineLine { to { opacity: 1; } }
+  /* the one-frame colour wash — a gunshot, a flashbulb, a payday */
+  #flashwrap { position: fixed; inset: 0; z-index: 2999; pointer-events: none; opacity: 0; }
+  #flashwrap.go { animation: flashOut .42s var(--ease); }
+  @keyframes flashOut { 0% { opacity: .55; } 100% { opacity: 0; } }
+  /* screen shake — violence and busts only, never a payout */
+  @keyframes shakeIt { 10%,90%{transform:translate3d(-2px,0,0)} 20%,80%{transform:translate3d(3px,0,0)}
+    30%,50%,70%{transform:translate3d(-5px,0,0)} 40%,60%{transform:translate3d(5px,0,0)} }
+  body.shaking { animation: shakeIt .5s cubic-bezier(.36,.07,.19,.97); }
+  /* a value that rises off the thing that produced it — the payoff needs a place to land */
+  .floatval { position: fixed; z-index: 2500; pointer-events: none; font-family: var(--mono);
+    font-size: 17px; font-weight: 600; text-shadow: 0 2px 10px #000;
+    animation: floatUp 1.15s var(--ease) forwards; }
+  @keyframes floatUp { 0% { opacity: 0; transform: translateY(4px) scale(.9); }
+    18% { opacity: 1; transform: translateY(-4px) scale(1.06); }
+    100% { opacity: 0; transform: translateY(-46px) scale(1); } }
+  @media (max-width: 760px) { #cine .ctitle { letter-spacing: 3px; } #cine .csub { font-size: 14.5px; } }
 
   /* ── accessibility: motion off means OFF ── */
   @media (prefers-reduced-motion: reduce) {
@@ -894,8 +1022,203 @@
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const HAPTIC = { tap: 8, success: [12, 30, 14], error: [40, 60, 40], big: [18, 40, 18, 40, 70] };
   const haptic = (kind) => { if (REDUCED) return; try { navigator.vibrate?.(HAPTIC[kind] || 8); } catch {} };
-  // one delegated listener arms every button in the app with a touch tick — no per-site wiring
-  document.addEventListener('pointerdown', (e) => { if (e.target?.closest?.('button, [data-do]')) haptic('tap'); }, { passive: true });
+  // one delegated listener arms every button in the app with a touch tick — no per-site wiring.
+  // It also remembers WHICH button was pressed, so a payout can float up from the control that
+  // earned it rather than from the middle of the screen (the render replaces innerHTML, so the
+  // element itself may be gone by then — floatVal reads its rect at press time, not at result time).
+  let lastPressed = null, lastPressRect = null;
+  document.addEventListener('pointerdown', (e) => {
+    const b = e.target?.closest?.('button, [data-do]');
+    if (!b) return;
+    lastPressed = b;
+    try { lastPressRect = b.getBoundingClientRect(); } catch { lastPressRect = null; }
+    haptic('tap');
+  }, { passive: true });
+
+  // ══ GAME FEEL ═══════════════════════════════════════════════════════════════════
+  // A short vocabulary of physical feedback, so a result LANDS instead of appearing.
+  // All four are no-ops under prefers-reduced-motion — that setting means off, not less.
+
+  // the whole frame takes the hit. Violence and busts only: shaking the screen for a
+  // PAYOUT reads as an error, which is the opposite of what a payday should feel like.
+  function shake() {
+    if (REDUCED) return;
+    document.body.classList.remove('shaking');
+    void document.body.offsetWidth;              // reflow, or a second shake in a row never plays
+    document.body.classList.add('shaking');
+    setTimeout(() => document.body.classList.remove('shaking'), 520);
+  }
+  // one frame of colour across everything — a muzzle flash, a flashbulb, a payday
+  let flashEl = null;
+  function flash(colour) {
+    if (REDUCED) return;
+    if (!flashEl) { flashEl = document.createElement('div'); flashEl.id = 'flashwrap'; document.body.appendChild(flashEl); }
+    flashEl.style.background = colour;
+    flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go');
+  }
+  // a number that rises off the thing that produced it. Anchored to the element the
+  // player just touched, so the payoff appears where their attention already is.
+  function floatVal(text, good = true, anchor = null) {
+    if (REDUCED || !text) return;
+    // the rect is captured at PRESS time (lastPressRect): by the time a result lands the
+    // handler has usually re-rendered the tab, so the button that was touched no longer exists.
+    const r = (anchor && document.body.contains(anchor) ? anchor.getBoundingClientRect() : null) || lastPressRect;
+    const n = el(`<div class="floatval" style="color:${good ? 'var(--ok)' : 'var(--bad)'}">${esc(text)}</div>`);
+    n.style.left = `${(r ? r.left + r.width / 2 : innerWidth / 2) - 40}px`;
+    n.style.top = `${(r ? r.top : innerHeight / 2) - 8}px`;
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 1200);
+  }
+
+  // ── THE CINEMATIC ──────────────────────────────────────────────────────────────
+  // A title card for the handful of moments worth stopping for. Deliberately rare:
+  // fire it on every crime and players learn to look away from it, which costs you
+  // the one tool you had for the moments that DO matter.
+  let cineEl = null, cineT = null;
+  function cine(spec) {
+    if (REDUCED || !spec) return;
+    if (!cineEl) {
+      cineEl = el('<div id="cine"><div class="cbox"></div></div>');
+      cineEl.onclick = () => closeCine();               // touching anywhere skips it
+      document.body.appendChild(cineEl);
+    }
+    const { kicker = '', title, sub = '', lines = [], accent = 'var(--neon)', glow = 'var(--neon-glow)' } = spec;
+    cineEl.style.setProperty('--cine-accent', accent);
+    cineEl.style.setProperty('--cine-glow', glow);
+    cineEl.firstElementChild.innerHTML = `
+      ${kicker ? `<div class="ckicker">${esc(kicker)}</div>` : ''}
+      <div class="ctitle">${esc(title)}</div>
+      <div class="crule"></div>
+      ${sub ? `<div class="csub">${esc(sub)}</div>` : ''}
+      ${lines.length ? `<div class="clines">${lines.map((l, i) =>
+        `<span style="animation-delay:${.45 + i * .13}s">${esc(l)}</span>`).join('')}</div>` : ''}
+      <div class="cskip">tap to continue</div>`;
+    cineEl.classList.add('on');
+    clearTimeout(cineT); cineT = setTimeout(closeCine, spec.hold || 2100);
+  }
+  function closeCine() { clearTimeout(cineT); cineEl?.classList.remove('on'); }
+
+  // WHICH moments earn one. Reads the SAME response body describe() reads, so this needs
+  // no new server surface — it is a second, louder reading of data the client already has.
+  // Returns null for everything else, which is most things, on purpose.
+  const $c = (n) => '$' + fmt(n);
+  function cineFor(b) {
+    if (!b || typeof b !== 'object') return null;
+    // ── you killed someone. The single heaviest thing a player can do.
+    if (b.kill) {
+      const lines = [];
+      if (b.looted) lines.push(`took ${$c(b.looted)} off the body`);
+      if (b.omrLooted) lines.push(`${b.omrLooted} $OMR`);
+      if (b.empireLoot) lines.push(`seized their ${b.empireLoot.name}`);
+      if (b.bounty) lines.push(`contract paid ${$c(b.bounty)}`);
+      if (b.vendetta) lines.push('the vendetta is settled');
+      return { kicker: 'wet work', title: "They're done", sub: 'the street remembers this one.',
+        lines, accent: 'var(--blood)', glow: 'rgba(192,57,43,.55)', fx: 'violent' };
+    }
+    // ── the Law took you. Not death, but the closest thing to it.
+    if (b.convicted === true || b.busted === true) {
+      return { kicker: 'the bureau', title: 'Indicted', sub: b.forfeited ? `they took ${$c(b.forfeited)}.` : 'the case landed.',
+        accent: 'var(--cold)', glow: 'rgba(107,147,184,.5)', fx: 'violent' };
+    }
+    // ── over the wall
+    if (b.escaped === true) {
+      return { kicker: 'the pen', title: 'Over the wall', sub: "you're out — and you're WANTED.",
+        accent: 'var(--neon)', fx: 'payday' };
+    }
+    // ── a genuine payday. The floor is deliberately high: a $600 crime is a toast.
+    const take = Number(b.earned ?? b.payout ?? b.take ?? b.won ?? b.purse ?? b.share ?? 0);
+    if (take >= 25000) {
+      return { kicker: 'the score', title: $c(take), sub: 'clean, and yours.',
+        lines: b.rwaCut ? ['a legit sliver, parked'] : [], accent: 'var(--ok)', glow: 'rgba(99,179,113,.45)', fx: 'payday' };
+    }
+    // ── the first week, done
+    if (b.capstone) return { kicker: 'made your bones', title: 'First week', sub: 'the city knows your name now.', fx: 'payday' };
+    return null;
+  }
+  // ── DIALOGS ────────────────────────────────────────────────────────────────────
+  // A native alert()/prompt()/confirm() renders in the OS font on a white slab. In a game whose
+  // whole surface is a 1940s ledger, that is the single loudest thing on the screen and it says
+  // "browser", not "city". These three are the same three verbs in the game's own type.
+  // ask() is deliberately a PROMISE so a caller can `if (!await ask(...)) return;` and read like
+  // the confirm() it replaces.
+  function dialog(inner, { wide = false } = {}) {
+    const bg = el(`<div class="modal-bg"><div class="modal"${wide ? ' style="max-width:640px"' : ''}>${inner}</div></div>`);
+    document.body.appendChild(bg);
+    const close = () => bg.remove();
+    bg.onclick = (e) => { if (e.target === bg) close(); };
+    return { bg, close };
+  }
+  // a read-only sheet — the leaderboards and case files that were alert()s
+  function sheetModal(title, bodyHtml) {
+    const { bg, close } = dialog(`<h2>${esc(title)}</h2><div class="mbody">${bodyHtml}</div>
+      <div style="margin-top:14px;text-align:right"><button class="act" data-x>close</button></div>`, { wide: true });
+    bg.querySelector('[data-x]').onclick = close;
+  }
+  // a leaderboard rendered as ranked rows rather than a \n-joined string
+  const rankRows = (rows, empty) => rows?.length
+    ? `<div class="ranks">${rows.map((r, i) => `<div class="rank${r.you ? ' me' : ''}">
+        <b class="n">${i + 1}</b><span class="who">${esc(r.name)}</span>
+        <span class="d">${esc(r.note || '')}</span><span class="v">${esc(r.val ?? '')}</span></div>`).join('')}</div>`
+    : `<p class="dim">${esc(empty)}</p>`;
+  // the confirm. `danger` styles it as the irreversible thing it is.
+  function ask(title, body, { yes = 'do it', no = 'back off', danger = false } = {}) {
+    return new Promise((resolve) => {
+      const { bg, close } = dialog(
+        `<h2 style="${danger ? 'color:var(--bad)' : ''}">${esc(title)}</h2>
+         <p class="dim" style="white-space:pre-line">${esc(body)}</p>
+         <div style="margin-top:15px;display:flex;gap:8px;justify-content:flex-end">
+           <button class="act" data-no>${esc(no)}</button>
+           <button class="act ${danger ? 'risk' : 'prime'}" data-yes>${esc(yes)}</button></div>`);
+      let done = false;
+      const fin = (v) => { if (done) return; done = true; close(); resolve(v); };
+      bg.querySelector('[data-yes]').onclick = () => { haptic('tap'); fin(true); };
+      bg.querySelector('[data-no]').onclick = () => fin(false);
+      bg.addEventListener('click', (e) => { if (e.target === bg) fin(false); });
+      setTimeout(() => bg.querySelector('[data-no]')?.focus(), 30);
+    });
+  }
+  // the prompt. Numbers only — the one native prompt() in the file asked for a garrison amount.
+  function askNum(title, label, { placeholder = '', yes = 'confirm' } = {}) {
+    return new Promise((resolve) => {
+      const { bg, close } = dialog(
+        `<h2>${esc(title)}</h2><p class="dim">${esc(label)}</p>
+         <input data-v type="number" inputmode="numeric" placeholder="${esc(placeholder)}" style="width:100%;margin-top:8px">
+         <div style="margin-top:15px;display:flex;gap:8px;justify-content:flex-end">
+           <button class="act" data-no>cancel</button>
+           <button class="act prime" data-yes>${esc(yes)}</button></div>`);
+      const inp = bg.querySelector('[data-v]');
+      let done = false;
+      const fin = (v) => { if (done) return; done = true; close(); resolve(v); };
+      bg.querySelector('[data-yes]').onclick = () => fin(Number(inp.value) || 0);
+      bg.querySelector('[data-no]').onclick = () => fin(null);
+      bg.addEventListener('click', (e) => { if (e.target === bg) fin(null); });
+      inp.onkeydown = (e) => { if (e.key === 'Enter') fin(Number(inp.value) || 0); };
+      setTimeout(() => inp.focus(), 30);
+    });
+  }
+
+  // Wrap each <h2> and everything up to the next one in a card. Purely structural — the caller's
+  // template stays a flat run, so games can be added without anyone remembering to open a div.
+  function feltify(root, cls = 'card felt') {
+    const kids = [...root.children];
+    let box = null;
+    for (const node of kids) {
+      if (node.tagName === 'H2') {
+        box = document.createElement('div');
+        box.className = cls;
+        root.insertBefore(box, node);
+      }
+      if (box) box.appendChild(node);          // moves it out of root and into the open card
+    }
+  }
+
+  // one place that turns a spec into sound, light and motion
+  function playCine(spec) {
+    if (!spec) return;
+    if (spec.fx === 'violent') { shake(); flash('radial-gradient(60% 50% at 50% 45%, rgba(192,57,43,.5), transparent)'); haptic('big'); }
+    else if (spec.fx === 'payday') { flash('radial-gradient(60% 50% at 50% 45%, rgba(232,179,75,.34), transparent)'); haptic('big'); }
+    cine(spec);
+  }
   // the working line — a thin indeterminate hairline at the very top while an action is in flight
   const busy = document.createElement('div'); busy.id = 'busy'; document.body.appendChild(busy);
   // procedural item art — one engraved SVG per catalog id, served by GET /v1/art/:kind/:id.
@@ -979,6 +1302,17 @@
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
+    // A BOUT — boxing (and stable racing) already send both scores, and nothing read them, so a
+    // losing manager learned only "got beat": not the margin, not whether one more training session
+    // would have won it. That severed the whole train→fight loop the system is built on.
+    if (body.you?.score !== undefined && body.them?.score !== undefined && body.win !== undefined) {
+      const gap = Math.abs(body.you.score - body.them.score);
+      const close = gap <= 4 ? ' — a close one' : gap >= 20 ? ' — not close' : '';
+      const money = body.net !== undefined ? ` · ${body.net >= 0 ? '+' : '−'}$${fmt(Math.abs(body.net))}` : '';
+      // the PvP race sends the same shape but no opponent NAME — say "them" rather than "undefined"
+      bits.push(`${body.win ? '🥊 WON' : 'lost'} ${body.you.score}–${body.them.score} vs ${body.them.name || 'them'}${close}${money}`
+        + (body.belt ? ' — AND THE BELT' : body.defended ? ' — title DEFENDED' : ''));
+    }
     if (body.spec !== undefined && body.name && body.spent !== undefined) bits.push(`✦ your ${body.kind} is now ${body.name} (−${body.spent} $OMR)`);
     if (body.won !== undefined && body.feeBurned !== undefined) bits.push(body.won ? `TOOK IT OVER — the ${body.kind} is yours (they got $${fmt(body.net)})` : `the takeover was fought off — the $${fmt(body.feeBurned)} fee is gone`);
     if (body.pledged !== undefined && body.standing) bits.push(`pledged ${fmt(body.pledged)} $OMR to the treasury — ${body.standing.tier} (score ${fmt(body.standing.score)})`);
@@ -996,7 +1330,14 @@
     if (body.gain) bits.push(`+${body.gain} ${body.stat || ''}`);
     if (body.earned) bits.push(`${body.play === 'flood' ? '🔥 moved WEIGHT' : body.play === 'careful' ? '🤫 worked the regulars' : 'moved product'} — +$${fmt(body.earned)}${body.cornerPremium ? ' (corner premium)' : ''}${body.heat ? ` · +${body.heat} heat` : ''}`);
     if (body.collected) bits.push(`collected $${fmt(body.collected)}${body.rakeback ? ` + $${fmt(body.rakeback)} rakeback` : ''}`);
-    if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) bits.push(body.win ? `🏁 took the checkered — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}` : `🏁 ate the loss — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`);
+    // the circuit already sends YOUR power and the FIELD's; printing neither made a $25k tune a
+    // coin-flip purchase — you could not tell whether one more level would have taken it.
+    if (typeof body.win === 'boolean' && (body.field !== undefined || body.wager !== undefined)) {
+      const margin = (body.power !== undefined && body.field !== undefined) ? ` — your ${body.power} vs the field's ${body.field}` : '';
+      bits.push((body.win ? `🏁 took the checkered${margin} — ${body.net >= 0 ? '+' : ''}$${fmt(body.net)}`
+                          : `🏁 ate the loss${margin} — $${fmt(Math.abs(body.net))}${body.dmg ? ` (car ${body.dmg}% dmg)` : ''}`)
+        + (body.nos ? ' · NOS burned' : ''));
+    }
     if (body.forPinks) bits.push(body.win ? `🎀 PINKS — you won their ${body.wonCar?.model || 'car'}` : `🎀 PINKS — you lost your ${body.lostCar?.model || 'car'}`);
     if (body.grandPrix && body.buyin !== undefined && body.pool !== undefined) bits.push(`🏁 on the grid — $${fmt(body.buyin)} in · pool $${fmt(body.pool)}, ${body.entrants} runner${body.entrants > 1 ? 's' : ''}`);
     if (body.tune != null && body.power != null) bits.push(`tuned up — engine at ${body.tune}, power ${body.power}`);
@@ -1194,7 +1535,19 @@
       // would otherwise overwrite it — the raw JSON for the deck / power users; the toast is the human read).
       $('#resp').textContent = `${method} ${path}\n` + JSON.stringify(r.body, null, 2);
       toast(describe(r.body, r.code), r.code >= 400);
-      if (r.code < 400) { const bt = bragText(r.body); if (bt) { haptic('big'); showBrag(bt); } }
+      if (r.code < 400) {
+        // THE BEAT. cineFor() returns null for almost everything — a pickpocket is a toast. When it
+        // does fire, the overlay goes up and the refresh runs BEHIND it, so the cinematic never
+        // costs the player a frame of responsiveness.
+        const spec = cineFor(r.body);
+        if (spec) playCine(spec);
+        else {
+          // no cinematic: still let a gain LAND somewhere, rather than only in a corner toast
+          const d = Number(r.body?.earned ?? r.body?.payout ?? r.body?.take ?? r.body?.won ?? 0);
+          if (d > 0) floatVal(`+$${fmt(d)}`, true, lastPressed);
+        }
+        const bt = bragText(r.body); if (bt) { haptic('big'); showBrag(bt); }
+      } else if (r.code >= 400) { shake(); }
       await refresh();
       return r;
     } finally { acting = false; document.body.style.cursor = ''; busy.classList.remove('on'); }
@@ -1448,7 +1801,7 @@
     const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim(), ...(ref ? { referralCode: ref } : {}) });
     if (r.code < 400) { localStorage.removeItem('omerta_ref'); boot(); } else toast(r.body?.message || r.body?.error, true);
   };
-  $('#btn-logout').onclick = () => {
+  $('#btn-logout').onclick = async () => {
     // A GUEST has no way back in — the token IS the only key, so signing out abandons the street
     // forever. (A real player's alpha-critical bug: "burn the papers" read like a gameplay action,
     // logged them out, and lost the character to limbo.) Warn hard for guests; confirm for everyone.
@@ -1456,7 +1809,7 @@
     const msg = guest
       ? "Sign out?\n\nYou're playing as a GUEST — this account has no login, so signing out will lose this street for good (there's no way back to it).\n\nTo keep it, cancel and use \"claim your account\" on The Sheet first."
       : 'Sign out of this account?';
-    if (!confirm(msg)) return;
+    if (!await ask(guest ? 'Burn the papers?' : 'Sign out?', msg, { yes: guest ? 'lose this street' : 'sign out', no: 'stay', danger: guest })) return;
     localStorage.removeItem('omerta_token'); location.reload();
   };
   $('#btn-share').onclick = shareDossier;
@@ -1566,7 +1919,9 @@
     if (rg) rg.onclick = () => sendPhoneDm(t.with.characterId, $('#ph-reply').value, cid);
     const bb = $('#ph-block');
     if (bb) bb.onclick = async () => {
-      if (!t.with.blocked && !confirm(`Block ${t.with.name}?\n\nThey won't be able to message you (they'll know the line is dead). The block follows their bloodline until you lift it. Game events still reach you — this only mutes their mouth.`)) return;
+      if (!t.with.blocked && !await ask(`Block ${t.with.name}?`,
+        "They won't be able to message you — they'll know the line is dead. The block follows their bloodline until you lift it. Game events still reach you; this only mutes their mouth.",
+        { yes: 'cut the line', no: 'leave it' })) return;
       const r = await api(t.with.blocked ? 'DELETE' : 'POST', '/v1/phone/block/' + t.with.characterId);
       toast(r.code < 400 ? (t.with.blocked ? 'the line is open again' : 'line blocked — they get a dead tone now') : (r.body?.message || r.body?.error), r.code >= 400);
       openPhoneThread(cid);
@@ -1686,7 +2041,20 @@
       <div class="money">$${fmt(me.cash)}</div>
       <div class="row"><span class="k">${T('k_bank')}</span><span>$${fmt(me.bank)}${me.bankInTransit ? ` <span style="color:var(--cold)">($${fmt(me.bankInTransit)} ${T('k_intransit')})</span>` : ''}</span></div>
       <div class="row"><span class="k">$OMR</span><span>${fmt(me.omr)} ${T('k_liquid')} · ${fmt(me.staked)} ${T('k_staked')}</span></div>
-      <div class="row"><span class="k">${T('k_respect')}</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>
+      ${(() => {
+        // THE SPINE. Every gate in the game keys on level, and the sheet used to render it as a
+        // parenthetical next to respect while giving four full gauges to things that refill by
+        // themselves. respect(L) = divisor × (L−1)², and /v1/rules publishes the divisor, so the
+        // client can show the real distance to the next level rather than a number with no scale.
+        const D = rules?.pacing?.levelDivisor;
+        if (!D) return `<div class="row"><span class="k">${T('k_respect')}</span><span>${fmt(me.respect)} (lvl ${me.level})</span></div>`;
+        const floorR = D * (me.level - 1) ** 2, nextR = D * me.level ** 2;
+        const into = Math.max(0, me.respect - floorR), span = Math.max(1, nextR - floorR);
+        return `<div class="row lvlrow"><span class="k">${T('k_respect')}</span>
+            <span><b class="lvlnum">LVL ${me.level}</b> <span class="d">${fmt(me.respect)}</span></span></div>
+          ${bar('lvl', into, span)}
+          <div class="d" style="margin:-7px 0 9px;font-size:11.5px;text-align:right">${fmt(nextR - me.respect)} to lvl ${me.level + 1}</div>`;
+      })()}
       <div class="chips">${chips.map(([c, t]) => `<span class="chip ${c}">${t}</span>`).join('')}</div>
       <div class="row" title="Energy is the PHYSICAL work: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns, races. Crime doesn't touch it."><span class="k">${T('k_energy')} <span class="d" style="font-size:10px">(gym · garage · crews)</span></span><span>${me.energy}/${me.maxEnergy}</span></div>${bar('', me.energy, me.maxEnergy)}
       <div class="row" title="Nerve is what crime costs — the clock on the street loop."><span class="k">${T('k_nerve')} <span class="d" style="font-size:10px">(crime)</span></span><span>${me.nerve}/${me.maxNerve}</span></div>${bar('', me.nerve, me.maxNerve)}
@@ -1704,6 +2072,15 @@
         if (m) { m.classList.add(me.cash > prev ? 'tick-up' : 'tick-down');
           countUp(m, prev, me.cash);
           setTimeout(() => m.classList.remove('tick-up', 'tick-down'), 900); } } }
+    // LEVELLING UP — the money tick above has fired on every $3 pickpocket since M1, while the one
+    // event the whole progression is built around passed in silence. Same pattern, bigger beat.
+    { const prev = renderSheet._lvl; renderSheet._lvl = me.level;
+      if (prev !== undefined && me.level > prev) {
+        playCine({ kicker: 'you moved up', title: `LEVEL ${me.level}`,
+          sub: 'the city gives you a little more room.', fx: 'payday', hold: 1900 });
+        $('#sheet')?.classList.add('lvlup');
+        setTimeout(() => $('#sheet')?.classList.remove('lvlup'), 1500);
+      } }
     // THE MOOD RING — the whole screen feels your street's peril (hunted → red breath, to ground → cool),
     // and a TIME-OF-DAY tint from the in-game city clock (falls back to the wall clock's UTC hour).
     { const danger = me.wanted || me.welsher || me.law?.indicted || me.law?.rat || me.jailSeconds > 0 || Number(me.health) <= 25;
@@ -2077,6 +2454,12 @@
     const distr = (await api('GET', '/v1/districts')).body?.districts || [];
     const dip = (await api('GET', '/v1/diplomacy')).body || {};
     const sov = (await api('GET', '/v1/sov')).body || {};
+    // the OTHER families — war, pacts and coalitions all named a target by hand-typed UUID, which is
+    // not something a person can do. One list, three pickers.
+    const rivals = ((await api('GET', '/v1/gangs')).body?.gangs || []).filter((x) => x.id !== me.gang.id);
+    const rivalOpts = rivals.length
+      ? rivals.map((x) => `<option value="${x.id}">[${esc(x.tag)}] ${esc(x.name)} — ${x.members} made</option>`).join('')
+      : '';
     t.innerHTML = `
       <h2>[${g.tag}] ${g.name}${g.seal ? ` <span class="chip">${g.seal}</span>` : ''}${g.foundation ? ` <span class="chip good">${g.foundation}</span>` : ''} — you are ${me.gang.role}</h2>
       <div class="grid">
@@ -2126,7 +2509,7 @@
           <div class="d">${d.perk || ''}</div>
           ${d.occupiedBy ? `<div class="d" style="color:var(--dim)">liberate for $${fmt(d.liberationCost)} (rout ${d.occupiedBy.name} to cheapen it)</div>` : d.holder ? `<div class="d" style="color:var(--dim)">garrison $${fmt(d.garrison)}</div>` : ''}
           ${boss && d.id === me.loc && (!d.holder || d.holder.tag !== g.tag) ? `<button class="act" data-do="POST /v1/districts/${d.id}/seize" style="${d.occupiedBy ? 'border-color:var(--blood)' : ''}">${d.occupiedBy ? 'liberate' : d.holder ? 'seize' : 'claim'} (stand here)</button>` : (boss && d.id !== me.loc && (!d.holder || d.holder.tag !== g.tag) ? '<span class="d" style="color:var(--dim)">travel here to take it</span>' : '')}</div>`).join('')}</div>
-      ${boss ? `<div style="margin-top:8px"><input id="war-gang" placeholder="rival gang id" size="26"> <button class="act" id="war-go">declare war ($10k)</button></div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
+      ${boss ? `<div style="margin-top:8px">${rivalOpts ? `<select id="war-gang">${rivalOpts}</select> <button class="act risk" id="war-go">declare war ($10k)</button>` : '<span class="d" style="color:var(--dim)">no rival family to fight yet</span>'}</div>` : '<span class="d" style="color:var(--dim)">wars and turf are the boss’s to call</span>'}`, !!g.war)}
 
       ${sect('fam-diplomacy', 'Diplomacy', 'sworn PACTS block war between families; a COALITION of the small ganging up on a DOMINANT family fights it at a discount', `
       ${dip.oathbreaker ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">OATHBREAKER</span> <span class="d">you broke a sworn treaty — marked for ${mins(dip.oathbreaker.seconds)}</span></div>` : ''}
@@ -2142,8 +2525,9 @@
           ${boss && !c.mine && !c.targetsMe ? `<button class="act" data-coaljoin="${c.id}">join the coalition</button>` : ''}
           ${boss && c.mine ? `<button class="act" data-coalleave="${c.id}">walk out</button>` : ''}</div>`).join('')}</div>
       ${boss ? `<div style="margin-top:6px">
-        <input id="pact-gang" placeholder="rival gang id" size="24"> <button class="act" id="pact-go">propose a pact</button>
-        <input id="coal-gang" placeholder="dominant gang id" size="24" style="margin-left:6px"> <button class="act" id="coal-go">form a coalition against them</button></div>`
+        ${rivalOpts ? `<select id="pact-gang">${rivalOpts}</select> <button class="act" id="pact-go">propose a pact</button>
+        <div style="margin-top:6px"><select id="coal-gang">${rivalOpts}</select> <button class="act" id="coal-go">form a coalition against them</button></div>`
+          : '<span class="d" style="color:var(--dim)">there is nobody else to treat with yet</span>'}</div>`
         : '<span class="d" style="color:var(--dim)">diplomacy is the boss’s to conduct</span>'}`,
         !!dip.oathbreaker || (dip.relations || []).some((r) => r.pending && !r.mine) || (dip.coalitions || []).some((c) => c.targetsMe))}
 
@@ -2232,7 +2616,9 @@
     }; }
     { const tlb = $('#terr-lb'); if (tlb) tlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/territory')).body || {};
-      alert('THE EMPIRE — biggest territorial families\n\n' + ((d.empires || []).map((x, i) => `${i + 1}. ${x.family} — ${x.rank} ($${fmt(x.earned)})`).join('\n') || 'no territory income logged yet')); }; }
+      sheetModal('THE EMPIRE — biggest territorial families',
+        rankRows((d.empires || []).map((x) => ({ name: x.family, note: x.rank, val: `$${fmt(x.earned)}` })),
+          'no territory income logged yet')); }; }
     { const te = $('#terr-establish'); if (te) te.onclick = () =>
       act('POST', `/v1/territory/${me.loc}/establish`, { kind: $('#terr-kind').value }).then(() => renderFamily()); }
     { const tr = $('#terr-raid-go'); if (tr) tr.onclick = () => {
@@ -2692,13 +3078,19 @@
     t.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => act('POST', `/v1/world/raids/${b.dataset.go}/go`, {}).then(() => renderCity()));
     const wcol = $('#w-collect'); if (wcol) wcol.onclick = () => act('POST', '/v1/world/collect', {}).then(() => renderCity());
     t.querySelectorAll('[data-invade]').forEach((b) => b.onclick = () => act('POST', `/v1/world/${b.dataset.invade}/invade`, {}).then(() => renderCity()));
-    t.querySelectorAll('[data-reinforce]').forEach((b) => b.onclick = () => { const a = Number(prompt('How much to add to the garrison (from the treasury)?')); if (a > 0) act('POST', `/v1/world/${b.dataset.reinforce}/reinforce`, { amount: a }).then(() => renderCity()); });
+    t.querySelectorAll('[data-reinforce]').forEach((b) => b.onclick = async () => {
+      const a = await askNum('Reinforce the outpost', 'How much to add to the garrison? It comes out of the family treasury and defends against both the uprising and a rival invasion.', { placeholder: '50000', yes: 'send the men' });
+      if (a > 0) act('POST', `/v1/world/${b.dataset.reinforce}/reinforce`, { amount: a }).then(() => renderCity()); });
     const wlb = $('#w-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/world')).body || {};
-      alert('THE WAR EFFORT — most feared cartel-hunters\n\n' + ((d.hunters || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} ($${fmt(x.damage)})`).join('\n') || 'no cartel damage logged yet')); };
+      sheetModal('THE WAR EFFORT — most feared cartel-hunters',
+        rankRows((d.hunters || []).map((x) => ({ name: x.name, note: x.rank, val: `$${fmt(x.damage)}` })),
+          'no cartel damage logged yet')); };
     const wflb = $('#w-flb'); if (wflb) wflb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/frontier')).body || {};
-      alert('THE FRONTIER — families holding NPC turf\n\n' + ((d.families || []).map((x, i) => `${i + 1}. ${x.name} [${x.tag}] — ${x.held} outfit(s): ${x.outfits.join(', ')}`).join('\n') || 'no frontier claimed yet — rout an apex outfit to plant your flag')); };
+      sheetModal('THE FRONTIER — families holding NPC turf',
+        rankRows((d.families || []).map((x) => ({ name: `[${x.tag}] ${x.name}`, note: x.outfits.join(', '), val: `${x.held} outfit(s)` })),
+          'no frontier claimed yet — rout an apex outfit to plant your flag')); };
     // NAMED LANDMARKS — dedicate a district plaque to your dynasty (a $OMR status flex)
     const lm = (await api('GET', '/v1/landmarks')).body;
     $('#landmark-slot').innerHTML = `<div class="grid">${(lm?.landmarks || []).map((l) => `
@@ -2787,7 +3179,16 @@
            <div style="margin-top:4px" class="d" style="font-size:11px">★ = a player's racer. Run your own (fee $${fmt(tk.entryFee || 5000)}, ${tk.playerSlots || 2} owner posts a race): <input id="trk-racer" placeholder="racer id" size="14"> <button class="act" id="trk-enter">run in the card</button></div>`; })()}
       <h2 style="margin-top:14px">Blackjack <span class="d" style="font-size:11px">(a natural pays 3:2 — dealer stands on 17)</span></h2>
       ${(() => { const hd = den.blackjack?.hand; const rk = (c) => c === 1 ? 'A' : c === 11 ? 'J' : c === 12 ? 'Q' : c === 13 ? 'K' : String(c);
-        if (hd) return `<div class="d" style="font-size:13.5px">your hand: <b>${hd.player.map(rk).join(' ')}</b> (${hd.playerTotal}) &nbsp;·&nbsp; dealer shows: <b>${rk(hd.dealerUp)}</b> &nbsp;·&nbsp; bet $${fmt(hd.bet)}${hd.doubled ? ' (doubled)' : ''}</div>
+        // a hand rendered as pasteboards, not as the letters "A 7 K" in a <b> — and the dealer's
+        // hole card shown face-DOWN, which is the whole tension of the game (the server never
+        // sends it, so the client cannot leak what it doesn't have)
+        const pc = (c) => `<span class="pc">${rk(c)}</span>`;
+        if (hd) return `<div style="margin-bottom:7px">
+            <div class="d" style="font-size:11px;letter-spacing:2px">THE DEALER</div>
+            <div style="margin:3px 0 9px">${pc(hd.dealerUp)}<span class="pc down">?</span></div>
+            <div class="d" style="font-size:11px;letter-spacing:2px">YOUR HAND — ${hd.playerTotal}${hd.doubled ? ' · DOUBLED' : ''}</div>
+            <div style="margin:3px 0 4px">${hd.player.map(pc).join('')}</div>
+            <div class="d">$${fmt(hd.bet)} on the table</div></div>
           <button class="act" data-do="POST /v1/casino/blackjack/hit">hit</button>
           <button class="act" data-do="POST /v1/casino/blackjack/stand">stand</button>
           ${hd.canDouble ? '<button class="act" data-do="POST /v1/casino/blackjack/double">double down</button>' : ''}`;
@@ -2819,6 +3220,11 @@
       <div class="d" style="color:var(--dim);font-size:12.5px">faders: ${(den.backroom?.faders || []).map((f) => `${f.name} ($${fmt(f.fadeLimit)})`).join(', ') || 'nobody'}</div>
       <input id="fade-limit" placeholder="your fade limit" size="12">
       <button class="act" id="fade-set">post a fade</button>`;
+    // THE FELT. The Den is eleven games written as one flat run of <h2> + bare inputs — the only tab
+    // in the game with no surfaces at all, which is backwards for the flashiest room in the city.
+    // Grouping is done here rather than in the template because the games are added and reordered
+    // constantly, and a structural pass over the rendered DOM can't fall out of sync with them.
+    feltify(t);
     t.querySelector('#dice-go').onclick = () => act('POST', '/v1/casino/dice', { amount: Number(t.querySelector('#dice-amt').value) });
     t.querySelector('#num-go').onclick = () => act('POST', '/v1/casino/numbers', { pick: Number(t.querySelector('#num-pick').value), amount: Number(t.querySelector('#num-amt').value) });
     t.querySelector('#fight-a').onclick = () => act('POST', '/v1/casino/fight', { side: 'a', amount: Number(t.querySelector('#fight-amt').value) });
@@ -3016,9 +3422,21 @@
 
     const duelsRes = await api('GET', '/v1/duels');
     const duels = duelsRes.code < 400 ? duelsRes.body : null; // (red-team MED) an error must not blank Wet Work
+    // A contract ON YOUR OWN HEAD rendered identically to a stranger's — the single most important
+    // thing on the screen sorted in wherever the query put it. Split it out and lead with it.
+    const onMe = board.filter((c) => c.target.id === me.id);
+    const others = board.filter((c) => c.target.id !== me.id);
     t.innerHTML = `
+      ${onMe.length ? `<div class="card threat" style="border-color:var(--blood);margin-bottom:12px">
+        <span class="t" style="color:var(--bad)">⚠ THERE IS PAPER OUT ON YOU</span>
+        ${onMe.map((c) => `<div class="row" style="margin-top:5px">
+          <span><span class="chip ${c.kind === 'kill' ? 'bad' : ''}">${c.kind.toUpperCase()}</span>
+            ${c.directedTo ? `named gun: ${esc(c.directedTo)}` : 'open to anyone'}</span>
+          <span style="color:var(--bad);font-size:17px">$${fmt(c.pot)}</span></div>
+          ${c.reason ? `<div class="d">“${esc(c.reason)}”</div>` : ''}`).join('')}
+        <div class="d" style="margin-top:6px">Go to ground, hire a guard, or find out who is paying — the peek is below.</div></div>` : ''}
       <h2>The Contract Board</h2>
-      ${board.length ? `<div class="grid">${board.map((c) => `
+      ${others.length ? `<div class="grid">${others.map((c) => `
         <div class="card"><span class="t">${esc(c.target.name)}</span>
           <span class="chip ${c.kind === 'kill' ? 'bad' : ''}">${c.kind.toUpperCase()}</span>
           <div class="d">pot <b style="color:var(--neon)">$${fmt(c.pot)}</b> · by ${c.poster ? esc(c.family ? c.poster + ' (family)' : c.poster) : 'somebody'}${c.reason ? ` · “${esc(c.reason)}”` : ''}</div>
@@ -3039,9 +3457,10 @@
 
       <h2 style="margin-top:12px">Your Hunt</h2>
       ${hunt ? `
-        <div class="card"><span class="t">hunting ${hunt.name}</span>
+        <div class="card${huntReadyS > 0 ? '' : ' liveshot'}"><span class="t">hunting ${esc(hunt.name)}</span>
           <div class="d">${huntReadyS > 0 ? `your people place them in ${mins(huntReadyS)}` : 'PLACED — take the shot'}${me.shootCdSeconds > 0 ? ` · trigger cools ${mins(me.shootCdSeconds)}` : ''}</div>
-          <button class="act risk" data-fire="${hunt.targetId}" ${huntReadyS > 0 ? 'disabled' : ''}>FIRE</button>
+          <button class="act risk" data-fire="${hunt.targetId}" data-name="${esc(hunt.name)}" ${huntReadyS > 0 ? 'disabled' : ''}
+            style="${huntReadyS > 0 ? '' : 'width:100%;font-size:16px;letter-spacing:3px;padding:11px'}">FIRE</button>
           <button class="act" id="hunt-off">call it off</button></div>`
         : '<span class="d" style="color:var(--dim)">nobody in the crosshairs — start a search from the roster below (3h to place a mark)</span>'}
 
@@ -3140,26 +3559,55 @@
         localStorage.setItem(huntKey(), JSON.stringify({ targetId: b.dataset.search, name: b.dataset.name, placedAt: r.body.placedAt }));
       renderPvp();
     });
-    t.querySelectorAll('[data-npchit]').forEach((b) => b.onclick = () =>
-      act('POST', `/v1/streets/${b.dataset.npchit}/npchit`, { tier: t.querySelector(`[data-npctier="${b.dataset.npchit}"]`).value }).then(() => renderPvp()));
+    t.querySelectorAll('[data-npchit]').forEach((b) => b.onclick = async () => {
+      if (!await ask('Put a man on them?', 'The fee burns whether the hit lands or not, and it draws law heat on YOU. A hired gun pays no reputation.',
+        { yes: 'make the call', no: 'forget it', danger: true })) return;
+      act('POST', `/v1/streets/${b.dataset.npchit}/npchit`, { tier: t.querySelector(`[data-npctier="${b.dataset.npchit}"]`).value }).then(() => renderPvp()); });
     t.querySelectorAll('[data-hire]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/bodyguard/hire/${b.dataset.hire}`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-feud]').forEach((b) => b.onclick = async () => {
       const f = (await api('GET', `/v1/feud/${b.dataset.feud}`)).body || {};
-      const line = `Blood feud with ${f.bloodline}\n\nbodies — you took ${f.kills?.theirs || 0}, they took ${f.kills?.ours || 0}` +
-        (f.myVendetta ? `\n\n⚔ YOUR VENDETTA (${f.myVendetta.tier}) — for ${f.myVendetta.sworn}, ${Math.ceil((f.myVendetta.expiresSeconds || 0) / 86400)}d left` : '') +
-        (f.theirVendetta ? `\n🩸 they've sworn one on YOU (${f.theirVendetta.tier})` : '') +
-        (f.peace?.theyOffered ? '\n\n🕊 they\'ve OFFERED PEACE — accept to bury it' : f.peace?.iOffered ? '\n\n🕊 your peace offer stands' : '');
+      // THE BLOOD LEDGER — the running body count between two bloodlines. It used to be a
+      // \n-joined confirm(); as a card the tally reads at a glance and the two vendettas can
+      // actually carry their own colour, which is the whole point of a feud screen.
+      const days = (s) => Math.ceil((s || 0) / 86400);
+      const body = `<div class="row" style="font-size:16px;margin:2px 0 12px">
+          <span><b style="color:var(--ok)">${f.kills?.theirs || 0}</b> <span class="k">you took</span></span>
+          <span><span class="k">they took</span> <b style="color:var(--bad)">${f.kills?.ours || 0}</b></span></div>`
+        + (f.myVendetta ? `<div class="card" style="border-color:var(--blood)"><span class="t">⚔ YOUR VENDETTA — ${esc(f.myVendetta.tier)}</span>
+            <div class="d">sworn for ${esc(f.myVendetta.sworn)} · ${days(f.myVendetta.expiresSeconds)}d left to settle it</div></div>` : '')
+        + (f.theirVendetta ? `<div class="card" style="border-color:var(--bad);margin-top:8px"><span class="t">🩸 THEY'VE SWORN ONE ON YOU — ${esc(f.theirVendetta.tier)}</span>
+            <div class="d">their line is hunting yours.</div></div>` : '')
+        + (!f.myVendetta && !f.theirVendetta ? '<p class="dim">No live vendetta between your lines — just the tally.</p>' : '');
       // THE SIT-DOWN: accept a standing offer, else offer peace if there's a live feud
-      if (f.peace?.theyOffered && confirm(line + '\n\nAccept the sit-down and bury this feud?')) {
-        await act('POST', `/v1/feud/${b.dataset.feud}/peace/accept`, {}); return;
+      // one card, two possible verbs — the ledger is always shown, the button changes with the state.
+      // The act() call stays at the CALL SITE with a literal path: test/client.js reads these
+      // statically to prove every route the client can issue is really mounted, and a path threaded
+      // through a variable is exactly the shape it cannot read (it counted this and failed the run).
+      const feudCard = (extra, yesLabel, go) => {
+        const { bg, close } = dialog(`<h2>Blood feud with ${esc(f.bloodline)}</h2>${body}${extra}
+          <div style="margin-top:15px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="act" data-no>let the blood stand</button>
+            <button class="act prime" data-yes>${esc(yesLabel)}</button></div>`);
+        bg.querySelector('[data-no]').onclick = close;
+        bg.querySelector('[data-yes]').onclick = async () => { close(); await go(); };
+      };
+      if (f.peace?.theyOffered) {
+        feudCard('<p class="dim" style="margin-top:10px">🕊 They have offered a sit-down. Accept and both lines are wiped clean.</p>',
+          'take the sit-down', () => act('POST', `/v1/feud/${b.dataset.feud}/peace/accept`, {}));
+        return;
       }
-      if ((f.myVendetta || f.theirVendetta) && !f.peace?.iOffered && confirm(line + '\n\nSue for peace (offer a sit-down)?')) {
-        await act('POST', `/v1/feud/${b.dataset.feud}/peace`, {}); return;
+      if ((f.myVendetta || f.theirVendetta) && !f.peace?.iOffered) {
+        feudCard('', 'sue for peace', () => act('POST', `/v1/feud/${b.dataset.feud}/peace`, {}));
+        return;
       }
-      toast(line.split('\n')[0]);
+      sheetModal(`Blood feud with ${f.bloodline}`, body + (f.peace?.iOffered ? '<p class="dim">🕊 your peace offer stands — waiting on them.</p>' : ''));
     });
     t.querySelectorAll('[data-fire]').forEach((b) => b.onclick = async () => {
+      // A kill ends someone's street for good and swears their bloodline against yours for a week.
+      // Every other irreversible act in the game asks first; this one — the heaviest — did not.
+      if (!await ask('Take the shot?', `${b.dataset.name || 'This man'} does not get back up. Their heir will swear a vendetta on your line, and the street will know it was you.`,
+        { yes: 'take the shot', no: 'let him walk', danger: true })) return;
       const r = await act('POST', `/v1/streets/${b.dataset.fire}/fire`, {});
       // the server consumes the search on every resolved shot (kill or miss) — clear the local
       // hunt on any 2xx, and on a stale no_search too
@@ -3188,19 +3636,32 @@
         ${L.rat ? '<span class="chip bad">RAT — the badge follows the bloodline</span>' : ''}
         ${L.patrol ? '<span class="chip cold">PATROL HOURS — the Bureau convicts harder</span>' : ''}
         <div class="d" style="margin-top:6px">the case: ${L.exposure} exposure · heat above ${L.watch} feeds it (yours: ${me.heat}) · today ×${L.cityEvent.exposureMult} (${L.cityEvent.name})</div>
-        <div class="bar" style="height:10px;position:relative;margin-top:6px"><i style="width:${mark(L.exposure)};background:${stageColor}"></i></div>
+        <!-- the RICO meter used to be byte-identical to the energy bar. It now carries the three
+             thresholds as MARKS ON the track rather than text below it, so "how close am I to
+             losing everything" is answerable at a glance instead of by arithmetic. -->
+        <div class="bar ricobar" style="height:18px;position:relative;margin-top:7px">
+          <i style="width:${mark(L.exposure)};background:${stageColor}"></i>
+          <b class="tick" style="left:${mark(L.thresholds.watched)}"></b>
+          <b class="tick" style="left:${mark(L.thresholds.investigation)}"></b>
+          <b class="tick bad" style="left:${mark(L.thresholds.indict)}"></b></div>
         <div class="d" style="display:flex;justify-content:space-between;font-size:11px">
-          <span>watched @ ${L.thresholds.watched}</span><span>investigation @ ${L.thresholds.investigation}</span><span>INDICTMENT @ ${L.thresholds.indict}</span></div></div>
+          <span>watched @ ${L.thresholds.watched}</span><span>investigation @ ${L.thresholds.investigation}</span><span style="color:var(--bad)">INDICTMENT @ ${L.thresholds.indict}</span></div></div>
 
       ${L.indicted ? `
       <h2 style="margin-top:12px" >The Case Against You</h2>
       <div class="card" style="border-color:var(--blood)">
         <span class="t" style="color:var(--bad)">UNDER INDICTMENT</span>
-        <div class="d">trial in ${mins(L.graceSeconds)} unless you act · conviction odds ~${L.convictionOdds}% · a conviction seizes ${Math.round(L.forfeitRate * 100)}% of pocket + bank (staked $OMR + minted gear are SAFE) and jails you — the street SURVIVES</div>
-        <div style="margin-top:6px">
-          <button class="act" data-do="POST /v1/law/plea">cop a plea (${Math.round((L.plea?.forfeitRate || 0) * 100)}% + ${mins(L.plea?.jailSeconds || 0)} inside)</button>
+        <!-- the two numbers that decide your fate were inside a 12.5px dim paragraph -->
+        <div class="row" style="font-size:19px;margin:6px 0 2px">
+          <span style="color:var(--bad)">~${L.convictionOdds}% <span class="k" style="font-size:12px">CONVICTION</span></span>
+          <span class="live">${mins(L.graceSeconds)} <span class="k" style="font-size:12px">TO TRIAL</span></span></div>
+        <div class="d">a conviction seizes ${Math.round(L.forfeitRate * 100)}% of pocket + bank (staked $OMR + minted gear are SAFE) and jails you — the street SURVIVES</div>
+        <div style="margin-top:8px">
+          <button class="act" data-do="POST /v1/law/plea"
+            data-confirm="Cop a plea?|You hand them ${Math.round((L.plea?.forfeitRate || 0) * 100)}% of pocket and bank and do ${mins(L.plea?.jailSeconds || 0)} inside — certain, no roll. The case is closed." data-confirm-yes="take the deal">cop a plea (${Math.round((L.plea?.forfeitRate || 0) * 100)}% + ${mins(L.plea?.jailSeconds || 0)} inside)</button>
           <button class="act" data-do="POST /v1/law/jury" ${L.jury.bought ? 'disabled' : ''}>${L.jury.bought ? 'jury bought' : `buy the jury (${L.jury.cost} $OMR)`}</button>
-          <button class="act" data-do="POST /v1/law/trial">demand trial NOW</button>
+          <button class="act risk" data-do="POST /v1/law/trial"
+            data-confirm="Demand trial now?|You give up the clock and roll it here: ~${L.convictionOdds}% they convict. A conviction takes ${Math.round(L.forfeitRate * 100)}% of your pocket AND your bank." data-confirm-yes="face the jury">demand trial NOW</button>
         </div></div>` : ''}
 
       <h2 style="margin-top:12px">The Escapes</h2>
@@ -3230,8 +3691,10 @@
       </div>`;
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
     $('#flip-target').innerHTML = streets.map((s) => `<option value="${s.id}">${s.name} (lvl ${s.level})</option>`).join('');
-    $('#flip-go').onclick = () =>
-      act('POST', `/v1/law/flip/${$('#flip-target').value}`, {}).then(() => renderLaw());
+    $('#flip-go').onclick = async () => {
+      if (!await ask('Give them a name?', 'Your case goes away and theirs begins. You are branded a RAT for good — omertà no longer protects you, and your own family can hunt you. It follows your bloodline.',
+        { yes: 'name him', no: 'keep your mouth shut', danger: true })) return;
+      act('POST', `/v1/law/flip/${$('#flip-target').value}`, {}).then(() => renderLaw()); };
   }
 
   // ── THE WIRE: the intelligence terminal — wiretaps on rivals + the Street Wire premium feed ──
@@ -3274,7 +3737,14 @@
         </div>
         <div class="d" style="font-size:11px;margin-top:4px">retainer runs ${mins(i.paidSeconds)} · a human source can't be fed lies</div>
       </div>`).join('');
+    // SOMEONE IS SQUEEZING YOU — this was the TENTH section, under the ticker tape and a subscribe
+    // card. It is a countdown with your money on it; it leads.
+    const squeeze = (SEC.onMe || []).length ? `<div class="grid" style="margin-bottom:12px">${SEC.onMe.map((s) => `
+        <div class="card threat" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">\u26a0 THEY HAVE ${esc(s.kindName.toUpperCase())}</span>
+          <div class="d"><b>${esc(s.holder)}</b> wants <b style="color:var(--bad)">$${fmt(s.demand)}</b> hush money \u2014 <span class="live">${mins(s.deadlineSeconds)}</span> before it goes to the Bureau</div>
+          <button class="act prime" data-secpay="${s.id}">pay the hush ($${fmt(s.demand)})</button></div>`).join('')}</div>` : '';
     t.innerHTML = `
+      ${squeeze}
       ${!(W.taps || []).length && !W.subscribed ? coachCard('The Wire — information is a weapon', 'Pay $OMR to run a WIRETAP on a rival (their Law heat, wealth, rackets, and whether they\'re hunting YOU) — or subscribe to the STREET WIRE for forecasts, threat chatter, and the war room. Someone bugging your line? SWEEP it clean.') : ''}
       ${W.spymaster ? `<div class="card"><span class="t">🎧 ${W.spymaster.rank}</span> <span class="d">${W.spymaster.ops} intel op(s) run${W.spymaster.tapBonus ? ` · tradecraft: +${W.spymaster.tapBonus} wire slot${W.spymaster.tapBonus > 1 ? 's' : ''}` : ''}${W.spymaster.discountBps ? `, −${(W.spymaster.discountBps / 100)}% on intel reads` : ''} — <a href="#" id="wire-lb">the Spymaster board →</a></span></div>${W.watchdog ? '<div class="d" style="color:var(--neon);font-size:12.5px">🐕 THE WATCHDOG is live — you\'ll be alerted the moment a tapped mark turns hot (hunts you / goes wanted / gets indicted).</div>' : ''}` : ''}
       <h2>The Street Wire</h2>
@@ -3349,10 +3819,6 @@
                <div style="margin-top:4px"><input data-secamt="${s.id}" placeholder="demand $" size="9">
                <button class="act" data-secextort="${s.id}" style="font-size:11px;padding:2px 6px">name the price</button></div>`}
           <button class="act" data-secexpose="${s.id}" style="border-color:var(--blood);font-size:11px;padding:2px 6px">hand it to the Bureau</button></div>`).join('')}</div>` : ''}
-      ${(SEC.onMe || []).length ? `<div class="grid" style="margin-top:6px">${SEC.onMe.map((s) => `
-        <div class="card" style="border-color:var(--bad)"><span class="t" style="color:var(--bad)">⚠ THEY HAVE ${s.kindName.toUpperCase()}</span>
-          <div class="d"><b>${s.holder}</b> wants $${fmt(s.demand)} hush money — ${mins(s.deadlineSeconds)} before it goes to the Bureau</div>
-          <button class="act" data-secpay="${s.id}">pay the hush ($${fmt(s.demand)})</button></div>`).join('')}</div>` : ''}
 
       ${W.premium ? `
       <h2 style="margin-top:12px">The War Room</h2>
@@ -3381,8 +3847,10 @@
     t.querySelectorAll('[data-secextort]').forEach((b) => b.onclick = () => {
       const amt = Number(t.querySelector(`[data-secamt="${b.dataset.secextort}"]`)?.value);
       if (amt > 0) act('POST', `/v1/secrets/${b.dataset.secextort}/extort`, { demand: amt }).then(() => renderWire()); });
-    t.querySelectorAll('[data-secexpose]').forEach((b) => b.onclick = () =>
-      act('POST', `/v1/secrets/${b.dataset.secexpose}/expose`, {}).then(() => renderWire()));
+    t.querySelectorAll('[data-secexpose]').forEach((b) => b.onclick = async () => {
+      if (!await ask('Hand it to the Bureau?', 'The dirt lands on their RICO file and the secret is spent — no more leverage, and no payday from it.',
+        { yes: 'burn them', no: 'hold it', danger: true })) return;
+      act('POST', `/v1/secrets/${b.dataset.secexpose}/expose`, {}).then(() => renderWire()); });
     t.querySelectorAll('[data-secpay]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/secrets/${b.dataset.secpay}/pay`, {}).then(() => renderWire()));
     const watchGo = $('#wire-watch-go'); if (watchGo) watchGo.onclick = () => {
@@ -3397,7 +3865,9 @@
       const r = await api('POST', '/v1/wire/trace', {});
       if (r.code >= 400) { toast(describe(r.body) || 'trace failed'); return; }
       const w = r.body.watchers || [];
-      alert(w.length ? 'BUGS TRACED — who\'s on your line:\n\n' + w.map((x) => `• ${x.name} (${minsTxt(x.expiresSeconds)} left)`).join('\n') : 'your lines are clean — nobody\'s listening.');
+      sheetModal('BUGS TRACED', w.length
+        ? `<p class="dim">These are the people listening to you right now. A trace NAMES them but does not clear them — sweep to cut the lines.</p>${rankRows(w.map((x) => ({ name: x.name, val: `${minsTxt(x.expiresSeconds)} left` })), '')}`
+        : '<p class="dim">Your lines are clean — nobody\'s listening.</p>');
       renderWire();
     };
     $('#wire-dossier-go').onclick = async () => {
@@ -3405,18 +3875,31 @@
       const r = await api('POST', `/v1/wire/dossier/${tgt}`, {});
       if (r.code >= 400) { toast(describe(r.body) || 'no dossier'); return; }
       const d = r.body.dossier;
-      alert(`DOSSIER — ${d.name} (lvl ${d.level})\n\n`
-        + `law: ${d.law.stage.toUpperCase()}${d.law.indicted ? ' · INDICTED' : ''} · heat ${d.law.heat}\n`
-        + `money: ${d.wealth}\n`
-        + `record: ${d.record.kills} kill(s) / ${d.record.deaths} death(s)\n`
-        + `flags: ${[d.flags.wanted && 'WANTED', d.flags.welsher && 'WELSHER', d.flags.rat && 'RAT', d.flags.indicted && 'INDICTED'].filter(Boolean).join(', ') || 'clean'}\n`
-        + `family: ${d.family ? d.family.name + ' (' + d.family.role + ')' : 'unaffiliated'}\n`
-        + `has wires on: ${d.watching.length ? d.watching.join(', ') : 'nobody'}`);
+      // The dossier is the priciest read on the screen ($OMR, once, non-refundable). Rendering it
+      // as a case file rather than a \n-joined alert is the difference between "a receipt" and
+      // "you bought something." Wealth stays BANDED — the server never sends an exact figure, and
+      // showing one would hand a hunter precise kill-EV (the audit's standing rule).
+      const flags = [d.flags.wanted && 'WANTED', d.flags.welsher && 'WELSHER', d.flags.rat && 'RAT', d.flags.indicted && 'INDICTED'].filter(Boolean);
+      const fileRow = (k, v, cls = '') => `<div class="row" style="border-bottom:1px solid var(--line);padding:6px 0">
+        <span class="k" style="font-size:11.5px;letter-spacing:2px;text-transform:uppercase">${esc(k)}</span>
+        <span class="${cls}" style="font-size:14.5px">${v}</span></div>`;
+      sheetModal(`DOSSIER — ${d.name}`,
+        `<p class="dim" style="margin:0 0 10px">level ${d.level} · ${d.family ? esc(d.family.name) + ' (' + esc(d.family.role) + ')' : 'unaffiliated'}</p>`
+        + (flags.length ? `<div class="chips">${flags.map((f) => `<span class="chip bad">${f}</span>`).join('')}</div>`
+                        : '<div class="chips"><span class="chip good">no record</span></div>')
+        + fileRow('the law', `${esc(d.law.stage.toUpperCase())}${d.law.indicted ? ' · INDICTED' : ''}`, d.law.indicted ? 'bad' : '')
+        + fileRow('street heat', d.law.heat)
+        + fileRow('money', esc(d.wealth))
+        + fileRow('record', `${d.record.kills} kill(s) · ${d.record.deaths} death(s)`)
+        + fileRow('wires out on', d.watching.length ? esc(d.watching.join(', ')) : 'nobody')
+        + `<p class="dim" style="margin-top:12px;font-size:12px">Money is a band, never a figure — the file doesn't carry an exact number.</p>`);
       renderWire();
     };
     const wlb = $('#wire-lb'); if (wlb) wlb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/wire')).body || {};
-      alert('THE SPYMASTER — busiest intel operators\n\n' + ((d.spies || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${x.ops} ops)`).join('\n') || 'nobody\'s been listening yet')); };
+      sheetModal('THE SPYMASTER — busiest intel operators',
+        rankRows((d.spies || []).map((x) => ({ name: x.name, note: x.rank, val: `${fmt(x.ops)} ops` })),
+          'nobody\'s been listening yet')); };
   }
 
   // ── THE STORE: ETH revenue packages (informational — purchases are made at the on-chain paywall) ──
@@ -3447,7 +3930,10 @@
       <div class="grid">${S.packages.map((p) => `
         <div class="card"><span class="t">${p.name}</span> <span class="chip">${eth(p.priceEth)}</span>${p.plexOmr ? ` <span class="chip cold">or ${fmt(p.plexOmr)} $OMR</span>` : ''}
           <div class="d">${p.blurb}</div>
-          ${p.plexOmr ? `<button class="act" data-plex="${p.sku}">pay ${fmt(p.plexOmr)} $OMR (PLEX)</button>` : ''}</div>`).join('')}</div>
+          <!-- a card with a price and NO button reads as broken. The ETH rail is dormant until the
+               paywall ships, so say that in the button's place rather than leaving a hole. -->
+          ${p.plexOmr ? `<button class="act prime" data-plex="${p.sku}">pay ${fmt(p.plexOmr)} $OMR (PLEX)</button>`
+            : '<button class="act" disabled title="the on-chain checkout is not live yet">ETH checkout opens at launch</button>'}</div>`).join('')}</div>
       <div class="card" style="margin-top:8px"><div class="d">${S.note} ${me.wallet ? '' : '<b>Link a wallet first</b> (Everything Else → Chain) — a purchase made before linking is credited the moment you link.'}</div></div>
       <div class="d" style="font-size:11px;margin-top:6px">Revenue split — founder ${S.split.founder / 100}% · token buyback ${S.split.buyback / 100}% · RWA reserve ${S.split.rwa / 100}%.</div>
       <div id="pass-slot"></div>
@@ -3673,10 +4159,14 @@
     const li = $('#sp-list'); if (li) li.onclick = () => act('POST', '/v1/speakeasy/list', { price: Number($('#sp-sale').value) }).then(() => renderSpeakeasy());
     const ul = $('#sp-unlist'); if (ul) ul.onclick = () => act('POST', '/v1/speakeasy/unlist', {}).then(() => renderSpeakeasy());
     t.querySelectorAll('[data-buy]').forEach((x) => x.onclick = () => act('POST', `/v1/speakeasy/${x.dataset.buy}/buy`, {}).then(() => renderSpeakeasy()));
-    t.querySelectorAll('[data-standover]').forEach((x) => x.onclick = () => { if (confirm('Stand over this club? The fee burns win or lose; a win forces a sale at the assessed value.')) act('POST', `/v1/speakeasy/${x.dataset.standover}/standover`, {}).then(() => renderSpeakeasy()); });
+    t.querySelectorAll('[data-standover]').forEach((x) => x.onclick = async () => {
+      if (!await ask('Stand over the club?', 'The fee burns win or lose. A win forces the owner to sell at the assessed value — you must carry the whole price.', { yes: 'lean on them', no: 'not tonight', danger: true })) return;
+      act('POST', `/v1/speakeasy/${x.dataset.standover}/standover`, {}).then(() => renderSpeakeasy()); });
     const nlLink = $('#sp-nl'); if (nlLink) nlLink.onclick = async (e) => { e.preventDefault();
       const nl = (await api('GET', '/v1/leaderboard/nightlife')).body || {};
-      alert('THE NIGHTLIFE — top of the scene\n\n' + (nl.board || []).map((x, i) => `${i + 1}. ${x.name} — ${x.rank} (${fmt(x.renown)})${x.you ? '  ← you' : ''}`).join('\n')); };
+      sheetModal('THE NIGHTLIFE — top of the scene',
+        rankRows((nl.board || []).map((x) => ({ name: x.name, note: x.rank, val: fmt(x.renown), you: x.you })),
+          'nobody has been seen out yet')); };
   }
 
   // ── THE FIGHTS: sign a contender, train them, stake them in PvP bouts ──
@@ -3723,7 +4213,11 @@
       <div class="grid">${(b.mainEvents || []).map((m) => {
         const total = m.a.pool + m.b.pool, oddsA = total ? Math.round(m.a.pool / total * 100) : 50;
         return `<div class="card"><span class="t">${m.a.name} vs ${m.b.name}</span> <span class="chip">closes ${mins(m.closesSeconds)}</span>${m.isPrincipal ? ' <span class="chip good">your card</span>' : ''}
-          <div class="d">pot $${fmt(total)} — ${m.a.name}: $${fmt(m.a.pool)} (${oddsA}%) · ${m.b.name}: $${fmt(m.b.pool)} (${100 - oddsA}%)</div>
+          <!-- the crowd's money as a TUG-OF-WAR, which is the one place a bar carries real meaning
+               here: two fighters, one pot, and where the room is leaning. It was two percentages. -->
+          <div class="row" style="margin:7px 0 2px;font-size:12px"><span>${m.a.name}</span><span class="k">pot $${fmt(total)}</span><span>${m.b.name}</span></div>
+          <div class="bar tug" style="height:12px;margin:0 0 3px"><i style="width:${oddsA}%"></i></div>
+          <div class="row" style="margin:0 0 4px;font-size:11.5px"><span class="k">$${fmt(m.a.pool)} (${oddsA}%)</span><span class="k">$${fmt(m.b.pool)} (${100 - oddsA}%)</span></div>
           ${m.yourBet ? `<div class="d" style="color:var(--neon)">your bet: $${fmt(m.yourBet.amount)} on ${m.yourBet.on}</div>`
             : (m.isPrincipal || m.closesSeconds <= 0) ? '' : `<div style="margin-top:4px" class="d">
               <input id="bx-bet-${m.id}" placeholder="$${fmt(b.betMin)}–${fmt(b.betMax)}" size="9">
@@ -3751,9 +4245,11 @@
     const bxa = $('#bx-accept'); if (bxa) bxa.onclick = () => act('POST', '/v1/boxing/callout/accept', null).then(() => renderBoxing());
     const lb = $('#bx-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/boxing')).body || {};
-      const f = (d.fighters || []).map((x, i) => `${i + 1}. ${x.belt ? '🏆 ' : ''}${x.fighter} (${x.manager}) — ${x.rank} ${x.record}`).join('\n');
-      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.manager} — ${x.title} (${x.wins} wins)`).join('\n');
-      alert('TOP FIGHTERS\n\n' + (f || 'none') + '\n\nMANAGER LEGEND (lifetime wins)\n\n' + (leg || 'none')); };
+      sheetModal('THE FIGHT CIRCUIT',
+        `<h3 style="color:var(--dim);font-size:12px;letter-spacing:2px;margin:2px 0 4px">TOP FIGHTERS</h3>`
+        + rankRows((d.fighters || []).map((x) => ({ name: `${x.belt ? '🏆 ' : ''}${x.fighter}`, note: `${x.manager} · ${x.rank}`, val: x.record })), 'no fighters ranked yet')
+        + `<h3 style="color:var(--dim);font-size:12px;letter-spacing:2px;margin:16px 0 4px">MANAGER LEGEND — lifetime wins</h3>`
+        + rankRows((d.legend || []).map((x) => ({ name: x.manager, note: x.title, val: `${x.wins} wins` })), 'no manager has banked a win yet')); };
   }
 
   // ── THE STABLE: own the dogs & the ponies (buy/train/list/circuit(PvE)/match(PvP) + the legend) ──
@@ -3817,9 +4313,11 @@
     });
     const lb = $('#st-lb'); if (lb) lb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/stable')).body || {};
-      const f = (d.racers || []).map((x, i) => `${i + 1}. ${x.kind === 'horse' ? '🐎' : '🐕'} ${x.racer} (${x.owner}) — ${x.rank} ${x.record}`).join('\n');
-      const leg = (d.legend || []).map((x, i) => `${i + 1}. ${x.owner} — ${x.title} (${x.wins} wins)`).join('\n');
-      alert('TOP RACERS\n\n' + (f || 'none') + '\n\nOWNER LEGEND (lifetime wins)\n\n' + (leg || 'none')); };
+      sheetModal('THE STABLE',
+        `<h3 style="color:var(--dim);font-size:12px;letter-spacing:2px;margin:2px 0 4px">TOP RACERS</h3>`
+        + rankRows((d.racers || []).map((x) => ({ name: `${x.kind === 'horse' ? '🐎' : '🐕'} ${x.racer}`, note: `${x.owner} · ${x.rank}`, val: x.record })), 'no racers ranked yet')
+        + `<h3 style="color:var(--dim);font-size:12px;letter-spacing:2px;margin:16px 0 4px">OWNER LEGEND — lifetime wins</h3>`
+        + rankRows((d.legend || []).map((x) => ({ name: x.owner, note: x.title, val: `${x.wins} wins` })), 'no owner has banked a win yet')); };
   }
 
   // ── STREET RACES: the car catalog as a competitive loop (PvE circuit + tuning + PvP wagers) ──
@@ -3838,7 +4336,7 @@
       <div class="grid">
         <div class="card"><span class="t">The Circuit (PvE)</span>
           <div class="d">Pay the buy-in (burns win or lose), beat the NPC pack for the purse. A loss dings your car.</div>
-          <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select><label style="font-size:13.5px"><input type="checkbox" id="rc-nos-npc"> burn a NOS (+${b.nos?.power || 60})</label></div>
+          <div class="row" style="margin-top:6px"><select id="rc-car">${carOpts}</select><button class="act nosbtn" id="rc-nos-npc" data-armed="0" title="arm the bottle for this run">NOS +${b.nos?.power || 60}</button></div>
           ${tiers.map((ti) => `<div class="row" style="margin-top:4px"><span>${ti.name} <span class="chip">lvl ${ti.minLvl}</span></span><span>fee $${fmt(ti.fee)} · purse $${fmt(ti.purse)} <button class="act" data-npc="${ti.id}"${cd > 0 || !cars.length ? ' disabled' : ''}>race</button></span></div>`).join('')}
         </div>
         <div class="card"><span class="t">Your Garage</span>
@@ -3852,7 +4350,7 @@
       <div class="card"><span class="t">The Strip (PvP)</span>
         <div class="d">Other drivers' cars taking a race. Wager races: pick your own ride, name a wager up to their limit — winner takes the pot minus a 5% rake, the loser's car takes damage. <b style="color:var(--bad)">🎀 pinks</b> races have no cash — the winner <b>takes the loser's car</b>.</div>
         ${strip.length ? strip.map((s) => `<div class="row" style="margin-top:4px"><span>${s.owner}'s ${s.model} <span class="chip">${s.band}</span>${s.limit ? ` · up to $${fmt(s.limit)}` : ''}${s.forPinks ? ' · <span class="chip" style="color:var(--bad)">🎀 for pinks</span>' : ''}</span>
-          <span><select class="rc-mycar" data-for="${s.carId}">${carOpts}</select><label style="font-size:13.5px"><input type="checkbox" class="rc-nos" data-for="${s.carId}"> NOS</label>
+          <span><select class="rc-mycar" data-for="${s.carId}">${carOpts}</select><button class="act nosbtn rc-nos" data-for="${s.carId}" data-armed="0">NOS</button>
           ${s.limit ? `<input id="rc-w-${s.carId}" type="number" placeholder="wager $" style="width:90px"><button class="act" data-race="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''}>race</button>` : ''}
           ${s.forPinks ? `<button class="act" data-pinkrace="${s.ownerId}" data-car="${s.carId}"${cd > 0 ? ' disabled' : ''} style="color:var(--bad)">🎀 for pinks</button>` : ''}</span></div>`).join('') : '<div class="d">Nobody\'s on the strip right now. List one of your own — for a wager or for pinks — to draw a challenger.</div>'}
       </div>
@@ -3864,7 +4362,16 @@
       </div>` : ''}
       <button class="act" id="rc-lb">🏁 THE WHEEL — the leaderboard</button>`;
     { const gp = $('#rc-gp'); if (gp) gp.onclick = () => act('POST', '/v1/races/gp', { car: $('#rc-gp-car').value }).then(() => renderRaces()); }
-    t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc, nos: $('#rc-nos-npc')?.checked || false }).then(() => renderRaces()));
+    // NOS is the most cinematic mechanic in the game and it was a CHECKBOX. Arming a bottle should
+    // feel like arming a bottle — it lights, it hums, and it says ARMED.
+    t.querySelectorAll('.nosbtn').forEach((x) => x.onclick = () => {
+      const on = x.dataset.armed !== '1';
+      x.dataset.armed = on ? '1' : '0';
+      x.classList.toggle('armed', on);
+      x.textContent = on ? '💥 NOS ARMED' : x.id === 'rc-nos-npc' ? `NOS +${b.nos?.power || 60}` : 'NOS';
+      haptic(on ? 'success' : 'tap');
+    });
+    t.querySelectorAll('[data-npc]').forEach((x) => x.onclick = () => act('POST', '/v1/races/npc', { car: $('#rc-car').value, tier: x.dataset.npc, nos: $('#rc-nos-npc')?.dataset.armed === '1' }).then(() => renderRaces()));
     t.querySelectorAll('[data-tune]').forEach((x) => x.onclick = () => act('POST', `/v1/races/tune/${x.dataset.tune}`, null).then(() => renderRaces()));
     t.querySelectorAll('[data-nos]').forEach((x) => x.onclick = () => act('POST', `/v1/races/nos/${x.dataset.nos}`, null).then(() => renderRaces()));
     t.querySelectorAll('[data-pink]').forEach((x) => x.onclick = () => act('POST', `/v1/races/pinkslip/${x.dataset.pink}`, { on: x.dataset.on === '1' }).then(() => renderRaces()));
@@ -3872,18 +4379,19 @@
     t.querySelectorAll('[data-unlist]').forEach((x) => x.onclick = () => act('POST', `/v1/races/unlist/${x.dataset.unlist}`, null).then(() => renderRaces()));
     t.querySelectorAll('[data-race]').forEach((x) => x.onclick = () => {
       const myCar = (t.querySelector(`.rc-mycar[data-for="${x.dataset.car}"]`) || {}).value;
-      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).checked || false;
+      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).dataset?.armed === '1';
       act('POST', `/v1/races/challenge/${x.dataset.race}`, { myCar, theirCar: x.dataset.car, wager: Number(($(`#rc-w-${x.dataset.car}`) || {}).value || 0), nos }).then(() => renderRaces());
     });
-    t.querySelectorAll('[data-pinkrace]').forEach((x) => x.onclick = () => {
+    t.querySelectorAll('[data-pinkrace]').forEach((x) => x.onclick = async () => {
       const myCar = (t.querySelector(`.rc-mycar[data-for="${x.dataset.car}"]`) || {}).value;
-      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).checked || false;
-      if (!confirm('Pink-slip race — if you lose, your selected car is GONE. Race for it?')) return;
+      const nos = (t.querySelector(`.rc-nos[data-for="${x.dataset.car}"]`) || {}).dataset?.armed === '1';
+      if (!await ask('Race for pinks?', 'If you lose, the car you picked changes hands on the spot. There is no buy-back.', { yes: 'race for it', no: 'walk away', danger: true })) return;
       act('POST', `/v1/races/pinks/${x.dataset.pinkrace}`, { myCar, theirCar: x.dataset.car, nos }).then(() => renderRaces());
     });
     const lb = $('#rc-lb'); if (lb) lb.onclick = async () => {
       const d = (await api('GET', '/v1/leaderboard/races')).body?.drivers || [];
-      alert('THE WHEEL — winningest drivers\n\n' + (d.map((x, i) => `${i + 1}. ${x.name} — ${x.wins} wins (${x.rank})`).join('\n') || 'none yet'));
+      sheetModal('THE WHEEL — winningest drivers',
+        rankRows(d.map((x) => ({ name: x.name, note: x.rank, val: `${x.wins} wins` })), 'nobody has taken a race yet'));
     };
   }
 
@@ -3938,7 +4446,8 @@
     { const bt = $('[data-berth]'); if (bt) bt.onclick = () => act('POST', '/v1/port/berth', null).then(() => renderPort()); }
     { const plb = $('#pt-lb'); if (plb) plb.onclick = async (e) => { e.preventDefault();
       const d = (await api('GET', '/v1/leaderboard/port')).body?.smugglers || [];
-      alert("THE SMUGGLER'S LEGEND — biggest lifetime haul\n\n" + (d.map((x, i) => `${i + 1}. ${x.name} — $${(x.smuggled||0).toLocaleString()} (${x.rank})`).join('\n') || 'none yet')); }; }
+      sheetModal("THE SMUGGLER'S LEGEND — biggest lifetime haul",
+        rankRows(d.map((x) => ({ name: x.name, note: x.rank, val: `$${fmt(x.smuggled || 0)}` })), 'nothing has come ashore yet')); }; }
     t.querySelectorAll('[data-up]').forEach((x) => x.onclick = () => act('POST', `/v1/port/upgrade/${x.dataset.up}`, { part: x.dataset.part }).then(() => renderPort()));
     t.querySelectorAll('[data-pirate]').forEach((x) => x.onclick = () => act('POST', `/v1/port/intercept/${x.dataset.pirate}`, null).then(() => renderPort()));
     t.querySelectorAll('.pt-rdv').forEach((x) => x.onchange = () => act('POST', `/v1/port/boat/${x.dataset.for}/rendezvous`, { open: x.checked }).then(() => renderPort()));
@@ -4084,6 +4593,17 @@
     const b = (await api('GET', '/v1/loans')).body || {};
     const streets = ((await api('GET', '/v1/streets')).body?.streets || []).filter((s) => s.id !== me.id);
     t.innerHTML = `
+      <!-- WANTED means NPC bounty hunters are rolling to kill you every worker tick. It surfaced as
+           a button on the LAST line of the screen, under the paper market. -->
+      ${me.wanted ? `<div class="card threat" style="border-color:var(--blood);margin-bottom:12px">
+        <span class="t" style="color:var(--bad)">⚠ BOUNTY HUNTERS ARE LOOKING FOR YOU</span>
+        <div class="d">You defaulted. Omertà no longer covers you — even your own family can hunt you — and NPC hunters roll for your life on their own clock. Lie low, or square it.</div>
+        <button class="act prime" data-do="POST /v1/loans/square"
+          data-confirm="Square your name?|$50k clears the WANTED mark and the welsher brand — but the debt itself has to be settled first." data-confirm-yes="pay the $50k">square your name ($50k)</button></div>`
+        : me.welsher ? `<div class="card" style="border-color:var(--bad);margin-bottom:12px">
+        <span class="t" style="color:var(--bad)">WELSHER</span>
+        <div class="d">You broke your word. Nobody has to lend to you again until you square it — and a named gun on your head is cheap.</div>
+        <button class="act" data-do="POST /v1/loans/square">square your name ($50k)</button></div>` : ''}
       ${!(b.offers || []).length && !(b.active || []).length ? coachCard('The Shylock — predatory lending', 'Lend cash at a rate for a fixed term and collect the vig — or default and get leg-broken and marked a welsher. High trust, high risk. Nothing on the wire right now; post an offer below or wait for borrowers.') : ''}
       ${b.house ? `<h2>The House Window <span class="d" style="font-size:11px">(the lender of last resort — bad terms, always open, lends only what it holds)</span></h2>
       <div class="card">${b.house.yourMarker
@@ -4098,7 +4618,18 @@
           ${o.mine ? '<span class="chip">your paper</span>' : ''}${o.forMe ? '<span class="chip good">FOR YOU</span>' : ''}${o.directed && !o.forMe && !o.mine ? '<span class="chip cold">spoken for</span>' : ''}
           <div class="d">owe $${fmt(o.owed)} in ${o.hours}h · ${o.lender}${o.secured ? ` · SECURED: pledge a car worth $${fmt(o.collateralMin)}+` : ''}</div>
           ${o.mine ? `<button class="act" data-loando="cancel:${o.id}">pull it</button>`
-            : `${o.secured ? `<input data-loancar="${o.id}" placeholder="car id to pledge" size="20">` : ''}
+            : `${o.secured ? (() => {
+                 // this asked the player to TYPE A UUID to pledge collateral. me.cars is already on
+                 // the view and each car carries its book value, so the picker can also grey out the
+                 // ones that don't clear the lender's floor rather than letting the server refuse them.
+                 const mine = (me.cars || []).filter((c) => !c.listed && !c.pledged);
+                 return mine.length
+                   ? `<select data-loancar="${o.id}">${mine.map((c) => {
+                       const ok = (c.value ?? 0) >= (o.collateralMin || 0);
+                       return `<option value="${c.id}"${ok ? '' : ' disabled'}>${esc(c.model || 'car')}${c.value != null ? ` — $${fmt(c.value)}` : ''}${ok ? '' : ' (too cheap)'}</option>`;
+                     }).join('')}</select>`
+                   : '<span class="d" style="color:var(--dim)">you have no free car to pledge</span>';
+               })() : ''}
                <button class="act" data-loantake="${o.id}">take the money</button>`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no paper on offer</span>'}
 
@@ -4129,7 +4660,7 @@
           <div class="d">${p.borrower} owes it · held by ${p.lender} · ${p.overdue ? 'collectable NOW' : 'due ' + mins(p.dueSeconds)}</div>
           ${p.mine ? '' : `<button class="act" data-loando="buy:${p.id}">buy the claim</button>`}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">nobody’s selling their book</span>'}
-      ${me.welsher || me.wanted ? `<div style="margin-top:10px"><button class="act" data-do="POST /v1/loans/square" style="border-color:var(--blood)">square your name ($50k — settle the debt first)</button></div>` : ''}`;
+`;   // (the square-your-name control now leads the screen as a threat banner, above)
     t.querySelector('#ln-offer').onclick = () => {
       const body = { amount: Number(t.querySelector('#ln-amt').value), rate: Number(t.querySelector('#ln-rate').value), hours: Number(t.querySelector('#ln-hours').value) };
       const to = t.querySelector('#ln-to').value; if (to) body.to = to;
@@ -4144,8 +4675,11 @@
       const body = carInp && carInp.value.trim() ? { carId: carInp.value.trim() } : {};
       act('POST', `/v1/loans/${btn.dataset.loantake}/take`, body).then(() => renderLoans());
     });
-    t.querySelectorAll('[data-loando]').forEach((btn) => btn.onclick = () => {
+    t.querySelectorAll('[data-loando]').forEach((btn) => btn.onclick = async () => {
       const [what, id] = btn.dataset.loando.split(':');
+      // one click used to hospitalize a debtor, seize their pledged car, and brand them WELSHER + WANTED
+      if (what === 'collect' && !await ask('Send the boys round?', 'You take what they have on them, seize any collateral, put them in the hospital, and mark them a welsher — WANTED, with the whole city free to hunt them.',
+        { yes: 'break their legs', no: 'give them time', danger: true })) return;
       act('POST', `/v1/loans/${id}/${what}`, {}).then(() => renderLoans());
     });
     t.querySelectorAll('[data-loansell]').forEach((btn) => btn.onclick = () =>
@@ -4156,14 +4690,17 @@
   async function renderPortfolio() {
     const t = $('#tab-portfolio');
     await refresh();
-    const pf = (await api('GET', '/v1/portfolio')).body || {};
-    const vault = (await api('GET', '/v1/vault')).body || {};
-    const wage = (await api('GET', '/v1/wage')).body || {};
-    const bd = (await api('GET', '/v1/bonds')).body || {};
-    const lb = (await api('GET', '/v1/leaderboard/portfolio')).body || {};
-    const flb = (await api('GET', '/v1/leaderboard/family-portfolio')).body || {};
-    const win = (await api('GET', '/v1/window')).body || {};
-    const yld = (await api('GET', '/v1/yield')).body || {};
+    // eight serial awaits before a single pixel painted. Issuing them together doesn't make the
+    // AUTHED ones concurrent (api() queues those on purpose — same-account calls serialize on the
+    // character row at the database anyway), but it removes the client-side turnaround between each
+    // response and the next request, and the keyless boards genuinely do run in parallel.
+    const [pfR, vaultR, wageR, bdR, lbR, flbR, winR, yldR] = await Promise.all([
+      api('GET', '/v1/portfolio'), api('GET', '/v1/vault'), api('GET', '/v1/wage'), api('GET', '/v1/bonds'),
+      api('GET', '/v1/leaderboard/portfolio'), api('GET', '/v1/leaderboard/family-portfolio'),
+      api('GET', '/v1/window'), api('GET', '/v1/yield'),
+    ]);
+    const pf = pfR.body || {}, vault = vaultR.body || {}, wage = wageR.body || {}, bd = bdR.body || {};
+    const lb = lbR.body || {}, flb = flbR.body || {}, win = winR.body || {}, yld = yldR.body || {};
     const mkt = pf.market || [];
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
@@ -4452,7 +4989,12 @@
       <h2 style="margin-top:14px">The Collection <span class="d" style="font-size:11px">(everything your bloodline has EVER touched — survives death, selling, seizure · ${col.have || 0}/${col.total || 0} · ${col.pct || 0}%)</span></h2>
       <div class="grid">${(col.categories || []).map((c) => `
         <div class="card"><span class="t">${c.name}</span> <span class="chip ${c.have === c.total ? 'good' : ''}">${c.have}/${c.total}${c.have === c.total ? ' ✦ COMPLETE' : ''}</span>
-          <div class="d" style="font-size:11px;line-height:1.7">${c.items.map((it) => `<span style="${it.got ? '' : 'opacity:.35'}" title="${it.name}">${it.got ? '◆' : '◇'}</span>`).join('​')}</div>
+          <!-- a completion BAR reads the progress at a glance; the diamonds are the detail under it.
+               They were 11px with the item name only in a title= — invisible on touch, where most of
+               the collection game gets played. The zero-width joiner is load-bearing: an unbroken run
+               of glyphs is one "word" to the layout engine and overflowed the phone by 187px. -->
+          ${bar('', c.have, c.total)}
+          <div class="d colgrid">${c.items.map((it) => `<span class="col-i${it.got ? ' got' : ''}" title="${esc(it.name)}">${it.got ? '◆' : '◇'}</span>`).join('​')}</div>
           ${c.have < c.total ? `<div class="d" style="font-size:10.5px;color:var(--dim)">missing: ${c.items.filter((it) => !it.got).slice(0, 4).map((it) => it.name).join(', ')}${c.total - c.have > 4 ? ` +${c.total - c.have - 4} more` : ''}</div>` : ''}</div>`).join('')}</div>
       <div class="d" style="margin-top:4px"><a href="#" id="col-lb-link">the completionist board →</a></div>
       <div id="col-lb"></div>`;
@@ -4649,8 +5191,14 @@
         ${p.holeSeconds > 0 ? `<span class="chip bad">THE HOLE ${mins(p.holeSeconds)}</span>` : ''}
         ${p.protectedSeconds > 0 ? `<span class="chip good">protected ${mins(p.protectedSeconds)}</span>` : ''}
         ${p.armed ? '<span class="chip">carrying a shiv</span>' : ''}</h2>
-      <div class="card"><span class="t">${p.incident?.name || 'a day like any other'}</span>
-        <div class="d">${p.incident?.desc || ''}</div></div>
+      ${(() => { // the day's incident IS the yard's ruleset — it was a grey card indistinguishable from "work the yard"
+        const id = p.incident?.id || '';
+        const hard = id === 'lockdown' || id === 'toss', hot = id === 'riot' || id === 'gangwar';
+        const col = hard ? 'var(--cold)' : hot ? 'var(--blood)' : 'var(--line)';
+        return `<div class="card${hot ? ' threat' : ''}" style="border-color:${col}">
+          <span class="t" style="${hot ? 'color:var(--bad)' : hard ? 'color:var(--cold)' : ''}">${esc(p.incident?.name || 'a day like any other')}</span>
+          ${hot ? '<span class="chip bad">THE YARD IS UP</span>' : hard ? '<span class="chip cold">LOCKED DOWN</span>' : ''}
+          <div class="d">${esc(p.incident?.desc || 'nothing moving. work, buy, wait.')}</div></div>`; })()}
       <div class="grid" style="margin-top:6px">
         <div class="card"><span class="t">Work the Yard</span><div class="d">energy → a little cash + time off the stretch</div>
           <button class="act" data-do="POST /v1/pen/work">work</button></div>
@@ -4685,15 +5233,19 @@
           ${p.breakout?.ready ? '<div style="margin-top:6px"><button class="act" data-penplan="1" style="border-color:var(--blood)">plan a crew break (stake your cutkit)</button></div>' : '<div class="d" style="color:var(--dim);margin-top:4px">buy a cutkit to plan a crew break</div>'}`}
       <h2 style="margin-top:10px">The Roster (${(p.yard || []).length})</h2>
       <div class="grid">${(p.yard || []).map((y) => `
-        <div class="card"><span class="t">${y.name}</span> <span class="d">lvl ${y.level ?? '?'}${y.gang ? ' · made' : ''}</span>${y.faction ? ` <span class="chip">${y.faction}</span>` : ''}
-          <button class="act risk" data-shank="${y.id}">shank</button>
+        <div class="card"><span class="t">${esc(y.name)}</span> <span class="d">lvl ${y.level ?? '?'}${y.gang ? ' · made' : ''}</span>${y.faction ? ` <span class="chip">${esc(y.faction)}</span>` : ''}
+          ${y.protected ? '<span class="chip good">PROTECTED</span>' : ''}${y.inHole ? '<span class="chip cold">IN THE HOLE</span>' : ''}${y.crew ? '<span class="chip cold">YOUR CREW</span>' : ''}
+          <button class="act risk" data-shank="${y.id}" data-name="${esc(y.name)}"${y.protected || y.inHole || y.crew ? ' disabled' : ''}>shank${y.protected ? ' — he\'s paid up' : y.inHole ? ' — segregated' : y.crew ? ' — your own' : ''}</button>
           <button class="act" data-burner="${y.id}">burner: outside hit</button></div>`).join('')}</div>`;
     t.querySelector('#pen-bribe').onclick = () =>
       act('POST', '/v1/pen/bribe', { seconds: Number(t.querySelector('#pen-secs').value) }).then(() => renderPen());
     t.querySelectorAll('[data-penbuy]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/pen/buy/${btn.dataset.penbuy}`, {}).then(() => renderPen()));
-    t.querySelectorAll('[data-shank]').forEach((btn) => btn.onclick = () =>
-      act('POST', `/v1/pen/shank/${btn.dataset.shank}`, {}).then(() => renderPen()));
+    t.querySelectorAll('[data-shank]').forEach((btn) => btn.onclick = async () => {
+      // permadeath from a cell: an heir, a prestige reset, a sworn bloodline. It was one 13.5px click.
+      if (!await ask(`Shank ${btn.dataset.name || 'him'}?`, 'If it lands he dies for good and his blood is on your line. If it misses, the guards take you and you go in the hole.',
+        { yes: 'stick him', no: 'back off', danger: true })) return;
+      act('POST', `/v1/pen/shank/${btn.dataset.shank}`, {}).then(() => renderPen()); });
     t.querySelectorAll('[data-burner]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/pen/burner/${btn.dataset.burner}`, { tier: 'legbreaker' }).then(() => renderPen()));
     t.querySelectorAll('[data-penjoin]').forEach((btn) => btn.onclick = () =>
@@ -4712,13 +5264,20 @@
       act('POST', `/v1/pen/break/${btn.dataset.penrat}/rat`, {}).then(() => renderPen()));
   }
 
-  // data-do buttons (POST/GET; an optional data-body='{...}' rides along)
-  document.addEventListener('click', (e) => {
+  // data-do buttons (POST/GET; an optional data-body='{...}' rides along).
+  // A button may also carry data-confirm="Title|the consequence" — most of the irreversible verbs
+  // in the game are declarative data-do buttons, so the guard has to live here rather than being
+  // hand-wired at each site (and a missing attribute means "no confirm", which is the old behaviour).
+  document.addEventListener('click', async (e) => {
     const btn = e.target?.closest?.('[data-do]'); if (!btn) return;
     const d = btn.dataset.do;
     const [m, p] = d.split(' ');
     let body = m === 'GET' ? undefined : {};
     if (btn.dataset.body) { try { body = JSON.parse(btn.dataset.body); } catch { /* keep {} */ } }
+    if (btn.dataset.confirm) {
+      const [title, ...rest] = btn.dataset.confirm.split('|');
+      if (!await ask(title, rest.join('|'), { yes: btn.dataset.confirmYes || 'do it', danger: true })) return;
+    }
     act(m, p, body);
   });
 

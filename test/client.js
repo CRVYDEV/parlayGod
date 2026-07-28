@@ -240,6 +240,9 @@ const NOT_API = new Set([
   'inline',     // scrollIntoView({inline:'center'})
   'method',     // window.ethereum.request({method:'personal_sign'}) — EIP-1193, not our API
   'saved',      // the language picker's localStorage value
+  'fx',         // cineFor()'s own spec — which flash/shake to play, never sent anywhere
+  'no',         // ask()'s decline-button label
+  'placeholder',// askNum()'s input placeholder
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];
@@ -563,6 +566,28 @@ const bodyAfter = (src, from) => {             // extent of a lambda body starti
     for (let j = k; j < src.length; j++) { if (src[j] === open) d++; else if (src[j] === close && --d === 0) return [k, j + 1]; }
     return null;
   }
+  // A lambda whose body is a TEMPLATE LITERAL — which is nearly every renderer in this client —
+  // must be scanned to its matching backtick. The generic scanner below stops at the first ';' or
+  // ',' at depth 0, and inside a template those are ordinary text: `style="color:var(--bad);
+  // font-size:17px"`, `&nbsp;`, a comma in prose. That silently TRUNCATED the body, so every field
+  // read past the first semicolon went unchecked while the run still reported a pass — found by a
+  // mutation that should have failed and didn't.
+  if (src[k] === '`') {
+    const st = ['tpl'];
+    for (let j = k + 1; j < src.length; j++) {
+      const c = src[j], top = st[st.length - 1];
+      if (c === '\\') { j++; continue; }                       // escape: skip the next char
+      if (top === 'tpl') {
+        if (c === '`') { st.pop(); if (!st.length) return [k, j + 1]; }
+        else if (c === '$' && src[j + 1] === '{') { st.push('expr'); j++; }
+      } else if (c === "'" || c === '"') {                     // a quoted string inside ${ … }
+        const q = c; while (++j < src.length && src[j] !== q) if (src[j] === '\\') j++;
+      } else if (c === '`') st.push('tpl');
+      else if (c === '{') st.push('brace');
+      else if (c === '}') st.pop();
+    }
+    return null;                                               // unterminated — counted, never skipped
+  }
   let d = 0;
   for (let j = k; j < src.length; j++) {
     const c = src[j];
@@ -615,8 +640,29 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
   }
   if (!body) continue;
   const blks = blocksOf(body);
-  for (const b of body.matchAll(GETBIND)) {
-    const v = b[1], path = b[3].replace(/\$\{[^}]*\}/g, ':p');
+  // A renderer that fetches many boards at once writes them as a Promise.all, which GETBIND cannot
+  // read — the boards would then fall out of coverage SILENTLY (a green run over unchecked screens,
+  // the exact failure this file exists to prevent). Resolve the idiom to the same (name → path) map
+  // GETBIND produces, and count anything in it that can't be resolved rather than dropping it.
+  //   const [aR, bR] = await Promise.all([ api('GET','/x'), api('GET','/y') ]);
+  //   const a = aR.body || {}, b = bR.body || {};
+  const viaAll = [];   // [bindingName, path, indexAfterTheAlias]
+  for (const pa of body.matchAll(/(?:const|let|var)\s*\[([^\]]+)\]\s*=\s*await\s+Promise\.all\(\s*\[([\s\S]*?)\]\s*\)\s*;/g)) {
+    const names = pa[1].split(',').map((x) => x.trim()).filter(Boolean);
+    const calls = [...pa[2].matchAll(/api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\1/g)].map((c) => c[2]);
+    if (names.length !== calls.length) { unscoped += names.length; continue; }  // never silently skip
+    const after = pa.index + pa[0].length;
+    for (let i = 0; i < names.length; i++) {
+      // find the alias that unwraps .body — `const a = aR.body || {}` — and bind THAT name
+      const al = new RegExp(`(?:const|let|var|,)\\s*([a-zA-Z_$][\\w$]*)\\s*=\\s*${names[i].replace('$', '\\$')}\\s*\\.body`).exec(body.slice(after, after + 900));
+      if (!al) { unscoped++; continue; }
+      viaAll.push([al[1], calls[i], after + al.index + al[0].length]);
+    }
+  }
+  const binds = [...body.matchAll(GETBIND)].map((b) => ({ v: b[1], path: b[3], sub: b[5] || '', index: b.index }))
+    .concat(viaAll.map(([v, path, idx]) => ({ v, path, sub: '', index: idx })));
+  for (const b of binds) {
+    const v = b.v, path = b.path.replace(/\$\{[^}]*\}/g, ':p');
     let scope = null;
     for (const [s, e] of blks) if (s < b.index && b.index < e && (!scope || (e - s) < (scope[1] - scope[0]))) scope = [s, e];
     if (!scope) { unscoped++; continue; }
@@ -624,9 +670,19 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     shadowUnresolved += unresolved;
     const re2 = new RegExp(`(?:const|let|var)\\s+${v.replace('$', '\\$')}\\s*=`, 'g'); re2.lastIndex = 1;
     const nxt = re2.exec(src);
-    const key = `${path}|${b[5] || ''}`;
+    const key = `${path}|${b.sub}`;
     // the list pass reads the UNBLANKED region — the lambdas blanking removes are exactly its subject
-    collectList(body.slice(b.index, scope[1]), v, key, m[1]);
+    const region = body.slice(b.index, scope[1]);
+    collectList(region, v, key, m[1]);
+    // A screen that splits one board into two lists writes `const onMe = board.filter(...)` and maps
+    // each separately. The derived array holds the SAME elements, so it inherits the source's key —
+    // without this those reads simply vanish from the count, which is a silent coverage hole, not a
+    // pass. (Writing `board.filter(f).map(g)` instead does NOT help: collectList reads the FIRST
+    // iterator's lambda, which is the predicate, not the renderer.)
+    for (const d of region.matchAll(new RegExp(
+      `(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*(?:\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*\\[\\]\\s*)?)?\\.\\s*(?:filter|slice|sort|concat)\\s*\\(`, 'g'))) {
+      collectList(region, d[1], d[2] ? `${key}|${d[2]}`.replace(/\|\|/, '|') : key, m[1]);
+    }
     for (const r of (nxt ? src.slice(0, nxt.index) : src)
       .matchAll(new RegExp(`(?<![\\w$.])${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
       if (BUILTIN.has(r[1])) continue;
@@ -705,7 +761,8 @@ async function seedLists() {
   await q(`UPDATE account_persistent SET product_moved=5000000, tycoon_earned=4000000, monument_built=900000,
              freight_delivered=800000, freight_hijacked=700000, prestige_sunk=600, season_sunk=300,
              honor_peak=70, honor_low=-70, statecraft=40, racer_wins=3, boxing_wins=3, smuggled=900000,
-             heists_pulled=4, caskets=3, duel_wins=3, intel_ops=12, cartel_damage=500000, soldiers_led=4
+             heists_pulled=4, caskets=3, duel_wins=3, intel_ops=12, cartel_damage=500000, soldiers_led=4,
+             race_wins=5
            WHERE account_id IN ($1,$2)`, [acct, acct2]);
   await q(`UPDATE characters SET honor=70 WHERE id=$1`, [charId]);
 
@@ -716,6 +773,11 @@ async function seedLists() {
     await q('UPDATE gangs SET treasury=90000000, omr_reserve=5000 WHERE id=$1', [gid]);
     await si('POST', '/v1/territory/neon/establish', token, { kind: 'numbers' });
     await si('POST', '/v1/sov/neon/build', token, { windowHour: new Date().getUTCHours() });
+    // THE EMPIRE board ranks on lifetime territory income; establishing alone banks none
+    await q('UPDATE gangs SET territory_earned=7500000 WHERE id=$1', [gid]);
+    // THE FRONTIER board ranks families holding NPC outposts (normally won by routing one)
+    await q("UPDATE world_npcs SET held_by_gang=$1 WHERE npc_id='dockrats'", [gid]);
+    await q("INSERT INTO world_npcs (npc_id, strength, held_by_gang) VALUES ('dockrats',0,$1) ON CONFLICT (npc_id) DO UPDATE SET held_by_gang=$1", [gid]);
   });
   await trySeed('commission', async () => {
     await q('UPDATE gangs SET lifetime_tribute=9000000, season_tribute=9000000, wars_won=5, season_wars=5 WHERE id=$1', [gid]);

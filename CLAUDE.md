@@ -3679,6 +3679,65 @@ measures the actual claim as a DELTA against a normal ref (clamped ⇒ grows ~48
 result), which is the same trap `tools/mobile.js` and `tools/scale.js` each sprang. Suite green, sim
 drift-0. Art direction, the prompts, and what went wrong in the real runs: `docs/ART.md`.
 
+**GAME FEEL — haptics, cutscenes, and the confirmations that were missing (2026-07-28).** Five parallel
+audits over all 24 screens, then a build pass. The single highest-leverage finding appeared in two of them
+independently: **`body[data-group]` sets an `--accent` per group and not one screen inside a tab read it** —
+every heading, chip and gauge hardcoded amber, so the whole group colour system was a 1px detail on the rail.
+It now carries into headings, gauges and card hover. Alongside it, one **real CSS bug**: `.row` was defined
+only as `#sheet .row`, and seven renderers use it — outside the sheet it had no flex and no
+justify-content, so the Street Races Circuit, Garage and Strip collapsed into run-on text.
+
+**The engagement layer** (`shake`/`flash`/`floatVal`/`cine`): a short vocabulary of physical feedback so a
+result *lands* instead of appearing. A cinematic title card fires for the handful of moments worth stopping
+for — a kill, an indictment, going over the wall, a payday over $25k, the first week — read off the SAME
+response body `describe()` reads, so it needs no new server surface. Everything is a no-op under
+`prefers-reduced-motion`, which means off, not shortened. Deliberately rare: fire it on every crime and
+players learn to look away from the one tool you had for the moments that matter. Levelling up now gets the
+beat the money tick has had since M1, and the sheet leads with a **respect bar against the real next-level
+threshold** (`rules.pacing.levelDivisor` is published, so the client can show the distance rather than a
+number with no scale) instead of a parenthetical next to four gauges for things that refill by themselves.
+
+**The dialogs.** Eleven `alert()`s, one `prompt()` and six `confirm()`s rendered in the OS font on a white
+slab — the loudest thing on a 1940s ledger. Replaced with `sheetModal` / `ask` / `askNum` in the game's own
+type; leaderboards became ranked rows and the Wire's dossier became a case file. More importantly, **six
+irreversible actions had no confirmation at all** — FIRE (ends a street for good and swears a vendetta), the
+shank (permadeath from a cell), the loan collect (hospitalize + seize the car + brand them WANTED), demand
+trial, flip (a permanent RAT brand), and expose. `data-do` buttons carry a `data-confirm` so the guard lives
+in one place rather than being hand-wired per site.
+
+**Threat visibility, which was inverted on three screens:** a $500k kill order on your own head rendered
+identically to a stranger's $5k job (now a breathing card above the board); the extortion demand with a
+countdown on your money was the *tenth* section of the Wire; WANTED — NPC hunters rolling for your life
+every worker tick — was the last line of the Shylock. The RICO meter was byte-identical to the energy bar
+and now carries the three thresholds as marks on the track. The Pen roster showed none of the state that
+decides whether a shank is even legal, so most attempts failed on an invisible gate — `penBoard` now sends
+`protected`/`inHole`/`crew` and the button disables itself with the reason.
+
+Also: the Den had **no `.card` anywhere** — eleven games as one flat run of `<h2>` + bare inputs, the
+flashiest room in the city the only tab with no surfaces (fixed structurally after render, so games can be
+added without anyone remembering to open a div); blackjack renders pasteboards with a face-down hole card
+instead of the letters `A 7 K`; the Main Event's crowd money is a tug-of-war bar; NOS went from a checkbox
+to a bottle that arms and hums. Two loops had **no feedback at all**: `describe()` had no boxing branch
+though the server sends both scores, and the races line printed neither power nor margin — so a $25k tune
+was a coin-flip purchase you could never evaluate. Three hand-typed-UUID inputs (pledge a car, declare war,
+propose a pact) became pickers; `me.cars` gained the same `carCollateralValue` the server checks a pledge
+against, so client and server can't disagree about what a car is worth.
+
+**What the guards caught, and what they missed.** `test/client.js` failed my own change twice — once for a
+path threaded through a variable it cannot read (fixed at the source), once demanding the fixture cover
+three leaderboards I had rewritten. Then a `Promise.all` restructure **silently dropped 8 boards from
+coverage**: `GETBIND` only reads `const x = (await api('GET','/p')).body`, so the boards fell out while the
+run still printed a pass. Taught the checker the idiom, and the derived-list idiom (`const onMe =
+board.filter(...)`) beside it. **The mutation that should then have failed still passed** — and chasing that
+found a *pre-existing* hole: `bodyAfter` stops at the first `;` or `,` at depth 0, which inside a template
+literal is ordinary text (`style="color:var(--bad);font-size:17px"`, `&nbsp;`, a comma in prose), so every
+lambda body was **silently truncated** and reads past that point were never checked. Made it
+template-literal aware; recovered 10 reads immediately and the mutation now fails correctly, naming the
+screen and the field. Suite green, mobile 54/54, sim drift-0, wiring 504 routes / 287 board fields / 421
+element fields. **A note on process: `git checkout public/index.html` to revert a mutation wiped the whole
+session's client work** — recovered from a scratchpad copy, but the lesson is to mutate on a copy or restore
+from a backup, never from git, while there are uncommitted changes.
+
 **Step two — the referral landing and the arbitrage board.** `GET /u/:name` is the page every share
 link points at, and it was a flat gradient that showed a stranger their friend's stats and a button
 while **never saying what the game is** — that copy only existed on the not-found fallback, so the

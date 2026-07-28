@@ -75,13 +75,21 @@ async function factionCover(client, target) {
 // GET /v1/pen — the yard (runs under withCharacter so it reads inside the caller's txn)
 export async function penBoard(ch, client, h) {
   const held = await contrabandOf(client, ch.id);
+  // The roster carries the state that decides whether a shank is even LEGAL — protection bought from
+  // the yard boss, and segregation in the hole. Without it the board offered a shank against marks
+  // the server was always going to refuse, so most attempts failed on a gate nobody could see. This
+  // leaks nothing: a paid protection window exists precisely to be known — deterrence is what it buys.
   const roster = (await client.query(
-    `SELECT c.id, c.name, c.respect, c.pen_faction, gm.gang_id FROM characters c
+    `SELECT c.id, c.name, c.respect, c.pen_faction, c.pen_safe_until, c.hole_until, gm.gang_id FROM characters c
        LEFT JOIN gang_members gm ON gm.character_id = c.id
       WHERE c.alive AND c.jail_until > now() AND c.id <> $1
       ORDER BY c.jail_until ASC LIMIT 30`, [ch.id])).rows
     .map((r) => ({ id: r.id, name: r.name, level: levelOf(Number(r.respect)), gang: r.gang_id || null,
-      faction: r.pen_faction ? (penFactionOf(r.pen_faction)?.name || r.pen_faction) : null }));
+      faction: r.pen_faction ? (penFactionOf(r.pen_faction)?.name || r.pen_faction) : null,
+      protected: !!(r.pen_safe_until && new Date(r.pen_safe_until) > new Date()),
+      inHole: !!(r.hole_until && new Date(r.hole_until) > new Date()),
+      // your own crew — the yard omertà gate, which the client could not otherwise derive by name alone
+      crew: !!(ch.pen_faction && r.pen_faction === ch.pen_faction) }));
   const ev = activeYardEvent();
   // step five — YOUR crew: your faction, the cover it gives you, and whether you're the shot-caller
   const myCover = jailed(ch) ? await factionCover(client, ch) : { cover: 0, mates: 0, shotCaller: false };
