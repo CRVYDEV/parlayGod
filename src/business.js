@@ -242,62 +242,26 @@ export async function upgradeBusiness(ch, businessId, client, h) {
     ...(raid.raided ? { raid } : {}) };
 }
 
-// PRIVATE laundering — cash → $OMR through the SAME AMM as the public wash house (swap:buy ledger),
-// but gated by this front's per-tier DAILY capacity (a rolling 24h window on launder_used) instead
-// of the wash-house district, and drawing LESS heat (BUSINESS_LAUNDER_HEAT < LAUNDER_HEAT) — your
-// own books are safer than the street. Still an extraction act: blocked from a safehouse (P1.3).
-export async function launderAtBusiness(ch, businessId, amount, client, h) {
-  if (ch.safe_until && new Date(ch.safe_until) > new Date()) throw new GameError('safe', "You can't move money while you're to ground.");
-  if (jailed(ch)) throw new GameError('jailed', "You can't wash cash from a cell."); // red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar
-  const amt = Math.floor(Number(amount));
-  if (!(amt > 0)) throw new GameError('amount', 'Positive amounts only.');
-  if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum wash is $${CONSTANTS.SWAP_MIN}.`);
-  // lock scoped to the owner so a rival can't even briefly hold your row (audit LOW-3)
-  const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
-  if (!r) throw new GameError('not_yours', "That's not your business.");
-  if (isCold(r)) throw new GameError('cold', `The ${businessOf(r.kind).name} is dark — pay the pad before it'll wash a dime.`);
-  // resolve the scrutiny window first — a raid seizes pending income + fines (the wash itself
-  // still proceeds, the §7.1 kitchen precedent: the Bureau's visit doesn't undo your next move)
-  const raid = await resolveScrutiny(ch, r, client, h);
-  const tier = businessTierOf(r.kind, r.tier);
-  // capacity is a TOKEN BUCKET refilling launderCapDay per 24h continuously — the old fixed
-  // window reset in full at its boundary, letting ~2× the "daily" cap through in minutes at every
-  // boundary straddle (audit MED-1); a bucket bounds any rolling day at cap + refill, no cliff
-  const refill = (Date.now() - new Date(r.launder_at).getTime()) / (24 * 3600 * 1000) * tier.launderCapDay;
-  const usedBefore = Math.max(0, Number(r.launder_used) - Math.max(0, refill));
-  const remaining = tier.launderCapDay - usedBefore;
-  if (amt > remaining) throw new GameError('capacity', `This ${businessOf(r.kind).name} can wash $${Math.max(0, Math.floor(remaining))} more today.`);
-  if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
-
-  const pool = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const c = Number(pool.cash_reserve), o = Number(pool.omr_reserve), k = c * o;
-  const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01), netIn = amt - fee - tax;
-  const out = o - k / (c + netIn);
-  if (!(out > 0)) throw new GameError('pool', "The pool couldn't fill that.");
-  await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + netIn, o - out]);
-  ch.cash = Number(ch.cash) - amt;
-  ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.BUSINESS_LAUNDER_HEAT); // washing draws the law — but less at your own front (clamp 100, audit LOW-2)
-  h.acct.omr = Number(h.acct.omr) + out;
-  // settle the bucket: store the post-refill usage + stamp the refill clock
-  await client.query('UPDATE businesses SET launder_used=$2, launder_at=now() WHERE id=$1',
-    [businessId, usedBefore + amt]);
-  // step two: washing draws Bureau SCRUTINY onto the front, pro-rated by how hard you push its
-  // capacity (a full day-cap = BUSINESS_SCRUTINY_PER_CAP points), capped like heat —
-  // resolveScrutiny just stamped the decay clock, so this bump starts a fresh window
-  // THE ACCOUNTANT (spec) draws HALF the Bureau's eye (scrutinyMult) — a defensive risk-shaper
-  const scrMult = (r.spec && BUSINESS_EMPIRE.SPECS[r.spec]?.scrutinyMult) || 1;
-  const scrAdd = amt / tier.launderCapDay * CONSTANTS.BUSINESS_SCRUTINY_PER_CAP * scrMult;
-  await client.query('UPDATE businesses SET scrutiny = LEAST($3, scrutiny + $2) WHERE id=$1',
-    [businessId, scrAdd, CONSTANTS.BUSINESS_SCRUTINY_MAX]);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });
-  await takeHouse(client, tax);
-  // THE LAUNDERER legend (Tier-4): lifetime cash washed through YOUR OWN fronts (survives death).
-  // Direct SQL, own account, OFF persistAccount → clobber-safe (the tycoon_earned discipline).
-  await client.query('UPDATE account_persistent SET laundered_lifetime = laundered_lifetime + $1 WHERE account_id=$2', [amt, ch.account_id]);
-  h.owned.businesses = await businessesOf(client, ch.id); // refresh launder headroom in the view
-  return { ok: true, spentCash: amt, gotOmr: out, price: (c + netIn) / (o - out),
-    launderedToday: usedBefore + amt, capDay: tier.launderCapDay, ...(raid.raided ? { raid } : {}) };
+// PRIVATE laundering — RETIRED (tokenomics v2 step 2). Cash no longer converts to $OMR by any
+// route, so there is nothing left to wash into. This was the Business Empire's SECOND value
+// proposition (fronts farmed cash AND were private laundering infrastructure at a lower heat than
+// the street); losing it is real content coming out, and the design accepts that deliberately
+// rather than pretending the change is free.
+//
+// KNOCK-ON, flagged rather than papered over: front SCRUTINY came only from laundering — an
+// income-only front was already explicitly never raided ("their risk is PvP"). With the wash gone
+// every front is income-only, so the Bureau-raid layer built in Business Empire step two is still
+// present and simply never fires. That is coherent and invents nothing, so it is what ships, but
+// it means personal fronts now carry NO PvE risk at all — only shakedown, takeover and the
+// Sacking. Giving scrutiny a new feed (income volume is the obvious one) would be new content, so
+// it is a founder call, recorded in the design doc's §7.2.
+//
+// The route stays mounted and answers with this rather than 404ing (the retired-swap precedent),
+// and `launder_used`/`launder_at` stay on the row: they are harmless, and dropping columns from a
+// live table is a migration this change does not need to take on.
+export async function launderAtBusiness() {
+  throw new GameError('retired',
+    'Nothing to wash any more — cash and $OMR no longer trade. Your fronts still earn; $OMR is redeemed for cash at the Exchange window.');
 }
 
 // ── step two: SHAKEDOWN — the PvP risk on passive income (runs under withTwoCharacters) ──

@@ -3179,13 +3179,25 @@ export const EXCHANGE = {
   // same commit. `test/tokenomics.js` asserts the interlock directly (it tries a swap buy: if
   // cash → $OMR still works, the window MUST be closed), so opening it early fails the suite
   // rather than quietly printing money. `EXCHANGE_OPEN=on` overrides for tests — never production.
-  OPEN: false,
+  //
+  // OPENED in tokenomics v2 step 2 — the SAME change that retired the AMM in both directions and
+  // with it `launderAtBusiness`. That is the interlock DISCHARGED, not bypassed: with no way to turn
+  // cash into $OMR there is no outside price to pump the fixed rate against, so "arbitrage is
+  // impossible by construction" is now true rather than aspirational. The test that enforced it
+  // flips with the code — it now asserts the buy side really is gone AND the window really is open,
+  // so re-introducing cash → $OMR without shutting the window fails the suite.
+  OPEN: true,
   DAILY_CAP_OMR: 250,          // per account, rolling 24h — the wash-cap token-bucket pattern
   // The pool is FED, never created: this share of the street-tax pool (which every in-game take
   // already feeds) moves across on the same 12h tick the buyback runs on. A dry pool refuses
   // cleanly and burns nothing — the Phase-4 stake-pool discipline: a claim on what was funded,
   // never a promise.
-  FUND_BPS: 3000,
+  //
+  // 10000 since step 2: with the AMM retired the street take has NOWHERE else to go — it used to be
+  // spent buying $OMR off the pool, and there is no pool. Leaving a share behind would just grow a
+  // pile of dead cash and make the window needlessly thinner. So the rule is simple and honest:
+  // every cut the house takes in the city is what the window pays out.
+  FUND_BPS: 10000,
 };
 
 // What individual staking rewards and personal RWA dividends are repurposed into. Standing already

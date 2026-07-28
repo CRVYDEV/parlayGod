@@ -132,9 +132,14 @@ export async function invest(ch, ticker, omr, client, h) {
   if (Number(h.acct.omr) < amt) throw new GameError('omr', `That costs ${amt} $OMR — earn it in the game first.`);
   h.acct.omr = Number(h.acct.omr) - amt;
   await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toBurn, reason: 'rwa:invest' });
+  // (tokenomics v2 step 2) this slice used to fill `rwa_dividend_pool`, which paid the investor a
+  // personal ~daily dividend. Personal yield is retired — it is the FAMILY yield now (design §3) —
+  // so the same $OMR goes to `family_yield_pool`. Still a bucket-to-bucket TRANSFER between two
+  // members of `omrBuckets` (reason `dividend:fund` is unchanged and stays in neither the mint nor
+  // the burn term), so conservation is untouched; only the destination moved.
   if (toPool > 0) {
     await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -toPool, reason: 'dividend:fund' });
-    await client.query('UPDATE rwa_dividend_pool SET pool = pool + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
+    await client.query('UPDATE family_yield_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [toPool]);
   }
   await client.query('UPDATE account_persistent SET rwa_invested = rwa_invested + $2 WHERE account_id=$1', [ch.account_id, amt]); // monotonic tier metric
   ch.rwa_used = cumulative; ch.rwa_at = new Date(); // record the windowed spend (persistCharacter commits it)
@@ -159,36 +164,21 @@ export async function invest(ch, ticker, omr, client, h) {
 // the pool singleton (canonical: account is already held, singletons last) so concurrent claims
 // serialize on it. The book value is the deterministic display price × shares (no sell, no cash-out —
 // R1 stays status; only the yield is $OMR).
-export async function claimDividend(ch, client, h) {
-  const rows = (await client.query('SELECT ticker, shares, cost_omr FROM portfolios WHERE account_id=$1 AND shares>0', [ch.account_id])).rows;
-  const book = round2(rows.reduce((a, r) => a + Number(r.shares) * tickerPriceOf(r.ticker), 0)); // market book (display)
-  // The yield accrues on INVESTED PRINCIPAL (Σ cost_omr), NOT market book — so free GRANTED shares
-  // (the heist cut / season prize, cost_omr=0) earn NOTHING (cross-system audit HIGH: else a free-rider
-  // who never invested skims the pool that paying investors fill). "Spenders fund holders" now means
-  // spenders fund SPENDERS — a fund pays yield on principal, not on the paper value of a free kickback.
-  const basis = round2(rows.reduce((a, r) => a + Number(r.cost_omr || 0), 0));
-  if (!(basis > 0)) throw new GameError('nothing', 'Invest your own $OMR into the fund before it pays you — a free kickback earns no dividend.');
-  const now = Date.now();
-  if (h.acct.dividend_at && new Date(h.acct.dividend_at).getTime() + PORTFOLIO.DIVIDEND_MS > now)
-    throw new GameError('cooldown', 'The dividend pays about once a day — come back later.');
-  const gross = round6(basis * PORTFOLIO.DIVIDEND_DAILY_BPS / 10000);
-  const pp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const pay = round6(Math.min(gross, round6(Number(pp?.pool || 0))));
-  if (!(pay > 0)) throw new GameError('dry', 'The dividend pool is dry right now — it fills as the family invests. Try again later.'); // don't burn the cooldown on a $0 day
-  h.acct.omr = Number(h.acct.omr) + pay; // persistAccount commits omr
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: pay, reason: 'dividend:omr' }); // transfer (pool→acct), not a mint
-  await client.query('UPDATE rwa_dividend_pool SET pool = pool - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [pay]);
-  await client.query('UPDATE account_persistent SET dividend_at=$2 WHERE account_id=$1', [ch.account_id, new Date(now)]);
-  h.acct.dividend_at = new Date(now);
-  await h.track(client, ch.account_id, 'rwa_dividend', { omr: pay, book });
-  return { ok: true, paid: pay, gross, bookValue: book, dividendPaid: pay };
+// (tokenomics v2 step 2) THE PERSONAL DIVIDEND — RETIRED. Repurposed into the FAMILY yield
+// (design §3): the slice of every invest that used to fill `rwa_dividend_pool` now fills
+// `family_yield_pool`, which pays the top families by standing into their `omr_reserve`. So the
+// Dynasty Fund keeps everything that made it an endgame — the book, the tier ladder, the crest,
+// the leaderboard, and the fact that it survives death and the heir inherits it. It loses the
+// personal payout, and that is the whole change.
+//
+// Why the family, not the man: standing already bought Commission seats, which are status. Now it
+// pays, so tribute, wars and the seasonal standing reset carry a real economic prize — and $OMR
+// gains a reason to be HELD by an organisation rather than sold by an individual.
+export async function claimDividend() {
+  throw new GameError('retired',
+    'The fund pays the families now, not the man — standing earns it into the family reserve. Your book, your tier and your dynasty are untouched.');
 }
 
-// CLAIM the FAMILY dividend — the gang RWA book's ~daily yield, paid from the SHARED sink-fed pool to
-// the gang RESERVE (the personal-claim twin, gang side). §10.4 transfer (pool→reserve, both inside
-// omrBuckets), pool-bounded. Boss/underboss only. Locks the gang row (loadOwned reads it unlocked) then
-// the pool singleton — canonical (…→gangs→singletons); personal claims lock account→pool, family locks
-// gang→pool, disjoint entities + same pool → serialize on the pool, no AB-BA.
 export async function claimFamilyDividend(ch, client, h) {
   if (h.owned.gangRole !== 'boss' && h.owned.gangRole !== 'underboss')
     throw new GameError('rank', 'Only the boss or underboss draws the family dividend.');
