@@ -13,7 +13,7 @@ import { levelOf, dayOf, CONSTANTS, PORTFOLIO , DUELS, COMMISSION, POPULATION, F
 import { grantShares } from './portfolio.js';
 import { runLedgerInvariants, alertDrift } from './invariants.js';
 import { runVigInvariants } from './vig.js';
-import { carveExchange, fundFamilyYield, payFamilyYield } from './exchange.js';
+import { carveExchange, mergeLegacyYieldPools, payFamilyYield } from './exchange.js';
 import { runBondInvariants } from './bonds.js';
 import { sweepExpiredBounties, huntWanted } from './social.js';
 import { sweepUncreditedFees } from './fees.js';
@@ -52,115 +52,37 @@ export async function runBuyback(pool, opts = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // lock order matches the swap path (amm_pool first) — no lock cycles
-    const amm = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
-    // cheap unlocked due-check so a not-due tick doesn't lock the top-25 gangs for nothing. Two
-    // buybacks can't both be here (they serialize on the amm_pool lock above), and the authoritative
-    // pool value is re-read under lock below, so a tribute landing after this peek is not lost.
+    // cheap unlocked due-check so a not-due tick locks nothing. The authoritative pool value is
+    // re-read under the lock below, so a take landing between the peek and the lock is not lost.
     const peek = (await client.query('SELECT pool, last_buyback FROM street_tax WHERE id=1')).rows[0];
     const dueMs = now.getTime() - new Date(peek.last_buyback).getTime();
     if (Number(peek.pool) <= 0 || (!opts.force && dueMs < BUYBACK_PERIOD_MS)) {
       await client.query('COMMIT');
       return null;
     }
-    // Lock the payout gangs (sorted id order) BEFORE the street_tax singleton — the global order is
-    // gangs → singletons, which bumpFamilyTask (gang, then street_tax on weekly completion) also
-    // follows. The old code locked street_tax before the gangs, AB-BA deadlocking the buyback against
-    // a family finishing its weekly contract. Ranking may go slightly stale between here and the
-    // distribution; harmless (we lock and credit exactly the rows we ranked).
-    const ranked = (await client.query(
-      `SELECT id, lifetime_tribute, wars_won FROM gangs
-        WHERE lifetime_tribute + 10000 * wars_won > 0
-        ORDER BY lifetime_tribute + 10000 * wars_won DESC LIMIT 25`)).rows;
-    // THE LEVY (Commission step three, omerta-deep-deferred-design.md §B): while the decree is in
-    // force, the family split pays the SEATED CHAMBER weighted by seat (5..1) instead of the top-25
-    // lifetime-standing formula — a PURE REDIRECT (same pool, same amount, same §10.4 posture; only
-    // WHO collects changes, for the decree's week). Both reads are plain MVCC reads; the payee rows
-    // are locked sorted below either way, so the lock discipline is unchanged.
-    const levy = (await activeDecree(client))?.id === 'the_levy';
-    const chamber = levy ? await seatedGangs(client) : [];
-    // THE LEVY weights use the CANONICAL seat formula (COMMISSION.SEATS − i, the castVote weight),
-    // not chamber.length − i — so a partial chamber keeps the same head/tail ratio the votes use.
-    const payees0 = levy && chamber.length
-      ? chamber.map((g, i) => ({ id: g.id, w: COMMISSION.SEATS - i }))
-      : ranked.map((g) => ({ id: g.id, w: Number(g.lifetime_tribute) + 10000 * Number(g.wars_won) }));
-    // (red-team MED) a payee gang can be DISSOLVED between the unlocked ranking read and this lock —
-    // the FOR UPDATE then returns 0 rows and the later `omr_reserve +=` UPDATE affects nothing, but the
-    // `distributed` counter would still credit the vanished share, so `bought` $OMR silently leaves the
-    // buckets. Keep ONLY payees whose row still exists under the lock; a dropped share rolls to the fund.
-    const payees = [];
-    for (const p of payees0.slice().sort((a, b) => (a.id < b.id ? -1 : 1)))
-      if ((await client.query('SELECT 1 FROM gangs WHERE id=$1 FOR UPDATE', [p.id])).rows[0]) payees.push(p);
-    // now the singleton — authoritative pool under lock
-    const tax = (await client.query('SELECT * FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
-    // TOKENOMICS v2 — THE EXCHANGE takes its slice of the take FIRST, inside this transaction:
-    // the street_tax lock is already held and the 12h due-check has already passed, so the window
-    // is funded exactly once per cycle. Returns 0 while the window is shut (EXCHANGE.OPEN), so
-    // today this diverts nothing and the buyback still spends the whole pool.
+    // THE LEGACY POOL MERGE (design §3, "merge into"). `stake_pool` and `rwa_dividend_pool` paid
+    // individual yield; both are retired, and nothing feeds them any more, so whatever they still
+    // hold moves to the family pot. Written as a DRAIN rather than a one-shot migration on purpose:
+    // it is idempotent by construction (after the first tick both are empty and this is a no-op
+    // forever), so it needs no migration flag and cannot double-apply. All three are inside
+    // `omrBuckets`, so this is a bucket-to-bucket transfer — no ledger row, conservation untouched.
+    const merged = await mergeLegacyYieldPools(client);
+    // now the singleton, authoritative under lock
+    const tax = (await client.query('SELECT pool FROM street_tax WHERE id=1 FOR UPDATE')).rows[0];
+    // THE WINDOW takes the take. With the AMM retired (tokenomics v2 step 2) there is no longer any
+    // way to convert cash into $OMR, so this tick no longer buys anything — the street tax's only
+    // destination is the redemption window, and `EXCHANGE.FUND_BPS` is 10000 so the whole take goes
+    // across. Every cut the house takes in the city is what the window pays out.
+    //
+    // Gone with the AMM: the $OMR the buyback used to acquire, and therefore the event-fund share,
+    // the top-25 family split, the Phase-4 `stake_pool` carve and the protocol-owned-liquidity
+    // carve. The family split's successor is the FAMILY YIELD (`payFamilyYield`), which pays $OMR
+    // that reaches the pot through the exit toll and the RWA invest slice instead of through a market.
     const toWindow = await carveExchange(client, Number(tax.pool));
-    const cashPool = Number(tax.pool) - toWindow;
-    if (cashPool <= 0) { await client.query('COMMIT'); return null; }
-    let c = Number(amm.cash_reserve), o = Number(amm.omr_reserve);
-
-    // ORGANIC AMM DEPTH (sim-audit F4): carve AMM_LP_BPS of the tax pool into PROTOCOL-OWNED
-    // LIQUIDITY — the cash slice paired with event-fund $OMR at the CURRENT spot price, deposited
-    // into BOTH reserves. Nothing mints (fund → amm is a bucket transfer inside the §10.4 $OMR
-    // set), the price doesn't move (deposited at ratio), and k grows — slippage falls with real
-    // economic activity. If the fund can't match the pair this cycle, the slice falls through to
-    // the buyback (depth when we can afford it, yield-backing otherwise).
-    let lpCash = 0, lpOmr = 0;
-    const lpWant = cashPool * (CONSTANTS.AMM_LP_BPS || 0) / 10000;
-    if (lpWant > 0) {
-      const spot = c / o;
-      const omrWant = lpWant / spot;
-      if (Number(tax.fund) >= omrWant) {
-        lpCash = lpWant; lpOmr = omrWant;
-        c += lpCash; o += lpOmr;
-        await client.query('UPDATE street_tax SET fund = fund - $1 WHERE id=1', [lpOmr]);
-      }
-    }
-    const spendable = cashPool - lpCash;
-    const k = c * o;
-    const bought = o - k / (c + spendable);
-    if (!(bought > 0) && lpCash <= 0) { await client.query('COMMIT'); return null; }
-    await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + spendable, o - bought]);
-
-    // Phase 4 (backed emission): carve a STAKE_POOL_BPS slice of the buyback off the top to fund
-    // staking yield — so cash sinks (street tax) pay stakers via redistribution, not a new mint.
-    // A bucket transfer within the §10.4 $OMR set (amm reserve → stake_pool); conserves, no ledger.
-    const stakeShare = bought * (CONSTANTS.STAKE_POOL_BPS || 0) / 10000;
-    if (stakeShare > 0)
-      await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [stakeShare]);
-    // TOKENOMICS v2 — the family-yield carve. Same shape as the stake-pool carve above and the same
-    // §10.4 status: a bucket transfer inside the $OMR set (amm reserve → family_yield_pool), no
-    // ledger row, nothing minted. FUND_BPS ships at 0, so today this is a no-op and the buyback
-    // splits exactly as it always has; it is the dial that moves yield from individuals to families
-    // as `stake:reward`/`dividend:omr` are retired (design §3).
-    // through fundFamilyYield, not an inline UPDATE — ONE implementation of the funding arithmetic
-    // (the carveExchange discipline). Two copies in two transaction contexts is how the balance and
-    // the lifetime_funded counter drift apart, and `family yield backed` is what would then fire.
-    const yieldShare = await fundFamilyYield(client, bought * (FAMILY_YIELD.FUND_BPS || 0) / 10000);
-    const forSplit = bought - stakeShare - yieldShare;
-
-    // remaining: 50% pro-rata to the top-25 families by standing; the rest (plus any
-    // undistributed remainder) rolls to the event fund.
-    const clanShare = forSplit / 2;
-    let toFund = forSplit / 2, distributed = 0;
-    const totalW = payees.reduce((a, p) => a + p.w, 0);
-    if (totalW > 0) {
-      for (const p of payees) {
-        const share = clanShare * p.w / totalW;
-        await client.query('UPDATE gangs SET omr_reserve = omr_reserve + $2 WHERE id=$1', [p.id, share]);
-        distributed += share;
-      }
-      toFund += clanShare - distributed;
-    } else {
-      toFund = forSplit; // no eligible families yet: the non-stake remainder to the event fund
-    }
-    await client.query('UPDATE street_tax SET pool=0, fund = fund + $1, last_buyback=$2 WHERE id=1', [toFund, now]);
+    if (toWindow <= 0 && merged <= 0) { await client.query('COMMIT'); return null; }
+    if (toWindow > 0) await client.query('UPDATE street_tax SET last_buyback=$1 WHERE id=1', [now]);
     await client.query('COMMIT');
-    return { spentCash: cashPool, boughtOmr: bought, toFund, toFamilies: distributed, families: payees.length, levy,
-      lpCash, lpOmr, toWindow };
+    return { toWindow, merged };
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 }
@@ -279,7 +201,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     }
     if (dbDownTicks) { console.log(`worker: database back after ${dbDownTicks} skipped tick(s) — resuming`); dbDownTicks = 0; }
     const r = await safe('buyback', () => runBuyback(pool));
-    if (r) console.log(`🔁 buyback: $${Math.round(r.spentCash)} → ${r.boughtOmr.toFixed(3)} $OMR (fund +${r.toFund.toFixed(3)}, families +${r.toFamilies.toFixed(3)}${r.toWindow ? `, window +$${Math.round(r.toWindow)}` : ''})`);
+    if (r) console.log(`🔁 street take: window +$${Math.round(r.toWindow)}${r.merged > 0 ? ` (legacy yield pools merged: ${r.merged.toFixed(3)} $OMR)` : ''}`);
     // TOKENOMICS v2 — THE FAMILY YIELD. A no-op on an empty pot, so this is safe to run every tick
     // and is live the moment FAMILY_YIELD.FUND_BPS is turned up (design §3).
     const fy = await safe('family yield', () => payFamilyYield(pool));

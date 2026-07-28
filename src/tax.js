@@ -90,9 +90,17 @@ export async function earlySurcharge(client, accountId, liquid, amount, now = Da
 
 // Split a toll (the flat exit toll + any early surcharge) into the two revenue buckets and credit
 // them. The caller writes its own ledger rows (tax:dev / tax:buyback) with its own conventions.
+// (tokenomics v2 step 2) The toll's non-dev half used to land in `stake_pool`, which paid individual
+// staking yield. That yield is retired — it is the family yield now (design §3) — so the same $OMR
+// goes to `family_yield_pool` instead. Both are inside `omrBuckets`, so this is a bucket-to-bucket
+// TRANSFER exactly as before: no ledger row, conservation untouched, only the destination changed.
+//
+// This matters more than it looks: retiring the AMM took away the only in-game way to turn cash into
+// $OMR, so the 12h buyback can no longer acquire any. The exit toll and the early-exit surcharge are
+// $OMR-denominated already — they need no market — which makes them the pool's real ongoing feed.
 export async function creditTollBuckets(client, devCut, buyCut) {
   if (devCut > 0) await client.query('UPDATE dev_fund SET omr = omr + $1, lifetime = lifetime + $1 WHERE id=1', [devCut]);
-  if (buyCut > 0) await client.query('UPDATE stake_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [buyCut]);
+  if (buyCut > 0) await client.query('UPDATE family_yield_pool SET balance = balance + $1, lifetime_funded = lifetime_funded + $1 WHERE id=1', [buyCut]);
 }
 
 export const splitToll = (toll) => {

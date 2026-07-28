@@ -34,6 +34,7 @@ import crypto from 'node:crypto';
 import { EXCHANGE, FAMILY_YIELD, exchangeOpen } from './rules.js';
 import { GameError } from './game.js';
 import { spendOmr } from './vanity.js';
+import { activeDecree, seatedGangs } from './commission.js'; // THE LEVY redirect (no cycle: commission.js imports only game.js + rules.js)
 
 const num = (v) => Number(v || 0);
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -155,6 +156,27 @@ export async function fundFamilyYield(client, omr) {
   return add;
 }
 
+// THE LEGACY POOL MERGE (design §3). `stake_pool` (Phase-4 backed staking yield) and
+// `rwa_dividend_pool` (the personal Dynasty dividend) both paid INDIVIDUALS. Both payouts are
+// retired in tokenomics v2 step 2, and with the AMM gone nothing refills either, so whatever they
+// still hold belongs to the family pot.
+//
+// Deliberately a DRAIN, not a one-shot migration: draining an empty pool is a no-op, so running it
+// on every tick is idempotent by construction — no migration flag to get wrong, no way to
+// double-apply, and it self-heals if a balance somehow lands in an old pool later. All three
+// singletons are inside `omrBuckets`, so this is a bucket-to-bucket TRANSFER: no ledger row,
+// `$OMR conservation` untouched (the `stake_pool` funding precedent).
+export async function mergeLegacyYieldPools(client) {
+  const sp = (await client.query('SELECT balance FROM stake_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const dp = (await client.query('SELECT pool FROM rwa_dividend_pool WHERE id=1 FOR UPDATE')).rows[0];
+  const moved = num(sp?.balance) + num(dp?.pool);
+  if (!(moved > 0)) return 0;
+  if (num(sp?.balance) > 0) await client.query('UPDATE stake_pool SET balance = 0 WHERE id=1');
+  if (num(dp?.pool) > 0) await client.query('UPDATE rwa_dividend_pool SET pool = 0 WHERE id=1');
+  await fundFamilyYield(client, moved);
+  return moved;
+}
+
 export async function familyYieldPool(db) {
   const r = (await db.query('SELECT balance, lifetime_funded, lifetime_paid FROM family_yield_pool WHERE id=1')).rows[0];
   return { balance: num(r?.balance), funded: num(r?.lifetime_funded), paid: num(r?.lifetime_paid) };
@@ -174,9 +196,19 @@ export async function payFamilyYield(pool) {
     // writes family_yield_pool once FUND_BPS > 0. Locking the pool first (as this did) is an AB-BA
     // deadlock against the buyback — and one ARMED BY THE MIGRATION ITSELF, since it only becomes
     // reachable the moment the founder raises the very dial the design says to raise.
-    const ranked = (await client.query(
-      `SELECT id, name, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
-         FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows
+    // THE LEVY (Commission decree). It used to redirect the 12h buyback's FAMILY SPLIT from the
+    // top-25-by-standing formula to the SEATED CHAMBER. That split retired with the AMM (there is
+    // no $OMR being bought any more), which would have left a shipped decree doing nothing at all —
+    // so it redirects THIS instead, which is the same prize by a different route: while the decree
+    // is in force the family yield pays the chamber, in seat order, rather than the standing board.
+    // A pure REDIRECT — same pool, same amount, same §10.4 posture; only WHO collects changes.
+    const levy = (await activeDecree(client))?.id === 'the_levy';
+    const chamber = levy ? await seatedGangs(client) : [];
+    const ranked = (levy && chamber.length
+      ? chamber.slice(0, FAMILY_YIELD.SEATS).map((g) => ({ id: g.id, name: g.name, standing: 1 }))
+      : (await client.query(
+        `SELECT id, name, (COALESCE(season_tribute,0) + 10000 * COALESCE(season_wars,0)) AS standing
+           FROM gangs ORDER BY standing DESC, id ASC LIMIT $1`, [FAMILY_YIELD.SEATS])).rows)
       .filter((g) => num(g.standing) > 0);
     if (!ranked.length) { await client.query('ROLLBACK'); return { paid: 0, families: [] }; }
 

@@ -166,34 +166,31 @@ await collect();
 assert(Math.round((await incomeSoFar() - mark) / rate1h) === 8, 'offline collect still bursts to the 8h window');
 await seed("cash=2000000, bank=0, racket_credit_ms=28800000"); // restore for the rest of the suite
 
-// ── AMM swap (§7.12): buy $OMR, then sell some back ──
-await seed("cash=2000000");
+// ── THE AMM — RETIRED (tokenomics v2 step 2) ──
+// Cash no longer becomes $OMR by ANY route. This used to be the laundering block: a located,
+// heat-drawing, safehouse- and jail-gated buy at a wash house, plus an ungated sell back. All of
+// it is gone, in both directions, and the redemption WINDOW (test/tokenomics.js) is the $OMR →
+// cash path now. What is asserted here is that the retirement is real and total — a half-retired
+// buy side would leave the money pump the window's fixed rate depends on being impossible.
+await seed("cash=2000000, loc='docks', heat=0, safe_until=NULL, jail_until=NULL");
 const ammPre = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
-// Risk-to-Earn P1.2 — laundering (cash→$OMR) is located + risky: illegal outside a wash house,
-// blocked from a safehouse, and it draws heat. (The test char sits in 'docks', a wash house.)
-await seed("loc='neon', heat=0"); // not a launder district, no turf
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'district', 'no washing cash outside a wash house');
-await seed("loc='docks', heat=0, safe_until = now() + interval '1 hour'");
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'safe', "can't wash cash from a safehouse");
-await seed("loc='docks', heat=0, safe_until=NULL");
-// red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar (was only safehouse-gated)
-await seed("jail_until = now() + interval '1 hour'");
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } })).body.error, 'jailed', "can't wash cash from a cell");
-await seed('jail_until=NULL');
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 100 } })).code, 400, 'min swap $500 enforced');
-r = await call('POST', '/v1/swap', { token, body: { direction: 'buy', amount: 50000 } });
-assert.equal(r.code, 200, 'swap buy'); assert(r.body.gotOmr > 0, 'received $OMR');
-assert(r.body.character.heat >= 15, 'laundering drew law heat (~15)');
-// the reverse (sell, bringing money in) is ungated — works anywhere
-await seed("loc='neon'");
-assert.equal((await call('POST', '/v1/swap', { token, body: { direction: 'sell', amount: 1 } })).code, 200, 'selling $OMR back is ungated');
-await seed("loc='docks'");
-const omrHeld = r.body.character.omr;
-assert(omrHeld > 0, 'omr on the account');
-const ammMid = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
-assert(Number(ammMid.cash_reserve) > Number(ammPre.cash_reserve), 'pool cash grew on a buy');
-r = await call('POST', '/v1/swap', { token, body: { direction: 'sell', amount: Math.floor(omrHeld / 2) } });
-assert.equal(r.code, 200, 'swap sell'); assert(r.body.gotCash > 0, 'sold $OMR for cash');
+for (const dir of ['buy', 'sell']) {
+  const g = await call('POST', '/v1/swap', { token, body: { direction: dir, amount: 50000 } });
+  assert.equal(g.body.error, 'retired', `the ${dir} side is retired`);
+}
+// laundering at your OWN front went with it — otherwise the pump just moves indoors
+assert.equal((await call('POST', '/v1/business/any/launder', { token, body: { amount: 1000 } })).body.error,
+  'retired', 'the private wash rail is retired too');
+// and the pool is left ALONE rather than drained: its omr_reserve is inside omrBuckets, so moving
+// it would perturb $OMR conservation for no gain. It is simply a bucket nobody trades against.
+const ammPost = (await pool.query('SELECT * FROM amm_pool WHERE id=1')).rows[0];
+assert.equal(Number(ammPost.cash_reserve), Number(ammPre.cash_reserve), 'the retired pool is untouched (cash)');
+assert.equal(Number(ammPost.omr_reserve), Number(ammPre.omr_reserve), 'the retired pool is untouched ($OMR)');
+// the character keeps their cash — a refused trade moves nothing
+assert.equal((await meOf(token)).cash, 2000000, 'a refused trade costs nothing');
+// $OMR for the staking block below now has to be GRANTED rather than bought, which is itself the
+// point of v2: the only ways in are bonds (real ETH) and the family yield.
+await pool.query(`UPDATE account_persistent SET omr = omr + 200 WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
 
 // ── staking (§7.1 + Phase 4 backed emission): rewards PAID FROM a funded pool, not minted ──
 const modH = { 'x-mod-key': 'test-mod-key' };
@@ -202,9 +199,9 @@ assert.equal(r.code, 200, 'stake'); assert(r.body.character.staked >= 5, 'omr st
 await seed("last_accrued_at = now() - interval '365 days'"); // a full year at 14% APY
 me = await meOf(token);
 assert(me.rewards > 0, 'staking rewards accrued lazily');
-// Phase 4: an EMPTY pool throttles the yield — the reward stays pending, nothing pays (no mint)
-assert.equal((await call('POST', '/v1/claim-rewards', { token })).body.error, 'pool', 'a dry reward pool throttles the payout (rewards stay pending, no mint)');
-// (the buyback below funds the pool from the AMM — the real production funding path; then we claim)
+// Rewards still ACCRUE on the deposit — they are simply no longer claimable by the individual
+// (tokenomics v2 step 2, design §3). Left accruing rather than zeroed so nothing is destroyed and
+// the number stays auditable; the claim is asserted retired in the 12h-tick block below.
 
 // ── NFT gear mint (§5.4): $OMR burn → account-side gear ──
 r = await call('POST', '/v1/gear/brasspin/mint', { token });
@@ -212,34 +209,52 @@ assert.equal(r.code, 200, 'mint gear'); assert(r.body.character.gear.includes('b
 assert(r.body.character.eff.cunning > r.body.character.stats.cunning, 'gear boosts effective stat');
 assert.equal((await call('POST', '/v1/gear/brasspin/mint', { token })).code, 400, 'no double-mint');
 
-// ── §7.12 buyback worker: fences + swaps + trades filled the street-tax pool ──
+// ── THE 12h TICK (tokenomics v2 step 2): the buyback no longer BUYS anything ──
+// It used to spend the street-tax pool on $OMR through the AMM curve, then split the proceeds to
+// the event fund, the top-25 families and the stake pool. The AMM is retired, so there is nothing
+// to buy with and no curve to buy through: the take's only destination is the redemption WINDOW.
 const taxPre = (await pool.query('SELECT * FROM street_tax WHERE id=1')).rows[0];
 assert(Number(taxPre.pool) > 0, 'street tax accumulated from house takes');
-const stakePoolPre = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
+// seed the legacy individual-yield pools so the MERGE has something real to move
+await pool.query('UPDATE stake_pool SET balance = 40 WHERE id=1');
+await pool.query('UPDATE rwa_dividend_pool SET pool = 10 WHERE id=1');
+const fyPre = Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance);
+const winPre = Number((await pool.query('SELECT balance FROM exchange_pool WHERE id=1')).rows[0].balance);
 const bb = await runBuyback(pool, { force: true });
-assert(bb && bb.boughtOmr > 0, 'buyback bought $OMR through the curve');
-const taxPost = (await pool.query('SELECT * FROM street_tax WHERE id=1')).rows[0];
-assert.equal(Number(taxPost.pool), 0, 'pool drained by buyback');
-assert(Number(taxPost.fund) > 0, 'event fund funded');
-// Phase 4: the buyback carves a 30% slice to the staking reward pool (cash sinks → yield)
-const stakePoolPost = Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance);
-assert(Math.abs((stakePoolPost - stakePoolPre) - bb.boughtOmr * 0.30) < 1e-6, 'the buyback funded the stake pool with its STAKE_POOL_BPS (30%) slice');
-// NOW the pool is funded (by the buyback) → the staker can claim, paid FROM the pool (a transfer)
-const emPre = (await call('GET', '/v1/mod/emission', { headers: modH })).body;
-const omrBeforeClaim = (await meOf(token)).omr;
-r = await call('POST', '/v1/claim-rewards', { token });
-assert.equal(r.code, 200, 'claim rewards'); assert(r.body.claimed > 0, 'the pool paid the reward');
-assert((await meOf(token)).omr > omrBeforeClaim, 'rewards → omr, paid FROM the pool');
-const emPost = (await call('GET', '/v1/mod/emission', { headers: modH })).body;
-assert(Math.abs((emPre.poolBalance - emPost.poolBalance) - r.body.claimed) < 1e-6, 'the pool dropped by exactly what was paid (a transfer, not a mint)');
+assert(bb && bb.toWindow > 0, 'the take went to the window');
+assert.equal(bb.toWindow, Math.floor(Number(taxPre.pool)), 'the WHOLE take crosses (FUND_BPS 10000) — with no AMM there is nowhere else for it to go');
+const winPost = Number((await pool.query('SELECT balance FROM exchange_pool WHERE id=1')).rows[0].balance);
+assert.equal(winPost - winPre, bb.toWindow, 'and it landed in the window pool');
+// THE LEGACY POOL MERGE: both individual-yield pools drain into the family pot
+assert.equal(bb.merged, 50, 'the retired stake + dividend pools merged');
+assert.equal(Number((await pool.query('SELECT balance FROM stake_pool WHERE id=1')).rows[0].balance), 0, 'the stake pool is emptied');
+assert.equal(Number((await pool.query('SELECT pool FROM rwa_dividend_pool WHERE id=1')).rows[0].pool), 0, 'the dividend pool is emptied');
+assert.equal(Number((await pool.query('SELECT balance FROM family_yield_pool WHERE id=1')).rows[0].balance) - fyPre, 50,
+  'and it all arrived in the family pot — a bucket-to-bucket transfer, nothing minted, nothing lost');
+// the merge is a DRAIN, so running it again is a no-op rather than double-applying
+await pool.query('UPDATE street_tax SET pool = 1000 WHERE id=1');
+const bbAgain = await runBuyback(pool, { force: true });
+assert.equal(bbAgain.merged, 0, 'a second tick merges nothing — the drain is idempotent by construction');
+
+// ── individual staking yield: RETIRED (repurposed to the family yield, design §3) ──
+// The principal is deliberately NOT touched by that: it still comes back whole.
+assert.equal((await call('POST', '/v1/claim-rewards', { token })).body.error, 'retired',
+  'the personal staking claim is retired');
+const stakedPre = (await meOf(token)).staked;
+assert(stakedPre >= 5, 'the deposit is still there');
+r = await call('POST', '/v1/unstake', { token });
+assert.equal(r.code, 200, 'unstake still works');
+assert.equal((await meOf(token)).staked, 0, 'the principal left the stake');
+assert(Number(r.body.character.unbonding) >= stakedPre, 'and returns WHOLE into the unbonding window (the P1.1 loot surface is unchanged)');
+// the emission gauge still reads (it reports the retired stake pool, now drained to the family pot)
+assert.equal((await call('GET', '/v1/mod/emission', { headers: modH })).code, 200, 'the emission gauge still reads');
 // ops top-up moves event-fund $OMR into the pool (a §10.4 transfer, never a mint)
 const fundPre = Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund);
 if (fundPre > 1) {
   assert.equal((await call('POST', '/v1/mod/emission/fund', { headers: modH, body: { amount: 1 } })).code, 200, 'ops moved 1 $OMR fund→pool');
   assert.equal(Number((await pool.query('SELECT fund FROM street_tax WHERE id=1')).rows[0].fund), fundPre - 1, 'the event fund paid for it (transfer)');
 }
-r = await call('POST', '/v1/unstake', { token });
-assert.equal(r.code, 200, 'unstake'); assert.equal(r.body.character.staked, 0, 'principal returned whole (never pool-gated)');
+// (the principal was already withdrawn above — the unstake path is covered there)
 // Make Risk Pay: the principal UNBONDS (lootable, no yield) before it's liquid — then releases whole
 assert(r.body.character.unbonding > 0, 'principal is in the unbonding window, not instant-liquid');
 const unbondingAmt = r.body.character.unbonding;

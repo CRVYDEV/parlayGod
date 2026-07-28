@@ -3,7 +3,8 @@
 // row (ch), the txn client, and the helper bag h = {ledger, rngLog, events, acct, owned}.
 import crypto from 'node:crypto';
 import { logCollect } from './collection.js';
-import { earlySurcharge, creditTollBuckets, splitToll } from './tax.js';
+// (tokenomics v2 step 2) the early-exit surcharge + toll split now live only on the WITHDRAWAL
+// boundary in chain.js — the AMM sell that used to carry them here is retired with the pool.
 import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
@@ -311,76 +312,31 @@ export async function sellAsset(ch, assetId, client, h) {
   return { ok: true, asset: a.id, earned: net };
 }
 
-// ═══════════════════ AMM SWAP (§7.12) ═══════════════════
-// Constant-product pool, single row, SELECT … FOR UPDATE. 1% dev + 1% street tax
-// each direction, taken in cash. Min swap $500 (buy side, per prototype).
-export async function swap(ch, direction, amount, client, h) {
-  if (direction !== 'buy' && direction !== 'sell') throw new GameError('bad_dir', "Direction must be 'buy' or 'sell'.");
-  const amt = Math.floor(Number(amount));
-  if (!(Number.isFinite(amt) && amt > 0)) throw new GameError('amount', 'Positive amounts only.'); // Number.isFinite rejects Infinity/NaN (E-L3 defense-in-depth)
-  const pool = (await client.query('SELECT * FROM amm_pool WHERE id=1 FOR UPDATE')).rows[0];
-  const c = Number(pool.cash_reserve), o = Number(pool.omr_reserve), k = c * o;
-
-  if (direction === 'buy') {
-    // Risk-to-Earn P1.2 — LAUNDERING: turning cash into $OMR is the extraction on-ramp, so it's a
-    // RISKY, LOCATED act, not a free click. Legal only at a wash-house district or on your family's
-    // own turf, and it draws LAUNDER_HEAT (law attention + marks you as carrying value worth a hit).
-    // You can't wash cash from a safehouse (P1.3 — hiding, not extracting). The reverse (sell,
-    // $OMR → cash, bringing money back in-game) is ungated — only extraction prep carries risk.
-    if (ch.safe_until && new Date(ch.safe_until) > new Date()) throw new GameError('safe', "You can't move money while you're to ground.");
-    if (jailed(ch)) throw new GameError('jailed', "You can't wash cash from a cell."); // red-team R1: laundering is an extraction act — jail-gated like deal/cook/boostCar
-    const onTurf = (h.owned?.held || []).includes(ch.loc);
-    if (!CONSTANTS.LAUNDER_DISTRICTS.includes(ch.loc) && !onTurf)
-      throw new GameError('district', `Cash is washed at a wash house (${CONSTANTS.LAUNDER_DISTRICTS.join(', ')}) or on your family's turf — not here.`);
-    if (amt < CONSTANTS.SWAP_MIN) throw new GameError('min', `Minimum swap is $${CONSTANTS.SWAP_MIN}.`);
-    // BALANCE D3 — the public route gets a per-account daily token bucket (= the top business
-    // tier's launderCapDay): heat decays in minutes, so it never bounded volume; now private
-    // infra is the BEST rail instead of the only sane one. Refills continuously over 24h.
-    const washRefill = ch.wash_at ? (Date.now() - new Date(ch.wash_at).getTime()) / 86400000 * CONSTANTS.PUBLIC_WASH_CAP_DAY : CONSTANTS.PUBLIC_WASH_CAP_DAY;
-    const washUsed = Math.max(0, Number(ch.wash_used || 0) - Math.max(0, washRefill));
-    if (washUsed + amt > CONSTANTS.PUBLIC_WASH_CAP_DAY)
-      throw new GameError('wash_cap', `The wash house handles $${CONSTANTS.PUBLIC_WASH_CAP_DAY} a day per face — $${Math.max(0, Math.floor(CONSTANTS.PUBLIC_WASH_CAP_DAY - washUsed))} left. Your own front takes the rest.`);
-    ch.wash_used = washUsed + amt;
-    ch.wash_at = new Date();
-    if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket.');
-    const fee = Math.ceil(amt * 0.01), tax = Math.ceil(amt * 0.01), netIn = amt - fee - tax;
-    const out = o - k / (c + netIn);
-    if (!(out > 0)) throw new GameError('pool', "The pool couldn't fill that.");
-    await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c + netIn, o - out]);
-    ch.cash = Number(ch.cash) - amt;
-    ch.heat = Math.min(100, Number(ch.heat || 0) + CONSTANTS.LAUNDER_HEAT); // washing cash draws the law
-    h.acct.omr = Number(h.acct.omr) + out;
-    await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -amt, reason: 'swap:buy' });
-    await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: out, reason: 'swap:buy' });
-    await takeHouse(client, tax);
-    return { ok: true, spentCash: amt, gotOmr: out, price: (c + netIn) / (o - out) };
-  }
-  // sell: amt is $OMR in
-  if (Number(h.acct.omr) < amt) throw new GameError('omr', 'Not that much $OMR.');
-  // THE EARLY-EXIT SURCHARGE (anti-dump): $OMR younger than the fresh window pays a linearly-
-  // decaying toll (50% at age 0 → 0 at 48h, no exemptions) carved from the tokens BEFORE they
-  // reach the pool — the pool prices only what actually enters it. Split half dev / half the
-  // buyback/yield pool (the exit-toll rail; tax:dev/tax:buyback + both buckets already audited).
-  const early = await earlySurcharge(client, h.accountId, Number(h.acct.omr), amt);
-  const { devCut, buyCut } = splitToll(early.surcharge);
-  const poolIn = Math.round((amt - devCut - buyCut) * 1e6) / 1e6; // round, not floor — a floored crumb would leak from conservation
-  if (!(poolIn > 0)) throw new GameError('min', 'That sale is all surcharge — hold it longer or sell more.');
-  const gross = c - k / (o + poolIn);
-  if (!(gross > 0)) throw new GameError('pool', "The pool couldn't fill that.");
-  const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01), net = Math.floor(gross - fee - tax);
-  // the buy side has a $500 minimum; the sell side had none, so a dust sale could
-  // yield net ≤ 0 (ceil fees > gross) — the seller would burn $OMR and be DEBITED cash
-  if (net <= 0) throw new GameError('min', 'That sale is too small to clear the 2% house take.');
-  h.acct.omr = Number(h.acct.omr) - amt;
-  ch.cash = Number(ch.cash) + net;
-  await client.query('UPDATE amm_pool SET cash_reserve=$1, omr_reserve=$2 WHERE id=1', [c - gross, o + poolIn]);
-  await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -poolIn, reason: 'swap:sell' });
-  if (devCut > 0) await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -devCut, reason: 'tax:dev' });
-  if (buyCut > 0) await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -buyCut, reason: 'tax:buyback' });
-  await creditTollBuckets(client, devCut, buyCut);
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: 'swap:sell' });
-  await takeHouse(client, tax);
-  return { ok: true, soldOmr: amt, gotCash: net, earlyTax: Math.floor((devCut + buyCut) * 1e6) / 1e6, freshSold: early.freshSold, price: (c - gross) / (o + poolIn) };
+// ═══════════════════ THE AMM — RETIRED (tokenomics v2 step 2) ═══════════════════
+// Cash no longer converts to $OMR, in either direction, by any route. This is the pivot's whole
+// point (design §0): while cash bought $OMR, every cash faucet in the game was secretly a token-
+// price decision, and the measured maxed passive stack ($21.6M/day for one player) sat one swap
+// away from sell pressure. Now cash is a purely internal gameplay resource with no exit, and $OMR
+// enters circulation only when someone pays real ETH for it.
+//
+// BOTH directions go, not just the buy. §1 of the design lists only cash → $OMR, but §2's own
+// reasoning applies harder to what would be left behind: a sell-only constant-product AMM drains
+// its cash reserve monotonically — every trade removes cash and adds $OMR, nothing refills the
+// cash side — until the price approaches zero and the window shuts itself. That is a mechanical
+// certainty, not a risk. THE EXCHANGE (src/exchange.js) is the $OMR → cash path now: a fixed
+// published rate, paid from a pool that real cash sinks fund, capped by that pool.
+//
+// The route stays mounted and answers with this, rather than 404ing: players and agents have it
+// bookmarked and coded against, and a clean explanation beats a dead URL. The `swap:` reasons stay
+// in the §10.4 vocabulary too — historical rows still have to validate, and dropping the prefix
+// would turn every past trade into an unknown-reason alarm.
+//
+// `amm_pool` itself is left ALONE. Its omr_reserve is inside omrBuckets, so deleting the row would
+// mean moving genesis $OMR somewhere and perturbing conservation for no gain. It is simply a bucket
+// nobody trades against any more, and the §10.4 sweep stays drift-0.
+export async function swap() {
+  throw new GameError('retired',
+    'The wash houses are shut. Cash and $OMR no longer trade — $OMR is redeemed for cash at the Exchange window, at a published rate.');
 }
 
 // ═══════════════════ STAKING (§7.1 / §5.4) ═══════════════════
@@ -415,18 +371,26 @@ export async function unstake(ch, client, h) {
   h.acct.unbonding = Number(h.acct.unbonding || 0) + staked;
   h.acct.unbond_at = new Date(Date.now() + CONSTANTS.UNSTAKE_CD_MS);
   h.acct.staked = 0;
-  const paid = await payStakeRewards(client, h, rewards);
-  h.acct.rewards = rewards - paid; // keep the unpaid remainder pending for the next refill
+  // (tokenomics v2 step 2) NO YIELD is paid here any more — individual staking rewards are retired
+  // and repurposed into the FAMILY yield (design §3). The PRINCIPAL is untouched by that change: it
+  // still returns whole, still unbonds, still stays lootable through the window. Accrued-but-never-
+  // paid `rewards` are left on the account rather than silently zeroed, so nothing is destroyed and
+  // the number stays auditable if the founder ever wants to settle it.
+  const paid = 0;
   return { ok: true, unbonding: staked, unbondSeconds: Math.ceil(CONSTANTS.UNSTAKE_CD_MS / 1000),
     rewards: paid, stillPending: rewards - paid };
 }
-export async function claimRewards(ch, client, h) {
-  const rewards = Number(h.acct.rewards);
-  if (!(rewards > 0)) throw new GameError('none', 'No rewards to claim.');
-  const paid = await payStakeRewards(client, h, rewards);
-  if (!(paid > 0)) throw new GameError('pool', 'The reward pool is dry — staking yield is throttled until the buyback refills it. Your rewards stay pending.');
-  h.acct.rewards = rewards - paid;
-  return { ok: true, claimed: paid, stillPending: rewards - paid };
+// (tokenomics v2 step 2) INDIVIDUAL STAKING YIELD — RETIRED, repurposed into the FAMILY yield
+// (design §3). The pool this paid from is merged into `family_yield_pool` on the next worker tick,
+// and standing — not deposit size — is what earns it now.
+//
+// Staking itself is untouched in every other respect: the deposit still goes in, the principal
+// still comes back WHOLE, and the unbonding window (the P1.1 loot surface) still applies. The
+// design explicitly defers "retire the deposit entirely" to v2.1 if it turns out to have no
+// remaining purpose, so it is left alone here rather than pre-empted.
+export async function claimRewards() {
+  throw new GameError('retired',
+    'Staking pays the families now, not the man — standing earns it into the family reserve. Your principal is untouched and still comes back whole.');
 }
 
 // ═══════════════════ THE ARMORY (§5.2) ═══════════════════

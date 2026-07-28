@@ -237,6 +237,73 @@ Retained regardless of clearance, as cheap deploy-time config rather than a bloc
 
 ---
 
+## 7.2 Step 2 in detail — what the sequencing above understates
+
+Written before building it, because tracing the code turned up a dependency §7 does not name.
+
+### The thing §7 understates: retiring the AMM breaks the buyback
+
+`runBuyback` (the 12h tick) is the ONLY in-game conversion of cash into $OMR: it takes the
+street-tax pool and *buys $OMR off the AMM*, then splits the proceeds to the event fund, the top-25
+families, `stake_pool` (30%) and the LP carve (25%). Retiring the AMM is the whole point of v2 — but
+it also deletes that mechanism, and with it the funding path for every $OMR pool in the game.
+
+So the family-yield migration (§3) is **not a later step**. It is forced by the same change, because
+the moment the AMM is gone `stake_pool` has no inflow and the buyback has no verb.
+
+### What the 12h tick becomes
+
+`carveExchange` already runs inside the buyback's transaction and needs no AMM — it is a cash → cash
+singleton move. After step 2 that IS the tick: **street tax → `exchange_pool`**, so the window can pay
+people who burn $OMR. The AMM buy, the family $OMR split and the LP carve all retire with the pool.
+
+### Where `family_yield_pool` gets its $OMR without an AMM
+
+Three sources, all already $OMR-denominated, so none of them needs a market:
+
+| source | today | after |
+|---|---|---|
+| the one-time balances of `stake_pool` + `rwa_dividend_pool` | pay individuals | **merged in** (§3's "merge into") |
+| the exit toll's `tax:buyback` half (withdrawal + early-exit surcharge) | → `stake_pool` | → `family_yield_pool` |
+| the RWA invest `DIVIDEND_BPS` (15%) slice | → `rwa_dividend_pool` | → `family_yield_pool` |
+| bond mint (step 4) | — | later |
+
+All four are transfers between buckets already inside `omrBuckets`, so `$OMR conservation` stays
+exact and nothing is minted. `FAMILY_YIELD.FUND_BPS` — the migration dial shipped at 0 — is what
+turns the distribution on.
+
+### Decisions I am making (routine, recorded so they are checkable)
+
+- **The AMM ROW stays.** Retire the routes, not the bucket. `amm_pool.omr_reserve` is inside
+  `omrBuckets`, so deleting it would have to move genesis $OMR somewhere and perturb conservation for
+  no gain. Left in place it is simply a bucket nobody trades against, and the sweep stays drift-0.
+- **Both directions go, not just the buy.** §1 lists only the buy direction, but §2's own reasoning
+  applies harder to what would be left: a sell-only AMM drains its cash reserve monotonically until
+  the price collapses. The window is the OMR → cash path; leaving a sell-side AMM beside it would be
+  the exact degenerate case §2 exists to avoid.
+- **Staking keeps the deposit, loses the yield.** §3 already says principal returns whole and defers
+  "retire the deposit entirely" to v2.1. Unchanged here.
+- **The price oracle is unaffected.** `plexQuote` and the RWA float read the *vig buyback's* recorded
+  `price_omr_per_eth` (the DEX TWAP on mainnet), not the in-game AMM. Only the two display surfaces
+  (`ops.js` gauge, `opportunities.js` agent board) read AMM spot, and both become `EXCHANGE.RATE` —
+  which after step 2 is the only published price the game has.
+
+### Two calls that are the founder's, not mine — flagged, not silently taken
+
+1. **The business PvE risk layer goes dormant.** Front scrutiny comes *only* from laundering
+   (income-only fronts were already explicitly never raided — "their risk is PvP"). Retire laundering
+   and every front becomes income-only, so the Bureau-raid mechanic built in Business Empire step two
+   is still there and simply never fires. That is coherent and invents nothing, so it is what ships.
+   But it means personal fronts carry **no PvE risk at all** — only shakedown, takeover and the
+   Sacking. If fronts should still draw heat, scrutiny needs a new feed (income volume is the obvious
+   one), and that is new content, not a retune.
+2. **The RICO meter loses a feed.** `LAUNDER_HEAT` (15) and `BUSINESS_LAUNDER_HEAT` (8) were a
+   recurring, self-inflicted heat source on the wealthiest players. Without them the investigation
+   meter is fed by crime/kill/port heat only, so a passive earner is meaningfully harder for the Law
+   to reach. Whether that wants compensating is a balance call for the re-sim (§7 step 5).
+
+---
+
 ## 8. Open levers
 
 `EXCHANGE.OPEN` (the interlock) · `EXCHANGE.RATE` · `EXCHANGE.FUND_BPS` · `EXCHANGE.DAILY_CAP_OMR` ·

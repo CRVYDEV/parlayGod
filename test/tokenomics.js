@@ -63,12 +63,31 @@ const sumOmrBuckets = async () => Number((await pool.query(
   await setCash(t.id, 50000);
   const buy = await call('POST', '/v1/swap', t.token, { direction: 'buy', amount: 1000 });
   const buySideLive = buy.code === 200;
+
+  // The invariant itself, asserted unconditionally so it cannot pass by taking neither branch.
+  // (It did exactly that when step 2 landed: the buy started throwing, `buySideLive` went false,
+  // and the whole block below was skipped while the file still reported a pass. A check that can
+  // only fire in a world that no longer exists is indistinguishable from a check that works.)
+  assert.ok(!(buySideLive && EXCHANGE.OPEN),
+    'cash buys $OMR AND the redemption window is open — that is a money pump: buy under RATE, redeem '
+    + 'at RATE, repeat. Retire the swap buy direction (design §2) in the same change that sets OPEN.');
+
   if (buySideLive) {
-    assert.equal(EXCHANGE.OPEN, false,
-      'cash still buys $OMR, so the redemption window MUST be shut — otherwise buy-low/redeem-at-RATE '
-      + 'is a money pump. Retire the swap buy direction (design §2) in the same change that sets OPEN.');
+    // the pre-step-2 world: the window must be shut, and must say so plainly
     const shut = await call('POST', '/v1/window/redeem', t.token, { amount: 1 });
     assert.equal(shut.body.error, 'closed', 'and the window says so plainly');
+  } else {
+    // step 2 has landed. Assert what actually replaced it, so this side has teeth too.
+    assert.equal(buy.body.error, 'retired', 'cash → $OMR is retired, not merely failing for some other reason');
+    // BOTH directions. A sell-only constant-product AMM drains its cash reserve monotonically until
+    // the price collapses (design §2) — leaving it would be the degenerate case, not a half-measure.
+    const sell = await call('POST', '/v1/swap', t.token, { direction: 'sell', amount: 1 });
+    assert.equal(sell.body.error, 'retired', 'the sell side went with it — a one-way AMM is a draining bucket, not a market');
+    // and the PRIVATE rail. Retiring only the public wash house would leave the same money pump
+    // open through a business front, which is the whole reason the design lists both.
+    const wash = await call('POST', '/v1/business/any/launder', t.token, { amount: 1000 });
+    assert.equal(wash.body.error, 'retired', 'laundering at your own front went with it — otherwise the pump just moves indoors');
+    assert.equal(EXCHANGE.OPEN, true, 'and the window that replaces them is open');
   }
 }
 
