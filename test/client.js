@@ -831,10 +831,22 @@ async function seedLists() {
     await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
   });
   await trySeed('pen break', async () => {
-    await q("UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id=$1", [two]);
-    await si('POST', '/v1/pen/buy/cutkit', t2, {});
-    await si('POST', '/v1/pen/break/plan', t2, {});
-    await q('UPDATE characters SET jail_until=NULL WHERE id=$1', [two]);
+    // PIN THE YARD INCIDENT. It is a seed-drawn DAILY event, and one of the six ('toss') closes the
+    // commissary — so on those days the cutkit can't be bought, the break is never planned, and this
+    // fixture silently loses a list. That is a date-flake, not a finding: the run went red on a toss
+    // day having been green the day before. `test/pen.js` pins it to 'quiet' for exactly this reason
+    // (and exercises each incident deliberately, which is where that coverage belongs). Read
+    // per-call by `activeYardEvent()`, so setting it here is enough.
+    const yard = process.env.PEN_YARD_EVENT;
+    process.env.PEN_YARD_EVENT = 'quiet';
+    try {
+      await q("UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id=$1", [two]);
+      await si('POST', '/v1/pen/buy/cutkit', t2, {});
+      await si('POST', '/v1/pen/break/plan', t2, {});
+      await q('UPDATE characters SET jail_until=NULL WHERE id=$1', [two]);
+    } finally {
+      if (yard === undefined) delete process.env.PEN_YARD_EVENT; else process.env.PEN_YARD_EVENT = yard;
+    }
   });
 
   // ── the boards that need another player to have acted ──
@@ -961,7 +973,16 @@ for (const [key, fields] of listReads) {
 }
 assert.deepEqual(listMissing, [], `the client reads ${listMissing.length} field(s) off list elements that the ` +
   `route's elements do not carry — every row renders that as undefined`);
-if (seedNotes.length) console.log('seed notes:\n  ' + seedNotes.join('\n  '));
+// A REFUSED SEED IS A FINDING, not a note. Every step in seedLists() is meant to succeed; when one
+// 4xx's the fixture quietly loses whatever it was going to make, and the only symptom is an empty
+// list further down — which is a much longer walk from the failure to the cause. Worse, a refusal
+// whose list happens to be non-empty for some OTHER reason reduces coverage with no symptom at all.
+// (Found the hard way: a seed-drawn DAILY yard incident closes the Pen commissary one day in six, so
+// the co-op-break fixture worked on the 28th and not on the 29th. Assert the refusals directly and
+// the run names the route, the code and the reason on the day it happens.)
+assert.deepEqual(seedNotes, [], `${seedNotes.length} fixture seed step(s) were REFUSED, so whatever ` +
+  `they were going to create does not exist and the coverage below is quietly thinner than it reads:\n  ` +
+  `${seedNotes.join('\n  ')}`);
 assert.deepEqual(listEmpty, [], `${listEmpty.length} list(s) came back EMPTY, so their element fields were ` +
   `never actually compared. An empty list is not a pass — extend seedLists() so each has a row:\n  ` +
   `${listEmpty.join('\n  ')}`);
