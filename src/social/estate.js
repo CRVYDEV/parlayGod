@@ -9,7 +9,7 @@
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bus, ledger, notify, npcTier, bumpStanding } from '../game.js';
 import { rememberedSkills } from '../skills.js';
-import { M3, LOAN, levelOf, dayOf, VENDETTA, feudTierOf, UNDERWORLD, LAW, tickerPriceOf, estateTierOf, HONOR, seasonModOf } from '../rules.js';
+import { M3, LOAN, levelOf, dayOf, VENDETTA, feudTierOf, UNDERWORLD, LAW, MASTERY, tickerPriceOf, estateTierOf, HONOR, seasonModOf } from '../rules.js';
 import { abandonRaidsAtDeath } from '../world.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from '../market.js';
 import { voidLoansAtDeath } from '../loans.js';
@@ -140,6 +140,14 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // Skills still DIE with the street (this is a small head start, not survival); MEMORY_MAX 0 or
   // a short bloodline (prestige < PRESTIGE_PER_SLOT) restores the hard rule. Pure build, no §10.4.
   const rememberedSkillIds = rememberedSkills([...(h.victimOwned.skills || [])], priorPrestige);
+  // THE TRADES (bloodline echo — founder rule 2026-07-29): mastery levels die with the street, but
+  // the heir inherits HEIR_KEEP_BPS (25%) of each track's XP — the npc-memory/honor echo shape.
+  // Read from h.victimOwned.mastery BEFORE the masteries wipe below; sub-1 remainders forgotten;
+  // the account-level mastery_legend survives whole by construction (never touched here). Dial 0
+  // restores the hard rule. Pure status — XP is not a currency, zero §10.4 surface.
+  const echoedMastery = Object.entries(h.victimOwned.mastery || {})
+    .map(([t, xp]) => ({ t, xp: Math.floor(Number(xp) * MASTERY.HEIR_KEEP_BPS / 10000) }))
+    .filter((r) => r.xp >= 1);
   // port_intercepts keys on (boat_id, pirate character_id): the loop below wipes the dead PIRATE's
   // attempts (character_id), but rows keyed on a dead RUNNER's boats would orphan once `boats` is
   // deleted — so sweep them by the runner's boats FIRST (before the loop removes the boats). Pure
@@ -149,7 +157,7 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // so the family's rackets don't keep his (snapshot) fortitude/scrutiny bonus after he's gone (RED-TEAM
   // fix: the passive bonus is a snapshot, so a dead specialist would otherwise buff forever).
   await client.query('UPDATE territory_rackets SET specialist=NULL, spec_power=0 WHERE specialist=$1', [victim.id]);
-  for (const table of ['cars', 'boats', 'rigs', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'route_notoriety', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs', 'clue_scrolls'])
+  for (const table of ['cars', 'boats', 'rigs', 'character_rackets', 'character_assets', 'character_cargo', 'character_items', 'character_guns', 'makings', 'stash', 'batches', 'businesses', 'numbers_tickets', 'fight_bets', 'track_bets', 'racers', 'blackjack_hands', 'crew_heist_members', 'pen_break_members', 'world_raid_members', 'character_skills', 'npc_standing', 'npc_leads', 'npc_grudges', 'npc_favors', 'npc_errands', 'npc_gain', 'pen_contraband', 'convoy_ambushes', 'port_intercepts', 'route_notoriety', 'daily_progress', 'missions_done', 'wage_snapshots', 'campaign_progress', 'soldiers', 'digs', 'clue_scrolls', 'masteries'])
     await client.query(`DELETE FROM ${table} WHERE character_id=$1`, [victim.id]);
   // npc_hits keys on (payer, target) not character_id — wipe the dead street's per-pair NPC-hit
   // cooldown rows both ways (AUDIT-full-system-v2 C-LOW-2; harmless row-hygiene, the heir's fresh id
@@ -334,6 +342,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   for (const sid of rememberedSkillIds)
     await client.query('INSERT INTO character_skills (character_id, skill_id) VALUES ($1,$2)', [heirId, sid]);
   report.kept.skills = rememberedSkillIds.length;
+  // THE TRADES echo — the heir is born a quarter-schooled in the bloodline's trades
+  for (const m of echoedMastery)
+    await client.query('INSERT INTO masteries (character_id, track_id, xp) VALUES ($1,$2,$3)', [heirId, m.t, m.xp]);
+  report.kept.masteries = echoedMastery.length;
   await h.notify(client, heirId, 'estate', report);
   // VENDETTA — a player fire-kill swears the bloodline against the killer's (NPC/mod deaths
   // don't: no street to swear against). One active vendetta per account pair; a repeat kill

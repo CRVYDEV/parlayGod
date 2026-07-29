@@ -1,7 +1,7 @@
 // M4 — THE KITCHEN (§7.10, §5.3). Fictional period product lines; an economy of
 // risk, not a recipe. Every formula cites spec §7.10 / prototype v24.
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, skillMult, trunkCap } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap, bumpMastery } from './game.js';
 import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
@@ -111,6 +111,7 @@ export async function collect(ch, client, h) {
   }
   await h.rngLog(client, ch.id, 'cook:collect', fireRoll, `q ${q.toFixed(2)}`);
   await h.bumpDaily(client, ch.id, 'cook');
+  await bumpMastery(client, h, ch, 'chemistry', 'cook'); // THE TRADES — a collected batch is the cook's craft
   return { ok: true, fire: false, qty: Number(b.qty), quality: Math.round(q * 100) / 100 };
 }
 
@@ -162,6 +163,7 @@ export async function deal(ch, drugId, qty, client, h, play) {
   await takeHouse(client, tax);
   await h.track(client, ch.account_id, 'deal', { drug: drugId, units: n, heat: Math.round(heatGain * 10) / 10 });
   await h.bumpDaily(client, ch.id, 'deal');
+  await bumpMastery(client, h, ch, 'chemistry', 'deal'); // THE TRADES — moving product works the same craft
   return { ok: true, units: n, earned: net, heat: Math.round(heatGain * 10) / 10,
     play: pl.id, nerve: nerveCost,
     cornerPremium: cornerPremium > 0,

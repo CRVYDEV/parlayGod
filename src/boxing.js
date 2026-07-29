@@ -6,7 +6,7 @@
 // status), and a MANAGER career LEGEND (lifetime fighter wins, account-level → SURVIVES DEATH, the
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog, bumpStanding, npcMult, npcTier } from './game.js';
+import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, npcMult, npcTier } from './game.js';
 import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -259,6 +259,7 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
     await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [f.id, Number(f.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
   }
   await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'exhibition' }); // working the card is the corner's business
+  await bumpMastery(client, h, ch, 'fists', 'exhibition');
   await h.rngLog(client, ch.id, `boxing:exhibition:${tier.id}`, mine, `${win ? 'win' : 'loss'} vs ${tier.name} (${mine} vs ${theirs})`);
   await h.track(client, ch.account_id, 'boxing_exhibition', { tier: tier.id, win });
   return { ok: true, win, opponent: tier.name, fee: tier.fee, purse: win ? tier.purse : 0, net: win ? tier.purse - tier.fee : -tier.fee,
@@ -317,6 +318,7 @@ export async function fightBout(ch, opponent, body, client, h) {
   const { belt: beltWon, defended } = await applyBeltResult(client, winnerF, winner.id, loserF);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]); // half → the buyback, half burns
   await bumpStanding(client, h, ch, 'cornerman', 2, { action: 'fight' }); // fight night is the corner's business
+  await bumpMastery(client, h, ch, 'fists', 'bout');
   await h.rngLog(client, ch.id, `boxing:bout:${of.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})${beltWon ? ' — TITLE' : defended ? ' — TITLE DEFENDED' : ''}`);
   await h.notify(client, opponent.id, 'boxing_bout', { from: ch.name, yours: of.name, mine: f.name, amount: amt, theyWon: !win, belt: beltWon && winner.id === opponent.id });
   bus.emit('streets', { type: 'boxing_bout', by: ch.name, fighters: `${f.name} v ${of.name}`, amount: pot, win, belt: beltWon });

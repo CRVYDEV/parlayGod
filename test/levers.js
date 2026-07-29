@@ -245,6 +245,11 @@ const SIGNED = [
   ['MEGAPROJECT.MIN_CASH', 100],
   ['MEGAPROJECT.MIN_OMR', 1],
   ['MEGAPROJECT.OMR_RATE', 500],
+  // THE TRADES (mastery, step one 2026-07-29) — status-only today, load-bearing when the
+  // milestone-perk / paths-v2 / stat-drip steps land (the curve + the death echo are the dials)
+  ['MASTERY.XP_DIVISOR', 15],
+  ['MASTERY.MAX_LVL', 50],
+  ['MASTERY.HEIR_KEEP_BPS', 2500],
   ['NOTORIETY.CONVOY_DEF_CAP', 24],
   ['NOTORIETY.CONVOY_DEF_PER', 0.6],
   ['NOTORIETY.DECAY_PER_HR', 4],

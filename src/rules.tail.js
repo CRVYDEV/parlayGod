@@ -3289,3 +3289,81 @@ export const FAMILY_YIELD = {
   // The honest cost is LESS DEFLATION, which is why it ships small. Founder sign-off lever.
   FUND_BPS: 500,   // 5% of each redemption
 };
+
+// ═══════════════ THE TRADES — the mastery expansion (omerta-mastery-design.md) ═══════════════
+// RuneScape-style use-XP, pointed at the verbs the game already has. Founder-directed 2026-07-29;
+// founder decisions recorded in the design doc: (1) death rule = die + bloodline echo (HEIR_KEEP_BPS,
+// dial to 0 for hard death) + an account-level lifetime legend; (2) path disadvantages = progression
+// speed (step 3); (3) stats-by-use tightly capped (step 4).
+//
+// THE CONSTRAINT SET (from the design map — each is load-bearing):
+//  - Masteries pay ZERO respect and gate ZERO character levels. Respect stays the only level
+//    currency (the level-240 speedrun class). A trade is the trade_rep class: a domain track.
+//  - XP is NOT a currency: bumpMastery writes zero transactions rows, so §10.4 has no surface here.
+//  - Every XP source is an action that already paid its nerve/energy/cash/cooldown — no new farm
+//    loop exists, only new reward for the existing ones. Awards are sized so XP-per-resource stays
+//    comparable across tracks (no one true farm).
+//  - No purchased XP, ever (the GIFT_CAP structural rule taken to 100%).
+// ALL numbers below are founder sign-off levers (BALANCE.md — THE TRADES).
+export const MASTERY = {
+  // The ten trades. `stat` is the step-4 stat-by-use target (which core stat this trade exercises);
+  // it is DATA today — step 1 wires no stat drip.
+  TRACKS: [
+    { id: 'larceny',    name: 'Larceny',    stat: 'cunning', desc: 'Every job pulled on the streets.' },
+    { id: 'wetwork',    name: 'Wet Work',   stat: 'muscle',  desc: 'Kills, shanks, and duels — the lethal arts.' },
+    { id: 'chemistry',  name: 'The Cook',   stat: 'cunning', desc: 'Batches cooked and product moved.' },
+    { id: 'wheels',     name: 'Wheels',     stat: 'speed',   desc: 'Cars boosted and races run.' },
+    { id: 'seamanship', name: 'Seamanship', stat: 'speed',   desc: 'Contraband landed and prizes taken at sea.' },
+    { id: 'gambling',   name: 'The Gambler', stat: 'cunning', desc: 'Action at the tables and the windows.' },
+    { id: 'muscle',     name: 'Protection', stat: 'muscle',  desc: 'Jumps, shakedowns, and standovers.' },
+    { id: 'commerce',   name: 'Commerce',   stat: 'cunning', desc: 'Goods moved and markets worked.' },
+    { id: 'scores',     name: 'Big Scores', stat: 'speed',   desc: 'Heists cased and pulled.' },
+    { id: 'fists',      name: 'Fisticuffs', stat: 'muscle',  desc: 'The fight game, corner to canvas.' },
+  ],
+  // The curve — the game's own quadratic (the levelOf shape): lvl = floor(sqrt(xp/DIV)) + 1, capped.
+  // At the measured crime pace (~60/hr) larceny reads ~L10 in ~7h of focused grind, ~L25 across a
+  // couple of dedicated days, L50 in RuneScape-99 territory. Founder levers.
+  XP_DIVISOR: 15,
+  MAX_LVL: 50,
+  // XP per action, keyed by the bumpMastery action tag (the bumpStanding shape — flat awards; the
+  // action's own resource cost is the throttle). Sized ~proportional to that cost so no track is
+  // the one true farm: crime ~3/2 nerve, deal ~4/1 nerve+goods, a kill is rare and expensive.
+  XP: {
+    crime: 3,                  // per SUCCESSFUL §7.2 job (nerve-throttled, the core grind)
+    jump: 4, shakedown: 6, standover: 10,        // muscle — contest WINS only
+    fire: 25, shank: 20, duel: 8,                // wetwork — a kill is rare, gated, expensive
+    cook: 6, deal: 4,                            // chemistry
+    boost: 5, race: 8,                           // wheels
+    port: 10, piracy: 12,                        // seamanship — a run is a long clock
+    dice: 2, blackjack: 2, numbers: 2, trackbet: 2, // gambling — per resolved play, cash-throttled
+    sell: 2, fill: 3,                            // commerce — per goods sale / market fill
+    score: 8, heist: 20,                         // scores — cooldown-gated ops
+    bout: 8, exhibition: 5,                      // fists — per bout fought
+  },
+  // Rank bands (display names by level — the TRADE_RANKS shape, status only)
+  RANKS: [
+    { at: 1,  name: 'Green' },
+    { at: 10, name: 'Apprentice' },
+    { at: 20, name: 'Made' },
+    { at: 30, name: 'Craftsman' },
+    { at: 40, name: 'Expert' },
+    { at: 50, name: 'Master of the Trade' },
+  ],
+  // THE DEATH RULE (founder-signed): the street's levels die; the heir inherits this share of each
+  // track's XP (the honor HEIR_KEEP / Underworld MEMORY_BPS echo pattern — 0 restores hard death).
+  // Softens death → a flagged founder sign-off lever by the standing rule.
+  HEIR_KEEP_BPS: 2500,
+  // Legend rank ladder (lifetime account XP across ALL trades — pure status, survives death)
+  LEGEND_RANKS: [
+    { at: 0,       name: 'Dabbler' },
+    { at: 5000,    name: 'Journeyman of the City' },
+    { at: 25000,   name: 'Man of Many Trades' },
+    { at: 100000,  name: 'The Complete Criminal' },
+    { at: 400000,  name: 'A Legend of the Life' },
+  ],
+};
+export const masteryLvlOf = (xp) =>
+  Math.min(MASTERY.MAX_LVL, Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / MASTERY.XP_DIVISOR)) + 1);
+export const masteryXpFor = (lvl) => MASTERY.XP_DIVISOR * (lvl - 1) * (lvl - 1);
+export const masteryRankOf = (lvl) => { let n = MASTERY.RANKS[0].name; for (const r of MASTERY.RANKS) if (lvl >= r.at) n = r.name; return n; };
+export const masteryLegendRankOf = (xp) => { let n = MASTERY.LEGEND_RANKS[0].name; for (const r of MASTERY.LEGEND_RANKS) if (Number(xp) >= r.at) n = r.name; return n; };

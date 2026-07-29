@@ -765,6 +765,8 @@ async function seedLists() {
              race_wins=5
            WHERE account_id IN ($1,$2)`, [acct, acct2]);
   await q(`UPDATE characters SET honor=70 WHERE id=$1`, [charId]);
+  // THE TRADES legend board ranks lifetime mastery XP per account
+  await q(`INSERT INTO mastery_legend (account_id, track_id, xp) VALUES ($1, 'larceny', 5000)`, [acct]);
 
   // ── the family, and everything that hangs off holding turf ──
   const gid = await paramId('/v1/gangs/:p');

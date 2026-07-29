@@ -39,6 +39,7 @@ import * as Convoy from './convoy.js';
 import * as Commission from './commission.js';
 import * as Market from './market.js';
 import * as Skills from './skills.js';
+import * as Mastery from './mastery.js';
 import * as Underworld from './underworld.js';
 import * as Law from './law.js';
 import * as World from './world.js';
@@ -92,7 +93,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -785,6 +786,9 @@ export async function buildServer() {
       decayEvery: EMISSION.DECAY_EVERY, capOmr: EMISSION.WAGE_CAP_OMR, minLevel: EMISSION.WAGE_MIN_LVL,
       minScore: EMISSION.WAGE_MIN_SCORE, mintedRequired: wageRequireMinted(),
       epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
+    // THE TRADES — the mastery catalog (tracks, curve, ranks — knowable; XP is earned, never bought)
+    mastery: { tracks: MASTERY.TRACKS, xpDivisor: MASTERY.XP_DIVISOR, maxLvl: MASTERY.MAX_LVL,
+      xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS },
     // FIVE PILLARS — the public catalogs (levers are sign-off; the schedule/ladders are knowable)
     honor: { tiers: HONOR.TIERS, trusted: HONOR.TRUSTED, dreaded: HONOR.DREADED },
     diplomacy: { pactDays: DIPLOMACY.PACT_MS / 86400000, coalitionMin: DIPLOMACY.COALITION_MIN,
@@ -953,6 +957,9 @@ export async function buildServer() {
   // SKILLS & SPECIALIZATIONS — the build layer: learn with level-derived points, respec for $OMR.
   app.get('/v1/skills', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Skills.skillsBoard(ch, h)));
+  // THE TRADES — the mastery board (use-XP tracks; pure status, the trade_rep shape generalised)
+  app.get('/v1/mastery', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Mastery.masteryBoard(ch, client, h)));
   app.post('/v1/skills/respec', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
   // step two: fire a capstone-unlocked ACTIVE ability, and per-skill (leaf-first) respec.

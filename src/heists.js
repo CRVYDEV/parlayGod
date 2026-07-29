@@ -14,7 +14,7 @@
 // Members are paid/jailed by direct row updates under lock (they are never in-memory in the
 // leader's transaction — no persistCharacter clobber).
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
+import { GameError, bus, bumpMastery } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
          HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
@@ -330,6 +330,10 @@ export async function executeHeist(ch, heistId, client, h) {
       // Tier-4 §D — THE CREW LEGEND: a successful heist banks a lifetime notch for every crewman
       // (account-level, survives death — direct SQL, off the positional persist; the duel_wins twin)
       await client.query('UPDATE account_persistent SET heists_pulled = heists_pulled + 1 WHERE account_id=$1', [m.account_id]);
+      // THE TRADES: a pulled score schools the whole crew — the leader through his loaded h (cache
+      // mirror), members HEADLESS (h=null → bumpMastery reads/writes their rows directly under the
+      // crew lock already held above; the heists_pulled twin, but per-character so it dies with them)
+      await bumpMastery(client, m.id === ch.id ? h : null, m, 'scores', 'heist');
       if (cutOmr > 0) { // the legit cut — a status grant (no §10.4 currency), account-level so it survives death
         const g = await grantShares(client, m.account_id, PORTFOLIO.SCORE_TICKER, cutOmr);
         if (m.id === ch.id && g) { // keep the leader's own returned view fresh (portfolio isn't persist-clobbered)

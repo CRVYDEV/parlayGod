@@ -4,7 +4,7 @@
 // — the bodyguard-hire pattern) and bottle service (a pure-status $OMR burn), both flexed on the guest
 // list. Prestige ranks the nightlife. §10.4: `speakeasy:` is a cash SINK/FAUCET/TRANSFER vocabulary (all
 // character_id'd → the per-character cash check reconciles); bottles/naming ride `vanity:%` (no omr change).
-import { GameError, bus, skillMult } from './game.js';
+import { GameError, bus, skillMult, bumpMastery } from './game.js';
 import { SPEAKEASY, DISTRICTS, speakeasyTierOf, speakeasyRoundOf, speakeasyBottleOf, levelOf, renownRankOf, decorStyleOf, styleUnlockOf, assessedValueOf, effStat, SKILLS } from './rules.js';
 import { spendOmr } from './vanity.js';
 
@@ -448,6 +448,7 @@ export async function standoverSpeakeasy(ch, owner, districtId, client, h) {
     await h.track(client, ch.account_id, 'speakeasy_standover', { district: districtId, won: false });
     return { ok: true, won: false, feePaid: S.FEE };
   }
+  await bumpMastery(client, h, ch, 'muscle', 'standover'); // THE TRADES — the hostile takeover of a whole club
   // WON — a forced sale at the assessed (build) value: the owner is PAID (taxed, the buyout pattern), loses the club.
   // Resolve the owner's pending raid FIRST (the buySpeakeasy precedent — audit F3): a WON standover must NOT wipe a
   // hot club clean, else a friendly standover would launder a pending raid (the outgoing owner escaping the fine).
