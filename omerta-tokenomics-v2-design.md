@@ -433,3 +433,71 @@ No in-game faucet moved; zero `transactions` rows; §10.4 untouched. Mainnet is 
 gated on legal counsel and the third-party audit — **whose clock this drop resets**, since the
 property every prior contract review leaned on is the one it deletes. The step-5 **RE-SIM is still
 owed** and is now the largest open item in the pivot.
+
+---
+
+## 7.5 Wall 3 resolved — the oracle goes in (founder call, 2026-07-29)
+
+§7.4 flagged that "accretive-only" as written is not implementable and shipped a static rate ceiling
+instead, with the trade-off recorded and the decision put to the founder. **The founder ruled: build
+the oracle.** This section supersedes §7.4's "what shipped instead" — but NOT its reasoning, which is
+what shaped how the oracle went in.
+
+### What was built
+
+- **`IOmrOracle`** — a deliberately minimal interface (one price, one timestamp). The mint path
+  should be reviewable without reading a fixed-point maths library, and the feed should be swappable
+  (V2 pool → V3 → a Chainlink-style aggregator) without ever touching that path.
+- **`OmrTwapOracle`** — a Uniswap V2 cumulative-price TWAP. A TWAP and **not a spot read**, because
+  spot on a mint path can be moved and restored inside a single block by anyone with a flash loan; a
+  spot-priced mint wall is not a wall. `PERIOD` has a compile-time floor (10 min) so a 30-second
+  "TWAP" — a spot price wearing a TWAP's name — cannot be deployed. `update()` is permissionless:
+  gating the poke on a keeper role would mean a lost key freezes the feed and, through it, the whole
+  bond product.
+- **`OmertaBond` wall 4** — the signed quote's claimed market price must sit within
+  `priceToleranceBps` of the TWAP. Fail-closed on all four failure modes: unset feed, unset
+  `maxOracleAge`, a zero reading, and a reverting feed.
+
+### The property that makes a price feed safe on a mint path
+
+§7.4's objection was that an oracle becomes the thing standing between a leaked key and unbounded
+supply. That objection is answered **structurally, not by trusting the feed**: wall 3 was KEPT and is
+checked independently, so the real ceiling is
+
+```
+MIN( maxOmrPerEth , oracle x (1 + tolerance) / (1 - discount) )
+```
+
+**A manipulated oracle can only ever tighten this, never loosen it.** Push the feed down and bonding
+halts — a liveness problem, recoverable, no supply created. Push it up and `maxOmrPerEth` still binds,
+because that is the Safe's number and no oracle can raise it. Deleting wall 3 as now-redundant would
+remove exactly this guarantee, which is why the contract header says so and a dedicated test
+(`test_oracle_CANNOT_LOOSEN_the_static_ceiling`) fails if anyone does.
+
+### On the word "accretive"
+
+The literal rule is now a **setting**, not something dropped: `priceToleranceBps = 0` with
+`MAX_DISCOUNT_BPS = 0` is exactly "mint only when the ETH received is worth at least the OMR issued".
+At the shipped values it is a bounded, market-tracking dilution ceiling — the treasury receives ETH
+worth at least `(1 - maxDiscount) / (1 + tolerance)` of the OMR issued at market. **Say that number
+when tuning; do not call it accretion.** True treasury-BACKING accretion (reserves ÷ supply) is still
+not checkable here — the contract custodies nothing — and remains the job of the off-chain pricing
+policy, which is where it belongs and where a mistake costs one bad bond instead of the token.
+
+### Two things this created that did not exist before
+
+1. **A keeper is now a production dependency.** `update()` must be poked at least once per
+   `maxOracleAge` or bonding halts. The failure direction is deliberate and correct, but it is an
+   operational commitment and is in CHAIN-DEPLOY.md as a deploy step, not a footnote.
+2. **The backend had to be taught the chain's price.** `quoteBond` signed against the Vig buyback
+   TWAP, which is a *different feed* from the on-chain oracle. Left alone, any drift beyond tolerance
+   would revert every honest quote while the server looked perfectly healthy. `makeBondPriceReader`
+   now reads the contract's own `priceCeiling()` and CLAMPS the signed price to it, so the two agree
+   by construction; a chain whose oracle is unset/stale/broken is reported as a paused product rather
+   than papered over with quotes that cannot land.
+
+### Founder levers this adds
+
+`priceToleranceBps` (0 = literal accretion; hard-capped 20%), `maxOracleAge` (must exceed the keeper
+interval), and the oracle's `PERIOD` (longer = more manipulation-resistant, more lag). All three are
+deploy-time and all three are properly a function of the step-5 re-sim, **which remains owed**.

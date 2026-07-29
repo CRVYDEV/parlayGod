@@ -4,8 +4,8 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 1. `forge test` must pass after every change; new behavior needs new tests (happy path + every revert).
    **The suite IS runnable in the sandboxed build environment**: `./run-forge-test-sandboxed.sh`
    (forge from the official npm dist, forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim —
-   same compiler version+commit as native). First executed 2026-07-23 (73/73); **77/77 green** after
-   tokenomics v2 step 4, incl. both 512-run fuzzes. On an open-internet machine prefer
+   same compiler version+commit as native). First executed 2026-07-23 (73/73); **103/103 green** after
+   tokenomics v2 step 4 + the accretion oracle, incl. four 512-run fuzzes. On an open-internet machine prefer
    `./run-forge-test.sh` (native toolchain).
    Test-authoring footgun that run caught: NEVER put `_sign(...)`/any external call inline in the
    arguments of a call guarded by `vm.prank`/`vm.expectRevert` — argument evaluation makes a
@@ -20,13 +20,21 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
      the owner and evented. There is deliberately **no owner mint**, so "the Safe was compromised" and
      "supply was inflated" stay two separate events. `minter = address(0)` (the deploy default) is
      minting OFF and doubles as a one-transaction emergency stop.
-   - OmertaBond's three walls: (1) `dailyCapOMR` — with no tranche this is the entire blast radius of a
+   - OmertaBond's FOUR walls: (1) `dailyCapOMR` — with no tranche this is the entire blast radius of a
      leaked signer key, and therefore the most load-bearing number in the system (0 = unlimited, so a
      deploy that forgets it has no wall); (2) `MAX_DISCOUNT_BPS` (2000, compile-time) — a discount is a
-     mint at a price; (3) `maxOmrPerEth` — the post-discount mint-RATE ceiling, **fail-closed at 0** (the
-     GearVault gear-cap precedent), so forgetting it turns the product off rather than open. Read the
-     contract header on why wall 3 is a rate ceiling and NOT the design's literal "accretive-only" —
-     that deviation is deliberate and flagged for the third-party audit.
+     mint at a price; (3) `maxOmrPerEth` — an ABSOLUTE post-discount mint-RATE ceiling, **fail-closed at
+     0** (the GearVault gear-cap precedent); (4) `oracle` — the ACCRETION wall, a TWAP the signed quote's
+     claimed price must agree with, also fail-closed (unset / stale / zero / reverting all revert).
+   - **DO NOT "simplify" walls 3 and 4 into one.** A price feed sits on the mint path; what makes that
+     safe is that the absolute ceiling is checked INDEPENDENTLY, so the effective bound is
+     `MIN(maxOmrPerEth, oracle x (1+tolerance) / (1-discount))` and **a manipulated oracle can only ever
+     TIGHTEN it, never loosen it**. Pushing the feed up buys an attacker nothing; pushing it down only
+     halts bonding. `test_oracle_CANNOT_LOOSEN_the_static_ceiling` fails if this is ever collapsed.
+   - The oracle (`OmrTwapOracle`) must be a TWAP, never spot — spot on a mint path is flash-loanable.
+     `PERIOD` has a compile-time floor for that reason. `update()` is permissionless on purpose (a
+     keeper-gated poke means a lost key freezes the bond product) and **must be poked at least once per
+     `maxOracleAge`** or bonding halts: an operational dependency, documented in CHAIN-DEPLOY.md.
    - The payout is minted AT BOND TIME (not at claim), which keeps `committedOMR <= omr.balanceOf(this)`
      true at every instant — so `sweep` still cannot touch OMR backing an outstanding bond and a claim
      can never fail for want of balance.
@@ -45,8 +53,8 @@ Solidity suite for OMERTÀ on Robinhood Chain. Rules for future sessions:
 3. No hardcoded chainIds/addresses — env-driven; Arbitrum One/Base are fallback targets.
 4. M6-B lives in the backend at the repo root (src/, test/…) — the chain service on viem. The signing snippet in README here must stay in exact parity with VOUCHER_TYPEHASH.
 5. Do not raise MAX_APY_BPS, remove either daily cap (VoucherClaim's or OmertaBond's), remove the
-   per-gearId gear cap or OmertaBond's `maxOmrPerEth` (both fail-closed at 0 by design), or add an
-   OWNER mint path to OMR — these are audit-surface decisions for humans. The bond mint is the one
+   per-gearId gear cap, OmertaBond's `maxOmrPerEth` or its accretion `oracle` (all fail-closed by
+   design), or add an OWNER mint path to OMR — these are audit-surface decisions for humans. The bond mint is the one
    sanctioned exception and it goes through `minter`, never through `onlyOwner`.
 6. OMR carries a founder-directed DEX SELL TAX: flat, owner-armed, applies ONLY to transfers into
    registered `ammPairs`, default 0, split **three ways in-transfer — dev / rwa / lp** (founder revenue,

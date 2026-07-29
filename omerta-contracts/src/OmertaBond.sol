@@ -8,6 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IOmrOracle} from "./IOmrOracle.sol";
 
 /// @dev The single mint path on OMR. Held as a narrow interface on purpose: this contract needs
 ///      exactly one privilege on the token and should be readable as having exactly one.
@@ -22,7 +23,7 @@ interface IOMRMintable {
 ///         ⚠ THIS CONTRACT MINTS (tokenomics v2 §4, founder ruling: "supply becomes unbounded;
 ///         bonds are the only mint"). Until step 4 it transferred from a Safe-funded tranche and
 ///         "nothing mints" was the property every prior audit of this suite rested on. That property
-///         is GONE and three walls replace it. All three must survive review; none is optional:
+///         is GONE and FOUR walls replace it. All four must survive review; none is optional:
 ///
 ///           1. `dailyCapOMR` — OMR issuable per UTC day. The tranche used to bound the TOTAL a
 ///              leaked signer could extract; with no tranche, this bounds the DAY, and it is now the
@@ -30,25 +31,44 @@ interface IOMRMintable {
 ///              forgets it is a deploy with no daily wall — set it.
 ///           2. `MAX_DISCOUNT_BPS` (2000, compile-time) — a discount is a mint at a price, and an
 ///              unbounded discount is a mint at any price.
-///           3. `maxOmrPerEth` — the mint-RATE ceiling, and FAIL-CLOSED AT ZERO (the GearVault gear-cap
-///              precedent): an unset rate ceiling means no bond can be struck at all, so the failure
-///              mode of forgetting it is "the product is off", not "the product prints".
+///           3. `maxOmrPerEth` — an ABSOLUTE Safe-set ceiling on OMR minted per ETH, FAIL-CLOSED AT
+///              ZERO (the GearVault gear-cap precedent): an unset ceiling means no bond can be struck
+///              at all, so the failure mode of forgetting it is "the product is off", not "prints".
+///           4. `oracle` — THE ACCRETION WALL (founder-directed, v2 §4). A TWAP that the signed
+///              quote's claimed market price must agree with. Also fail-closed: unset, stale, zero,
+///              or reverting each REVERT the bond.
 ///
-///         ON WALL 3, HONESTLY. The design calls this "accretive-only": mint only when the ETH
-///         received is worth at least the OMR issued. Taken literally that forbids every DISCOUNTED
-///         bond, because a discount is by definition issuing OMR worth more than the ETH paid — so
-///         the literal reading and the product contradict each other. The real (Olympus) meaning is
-///         treasury-backing accretion: reserves-per-token must not fall. That is not checkable here.
-///         This contract custodies nothing — it forwards every wei in the same transaction — so it
-///         cannot know treasury reserves without an oracle, and putting a price feed on the mint path
-///         would make that feed the thing standing between a leaked key and unbounded supply. So
-///         wall 3 is a hard, Safe-set ceiling on OMR-per-ETH: weaker as economics, stronger as a
-///         wall, and honest about which it is. Backing accretion belongs in the off-chain policy that
-///         decides what price to sign, where it can read the whole treasury. FLAGGED for the founder
-///         and for the third-party audit — this is a deliberate deviation from the design's word.
+///         WHY 3 AND 4 ARE BOTH HERE. This composition is the point, and deleting either half to
+///         "simplify" removes the guarantee. Wall 3 alone is STATIC — it cannot track the market, so
+///         it is either too loose (once OMR appreciates) or blocks honest bonds (once OMR falls).
+///         Wall 4 alone puts a price feed on a MINT path, which is the classic route from an oracle
+///         bug to unbounded supply. A bond must pass BOTH, so the real ceiling is:
+///
+///             effective rate ceiling = MIN( maxOmrPerEth , oracle x (1+tolerance) / (1-discount) )
+///
+///         **A MANIPULATED ORACLE CAN ONLY EVER TIGHTEN THIS, NEVER LOOSEN IT.** Push the oracle
+///         down and bonding halts — a liveness problem, recoverable, no supply created. Push it up
+///         and `maxOmrPerEth` still binds, because that is the Safe's number and no oracle can raise
+///         it. That asymmetry is the entire reason a price feed is safe to put here.
+///
+///         ON "ACCRETIVE-ONLY", HONESTLY. Read literally — mint only when the ETH received is worth
+///         at least the OMR issued — the rule forbids every DISCOUNTED bond, since a discount IS
+///         issuing OMR worth more than the ETH paid; the literal rule and the product contradict
+///         each other. What is implemented is that same inequality with two dials: the quote's
+///         claimed price may not exceed the oracle by more than `priceToleranceBps`, and the discount
+///         is capped by `MAX_DISCOUNT_BPS`. **Set both to zero and this becomes the literal rule
+///         exactly** — so the literal case is a SETTING here, not something dropped. At non-zero
+///         values it is a bounded, market-tracking dilution ceiling: the treasury always receives ETH
+///         worth at least `(1-maxDiscount)/(1+tolerance)` of the OMR issued at market. Say that
+///         number out loud when tuning these; do not call it accretion.
+///
+///         WHAT THE ORACLE STILL CANNOT SEE: true treasury BACKING (reserves / supply). This contract
+///         custodies nothing — every wei is forwarded in the same transaction — so backing accretion
+///         remains the job of the off-chain policy deciding what price to sign, where it can read the
+///         whole treasury and where a mistake costs one bad bond instead of the token.
 ///
 ///         Prices/discounts come in a server-signed EIP-712 quote (the VoucherClaim signer
-///         discipline); a compromised signer is bounded by all three walls and revoked by the Safe.
+///         discipline); a compromised signer is bounded by all four walls and revoked by the Safe.
 ///         `sweep` can pull only OMR that is not backing an outstanding vested bond.
 contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -108,9 +128,23 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     uint256 public dailyCapOMR;
     /// @notice WALL 3 — the maximum OMR this contract will ever mint per 1 ETH received, measured
     ///         AFTER the discount (the rate actually issued, not the quoted market rate). FAIL-CLOSED
-    ///         AT ZERO: until the Safe sets it, every bond reverts. See the header for why this is a
-    ///         rate ceiling rather than a treasury-backing accretion test.
+    ///         AT ZERO: until the Safe sets it, every bond reverts. This is the ABSOLUTE ceiling that
+    ///         a manipulated oracle cannot raise — see the header on why walls 3 and 4 compose.
     uint256 public maxOmrPerEth;
+
+    /// @notice WALL 4 — the price feed the accretion check reads. FAIL-CLOSED AT ZERO ADDRESS.
+    IOmrOracle public oracle;
+    /// @notice How far above the oracle's TWAP a signed quote's claimed market price may sit, in bps.
+    ///         Non-zero because a TWAP LAGS spot by construction: in a fast market an honest quote
+    ///         priced at spot is legitimately above a 30-minute average, and a zero-tolerance wall
+    ///         would reject honest bonds precisely when the market is moving. Zero makes the wall
+    ///         literal (see the header); the compile-time cap keeps any setting defensible.
+    uint256 public priceToleranceBps;
+    uint256 public constant MAX_PRICE_TOLERANCE_BPS = 2000; // hard cap: 20%
+    /// @notice How old the oracle's reading may be before a bond refuses. Bounds how long a dead
+    ///         keeper can leave the mint running on a price nobody is maintaining. Zero = unset =
+    ///         every bond reverts, so this too is fail-closed.
+    uint256 public maxOracleAge;
     mapping(uint256 => uint256) public bondedOnDay; // UTC day => OMR payout bonded that day
     mapping(uint256 => bool) public usedNonce; // quote replay protection
     mapping(uint256 => Bond) public bonds;     // bondId => Bond
@@ -122,6 +156,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     event RecipientsSet(address indexed pol, address indexed dev, address indexed vig);
     event DailyCapSet(uint256 cap);
     event MaxRateSet(uint256 maxOmrPerEth);
+    event OracleSet(address indexed oracle, uint256 priceToleranceBps, uint256 maxOracleAge);
     event Swept(address indexed to, uint256 amount);
 
     error ZeroAddress();
@@ -134,6 +169,10 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     error Replay();
     error BadSignature();
     error RateCeiling();           // the post-discount mint rate exceeds maxOmrPerEth (0 = unset, fails closed)
+    error OracleUnset();           // wall 4 not configured — fails closed rather than skipping the check
+    error OracleUnavailable();     // the feed reverted or reported no usable reading
+    error OracleStale(uint256 updatedAt, uint256 maxAge);
+    error PriceAboveOracle(uint256 quoted, uint256 ceiling); // the accretion wall
     error NotOwner();
     error NothingVested();
     error ForwardFailed();
@@ -166,6 +205,11 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         vigRecipient = vigRecipient_;
         dailyCapOMR = dailyCapOMR_;
         maxOmrPerEth = maxOmrPerEth_;
+        // WALL 4 is deliberately NOT a constructor argument. A TWAP oracle cannot exist before the
+        // pool it reads, and the pool cannot exist before this token — so the honest deploy order is
+        // token, bond, pool, oracle, `setOracle`, `setMinter`. Leaving it unset here means the
+        // contract is born refusing every bond, which is the correct state for a contract that can
+        // mint and has not yet been told what the market price is.
         emit SignerSet(signer_);
         emit RecipientsSet(polRecipient_, devRecipient_, vigRecipient_);
         emit DailyCapSet(dailyCapOMR_);
@@ -184,6 +228,46 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     function setMaxRate(uint256 maxOmrPerEth_) external onlyOwner {
         maxOmrPerEth = maxOmrPerEth_;
         emit MaxRateSet(maxOmrPerEth_);
+    }
+
+    /// @notice The Safe configures WALL 4 — the accretion oracle, how far a quote may sit above it,
+    ///         and how stale a reading may be. Setting `o` to the zero address stops all bonding: a
+    ///         third kill switch, and the reason a swapped-out feed can never mean "skip the check".
+    ///         Swappable so the feed can follow the canonical pool (V2 → V3 → a Chainlink-style
+    ///         aggregator) without ever touching the mint path itself.
+    function setOracle(IOmrOracle o, uint256 toleranceBps, uint256 maxAge) external onlyOwner {
+        if (toleranceBps > MAX_PRICE_TOLERANCE_BPS) revert BadBps();
+        oracle = o;
+        priceToleranceBps = toleranceBps;
+        maxOracleAge = maxAge;
+        emit OracleSet(address(o), toleranceBps, maxAge);
+    }
+
+    /// @notice The live accretion ceiling on a quote's claimed market price: what the oracle says,
+    ///         plus the tolerance. A quote above this is refused. Exposed so the quote signer can
+    ///         price against the same number the chain will judge it by — a server that signs blind
+    ///         against its own TWAP will have honest quotes revert whenever the two feeds drift.
+    /// @return ceiling the highest `priceOmrPerEth` a quote may carry right now
+    /// @return oraclePrice the raw TWAP reading behind it
+    function priceCeiling() public view returns (uint256 ceiling, uint256 oraclePrice) {
+        oraclePrice = _oraclePrice();
+        ceiling = (oraclePrice * (10000 + priceToleranceBps)) / 10000;
+    }
+
+    /// @dev Reads the feed and enforces every fail-closed condition. Kept in one place so there is
+    ///      exactly one path to a price and no way to accidentally add a second that skips a check.
+    function _oraclePrice() private view returns (uint256) {
+        if (address(oracle) == address(0) || maxOracleAge == 0) revert OracleUnset();
+        // try/catch so a reverting or non-conforming feed surfaces as a clean, named error instead
+        // of an opaque bubble — and, more importantly, so "the oracle broke" can never be mistaken
+        // in review for a path that proceeds.
+        try oracle.consult() returns (uint256 price, uint256 updatedAt) {
+            if (price == 0) revert OracleUnavailable();
+            if (block.timestamp > updatedAt + maxOracleAge) revert OracleStale(updatedAt, maxOracleAge);
+            return price;
+        } catch {
+            revert OracleUnavailable();
+        }
     }
 
     // ── the bond ──
@@ -207,15 +291,22 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (ECDSA.recover(hashQuote(q), sig) != signer) revert BadSignature();
         usedNonce[q.nonce] = true;
 
+        // WALL 4 — THE ACCRETION WALL. The signer says what OMR is worth; the oracle says whether
+        // that is true. Checked on the CLAIMED price rather than the post-discount rate on purpose:
+        // the discount is separately bounded by MAX_DISCOUNT_BPS, so splitting the two means each
+        // wall guards one lie (an inflated market price / an excessive discount) and neither can be
+        // used to hide the other. Reverts if the feed is unset, stale, zero or broken.
+        (uint256 ceiling, ) = priceCeiling();
+        if (q.priceOmrPerEth > ceiling) revert PriceAboveOracle(q.priceOmrPerEth, ceiling);
+
         // discounted payout: principal's market OMR value, scaled UP by the discount (cheaper OMR)
         uint256 marketOmr = (q.principal * q.priceOmrPerEth) / 1e18;
         uint256 payout = (marketOmr * 10000) / (10000 - q.discountBps);
 
-        // WALL 3 — THE MINT-RATE CEILING, checked on the POST-DISCOUNT rate, which is the rate
-        // actually issued. FAIL-CLOSED at zero: an unset ceiling stops every bond, so forgetting to
-        // configure this turns the product off rather than opening it up (the GearVault gear-cap
-        // precedent). This replaces the tranche cap that used to make minting structurally
-        // impossible; read the header for what it does and does not promise.
+        // WALL 3 — THE ABSOLUTE MINT-RATE CEILING, checked on the POST-DISCOUNT rate, which is the
+        // rate actually issued. FAIL-CLOSED at zero. This is deliberately INDEPENDENT of wall 4: it
+        // is the number a manipulated oracle cannot raise, so the two together bound the mint at
+        // MIN(this, oracle-derived) and an oracle can only ever tighten. Do not fold them together.
         if (maxOmrPerEth == 0 || (payout * 1e18) / q.principal > maxOmrPerEth) revert RateCeiling();
         committedOMR += payout;
 
