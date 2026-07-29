@@ -3387,6 +3387,18 @@ export const MASTERY = {
     dynast:   { name: 'Dynast',   desc: 'Your heir inherits HALF this trade\'s schooling instead of a quarter.' },
   },
   TRAIT_HEIR_BPS: 5000, // the dynast echo (vs HEIR_KEEP_BPS for everyone else) — a death-softening dial
+  // ── STEP FOUR: STATS BY USE (founder-signed fork: "yes, tightly capped") ──
+  // Working a trade also exercises its core stat: each XP-paying action rolls a small chance of
+  // +1 to the track's stat, on THE GYM'S OWN diminishing curve (200/(200+stat) — the exact factor
+  // train() uses, so use-training can never outpace the gym's shape), metered by a hard rolling
+  // daily bucket (the D3 wash/port token-bucket pattern). The gym stays the FAST lane (~40
+  // pts/hr at the 3-min cooldown vs ≤CAP_DAY/day here) — this makes playing your trade FEEL like
+  // training it, never a second gym. Signed contest formulas can't inflate past the cap.
+  STAT_USE: {
+    CAP_DAY: 3,      // hard ceiling on use-trained stat points per rolling day
+    P_PER_XP: 0.02,  // roll chance per point of mastery XP the action paid (before the gym dim)
+    GYM_DIM: 200,    // the gym's own diminishing base — gain chance scales by GYM_DIM/(GYM_DIM+stat)
+  },
   // Legend rank ladder (lifetime account XP across ALL trades — pure status, survives death)
   LEGEND_RANKS: [
     { at: 0,       name: 'Dabbler' },

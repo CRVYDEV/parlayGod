@@ -3825,9 +3825,26 @@ doesn't price. `/v1/rules.pathFx` publishes the matrix; the console path cards s
 exact numbers, home 4.5-XP crime / rival 0.6-XP dice through the real funnel, the cooldown (refused with
 $OMR in hand → allowed past the week), the Gun's sale ratio at a real till, the Ring's Doc bill to the
 dollar, and the Ledger front collecting ×1.1 vs a pathless twin on identical seeded fronts —
-mutation-verified (XP rates dropped → caught; cooldown dropped → caught). **Step 4 designed, not
-built:** stats-by-use (a capped daily drip on the gym's own diminishing curve, playthrough re-run). A
-combined red-team follows step 4 (the pillar discipline).
+mutation-verified (XP rates dropped → caught; cooldown dropped → caught). **Step four — STATS BY
+USE — BUILT** (the founder-signed "yes, tightly capped" fork; `MASTERY.STAT_USE` rules tail, new
+direct-SQL `characters.statuse_used/statuse_at`): every XP-paying bumpMastery on the ACTOR path rolls
++1 to the track's stat — `P_PER_XP` (0.02) per XP point paid, scaled by THE GYM'S OWN diminishing
+factor (`GYM_DIM/(GYM_DIM+stat)` = the exact 200/(200+stat) train() uses, so use-training can never
+outpace the gym's shape), every roll rng-audited (`statuse:<track>`), metered by a hard rolling daily
+bucket (`CAP_DAY` 3 — the D3 wash-bucket shape, charged with the FULL-UNIT-FITS gate since a strict
+`used < CAP` passes at 3−ε moments after the third gain and leaks a CAP+1 burst). Headless bumps
+(duel opponents, heist crew under their own locked rows) honestly SKIP the drip rather than silently
+lose it. The gym stays the fast lane (~40 pts/hr vs ≤3/day — the death-of-the-gym non-risk, measured
+in BALANCE.md); stat points are power but the cap bounds total inflation at +3/day/street whatever
+the action volume. Zero §10.4 (a stat is not a currency). `STAT_USE_P` is TEST-ONLY (the LAW_BUST_P
+precedent, preflight-classified). Board `statUse {capDay, left}` off the SAME rolling math the drip
+charges; `/v1/rules.mastery.statUse`; console bucket line + `stat_use` feed template. Tests
+(test/mastery.js step-4 block, three mutations each caught at its own assertion): the +1 with the
+rng row, the bucket charge, the CAP_DAY ceiling (a spent bucket grants NOTHING), the board headroom,
+the 1-day refill restoring the allowance, and P=0 landing nothing. All `STAT_USE.*` numbers are
+founder sign-off levers. **THE TRADES pillar is feature-complete** (use-XP tracks → milestone perks +
+the level-50 trait → Paths v2 with teeth → stats-by-use); the combined red-team follows (the pillar
+discipline).
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

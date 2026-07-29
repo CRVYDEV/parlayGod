@@ -2523,3 +2523,34 @@ cooldown `PATH_SWITCH_CD_MS` (7d) exists because home/rival XP rates make career
 activities a rate arbitrage the 25 $OMR burn alone doesn't price; the first pick starts the same
 clock. The three ORIGINAL paths' pre-v2 numbers are byte-identical through the ternary→matrix
 conversion (asserted in test/mastery.js).
+
+## THE TRADES step four — stats by use (the founder-signed fork, 2026-07-29)
+
+Founder answered the third design fork "yes, tightly capped": working a trade also exercises its
+core stat. Every XP-paying action rolls +1 to the track's stat (`MASTERY.STAT_USE` — `P_PER_XP`
+0.02 per XP point paid, capped at 0.5/roll) on THE GYM'S OWN diminishing factor
+(`GYM_DIM/(GYM_DIM+stat)` = the exact `200/(200+stat)` train() uses, so use-training can never
+outpace the gym's shape), metered by a hard rolling daily bucket (`CAP_DAY` 3 — the D3
+wash/port token-bucket pattern, columns `characters.statuse_used/statuse_at`, charged with the
+full-unit-fits gate so a burst can never leak CAP+1). Actor path only — headless bumps (duel
+opponents, heist crew) honestly skip the drip rather than silently lose it.
+
+**Why this is NOT a second gym (the death-of-the-gym non-risk, measured):** the gym pays
+~40 pts/hr at the 3-min cooldown; the drip is hard-ceilinged at **≤3/day** whatever you play —
+~2 orders of magnitude apart. Stat points ARE power (they feed the signed contest formulas), but
+the cap bounds the total inflation at +3/day/street regardless of action volume, and the gym-dim
+factor shrinks it exactly where stats are already high. Zero §10.4 surface (a stat is not a
+currency; every roll is rng-audited `statuse:<track>`). `STAT_USE_P` is TEST-ONLY (the LAW_BUST_P
+precedent, classified in preflight).
+
+| lever | value | note |
+|---|---|---|
+| `MASTERY.STAT_USE.CAP_DAY` | 3 | the hard daily ceiling — 0 turns the fork off |
+| `MASTERY.STAT_USE.P_PER_XP` | 0.02 | roll chance per XP point (a 3-XP crime ≈ 6% before dim) |
+| `MASTERY.STAT_USE.GYM_DIM` | 200 | the gym's own curve base — keep in lockstep with train() |
+
+**Playthrough re-run (the design's step-4 requirement, 2026-07-29):** with the drip LIVE the
+pacing holds — 2h at the keyboard ≈ level 12, 5h ≈ 20, 10h ≈ 33; the 7-day solo ceiling is
+level 34 / $1.4M / 13 of 28 missions (the level-240 speedrun stays closed). The drip's worst case
+is ≤3 stat points/day on top of a gym session training ~40/hr — invisible at the pacing scale,
+exactly the intent.
