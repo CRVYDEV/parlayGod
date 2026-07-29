@@ -2262,3 +2262,40 @@ RWA against the principal on every real bond.
 a full re-sourcing cycle leaves the ledger row count unchanged.
 
 **The step-5 RE-SIM is still owed** and this drop does not touch it.
+
+---
+
+## TOKENOMICS v2 STEP 4 — the contracts, and the three numbers that now bound supply (2026-07-29)
+
+Step 4 is the on-chain half. It moves no in-game faucet and writes no `transactions` row — but it
+introduces the three most consequential numbers in the system, because they are what replaced a
+property that used to need no number at all. **Until this drop OMR had no mint function**, so the
+answer to "how much OMR can exist?" was a constant. It is now a policy, and these are its dials.
+
+| lever | value | what it bounds | verdict |
+|---|---|---|---|
+| `OmertaBond.dailyCapOMR` | **set at deploy** | OMR issuable per UTC day. With no tranche bounding the total, this is the ENTIRE blast radius of a leaked quote-signer key. **`0` means UNLIMITED** — a deploy that forgets it has no daily wall at all. | SET IT DELIBERATELY SMALL FOR LAUNCH |
+| `OmertaBond.maxOmrPerEth` | **set at deploy** | The post-discount mint RATE. **Fail-closed at 0** (the GearVault gear-cap precedent), so an unconfigured deploy cannot bond rather than bonding at any price. Doubles as a kill switch — `setMaxRate(0)` stops issuance without a pause. | KEEP FAIL-CLOSED |
+| `MAX_DISCOUNT_BPS` | `2000` (compile-time) | A discount is a mint at a price; an unbounded discount is a mint at any price. Must equal the backend `BONDS.MAX_DISCOUNT_BPS`. | KEEP |
+| `SELL_TAX.BPS` / `DEV` / `RWA` / `LP` | `900` = 200 / 400 / 300 | The DEX sell tax and its three-way split, replacing the old 50/50 dev/buyback. Hard-capped at 1000 (10%) in the contract. LP takes the remainder so the shares sum EXACTLY. | KEEP (founder-directed 9%) |
+
+**The honest note on wall 3, because it is a deviation and should not be discovered by an auditor.**
+Design §4 calls this wall "accretive-only": mint only when the ETH received is worth at least the OMR
+issued. Read literally that forbids **every discounted bond** — a discount is by definition issuing
+OMR worth more than the ETH paid — so the literal wording and the product contradict each other. The
+real (Olympus) meaning is treasury-BACKING accretion: reserves ÷ supply must not fall. That is not
+checkable in this contract. It custodies nothing — every wei is forwarded in the same transaction —
+so it cannot know treasury reserves without an oracle, and an oracle on the mint path would become
+the thing standing between a leaked key and unbounded supply. So wall 3 ships as a hard, Safe-set
+ceiling on OMR-per-ETH: **weaker as economics, stronger as a wall.** Backing accretion belongs in the
+off-chain policy that decides what price to sign, where it can read the whole treasury and where
+getting it wrong costs a bad bond rather than the token. Flagged in the contract header, in
+`CHAIN-DEPLOY.md` gate 2, and here.
+
+**The founder decision this leaves open:** what `dailyCapOMR` and `maxOmrPerEth` should actually be.
+Both are deploy-time and both are properly a function of the step-5 re-sim, which is still owed —
+the daily cap wants to be sized against real bond demand, and the rate ceiling against the price the
+buy-side policy expects to sign. Until then they are "set them small" rather than a recommendation.
+
+**Mainnet is unchanged and still gated** on the third-party audit (whose clock this drop RESET — see
+`CHAIN-DEPLOY.md` §0.2) and legal counsel. Gate 1 (`forge test`) is green at 77/77.

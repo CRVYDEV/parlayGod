@@ -4,12 +4,12 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 
 | Contract | Role |
 |---|---|
-| `OMR.sol` | Fixed-supply ERC-20 + Permit. No owner, no mint. Inert by design. |
+| `OMR.sol` | ERC-20 + Permit. Founding supply `100_000_000e18` to the Safe, plus **ONE mint path**: a single `minter` address (the OmertaBond contract), set only by the owner and evented. **No owner mint** — the Safe chooses who may mint and can revoke it in one transaction (`setMinter(0)`), but cannot itself print. Also carries the owner-armed DEX **sell tax** (transfers INTO registered `ammPairs` only; split three ways dev/rwa/lp in-transfer; 10% compile-time hard cap; default 0). ⚠ Before tokenomics v2 step 4 this token was fixed-supply and inert — see `CLAUDE.md` rule 2 for what replaced that property. |
 | `VoucherClaim.sol` | THE bridge. EIP-712 vouchers signed by the game server; replay-proof, deadline-bound, daily-capped, pausable, tranche-funded. Nothing mints. |
 | `GearVault.sol` | ERC-1155 gear (one tokenId per gear class). Mints only via VoucherClaim, which is **fail-closed**: a gearId only mints up to a per-class supply cap the Safe sets (`vc.setGearSupplyCap`). |
 | `OMRStaking.sol` | 14% APY (owner-set, 50% hard ceiling), pre-funded reward pool, principal always withdrawable. |
 | `OmertaFees.sol` | The inbound entry/revive fee rail (§11). Forwards each exact ETH fee straight to the dev + Vig wallets in the same tx; custodies nothing, mints nothing; emits a nonce'd event the backend watches. |
-| `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + Vig) and forwarded in-tx (custodies no ETH). **Nothing mints**: the payout TRANSFERS from a Safe-funded tranche — `committedOMR + payout <= omr.balanceOf(this)` is enforced at bond time, so total OMR bonded out is hard-capped by the funded balance (the Olympus reflexive-mint failure mode is structurally excluded). EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_DISCOUNT_BPS`/`MAX_VEST`/`MAX_QUOTE_TTL` backstops (a leaked-then-rotated signer's far-future quotes can't stay bondable); Safe-owned, pausable; `sweep` can pull only the UNCOMMITTED OMR tranche, never OMR backing outstanding bonds; `sweepETH` rescues any stray ETH to the Safe (the OmertaFees pattern). |
+| `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + dev + Vig) and forwarded in-tx (custodies no ETH). **THE ONLY MINT IN THE SYSTEM** (tokenomics v2 §4 — the Safe-funded tranche it used to draw on is gone). Three walls replace the tranche and all three must survive review: `dailyCapOMR` (with no tranche, this is the entire blast radius of a leaked quote-signer, and 0 means UNLIMITED), `MAX_DISCOUNT_BPS` (2000, compile-time), and `maxOmrPerEth` — the post-discount mint-RATE ceiling, **fail-closed at 0** so an unconfigured deploy cannot bond at all. Read the contract header on why wall 3 is a rate ceiling rather than the design's literal "accretive-only" test: this contract custodies nothing, so it cannot know treasury backing without an oracle, and an oracle on the mint path becomes the thing standing between a leaked key and unbounded supply. The payout is minted at BOND time, keeping `committedOMR <= omr.balanceOf(this)` true at every instant — so `sweep` still cannot touch OMR backing an outstanding bond and a claim can never fail for want of balance. EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_VEST`/`MAX_QUOTE_TTL` backstops (a leaked-then-rotated signer's far-future quotes can't stay bondable); Safe-owned, pausable; `sweepETH` rescues any stray ETH to the Safe (the OmertaFees pattern). |
 
 ## Test & deploy
 ```
@@ -18,13 +18,15 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 or manually:
 ```
 forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts   # first run only
-forge test           # 29 tests incl. a 512-run fuzz (tranche invariant, tampering, replay, caps)
+forge test           # 77 tests incl. two 512-run fuzzes (the anti-Ponzi bound, sell-tax conservation)
 export SAFE=0x... SIGNER=0x... RPC=https://robinhood-testnet.g.alchemy.com/v2/KEY
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $DEPLOYER_PK
 ```
-> `forge test` has never executed inside the sandboxed build environment (Foundry's install
-> hosts are egress-blocked there) — run it on any machine with open internet before the
-> third-party audit. The suite compiles clean (solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings).
+> The suite **also runs inside the sandboxed build environment** — `./run-forge-test-sandboxed.sh`
+> (forge from the official npm dist, forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim:
+> the same compiler version+commit as native). First executed 2026-07-23 at 73/73; **77/77 green**
+> after tokenomics v2 step 4. The third-party audit should still re-run `./run-forge-test.sh` on an
+> open-internet machine with NATIVE solc as part of its own verification.
 
 ## Server-side signing parity (for M6-B, viem)
 The chain service must produce signatures `VoucherClaim.claim` accepts:
@@ -69,7 +71,13 @@ const signature = await account.signTypedData({
 ```
 
 ## Before mainnet (non-negotiable)
-Third-party audit of all four contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; daily cap + OMR tranche + **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.
+Third-party audit of all six contracts + the signing service; counsel review of Robinhood Chain ToS re: wagering-adjacent dApps; Safe signer ceremony; VoucherClaim's daily cap + OMR tranche, OmertaBond's `dailyCapOMR` + `maxOmrPerEth`, and the **per-gearId supply caps** (gear is fail-closed — no class mints until the Safe caps it) all set deliberately small for launch.
+
+⚠ **Point the auditor at tokenomics v2 step 4 explicitly.** Until 2026-07-29 this suite's headline
+property was "nothing mints", and every prior review leaned on it. OMR now has a mint path and bonds
+use it. What must be reviewed as new: `OMR.minter` (single path, owner-set, no owner mint) and
+OmertaBond's three walls — and specifically that `maxOmrPerEth` is a mint-RATE ceiling, a deliberate
+deviation from the design's literal "accretive-only" wording (reasoning in the contract header).
 
 ## Internal red-team pass (see `../AUDIT-contracts.md`)
 Patched: gear mints are now bounded per class (was uncapped — a compromised signer could mint unlimited gear); GearVault is Safe-owned from deploy (no hot-deployer window); a `MAX_VOUCHER_TTL` deadline backstop; and the signer snippet no longer hardcodes a chainId. The OMR rail, EIP-712/replay, reentrancy, and staking pool-separation were reviewed and found sound. Accepted-as-designed (Safe is root of trust): sweep/pause, global daily-cap contention, APY-change retroactivity. The suite compiles clean (solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings) but the producing environment had no `forge` — run `forge test` locally to execute the VM assertions.

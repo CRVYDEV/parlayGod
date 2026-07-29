@@ -13,8 +13,9 @@ touches mainnet** until §0 is satisfied.
 
 ## 0. The three HARD GATES (no mainnet step proceeds until all three are green)
 
-1. **`forge test` passes on a real Foundry toolchain. ✅ EXECUTED 2026-07-23 — 73/73 PASS** (incl.
-   both 512-run fuzzes: OMR sell-tax conservation + the OmertaBond anti-Ponzi bound) via the official
+1. **`forge test` passes on a real Foundry toolchain. ✅ EXECUTED 2026-07-23 — 73/73 PASS; 77/77 after
+   tokenomics v2 step 4** (incl. both 512-run fuzzes: OMR sell-tax conservation + the OmertaBond
+   anti-Ponzi bound) via the official
    npm-distributed forge 1.7.1 in the sandbox (`cd omerta-contracts && ./run-forge-test-sandboxed.sh`
    — forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim: the emscripten build of the SAME
    compiler version+commit as native). The run surfaced and fixed a latent test-harness class (inline
@@ -24,6 +25,12 @@ touches mainnet** until §0 is satisfied.
    as part of its own verification — but the Foundry-VM gate itself is now green.
 2. **A third-party audit of the CONTRACTS *and* the off-chain EIP-712 signer.** The signer (`src/chain.js`) is
    as security-critical as the contracts — it mints withdrawal authority. Audit both.
+   ⚠ **The audit clock was RESET by tokenomics v2 step 4 (2026-07-29).** Until then OMR had no mint
+   function and "nothing mints" was the property every prior review of this suite rested on. Supply is now
+   unbounded and bonds mint it. Any auditor must be pointed at that specifically, and at what replaced the
+   fixed cap: `OMR.minter` (one path, no owner mint) plus OmertaBond's `dailyCapOMR`, `MAX_DISCOUNT_BPS`
+   and `maxOmrPerEth`. Flag for them explicitly that wall 3 is a mint-RATE ceiling and **not** the design's
+   literal "accretive-only" test — the reasoning and the trade-off are in the OmertaBond header.
 3. **Legal counsel sign-off** on the Risk-to-Earn / RWA line (see the "Sensitive design notes" in `CLAUDE.md`
    and the R2/R3 gating in `omerta-rwa-portfolio-design.md`). Jurisdiction/KYC/geofence for any RWA extraction.
 
@@ -41,11 +48,37 @@ Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 ## 2. Deploy order + wiring (Safe-owned from deploy — no hot-deployer window)
 Deploy with the deployer key, then immediately hand ownership to the Safe (§3). Mirror `tools/chain-e2e.js`
 PHASE 1 for the exact calls/args.
-- [ ] **`OMR(treasurySafe)`** — fixed-supply `100_000_000e18` minted once to the Safe. Inert; no mint fn.
+- [ ] **`OMR(treasurySafe)`** — founding supply `100_000_000e18` minted once to the Safe. **No longer a
+      fixed-supply token** (tokenomics v2 §4): it has ONE mint path, the `minter` address, which ships
+      **unset (= minting off)** and is armed deliberately below. There is no owner mint.
 - [ ] **`GearVault(safe)`** — ERC-1155; mint gated to VoucherClaim (set in the next step); per-`gearId` supply
-- [ ] **Arm the DEX sell tax (after the pool exists):** `OMR.setTaxRecipients(devWallet, buybackWallet)` →
+      caps set by the Safe (set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
+- [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
+      `gearVault.setMinter(voucherClaim)` so gear mints route through it.
+- [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
+- [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
+      `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
+      the dev wallet in-tx; custodies nothing.
+- [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, polRecipient, devRecipient, vigRecipient,
+      dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split (37.5% POL / 15% dev wallet /
+      22.5% Vig / 25% RWA-float; the RWA slice is mirrored off-chain by the backend from the `Bonded` event,
+      the on-chain forward is POL + dev + Vig). **This contract MINTS** — see below. Keep
+      `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+- [ ] **Arm the mint — the step that turns issuance on.** `OMR.setMinter(omertaBond)`. Do this LAST, and
+      only after `OmertaBond.dailyCapOMR` and `maxOmrPerEth` are both set to real values: those two plus
+      the compile-time `MAX_DISCOUNT_BPS` are the entire wall between a leaked quote-signer and unbounded
+      supply. `maxOmrPerEth` is **fail-closed at 0**, so bonding stays off until it is set — but
+      `dailyCapOMR = 0` means UNLIMITED, so a deploy that forgets it has no daily wall at all. Set it.
+      `setMinter(address(0))` is the one-transaction emergency stop.
+- [ ] **Fund VoucherClaim's tranche (a plain OMR transfer — the bridge NEVER mints):** transfer OMR from the
+      Safe into `VoucherClaim` to back signed withdrawal vouchers. Its `balanceOf` IS its cap.
+      **OmertaBond no longer needs funding** — it mints each payout at bond time, which is what keeps
+      `committedOMR ≤ balanceOf(this)` true at every instant so `sweep` can never strand a bonder.
+- [ ] **Arm the DEX sell tax (after the pool exists):** `OMR.setTaxRecipients(devWallet, rwaWallet, lpWallet)` →
       `setExempt` for the POL manager + OmertaBond + VoucherClaim + the Safe → `setPair(pool, true)` →
-      `setSellTax(bps)` (hard-capped 10%; default 0 = off). Only transfers INTO registered pools are
+      `setSellTax(bps, devBps, rwaBps)` — the total is hard-capped at 10% and defaults to 0 = off; LP takes
+      the remainder after dev + rwa. Ship the backend's `SELL_TAX` values (900 total = 200 dev / 400 rwa /
+      300 lp) so the two layers agree about where the money went. Only transfers INTO registered pools are
       taxed; buys and wallet transfers are clean. **HARD REQUIREMENT: the canonical pool must be
       Uniswap V2-COMPATIBLE** (sell-taxed tokens need the *SupportingFeeOnTransferTokens router path;
       Uniswap V3 does not support them). RESOLVED (verified July 2026): Uniswap deployed **v2, v3, v4 +
@@ -53,20 +86,6 @@ PHASE 1 for the exact calls/args.
       CONFIRM ON-CHAIN at deploy: pull the addresses from Uniswap's deployment docs
       (developers.uniswap.org → Robinhood Chain deployments) and run `node tools/check-dex.js` against
       the live RPC (probes bytecode + the right view calls; prints a go/no-go verdict for the taxed pool).
-      caps set by the Safe (§ set caps BEFORE signing any gear voucher — an uncapped id is fail-closed).
-- [ ] **`VoucherClaim(omr, gearVault, signer, safe, dailyCapOMR)`** — the only $OMR bridge. Then
-      `gearVault.setMinter(voucherClaim)` so gear mints route through it.
-- [ ] **`OMRStaking(omr, safe)`** — pre-funded reward pool; principal always withdrawable.
-- [ ] **`OmertaFees(devWallet, safe, mintFeeWei, respawnFeeWei)`** — the ETH tollbooth. Fees:
-      `MINT = 0.01 ETH`, `RESPAWN = 0.10 ETH`, `reroll` defaults to `mintFee` (owner-settable). Forwards ETH to
-      the dev wallet in-tx; custodies nothing.
-- [ ] **`OmertaBond(safe, signer, omr, polBps=5000, devBps=2000, polRecipient, devRecipient, vigRecipient,
-      dailyCapOMR)`** — POL bonding with the three-way ETH split (50% POL / 20% dev wallet / 30% Vig,
-      forwarded in-tx — custodies nothing); the tranche cap is `committedOMR + payout ≤ omr.balanceOf(this)`
-      (never mints). Keep `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
-- [ ] **Fund the on-chain tranches (a plain OMR transfer — the contracts NEVER mint):** transfer OMR from the
-      Safe into `VoucherClaim` (backs signed withdrawal vouchers) and into `OmertaBond` (backs bond payouts).
-      The contract's `balanceOf` IS its cap.
 
 ## 3. Transfer ownership to the Safe
 - [ ] Every contract is `Ownable2Step`. From the deployer: `transferOwnership(safe)`; from the Safe:
@@ -105,11 +124,13 @@ unbacked reserve. (Red-team D-MED2.)
 The backend keeps its own reserve records; they must track the on-chain balances, or the invariants flag a gap.
 - [ ] `POST /v1/mod/reserve/fund` → set `chain_reserve.funded_omr` to match the OMR held by `VoucherClaim`
       (the withdrawal full-reserve queue signs only within `funded_omr`).
-- [ ] `POST /v1/mod/bond/fund` → set `bond_reserve.capacity_omr` to match the OMR held by `OmertaBond`.
-      NOTE: the `Bonded` watcher **bypasses** this backend tranche cap on ingest (the contract already enforced
-      its own identical cap), so a real bond is always recorded and can never stall the sync cursor — but you
-      must keep `capacity_omr` funded to match, or `GET /v1/mod/bonds` (`runBondInvariants`) reports the
-      shortfall. Same discipline for `runVigInvariants` / `GET /v1/mod/vig` (extraction ≤ inflow).
+- [ ] `POST /v1/mod/bond/fund` → set `bond_reserve.capacity_omr` to the OMR budget you intend bonds to issue.
+      Since step 4 this is a **backend-side budget, not a mirror of a balance** — OmertaBond mints its payouts,
+      so there is no on-chain tranche to match. The on-chain wall is `dailyCapOMR` + `maxOmrPerEth`; keep the
+      backend budget in step with them or `GET /v1/mod/bonds` (`runBondInvariants`) reports the gap. The
+      `Bonded` watcher **bypasses** the backend cap on ingest (the contract already enforced its own walls), so
+      a real bond is always recorded and can never stall the sync cursor. Same discipline for
+      `runVigInvariants` / `GET /v1/mod/vig` (extraction ≤ inflow).
 
 ## 6. Post-deploy verification (testnet, then the same on mainnet after the gates)
 - [ ] `CHAIN_RPC_URL=… CHAIN_ID=… DEPLOYER_PK=… PLAYER_PK=… VOUCHER_SIGNER_PK=… node tools/chain-e2e.js`
@@ -152,6 +173,10 @@ The backend keeps its own reserve records; they must track the on-chain balances
 - The **withdrawal queue** (`chain_reserve`) never signs beyond `funded_omr`; a queued-but-unsigned withdrawal is
   cancellable (`POST /v1/withdraw/:id/cancel`, reverses the burn net-0). `sweep()` on VoucherClaim/OmertaBond can
   reclaim only the UNCOMMITTED tranche (never OMR backing outstanding obligations).
+- **Stopping issuance** has two independent switches, either of which is one transaction from the Safe and
+  neither of which touches a balance or a bonder's vested claim: `OMR.setMinter(address(0))` revokes the mint
+  privilege at the token, and `OmertaBond.setMaxRate(0)` fails every new bond closed at the bond contract. Use
+  the token-side one if the bond contract itself is what you distrust.
 
 ---
 *Off-chain alpha ships independently of all of this — see `DEPLOY.md`. This runbook is the chain rail only, and

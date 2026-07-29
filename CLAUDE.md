@@ -5952,3 +5952,48 @@ ops dashboard still shows AMM reserves (the founder's own screen, and the number
 longer a price), and `/v1/rules` still lists the two retired business specs (a clean refusal, and
 removing them would erase the record of what an existing `accountant` front is). Suite 57/57 + sim
 drift-0. **The step-5 RE-SIM is unchanged by this pass and still the largest open item.**
+
+**TOKENOMICS v2 STEP 4 — OMR MINTS NOW, AND THAT DELETED THE SUITE'S OLDEST PROPERTY**
+(`omerta-contracts/src/OMR.sol` + `OmertaBond.sol`, `test/OMRTax.t.sol` + `OmertaBond.t.sol`;
+design §4). Until this drop the token had **no mint function at all**, and "nothing mints" is the
+single sentence every prior contract audit of this suite rested on. The founder retired it: supply
+becomes unbounded and **bonds are the only mint**. What replaces a fixed cap is not a promise, it is
+walls, and the whole review value of the change is whether they hold. **`OMR.mint()`** is callable
+only by a single `minter` address, owner-set and evented, shipping **unset (= minting off)**; there
+is deliberately **no owner mint**, so "the Safe was compromised" and "supply was inflated" stay two
+separate events, and `setMinter(0)` is a one-transaction emergency stop that needs no pause and no
+change to the bond contract. **`OmertaBond`** dropped the Safe-funded tranche and now mints each
+payout **at bond time** (not at claim) — which is what keeps `committedOMR <= omr.balanceOf(this)`
+true at every instant, so `sweep` still cannot touch OMR backing an outstanding bond and a claim can
+never fail for want of balance. Three walls replace the tranche: **(1) `dailyCapOMR`** — with no
+tranche bounding the total, this is now the entire blast radius of a leaked quote-signer and the most
+load-bearing number in the system (and **0 means UNLIMITED**, so a deploy that forgets it has no wall);
+**(2) `MAX_DISCOUNT_BPS`** 2000, compile-time — a discount is a mint at a price; **(3) `maxOmrPerEth`**,
+the post-discount mint-RATE ceiling, **fail-closed at 0** (the GearVault gear-cap precedent) so
+forgetting it turns the product off rather than open. **The design finding worth keeping:** §4's
+"accretive-only" wall, read literally ("mint only when the ETH received is worth at least the OMR
+issued"), forbids *every discounted bond* — a discount is by definition issuing OMR worth more than
+the ETH paid, so the literal wording and the product contradict each other. The real (Olympus)
+meaning is treasury-BACKING accretion, which needs reserves ÷ supply — unknowable in a contract that
+custodies nothing and forwards every wei in-tx, and an oracle on the mint path would make that feed
+the thing standing between a leaked key and unbounded supply. So wall 3 is a hard Safe-set rate
+ceiling: weaker as economics, stronger as a wall, and documented in-contract as a deliberate
+deviation, flagged for the founder and for the third-party audit. Backing accretion belongs in the
+off-chain policy that decides what price to sign, where it can read the whole treasury. Also landed:
+the **9% three-way sell tax** (dev 200 / rwa 400 / lp 300 bps of a 900 total) replacing the old
+50/50 dev/buyback split, in lockstep with the backend `SELL_TAX` constants, with the **remainder rule
+on the LP slice** so the three shares sum to the tax EXACTLY (two of three round down; a "natural"
+third slice strands a wei belonging to nobody — the same discipline the backend ingest uses).
+**77/77 forge green** (from a 73/73 baseline), incl. both 512-run fuzzes. Two process notes: a first
+cut of the anti-Ponzi fuzz asserted `totalSupply() == 100_000_000e18`, i.e. the property this drop
+deliberately deletes (rewritten to `supply0 + expect`); and three tests failed `NotPayer()` because I
+hit the subtree's own documented cheatcode footgun — inserting `uint256 supply0 = omr.totalSupply();`
+*between* `vm.prank(bonder)` and the guarded call makes a staticcall that consumes the prank. Hoist
+reads above cheatcodes. Docs: the subtree `CLAUDE.md` rules 2/5/6 rewritten (they described the
+deleted invariants while sitting next to the changed code), `omerta-contracts/README.md`,
+`CHAIN-DEPLOY.md` (deploy order now ends at `setMinter` — arm the mint LAST, after both caps are real
+values — plus the two kill switches and a note that **the third-party-audit clock is RESET**: any
+auditor must be pointed at the deleted property and at what replaced it). **Mainnet is unchanged and
+still blocked on gates 2 + 3** (third-party audit of contracts AND signer, legal counsel); gate 1
+(`forge test`) stays green. **Still owed: the design's step-5 RE-SIM** — the entire cash economy was
+balanced against an extraction threat model that v2 removes.
