@@ -2,7 +2,7 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING, pathFx } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -84,7 +84,7 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const rlv = ctx.racketLevels || {};
   const incPerMin = (rackets.reduce((a, id) => a + racketIncome(id) * (1 + Math.max(0, Number(rlv[id] || 0)) * RACKET_EMPIRE.UP_STEP), 0) + assetIncome(assets))
     * (ev.racketMult || 1) * (held.includes('neon') ? 1.15 : 1)   // Neon Mile turf
-    * (ch.path === 'ledger' ? 1.1 : 1) * (rIdx >= 7 ? 1.1 : 1);
+    * pathFx(ch, 'racketIncome') * (rIdx >= 7 ? 1.1 : 1); // PATHS v2 — the ternary → the matrix (ledger keeps its exact 1.1)
   const income = Math.floor(incPerMin * (eligibleMs / 60000));
   ch._accruedIncome = income;                 // surfaced so the caller ledgers it
   if (income > 0) ch.cash = Number(ch.cash) + income;
@@ -112,7 +112,7 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
       const n = Math.min(Number(s.qty), toSell);
       toSell -= n; moved += n;
       proceeds += Math.floor(n * d.base * Number(s.quality || 1) * 0.8);
-      heatAdd += d.heat * n * 0.1 * (ev.drugHeat || 1) * (ch.path === 'kitchen' ? 0.75 : 1);
+      heatAdd += d.heat * n * 0.1 * (ev.drugHeat || 1) * pathFx(ch, 'dealHeat'); // PATHS v2 (kitchen keeps its exact 0.75)
       s.qty = Number(s.qty) - n;
     }
     ch.cash = Number(ch.cash) + proceeds;

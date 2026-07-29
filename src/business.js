@@ -10,7 +10,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, businessOf, businessTierOf, businessMaxTier,
-  businessAssessedValue, launderRankOf, levelOf, effStat } from './rules.js';
+  businessAssessedValue, launderRankOf, levelOf, effStat, pathFx } from './rules.js';
 import { denAvailable, denDistribute } from './casino.js';
 import { spendOmr } from './vanity.js';
 
@@ -172,6 +172,10 @@ export async function collectBusiness(ch, client, h) {
     }
   }
   if (total > 0) {
+    // PATHS v2 — the Ledger's "+10% front income" was ADVERTISED since M4 and never implemented
+    // (the migration-sweep map finding); now real. Flagged in BALANCE.md: a ~10% widen of the
+    // L1a-flattened front curve for ONE path choice that also carries the soft-hands handicap.
+    total = Math.floor(total * pathFx(ch, 'frontIncome'));
     ch.cash = Number(ch.cash) + total;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: total, reason: 'business:income' });
     // TYCOON fold-in (Tier-4): business income counts toward the account-level tycoon_earned legend

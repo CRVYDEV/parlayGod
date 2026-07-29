@@ -7,7 +7,7 @@
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
 import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
-import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
+import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf, pathFx } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -297,7 +297,9 @@ export async function fightBout(ch, opponent, body, client, h) {
   if (Number(ch.cash) < amt) throw new GameError('cash', 'Not that much in pocket for the purse.');
   if (Number(opponent.cash) < amt) throw new GameError('their_cash', "They can't cover the purse right now.");
   let mine, theirs;
-  do { mine = form(f) + rand(0, BOXING.VARIANCE); theirs = form(of) + rand(0, BOXING.VARIANCE); } while (mine === theirs);
+  // PATHS v2 — the Ring's corner craft (or the Shadow's aversion) tilts a MANAGED fight; each side
+  // reads its own manager's path column (no h needed — the withTwoCharacters rows carry .path)
+  do { mine = (form(f) + rand(0, BOXING.VARIANCE)) * pathFx(ch, 'contest'); theirs = (form(of) + rand(0, BOXING.VARIANCE)) * pathFx(opponent, 'contest'); } while (mine === theirs);
   const win = mine > theirs;
   const pot = amt * 2;
   const rake = Math.ceil(pot * BOXING.RAKE_BPS / 10000);

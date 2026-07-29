@@ -2496,3 +2496,30 @@ odds → deepens the net sink).
 **The trait** (level 50, once, permanent, dies with the street): VIRTUOSO deepens the perk to fx[3];
 DYNAST echoes **`MASTERY.TRAIT_HEIR_BPS` (5000 = 50%)** of that ONE trade to the heir instead of the
 25% — a death-softening dial on top of HEIR_KEEP_BPS (the standing flag class; 2500 reverts it).
+
+## THE TRADES step three — PATHS v2 (six careers with teeth, 2026-07-29)
+
+The catalog went 3→6 through the machine-owned seam (prototype edit + re-extract — the car-catalog
+precedent); the hand-written `PATH_FX` matrix is the teeth. Founder-chosen axis: **progression
+speed** — home trades school ×`PATH_XP_HOME` (1.5), rival trades ×`PATH_XP_RIVAL` (0.6, fractional
+XP so the penalty never rounds away) — plus ONE signature perk and ONE handicap per path, every
+effect a single-touchpoint multiplier off the audit-locked list. The same action always pays the
+same MONEY except where a perk/handicap is itself the money lever, flagged below:
+
+| path | perk | handicap | home ×1.5 | rival ×0.6 |
+|---|---|---|---|---|
+| The Gun | jump ×1.1 · hit eff ×1.15 *(unchanged)* | **goods sales ×0.95** (smaller faucet) | Wet Work, Protection | Commerce, The Cook |
+| The Ledger | racket ×1.1 · goods ×1.05 *(unchanged)* + **front income ×1.1 — the M4 promise, real at last** | jump ×0.95 | Commerce, Big Scores | Wet Work, Protection |
+| The Kitchen | quality +0.15 · deal heat ×0.75 *(unchanged)* | jail ×1.1 | The Cook, Larceny | The Gambler, Fisticuffs |
+| The Wheel | convoys ×0.9 time | cook time ×1.15 | Wheels, Seamanship | The Cook, The Gambler |
+| The Shadow | search clock ×0.85 | duels/bouts ×0.95 | Larceny, Wet Work | Fisticuffs, Commerce |
+| The Ring | duels/bouts ×1.05 | Doc bills ×1.15 | Fisticuffs, The Gambler | Seamanship, Big Scores |
+
+**Flags:** (1) `frontIncome` ×1.1 widens the L1a-flattened front curve ~10% for ONE path choice
+that also carries the soft-hands handicap — at the maxed 5-front stack that is ~+$2.2M/day for a
+Ledger player (dial: the fx entry). (2) The search clock now stacks FOUR deep (executioner × Vinnie
+× wetwork-perk × Shadow = **0.46** fully built — the deepest stack in the game). (3) The switch
+cooldown `PATH_SWITCH_CD_MS` (7d) exists because home/rival XP rates make career-hopping between
+activities a rate arbitrage the 25 $OMR burn alone doesn't price; the first pick starts the same
+clock. The three ORIGINAL paths' pre-v2 numbers are byte-identical through the ternary→matrix
+conversion (asserted in test/mastery.js).

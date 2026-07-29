@@ -636,6 +636,13 @@ sooner (Big Scores), fighters healing faster (Fisticuffs). Den plays under **$1,
 further, for this life) or **Dynast** (your heir keeps HALF this trade's schooling instead of a
 quarter). The choice dies with the street; the heir chooses their own.
 
+**Paths v2 (step three):** six careers now — The Gun, The Ledger, The Kitchen, **The Wheel, The
+Shadow, The Ring** — each with a signature edge, a REAL handicap (the Gun sells goods at ×0.95, the
+Ledger fights at ×0.95, the Kitchen does ×1.1 jail time, the Wheel cooks slow, the Shadow shies from
+duels, the Ring pays the Doc ×1.15), and trades that come easy (**×1.5 XP**) or fight you (**×0.6**).
+The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 25 $OMR
+AND a week between moves.
+
 ---
 
 ## 24. The Underworld

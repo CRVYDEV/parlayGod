@@ -3396,6 +3396,51 @@ export const MASTERY = {
     { at: 400000,  name: 'A Legend of the Life' },
   ],
 };
+// ══ PATHS v2 (TRADES step three) — the specialties AND the disadvantages ══
+// The PATHS catalog (ids/names/descs) is MACHINE-OWNED in rules.generated.js (prototype +
+// re-extract, the car-catalog precedent); this matrix is the HAND-WRITTEN teeth. Per path:
+//   home  — trades that farm ×PATH_XP_HOME faster (progression speed, the founder's chosen axis);
+//   rival — trades that farm ×PATH_XP_RIVAL slower (the disadvantage that makes it a choice);
+//   fx    — the signature perk(s) + ONE handicap, each a named single-touchpoint multiplier
+//           (the masteryFx/skillMult class, off the audit-locked list; the money-adjacent ones
+//           are flagged in BALANCE.md). The three ORIGINAL paths keep their exact pre-v2 numbers
+//           (gun 1.1/1.15, ledger 1.1/1.05, kitchen +0.15/×0.75 — the ternary conversion is
+//           byte-identical for them) and each GAINS its handicap as a new lever. `frontIncome`
+//           makes the Ledger's long-advertised "+10% front income" REAL at last (flagged — it
+//           widens the L1a-flattened front curve ~10% for one path choice).
+// XP mults apply INSIDE bumpMastery, so fractional XP is deliberate (a rival 1-XP den play pays
+// 0.6, not a rounded-away 0 or a rounded-up 1 — the masteries column is NUMERIC).
+export const PATH_XP_HOME = 1.5;
+export const PATH_XP_RIVAL = 0.6;
+export const PATH_SWITCH_CD_MS = 7 * 24 * 3600 * 1000; // switching careers needs a week between moves
+                                                       // (XP-rate arbitrage made the 25 $OMR burn too cheap a throttle)
+export const PATH_FX = {
+  gun:     { home: ['wetwork', 'muscle'],     rival: ['commerce', 'chemistry'],
+             fx: { jumpAtk: 1.1, hitEff: 1.15, goodsSell: 0.95 } },
+  ledger:  { home: ['commerce', 'scores'],    rival: ['wetwork', 'muscle'],
+             fx: { racketIncome: 1.1, frontIncome: 1.1, goodsSell: 1.05, jumpAtk: 0.95 } },
+  kitchen: { home: ['chemistry', 'larceny'],  rival: ['gambling', 'fists'],
+             fx: { dealHeat: 0.75, jailStint: 1.1 }, add: { cookQuality: 0.15 } },
+  wheel:   { home: ['wheels', 'seamanship'],  rival: ['chemistry', 'gambling'],
+             fx: { convoyTime: 0.9, cookTime: 1.15 } },
+  shadow:  { home: ['larceny', 'wetwork'],    rival: ['fists', 'commerce'],
+             fx: { searchClock: 0.85, contest: 0.95 } },
+  ring:    { home: ['fists', 'gambling'],     rival: ['seamanship', 'scores'],
+             fx: { contest: 1.05, healCost: 1.15 } },
+};
+// The readers — pathless (or an unknown key) is always the neutral value, so every touchpoint is
+// safe for a fresh street and for headless callers that only hold the character row (ch.path is a
+// COLUMN, not loadOwned state — no h needed anywhere).
+export const pathFx = (ch, key) => PATH_FX[ch?.path]?.fx?.[key] ?? 1;
+export const pathAdd = (ch, key) => PATH_FX[ch?.path]?.add?.[key] ?? 0;
+export const pathXpMult = (ch, trackId) => {
+  const p = PATH_FX[ch?.path];
+  if (!p) return 1;
+  if (p.home.includes(trackId)) return PATH_XP_HOME;
+  if (p.rival.includes(trackId)) return PATH_XP_RIVAL;
+  return 1;
+};
+
 export const masteryLvlOf = (xp) =>
   Math.min(MASTERY.MAX_LVL, Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / MASTERY.XP_DIVISOR)) + 1);
 export const masteryXpFor = (lvl) => MASTERY.XP_DIVISOR * (lvl - 1) * (lvl - 1);

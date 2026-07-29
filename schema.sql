@@ -2320,3 +2320,8 @@ CREATE TABLE IF NOT EXISTS character_traits (
   trait_id TEXT NOT NULL,
   PRIMARY KEY (character_id, track_id)
 );
+
+-- PATHS v2: the career-switch cooldown clock (direct-SQL column, off persistCharacter's positional
+-- UPDATE — the respec_at pattern). XP-rate arbitrage (home ×1.5 / rival ×0.6) made the 25 $OMR burn
+-- too cheap a throttle on its own.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS path_at TIMESTAMPTZ;

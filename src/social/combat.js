@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
@@ -66,7 +66,7 @@ export async function jump(ch, victim, client, h, intent) {
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer hits harder — a new modifier on the attack term, sign-off lever
   const atk = (eff('muscle') + eff('speed') * 0.5 + (gunObjOf(ch.gun)?.fp || 0) * 0.4 + (rIdx >= 3 ? 5 : 0))
-    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
+    * pathFx(ch, 'jumpAtk') * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) // PATHS v2 — gun keeps 1.1; the Ledger's soft hands read 0.95
     * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk — the bruiser contest-mult precedent
   const def = (vEff('muscle') + vEff('speed') * 0.5 + (gunObjOf(victim.gun)?.fp || 0) * 0.4) + Math.random() * 25;
   await h.rngLog(client, ch.id, `jump:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
@@ -151,7 +151,7 @@ export async function startSearch(ch, targetCharacterId, client, h) {
   // EXECUTIONER (skills) × VINNIE T3 (underworld): the assassin's people work faster —
   // applied here AND at fire's readiness check via hunterSearchMs (both read the HUNTER's
   // build+standing, so the two clocks agree). Stacking flagged; both sign-off levers.
-  return { ok: true, placedAt: new Date(Date.now() + hunterSearchMs(h)) };
+  return { ok: true, placedAt: new Date(Date.now() + hunterSearchMs(h, ch)) };
 }
 
 // §9 production timers: search 3 h, failed-shot cooldown 2 h.
@@ -161,10 +161,11 @@ export async function startSearch(ch, targetCharacterId, client, h) {
 // Tests may shrink them via env — never set these in production configs.
 const searchMs = () => Number(process.env.SEARCH_MS || CONSTANTS.SEARCH_MS);
 
-const hunterSearchMs = (h) => Math.floor(searchMs()
+const hunterSearchMs = (h, ch) => Math.floor(searchMs()
   * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)
   * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT)
-  * masteryFx(h, 'wetwork')); // TRADES perk — a third stack on the clock (0.72 → 0.54 fully built; flagged)
+  * masteryFx(h, 'wetwork') // TRADES perk — a third stack on the clock (0.72 → 0.54 fully built; flagged)
+  * pathFx(ch, 'searchClock')); // PATHS v2 — the Shadow's perk is a FOURTH stack (0.46 fully built; flagged)
 
 const shootCdMs = () => Number(process.env.SHOOT_CD_MS || (2 * 3600 * 1000));
 
@@ -232,7 +233,7 @@ export async function fire(ch, victim, client, h, rounds) {
   const s = (await client.query('SELECT * FROM searches WHERE hunter=$1', [ch.id])).rows[0];
   if (!s || s.target !== victim.id) throw new GameError('no_search', 'Your people have no fix on them. Start a search.');
   // same clock as startSearch (executioner × fixer T3) — the hunter's two clocks agree
-  if (new Date(s.started_at).getTime() + hunterSearchMs(h) > Date.now())
+  if (new Date(s.started_at).getTime() + hunterSearchMs(h, ch) > Date.now())
     throw new GameError('searching', "They haven't been placed yet. Patience is a caliber.");
   if (jailed(ch)) throw new GameError('jailed', 'No wet work from lockup.');
   if (safeHoused(ch)) throw new GameError('safe', "No wet work while you're to ground — hiding, not hunting.");
@@ -273,7 +274,7 @@ export async function fire(ch, victim, client, h, rounds) {
   const btk = btkOf(vicLvl, victim.muscle, vestMultOf(victim.vest));
   const jamRoll = Math.random();
   const jammed = jamRoll > (gun.rel || 0.9);
-  const effective = Math.floor(fired * (0.7 + (gun.fp || 0) / 50) * (jammed ? 0.75 : 1) * (ch.path === 'gun' ? 1.15 : 1));
+  const effective = Math.floor(fired * (0.7 + (gun.fp || 0) / 50) * (jammed ? 0.75 : 1) * pathFx(ch, 'hitEff')); // PATHS v2 (gun keeps its exact 1.15)
   await h.rngLog(client, ch.id, `fire:${victim.id}`, jamRoll, effective >= btk ? `kill (eff ${effective} vs btk ${btk})` : `miss (eff ${effective} vs btk ${btk})`);
   await client.query('DELETE FROM searches WHERE hunter=$1', [ch.id]);
 
