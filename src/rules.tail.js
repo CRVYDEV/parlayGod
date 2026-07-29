@@ -45,6 +45,8 @@ export const CONSTANTS = {
   // LAUNDER_HEAT — so extraction is a located, exposed act, not a free click. B2 BANK DAILY CAP:
   // bank interest is metered by a daily token bucket like racket income (BANK_DAILY_CAP_MS/day),
   // so continuous online play can't compound ~4%/day risk-free (the audit's #1 safe-beats-risky).
+  // LAUNDER_HEAT / LAUNDER_DISTRICTS are DEAD as of tokenomics v2 step 2 — cash no longer converts
+  // to $OMR by any route, so there is nothing to wash and no wash house to stand in.
   LAUNDER_HEAT: 15, LAUNDER_DISTRICTS: ['docks', 'canal'], BANK_DAILY_CAP_MS: 12*3600*1000,
   // Phase 3 — a territory racket's income accrues lazily up to this bound (collected on demand),
   // so an uncollected operation can't hoard unlimited income; uncollected income is forfeited to
@@ -96,6 +98,8 @@ export const CONSTANTS = {
   // DEAD as of tokenomics v2 step 2 (red-team A3): the 12h buyback no longer acquires any $OMR, so
   // nothing reads this. Kept declared because it is a PINNED lever (test/levers.js) and a pin
   // dangling at a deleted constant fails the register — but tuning it now does nothing at all.
+  // DEAD as of tokenomics v2 step 2: the buyback no longer buys $OMR, so there is no bought $OMR
+  // to slice, and individual staking yield is retired. Kept for the record, read by nothing.
   STAKE_POOL_BPS: 3000,
   // Business Empire — a personal front's income accrues lazily up to this bound (collected on
   // demand → pocket cash), so an uncollected business can't hoard unbounded income (the
@@ -103,6 +107,8 @@ export const CONSTANTS = {
   // LOWER than the street's LAUNDER_HEAT (your own books are safer than a public wash house) —
   // gated by the front's per-tier daily capacity, not the wash-house district. New/tunable — sim
   // + founder sign-off before production (ground rule #1).
+  // BUSINESS_LAUNDER_HEAT is DEAD (v2 step 2) — private laundering at your own front went with the
+  // public wash house. Fronts still earn; they no longer wash.
   BUSINESS_CAP_MS: 24*3600*1000, BUSINESS_LAUNDER_HEAT: 8,
   // RECURRING SINKS — "the pad": every front owes protection + wages proportional to its income
   // (BUSINESS_UPKEEP_BPS of incomePerHr — a ~20% recurring tax that scales with the empire).
@@ -128,6 +134,11 @@ export const CONSTANTS = {
   // vs decay 48/day — the risk layer was dead code). Now a full day-cap wash adds 45 while only
   // 24 decays off, so sustained max-throughput extraction crosses the threshold in ~3 days and
   // sits hot (scrutiny caps at 100); moderate washing (≤ half cap/day) still never raids.
+  // DEAD as a live mechanic (v2 step 2). Business scrutiny grew ONLY from laundering, so with that
+  // retired nothing writes it: no front can be Bureau-raided any more, and the whole Business
+  // Empire step-two risk layer is unreachable. A front's remaining risk is PvP (shakedown, hostile
+  // takeover, the Sacking). Flagged for founder sign-off in BALANCE.md — passive fronts are now
+  // strictly safer than the curve was balanced against.
   BUSINESS_SCRUTINY_PER_CAP: 45, BUSINESS_SCRUTINY_DECAY_HR: 1, BUSINESS_SCRUTINY_MAX: 100,
   BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.0005, BUSINESS_RAID_FINE_RATE: 0.10,
   SHAKEDOWN_RATE: 0.30, SHAKEDOWN_CD_MS: 8*3600*1000, SHAKEDOWN_ENERGY: 15, SHAKEDOWN_HEAT: 10,
@@ -155,6 +166,8 @@ export const CONSTANTS = {
   // BALANCE.md sign-off (founder-approved recs, 2026-07-16):
   // D3 — the PUBLIC wash route gets a per-account daily token bucket (= the top business tier's
   // launderCapDay): private infra is the best extraction rail, no longer the only sane one.
+  // DEAD as of tokenomics v2 step 2 (the D3 wash cap) — it capped cash → $OMR on the AMM buy side,
+  // which no longer exists. The window's own EXCHANGE.DAILY_CAP_OMR is the live cap now.
   PUBLIC_WASH_CAP_DAY: 2600000,
   // D5 — bank interest TAPERS above a threshold: full rate on the first BANK_TAPER_ABOVE, then
   // BANK_TAPER_KEEP of the rate beyond — the game's only exponential now flattens at whale scale.
@@ -1300,6 +1313,11 @@ export const statesmanRankOf = (n) => {
 // a NEW single-touchpoint modifier — deliberately OFF the audit-locked surfaces (no heat
 // deterrent discounts, no loot-exposure windows, no extraction caps). ALL numbers (FX + costs)
 // are founder sign-off levers — sim before production. Design: omerta-skills-design.md.
+// The tier-4 capstone point cost, hoisted so the TREE entries below and `SKILLS.CAPSTONE_COST`
+// are the SAME number. They used to be two literal 4s, which made the signed lever decorative:
+// nothing read it, and retuning it changed no cost anywhere.
+const CAPSTONE_COST = 4;
+
 export const SKILLS = {
   LVL_PER_POINT: 4,     // one skill point per four levels
   RESPEC_OMR: 10,       // burn to unlearn everything (shared respec cooldown)
@@ -1315,11 +1333,11 @@ export const SKILLS = {
     { id: 'road_captain',   branch: 'wheelman', tier: 3, cost: 3, name: 'Road Captain',     desc: 'Your convoys run 20% faster.' },
     // ── STEP TWO — TIER-4 CAPSTONES (cost 4, the tier-3 skill is the prereq → a full branch = lvl 40).
     // Each is a strong PASSIVE that stacks on its branch's signature effect AND unlocks an ACTIVE ability.
-    { id: 'made_man',  branch: 'enforcer', tier: 4, cost: 4, name: 'Made Man',    desc: 'Jumps + shakedowns hit another 8% harder — and unlocks Adrenaline Rush (energy to the max).' },
-    { id: 'kingpin',   branch: 'operator', tier: 4, cost: 4, name: 'Kingpin',     desc: 'Fencing + melting yield another 8% — and unlocks Moxie (nerve to the max).' },
-    { id: 'road_boss', branch: 'wheelman', tier: 4, cost: 4, name: 'Road Boss',   desc: 'The trunk holds 3 more still — and unlocks Hot Wire (clears your heist + world-raid cooldowns).' },
+    { id: 'made_man',  branch: 'enforcer', tier: 4, cost: CAPSTONE_COST, name: 'Made Man',    desc: 'Jumps + shakedowns hit another 8% harder — and unlocks Adrenaline Rush (energy to the max).' },
+    { id: 'kingpin',   branch: 'operator', tier: 4, cost: CAPSTONE_COST, name: 'Kingpin',     desc: 'Fencing + melting yield another 8% — and unlocks Moxie (nerve to the max).' },
+    { id: 'road_boss', branch: 'wheelman', tier: 4, cost: CAPSTONE_COST, name: 'Road Boss',   desc: 'The trunk holds 3 more still — and unlocks Hot Wire (clears your heist + world-raid cooldowns).' },
   ],
-  CAPSTONE_COST: 4,
+  CAPSTONE_COST,
   ACTIVE_CD_MS: 8 * 3600 * 1000,   // shared cooldown across your unlocked ACTIVE abilities
   RESPEC_ONE_OMR: 5,               // step two: unlearn ONE skill (leaf-first) for less than a full respec
   // capstone-unlocked ACTIVE abilities (the new mechanic): resource/cooldown bursts, off every §10.4 +
@@ -3255,11 +3273,19 @@ export const FAMILY_YIELD = {
   SEATS: 5,
   WEIGHTS: [5, 4, 3, 2, 1],    // descending by standing rank (the Commission-levy pattern)
   MIN_PAYOUT: 0.01,            // don't write dust rows
-  // THE MIGRATION DIAL, and it ships at ZERO on purpose. This share of each 12h buyback is carved
-  // into the family pot. At 0 the buyback behaves EXACTLY as it does today, so this drop changes no
-  // signed balance number — the mechanism is live and provably correct, and the switchover from
-  // individual yield becomes one number the founder turns up deliberately rather than a cliff.
-  // Raise it as `stake:reward` / `dividend:omr` are retired (design §3), so the yield moves across
-  // rather than being duplicated: funding this while individual yield still pays would pay twice.
-  FUND_BPS: 0,
+  // THE FAMILY'S CUT of every redemption at the Exchange window: this share of what a player burns
+  // is TRANSFERRED to the family pot instead of leaving supply (`exchange.js:redeem`).
+  //
+  // RE-HOMED 2026-07-29. It used to read "a share of each 12h buyback", shipped at 0 as a migration
+  // dial, and said to raise it once individual yield retired. Step 2 retired individual yield AND
+  // rewrote the buyback so it no longer buys $OMR — so the source this was a share OF ceased to
+  // exist, nothing ever read the constant, and turning it up would have done nothing. The family
+  // yield's only inflow was the one-time legacy drain. Redemption is now the only place $OMR goes
+  // to die, which makes it the only honest thing to fund the families from, and it is self-funding:
+  // the cut scales with real redemption volume rather than being a subsidy.
+  //
+  // §10.4-neutral: `window:burn` is in `omrBurns`, `yield:` is in neither the mint nor the burn
+  // term, so this reclassifies part of an existing debit — no new reason, no invariant change.
+  // The honest cost is LESS DEFLATION, which is why it ships small. Founder sign-off lever.
+  FUND_BPS: 500,   // 5% of each redemption
 };

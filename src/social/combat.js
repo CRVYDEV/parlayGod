@@ -7,7 +7,7 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding } from '../game.js';
-import { M3, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
@@ -157,7 +157,7 @@ export async function startSearch(ch, targetCharacterId, client, h) {
 
 // §9 production timers: search 3 h, failed-shot cooldown 2 h.
 // Tests may shrink them via env — never set these in production configs.
-const searchMs = () => Number(process.env.SEARCH_MS || (3 * 3600 * 1000));
+const searchMs = () => Number(process.env.SEARCH_MS || CONSTANTS.SEARCH_MS);
 
 const hunterSearchMs = (h) => Math.floor(searchMs()
   * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)

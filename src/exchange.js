@@ -38,6 +38,7 @@ import { activeDecree, seatedGangs } from './commission.js'; // THE LEVY redirec
 
 const num = (v) => Number(v || 0);
 const round2 = (n) => Math.round(n * 100) / 100;
+const round6 = (n) => Math.round(n * 1e6) / 1e6;   // $OMR is 6dp, same as the NUMERIC column
 
 // ── the pool ─────────────────────────────────────────────────────────────────────────────────────
 export async function exchangePool(db) {
@@ -105,7 +106,28 @@ export async function redeem(ch, amount, client, h) {
     throw new GameError('dry', 'The window is short today. Nothing was burned — try again after the next take.');
   }
 
-  await spendOmr(client, h, omr, 'window:burn');          // the $OMR leaves supply
+  // ── THE FAMILY'S CUT ────────────────────────────────────────────────────────────────────────
+  // The families take a share of the money changing hands. Redemption is the only place $OMR now
+  // goes to die, so it is also the only honest place to fund the family yield from: a share that
+  // would otherwise BURN is TRANSFERRED to the family pot instead. §10.4-neutral by construction —
+  // `window:burn` is in `omrBurns` and `yield:` is in neither the mint nor the burn term, so this
+  // reclassifies a slice of an existing debit rather than creating one. Self-funding, and it scales
+  // with real redemption volume instead of being a subsidy. The cost is honest: less deflation.
+  //
+  // THE REMAINDER RULE sits on the BURN (the sell-tax discipline): the cut is computed, the burn is
+  // whatever is left, so the two always sum to exactly what the player asked to redeem and no dust
+  // goes unowned. Sizing is a founder lever — see FAMILY_YIELD.FUND_BPS.
+  const cut = round6(omr * FAMILY_YIELD.FUND_BPS / 10000);
+  const burn = round6(omr - cut);
+  if (cut > 0) {
+    await spendOmr(client, h, cut, 'yield:window');
+    // Re-round the in-memory balance before the second debit. Without this, redeeming your ENTIRE
+    // balance can fail: `balance - cut` in float can sit a few 1e-16 BELOW `round6(omr - cut)`, and
+    // spendOmr's own `balance < cost` guard would then refuse the burn on a perfectly funded account.
+    h.acct.omr = round6(Number(h.acct.omr));
+    await fundFamilyYield(client, cut);
+  }
+  await spendOmr(client, h, burn, 'window:burn');         // the rest leaves supply
   await client.query(
     'UPDATE exchange_pool SET balance = balance - $1, lifetime_paid = lifetime_paid + $1 WHERE id=1', [cash]);
   ch.cash = num(ch.cash) + cash;
@@ -117,7 +139,8 @@ export async function redeem(ch, amount, client, h) {
     [h.accountId, round2(decayed + omr)]);
   h.acct.exchange_used = round2(decayed + omr); h.acct.exchange_at = new Date(now);
 
-  return { ok: true, burned: omr, cash, rate: EXCHANGE.RATE, poolLeft: num(p.balance) - cash };
+  return { ok: true, burned: burn, familyCut: cut, spent: omr, cash, rate: EXCHANGE.RATE,
+    poolLeft: num(p.balance) - cash };
 }
 
 // The public window: the rate, what the till holds, and your own headroom.
@@ -269,13 +292,16 @@ export async function yieldBoard(db) {
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   return {
     pool: round2(p.balance), lifetimePaid: round2(p.paid), seats: FAMILY_YIELD.SEATS,
+    // where the pot comes from — a share of every redemption at the window (re-homed 2026-07-29)
+    fundBps: FAMILY_YIELD.FUND_BPS,
     families: top.map((g, i) => ({
       rank: i + 1, name: g.name, tag: g.tag, standing: num(g.standing),
       shareBps: Math.round(weights[i] / total * 10000),
       nextPayout: round2(p.balance * weights[i] / total),
       reserve: round2(num(g.omr_reserve)),
     })),
-    note: `The top ${FAMILY_YIELD.SEATS} families by this season's standing split the yield. Seats re-contest every season.`,
+    note: `The top ${FAMILY_YIELD.SEATS} families by this season's standing split the yield — funded by `
+      + `${FAMILY_YIELD.FUND_BPS / 100}% of every redemption at the window. Seats re-contest every season.`,
   };
 }
 

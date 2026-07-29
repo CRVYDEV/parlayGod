@@ -407,7 +407,10 @@ export async function sweepRingTables(pool) {
     finally { client.release(); }
   }
   const idle = (await pool.query(
-    "SELECT id FROM poker_tables WHERE street IS NULL AND last_action_at < now() - interval '30 minutes' ORDER BY id")).rows;
+    // the interval is PARAMETERISED, not a SQL literal — a literal made CASINO.RING.IDLE_MS a
+    // decorative constant that nothing read, so retuning it did nothing at all.
+    'SELECT id FROM poker_tables WHERE street IS NULL AND last_action_at < now() - ($1 || \' milliseconds\')::interval ORDER BY id',
+    [CASINO.RING.IDLE_MS])).rows;
   for (const { id } of idle) {
     const client = await pool.connect();
     try {
