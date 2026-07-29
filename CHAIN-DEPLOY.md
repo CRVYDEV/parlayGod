@@ -67,15 +67,23 @@ PHASE 1 for the exact calls/args.
       22.5% Vig / 25% RWA-float; the RWA slice is mirrored off-chain by the backend from the `Bonded` event,
       the on-chain forward is POL + dev + Vig). **This contract MINTS** — see below. Keep
       `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+      **Run `npm run dials` FIRST for the two cap arguments** — they derive from LIVE POOL DEPTH and are
+      not fixed numbers. At a 100-ETH pool it gives `dailyCapOMR` **~27,000 OMR/day** (≈5% of the pool's
+      OMR reserve, sized so a full day's cap dumped moves the price ≤10%) and `maxOmrPerEth` **~15,000**
+      (3× the launch price — a circuit breaker, not a price). Re-run it whenever POL materially deepens
+      and raise the cap with it.
 - [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed, deployed AFTER the pool
-      exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); 30 min is the
-      shipped default. The constructor works out which side of the pair OMR sits on rather than being
-      told. It reports **no usable reading until a full period has been closed**, so bonding cannot
-      start on a price derived from nothing.
-- [ ] **`OmertaBond.setOracle(oracle, priceToleranceBps, maxOracleAge)`** — arm WALL 4. Tolerance is how
-      far a signed quote may sit ABOVE the TWAP (non-zero because a TWAP lags spot; 0 makes the wall
-      literal-accretive; hard-capped at 2000). `maxOracleAge` must exceed the keeper's poke interval or
-      honest bonds start reverting as stale.
+      exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); **30 min
+      recommended** — past that the manipulation-cost curve flattens for a thin pool while the lag grows,
+      and what actually makes this expensive is POOL DEPTH, not the clock (see `npm run dials`). The
+      constructor works out which side of the pair OMR sits on rather than being told. It reports **no
+      usable reading until a full period has been closed**, so bonding cannot start on a price derived
+      from nothing.
+- [ ] **`OmertaBond.setOracle(oracle, priceToleranceBps, maxOracleAge)`** — arm WALL 4. Recommended
+      **500 bps (5%)** and **90 minutes** against a 30-minute keeper (3× the poke interval tolerates two
+      consecutive misses and no more). Tolerance is how far a signed quote may sit ABOVE the TWAP —
+      non-zero because a TWAP lags spot, so 0 rejects honest quotes exactly when the market moves; 0 is
+      nonetheless a legitimate choice if you would rather bonding stall than drift. Hard-capped at 2000.
 - [ ] **Start the oracle keeper.** `OmrTwapOracle.update()` is permissionless and must be poked at least
       once per `maxOracleAge`, or the feed goes stale and bonding halts. That failure direction is
       deliberate — a dead keeper must stop the mint, never leave it running on an unmaintained price —

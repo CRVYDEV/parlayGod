@@ -5997,3 +5997,32 @@ auditor must be pointed at the deleted property and at what replaced it). **Main
 still blocked on gates 2 + 3** (third-party audit of contracts AND signer, legal counsel); gate 1
 (`forge test`) stays green. **Still owed: the design's step-5 RE-SIM** — the entire cash economy was
 balanced against an extraction threat model that v2 removes.
+
+**SIZING THE BOND DIALS — `tools/bond-dials.js` (`npm run dials`, the 8th harness).** The four walls
+step 4 + the oracle introduced (`dailyCapOMR`, `maxOmrPerEth`, `priceToleranceBps`,
+`OmrTwapOracle.PERIOD`) were all unset and all blocking a deploy, with CHAIN-DEPLOY.md saying "set them
+small" — advice, not a number. This derives them: pure arithmetic over the real constants, no server, no
+chain. The threat model is one attacker, the leaked quote-signer, who can sign anything but must still
+PAY the ETH and still SELL the OMR. **Two findings changed my own first answer.** (1) I initially sized
+the daily cap as a share of supply (0.05% = 50,000/day) — but a 50,000 dump into a 100-ETH pool makes OMR
+**19% cheaper in a day**, and 100,000 makes it **40% cheaper**, while both are a rounding error against
+supply. **Price impact, not dilution, is the damage, and it is a function of POOL DEPTH** — so the
+recommendation is a RULE (≈5% of the pool's OMR reserve, ~27,000/day at 100 ETH) sized so a full day's
+cap dumped moves the price ≤10%, re-derived whenever POL deepens. "% of supply" would have been ~4× too
+loose. (2) The attack goes **loss-making** at larger caps (a 500,000-OMR haul realises **−32 ETH** — the
+exit craters the price it sells into) and it is tempting to call the cap self-limiting. **It is not**: a
+griefer needs no profit, and anyone short elsewhere profits from the crash. Size on damage, never on
+attacker P&L. Two more: `MAX_DISCOUNT_BPS` is FIRST-order and the oracle tolerance second (at the 20% cap
+a leaked signer already buys 25% under market before touching any feed, so beating the TWAP by 5% adds a
+few points on top — `maxOmrPerEth` and the cap are the walls that matter); and **the 9% DEX sell tax is
+also an anti-manipulation tax**, since moving the oracle UP requires SELLING, and the round trip never
+recovers the tax — most tokens' TWAP-manipulation cost is slippage alone, here it is slippage plus a hard
+9%, which was not its purpose and matters if anyone proposes lowering it. Recommendations are in
+BALANCE.md and inline in CHAIN-DEPLOY.md's deploy order. **Flagged, not changed:** there is no MINIMUM
+vest (`vestSeconds >= 1` is legal and the ATTACKER's quote picks it; `claim()` is also not
+`whenNotPaused`) — so the daily cap is realised IMMEDIATELY, which is the assumption the sizing uses; for
+an honest bonder the server sets the full 120h, so vesting is a product feature and not a security
+control, and the point is not to count it as one. Also `quoteBond` clamps to the CEILING rather than the
+oracle price, so drift always resolves toward more OMR per ETH — defensible, worth deciding deliberately.
+**The thing that is not a dial:** every number scales with pool depth, so the strongest action available
+for these walls is POL, not a setting.
