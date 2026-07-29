@@ -796,7 +796,8 @@ export async function buildServer() {
       xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS,
       // step two — the milestone perks + the level-50 trait choice (all knowable; the den XP floor too)
       milestones: MASTERY.MILESTONES, perks: MASTERY.PERKS, traits: MASTERY.TRAITS,
-      traitHeirBps: MASTERY.TRAIT_HEIR_BPS, gamblerMinStake: MASTERY.GAMBLER_MIN_STAKE },
+      traitHeirBps: MASTERY.TRAIT_HEIR_BPS, gamblerMinStake: MASTERY.GAMBLER_MIN_STAKE,
+      statUse: MASTERY.STAT_USE },
     // FIVE PILLARS — the public catalogs (levers are sign-off; the schedule/ladders are knowable)
     honor: { tiers: HONOR.TIERS, trusted: HONOR.TRUSTED, dreaded: HONOR.DREADED },
     diplomacy: { pactDays: DIPLOMACY.PACT_MS / 86400000, coalitionMin: DIPLOMACY.COALITION_MIN,

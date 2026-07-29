@@ -2325,3 +2325,9 @@ CREATE TABLE IF NOT EXISTS character_traits (
 -- UPDATE — the respec_at pattern). XP-rate arbitrage (home ×1.5 / rival ×0.6) made the 25 $OMR burn
 -- too cheap a throttle on its own.
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS path_at TIMESTAMPTZ;
+
+-- THE TRADES step four (stats by use): the rolling daily token bucket metering use-trained stat
+-- points (the D3 wash / port supply pattern — used decays continuously over 24h). Direct-SQL
+-- columns, off persistCharacter's positional UPDATE.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS statuse_used NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS statuse_at TIMESTAMPTZ;

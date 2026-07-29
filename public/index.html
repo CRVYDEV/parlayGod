@@ -5217,6 +5217,7 @@
         <div class="d">high-water: <b style="color:var(--ok)">${hon.peak > 0 ? '+' : ''}${hon.peak ?? 0}</b> (${hon.peakTier || '—'}) · deepest infamy: <b style="color:var(--bad)">${hon.low ?? 0}</b> (${hon.lowTier || '—'}) · <a href="#" id="honor-board">the men of honor & the most feared →</a></div><div id="honor-lb"></div></div>
 
       <h2>The Trades <span class="d" style="font-size:11px">(learned by DOING — every job, deal, race and bout schools its craft · dies with the street, your heir keeps ${Math.round((ms.heirKeepBps ?? 2500) / 100)}% of the schooling)</span></h2>
+      <div class="d" style="font-size:11px;margin:-4px 0 6px;color:var(--dim)">Working a trade also builds its stat — up to <b>${ms.statUse?.capDay ?? 3}/day</b> (${ms.statUse?.left ?? '—'} left today). The gym is still the fast lane.</div>
       <div class="d" style="font-size:11px;margin:-4px 0 6px;color:var(--dim)">The bloodline's lifetime schooling: <b>${(ms.legend?.total ?? 0).toLocaleString()}</b> XP — <b>${ms.legend?.rank || 'Dabbler'}</b> · <a href="#" id="trades-board">the deepest tradesmen →</a></div><div id="trades-lb"></div>
       <div class="grid">${(ms.tracks || []).map((k) => `
         <div class="card"><span class="t">${k.name} <span class="chip${k.lvl >= 40 ? ' good' : ''}">L${k.lvl} — ${k.rank}</span></span>
@@ -5554,6 +5555,7 @@
       vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
+      stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
       chat: () => `${d.who}: ${d.text}`,
     };
     if (T[t]) { try { return T[t](); } catch { /* fall through */ } }

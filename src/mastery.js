@@ -52,6 +52,14 @@ export async function masteryBoard(ch, client, h) {
     milestones: MASTERY.MILESTONES,
     traits: MASTERY.TRAITS,
     traitHeirBps: MASTERY.TRAIT_HEIR_BPS,
+    // STEP FOUR — the stats-by-use bucket (the same rolling-refill math the drip charges against)
+    statUse: (() => {
+      const refill = ch.statuse_at
+        ? (Date.now() - new Date(ch.statuse_at).getTime()) / 86400000 * MASTERY.STAT_USE.CAP_DAY
+        : MASTERY.STAT_USE.CAP_DAY;
+      const used = Math.max(0, Number(ch.statuse_used || 0) - Math.max(0, refill));
+      return { capDay: MASTERY.STAT_USE.CAP_DAY, left: Math.max(0, Math.round((MASTERY.STAT_USE.CAP_DAY - used) * 100) / 100) };
+    })(),
   };
 }
 

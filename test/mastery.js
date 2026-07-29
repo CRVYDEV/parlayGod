@@ -280,6 +280,57 @@ assert(incP > 0, 'the pathless front paid');
 assert(Math.abs(incL - Math.floor(incP * M.ledger.fx.frontIncome)) <= 3,
   `the Ledger collects ×1.1 on the same front (${incL} vs ${incP} — the promise the desc made since M4)`);
 
+// ══ STEP FOUR — STATS BY USE (founder-signed fork: "yes, tightly capped") ══
+// Working a trade drips its core stat under a hard rolling daily bucket. STAT_USE_P is the
+// TEST-ONLY roll knob (read per-call — the LAW_BUST_P precedent).
+const ula = await mk('Use-Train Ula');
+const cunOf = async (id) => Number((await pool.query(`SELECT cunning c FROM characters WHERE id='${id}'`)).rows[0].c);
+const pullClean = async (who) => { // one clean job (larceny — stat: cunning), retried past busts
+  for (let i = 0; i < 60; i++) {
+    await seedCh(who.id, 'nerve=100, jail_until=NULL');
+    const res = await call('POST', '/v1/crimes/pick', { token: who.token });
+    if (res.body.success) return res.body;
+  }
+  throw new Error('no clean job in 60 tries');
+};
+
+process.env.STAT_USE_P = '1'; // pin the roll — every clean job builds until the bucket is dry
+const cun0 = await cunOf(ula.id);
+await pullClean(ula);
+assert.equal(await cunOf(ula.id), cun0 + 1, 'working the trade built its stat (+1 cunning on a clean job)');
+const rngRow = await pool.query(
+  `SELECT outcome FROM rng_audit WHERE character_id='${ula.id}' AND action='statuse:larceny'`);
+assert(rngRow.rows.length >= 1 && rngRow.rows[0].outcome.includes('+1 cunning'), 'the use-roll is rng-audited');
+assert(Number((await pool.query(`SELECT statuse_used u FROM characters WHERE id='${ula.id}'`)).rows[0].u) >= 1,
+  'the daily bucket charged');
+
+// the HARD CAP: two more gains fill the CAP_DAY (3) bucket; the next clean job builds NOTHING
+await pullClean(ula); await pullClean(ula);
+assert.equal(await cunOf(ula.id), cun0 + MASTERY.STAT_USE.CAP_DAY, 'the bucket holds exactly CAP_DAY gains');
+await pullClean(ula);
+assert.equal(await cunOf(ula.id), cun0 + MASTERY.STAT_USE.CAP_DAY,
+  'a spent bucket grants NOTHING — the hard daily ceiling (the gym stays the fast lane)');
+
+// the board surfaces the headroom off the SAME rolling math the drip charges against
+r = await call('GET', '/v1/mastery', { token: ula.token });
+assert.equal(r.body.statUse.capDay, MASTERY.STAT_USE.CAP_DAY, 'the cap is on the board');
+assert(r.body.statUse.left < 1, `a spent bucket reads ~0 left (${r.body.statUse.left})`);
+
+// the ROLLING REFILL: a day later the full allowance is back and the drip grants again
+await seedCh(ula.id, "statuse_at = now() - interval '1 day'");
+r = await call('GET', '/v1/mastery', { token: ula.token });
+assert.equal(r.body.statUse.left, MASTERY.STAT_USE.CAP_DAY, 'a day of refill restores the full allowance');
+const cunR = await cunOf(ula.id);
+await pullClean(ula);
+assert.equal(await cunOf(ula.id), cunR + 1, 'the refilled bucket grants again');
+
+// pinned to ZERO: the roll still happens (audited) but nothing lands — a roll, not a salary
+process.env.STAT_USE_P = '0';
+const cunZ = await cunOf(ula.id);
+await pullClean(ula);
+assert.equal(await cunOf(ula.id), cunZ, 'P=0 → no gain (the drip is a chance, never a grant)');
+delete process.env.STAT_USE_P;
+
 // ── §10.4: XP is not a currency — the whole system wrote ZERO ledger rows of its own ──
 const xpRows = await pool.query(
   "SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'mastery%' OR reason LIKE 'trade:%'");
@@ -288,4 +339,4 @@ const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c
 assert(vocab.ok, `the reason vocabulary stays closed (${JSON.stringify(vocab.unknown || [])})`);
 
 await app.close();
-console.log('✅ THE TRADES test passed — step one (the ten-track board + catalog, the funnel at real hook sites with the legend mirroring every point, the level-up ding, DEATH echo at HEIR_KEEP_BPS with the legend surviving whole, the agents-excluded leaderboard) AND step two (the den STAKE FLOOR refusing min-bet XP, the milestone perk reading neutral → the exact rung on the board, the wheels perk charging the DISCOUNTED tune price at a real till, the commerce fee relation, the trait gates level/bad_track/bad_trait/chosen, the VIRTUOSO deepening to the mastered rung, the DYNAST echoing HALF that one trade while the rest echo the quarter, and traits dying with the street), plus §10.4: zero ledger rows — XP is not a currency');
+console.log('✅ THE TRADES test passed — step one (the ten-track board + catalog, the funnel at real hook sites with the legend mirroring every point, the level-up ding, DEATH echo at HEIR_KEEP_BPS with the legend surviving whole, the agents-excluded leaderboard) AND step two (the den STAKE FLOOR refusing min-bet XP, the milestone perk reading neutral → the exact rung on the board, the wheels perk charging the DISCOUNTED tune price at a real till, the commerce fee relation, the trait gates level/bad_track/bad_trait/chosen, the VIRTUOSO deepening to the mastered rung, the DYNAST echoing HALF that one trade while the rest echo the quarter, and traits dying with the street) AND step four (STATS BY USE: a clean job builds +1 cunning rng-audited, the CAP_DAY bucket fills then grants NOTHING, the board headroom reads the same rolling math, a day of refill restores the allowance, P=0 lands nothing), plus §10.4: zero ledger rows — XP is not a currency');

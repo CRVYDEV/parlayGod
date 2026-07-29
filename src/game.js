@@ -421,7 +421,41 @@ export async function bumpMastery(client, h, ch, trackId, action) {
   if (after > before) {
     await notify(client, ch.id, 'mastery_up', { track: trackId, name: track.name, lvl: after, rank: masteryRankOf(after) });
   }
-  return { track: trackId, xp, lvl: after, leveled: after > before };
+  // STEP FOUR — STATS BY USE (founder-signed: "yes, tightly capped"). Working the trade exercises
+  // its stat: a small roll per XP-paying action, on the GYM'S OWN diminishing factor, metered by a
+  // hard rolling daily bucket. Actor path (h) ONLY — headless callers (duel opponents, heist crew)
+  // hold locked rows and write specific columns absolutely; a stat bump there would never persist,
+  // so the drip is honestly skipped rather than silently lost.
+  let statGain = 0;
+  if (h && track.stat) {
+    const now = Date.now();
+    const refill = ch.statuse_at
+      ? (now - new Date(ch.statuse_at).getTime()) / 86400000 * MASTERY.STAT_USE.CAP_DAY
+      : MASTERY.STAT_USE.CAP_DAY;
+    const used = Math.max(0, Number(ch.statuse_used || 0) - Math.max(0, refill));
+    // charge only if the FULL unit fits (the D3 wash-gate form) — a strict `used < CAP` would pass
+    // at 3−ε moments after the third gain, leaking a CAP+1 burst
+    if (used + 1 <= MASTERY.STAT_USE.CAP_DAY) {
+      // TEST-ONLY roll knob (the LAW_BUST_P precedent — never set in production); read per-call
+      const dim = MASTERY.STAT_USE.GYM_DIM / (MASTERY.STAT_USE.GYM_DIM + Number(ch[track.stat] || 0));
+      const p = process.env.STAT_USE_P != null
+        ? Number(process.env.STAT_USE_P)
+        : Math.min(0.5, MASTERY.STAT_USE.P_PER_XP * xp * dim);
+      const roll = Math.random();
+      await rngLog(client, ch.id, `statuse:${trackId}`, roll,
+        `${roll < p ? `+1 ${track.stat}` : 'no gain'} (P ${p.toFixed(3)}, ${track.stat} ${ch[track.stat]})`);
+      if (roll < p) {
+        statGain = 1;
+        ch[track.stat] = Number(ch[track.stat]) + 1; // persisted positionally by the caller (the train() shape)
+        // charge the bucket — direct SQL under the held char lock (the port_used pattern) + ch mirror
+        await client.query('UPDATE characters SET statuse_used=$2, statuse_at=$3 WHERE id=$1',
+          [ch.id, used + 1, new Date(now)]);
+        ch.statuse_used = used + 1; ch.statuse_at = new Date(now);
+        await notify(client, ch.id, 'stat_use', { track: trackId, stat: track.stat, value: ch[track.stat] });
+      }
+    }
+  }
+  return { track: trackId, xp, lvl: after, leveled: after > before, statGain: statGain || undefined };
 }
 
 async function advanceCampaignsInline(client, ch, action) {

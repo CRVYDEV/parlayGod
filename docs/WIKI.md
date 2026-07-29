@@ -643,6 +643,12 @@ duels, the Ring pays the Doc ×1.15), and trades that come easy (**×1.5 XP**) o
 The Ledger's long-advertised +10% front income is finally real. Switching careers takes the 25 $OMR
 AND a week between moves.
 
+**Stats by use (step four):** working a trade also exercises its core stat — each XP-paying action
+has a small chance of +1 to the track's stat (larceny builds cunning, wet work builds muscle,
+wheels builds speed…), on the gym's own diminishing curve, hard-capped at **3 points per rolling
+day** whatever you play. The gym is still the fast lane; this just makes plying your trade FEEL
+like training it. Your board shows today's remaining allowance.
+
 ---
 
 ## 24. The Underworld
