@@ -1,7 +1,7 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
 import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx } from './game.js';
-import { soldierFxOf, SOLDIERS } from './rules.js';
+import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
@@ -14,9 +14,13 @@ const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 // ── PATHS (§5.1): first pick $10,000 at level ≥5; switching burns 25 $OMR ──
 export async function choosePath(ch, pathId, client, h) {
   const pt = PATHS.find((x) => x.id === pathId);
-  if (!pt) throw new GameError('bad_path', 'The Gun, The Ledger, or The Kitchen.');
+  if (!pt) throw new GameError('bad_path', `Pick a real career: ${PATHS.map((x) => x.name).join(', ')}.`);
   if (ch.path === pathId) throw new GameError('same', "That's already your trade.");
   if (levelOf(Number(ch.respect)) < 5) throw new GameError('level', 'Pick a career at level 5.');
+  // PATHS v2 — the switch cooldown: home/rival XP rates make hopping careers between activities a
+  // rate arbitrage the 25 $OMR burn alone doesn't price; a week between moves makes it a COMMITMENT
+  if (ch.path && ch.path_at && Date.now() < new Date(ch.path_at).getTime() + PATH_SWITCH_CD_MS)
+    throw new GameError('cooldown', 'You just changed careers — the street needs a week to take you seriously.');
   if (!ch.path) {
     if (Number(ch.cash) < CONSTANTS.PATH_FIRST_COST) throw new GameError('cash', `Declaring a path costs $${CONSTANTS.PATH_FIRST_COST}.`);
     ch.cash = Number(ch.cash) - CONSTANTS.PATH_FIRST_COST;
@@ -27,6 +31,9 @@ export async function choosePath(ch, pathId, client, h) {
     await h.ledger(client, { accountId: h.accountId, currency: 'omr', amount: -CONSTANTS.PATH_SWITCH_OMR, reason: `path:${pathId}` });
   }
   ch.path = pathId;
+  // the clock is a direct-SQL column (off persistCharacter's positional UPDATE — the respec_at
+  // pattern); stamped on EVERY choice so the first pick starts the same week as a switch
+  await client.query('UPDATE characters SET path_at=now() WHERE id=$1', [ch.id]);
   return { ok: true, path: pathId };
 }
 

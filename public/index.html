@@ -1404,7 +1404,7 @@
     safehoused: "not from a safehouse — that's a shield, not a base", nerve: "not enough nerve", energy: "not enough energy",
     broke: "you can't cover that", cash: "you can't cover that", omr: "not enough $OMR", rank: "your rank isn't high enough",
     level: "you're not a high enough level yet", rookie: "you're too green for that yet", pledged: "that car's pledged as collateral",
-    listed: "that car's on the block — pull the listing first", bad_path: "pick The Gun, The Ledger, or The Kitchen",
+    listed: "that car's on the block — pull the listing first", bad_path: "pick a real career — six paths are on the board",
     self: "you can't do that to yourself", family: "omertà — you can't move on your own family", dry: "the pool's dry — check back after the next buyback",
     nothing: "nothing to collect", no_contracts: "no contracts on your head", maxed: "you're already at the cap", spent: "already used up",
     once: "one shot only — you've taken it", not_due: "that isn't due yet", too_soon: "not yet — the clock's still running", cooldown: "still on cooldown",
@@ -3042,13 +3042,19 @@
     let pathBlock = '';
     if (me && me.path) {
       const p = (rules?.paths || []).find((x) => x.id === me.path);
-      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card"><span class="t" style="color:var(--neon)">${p ? p.name : me.path}</span><div class="d">${p ? p.desc : 'Chosen. It shapes how you earn.'}</div></div>`;
+      const fx = rules?.pathFx?.matrix?.[me.path];
+      const tn = (id) => (rules?.mastery?.tracks || []).find((t) => t.id === id)?.name || id;
+      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card"><span class="t" style="color:var(--neon)">${p ? p.name : me.path}</span><div class="d">${p ? p.desc : 'Chosen. It shapes how you earn.'}</div>
+        ${fx ? `<div class="d" style="margin-top:4px"><span style="color:var(--ok)">home trades ×${rules.pathFx.xpHome}:</span> ${fx.home.map(tn).join(', ')} · <span style="color:var(--bad)">rival ×${rules.pathFx.xpRival}:</span> ${fx.rival.map(tn).join(', ')}</div>` : ''}</div>`;
     } else if (me && me.level >= 5) {
       pathBlock = `<h2 style="margin-top:14px">Declare Your Path <span class="d" style="color:var(--dim);font-size:12.5px">— permanent, shapes how you earn</span></h2><div class="grid">` +
-        (rules?.paths || []).map((p) => `<div class="card"><span class="t" style="color:var(--neon)">${p.name}</span><div class="d">${p.desc}</div>
-          <button class="act" data-do="POST /v1/path" data-body='{"path":"${p.id}"}'>choose ${p.name}</button></div>`).join('') + `</div>`;
+        (rules?.paths || []).map((p) => { const fx = rules?.pathFx?.matrix?.[p.id];
+          const tn = (id) => (rules?.mastery?.tracks || []).find((t) => t.id === id)?.name || id;
+          return `<div class="card"><span class="t" style="color:var(--neon)">${p.name}</span><div class="d">${p.desc}</div>
+          ${fx ? `<div class="d" style="margin-top:4px"><span style="color:var(--ok)">×${rules.pathFx.xpHome}:</span> ${fx.home.map(tn).join(', ')} · <span style="color:var(--bad)">×${rules.pathFx.xpRival}:</span> ${fx.rival.map(tn).join(', ')}</div>` : ''}
+          <button class="act" data-do="POST /v1/path" data-body='{"path":"${p.id}"}'>choose ${p.name}</button></div>`; }).join('') + `</div>`;
     } else if (me) {
-      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card coach-card"><div class="d">At <b>level 5</b> you'll declare a Path — The Gun, The Ledger, or The Kitchen — a permanent bonus to how you earn. Keep grinding.</div></div>`;
+      pathBlock = `<h2 style="margin-top:14px">Your Path</h2><div class="card coach-card"><div class="d">At <b>level 5</b> you'll declare a Path — one of six careers, each with a signature edge, a real handicap, and trades that come easy (or fight you). Keep grinding.</div></div>`;
     }
     // Trade goods — buy at the district spot price, carry weight in the trunk, sell high elsewhere.
     // This is the on-ramp for the Black Market goods trade AND smuggling convoys (both need a stocked trunk).

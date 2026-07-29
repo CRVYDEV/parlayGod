@@ -6,7 +6,7 @@ import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
   makingsPriceOf, demandOf, effStat, crewWageOwed, HONOR,
-  labModuleCost, kingpinRankOf, seasonModOf } from './rules.js';
+  labModuleCost, kingpinRankOf, seasonModOf, pathFx, pathAdd } from './rules.js';
 import { activeDecree } from './commission.js';
 import { logCollect } from './collection.js';
 
@@ -73,7 +73,7 @@ export async function cook(ch, drugId, qty, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -crates, reason: `cook:${drugId}` });
   // TRADES perk (chemistry): a schooled cook runs the burner faster — pacing only; throughput
   // is still nerve-bounded at the corner, so the sim-signed deal curve is untouched
-  const doneAt = new Date(Date.now() + Math.round(k.mins * CONSTANTS.COOK_MULT * masteryFx(h, 'chemistry')) * 60 * 1000); // §9: demo mins × 12
+  const doneAt = new Date(Date.now() + Math.round(k.mins * CONSTANTS.COOK_MULT * masteryFx(h, 'chemistry') * pathFx(ch, 'cookTime')) * 60 * 1000); // §9: demo mins × 12 · PATHS v2 — the Wheel's no-patience handicap rides here
   const id = uid();
   await client.query('INSERT INTO batches (id, character_id, drug_id, qty, done_at) VALUES ($1,$2,$3,$4,$5)',
     [id, ch.id, drugId, n, doneAt]);
@@ -102,7 +102,7 @@ export async function collect(ch, client, h) {
   // LAB MODULE (Tier-4) — the Purity Rig lifts the quality floor
   const q = Math.min(1.6, Math.max(0.6,
     0.7 + cunning * 0.004 + k.q + Number(ch.lab_purity || 0) * KITCHEN.MODULES.purity.step
-    + (ch.path === 'kitchen' ? 0.15 : 0) + (Math.random() * 0.2 - 0.1)));
+    + pathAdd(ch, 'cookQuality') + (Math.random() * 0.2 - 0.1))); // PATHS v2 (kitchen keeps its exact +0.15)
   const cur = h.owned.stash.find((s) => s.drug_id === b.drug_id);
   if (cur) {
     const total = Number(cur.qty) + Number(b.qty);
@@ -144,7 +144,7 @@ export async function deal(ch, drugId, qty, client, h, play) {
   const gross = Math.floor(unit * n);
   const fee = Math.ceil(gross * 0.01), tax = Math.ceil(gross * 0.01);
   const net = gross - fee - tax;
-  const heatGain = d.heat * n * 0.1 * (ev.drugHeat || 1) * (ch.path === 'kitchen' ? 0.75 : 1) * pl.heatMult;
+  const heatGain = d.heat * n * 0.1 * (ev.drugHeat || 1) * pathFx(ch, 'dealHeat') * pl.heatMult; // PATHS v2 (kitchen keeps its exact 0.75)
   ch.nerve = Number(ch.nerve) - nerveCost;
   ch.cash = Number(ch.cash) + net;
   // rank climbs on GROSS — the PLAY tilts it (regulars build a book, churn burns your name). The

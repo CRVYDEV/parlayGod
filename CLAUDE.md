@@ -3805,11 +3805,29 @@ console renders perk lines + a Virtuoso/Dynast chooser through the in-game `ask(
 at a real till, the fee relation, all four trait gates, virtuoso deepening, dynast half-echo vs the
 quarter, traits wiped) — mutation-verified (perk dropped from the till → caught; dynast ignored at the
 estate → caught). §10.4 untouched (perks are pacing/discount/access/contest modifiers; the discounted
-number is always the ledgered one). **Steps 3–4 designed, not built:** PATHS v2 (prototype re-extract
-3→6 + a hand-written `PATH_FX` tail matrix, home ×~1.5 / rival ×~0.6 XP rates inside bumpMastery, one
-signature perk + one handicap per path, a switch cooldown); stats-by-use (a capped daily drip on the
-gym's own diminishing curve, playthrough re-run). A combined red-team follows step 4 (the pillar
-discipline).
+number is always the ledgered one). **Step three — PATHS v2 — BUILT**
+(the founder's "more paths with specialties and disadvantages"): the PATHS catalog went 3→6 through the
+MACHINE-OWNED seam (prototype edit + `extract-rules` — gun/ledger/kitchen + **The Wheel / The Shadow /
+The Ring**); the HAND-WRITTEN `PATH_FX` tail matrix is the teeth — per path `home` trades (×`PATH_XP_HOME`
+1.5 inside bumpMastery), `rival` (×`PATH_XP_RIVAL` 0.6 — FRACTIONAL XP, never rounded away), and `fx`
+(one signature perk + ONE handicap, each a named single-touchpoint multiplier read via
+`pathFx(ch,key)`/`pathAdd` — ch.path is a COLUMN so no h needed, headless-safe). The SEVEN pre-v2 inline
+path ternaries (accrual ×2, economy, kitchen ×2, combat ×2) converted to matrix reads BYTE-IDENTICALLY
+for the three originals (asserted); each original gained its handicap as a new lever (gun goodsSell 0.95,
+ledger jumpAtk 0.95, kitchen jailStint 1.1). NEW sites: `frontIncome` ×1.1 at collectBusiness — **the
+Ledger's M4-advertised "+10% front income", real at last** (flagged: ~+$2.2M/day on a maxed stack);
+convoyTime (Wheel), contest at duel+bout scores (Ring 1.05 / Shadow 0.95 — each side reads its OWN row's
+path), healCost (Ring 1.15), searchClock (Shadow 0.85 — the FOURTH stack on that clock, 0.46 fully built,
+flagged). **The switch cooldown** — `PATH_SWITCH_CD_MS` (7d) on the new direct-SQL `characters.path_at`
+(stamped on every choice): home/rival rates make career-hopping a rate arbitrage the 25 $OMR burn alone
+doesn't price. `/v1/rules.pathFx` publishes the matrix; the console path cards show home/rival chips;
+`bad_path` copy de-hardcoded. Tests (test/mastery.js step-3 block): 6 on the catalog, the originals'
+exact numbers, home 4.5-XP crime / rival 0.6-XP dice through the real funnel, the cooldown (refused with
+$OMR in hand → allowed past the week), the Gun's sale ratio at a real till, the Ring's Doc bill to the
+dollar, and the Ledger front collecting ×1.1 vs a pathless twin on identical seeded fronts —
+mutation-verified (XP rates dropped → caught; cooldown dropped → caught). **Step 4 designed, not
+built:** stats-by-use (a capped daily drip on the gym's own diminishing curve, playthrough re-run). A
+combined red-team follows step 4 (the pillar discipline).
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

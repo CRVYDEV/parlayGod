@@ -19,7 +19,7 @@
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
 import { GameError, notify, bumpMastery } from './game.js';
-import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat } from './rules.js';
+import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -118,8 +118,8 @@ export async function challenge(ch, opponent, amount, client, h) {
   const theirEdge = myStyle && theirStyle && theirStyle.beats === myStyle.id ? DUELS.STYLE_EDGE : 1;
   let mine, theirs;
   do {
-    mine = (eff(ch, h.owned) + rand(0, DUELS.VARIANCE)) * myEdge;
-    theirs = (eff(opponent, h.victimOwned) + rand(0, DUELS.VARIANCE)) * theirEdge;
+    mine = (eff(ch, h.owned) + rand(0, DUELS.VARIANCE)) * myEdge * pathFx(ch, 'contest');       // PATHS v2 — the Ring's edge /
+    theirs = (eff(opponent, h.victimOwned) + rand(0, DUELS.VARIANCE)) * theirEdge * pathFx(opponent, 'contest'); // the Shadow's aversion
   } while (mine === theirs);
   const win = mine > theirs;
   const styleClash = myEdge > 1 ? 'you had the style edge' : theirEdge > 1 ? 'they had the style edge' : null;

@@ -9,7 +9,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf } from './rules.js';
+         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -392,7 +392,9 @@ export function masteryFx(h, trackId) {
 
 export async function bumpMastery(client, h, ch, trackId, action) {
   const track = MASTERY.TRACKS.find((t) => t.id === trackId);
-  const xp = Number(MASTERY.XP[action] || 0);
+  // PATHS v2 — a home trade schools ×1.5, a rival ×0.6 (fractional XP is fine: NUMERIC column,
+  // and rounding would erase the rival penalty on 1-XP actions or zero them out entirely)
+  const xp = Number(MASTERY.XP[action] || 0) * pathXpMult(ch, trackId);
   if (!track || !(xp > 0)) return null;   // defensive — a bad tag must never fail the action
   const cur = h?.owned?.mastery
     ? Number(h.owned.mastery[trackId] || 0)
@@ -1131,6 +1133,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
     const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1) * ap.jailMult
       * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT)
       * masteryFx(h, 'larceny') // TRADES perk (pacing — stacks with getaway; flagged in BALANCE)
+      * pathFx(ch, 'jailStint') // PATHS v2 — the Kitchen's handicap (the Bureau knows a cook)
       * (second?.trait === 'wheelman' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
     await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'fail');
@@ -1171,7 +1174,8 @@ export async function heal(ch, client, h) {
   // new modifiers stacking multiplicatively (0.75 × 0.9), both sign-off levers
   const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
     * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT)
-    * npcMult(h, 'doc', 1, UNDERWORLD.FX.DOC_MULT));
+    * npcMult(h, 'doc', 1, UNDERWORLD.FX.DOC_MULT)
+    * pathFx(ch, 'healCost')); // PATHS v2 — the Ring's handicap (a brawler's medical bills)
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);
   ch.cash = Number(ch.cash) - cost; ch.health = 100;

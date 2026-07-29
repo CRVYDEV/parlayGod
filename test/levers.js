@@ -255,6 +255,11 @@ const SIGNED = [
   ['BLACK_MARKET.LIST_FEE_MIN', 10], // named by the step-2 BALANCE entry (the fee floor that re-asserts after the commerce perk)
   ['MASTERY.GAMBLER_MIN_STAKE', 1000],
   ['MASTERY.TRAIT_HEIR_BPS', 5000],
+  // step three — PATHS v2 (the XP-rate axis + the switch throttle; the PATH_FX perk/handicap
+  // mults live under lowercase path keys, outside the walker — the founder dials are these three)
+  ['PATH_XP_HOME', 1.5],
+  ['PATH_XP_RIVAL', 0.6],
+  ['PATH_SWITCH_CD_MS', 604800000],
   ['NOTORIETY.CONVOY_DEF_CAP', 24],
   ['NOTORIETY.CONVOY_DEF_PER', 0.6],
   ['NOTORIETY.DECAY_PER_HR', 4],

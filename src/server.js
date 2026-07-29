@@ -93,7 +93,8 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          RACKETS, ASSETS, MISSIONS, GANG_SEALS, SOCIAL_GAME_URL, SOCIAL_X_HANDLE, territoryRankOf, syndicateOf, TERRITORY_TYPES, TERRITORY_RACKETS,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
-         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY } from './rules.js';
+         HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -780,6 +781,10 @@ export async function buildServer() {
     districts: DISTRICTS,
     stats: ['muscle', 'cunning', 'speed'],
     paths: PATHS,
+    // PATHS v2 — the hand-written teeth behind the catalog (home/rival trades + the fx matrix),
+    // published so the Declare-Your-Path card can show what a career really costs and pays
+    pathFx: { matrix: PATH_FX, xpHome: PATH_XP_HOME, xpRival: PATH_XP_RIVAL,
+      switchCdSeconds: Math.round(PATH_SWITCH_CD_MS / 1000) },
     share: { gameUrl: SOCIAL_GAME_URL, xHandle: SOCIAL_X_HANDLE }, // brag-on-X: prefilled intents carry the player's name as a referral code
     // THE STREET WAGE — the emission schedule is PUBLIC by design (anyone can verify the printer)
     emission: { endowmentOmr: EMISSION.ENDOWMENT_OMR, epochOmr: EMISSION.EPOCH_OMR, decay: EMISSION.DECAY,

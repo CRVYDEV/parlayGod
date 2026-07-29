@@ -30,8 +30,8 @@ Roughly **55,000 lines** of code, tests, schema and contracts.
 Everything is built on five load-bearing decisions. None has needed revision in ~47 systems.
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
-tables (455 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (3369 lines) and the extractor never opens it. `rules.js`
+tables (458 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
+catalog, ladder and founder-signed lever (3448 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

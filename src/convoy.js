@@ -14,7 +14,7 @@
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
 import { CONVOY, COMMISSION, SKILLS, UNDERWORLD, NOTORIETY, guardTierOf, DISTRICTS, GOODS, goodPriceOf,
-  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks } from './rules.js';
+  levelOf, rigOf, rigUpgradeCost, haulerRankOf, banditRankOf, haulerTierOf, smuggleRepPerks, pathFx } from './rules.js';
 import { activeDecree } from './commission.js';
 import { laneHeat, heatLane } from './notoriety.js';
 
@@ -143,7 +143,8 @@ export async function departConvoy(ch, guardTier, insure, client, h) {
   // OPEN_ROADS decree (Commission Tier-4): the roads move quicker for everyone this week (COMMISSION.OPEN_ROADS_MULT if armed, else 1)
   const openRoads = (await activeDecree(client))?.id === 'open_roads' ? (COMMISSION.OPEN_ROADS_MULT || 1) : 1;
   // ROAD CAPTAIN (skills): the wheelman's convoys run faster — a new modifier, sign-off lever
-  const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT) * (1 - rigSpeedBps / 10000) * openRoads);
+  const rideMs = Math.floor(convoyMs() * skillMult(h, 'road_captain', SKILLS.FX.CONVOY_MULT) * (1 - rigSpeedBps / 10000) * openRoads
+    * pathFx(ch, 'convoyTime')); // PATHS v2 — the Wheel's convoys run faster (stacks with road_captain; pacing only)
   const arrivesAt = new Date(Date.now() + rideMs);
   // TIER C: a hammered LANE sheds guard defense — the bandits have it cased. Read the lane's current NOTORIETY
   // (a legend's rep cools it faster), cut the effective guards this run, then HEAT the lane for next time. The

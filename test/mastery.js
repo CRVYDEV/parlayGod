@@ -208,6 +208,78 @@ assert.equal(Number((await pool.query(`SELECT COUNT(*) n FROM character_traits W
 assert.equal((await call('GET', '/v1/mastery', { token: pia.token })).body.tracks.find((t) => t.id === 'wheels').trait,
   null, 'the heir chooses their own legacy');
 
+// ══ STEP THREE — PATHS v2: six careers, home/rival XP rates, perks WITH handicaps ══
+// the catalog went 3→6 through the machine-owned seam (prototype + re-extract)
+assert.equal(rules.paths.length, 6, 'six careers on the board');
+assert(rules.paths.some((p) => p.id === 'shadow'), 'the new careers are real ids');
+// the three ORIGINALS keep their exact pre-v2 numbers — the ternary→matrix conversion is byte-identical
+const M = rules.pathFx.matrix;
+assert.equal(M.gun.fx.jumpAtk, 1.1, 'gun keeps its exact 1.1 street-fight edge');
+assert.equal(M.gun.fx.hitEff, 1.15, 'gun keeps its exact 1.15 hit effectiveness');
+assert.equal(M.ledger.fx.racketIncome, 1.1, 'ledger keeps its exact 1.1 racket income');
+assert.equal(M.ledger.fx.goodsSell, 1.05, 'ledger keeps its exact 1.05 goods sale');
+assert.equal(M.kitchen.add.cookQuality, 0.15, 'kitchen keeps its exact +0.15 quality');
+assert.equal(M.kitchen.fx.dealHeat, 0.75, 'kitchen keeps its exact 0.75 deal heat');
+
+// ── HOME/RIVAL XP rates apply inside the funnel (fractional XP — the NUMERIC column carries it) ──
+const kim = await mk('Kitchen Kim');
+await seedCh(kim.id, `respect=${10 * 4 * 4}, cash=100000, loc='docks'`); // level 5 — the path gate
+r = await call('POST', '/v1/path', { token: kim.token, body: { path: 'kitchen' } });
+assert.equal(r.code, 200, 'the career is declared ($10k first pick)');
+jobs = 0;
+for (let i = 0; i < 40 && jobs === 0; i++) {
+  await seedCh(kim.id, 'nerve=100, jail_until=NULL');
+  if ((await call('POST', '/v1/crimes/pick', { token: kim.token })).body.success) jobs++;
+}
+assert(jobs > 0, 'a clean job landed on the path');
+assert.equal(await myXp(kim.id, 'larceny'), MASTERY.XP.crime * rules.pathFx.xpHome,
+  'a HOME trade schools half again as fast (larceny is the Kitchen\'s)');
+await seedCh(kim.id, "cash=50000, nerve=100, loc='neon', jail_until=NULL");
+r = await call('POST', '/v1/casino/dice', { token: kim.token, body: { amount: MASTERY.GAMBLER_MIN_STAKE } });
+assert.equal(r.code, 200, 'a real-stake play resolved');
+assert.equal(await myXp(kim.id, 'gambling'), MASTERY.XP.dice * rules.pathFx.xpRival,
+  'a RIVAL trade fights you (0.6 XP — fractional, never rounded to 0 or 1)');
+
+// ── the SWITCH COOLDOWN: hopping careers between activities is rate arbitrage; a week prices it ──
+await pool.query(`UPDATE account_persistent SET omr = omr + 100 WHERE account_id='${kim.aid}'`);
+assert.equal((await call('POST', '/v1/path', { token: kim.token, body: { path: 'gun' } })).body.error,
+  'cooldown', 'a fresh career sticks for a week — even with the $OMR in hand');
+await pool.query(`UPDATE characters SET path_at = now() - interval '8 days' WHERE id='${kim.id}'`);
+assert.equal((await call('POST', '/v1/path', { token: kim.token, body: { path: 'gun' } })).code,
+  200, 'past the week, the 25 $OMR switch works as before');
+
+// ── the HANDICAPS bite at real tills ──
+// the Gun sells goods at 0.95 (a soldier's no merchant) — same district, same day, vs a pathless twin
+const plain = await mk('Pathless Pete');
+await seedCh(plain.id, "cash=100000, loc='docks'");
+await seedCh(kim.id, "cash=100000, loc='docks', jail_until=NULL"); // kim is The Gun now
+await call('POST', '/v1/goods/buy', { token: plain.token, body: { goodId: 'gin', qty: 1 } });
+await call('POST', '/v1/goods/buy', { token: kim.token, body: { goodId: 'gin', qty: 1 } });
+const sellP = (await call('POST', '/v1/goods/sell', { token: plain.token, body: { goodId: 'gin', qty: 1 } })).body;
+const sellG = (await call('POST', '/v1/goods/sell', { token: kim.token, body: { goodId: 'gin', qty: 1 } })).body;
+const ratio = sellG.unit / sellP.unit;
+assert(ratio > 0.93 && ratio < 0.97, `the Gun's handicap prices the sale (unit ratio ${ratio.toFixed(3)})`);
+
+// the Ring pays the Doc 15% more (a brawler's medical bills) — deterministic to the dollar
+const rocky = await mk('Ring Rocky');
+await pool.query(`UPDATE characters SET path='ring' WHERE id='${rocky.id}'`); // the column IS the state
+await seedCh(rocky.id, 'health=50, cash=100000');
+r = await call('POST', '/v1/heal', { token: rocky.token });
+assert.equal(r.body.cost, Math.floor(50 * 15 * M.ring.fx.healCost), 'the Ring pays exactly ×1.15 at the Doc');
+
+// ── the Ledger's "+10% front income" — ADVERTISED since M4, real at last ──
+const lex = await mk('Ledger Lex');
+await pool.query(`UPDATE characters SET path='ledger' WHERE id='${lex.id}'`);
+const seedFront = (id) => pool.query(
+  `INSERT INTO businesses (id, character_id, kind, tier, last_collect_at, upkeep_at)
+   VALUES ('biz-${id.slice(0, 8)}', '${id}', 'laundromat', 1, now() - interval '1 hour', now())`);
+await seedFront(lex.id); await seedFront(plain.id);
+const incL = (await call('POST', '/v1/business/collect', { token: lex.token })).body.collected;
+const incP = (await call('POST', '/v1/business/collect', { token: plain.token })).body.collected;
+assert(incP > 0, 'the pathless front paid');
+assert(Math.abs(incL - Math.floor(incP * M.ledger.fx.frontIncome)) <= 3,
+  `the Ledger collects ×1.1 on the same front (${incL} vs ${incP} — the promise the desc made since M4)`);
+
 // ── §10.4: XP is not a currency — the whole system wrote ZERO ledger rows of its own ──
 const xpRows = await pool.query(
   "SELECT COUNT(*) n FROM transactions WHERE reason LIKE 'mastery%' OR reason LIKE 'trade:%'");

@@ -549,9 +549,12 @@ const tradeRankIdx = (rep) => { let i = 0; TRADE_RANKS.forEach((r, j) => { if ((
 
 // ── PATHS — a career choice at level 5. One active at a time.
 const PATHS = [
-  { id: "gun", name: "The Gun", desc: "+10% power in street fights · +15% effectiveness on hit contracts. You are the argument.", },
-  { id: "ledger", name: "The Ledger", desc: "+10% racket & front income · +5% on trade-good sales. Money never sleeps; neither do you.", },
-  { id: "kitchen", name: "The Kitchen", desc: "+15% cook quality · −25% heat from dealing. The city has an appetite. Feed it.", },
+  { id: "gun", name: "The Gun", desc: "+10% power in street fights · +15% effectiveness on hit contracts — but a soldier's no merchant (−5% on trade-good sales). Wet Work & Protection come easy; Commerce & The Cook fight you. You are the argument.", },
+  { id: "ledger", name: "The Ledger", desc: "+10% racket & front income · +5% on trade-good sales — but soft hands (−5% in a street fight). Commerce & Big Scores come easy; Wet Work & Protection fight you. Money never sleeps; neither do you.", },
+  { id: "kitchen", name: "The Kitchen", desc: "+15% cook quality · −25% heat from dealing — but the Bureau knows a cook (+10% jail stints). The Cook & Larceny come easy; The Gambler & Fisticuffs fight you. The city has an appetite. Feed it.", },
+  { id: "wheel", name: "The Wheel", desc: "Your convoys run 10% faster — but no patience for the burner (+15% cook time). Wheels & Seamanship come easy; The Cook & The Gambler fight you. Everything moves because you do.", },
+  { id: "shadow", name: "The Shadow", desc: "Your searches find a mark 15% sooner — but you avoid the open fight (−5% in duels and bouts). Larceny & Wet Work come easy; Fisticuffs & Commerce fight you. Nobody remembers your face.", },
+  { id: "ring", name: "The Ring", desc: "+5% in duels and bouts — but a brawler's medical bills (+15% at the Doc). Fisticuffs & The Gambler come easy; Seamanship & Big Scores fight you. The whole city is a square circle.", },
 ];
 const PATH_FIRST_COST = 10000;
 const PATH_SWITCH_OMR = 25;
