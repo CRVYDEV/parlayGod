@@ -2350,3 +2350,68 @@ transfers (`gang:tribute`, `convoy:toll`, `port:toll`) are ledgered ONCE — the
 `portTollIn`). The probe now splits by `character_id` the way the invariants themselves do, and says
 plainly that the gang figure is "gang-bound rows", not the treasury delta. Same lesson as always: a
 measurement that looks authoritative and is subtly wrong is worse than no measurement.
+
+---
+
+## THE BOND DIALS — sized (2026-07-29)
+
+`OmertaBond.dailyCapOMR`, `maxOmrPerEth`, `priceToleranceBps` and `OmrTwapOracle.PERIOD` were all unset
+and all block a real deploy; CHAIN-DEPLOY.md said "set them small", which is advice, not a number.
+Derived in **`tools/bond-dials.js`** (`npm run dials`) — pure arithmetic, reads the real constants, no
+server or chain. **Re-run it whenever POL materially deepens**: three of the four move with pool depth.
+
+### The threat model, stated once
+These walls exist for exactly one attacker: someone holding the quote-signer key. They can sign
+anything — but they must still **pay the ETH** (`bond()` requires `msg.value == principal`) and still
+**sell the OMR** to realise anything. So the question is never "how much can they steal", it is *how
+much better than market can they buy, how much can they buy, and what do they net on the way out*.
+
+### Recommended
+
+| dial | recommendation | why |
+|---|---|---|
+| **`dailyCapOMR`** | **≈5% of the pool's OMR reserve** — ~27,000/day at a 100-ETH pool | A RULE, not a number, because pool depth is the binding constraint. Sized so a full day at the cap, entirely dumped, moves the price ≤10%. |
+| **`maxOmrPerEth`** | **~15,000** (3× the launch price) | A circuit breaker, not a price. The honest max rate is ~6,563; 3× never binds in normal trade but does bind on a manipulated feed. |
+| **`priceToleranceBps`** | **500 (5%)** | A TWAP lags spot; zero rejects honest quotes exactly when the market moves. Second-order — see below. |
+| **`OmrTwapOracle.PERIOD`** | **30 min** (floor is 10) | Past 30 min the cost curve flattens for a thin pool while lag grows. |
+| **`maxOracleAge`** | **90 min** with a 30-min keeper | 3× the poke interval: tolerates two consecutive misses and no more. |
+
+### Four findings, two of which changed the recommendation
+
+**1. "% of supply" is the wrong anchor and would have been ~4× too loose.** My first pass sized the cap
+at 0.05% of supply (50,000/day). But a 50,000 dump into a 100-ETH pool makes OMR **19% cheaper in a
+day**, and 100,000 makes it **40% cheaper** — while both are a rounding error against supply (0.05%,
+0.1%). Price impact, not dilution, is the damage that matters, and it is a function of *pool depth*.
+The recommendation above is the inverted form of that.
+
+**2. Do NOT read the attack going loss-making as a defence.** At a 100-ETH pool a 500,000-OMR haul
+realises **−32 ETH** — the exit craters the price it is selling into and the 9% tax takes the rest. It
+is tempting to call the cap self-limiting. It is not: **a griefer does not need to profit**, and anyone
+short elsewhere profits from the crash rather than from the bond. Size on damage, never on attacker P&L.
+
+**3. `MAX_DISCOUNT_BPS` is first-order; the oracle tolerance is second.** At the 20% cap a leaked signer
+already buys OMR **25% under market** before touching any feed. Beating the TWAP by 5% adds a few points
+on top. So the tolerance is not the wall that matters — `maxOmrPerEth` and the daily cap are.
+
+**4. The 9% sell tax is also an anti-manipulation tax.** Moving the oracle *upward* requires *selling*
+OMR, which pays the DEX tax, and the round trip never recovers it. Most tokens' TWAP-manipulation cost
+is slippage alone; here it is slippage **plus a hard 9%**. That was not the tax's purpose and is worth
+knowing before anyone proposes lowering it.
+
+### Flagged — not dials, and not changed
+
+- **There is no MINIMUM vest.** `OmertaBond` checks only `vestSeconds == 0 || > MAX_VEST`, and the quote
+  (which the attacker signs) chooses it — so a leaked signer sets `vestSeconds = 1` and claims a second
+  later. `claim()` also has no `whenNotPaused`, so pausing does not stop a claim either. Neither is a
+  hole alone; together they mean **the daily cap is realised immediately**, which is the assumption the
+  cap is sized under above. For an honest bonder the server sets the full 120h, so vesting is a *product*
+  feature and not a security control — the point is not to count it as one. A `MIN_VEST` is a one-line
+  change and a founder/audit call.
+- **`quoteBond` clamps to the CEILING, not the oracle price.** When our feed reads above the chain's, it
+  signs at `oracle × (1+tolerance)` — the most generous quote the wall allows — so drift always resolves
+  toward *more* OMR per ETH. Clamping to the oracle price itself resolves it the other way. Defensible
+  either way; worth deciding deliberately.
+
+### The thing that is not a dial at all
+Every number here scales with **pool depth**. Thin liquidity is what makes an oracle cheap to move and a
+cap expensive to raise. The strongest available action for these walls is not a setting — it is **POL**.
