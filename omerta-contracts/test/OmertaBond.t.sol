@@ -31,7 +31,10 @@ contract OmertaBondTest is Test {
     address payable vig = payable(makeAddr("vig"));
     address bonder = makeAddr("bonder");
 
-    uint256 constant TRANCHE = 100_000e18;   // OMR the Safe pre-funds for bonding
+    uint256 constant TRANCHE = 100_000e18;   // OMR the Safe seeds for the sweep/surplus tests
+    /// WALL 3 — the mint-rate ceiling. Generous here so the OTHER walls are what bind in each test;
+    /// its own coverage is `test_rate_ceiling_*` below. Post-discount rate at PRICE/800bps is ~5435.
+    uint256 constant MAX_RATE = 10_000e18;
     uint256 constant POL_BPS = 5000;          // 50% of ETH → POL (matches backend BONDS.POL_BPS)
     uint256 constant DEV_BPS = 2000;          // 20% → the dev wallet (founder revenue; the rest is the Vig)
     uint256 constant PRICE = 5000e18;         // 5000 OMR per 1 ETH
@@ -39,9 +42,11 @@ contract OmertaBondTest is Test {
     function setUp() public {
         signer = vm.addr(signerPk);
         omr = new OMR(safe);
-        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 0); // 0 = uncapped (existing tests)
-        vm.prank(safe);
-        omr.transfer(address(bond), TRANCHE); // fund the tranche (the pre-funded discipline)
+        bond = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 0, MAX_RATE); // 0 = uncapped daily
+        vm.startPrank(safe);
+        omr.setMinter(address(bond));         // v2 §4: the bond IS the mint path now
+        omr.transfer(address(bond), TRANCHE); // a surplus balance, so `sweep` has something to pull
+        vm.stopPrank();
         vm.deal(bonder, 100 ether);
     }
 
@@ -66,6 +71,7 @@ contract OmertaBondTest is Test {
     function test_bond_pays_discounted_omr_and_splits_eth() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
         bytes memory sig = _sign(q, signerPk);
+        uint256 supply0 = omr.totalSupply();
         vm.prank(bonder);
         uint256 id = bond.bond{value: 1 ether}(q, sig);
 
@@ -79,19 +85,74 @@ contract OmertaBondTest is Test {
         assertEq(dev.balance, 0.2 ether, "20% to the dev wallet");
         assertEq(vig.balance, 0.3 ether, "30% to Vig");
         assertEq(address(bond).balance, 0, "contract holds no ETH");
-        // NOTHING MINTED — the OMR still all exists; the payout is committed against the pre-funded tranche
-        assertEq(omr.totalSupply(), 100_000_000e18);
-        assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "committed <= funded balance");
+        // THE MINT (tokenomics v2 §4). This assertion used to read `totalSupply() == 100_000_000e18`
+        // -- "nothing minted", the suite's oldest property. It is deliberately gone. What has to hold
+        // in its place is that supply moved by EXACTLY the payout and not one wei more: the bond is
+        // the only door, and it opens exactly as wide as the quote it was handed.
+        assertEq(omr.totalSupply(), supply0 + expect, "supply grew by exactly the payout");
+        assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "and the commitment is covered the instant it is booked");
     }
 
-    // ── the anti-Ponzi cap: never promise more OMR than the funded tranche ──
-    function test_bond_reverts_past_the_tranche() public {
-        // 25 ETH @5000 = 125,000 OMR market → ~135,870 discounted > the 100k tranche
-        OmertaBond.BondQuote memory q = _quote(bonder, 25 ether, 800, 5 days, 1);
+    // ── WALL 3: the mint-rate ceiling. The tranche cap used to make minting structurally
+    //    impossible; this is what stands in its place, so it gets the same scrutiny. ──
+    function test_rate_ceiling_binds_on_the_POST_discount_rate() public {
+        // 6000 OMR/ETH quoted is already under a 10,000 ceiling — but at the 20% max discount the
+        // rate ACTUALLY minted is 7,500/ETH. Set the ceiling between the two: a contract that checked
+        // the quoted rate would accept this, and it must not.
+        vm.prank(safe);
+        bond.setMaxRate(7_000e18);
+        OmertaBond.BondQuote memory q =
+            OmertaBond.BondQuote(bonder, 1 ether, 6_000e18, 2000, 5 days, 1, block.timestamp + 1 hours);
         bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
-        vm.expectRevert(OmertaBond.TrancheExhausted.selector);
-        bond.bond{value: 25 ether}(q, sig);
+        vm.expectRevert(OmertaBond.RateCeiling.selector);
+        bond.bond{value: 1 ether}(q, sig);
+        // the same quote at no discount mints at exactly 6,000/ETH and is accepted
+        OmertaBond.BondQuote memory ok =
+            OmertaBond.BondQuote(bonder, 1 ether, 6_000e18, 0, 5 days, 2, block.timestamp + 1 hours);
+        bytes memory sigOk = _sign(ok, signerPk);
+        vm.prank(bonder);
+        bond.bond{value: 1 ether}(ok, sigOk);
+    }
+
+    function test_rate_ceiling_FAILS_CLOSED_when_unset() public {
+        // An unset ceiling must stop every bond — so forgetting to configure wall 3 turns the
+        // product OFF rather than opening it (the GearVault gear-cap precedent).
+        OmertaBond fresh = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 0, 0);
+        vm.prank(safe);
+        omr.setMinter(address(fresh));
+        assertEq(fresh.maxOmrPerEth(), 0, "ships with the ceiling unset");
+        OmertaBond.BondQuote memory q =
+            OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 5 days, 1, block.timestamp + 1 hours);
+        bytes memory sig = _sign2(fresh, q);
+        vm.prank(bonder);
+        vm.expectRevert(OmertaBond.RateCeiling.selector);
+        fresh.bond{value: 1 ether}(q, sig);
+        // and it is a KILL SWITCH: arming, then zeroing, stops issuance with no pause needed
+        vm.prank(safe);
+        fresh.setMaxRate(MAX_RATE);
+        vm.prank(bonder);
+        fresh.bond{value: 1 ether}(q, sig);
+        vm.prank(safe);
+        fresh.setMaxRate(0);
+        OmertaBond.BondQuote memory q2 =
+            OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 5 days, 2, block.timestamp + 1 hours);
+        bytes memory sig2 = _sign2(fresh, q2);
+        vm.prank(bonder);
+        vm.expectRevert(OmertaBond.RateCeiling.selector);
+        fresh.bond{value: 1 ether}(q2, sig2);
+    }
+
+    /// The bond can ONLY mint through the token's single minter door — revoke it and bonding stops
+    /// dead, whatever this contract's own walls say. Two independent kill switches, on two contracts.
+    function test_bond_cannot_mint_without_the_minter_role() public {
+        vm.prank(safe);
+        omr.setMinter(address(0));
+        OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 5 days, 1);
+        bytes memory sig = _sign(q, signerPk);
+        vm.prank(bonder);
+        vm.expectRevert(OMR.NotMinter.selector);
+        bond.bond{value: 1 ether}(q, sig);
     }
 
     function test_bond_reverts_wrong_value() public {
@@ -181,6 +242,7 @@ contract OmertaBondTest is Test {
     function test_claim_vests_linearly() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 100, 1); // 100-second vest
         bytes memory sig = _sign(q, signerPk);
+        uint256 supply0 = omr.totalSupply();
         vm.prank(bonder);
         uint256 id = bond.bond{value: 1 ether}(q, sig);
         uint256 expect = _payout(1 ether, 800);
@@ -212,6 +274,7 @@ contract OmertaBondTest is Test {
     function test_claim_reverts_not_owner() public {
         OmertaBond.BondQuote memory q = _quote(bonder, 1 ether, 800, 100, 1);
         bytes memory sig = _sign(q, signerPk);
+        uint256 supply0 = omr.totalSupply();
         vm.prank(bonder);
         uint256 id = bond.bond{value: 1 ether}(q, sig);
         vm.warp(block.timestamp + 100);
@@ -296,7 +359,10 @@ contract OmertaBondTest is Test {
         assertFalse(bond.usedNonce(1), "nonce rolled back");
     }
 
-    // ── fuzz: committedOMR can NEVER exceed the funded balance (the no-mint anti-Ponzi invariant) ──
+    // ── fuzz: committedOMR is ALWAYS covered by the balance. This used to hold because the contract
+    //    never minted; it now holds because it mints the payout AT BOND TIME rather than at claim.
+    //    Same assertion, different reason — and it is what keeps `sweep` unable to touch OMR backing
+    //    a bond, and a bonder's claim unable to fail for want of balance. ──
     function testFuzz_committed_never_exceeds_balance(uint256 principal, uint256 disc) public {
         principal = bound(principal, 1, 15 ether);
         disc = bound(disc, 0, MAX_DISCOUNT_BPS_T);
@@ -305,10 +371,10 @@ contract OmertaBondTest is Test {
         bytes memory sig = _sign(q, signerPk);
         vm.prank(bonder);
         try bond.bond{value: principal}(q, sig) {
-            // a booked bond must be fully backed by the pre-funded balance
-            assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "committed <= funded balance");
+            // a booked bond is fully backed the instant it is booked
+            assertLe(bond.committedOMR(), omr.balanceOf(address(bond)), "committed <= held balance");
         } catch {
-            // over-tranche (or zero-value) rejected — nothing committed, the invariant trivially holds
+            // refused (rate ceiling / zero value) — nothing committed, nothing minted
             assertEq(bond.committedOMR(), 0);
         }
     }
@@ -329,14 +395,15 @@ contract OmertaBondTest is Test {
         assertEq(bond.signer(), signer);
         assertEq(bond.polBps(), POL_BPS);
         assertEq(bond.devBps(), DEV_BPS);
+        assertEq(bond.maxOmrPerEth(), MAX_RATE, "wall 3 is armed at deploy");
     }
 
     // ── the per-UTC-day cap (leaked-signer daily blast-radius backstop) ──
     function test_daily_cap_blocks_over_budget() public {
         // a fresh bond contract with a tight daily cap of 6,000 OMR
-        OmertaBond capped = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 6_000e18);
+        OmertaBond capped = new OmertaBond(safe, signer, IERC20(address(omr)), POL_BPS, DEV_BPS, pol, dev, vig, 6_000e18, MAX_RATE);
         vm.prank(safe);
-        omr.transfer(address(capped), TRANCHE); // fund the tranche generously — the CAP, not the tranche, must bind
+        omr.setMinter(address(capped)); // the DAILY CAP, not a balance, is what must bind here
         // 1 ETH @ 5000, 8% disc → payout ≈ 5,434 OMR — under the cap, accepted
         OmertaBond.BondQuote memory q1 = OmertaBond.BondQuote(bonder, 1 ether, PRICE, 800, 7 days, 1, block.timestamp + 1 hours);
         bytes memory sigC1 = _sign2(capped, q1);

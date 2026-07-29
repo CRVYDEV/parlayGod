@@ -376,3 +376,60 @@ It writes no `transactions` rows, adds no §10.4 reason, and moves no game-curre
 real ETH between out-of-band destinations. The suite asserts that directly by counting ledger rows
 across a full re-sourcing cycle. The chain half (the contract's three-way tax, a `SellTaxTaken`
 watcher, the real buy bot) is step 4 and stays mainnet/legal-gated.
+
+---
+
+## 7.4 Step 4 as built — the contracts, and where I did NOT follow §4
+
+Step 4 is `OMR.mint()` + the three walls + the three-way sell tax, on-chain. `forge test` 77/77
+(from 73/73), incl. both 512-run fuzzes.
+
+### What shipped as designed
+
+- **`OMR.mint()`** gated to a single `minter` address, owner-set, evented, shipping **unset**
+  (minting off). No owner mint — the Safe chooses who may mint and can revoke it in one transaction,
+  but cannot itself print, so "the Safe was compromised" and "supply was inflated" stay two separate
+  events. `setMinter(address(0))` is an emergency stop that needs no pause.
+- **Wall 1, `dailyCapOMR`** — as specified. Note for the deploy runbook: **`0` means UNLIMITED**, so
+  a deploy that forgets it has no wall at all, which is the opposite of the failure mode wall 3 has.
+- **Wall 2, `MAX_DISCOUNT_BPS`** 2000, compile-time, mirroring the backend.
+- **The sell tax** at 900 bps split dev 200 / rwa 400 / lp 300, with the **remainder rule on the LP
+  slice** so the three shares sum to the tax exactly (the same discipline the step-3 ingest uses —
+  two of three shares round down, and a "natural" third slice strands a wei belonging to nobody).
+- The payout is minted **at bond time, not at claim**, which keeps `committedOMR <=
+  omr.balanceOf(this)` true at every instant — so `sweep` still cannot reach OMR backing an
+  outstanding bond, and a claim can never fail for want of balance.
+
+### Wall 3: "accretive-only" as written is not implementable, and would forbid the product
+
+§4's wall 3 says a bond may mint only when the ETH received is worth **at least** the market value of
+the OMR issued. Taken literally that forbids **every discounted bond** — a discount is by definition
+issuing OMR worth more than the ETH paid — so the rule as phrased and the product it guards
+contradict each other. The discount path is what §4 itself says ships first.
+
+The intended (Olympus) meaning is treasury-BACKING accretion: reserves ÷ supply must not fall. That
+is a real and correct rule, and it is **not checkable in this contract**. `OmertaBond` custodies
+nothing — it forwards every wei of the split in the same transaction — so it cannot know treasury
+reserves without an oracle. And an oracle on the mint path becomes the thing standing between a
+leaked key and unbounded supply: it would be the softest wall of the three while looking like the
+strongest.
+
+**What shipped instead: `maxOmrPerEth`** — a hard, Safe-set ceiling on OMR minted per ETH, checked on
+the POST-discount rate (the rate actually issued, not the quoted market rate), and **fail-closed at
+zero** (the GearVault gear-cap precedent), so an unconfigured deploy cannot bond rather than bonding
+at any price. It is weaker as economics and stronger as a wall, and it is documented as exactly that
+in the contract header, in `CHAIN-DEPLOY.md` gate 2, and in `BALANCE.md`.
+
+**Where backing accretion belongs: the off-chain pricing policy that decides what to sign.** That is
+the layer that can read the whole treasury, and where getting it wrong costs one bad bond instead of
+the token. It is not built — flagged here as the real remaining piece of §4's intent.
+
+**FOUNDER CALL:** if wall 3 is meant literally as a market-value test, it needs an oracle on the mint
+path and that trade-off should be taken deliberately, not by me.
+
+### What step 4 does not do
+
+No in-game faucet moved; zero `transactions` rows; §10.4 untouched. Mainnet is unchanged and still
+gated on legal counsel and the third-party audit — **whose clock this drop resets**, since the
+property every prior contract review leaned on is the one it deletes. The step-5 **RE-SIM is still
+owed** and is now the largest open item in the pivot.

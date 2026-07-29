@@ -9,18 +9,47 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+/// @dev The single mint path on OMR. Held as a narrow interface on purpose: this contract needs
+///      exactly one privilege on the token and should be readable as having exactly one.
+interface IOMRMintable {
+    function mint(address to, uint256 amount) external;
+}
+
 /// @title OmertaBond — the disciplined treasury bond for Protocol-Owned Liquidity (design
 ///        omerta-reserve-bond-design.md; the OlympusDAO "Option C").
 /// @notice A bonder deposits ETH → receives DISCOUNTED OMR, vested linearly; the ETH is split
 ///         (POL share + Vig share) and forwarded in the SAME tx, so this contract custodies no ETH.
-///         Security invariant, mirrored from the game economy's §10.4 rule: NOTHING IS MINTED. The
-///         payout OMR is TRANSFERRED from a balance the treasury Safe pre-funded (the VoucherClaim
-///         tranche discipline) — `committedOMR + payout <= omr.balanceOf(this)` is enforced at bond
-///         time, so total OMR ever bonded out is HARD-CAPPED by the funded balance and can never be
-///         reflexive (the Olympus failure mode is structurally excluded). Prices/discounts come in a
-///         server-signed EIP-712 quote (the VoucherClaim signer discipline); a compromised signer is
-///         bounded by the tranche + MAX_DISCOUNT_BPS and revoked by the Safe. `sweep` can pull only
-///         the UNCOMMITTED tranche — never the OMR backing outstanding vested bonds.
+///         ⚠ THIS CONTRACT MINTS (tokenomics v2 §4, founder ruling: "supply becomes unbounded;
+///         bonds are the only mint"). Until step 4 it transferred from a Safe-funded tranche and
+///         "nothing mints" was the property every prior audit of this suite rested on. That property
+///         is GONE and three walls replace it. All three must survive review; none is optional:
+///
+///           1. `dailyCapOMR` — OMR issuable per UTC day. The tranche used to bound the TOTAL a
+///              leaked signer could extract; with no tranche, this bounds the DAY, and it is now the
+///              single most load-bearing number in the system. Zero means unlimited, so a deploy that
+///              forgets it is a deploy with no daily wall — set it.
+///           2. `MAX_DISCOUNT_BPS` (2000, compile-time) — a discount is a mint at a price, and an
+///              unbounded discount is a mint at any price.
+///           3. `maxOmrPerEth` — the mint-RATE ceiling, and FAIL-CLOSED AT ZERO (the GearVault gear-cap
+///              precedent): an unset rate ceiling means no bond can be struck at all, so the failure
+///              mode of forgetting it is "the product is off", not "the product prints".
+///
+///         ON WALL 3, HONESTLY. The design calls this "accretive-only": mint only when the ETH
+///         received is worth at least the OMR issued. Taken literally that forbids every DISCOUNTED
+///         bond, because a discount is by definition issuing OMR worth more than the ETH paid — so
+///         the literal reading and the product contradict each other. The real (Olympus) meaning is
+///         treasury-backing accretion: reserves-per-token must not fall. That is not checkable here.
+///         This contract custodies nothing — it forwards every wei in the same transaction — so it
+///         cannot know treasury reserves without an oracle, and putting a price feed on the mint path
+///         would make that feed the thing standing between a leaked key and unbounded supply. So
+///         wall 3 is a hard, Safe-set ceiling on OMR-per-ETH: weaker as economics, stronger as a
+///         wall, and honest about which it is. Backing accretion belongs in the off-chain policy that
+///         decides what price to sign, where it can read the whole treasury. FLAGGED for the founder
+///         and for the third-party audit — this is a deliberate deviation from the design's word.
+///
+///         Prices/discounts come in a server-signed EIP-712 quote (the VoucherClaim signer
+///         discipline); a compromised signer is bounded by all three walls and revoked by the Safe.
+///         `sweep` can pull only OMR that is not backing an outstanding vested bond.
 contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -59,6 +88,8 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     IERC20 public immutable omr;
+    /// @dev The same token, held as the narrow mint interface (see IOMRMintable).
+    IOMRMintable private immutable omrMint;
     /// @notice POL share of every bond's ETH, in basis points. IMMUTABLE — set once at deploy in
     ///         lockstep with the backend's BONDS.POL_BPS so on-chain and off-chain never drift.
     uint256 public immutable polBps;
@@ -75,6 +106,11 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     ///         twin (audit: OmertaBond otherwise gave weaker containment than its sibling for the same
     ///         leaked-key threat). Owner-settable; keep in step with the backend BONDS daily budget.
     uint256 public dailyCapOMR;
+    /// @notice WALL 3 — the maximum OMR this contract will ever mint per 1 ETH received, measured
+    ///         AFTER the discount (the rate actually issued, not the quoted market rate). FAIL-CLOSED
+    ///         AT ZERO: until the Safe sets it, every bond reverts. See the header for why this is a
+    ///         rate ceiling rather than a treasury-backing accretion test.
+    uint256 public maxOmrPerEth;
     mapping(uint256 => uint256) public bondedOnDay; // UTC day => OMR payout bonded that day
     mapping(uint256 => bool) public usedNonce; // quote replay protection
     mapping(uint256 => Bond) public bonds;     // bondId => Bond
@@ -85,6 +121,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     event SignerSet(address indexed signer);
     event RecipientsSet(address indexed pol, address indexed dev, address indexed vig);
     event DailyCapSet(uint256 cap);
+    event MaxRateSet(uint256 maxOmrPerEth);
     event Swept(address indexed to, uint256 amount);
 
     error ZeroAddress();
@@ -96,7 +133,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     error VestTooLong();
     error Replay();
     error BadSignature();
-    error TrancheExhausted();      // committed + payout would exceed the funded balance
+    error RateCeiling();           // the post-discount mint rate exceeds maxOmrPerEth (0 = unset, fails closed)
     error NotOwner();
     error NothingVested();
     error ForwardFailed();
@@ -111,7 +148,8 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         address payable polRecipient_,
         address payable devRecipient_,
         address payable vigRecipient_,
-        uint256 dailyCapOMR_
+        uint256 dailyCapOMR_,
+        uint256 maxOmrPerEth_
     ) EIP712("OmertaBond", "1") Ownable(owner_) {
         if (signer_ == address(0) || address(omr_) == address(0)) revert ZeroAddress();
         if (polBps_ + devBps_ > 10000) revert BadBps();
@@ -120,21 +158,32 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (polBps_ + devBps_ < 10000 && vigRecipient_ == address(0)) revert ZeroAddress();
         signer = signer_;
         omr = omr_;
+        omrMint = IOMRMintable(address(omr_));
         polBps = polBps_;
         devBps = devBps_;
         polRecipient = polRecipient_;
         devRecipient = devRecipient_;
         vigRecipient = vigRecipient_;
         dailyCapOMR = dailyCapOMR_;
+        maxOmrPerEth = maxOmrPerEth_;
         emit SignerSet(signer_);
         emit RecipientsSet(polRecipient_, devRecipient_, vigRecipient_);
         emit DailyCapSet(dailyCapOMR_);
+        emit MaxRateSet(maxOmrPerEth_);
     }
 
     /// @notice The Safe tunes the per-day OMR bond cap (0 = unlimited) — the leaked-signer backstop.
     function setDailyCap(uint256 cap) external onlyOwner {
         dailyCapOMR = cap;
         emit DailyCapSet(cap);
+    }
+
+    /// @notice The Safe sets WALL 3 — the ceiling on OMR minted per ETH, after the discount. Setting
+    ///         it to 0 stops all bonding (the fail-closed default), which doubles as a kill switch
+    ///         that needs no pause and no token-side change.
+    function setMaxRate(uint256 maxOmrPerEth_) external onlyOwner {
+        maxOmrPerEth = maxOmrPerEth_;
+        emit MaxRateSet(maxOmrPerEth_);
     }
 
     // ── the bond ──
@@ -145,7 +194,8 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     /// @notice Deposit ETH against a server-signed quote → book a vesting OMR bond. The ETH is split
-    ///         (POL + Vig) and forwarded in this tx; the contract custodies no ETH and mints no OMR.
+    ///         (POL + Dev + Vig) and forwarded in this tx, so the contract custodies no ETH. It DOES
+    ///         mint the OMR payout — see the header's three walls for what bounds that.
     function bond(BondQuote calldata q, bytes calldata sig) external payable nonReentrant whenNotPaused returns (uint256 bondId) {
         if (msg.sender != q.payer) revert NotPayer();
         if (msg.value != q.principal || msg.value == 0) revert WrongValue(msg.value, q.principal);
@@ -161,13 +211,17 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         uint256 marketOmr = (q.principal * q.priceOmrPerEth) / 1e18;
         uint256 payout = (marketOmr * 10000) / (10000 - q.discountBps);
 
-        // THE TRANCHE CAP (the anti-Ponzi discipline): the contract must already HOLD enough OMR to
-        // cover every outstanding payout PLUS this one. Never mints; bounded by the funded balance.
-        if (committedOMR + payout > omr.balanceOf(address(this))) revert TrancheExhausted();
+        // WALL 3 — THE MINT-RATE CEILING, checked on the POST-DISCOUNT rate, which is the rate
+        // actually issued. FAIL-CLOSED at zero: an unset ceiling stops every bond, so forgetting to
+        // configure this turns the product off rather than opening it up (the GearVault gear-cap
+        // precedent). This replaces the tranche cap that used to make minting structurally
+        // impossible; read the header for what it does and does not promise.
+        if (maxOmrPerEth == 0 || (payout * 1e18) / q.principal > maxOmrPerEth) revert RateCeiling();
         committedOMR += payout;
 
-        // per-UTC-day cap: bound a compromised signer's DAILY blast radius (the tranche bounds the
-        // total; this bounds one day) — the VoucherClaim.dailyCapOMR twin.
+        // WALL 1 — the per-UTC-day cap. It used to be the second line of defence behind the tranche;
+        // with no tranche it is the only thing bounding a compromised signer's TOTAL extraction over
+        // time, which is why the header calls it the most load-bearing number in the system.
         if (dailyCapOMR != 0) {
             uint256 day = block.timestamp / 1 days;
             uint256 dayTotal = bondedOnDay[day] + payout;
@@ -177,6 +231,12 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
 
         bondId = nextBondId++;
         bonds[bondId] = Bond({ owner: q.payer, payout: payout, claimed: 0, start: uint64(block.timestamp), vestSeconds: uint64(q.vestSeconds) });
+
+        // MINT the payout to this contract, which then releases it on the vesting schedule. Minting
+        // here rather than at claim keeps `committedOMR <= omr.balanceOf(this)` true at all times —
+        // so `sweep` still cannot touch OMR backing an outstanding bond, and a bonder's claim can
+        // never fail for want of balance no matter what else the Safe does.
+        omrMint.mint(address(this), payout);
 
         // split + forward the ETH in this tx (the OmertaFees custody-nothing pattern):
         // POL (liquidity) + DEV (founder revenue) + Vig (buybacks) — the remainder math means the
@@ -200,7 +260,7 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
         if (amount == 0) revert NothingVested();
         b.claimed = vested;
         committedOMR -= amount;         // the released OMR leaves the outstanding commitment
-        omr.safeTransfer(b.owner, amount); // transfers pre-funded balance; NEVER mints
+        omr.safeTransfer(b.owner, amount); // releases OMR minted at bond time; claim itself never mints
         emit BondClaimed(bondId, b.owner, amount);
     }
 
@@ -236,8 +296,9 @@ contract OmertaBond is EIP712, Ownable2Step, Pausable, ReentrancyGuard {
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
-    /// @notice Tranche management: the Safe can pull back only the UNCOMMITTED OMR — never the balance
-    ///         backing outstanding vested bonds (so a sweep can never strand a bonder's claim).
+    /// @notice The Safe can pull back only OMR that is NOT backing an outstanding vested bond. With
+    ///         the payout minted at bond time, `committedOMR` is always covered by the balance, so
+    ///         this is exactly the surplus — a sweep can never strand a bonder's claim.
     function sweep(address to, uint256 amount) external onlyOwner {
         if (amount > omr.balanceOf(address(this)) - committedOMR) revert OverSweep();
         omr.safeTransfer(to, amount);
