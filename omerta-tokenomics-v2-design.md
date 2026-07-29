@@ -233,7 +233,8 @@ Retained regardless of clearance, as cheap deploy-time config rather than a bloc
 4. **Contracts** — `OMR.mint()` + the 9% three-way tax; `OmertaBond` mints with the three walls. Both
    reset the audit clock: `forge test` green, then third-party re-audit before mainnet.
 5. **Re-sim.** The entire cash economy was balanced against an extraction threat model that no longer
-   exists. Every "sim + sign-off" faucet flag in BALANCE.md needs re-reading in that light.
+   exists. Every "sim + sign-off" faucet flag in BALANCE.md needs re-reading in that light. **DONE**
+   (§7.6; `tools/sim.js` P9.23, BALANCE.md "TOKENOMICS v2 STEP 5").
 
 ---
 
@@ -501,3 +502,38 @@ policy, which is where it belongs and where a mistake costs one bad bond instead
 `priceToleranceBps` (0 = literal accretion; hard-capped 20%), `maxOracleAge` (must exceed the keeper
 interval), and the oracle's `PERIOD` (longer = more manipulation-resistant, more lag). All three are
 deploy-time and all three are properly a function of the step-5 re-sim, **which remains owed**.
+
+
+---
+
+## 7.6 Step 5 as done — the re-sim
+
+Measured by a new `tools/sim.js` **P9.23**; the reclassification is in BALANCE.md. **No lever retuned.**
+
+**The finding is categorical, not numerical.** `invariants.js:omrMints` is the enumerated set of
+everything that can create $OMR — `mission:%`, `prize:omr`, `emission:%` — and none takes cash as an
+input. There is no direct path and no laundered path through a third asset. This is not a measurement
+that could come out differently later; it is a property of the code that a §10.4 check enforces.
+
+**What that does to the flags.** Every cash faucet carried two worries, and they now separate: *"this
+becomes sell pressure"* is **moot** (the path is gone), and *"this breaks pacing or concentrates
+wealth"* is **still live and now the only question**. The open flags — the passive stack, the apex
+purses, the port curve, the `npc:seed` recycle, co-op raid throughput — are therefore **reduced in
+stakes and narrowed in scope, not resolved**. Getting one wrong is now a game-design problem fixable by
+a retune rather than a token-holder problem.
+
+**The token model, now that it stands alone.** Supply is decided by three bounded things: the wage
+(fixed, halving, endowment-capped, minted-only), bonds (four walls + the oracle), and the sink catalog.
+P9.22's standing finding is unchanged and is the most important number left: **the Exchange window
+absorbs only a few percent of emission until the base is in the thousands**, so the real exit is the
+sink catalog and the reserve-backed chain withdrawal. `FUND_BPS` / `RATE` / `EPOCH_OMR`, in that order
+of directness. Founder call.
+
+**A trap worth recording.** P9.23's first cut split reasons into faucets and sinks by net sign and
+reported `gang:tribute` as a $120k "sink" for cash that had moved into a treasury and still existed —
+mirrored transfers are ledgered once and the treasury credit is derived. The probe now splits by
+`character_id` the way the invariants do. A measurement that looks authoritative and is subtly wrong is
+worse than none.
+
+**The pivot is complete.** Steps 1-5 are built; what remains is mainnet, which is gated on legal counsel
+and the third-party audit (whose clock step 4 reset).

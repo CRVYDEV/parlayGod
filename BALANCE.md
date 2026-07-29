@@ -2299,3 +2299,54 @@ buy-side policy expects to sign. Until then they are "set them small" rather tha
 
 **Mainnet is unchanged and still gated** on the third-party audit (whose clock this drop RESET — see
 `CHAIN-DEPLOY.md` §0.2) and legal counsel. Gate 1 (`forge test`) is green at 77/77.
+
+---
+
+## TOKENOMICS v2 STEP 5 — THE RE-SIM (2026-07-29)
+
+The design's step 5: *"the entire cash economy was balanced against an extraction threat model that no
+longer exists. Every 'sim + sign-off' faucet flag needs re-reading in that light."* Done — measured by
+a new `tools/sim.js` **P9.23**, and re-read below. **No lever was retuned.**
+
+### The finding, and it is categorical rather than numerical
+
+**Cash can no longer reach the token. At all.** `invariants.js:omrMints` is the enumerated set of
+everything that can create $OMR — `mission:%`, `prize:omr`, `emission:%` — and **not one of them takes
+cash as an input**. Step 2 deleted the swap and the laundering surface; there is no direct path and no
+laundered path through a third asset. So this is not a measurement that could come out differently
+next quarter; it is a property of the code that a §10.4 check enforces.
+
+### What that does to the flags
+
+Every cash faucet in this document carried, explicitly or not, two worries. They now separate cleanly:
+
+| the worry | status |
+|---|---|
+| **"this faucet becomes sell pressure"** — a big cash income is one swap from the token price | **MOOT.** The path is gone. A bigger cash faucet now costs game balance and nothing else. |
+| **"this faucet breaks pacing or concentrates wealth"** | **STILL LIVE, and now the only question.** Nothing about it got easier. |
+
+So the open faucet flags are not resolved — they are **reduced in stakes and narrowed in scope**. The
+passive stack (P9.20), the apex world/boxing/racing purses, the port sale curve, the `npc:seed` recycle
+(P9.21) and the co-op raid throughput all remain founder calls about **pacing and concentration**. What
+changed is that getting one wrong is now a game-design problem, recoverable by a retune, rather than a
+token-holder problem.
+
+### The $OMR side, now genuinely separable
+
+With cash out of the picture, token supply is decided by exactly three things and they are all bounded:
+the **wage** (fixed schedule, halving, lifetime endowment cap, minted-accounts-only), **bonds** (four
+walls, and after this session an oracle that tracks the market), and the **sink catalog**. P9.22's
+standing finding is unchanged and remains the most important number in the token model: **the Exchange
+window absorbs a few percent of emission until the base is in the thousands**, so the real exit is the
+sink catalog (which comfortably covers the wage) and, for real value, the reserve-backed chain
+withdrawal. `FUND_BPS` / `RATE` / `EPOCH_OMR` are the levers, in that order of directness. Founder call.
+
+### A measurement trap worth recording
+
+P9.23's first cut split cash reasons into faucets and sinks by net sign, and **reported `gang:tribute`
+as a $120,000 "sink" for cash that had simply moved into a treasury and still existed**. Mirrored
+transfers (`gang:tribute`, `convoy:toll`, `port:toll`) are ledgered ONCE — the character's negative row
+— and the treasury credit is *derived* by negating it (`invariants.js` `tributeIn`/`tollIn`/
+`portTollIn`). The probe now splits by `character_id` the way the invariants themselves do, and says
+plainly that the gang figure is "gang-bound rows", not the treasury delta. Same lesson as always: a
+measurement that looks authoritative and is subtly wrong is worse than no measurement.

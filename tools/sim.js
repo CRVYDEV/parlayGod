@@ -757,7 +757,7 @@ phase('P9.21 the population — the npc:seed faucet ceiling');
 // per-player-per-day rate (which that harness verified is population-INVARIANT: $34/player/day at
 // 12 players, $35 at 36 — so it is a real per-player rate, not an artifact of one size). It is a
 // FLOOR: scale.js players follow a fixed script, and a real player trades more than a scripted one.
-phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics v2, pre-build)');
+phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics v2, BUILT)');
 {
   const TAKE_PER_PLAYER_DAY = 35;   // MEASURED, tools/scale.js — see its census line
   const toWindow = TAKE_PER_PLAYER_DAY * EXCHANGE.FUND_BPS / 10000;
@@ -798,8 +798,71 @@ phase('P9.22 the severance — Exchange absorption vs $OMR emission (tokenomics 
   note('severance', 'sinks vs emission at the wage-sized base', `~${Math.round(sinkAtWageBase)} $OMR/day of sink vs ${emitPerDay} emitted`,
     `the wage caps at ${EMISSION.WAGE_CAP_OMR}/account, so its ${emitPerDay}/day budget is sized for ~${emitPerDay / EMISSION.WAGE_CAP_OMR} max-earning players; their recurring sinks alone ${sinkAtWageBase >= emitPerDay ? 'MORE than cover' : 'do not cover'} what they earn`);
 
-  note('severance', 'READ THIS BEFORE BUILDING STEP 2', 'the window is a relief valve, not the exit',
+  note('severance', 'THE STANDING FINDING (step 2 shipped; this still holds)', 'the window is a relief valve, not the exit',
     `$OMR's real exit is the SINK CATALOG (which comfortably absorbs the wage) and, for real value, the reserve-backed CHAIN withdrawal. The Exchange at RATE ${EXCHANGE.RATE} × FUND_BPS ${EXCHANGE.FUND_BPS / 100}% clears a few percent of emission until the base is in the thousands — so as sized it will read as permanently 'dry' to players. Levers, in order of directness: FUND_BPS (how much take reaches it), RATE (a LOWER rate serves more $OMR per pool dollar), EPOCH_OMR (emit less). This is a founder call — none of it is retuned here`);
+}
+
+// ════════ P9.23 THE RE-SIM — what the severance changed about every cash flag ════════
+// Design step 5. The whole cash economy was balanced against an extraction threat model that step 2
+// DELETED: cash could become $OMR (swap + laundering), so every cash faucet was secretly a
+// token-price decision and a $21.6M/day passive stack sat one swap from sell pressure. That link is
+// now cut in code -- `omrMints` is the enumerated set of everything that can create $OMR and none of
+// its members takes cash as an input.
+//
+// So the question every  cash faucet is judged by CHANGED, and the flags have to be re-read:
+//   * flagged because it fed EXTRACTION  -> MOOT. Cash is a closed loop; no cash faucet can move the
+//                                           token price, because no path exists.
+//   * flagged because of INTERNAL balance -> STILL LIVE, and now the ONLY question. Progression
+//                                           pacing, wealth concentration, whether a loop is worth
+//                                           playing. Nothing about that got easier.
+// This probe measures the second question from the ledger the sim just produced, and states plainly
+// what that does and does not prove.
+phase('P9.23 the re-sim — cash as a closed loop (tokenomics v2 step 5)');
+{
+  // WHY THIS IS SPLIT BY character_id AND NOT INTO "faucets vs sinks": a naive net-per-reason
+  // MISREADS the mirrored transfers. `gang:tribute`, `convoy:toll` and `port:toll` are ledgered ONCE
+  // (the character's negative row) and the treasury credit is DERIVED by negating it
+  // (`invariants.js` `tributeIn`/`tollIn`/`portTollIn`). So a first cut of this probe reported
+  // gang:tribute as a $120,000 "sink" for cash that had simply moved into a treasury and still
+  // existed. The split below is the one the invariants themselves use — check (a) is character cash,
+  // check (b) is gang treasuries. BE PRECISE ABOUT WHAT THE GANG FIGURE IS, because the obvious
+  // reading is also wrong: a mirrored transfer has NO gang row at all, so it appears as a character
+  // -side OUT and contributes NOTHING to the gang figure. That figure is therefore "gang-bound LEDGER
+  // ROWS", not "the treasury delta" -- the treasury really did receive the tribute, it just was not
+  // written twice. `runLedgerInvariants` check (b) is the thing that reconciles actual treasuries,
+  // and it is what P10 runs.
+  const rows = (await pool.query(
+    `SELECT reason, SUM(amount) AS net, COUNT(*)::int AS n,
+            SUM(CASE WHEN character_id IS NULL THEN amount ELSE 0 END) AS gang_net
+       FROM transactions WHERE currency='cash' GROUP BY reason`)).rows
+    .map((r) => ({ reason: r.reason, net: Number(r.net), gang: Number(r.gang_net), n: r.n }))
+    .map((r) => ({ ...r, chr: r.net - r.gang }));
+
+  if (process.env.SIM_REASON_DUMP) {
+    for (const r of rows.slice().sort((a, b) => b.net - a.net)) console.log(`  DUMP ${r.reason} net=${Math.round(r.net)} chr=${Math.round(r.chr)} gang=${Math.round(r.gang)} n=${r.n}`);
+  }
+  const top = (sel, sign) => rows.filter((r) => sign * sel(r) > 1).sort((a, b) => sign * (sel(b) - sel(a)))
+    .slice(0, 5).map((r) => `${r.reason} $${Math.round(Math.abs(sel(r))).toLocaleString()}`).join(' · ');
+  const chrNet = rows.reduce((a, r) => a + r.chr, 0);
+  const gangNet = rows.reduce((a, r) => a + r.gang, 0);
+
+  note('re-sim', 'the extraction link', 'SEVERED — cash cannot become $OMR',
+    `omrMints is {mission:%, prize:omr, emission:%} and NONE takes cash as an input. So every cash faucet flagged for EXTRACTION risk is MOOT on that axis; what survives is the INTERNAL question (pacing, concentration), which is now the only one`);
+  note('re-sim', 'character-side cash, net', `$${Math.round(chrNet).toLocaleString()} over the run`,
+    `into players: ${top((r) => r.chr, 1)} — out: ${top((r) => r.chr, -1)}`);
+  note('re-sim', 'gang-bound rows, net', `$${Math.round(gangNet).toLocaleString()} over the run`,
+    `character_id-NULL rows ONLY — in: ${top((r) => r.gang, 1) || 'none'} — out: ${top((r) => r.gang, -1) || 'none'}. NOT the treasury delta: a mirrored transfer (gang:tribute, convoy:toll, port:toll) writes only the character's negative row and the treasury credit is derived, so it is counted on the character side above and nowhere here`);
+  note('re-sim', 'what this measures', 'SHAPE, not steady state',
+    `a scripted run does what the script does, so this ranks which loops MOVE the most cash; it does NOT predict a real economy's inflation. The per-faucet $/day CEILINGS in P9.8-P9.22 are the numbers to tune against, and P10 below is what proves conservation`);
+
+  // The one thing the severance genuinely REMOVED from the risk register, stated so it is not
+  // re-litigated every time a faucet is touched.
+  note('re-sim', 'what a cash faucet can no longer do', 'move the token price',
+    `pre-v2 the honest worry about any big cash faucet was that it became sell pressure through the swap. It cannot: the sell side is retired and the only cash exit is the Exchange window, which runs the OTHER way ($OMR in, cash out) and is bounded by a till that cash sinks fill. A bigger cash faucet now costs game balance, never token holders`);
+  note('re-sim', 'what still needs founder sign-off', 'the internal-balance flags, unchanged',
+    `the passive stack (P9.20), the apex world/boxing/racing purses, the port sale curve and the npc:seed recycle (P9.21) are all still live questions about PACING and CONCENTRATION. The severance lowered their stakes; it did not answer them`);
+  note('re-sim', 'the $OMR side, now fully separable', `${EMISSION.EPOCH_OMR}/day emitted vs a sink catalog that covers it`,
+    `see the severance block above: with cash out of the picture, $OMR supply is decided ONLY by the wage schedule (fixed, halving, endowment-capped), bonds (four walls), and the sink catalog. That is the whole token model now, and it no longer has a cash-shaped back door`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
