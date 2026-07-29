@@ -6096,3 +6096,36 @@ changed: **the keeper is an operational dependency with no in-repo monitor** —
 indistinguishable from low demand, and the backup watchdog (`archiverHealth` → `alertDrift`) is the
 precedent for how it should eventually be watched. Mainnet still blocked on gate 2 (third-party audit,
 whose clock step 4 reset) and gate 3 (legal counsel); this report is part of that packet.
+
+**THE MIGRATION SWEEP — the levers nothing read, and the guard that now reads for them (2026-07-29).**
+Tokenomics v2 ran five steps with no completeness pass, so this traced every dangling end. The method
+became the deliverable: **`test/levers.js` check 4** — every one of the 379 pinned levers must be READ
+by something in src/, alias-resolved (`BLACK_MARKET as MARKET`, `const R = SPEAKEASY.RENOWN`,
+destructuring — without alias resolution a third of the register reads as dead), comments stripped (a
+lever "mentioned" in prose is not wired — that is exactly what let the headline finding hide), with 8
+deliberately-inert levers exempted each WITH a stated reason, and the exempt list itself asserted (a
+listed-dead lever something now reads fails the run). **The headline: `FAMILY_YIELD.FUND_BPS` had zero
+readers** — its documented source ("a share of each 12h buyback's bought $OMR") was deleted by step 2,
+so the family yield — shipped, tested, audited — paid out of the one-time legacy drain and then nothing,
+forever. Founder chose re-homing over retirement: **the family's cut of every Window redemption** (5%,
+`yield:window`, a TRANSFER replacing a slice of the `window:burn` — zero new reasons, §10.4-neutral by
+reclassification; the remainder rule sits on the burn so cut+burn == what the player spent exactly).
+The honest cost is less deflation, recorded in BALANCE.md. Two more real findings: **the console still
+SOLD laundering** (the Empire catalog's headline, per-tier wash figures, per-front "wash headroom", the
+coach card, and a "launderable" glossary entry — all false since step 2; a player was buying fronts for
+a capability that does not exist) and **an entire risk layer went dark as a side effect** — business
+scrutiny grew ONLY from laundering, so nothing writes it and no front can ever be Bureau-raided again
+(`business:raid` unreachable; fronts are now strictly safer than the L1a/L1b curve assumed — flagged for
+founder sign-off, not patched). Four decorative levers were wired to the code duplicating their values
+(the 3h search clock in combat.js, the capstone cost hardcoded per tree entry — hoisted so tree and
+lever are ONE const, ring poker's idle timeout as a SQL literal — now parameterised) and six step-2
+orphans marked DEAD in place. **Three lessons paid for:** (1) my own sweep produced two false positives
+before it produced the truth — excluding rules.tail.js wholesale hid `heistFenceMultOf`'s read of
+HEIST_FENCE_LO, and single-segment levers (every HEIST_*) were never checked at all because the dotted
+suffix loop cannot run on one segment — a guard's false positive is as corrosive as its false pass;
+(2) the full-balance redemption edge fires on only ~13% of 6dp values (the float remainder dips below
+the rounded burn), so my first fixture (12.345678) tested nothing and the mutation survived — the
+regression now uses a MEASURED-triggering value (10.011) with the survivorship written into the comment;
+(3) the guard's honest scope is REFERENCED, not GOVERNS — unwiring the lever from `redeem` alone left it
+green because the board still displayed it; only zero references fire it. Suite green + sim drift-0;
+mutation-verified ×4 (over-burn, cut-never-delivered, re-round dropped, lever unwired).

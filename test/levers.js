@@ -22,6 +22,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import * as R from '../src/rules.js';
+import { walkSrc } from './lib/srcfiles.js';
 
 // lever path -> the value it is signed at. LITERALS on purpose: reading these from src/rules.js at
 // runtime would assert that the code equals itself, which is exactly the vacuous check this suite
@@ -158,7 +159,9 @@ const SIGNED = [
   ['EXCHANGE.FUND_BPS', 10000], // the WHOLE street take — with the AMM retired it has nowhere else to go
   // the migration dial — 0 means the buyback splits exactly as before; raising it moves yield from
   // individuals to families and must happen as stake:reward/dividend:omr retire, or it pays twice
-  ['FAMILY_YIELD.FUND_BPS', 0],
+  ['FAMILY_YIELD.FUND_BPS', 500],   // re-homed 2026-07-29: 0 -> 500, and it now means a share of each
+                                    // WINDOW REDEMPTION. The old source (a share of the 12h buyback's
+                                    // bought $OMR) was deleted by v2 step 2 and nothing ever read it.
   ['FAMILY_YIELD.SEATS', 5],
   ['FAMILY_YIELD.WEIGHTS', [5, 4, 3, 2, 1]],
   ['EMISSION.DECAY_EVERY', 180],
@@ -476,3 +479,105 @@ console.log(`✅ THE SIGNED LEVERS test passed — ${SIGNED.length} founder-sign
   + 'values BALANCE.md and SIGN-OFF.md sign off on, so a retune can no longer happen silently: changing one '
   + 'now requires editing the pin in the same commit. The register is also asserted COMPLETE, so a newly '
   + 'signed lever cannot skip the pin and quietly reopen the gap, and no pin dangles at a renamed constant.');
+
+// ── (4) EVERY PINNED LEVER IS ACTUALLY READ BY SOMETHING ────────────────────────────────────────
+// Check (2) catches a pin dangling at a RENAMED constant. It cannot catch the opposite: a constant
+// that exists, is pinned, is documented as a live dial — and that nothing in src/ reads. That lever
+// is DECORATIVE. Retuning it changes nothing, and the pin gives false assurance that a signed number
+// is under control when it is inert.
+//
+// FOUND BY THIS, on its first run (2026-07-29): FAMILY_YIELD.FUND_BPS, whose funding source was
+// deleted by tokenomics v2 step 2 and which nothing had read since — the family yield shipped, was
+// tested and audited, and paid out of a one-time drain and then nothing, forever. Plus four levers
+// duplicated as magic numbers elsewhere (the 3h search timer hardcoded in combat.js, the tier-4
+// capstone cost hardcoded in the skill tree, ring poker's idle timeout hardcoded as a SQL literal,
+// and the weekly-favor count enforced structurally by a primary key).
+//
+// HOW IT READS SOURCE. Comments are stripped first — a lever "mentioned" only in prose is not wired,
+// and FAMILY_YIELD.FUND_BPS was named in exactly one worker.js comment, which is what let it look
+// alive. Then per file it resolves ALIASES, because the codebase routinely renames a block on import
+// (`BLACK_MARKET as MARKET`) or pulls a sub-block out (`const R = SPEAKEASY.RENOWN`); without that,
+// a third of the register reads as dead. A bare-identifier fallback covers destructuring, but it
+// excludes rules.tail.js (declarations live there, and its helpers use dotted access anyway) and
+// requires the name NOT be preceded by a dot — otherwise `EXCHANGE.FUND_BPS` answers a search for
+// FAMILY_YIELD's, which is the specific false pass that hid the headline finding.
+// HONEST SCOPE. This proves a lever is REFERENCED, not that it GOVERNS. A lever that is only
+// published — surfaced on a board, echoed in /v1/rules — counts as read here and would pass even if
+// no mechanic consulted it. Measured while mutation-testing this check: unwiring FAMILY_YIELD.FUND_BPS
+// from `redeem` alone left the guard GREEN, because the board still named it; only removing every
+// reference fired it. So this catches the lever nothing touches at all (which is what shipped), not
+// the lever that is merely decorative-but-displayed. Tightening that means distinguishing a
+// behavioural read from a display read, which needs more than a text scan.
+const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+const bodies = walkSrc('src').map((f) => [f, stripComments(fs.readFileSync(f, 'utf8'))]);
+
+const aliasesOf = (body) => {
+  const a = new Map();
+  for (const m of body.matchAll(/\b(\w+)\s+as\s+(\w+)/g)) a.set(m[2], m[1]);
+  for (let pass = 0; pass < 3; pass++) {           // transitive: `const T = M.TAKEOVER` after an aliased import
+    for (const m of body.matchAll(/\bconst\s+(\w+)\s*=\s*([A-Z][\w.]*)\s*[;,\n]/g)) {
+      const head = m[2].split('.')[0];
+      a.set(m[1], (a.get(head) ?? head) + m[2].slice(head.length));
+    }
+    for (const m of body.matchAll(/\bconst\s*\{([^}]+)\}\s*=\s*([A-Z][\w.]*)\s*[;,\n]/g)) {
+      const head = m[2].split('.')[0], full = (a.get(head) ?? head) + m[2].slice(head.length);
+      for (const raw of m[1].split(',')) {
+        const [k, v] = raw.split(':').map((x) => x.trim());
+        if (k) a.set(v || k, `${full}.${k}`);
+      }
+    }
+  }
+  return a;
+};
+const files = bodies.map(([f, b]) => [f, b, aliasesOf(b)]);
+
+const readsIn = (file, body, alias, path) => {
+  const seg = path.split('.');
+  // a TOP-LEVEL export is read as a bare identifier and never dotted, so the suffix loop below
+  // cannot run for it at all — which silently exempted every HEIST_* lever on the first cut.
+  // rules.tail.js is NOT excluded here, unlike the bare-leaf fallback below: a top-level export's
+  // DECLARATION is `export const X = v`, which the `[:=]` lookahead already rules out, and its
+  // helpers legitimately live beside it (`heistFenceMultOf` reads HEIST_FENCE_LO). Excluding the
+  // file wholesale made that read invisible and reported a live lever as dead — a false positive in
+  // the guard is as corrosive here as a false pass.
+  if (seg.length === 1) return new RegExp(`(^|[^.\\w])${path}\\b(?!\\s*[:=][^=])`, 'm').test(body);
+  for (let i = 0; i < seg.length - 1; i++) if (body.includes(seg.slice(i).join('.'))) return true;
+  for (const [local, target] of alias) {
+    if (path === target) { if (new RegExp(`(^|[^.\\w])${local}\\b`, 'm').test(body)) return true; continue; }
+    if (path.startsWith(target + '.') && body.includes(local + '.' + path.slice(target.length + 1))) return true;
+  }
+  return false;
+};
+
+// Levers that are deliberately inert. Each needs a REASON, not just an entry — an exempt list with
+// no justification is how a dead lever hides in plain sight, which is the whole failure being fixed.
+const DECORATIVE = new Map([
+  ['CONSTANTS.AMM_LP_BPS',              'DEAD: v2 step 2 retired the AMM — there is no pool to deepen.'],
+  ['CONSTANTS.STAKE_POOL_BPS',          'DEAD: v2 step 2 — the buyback buys no $OMR, and individual staking yield is retired.'],
+  ['CONSTANTS.LAUNDER_HEAT',            'DEAD: v2 step 2 retired laundering — nothing to wash.'],
+  ['CONSTANTS.BUSINESS_LAUNDER_HEAT',   'DEAD: v2 step 2 — private laundering went with the public wash house.'],
+  ['CONSTANTS.BUSINESS_SCRUTINY_PER_CAP', 'DEAD: scrutiny grew ONLY from laundering, so nothing writes it — no front can be raided.'],
+  ['CONSTANTS.PUBLIC_WASH_CAP_DAY',     'DEAD: v2 step 2 — it capped the AMM buy side; EXCHANGE.DAILY_CAP_OMR is the live cap.'],
+  ['SKILLS.CAPSTONE_COST',              'MIRROR: the field is shorthand for the hoisted `const CAPSTONE_COST`, which the TREE entries read — editing it does change every capstone cost.'],
+  ['UNDERWORLD.STEP4.FAVOR_WEEKLY',     'STRUCTURAL: one favor a week is enforced by the npc_favors week primary key, not by a read.'],
+]);
+
+const unread = [];
+for (const [path] of SIGNED) {
+  if (DECORATIVE.has(path)) continue;
+  if (!files.some(([f, b, a]) => readsIn(f, b, a, path))) unread.push(path);
+}
+assert.equal(unread.length, 0,
+  `${unread.length} signed lever(s) are pinned but READ BY NOTHING in src/, so retuning them changes `
+  + `nothing and the pin is false assurance: ${unread.join(', ')}\n`
+  + '  → wire it to the code that duplicates its value, or add it to DECORATIVE above WITH A REASON.');
+// and the exempt list cannot rot either: a lever listed as dead that someone later wires, or renames
+// away, is itself a lie about the state of the tree.
+for (const [path, why] of DECORATIVE) {
+  assert(SIGNED.some(([p]) => p === path), `DECORATIVE lists ${path}, which is not a pinned lever any more`);
+  assert(why.length > 20, `DECORATIVE needs a real reason for ${path}`);
+  assert(!files.some(([f, b, a]) => readsIn(f, b, a, path)),
+    `${path} is listed as DECORATIVE but something now READS it — delete the exemption, it is alive again`);
+}
+console.log(`✓ readers: all ${SIGNED.length - DECORATIVE.size} live levers are read by src/; `
+  + `${DECORATIVE.size} are inert with a stated reason`);

@@ -702,8 +702,10 @@ are shut, laundering at your own front is gone, and the swap says so plainly if 
   funded, never a promise. There is a daily limit per account. It is **open**, which it could not be
   while cash still bought $OMR: the two together would be a money pump, and the game refuses to run both.
 - **The Family Yield** (`GET /v1/yield`) — the top families by this season's standing split a pot of $OMR
-  into their reserve. It is what staking rewards and personal dividends become: standing stops being only
-  a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
+  into their reserve. The pot is fed by **the family's cut of every redemption at the Window** — a small
+  share of what a player burns goes to the families instead of leaving supply, so the yield scales with
+  real redemption volume. It is what staking rewards and personal dividends become: standing stops being
+  only a badge and starts paying, so tribute, wars and the Commission are worth real money to a family.
 - **What backs the stock float** (`GET /v1/vault`) — the float buys real tokenized shares with real ETH,
   and the board now names where that ETH came from: the DEX sell tax, treasury bonds, the store, game
   fees. Two of those matter at scale and they are deliberately different — the tax only earns when people

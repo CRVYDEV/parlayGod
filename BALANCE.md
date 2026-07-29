@@ -2428,3 +2428,21 @@ knowing before anyone proposes lowering it.
 ### The thing that is not a dial at all
 Every number here scales with **pool depth**. Thin liquidity is what makes an oracle cheap to move and a
 cap expensive to raise. The strongest available action for these walls is not a setting — it is **POL**.
+
+## THE MIGRATION SWEEP — dangling ends of tokenomics v2, closed (2026-07-29)
+
+A reader sweep over all 379 signed levers (alias-resolved, comments stripped — the method is now
+`test/levers.js` check 4) found the migration's leftovers. The moved lever and the flags:
+
+| lever / finding | was | now | why |
+|---|---|---|---|
+| `FAMILY_YIELD.FUND_BPS` | 0, **read by nothing** | **500** (5% of every Window redemption) | Its documented source — "a share of each 12h buyback's bought $OMR" — was deleted by step 2 (the buyback buys no $OMR), so the family yield shipped funded by a one-time legacy drain and then nothing, forever. Re-homed founder-directed: redemption is the only place $OMR now goes to die, so the families take their cut of the money changing hands. §10.4-neutral (a `yield:window` TRANSFER replacing a slice of the `window:burn` — no new reason, both already vocabularied). **The honest cost is less deflation** — at FUND_BPS 500, 5% of redeemed $OMR survives as family reserve instead of burning. Dial: 0 restores full burn. |
+| **The dark risk layer** (FLAG, founder sign-off) | fronts drew Bureau raids via laundering scrutiny | **no front can ever be raided** | Business scrutiny grew ONLY from laundering; step 2 retired laundering, so nothing writes scrutiny and the whole Business Empire step-two PvE risk layer is unreachable (`business:raid` can never fire). A front's remaining risk is PvP only (shakedown / hostile takeover / the Sacking). Passive fronts are now strictly SAFER than the curve was balanced against — the L1a/L1b flatten assumed the old risk surface. Options: (a) accept — PvP is the risk model now; (b) re-source scrutiny from INCOME (a front heats by earning); (c) trim the curve again. Not patched (ground rule #1). |
+| Decorative levers, wired | `CONSTANTS.SEARCH_MS`, `SKILLS.CAPSTONE_COST`, `CASINO.RING.IDLE_MS` duplicated as magic numbers | each now the single source of truth | Retuning them previously changed nothing — the 3h search clock was hardcoded in combat.js, the capstone cost hardcoded per tree entry, the ring idle timeout a SQL literal. |
+| Dead levers, marked | 6 step-2 orphans looked live | marked DEAD in place + exempted in the guard WITH reasons | `AMM_LP_BPS`, `STAKE_POOL_BPS`, `LAUNDER_HEAT`, `BUSINESS_LAUNDER_HEAT`, `BUSINESS_SCRUTINY_PER_CAP`, `PUBLIC_WASH_CAP_DAY` — kept for the record, read by nothing, each with a stated reason so the exemption itself cannot rot. |
+| Console false copy | the Empire tab sold "PRIVATE laundering" + per-tier wash figures + "launderable" $OMR | removed | A player was making the purchase decision for a front on a capability retired in step 2. |
+
+Levers: `FAMILY_YIELD.FUND_BPS` 500 is a founder sign-off lever (pinned; sized small because the cost
+is deflation). The full-balance redemption edge (float re-round) is regression-tested at a
+measured-triggering value — the hazard fires on ~13% of 6dp amounts, so a "realistic-looking" fixture
+proves nothing.

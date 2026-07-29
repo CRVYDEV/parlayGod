@@ -1001,7 +1001,7 @@
     <dt>Energy</dt><dd>What the <b>physical</b> work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns, races. If your energy bar sits full, that's not idle capacity — it's content you haven't touched yet.</dd>
     <dt>Health / Hospital</dt><dd>Lose a fight and you're under the Doc's care for a spell — that's <b>protection, not prison</b>: rivals can't jump or shoot you, but you can still run jobs and your businesses. Hit zero in the wrong fight and you're dead.</dd>
     <dt>Heat / The Law</dt><dd>Crime draws heat. Enough of it and the Bureau opens a RICO case — see The Law tab. Lay low or bribe to cool it.</dd>
-    <dt>Cash vs. the Bank vs. $OMR</dt><dd>Pocket cash can be looted when you're killed. Banked cash is safer (but takes time to clear). $OMR is the premium, launderable, extractable currency.</dd>
+    <dt>Cash vs. the Bank vs. $OMR</dt><dd>Pocket cash can be looted when you're killed. Banked cash is safer (but takes time to clear). $OMR is the premium, extractable currency — redeemed for cash at the Exchange window, one way.</dd>
     <dt>Omertà</dt><dd>The code of silence — your family won't hunt you, and you can't contract a made brother… unless they turn rat.</dd>
     <dt>The Kitchen / Deal</dt><dd>Cook product, hire a crew, and move weight — the deepest cash engine. Watch the heat and the nut (crew wages).</dd>
     <dt>Going Legit</dt><dd>Wash dirty cash into clean $OMR, then into a real blue-chip portfolio that survives your death. The endgame.</dd>
@@ -1015,7 +1015,7 @@
     <dt>The Family / Turf / Commission</dt><dd>Join a family for backup, <b>turf</b> income, and <b>wars</b>. <b>Tribute</b> is what you kick up; the <b>Commission</b> is the five biggest families setting the week's rules.</dd>
     <dt>Vendetta</dt><dd>Kill a man and his bloodline swears a blood feud against yours. Settle it with revenge inside the window for feared respect. Kill them again and it DEEPENS (Vendetta → Blood Feud → War of Extinction — a longer window). Or hold a <b>sit-down</b> and both lines bury it in peace.</dd>
     <dt>The Underworld</dt><dd>Named fixers — the Doc, Vinnie, Bella, Big Tuna, the Madame. Earn their <b>standing</b> by working their corner of the game for discounts and favors. Cross them and they hold a grudge.</dd>
-    <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> does the same to a laundering front. Watched heat — you can't just wait it out.</dd>
+    <dt>Renown · Notoriety · Scrutiny</dt><dd>Reputations that follow you: <b>renown</b> is your nightlife legend; <b>notoriety</b> heats a club toward a raid; <b>scrutiny</b> is the Bureau's file on you. Watched heat — you can't just wait it out.</dd>
     <dt>The Wire</dt><dd>Information you buy with $OMR: <b>tap</b> a rival to see what they're holding and whether they're hunting you; <b>sweep</b> your own lines clean; <b>subscribe</b> to the Street Wire for forecasts and threat chatter.</dd>
   </dl>
   <div style="margin-top:12px;text-align:right"><button class="act" id="glossary-close" style="padding:9px 18px">got it</button></div>
@@ -4184,7 +4184,7 @@
     const ownedKinds = new Set(owned.map((b) => b.kind));
     const emp = rules?.empire || {};
     t.innerHTML = `
-      ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own, plus doubles as private laundering. They cost upkeep (the pad) and can draw the Bureau, so tend them. A late-game engine — come back as you level.') : ''}
+      ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own while you are away. They cost upkeep (the pad), and a rival can shake one down or take it off you, so tend them. A late-game engine — come back as you level.') : ''}
       ${owned.length ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">⚠ YOUR EMPIRE IS RISK CAPITAL</span>
         <div class="d">If a rival <b>fire-kills your street</b>, the killer can <b>take over</b> your most valuable front — one they can hold. Your fronts aren't safe just because they're passive: defend yourself (a safehouse, a bodyguard), or expect to fight for them.</div></div>` : ''}
       ${me.tycoon ? `<div class="card" style="border-color:var(--gold)"><span class="t">THE TYCOON — ${me.tycoon.rank}</span>
@@ -4202,7 +4202,7 @@
         <div class="card"><span class="t">${b.name} · tier ${b.tier}</span>
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
           <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
-          <div class="d">scrutiny ${b.scrutiny} · wash headroom $${fmt(b.launderHeadroom)}/day${b.kind === 'casino' ? ' · den rakeback at collect' : ''}</div>
+          <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away'}</div>
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
 
@@ -4212,10 +4212,10 @@
         <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
         <input id="biz-takeover-id" placeholder="rival front id" size="24"> <button class="act" id="biz-takeover-go">muscle in</button></div>
 
-      <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(income + PRIVATE laundering — lower heat than the street wash)</span></h2>
+      <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — buy once, collect forever)</span></h2>
       <div class="grid">${cat.map((c) => `
         <div class="card"><span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
-          <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr, wash $${fmt(c.tiers[0].launderCapDay)}/day</div>
+          <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr</div>
           ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
 
       <h2 style="margin-top:14px">Rackets <span class="d" style="font-size:11px">— buy once, drip cash forever (banks to the treasury via the tithe on melt)</span></h2>

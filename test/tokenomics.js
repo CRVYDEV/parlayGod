@@ -40,6 +40,7 @@ const setCash = async (id, amt) => {
   await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [id, amt]);
   sqlCash += amt - 500;
 };
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
 const omrOf = async (a) => Number((await pool.query('SELECT omr FROM account_persistent WHERE account_id=$1', [a])).rows[0].omr);
 const cashOf = async (c) => Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [c])).rows[0].cash);
 const sumOmrBuckets = async () => Number((await pool.query(
@@ -143,8 +144,35 @@ assert.equal(Number((await pool.query('SELECT pool FROM street_tax WHERE id=1'))
     "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='window:burn'")).rows[0].s);
   const payout = Number((await pool.query(
     "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='window:payout'")).rows[0].s);
-  assert.equal(burn, -10, 'the burn is ledgered');
+  // THE FAMILY'S CUT: a share of every redemption is TRANSFERRED to the family pot instead of
+  // burning. The two must sum to exactly what the player spent — the remainder rule on the burn.
+  const cut = Number((await pool.query(
+    "SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='yield:window'")).rows[0].s);
+  const expectCut = 10 * FAMILY_YIELD.FUND_BPS / 10000;
+  assert.equal(cut, -expectCut, "the family's cut is ledgered as a TRANSFER, not a burn");
+  assert.equal(burn, -(10 - expectCut), 'and the burn is the remainder');
+  assert.equal(-(burn + cut), 10, 'burn + cut == what the player spent, exactly — no dust unowned');
   assert.equal(payout, paid, 'the faucet is ledgered');
+  assert.equal((await familyYieldPool(pool)).balance, expectCut, 'the cut reached the family pot');
+  assert.equal(r.body.familyCut, expectCut, 'and the response is honest about the split');
+}
+
+{ // THE FULL-BALANCE EDGE. The cut is taken as its own debit and the burn is the remainder, so
+  // redeeming EXACTLY what you hold does two debits that must sum to the balance with no float
+  // slack. Without re-rounding the in-memory balance between them, `balance - cut` can sit a few
+  // 1e-16 below `round6(omr - cut)` and the burn is refused on a perfectly funded account — the
+  // most ordinary action there is (cash out everything) failing on arithmetic.
+  //
+  // 10.011 is not arbitrary. The hazard fires for ~13% of 6dp values (260,331 of the first 2,000,000
+  // measured) and NOT for the rest, so a fixture picked for looking realistic tests nothing — the
+  // first value tried here, 12.345678, was one of the 87% and the mutation survived. This one is
+  // measured to trigger: `10.011 - 0.50055` lands a few 1e-16 below `round6(10.011 - 0.50055)`.
+  const e = await mk('emptier');
+  await pool.query('UPDATE account_persistent SET omr=$2 WHERE account_id=$1', [e.acct, 10.011]);
+  sqlOmr += 10.011;   // un-ledgered by construction — tracked, per this file's header discipline
+  const r = await call('POST', '/v1/window/redeem', e.token, { amount: 10.011 });
+  assert.equal(r.code, 200, `cashing out the whole balance must work: ${JSON.stringify(r.body)}`);
+  assert.equal(await omrOf(e.acct), 0, 'and it leaves exactly nothing behind');
 }
 
 { // the per-account rolling cap — a whale cannot drain the till in one sitting
@@ -177,12 +205,18 @@ await pool.query('UPDATE gangs SET season_tribute=5000000 WHERE id=$1', [gid]);
 
 { // funding the pot moves nothing between players — it is a bucket, and it is INSIDE the $OMR sum
   const bucketsBefore = await sumOmrBuckets();
+  const potBefore = (await familyYieldPool(pool)).balance;
   const client = await pool.connect();
   try { await client.query('BEGIN'); await fundFamilyYield(client, 100); await client.query('COMMIT'); }
   finally { client.release(); }
   sqlOmr += 100;
   assert.equal(await sumOmrBuckets(), bucketsBefore + 100, 'the pot is inside the bucket sum');
-  assert.equal((await familyYieldPool(pool)).balance, 100);
+  // a DELTA, not an absolute. The pot is no longer empty by the time this runs — window redemptions
+  // above now fund it (the family's cut), which is the point. Asserting `== 100` would have been an
+  // assertion about test ORDERING rather than about the funding, and it broke the moment the pot
+  // gained a real inflow.
+  assert.equal(round6((await familyYieldPool(pool)).balance - potBefore), 100,
+    'and funding it moved exactly what was funded');
 
   // (red-team F4) The check above uses this file's OWN bucket sum, which proves nothing about the
   // PRODUCTION one — and the §10.4 assertion at the bottom runs after distribution, when the $OMR
