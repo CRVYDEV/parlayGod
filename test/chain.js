@@ -479,5 +479,33 @@ const d0Toll = await driftOf('$OMR conservation');
   process.env.EARLY_SELL_TAX_BPS = '0';
 }
 
+// ── RED-TEAM F1: the accretion-oracle clamp must round DOWN, not to the ceiling ──
+// `quoteBond` clamps a too-high price to what the chain will accept. It used to clamp to the CEILING
+// (oracle x (1+tolerance)) and then `round6` it — and round6 ROUNDS, so it rounds UP about half the
+// time, putting the signed price a micro-unit ABOVE the contract's ceiling and reverting
+// `PriceAboveOracle` on-chain — measured at 50.0%, which is also what theory says, since a
+// uniformly-distributed residue rounds up exactly half the time. Every OTHER clamped quote would
+// have failed, on the exact
+// path that exists to PREVENT failures. The fix clamps to the ORACLE PRICE, which leaves the whole
+// tolerance band as headroom so rounding cannot breach it. The clamp itself only runs with a live
+// bond chain (dormant here), so this pins the ARITHMETIC that makes the fix correct.
+{
+  const round6 = (x) => Math.round(Number(x) * 1e6) / 1e6;
+  const TOL_BPS = 500;
+  let ceilingBreaches = 0;
+  let oracleBreaches = 0;
+  for (let i = 0; i < 20000; i++) {
+    const oraclePrice = 1000 + Math.random() * 9000;          // any plausible OMR/ETH
+    const ceiling = (oraclePrice * (10000 + TOL_BPS)) / 10000; // what the contract will accept
+    if (round6(ceiling) > ceiling) ceilingBreaches++;          // the OLD clamp target
+    if (round6(oraclePrice) > ceiling) oracleBreaches++;       // the NEW one
+  }
+  assert.ok(ceilingBreaches > 5000,
+    `clamping to the CEILING should breach it on a large fraction of prices (the bug) — saw ${ceilingBreaches}/20000`);
+  assert.equal(oracleBreaches, 0,
+    'clamping to the ORACLE PRICE must NEVER round above the ceiling: the tolerance band is the headroom that makes it safe');
+  console.log(`  ✓ F1 clamp: rounding the ceiling breaches it ${(ceilingBreaches / 200).toFixed(0)}% of the time; rounding the oracle price never does`);
+}
+
 console.log('✅ M6-B chain test passed — SIWE wallet link, EIP-712 voucher signing parity (recovers the signer), full-reserve withdrawal queue (debit→queue→fund→drain→sign), $OMR ledger conservation, gear-mint vouchers, Claimed reserve release, expired-voucher reclaim (OMR refund + reserve free + gear restore, §10.4 exact), §11 mint-gate + fee reconcile + concurrent-credit safety, bond-quote signing parity (recovers the signer) + watcher enrichment + wallet-submit calldata (server-encoded bond() for MetaMask/Robinhood Wallet), and THE EXIT TOLL (gross debit → net voucher, tax:dev/tax:buyback transfers, dev-fund claim, conservation exact)');
 await app.close();

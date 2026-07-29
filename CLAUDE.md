@@ -6026,3 +6026,73 @@ control, and the point is not to count it as one. Also `quoteBond` clamps to the
 oracle price, so drift always resolves toward more OMR per ETH — defensible, worth deciding deliberately.
 **The thing that is not a dial:** every number scales with pool depth, so the strongest action available
 for these walls is POL, not a setting.
+
+**RED-TEAMING THE ORACLE — and both findings were about a number being published, not stolen
+(2026-07-29).** Tokenomics v2 step 4 deleted the property every prior contract audit of this suite
+rested on ("nothing mints") and replaced it with four walls. Wall 4 — the accretion oracle — is the
+newest, the only one that reads state it does not own, and the only one with a moving part off-chain,
+and it had shipped without an adversarial pass. Report: `AUDIT-oracle.md`. **No CRITICAL. Two real
+findings, one per layer, both fixed and mutation-verified. forge 107/107.**
+
+**F1 (MED, backend) — the clamp rounded ITSELF over the ceiling.** `quoteBond` clamps a too-high price
+down to something the contract will accept, specifically so a player never receives a quote whose
+`bond()` reverts. It clamped to the **ceiling** and then `round6`'d it — and `round6` ROUNDS, so it
+rounds *up* whenever the seventh decimal is ≥ 5. **Measured at 50.0% over 200,000 samples**, which is
+also what theory says (a uniformly-distributed residue rounds up exactly half the time). So roughly
+every OTHER clamped quote would have reverted `PriceAboveOracle` on-chain — on the exact code path
+whose only job is to prevent exactly that, and it would have surfaced on mainnet as intermittent,
+price-dependent, apparently random bond failures. Fixed by clamping to the oracle **price**, which
+leaves the whole tolerance band as headroom so rounding cannot breach it — and which also resolves the
+dials pass's open question about clamp direction in the conservative one: the ceiling is the most
+GENEROUS price the wall permits, so clamping there resolved every disagreement between our feed and the
+chain's toward MORE OMR per ETH. The clamp only runs against a live bond chain (dormant in the suite),
+so the regression pins the ARITHMETIC that makes the fix correct rather than faking a chain.
+
+**F2 (MED, contract) — an unbounded window let a dead price be published as fresh.** `PERIOD` was a
+MINIMUM with no maximum, so `update()` closed whatever interval had elapsed and stamped
+`lastUpdate = now`. The consumer's defence is `maxOracleAge` — but **that measures when the average was
+COMPUTED, not what period it COVERS**, so a multi-day interval closed one second ago is one second old
+by that measure. Measured on the real contract: after a nine-day keeper outage spanning a run to 20,000
+that then crashed back to 5,000, it reported **19,998.84** — four times spot, stamped fresh, invisible
+to the staleness check. Three things made it exploitable rather than merely wrong: `update()` is
+permissionless (deliberately — a keeper-gated poke means a lost key freezes the product), so whoever
+pokes **chooses when the window closes**; the high price **costs the attacker nothing to create**,
+since ordinary volatility during an outage does the work; and a keeper outage is exactly when nobody is
+watching. Wall 3 (`maxOmrPerEth`) still bound absolutely — that is the composition argument, and why
+this is MED — but wall 4 would have stopped contributing at the moment it was most needed. Fixed by
+bounding the window on BOTH sides: an interval longer than `PERIOD × MAX_WINDOW_MULT` (4) is
+**DISCARDED, not averaged** — re-baseline, `priceAverage = 0` so `consult()` reports "no usable
+reading" and the bond reverts, and emit `Rebaselined` so the outage is visible rather than silent.
+Fail-closed; recovery is one honest period.
+
+**The process lesson, in a new costume.** The F2 mutation appeared to SURVIVE. It had not: the
+regressions had never been written, because I ran `cd omerta-contracts && python3 - <<'PY'` from
+*inside* `omerta-contracts` — the `cd` failed and `&&` short-circuited the edit away. `grep -c` showed
+zero. The three tests that did run were exploratory probes that only `emit`, so they survive any
+mutation. **A check that cannot fail reads exactly like a clean bill of health**, and this is now the
+fourth distinct way that has happened (mobile.js's dead `MIN_TAP`, scale.js's vacuous liquidity assert,
+the client wiring test's unreadable ternaries, this). Every edit-by-heredoc now asserts its own marker
+landed. Separately, my first F2 probe scenario was simply WRONG — a ten-day window at a *sustained*
+price reports correctly, because the average of a constant is that constant; the finding needs an
+outage that SPANS a move and then reverts, and constructing that was most of the work.
+
+**The MIN_VEST question, decided: do NOT add one** (it had been left hanging by the dials pass). The
+tempting reasoning is that a minimum vest slows an attacker and buys response time. It does not, for
+two reasons found by reading the contract rather than reasoning about it: **`claim()` is deliberately
+not `whenNotPaused`**, so pausing stops new bonds but never stops already-vested OMR being claimed — a
+vest is not a window in which the Safe can intervene, only one in which the attacker waits; and **the
+blast radius is `dailyCapOMR` whatever the vest is** — a vest changes WHEN the capped amount lands, not
+HOW MUCH, and the sizing already assumes immediate realisation, which is the conservative reading.
+Adding one would buy a false sense of a security control while making honest bonds worse. **Vesting is
+a product feature here, not a security control, and the value of writing that down is that nobody later
+counts it as one** (recorded in CHAIN-DEPLOY.md next to the dials).
+
+Verified clean: the composition (`maxOmrPerEth` and `priceCeiling()` are checked independently in
+`bond()`, so a manipulated oracle can only ever TIGHTEN the bound), fail-closed at all four oracle
+failure modes (unset / zero / stale / reverting), the `mulDiv` decode (fuzzed to `type(uint112).max/2`,
+not a point test), the wrapping cumulative arithmetic, V2 counterfactual accrual on an idle pool,
+derived-not-trusted pair-side selection, and no §10.4 surface anywhere in the oracle path. Flagged, not
+changed: **the keeper is an operational dependency with no in-repo monitor** — a silent halt is
+indistinguishable from low demand, and the backup watchdog (`archiverHealth` → `alertDrift`) is the
+precedent for how it should eventually be watched. Mainnet still blocked on gate 2 (third-party audit,
+whose clock step 4 reset) and gate 3 (legal counsel); this report is part of that packet.

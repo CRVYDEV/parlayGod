@@ -543,8 +543,8 @@ export async function quoteBond(pool, accountId, principalEth) {
       throw new GameError('price', 'No live OMR-ETH price yet — bonding opens once the buyback prints one.');
     // WALL 4 PARITY. The contract judges this quote against its own TWAP; sign above that and the
     // bond reverts on-chain no matter how healthy this server looks. So when the bond chain is live,
-    // CLAMP to the ceiling the contract will actually apply. Clamping DOWN only ever issues LESS OMR
-    // per ETH than our own feed thought was fair, so the safe direction is the automatic one — and a
+    // CLAMP to what the contract will actually accept. Clamping DOWN only ever issues LESS OMR per
+    // ETH than our own feed thought was fair, so the safe direction is the automatic one — and a
     // chain that is currently refusing every bond (unset/stale/broken oracle) is reported plainly
     // rather than papered over with a quote that cannot land.
     const priceReader = await makeBondPriceReader();
@@ -553,9 +553,20 @@ export async function quoteBond(pool, accountId, principalEth) {
       try { onchain = await priceReader.ceiling(); } catch {
         throw new GameError('oracle', 'The on-chain price oracle is not reporting — bonding is paused until it recovers.');
       }
-      if (!(onchain?.ceiling > 0)) throw new GameError('oracle', 'The on-chain price oracle has no usable reading — bonding is paused.');
-      if (price > onchain.ceiling) price = round6(onchain.ceiling);
-      if (!(price > 0)) throw new GameError('oracle', 'The on-chain price ceiling is below the minimum quotable price.');
+      if (!(onchain?.oraclePrice > 0)) throw new GameError('oracle', 'The on-chain price oracle has no usable reading — bonding is paused.');
+      // CLAMP TO THE ORACLE PRICE, NOT THE CEILING (red-team F1). Two reasons, both decisive:
+      //
+      // 1. CORRECTNESS. `round6` ROUNDS, and it rounds UP half the time — measured at 50.0% over
+      //    200k random ceilings, which is also the answer theory gives, since a uniformly-distributed
+      //    residue rounds up exactly half the time. A price one micro-unit above the ceiling reverts
+      //    `PriceAboveOracle` on-chain. Clamping to the CEILING therefore meant roughly every OTHER
+      //    clamped quote failed, on the exact code path that exists to PREVENT failures. Clamping to
+      //    the oracle price leaves the whole tolerance band as headroom, so rounding cannot breach it.
+      // 2. DIRECTION. The ceiling is the most GENEROUS quote the wall permits, so clamping there made
+      //    every disagreement between our feed and the chain's resolve toward MORE OMR per ETH. The
+      //    conservative direction is the right default for a mint path.
+      if (price > onchain.oraclePrice) price = round6(onchain.oraclePrice);
+      if (!(price > 0)) throw new GameError('oracle', 'The on-chain oracle price is below the minimum quotable price.');
     }
     const disc = BONDS.DISCOUNT_BPS;
     const vestSeconds = Math.floor(BONDS.VEST_HOURS * 3600);

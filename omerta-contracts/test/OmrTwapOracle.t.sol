@@ -118,8 +118,9 @@ contract OmrTwapOracleTest is Test {
         vm.warp(block.timestamp + PERIOD + 1);
         oracle.update();
         pair.setReserves(1_000e18, 10_000_000e18); // the market really moved to 10,000 OMR/ETH
-        vm.warp(block.timestamp + PERIOD * 10);    // and stayed there
-        oracle.update();
+        // ...and a LIVE keeper pokes through it. Windows must stay inside MAX_WINDOW_MULT (F2), which
+        // is what a working keeper produces anyway — this is the honest shape, not a workaround.
+        for (uint256 i = 0; i < 3; i++) { vm.warp(block.timestamp + PERIOD + 1); oracle.update(); }
         (uint256 price, ) = oracle.consult();
         assertApproxEqRel(price, 10_000e18, 1e16, "a sustained move is tracked");
     }
@@ -127,8 +128,8 @@ contract OmrTwapOracleTest is Test {
     function test_counterfactual_accrual_covers_an_idle_pool() public {
         // A pair only writes its cumulative when touched. On a quiet pool the stored value lags, and
         // an oracle that ignored that would shorten every window by however long nobody traded.
-        vm.warp(block.timestamp + PERIOD * 5); // nobody touches the pair at all
-        oracle.update();                       // must still close a valid 5-period window
+        vm.warp(block.timestamp + PERIOD * 2); // nobody TOUCHES THE PAIR (the point) for two windows
+        oracle.update();                       // must still close a valid window off the counterfactual
         (uint256 price, ) = oracle.consult();
         assertApproxEqRel(price, 5000e18, 1e15, "an untouched pool still prices correctly");
     }
@@ -174,5 +175,63 @@ contract OmrTwapOracleTest is Test {
         // the expected OMR-per-ETH, computed independently of the contract's fixed-point path
         uint256 expected = (uint256(reserveOmr) * 1e18) / 1_000e18;
         assertApproxEqRel(price, expected, 1e15, "decoded price tracks the reserve ratio at any scale");
+    }
+
+    // ── RED-TEAM REGRESSIONS (F2: the window is bounded on BOTH sides) ──
+
+    function test_F2_a_past_spike_can_no_longer_contaminate_a_long_window() public {
+        // THE FINDING, pinned. Before the fix this reported 19,998 while spot was 5,000 -- four times
+        // over, stamped fresh, and invisible to the consumer's staleness check because that check
+        // measures when the average was COMPUTED, not what it covers. `update()` is permissionless,
+        // so whoever pokes chooses when the window closes, and after a keeper outage the interval can
+        // hold a high price nobody had to pay to create.
+        vm.warp(block.timestamp + PERIOD + 1);
+        oracle.update();
+
+        pair.setReserves(1_000e18, 20_000_000e18);  // a real bull run to 20,000...
+        vm.warp(block.timestamp + 9 days);          // ...nine days of it, keeper DOWN
+        pair.setReserves(1_000e18, 5_000_000e18);   // then back to 5,000
+        vm.warp(block.timestamp + 1 minutes);
+        oracle.update();                            // someone pokes right after the crash
+
+        (uint256 price, uint256 updatedAt) = oracle.consult();
+        assertEq(price, 0, "an over-long window must be DISCARDED, not published as an average");
+        assertEq(updatedAt, 0, "and it must not be stamped fresh");
+    }
+
+    function test_F2_recovery_is_one_honest_window() public {
+        // Fail-closed is only acceptable if it recovers. After the re-baseline, one more PERIOD of
+        // honest observation must restore a correct reading -- otherwise a keeper blip bricks bonding.
+        vm.warp(block.timestamp + PERIOD * 10);
+        oracle.update();                            // discards, re-baselines
+        (uint256 dead, ) = oracle.consult();
+        assertEq(dead, 0, "unavailable immediately after the re-baseline");
+
+        vm.warp(block.timestamp + PERIOD + 1);
+        oracle.update();                            // one honest window
+        (uint256 price, uint256 updatedAt) = oracle.consult();
+        assertApproxEqRel(price, 5000e18, 1e15, "and the feed is live again at the true price");
+        assertEq(updatedAt, block.timestamp);
+    }
+
+    function test_F2_the_boundary_is_inclusive_so_a_normal_late_poke_still_works() public {
+        // A keeper that pokes late must NOT trip the discard -- only one that is very late. Asserting
+        // the exact boundary stops a later "tighten it a bit" from silently making late pokes useless.
+        vm.warp(block.timestamp + PERIOD + 1);
+        oracle.update();
+        vm.warp(block.timestamp + PERIOD * oracle.MAX_WINDOW_MULT()); // exactly at the limit
+        oracle.update();
+        (uint256 price, ) = oracle.consult();
+        assertGt(price, 0, "a window exactly at MAX_WINDOW_MULT is still averaged, not discarded");
+    }
+
+    function test_F2_the_very_first_poke_is_bounded_too() public {
+        // The constructor seeds a snapshot, so the FIRST window is unbounded without this -- deploy,
+        // wait a month, poke once, and the oracle would publish a month-long average as current.
+        pair.setReserves(1_000e18, 20_000_000e18);
+        vm.warp(block.timestamp + 30 days);
+        oracle.update();
+        (uint256 price, ) = oracle.consult();
+        assertEq(price, 0, "a month-long first window is discarded like any other");
     }
 }
