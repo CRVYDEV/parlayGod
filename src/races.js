@@ -8,7 +8,7 @@
 //   • TUNING (tuneCar) — a cash sink that adds race power (the car-progression the catalog lacked).
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog, bumpMastery } from './game.js';
+import { GameError, bus, ledger, notify, rngLog, bumpMastery, masteryFx } from './game.js';
 import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf } from './rules.js';
 import { logCarCollect } from './collection.js';
 
@@ -95,14 +95,16 @@ export async function tuneCar(ch, carId, client, h) {
   if (jailed(ch)) throw new GameError('jailed', 'No shop time from lockup.');
   const car = raceable(h, carId);
   if (Number(car.tune) >= RACES.TUNE_MAX) throw new GameError('maxed', `That engine is already maxed (${RACES.TUNE_MAX}).`);
-  if (Number(ch.cash) < RACES.TUNE_COST) throw new GameError('cash', `A tune costs $${RACES.TUNE_COST}.`);
-  ch.cash = Number(ch.cash) - RACES.TUNE_COST;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -RACES.TUNE_COST, reason: 'race:tune' });
+  // TRADES perk (wheels): the shop knows a wheelman — the DISCOUNTED number is what's ledgered
+  const tuneCost = Math.floor(RACES.TUNE_COST * masteryFx(h, 'wheels'));
+  if (Number(ch.cash) < tuneCost) throw new GameError('cash', `A tune costs $${tuneCost}.`);
+  ch.cash = Number(ch.cash) - tuneCost;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -tuneCost, reason: 'race:tune' });
   const nt = Number(car.tune) + 1;
   await client.query('UPDATE cars SET tune=$2 WHERE id=$1', [car.id, nt]);
   car.tune = nt;
   await h.track(client, ch.account_id, 'race', { mode: 'tune', tune: nt });
-  return { ok: true, tune: nt, spent: RACES.TUNE_COST, power: carPower(car.model_id, car.trim_id, nt, ch.speed, car.dmg) };
+  return { ok: true, tune: nt, spent: tuneCost, power: carPower(car.model_id, car.trim_id, nt, ch.speed, car.dmg) };
 }
 
 // POST /v1/races/list/:carId {limit} — put a car on the strip to race for a wager up to `limit`

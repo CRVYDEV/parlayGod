@@ -161,6 +161,7 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'npc', npc_id, NULL::text, standing::numeric, NULL::numeric, touched_at FROM npc_standing WHERE character_id=$1
     UNION ALL SELECT 'grudge', npc_id, NULL::text, count::numeric, NULL::numeric, since FROM npc_grudges WHERE character_id=$1 AND count > 0
     UNION ALL SELECT 'my', track_id, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM masteries WHERE character_id=$1
+    UNION ALL SELECT 'trait', track_id, trait_id, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_traits WHERE character_id=$1
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2`,
   [ch.id, ch.account_id]);
@@ -184,6 +185,7 @@ export async function loadOwned(client, ch) {
   const grudge = of('grudge', (r) => ({ npc_id: r.k, count: n(r.n), since: r.ts }));
   // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
   const my = of('my', (r) => ({ track_id: r.k, xp: n(r.n) }));
+  const trait = of('trait', (r) => ({ track_id: r.k, trait_id: r.k2 }));
   const pf = of('pf', (r) => ({ ticker: r.k, shares: n(r.n), cost_omr: n(r.n2) }));
   // THE ESTATE — account-level too (survives death; the heir inherits the compound)
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
@@ -221,6 +223,7 @@ export async function loadOwned(client, ch) {
     // THE TRADES — use-XP per track (omerta-mastery-design.md). Dies with the street (a
     // HEIR_KEEP_BPS echo carries); XP is not a currency, so nothing here touches §10.4.
     mastery: Object.fromEntries(my.rows.map((r) => [r.track_id, Number(r.xp)])),
+    traits: Object.fromEntries(trait.rows.map((r) => [r.track_id, r.trait_id])), // the level-50 choices (step two)
     // who you know — dies with the street. Idle friendships COOL (Underworld step two): the
     // EFFECTIVE standing is what everyone reads; the stored row catches up on the next bump.
     npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, decayedStanding(Number(r.standing), r.touched_at)])),
@@ -373,6 +376,20 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
 // caller's char lock, UPDATE-then-INSERT upsert, in-memory mirror so same-txn reads stay honest.
 // `h` may be null for HEADLESS callers (crew members paid by direct row updates under lock — the
 // heist-crew pattern): then `cur` is read by SQL and no mirror is written.
+// THE TRADES step two — the milestone-perk reader (the skillMult twin). Returns the perk axis
+// value for the highest milestone this street's TRACK LEVEL has reached (1 = no perk yet); the
+// VIRTUOSO trait at level 50 deepens to fx[3]. Reads the loadOwned cache only — a caller without
+// h (headless) gets the neutral 1, which is always safe (perks are strictly optional modifiers).
+export function masteryFx(h, trackId) {
+  const p = MASTERY.PERKS[trackId];
+  if (!p || !h?.owned?.mastery) return 1;
+  const lvl = masteryLvlOf(Number(h.owned.mastery[trackId] || 0));
+  if (lvl >= MASTERY.MAX_LVL && h.owned.traits?.[trackId] === 'virtuoso') return p.fx[3];
+  let i = -1;
+  for (const m of MASTERY.MILESTONES) if (lvl >= m) i++;
+  return i < 0 ? 1 : p.fx[i];
+}
+
 export async function bumpMastery(client, h, ch, trackId, action) {
   const track = MASTERY.TRACKS.find((t) => t.id === trackId);
   const xp = Number(MASTERY.XP[action] || 0);
@@ -1113,6 +1130,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
     // THE APPROACH: a loud bust does harder time (jailMult 1.4), a cased job softer (0.8).
     const jailS = Math.round(c.jail * (ev.jailMult || 1) * (rIdx >= 5 ? 0.8 : 1) * ap.jailMult
       * skillMult(h, 'getaway', SKILLS.FX.JAIL_MULT)
+      * masteryFx(h, 'larceny') // TRADES perk (pacing — stacks with getaway; flagged in BALANCE)
       * (second?.trait === 'wheelman' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
     if (jailS > 0) ch.jail_until = new Date(Date.now() + jailS * 1000);
     await h.rngLog(client, ch.id, `crime:${c.id}`, roll, 'fail');

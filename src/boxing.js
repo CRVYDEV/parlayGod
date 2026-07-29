@@ -6,7 +6,7 @@
 // status), and a MANAGER career LEGEND (lifetime fighter wins, account-level → SURVIVES DEATH, the
 // hitman-rep precedent). Fighters die with the street (the fighters rows join the runEstate wipe).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, npcMult, npcTier } from './game.js';
+import { GameError, bus, ledger, notify, rngLog, bumpStanding, bumpMastery, masteryFx, npcMult, npcTier } from './game.js';
 import { BOXING, UNDERWORLD, boxerRankOf, boxerLegendOf, npcBoxerOf, levelOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -256,7 +256,8 @@ export async function exhibitionBout(ch, fighterId, tierId, client, h) {
     await client.query('UPDATE fighters SET wins=$2 WHERE id=$1', [f.id, Number(f.wins) + 1]);
     await bumpLegend(client, ch.account_id);
   } else {
-    await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [f.id, Number(f.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
+    // TRADES perk (fists): a schooled corner patches them up faster — pacing only
+    await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [f.id, Number(f.losses) + 1, new Date(Date.now() + Math.round(BOXING.INJURY_MS * masteryFx(h, 'fists')))]);
   }
   await bumpStanding(client, h, ch, 'cornerman', 1, { action: 'exhibition' }); // working the card is the corner's business
   await bumpMastery(client, h, ch, 'fists', 'exhibition');
@@ -308,7 +309,10 @@ export async function fightBout(ch, opponent, body, client, h) {
   await h.ledger(client, { characterId: winner.id, currency: 'cash', amount: amt - rake, reason: 'boxing:bout', counterparty: loser.id });
   // records + injury — absolute INT writes (pg-mem arithmetic-UPDATE quirk)
   await client.query('UPDATE fighters SET wins=$2 WHERE id=$1', [winnerF.id, Number(winnerF.wins) + 1]);
-  await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [loserF.id, Number(loserF.losses) + 1, new Date(Date.now() + BOXING.INJURY_MS)]);
+  // TRADES perk (fists) — the LOSING fighter's OWNER's schooling decides the lay-up (both sides are
+  // loaded under withTwoCharacters: the actor via h.owned, the opponent via h.victimOwned)
+  const loserFx = masteryFx(win ? { owned: h.victimOwned } : h, 'fists');
+  await client.query('UPDATE fighters SET losses=$2, injured_until=$3 WHERE id=$1', [loserF.id, Number(loserF.losses) + 1, new Date(Date.now() + Math.round(BOXING.INJURY_MS * loserFx))]);
   // (red-team R18) the manager LEGEND only banks vs a loser at/above the anti-Sybil floor — the wager/rake
   // still move (a taxed transfer); only the cosmetic boxing_wins credit is gated (the races/stable precedent)
   if (levelOf(Number(loser.respect)) >= BOXING.LEGEND_MIN_LVL) await bumpLegend(client, winner.account_id);

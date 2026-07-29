@@ -8,7 +8,7 @@
 // the per-character cash check reconciles them automatically. Laundering rides the existing
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
-import { GameError, bus, skillMult, trunkCap, bumpMastery } from './game.js';
+import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, businessOf, businessTierOf, businessMaxTier,
   businessAssessedValue, launderRankOf, levelOf, effStat } from './rules.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -291,7 +291,8 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer leans harder — a new modifier, sign-off lever
-  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) + Math.random() * 25;
+  const atk = (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
+    * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk (the shakedown half of the muscle axis)
   const def = vEff('muscle') + vEff('cunning') * 0.5 + Math.random() * 25;
   await h.rngLog(client, ch.id, `shakedown:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 

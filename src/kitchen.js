@@ -1,7 +1,7 @@
 // M4 — THE KITCHEN (§7.10, §5.3). Fictional period product lines; an economy of
 // risk, not a recipe. Every formula cites spec §7.10 / prototype v24.
 import crypto from 'node:crypto';
-import { GameError, bumpFamilyTask, skillMult, trunkCap, bumpMastery } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
 import {
   DRUGS, KITCHENS, TRADE_RANKS, CONSTANTS, M4, COMMISSION, SKILLS, KITCHEN,
   drugOf, kitchenOf, tradeRankIdx, cityEventOf, dayOf,
@@ -71,7 +71,9 @@ export async function cook(ch, drugId, qty, client, h) {
   ch.cb = Number(ch.cb) - crates;
   h.owned.makings[drugId] = have - n;
   await h.ledger(client, { characterId: ch.id, currency: 'cb', amount: -crates, reason: `cook:${drugId}` });
-  const doneAt = new Date(Date.now() + k.mins * CONSTANTS.COOK_MULT * 60 * 1000); // §9: demo mins × 12
+  // TRADES perk (chemistry): a schooled cook runs the burner faster — pacing only; throughput
+  // is still nerve-bounded at the corner, so the sim-signed deal curve is untouched
+  const doneAt = new Date(Date.now() + Math.round(k.mins * CONSTANTS.COOK_MULT * masteryFx(h, 'chemistry')) * 60 * 1000); // §9: demo mins × 12
   const id = uid();
   await client.query('INSERT INTO batches (id, character_id, drug_id, qty, done_at) VALUES ($1,$2,$3,$4,$5)',
     [id, ch.id, drugId, n, doneAt]);

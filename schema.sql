@@ -2310,3 +2310,13 @@ CREATE TABLE IF NOT EXISTS mastery_legend (
   xp NUMERIC NOT NULL DEFAULT 0,
   PRIMARY KEY (account_id, track_id)
 );
+
+-- THE TRADES step two: the level-50 trait choice (one of two per track, permanent, dies with the
+-- street — the estate wipes it; the DYNAST trait is read at the estate BEFORE the wipe to deepen
+-- that track's heir echo). Pure status/modifier state — never a currency.
+CREATE TABLE IF NOT EXISTS character_traits (
+  character_id TEXT NOT NULL,
+  track_id TEXT NOT NULL,
+  trait_id TEXT NOT NULL,
+  PRIMARY KEY (character_id, track_id)
+);

@@ -3779,11 +3779,37 @@ fence — the landing is the seamanship); blackjack hooks the DEAL only (one pla
 double's second stake); wetwork/muscle hooks fire on WINS only. Mutation-verified both ways (drop the
 heir echo → caught; unhook doCrime → caught). All `MASTERY.*` numbers are founder sign-off levers
 (BALANCE.md — `HEIR_KEEP_BPS` flagged as death-softening; the XP table must be re-checked against the
-playthrough harness before step two makes it a power number). **Steps 2–4 designed, not built:**
-milestone perks (10/25/40) + the level-50 trait choice; PATHS v2 (prototype re-extract 3→6 + a
-hand-written `PATH_FX` tail matrix, home ×~1.5 / rival ×~0.6 XP rates inside bumpMastery, one signature
-perk + one handicap per path, a switch cooldown); stats-by-use (a capped daily drip on the gym's own
-diminishing curve, playthrough re-run). A combined red-team follows step 4 (the pillar discipline).
+playthrough harness before step two makes it a power number). **Step two — MILESTONE PERKS + THE
+LEVEL-50 TRAIT — BUILT** (`MASTERY.PERKS`/`MILESTONES`/`TRAITS`/`TRAIT_HEIR_BPS`/`GAMBLER_MIN_STAKE`
+rules tail; `masteryFx` in game.js — the skillMult twin, reading the loadOwned cache, neutral 1 when
+headless; `character_traits` table + `POST /v1/mastery/trait/:trackId`). **The gate check ran first
+and forced the flagged XP retune** (BALANCE § step two): the den measured 4×–40× larceny (madame-comped
+min-bet spam → L40 in ~3h) while cooldown tracks starved (scores L25 ≈ 4,700h) → den XP halved 2→1 +
+`GAMBLER_MIN_STAKE` 1000 (a play under $1k schools NOTHING — the call-site gate on all four den hooks),
+score/heist 25/60, bout/exhibition 25/20, cook/deal 12/6, race/port/piracy/duel 15/20/25/10. **The
+perks**: ONE axis per trade deepening at L10/25/40 (fx[0..2]), every effect a NEW single-touchpoint
+multiplicative modifier OFF the audit-locked list — larceny jail ×0.95/0.90/0.85 (getaway-stack),
+wetwork search clock (executioner/Vinnie-stack → 0.54 fully built, THE deepest stack, flagged),
+chemistry cook clock, wheels tune price + seamanship refit price (sink discounts, the DISCOUNTED number
+ledgered), gambling PvE table LIMIT ×1.1/1.25/1.5 (ACCESS only, odds untouched → deepens the net sink),
+muscle jump/shakedown atk ×1.02/1.04/1.06 (bruiser precedent), commerce listing fees (broker-stack,
+LIST_FEE_MIN re-asserts), scores Score-cooldown, fists fighter recovery (the bout loser's OWNER's
+mastery via `{owned: h.victimOwned}`; the worker-resolved main event stays neutral — headless). **The
+trait** (level 50, once, permanent, dies with the street — `chooseTrait`, gates level/bad_track/
+bad_trait/chosen): VIRTUOSO deepens the perk to fx[3]; DYNAST echoes `TRAIT_HEIR_BPS` (50%) of that ONE
+trade to the heir (read from `h.victimOwned.traits` BEFORE the `character_traits` wipe — a
+death-softening dial, flagged). Board surfaces `perk {what, now, next, nextAt}` (via the SAME
+`masteryFx` reader the tills use — board and game can never disagree), `trait`, `canChooseTrait`;
+console renders perk lines + a Virtuoso/Dynast chooser through the in-game `ask()` dialog.
+`test/mastery.js` step-2 block (the stake floor, the exact rung on the board, the DISCOUNTED tune price
+at a real till, the fee relation, all four trait gates, virtuoso deepening, dynast half-echo vs the
+quarter, traits wiped) — mutation-verified (perk dropped from the till → caught; dynast ignored at the
+estate → caught). §10.4 untouched (perks are pacing/discount/access/contest modifiers; the discounted
+number is always the ledgered one). **Steps 3–4 designed, not built:** PATHS v2 (prototype re-extract
+3→6 + a hand-written `PATH_FX` tail matrix, home ×~1.5 / rival ×~0.6 XP rates inside bumpMastery, one
+signature perk + one handicap per path, a switch cooldown); stats-by-use (a capped daily drip on the
+gym's own diminishing curve, playthrough re-run). A combined red-team follows step 4 (the pillar
+discipline).
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

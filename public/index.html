@@ -5217,6 +5217,11 @@
           <div class="d">${k.desc}</div>
           <div class="d" style="margin-top:4px">${k.nextAt == null ? 'MASTERED' : `${Math.floor(k.xp).toLocaleString()} / ${k.nextAt.toLocaleString()} xp to L${k.lvl + 1}`}
             ${k.legendXp > 0 ? ` · <span style="color:var(--dim)">bloodline ${Math.floor(k.legendXp).toLocaleString()}</span>` : ''}</div>
+          ${k.perk ? `<div class="d" style="margin-top:3px;color:${k.perk.now !== 1 ? 'var(--ok)' : 'var(--dim)'}">${k.perk.now !== 1 ? `◆ ${k.perk.what}: ×${k.perk.now}` : `perk at L${(ms.milestones || [10])[0]}: ${k.perk.what}`}${k.perk.next ? ` <span style="color:var(--dim)">(L${k.perk.nextAt} → ×${k.perk.next})</span>` : ''}</div>` : ''}
+          ${k.trait ? `<div class="d" style="margin-top:3px;color:var(--gold,#c9a227)">★ ${(ms.traits || {})[k.trait]?.name || k.trait}</div>` : ''}
+          ${k.canChooseTrait ? `<div style="margin-top:4px"><span class="d">MASTERED — choose your legacy (permanent):</span><br>
+            <button class="act" data-trait="${k.id}:virtuoso" data-confirm="Permanent. The Virtuoso deepens this trade's perk for THIS life.">Virtuoso</button>
+            <button class="act" data-trait="${k.id}:dynast" data-confirm="Permanent. The Dynast hands your heir HALF this trade's schooling.">Dynast</button></div>` : ''}
           ${k.nextAt != null ? `<div class="bar" style="margin-top:4px"><div class="fill" style="width:${Math.min(100, Math.round(100 * (k.xp - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0)) / Math.max(1, k.nextAt - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0))))}%"></div></div>` : ''}</div>`).join('')}</div>
 
       <h2>The Build <span class="d" style="font-size:11px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
@@ -5313,6 +5318,11 @@
         t.querySelector('#honor-lb').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
           <div style="flex:1;min-width:180px"><div class="d" style="color:var(--ok)"><b>MEN OF HONOR</b></div>${(b.menOfHonor || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — +${k.peak} <span class="chip">${k.tier}</span></div>`).join('') || '<div class="d">none yet</div>'}</div>
           <div style="flex:1;min-width:180px"><div class="d" style="color:var(--bad)"><b>THE MOST FEARED</b></div>${(b.mostFeared || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — ${k.low} <span class="chip bad">${k.tier}</span></div>`).join('') || '<div class="d">none yet</div>'}</div></div>`; }; }
+    t.querySelectorAll('[data-trait]').forEach((btn) => btn.onclick = async () => {
+      const [track, trait] = btn.dataset.trait.split(':');
+      if (!await ask('Cast the die?', btn.dataset.confirm || '', { yes: 'choose it', danger: true })) return;
+      act('POST', `/v1/mastery/trait/${track}`, { trait }).then(() => renderLife());
+    });
     t.querySelectorAll('[data-learn]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/skills/${btn.dataset.learn}`, {}).then(() => renderLife()));
     t.querySelectorAll('[data-respec1]').forEach((btn) => btn.onclick = () =>
