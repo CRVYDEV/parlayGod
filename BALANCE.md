@@ -2405,12 +2405,25 @@ knowing before anyone proposes lowering it.
   later. `claim()` also has no `whenNotPaused`, so pausing does not stop a claim either. Neither is a
   hole alone; together they mean **the daily cap is realised immediately**, which is the assumption the
   cap is sized under above. For an honest bonder the server sets the full 120h, so vesting is a *product*
-  feature and not a security control — the point is not to count it as one. A `MIN_VEST` is a one-line
-  change and a founder/audit call.
+  feature and not a security control — the point is not to count it as one.
+  **RESOLVED 2026-07-29 (`AUDIT-oracle.md`): do NOT add one.** The tempting reasoning is that a minimum
+  vest slows an attacker and buys response time. It buys neither. `claim()` not being `whenNotPaused`
+  means a vest is not a window in which the Safe can intervene, only one in which the attacker waits;
+  and the blast radius is `dailyCapOMR` whatever the vest is — a vest changes WHEN the capped amount
+  lands, not HOW MUCH, and the sizing above already assumes immediate realisation, which is the
+  conservative reading. A floor would buy a false sense of a security control while constraining only
+  the honest path. Written into CHAIN-DEPLOY.md so nobody later counts it as a control.
 - **`quoteBond` clamps to the CEILING, not the oracle price.** When our feed reads above the chain's, it
   signs at `oracle × (1+tolerance)` — the most generous quote the wall allows — so drift always resolves
   toward *more* OMR per ETH. Clamping to the oracle price itself resolves it the other way. Defensible
   either way; worth deciding deliberately.
+  **RESOLVED 2026-07-29 (`AUDIT-oracle.md` F1): clamp to the PRICE — and it turned out not to be only a
+  question of taste.** `round6` rounds, and it rounds *up* **50.0% of the time** (measured over 200k
+  samples; also the theoretical answer), so a price rounded to the ceiling sat one micro-unit ABOVE it
+  and reverted `PriceAboveOracle` on-chain — roughly every OTHER clamped quote failing, on the code path
+  that exists to prevent failures. Clamping to the oracle price leaves the whole tolerance band as
+  headroom so rounding cannot breach it, AND resolves drift in the conservative direction. Both reasons
+  point the same way; the arithmetic is pinned in `test/chain.js`.
 
 ### The thing that is not a dial at all
 Every number here scales with **pool depth**. Thin liquidity is what makes an oracle cheap to move and a

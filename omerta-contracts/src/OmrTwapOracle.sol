@@ -49,6 +49,11 @@ contract OmrTwapOracle is IOmrOracle, Ownable2Step {
     /// @notice Floor on PERIOD at construction. Deploying a 30-second "TWAP" would be a spot price
     ///         wearing a TWAP's name, and this contract exists to prevent exactly that.
     uint32 public constant MIN_PERIOD = 10 minutes;
+    /// @notice CEILING on the window a single `update()` may close, as a multiple of PERIOD. An
+    ///         interval longer than this is DISCARDED rather than averaged — see `update()` for the
+    ///         attack this closes. 4x PERIOD is three consecutive missed pokes, by which point the
+    ///         reading is already stale to the consumer and bonding has halted anyway.
+    uint32 public constant MAX_WINDOW_MULT = 4;
 
     IUniswapV2Pair public immutable pair;
     /// @dev True when OMR is the pair's token1, i.e. price0 (= token1 per token0) is OMR per WETH.
@@ -62,6 +67,10 @@ contract OmrTwapOracle is IOmrOracle, Ownable2Step {
     uint256 public lastUpdate;           // unix seconds the current average closed (full width)
 
     event Updated(uint224 priceAverage, uint256 omrPerEth, uint32 timeElapsed);
+    /// @notice An interval too long to trust was discarded and the snapshot re-baselined. Emitted
+    ///         rather than silent because it means the feed just went unavailable and somebody's
+    ///         keeper needs looking at.
+    event Rebaselined(uint32 discardedWindow);
 
     error PeriodTooShort();
     error ZeroAddress();
@@ -102,6 +111,30 @@ contract OmrTwapOracle is IOmrOracle, Ownable2Step {
         if (timeElapsed < PERIOD) revert PeriodNotElapsed(timeElapsed, PERIOD);
 
         uint256 cumulative = omrIsToken1 ? p0 : p1;
+
+        // ── THE WINDOW IS BOUNDED ON BOTH SIDES (red-team F2) ──────────────────────────────────
+        // Too SHORT is obvious and handled above. Too LONG is the subtle one and it was a real hole:
+        // closing a multi-day interval publishes an average of prices that are LONG GONE, and stamps
+        // it `lastUpdate = now` — so the consumer's staleness check cannot see it, because that check
+        // measures when the average was COMPUTED, not what period it COVERS. Measured on the real
+        // contract: after a nine-day keeper outage spanning a bull run that then crashed, this
+        // reported 19,998 while spot was 5,000. Four times over, stamped fresh.
+        //
+        // What made it exploitable rather than merely wrong: `update()` is permissionless, so whoever
+        // pokes CHOOSES when the window closes — and after an outage the interval can contain a high
+        // price nobody had to pay to create. Ordinary market volatility does the attacker's work.
+        //
+        // So a too-long interval is DISCARDED, not averaged: re-baseline and report nothing until an
+        // honest window closes. Fail-closed, and recovery is one PERIOD.
+        if (timeElapsed > PERIOD * MAX_WINDOW_MULT) {
+            priceCumulativeLast = cumulative;
+            blockTimestampLast = ts;
+            priceAverage = 0;   // -> consult() reports "no usable reading" -> OmertaBond reverts
+            lastUpdate = 0;
+            emit Rebaselined(timeElapsed);
+            return;
+        }
+
         unchecked {
             // The subtraction is deliberately wrapping: V2's cumulatives are allowed to overflow and
             // the DIFFERENCE stays correct across the wrap. This is the one place unchecked maths is

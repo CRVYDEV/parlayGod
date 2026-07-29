@@ -201,6 +201,14 @@ The backend keeps its own reserve records; they must track the on-chain balances
   neither of which touches a balance or a bonder's vested claim: `OMR.setMinter(address(0))` revokes the mint
   privilege at the token, and `OmertaBond.setMaxRate(0)` fails every new bond closed at the bond contract. Use
   the token-side one if the bond contract itself is what you distrust.
+- **VESTING IS A PRODUCT FEATURE, NOT A SECURITY CONTROL — do not count it as one.** There is deliberately no
+  minimum `vestSeconds`, and adding one would buy nothing: `claim()` is intentionally NOT `whenNotPaused`, so
+  pausing stops new bonds but never stops already-vested OMR being claimed — a vest is therefore not a window in
+  which the Safe can intervene, only a window in which an attacker waits. And the blast radius is `dailyCapOMR`
+  whatever the vest is: a vest changes WHEN the capped amount lands, not HOW MUCH. `npm run dials` sizes the cap
+  on the assumption it is realised immediately, which is the conservative reading and stays correct with no
+  minimum. The server signs the full `BONDS.VEST_HOURS` for honest bonders; a floor would only constrain them.
+  (Decided in `AUDIT-oracle.md`.)
 
 ---
 *Off-chain alpha ships independently of all of this — see `DEPLOY.md`. This runbook is the chain rail only, and
