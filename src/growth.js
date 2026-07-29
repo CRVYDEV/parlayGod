@@ -1,6 +1,6 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
-import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery } from './game.js';
+import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery, masteryFx } from './game.js';
 import { soldierFxOf, SOLDIERS } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
@@ -76,6 +76,7 @@ export async function heist(ch, client, h) {
   ch.cash = Number(ch.cash) + take;
   ch.respect = Number(ch.respect) + rep;
   const cdMs = Math.round(M4.HEIST_CD_MS
+    * masteryFx(h, 'scores') // TRADES perk — pacing (the safecracker axis, unpaid)
     * (second?.trait === 'safecracker' ? Math.max(0, 1 - soldierFxOf(second)) : 1));
   ch.heist_at = new Date(Date.now() + cdMs);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'heist' });

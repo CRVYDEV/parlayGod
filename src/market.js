@@ -16,7 +16,7 @@
 // → market_listings (pot class) → street_tax singleton. Acyclic vs the global order; residual
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding, bumpMastery } from './game.js';
+import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding, bumpMastery, masteryFx } from './game.js';
 import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
 import { logCarCollect } from './collection.js';
 
@@ -80,7 +80,7 @@ export async function listItem(ch, opts, client, h) {
     const reserve = opts.reserve != null ? Math.floor(Number(opts.reserve)) : null;
     if (reserve != null && (reserve < minBid || (buyNow != null && reserve > buyNow)))
       throw new GameError('bad_reserve', 'A reserve sits between the minimum bid and buy-now.');
-    const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT))); // BROKER (skills) halves fees
+    const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(buyNow ?? reserve ?? minBid) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce'))); // BROKER (skills) + TRADES stack; the floor re-asserts
     if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
     ch.cash = Number(ch.cash) - fee;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -101,7 +101,7 @@ export async function listItem(ch, opts, client, h) {
   const price = Math.floor(Number(opts.price) || 0);
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   if (qty * price < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
+  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(qty * price) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce')));
   if (Number(ch.cash) < fee) throw new GameError('cash', `Listing runs $${fee} (1% of the ask).`);
   ch.cash = Number(ch.cash) - fee;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -fee, reason: 'market:list' });
@@ -182,7 +182,7 @@ export async function postOrder(ch, opts, client, h) {
   if (price < 1) throw new GameError('min_price', 'Unit price must be at least $1.');
   const escrow = qty * price;
   if (escrow < MARKET.MIN_PRICE) throw new GameError('min_price', `The Market floor is $${MARKET.MIN_PRICE} an ask.`);
-  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT)));
+  const fee = Math.max(MARKET.LIST_FEE_MIN, Math.floor(listFee(escrow) * skillMult(h, 'broker', SKILLS.FX.BROKER_FEE_MULT) * masteryFx(h, 'commerce')));
   if (Number(ch.cash) < escrow + fee) throw new GameError('cash', `The order escrows $${escrow} plus a $${fee} fee.`);
   const hours = Math.min(maxTtlH(h), Math.max(1, Math.floor(Number(opts.hours) || MARKET.MAX_TTL_H)));
   ch.cash = Number(ch.cash) - fee;

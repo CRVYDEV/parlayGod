@@ -250,6 +250,11 @@ const SIGNED = [
   ['MASTERY.XP_DIVISOR', 15],
   ['MASTERY.MAX_LVL', 50],
   ['MASTERY.HEIR_KEEP_BPS', 2500],
+  // step two — the den XP floor + the dynast echo (the perk fx arrays live under lowercase track
+  // keys, outside the walker's reach; the two UPPERCASE scalars named in BALANCE are pinned here)
+  ['BLACK_MARKET.LIST_FEE_MIN', 10], // named by the step-2 BALANCE entry (the fee floor that re-asserts after the commerce perk)
+  ['MASTERY.GAMBLER_MIN_STAKE', 1000],
+  ['MASTERY.TRAIT_HEIR_BPS', 5000],
   ['NOTORIETY.CONVOY_DEF_CAP', 24],
   ['NOTORIETY.CONVOY_DEF_PER', 0.6],
   ['NOTORIETY.DECAY_PER_HR', 4],

@@ -8,7 +8,7 @@
 // a WIN redirects the run's would-be landing to the pirate at a CUT, so port emission can only FALL), and
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
-import { GameError, bus, bumpMastery } from './game.js';
+import { GameError, bus, bumpMastery, masteryFx } from './game.js';
 import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
@@ -108,7 +108,8 @@ export async function upgradeBoat(ch, boatId, part, client, h) {
   const lvl = Number(part === 'hull' ? boat.hull : boat.engine) || 0;
   if (lvl >= PORT.STEP2.UPGRADE_MAX) throw new GameError('maxed', `The ${part} is already at the max (${PORT.STEP2.UPGRADE_MAX}).`);
   const spec = boatOf(boat.kind);
-  const cost = boatUpgradeCost(boat, spec, part);
+  // TRADES perk (seamanship): the dry dock cuts a real captain a deal — the discounted number is ledgered
+  const cost = Math.floor(boatUpgradeCost(boat, spec, part) * masteryFx(h, 'seamanship'));
   if (Number(ch.cash) < cost) throw new GameError('cash', `That refit runs $${cost}.`);
   ch.cash = Number(ch.cash) - cost;
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -cost, reason: 'port:upgrade' });

@@ -625,8 +625,16 @@ The curve is the game's own quadratic (level = √(xp/15)+1, capped at 50); rank
 Made → Craftsman → Expert → **Master of the Trade**. Levels **die with the street** — the heir inherits
 **25% of each track's XP** (the bloodline echo) — while a lifetime, account-level XP **legend** survives
 death whole and ranks the `GET /v1/leaderboard/trades` board (Dabbler → A Legend of the Life; agents
-excluded). Pure status in step one: no money moves, no ledger rows, no gameplay power — the milestone
-perks, path specialties and stat drip are later steps.
+excluded).
+
+**Milestone perks (step two):** each trade carries ONE perk that deepens at L10/25/40 — shorter jail
+stints (Larceny), a faster search clock (Wet Work), faster batches (The Cook), discounted tunes and
+boat refits (Wheels, Seamanship), a higher PvE table limit (The Gambler — access only, the odds never
+move), harder jumps and shakedowns (Protection), cheaper listings (Commerce), the Score lining up
+sooner (Big Scores), fighters healing faster (Fisticuffs). Den plays under **$1,000** school nothing
+(no min-bet farming). At **level 50**, choose a permanent trait — **Virtuoso** (the perk deepens
+further, for this life) or **Dynast** (your heir keeps HALF this trade's schooling instead of a
+quarter). The choice dies with the street; the heir chooses their own.
 
 ---
 

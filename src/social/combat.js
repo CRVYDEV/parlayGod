@@ -6,7 +6,7 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery } from '../game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx } from '../game.js';
 import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
@@ -66,7 +66,8 @@ export async function jump(ch, victim, client, h, intent) {
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer hits harder — a new modifier on the attack term, sign-off lever
   const atk = (eff('muscle') + eff('speed') * 0.5 + (gunObjOf(ch.gun)?.fp || 0) * 0.4 + (rIdx >= 3 ? 5 : 0))
-    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) + Math.random() * 25;
+    * (ch.path === 'gun' ? 1.1 : 1) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
+    * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk — the bruiser contest-mult precedent
   const def = (vEff('muscle') + vEff('speed') * 0.5 + (gunObjOf(victim.gun)?.fp || 0) * 0.4) + Math.random() * 25;
   await h.rngLog(client, ch.id, `jump:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
@@ -162,7 +163,8 @@ const searchMs = () => Number(process.env.SEARCH_MS || CONSTANTS.SEARCH_MS);
 
 const hunterSearchMs = (h) => Math.floor(searchMs()
   * skillMult(h, 'executioner', SKILLS.FX.SEARCH_MULT)
-  * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT));
+  * npcMult(h, 'fixer', 3, UNDERWORLD.FX.SEARCH_MULT)
+  * masteryFx(h, 'wetwork')); // TRADES perk — a third stack on the clock (0.72 → 0.54 fully built; flagged)
 
 const shootCdMs = () => Number(process.env.SHOOT_CD_MS || (2 * 3600 * 1000));
 

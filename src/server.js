@@ -788,7 +788,10 @@ export async function buildServer() {
       epoch: emissionEpochOf(), budget: epochBudget(emissionEpochOf()) },
     // THE TRADES — the mastery catalog (tracks, curve, ranks — knowable; XP is earned, never bought)
     mastery: { tracks: MASTERY.TRACKS, xpDivisor: MASTERY.XP_DIVISOR, maxLvl: MASTERY.MAX_LVL,
-      xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS },
+      xp: MASTERY.XP, ranks: MASTERY.RANKS, heirKeepBps: MASTERY.HEIR_KEEP_BPS, legendRanks: MASTERY.LEGEND_RANKS,
+      // step two — the milestone perks + the level-50 trait choice (all knowable; the den XP floor too)
+      milestones: MASTERY.MILESTONES, perks: MASTERY.PERKS, traits: MASTERY.TRAITS,
+      traitHeirBps: MASTERY.TRAIT_HEIR_BPS, gamblerMinStake: MASTERY.GAMBLER_MIN_STAKE },
     // FIVE PILLARS — the public catalogs (levers are sign-off; the schedule/ladders are knowable)
     honor: { tiers: HONOR.TIERS, trusted: HONOR.TRUSTED, dreaded: HONOR.DREADED },
     diplomacy: { pactDays: DIPLOMACY.PACT_MS / 86400000, coalitionMin: DIPLOMACY.COALITION_MIN,
@@ -960,6 +963,8 @@ export async function buildServer() {
   // THE TRADES — the mastery board (use-XP tracks; pure status, the trade_rep shape generalised)
   app.get('/v1/mastery', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Mastery.masteryBoard(ch, client, h)));
+  app.post('/v1/mastery/trait/:trackId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Mastery.chooseTrait(ch, req.params.trackId, req.body?.trait, client, h)));
   app.post('/v1/skills/respec', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => Skills.respecSkills(ch, client, h)));
   // step two: fire a capstone-unlocked ACTIVE ability, and per-skill (leaf-first) respec.

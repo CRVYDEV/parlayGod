@@ -3328,18 +3328,27 @@ export const MASTERY = {
   // XP per action, keyed by the bumpMastery action tag (the bumpStanding shape — flat awards; the
   // action's own resource cost is the throttle). Sized ~proportional to that cost so no track is
   // the one true farm: crime ~3/2 nerve, deal ~4/1 nerve+goods, a kill is rare and expensive.
+  // RETUNED at the step-2 gate (the BALANCE flag): once milestone perks exist, XP/hr is a power
+  // number — the analytic pace check found the den 4-40x faster than larceny (1 nerve/play, and the
+  // Madame comps even that) while the cooldown-gated tracks starved (scores L25 measured ~4,700h).
+  // Den awards halved + gated behind GAMBLER_MIN_STAKE; cooldown tracks sized so a level rewards the
+  // loop's NATURAL daily cadence (an exhibition every 6h, a Score every 8h), not an impossible grind.
   XP: {
-    crime: 3,                  // per SUCCESSFUL §7.2 job (nerve-throttled, the core grind)
+    crime: 3,                  // per SUCCESSFUL §7.2 job (nerve-throttled, the core grind ~180xp/hr)
     jump: 4, shakedown: 6, standover: 10,        // muscle — contest WINS only
-    fire: 25, shank: 20, duel: 8,                // wetwork — a kill is rare, gated, expensive
-    cook: 6, deal: 4,                            // chemistry
-    boost: 5, race: 8,                           // wheels
-    port: 10, piracy: 12,                        // seamanship — a run is a long clock
-    dice: 2, blackjack: 2, numbers: 2, trackbet: 2, // gambling — per resolved play, cash-throttled
+    fire: 25, shank: 20, duel: 10,               // wetwork — a kill is rare, gated, expensive
+    cook: 12, deal: 6,                           // chemistry — batches are slow clocks
+    boost: 5, race: 15,                          // wheels — races ride a 2h cooldown
+    port: 20, piracy: 25,                        // seamanship — a run is a long clock + supply-capped
+    dice: 1, blackjack: 1, numbers: 1, trackbet: 1, // gambling — per resolved play AT A REAL STAKE (below)
     sell: 2, fill: 3,                            // commerce — per goods sale / market fill
-    score: 8, heist: 20,                         // scores — cooldown-gated ops
-    bout: 8, exhibition: 5,                      // fists — per bout fought
+    score: 25, heist: 60,                        // scores — 8h/daily cooldown ops
+    bout: 25, exhibition: 20,                    // fists — 6h exhibition cd, bouts need a willing rival
   },
+  // The den floor: a play below this stake schools nothing — without it a min-bet ($100) spammer
+  // with the Madame's comped seat farms The Gambler at the rate limit for ~free; at $1,000+ the
+  // house edge makes the fast track genuinely expensive (the "no free farm loop" rule, priced).
+  GAMBLER_MIN_STAKE: 1000,
   // Rank bands (display names by level — the TRADE_RANKS shape, status only)
   RANKS: [
     { at: 1,  name: 'Green' },
@@ -3353,6 +3362,31 @@ export const MASTERY = {
   // track's XP (the honor HEIR_KEEP / Underworld MEMORY_BPS echo pattern — 0 restores hard death).
   // Softens death → a flagged founder sign-off lever by the standing rule.
   HEIR_KEEP_BPS: 2500,
+  // ── STEP TWO: MILESTONE PERKS + THE LEVEL-50 TRAIT ──
+  // Each trade has ONE perk axis that deepens at the milestone levels — every effect a NEW
+  // single-touchpoint multiplicative modifier OFF the audit-locked list (pacing clocks, sink
+  // discounts where the DISCOUNTED number is what's ledgered, contest mults on the bruiser
+  // precedent, table-limit ACCESS with odds untouched). fx[0..2] = L10/25/40; fx[3] is the
+  // VIRTUOSO trait's deepening (level 50 + the choice). Signed floors re-assert after mults.
+  MILESTONES: [10, 25, 40],
+  PERKS: {
+    larceny:    { what: 'jail stints on a busted job',        fx: [0.95, 0.90, 0.85, 0.75] }, // getaway-stack (pacing)
+    wetwork:    { what: 'your search clock on a mark',        fx: [0.95, 0.90, 0.85, 0.75] }, // executioner/Vinnie-stack (pacing)
+    chemistry:  { what: 'cook time on a batch',               fx: [0.95, 0.90, 0.85, 0.75] }, // throughput still nerve-bounded at the corner
+    wheels:     { what: 'tuning prices at the garage',        fx: [0.95, 0.90, 0.85, 0.75] }, // sink discount — the discounted number is ledgered
+    seamanship: { what: 'hull & engine work at the boatyard', fx: [0.95, 0.90, 0.85, 0.75] }, // sink discount
+    gambling:   { what: 'your PvE table limit at the den',    fx: [1.10, 1.25, 1.50, 2.00] }, // ACCESS only — odds untouched, liability-capped
+    muscle:     { what: 'jump & shakedown muscle',            fx: [1.02, 1.04, 1.06, 1.10] }, // the bruiser contest-mult precedent
+    commerce:   { what: 'Black Market listing fees',          fx: [0.90, 0.80, 0.70, 0.50] }, // broker-stack; LIST_FEE_MIN re-asserts after
+    scores:     { what: 'the Score lines up sooner',          fx: [0.95, 0.90, 0.85, 0.75] }, // pacing (the safecracker axis, unpaid)
+    fists:      { what: 'your fighters heal faster',          fx: [0.90, 0.80, 0.70, 0.50] }, // pacing (the cornerman-cutman axis)
+  },
+  // THE TRAIT (level 50, once, permanent, dies with the street): power now, or legacy.
+  TRAITS: {
+    virtuoso: { name: 'Virtuoso', desc: "The trade's perk deepens to its mastered strength." },
+    dynast:   { name: 'Dynast',   desc: 'Your heir inherits HALF this trade\'s schooling instead of a quarter.' },
+  },
+  TRAIT_HEIR_BPS: 5000, // the dynast echo (vs HEIR_KEEP_BPS for everyone else) — a death-softening dial
   // Legend rank ladder (lifetime account XP across ALL trades — pure status, survives death)
   LEGEND_RANKS: [
     { at: 0,       name: 'Dabbler' },

@@ -2465,3 +2465,34 @@ are recorded now:
 
 **Flag (step-two gate):** before milestone perks land, re-check the XP table against the playthrough
 harness — a perk ladder makes XP/hr a power number, and the table was sized for status only.
+
+## THE TRADES step two — milestone perks + the level-50 trait (2026-07-29)
+
+**The step-2 gate check ran first and forced an XP retune** (the flag predicted this: once perks
+exist, XP/hr is a power number). Measured analytically at the loops' real cadences:
+The Gambler ran **4×–40× larceny** (dice = 1 nerve/play at 6 nerve/min = 720 XP/hr; the Madame's T1
+comp removes even that → rate-limit-bound ~7,200 XP/hr, L40 in ~3 hours of min-bet spam), while the
+cooldown-gated tracks starved (Big Scores L25 measured **~4,700 hours** — unreachable). Applied:
+
+| lever | was → now | why |
+|---|---|---|
+| den XP (dice/blackjack/numbers/trackbet) | 2 → **1** each | the fastest feed, halved |
+| `MASTERY.GAMBLER_MIN_STAKE` | — → **1000** | a play under $1,000 schools NOTHING — kills the comped min-bet farm; at $1k+ the house edge prices the fast track (~$50k/hr at the rate limit) |
+| score/heist | 8/20 → **25/60** | 8h-cd / daily ops — sized to the loop's natural cadence |
+| bout/exhibition | 8/5 → **25/20** | 6h exhibition cd; bouts need a willing rival |
+| cook/deal | 6/4 → **12/6** | batches are slow clocks |
+| race / port / piracy / duel | 8/10/12/8 → **15/20/25/10** | cooldown / supply-capped / rival-gated |
+
+**The perks** (`MASTERY.PERKS`, one axis per trade, deepening at L10/25/40; every effect a NEW
+single-touchpoint multiplicative modifier OFF the audit-locked list — pacing clocks, sink discounts
+with the DISCOUNTED number ledgered, contest mults on the bruiser precedent, table-limit ACCESS with
+odds untouched; signed floors re-assert after mults). **Flagged stacks** (each an existing flagged
+class, now one deeper): larceny jail × getaway (0.85×0.8 = 0.68 fully built), wetwork search clock ×
+executioner × Vinnie (0.72 → **0.54** fully built — the deepest stack in the game, sign-off),
+commerce fees × broker (LIST_FEE_MIN still floors), muscle atk × bruiser × made_man (1.08×1.08×1.06).
+The gambling axis raises only the PvE LIMIT (more exposure per play at unchanged house-favorable
+odds → deepens the net sink).
+
+**The trait** (level 50, once, permanent, dies with the street): VIRTUOSO deepens the perk to fx[3];
+DYNAST echoes **`MASTERY.TRAIT_HEIR_BPS` (5000 = 50%)** of that ONE trade to the heir instead of the
+25% — a death-softening dial on top of HEIR_KEEP_BPS (the standing flag class; 2500 reverts it).
