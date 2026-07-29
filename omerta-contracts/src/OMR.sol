@@ -13,15 +13,20 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         no mint function at all, and "nothing mints" was the sentence every prior audit of this
 ///         suite leaned on. Founder ruling (omerta-tokenomics-v2-design.md §4): supply becomes
 ///         unbounded and BONDS ARE THE ONLY MINT. What replaces the fixed cap is not a promise but
-///         three walls, ALL of which live in OmertaBond and must all survive review:
+///         FOUR walls, ALL of which live in OmertaBond and must all survive review:
 ///           1. `dailyCapOMR`  — a per-UTC-day ceiling on OMR issued. With no tranche to bound the
 ///                               total, this is now the blast radius of a leaked signer key, which
 ///                               makes it the single most load-bearing number in the system.
 ///           2. `MAX_DISCOUNT_BPS` (2000) — a discount is a mint at a price; an unbounded discount
 ///                               is a mint at any price.
-///           3. `maxOmrPerEth`  — the mint-RATE ceiling, fail-closed at 0 (the GearVault cap
-///                               precedent). See OmertaBond for why this is a rate wall rather than
-///                               a true treasury-backing accretion test, and what that trades away.
+///           3. `maxOmrPerEth`  — an ABSOLUTE mint-RATE ceiling, fail-closed at 0 (the GearVault cap
+///                               precedent). The number a manipulated oracle cannot raise.
+///           4. `oracle`        — the ACCRETION wall: a TWAP the signed quote's claimed market price
+///                               must agree with, so the ceiling TRACKS the market instead of going
+///                               stale. Also fail-closed. Composed with wall 3 it can only ever
+///                               TIGHTEN what may be minted, never loosen it — read OmertaBond's
+///                               header for why that asymmetry is what makes a price feed safe on a
+///                               mint path at all.
 ///         This contract itself keeps exactly one rule, and it is the one that matters here: the
 ///         minter is a single address, set only by the owner, and every change is evented. There is
 ///         no owner mint, no mint-to-self, no second path.

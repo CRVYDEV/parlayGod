@@ -27,10 +27,13 @@ touches mainnet** until §0 is satisfied.
    as security-critical as the contracts — it mints withdrawal authority. Audit both.
    ⚠ **The audit clock was RESET by tokenomics v2 step 4 (2026-07-29).** Until then OMR had no mint
    function and "nothing mints" was the property every prior review of this suite rested on. Supply is now
-   unbounded and bonds mint it. Any auditor must be pointed at that specifically, and at what replaced the
-   fixed cap: `OMR.minter` (one path, no owner mint) plus OmertaBond's `dailyCapOMR`, `MAX_DISCOUNT_BPS`
-   and `maxOmrPerEth`. Flag for them explicitly that wall 3 is a mint-RATE ceiling and **not** the design's
-   literal "accretive-only" test — the reasoning and the trade-off are in the OmertaBond header.
+   unbounded and bonds mint it. Any auditor must be pointed at that specifically, and at the FOUR walls
+   that replaced the fixed cap: `OMR.minter` (one path, no owner mint) plus OmertaBond's `dailyCapOMR`,
+   `MAX_DISCOUNT_BPS`, `maxOmrPerEth` and the `oracle`. **The single most important property to review is
+   the COMPOSITION of walls 3 and 4** — a price feed sits on the mint path, and what makes that safe is
+   that `maxOmrPerEth` is checked independently, so a manipulated oracle can only ever TIGHTEN the ceiling,
+   never raise it. Also review `OmrTwapOracle` (a Uniswap V2 cumulative-price TWAP) and the keeper
+   dependency it creates.
 3. **Legal counsel sign-off** on the Risk-to-Earn / RWA line (see the "Sensitive design notes" in `CLAUDE.md`
    and the R2/R3 gating in `omerta-rwa-portfolio-design.md`). Jurisdiction/KYC/geofence for any RWA extraction.
 
@@ -64,12 +67,25 @@ PHASE 1 for the exact calls/args.
       22.5% Vig / 25% RWA-float; the RWA slice is mirrored off-chain by the backend from the `Bonded` event,
       the on-chain forward is POL + dev + Vig). **This contract MINTS** — see below. Keep
       `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+- [ ] **`OmrTwapOracle(safe, omrWethPair, omr, period)`** — WALL 4's price feed, deployed AFTER the pool
+      exists (it reads that pool's cumulative price). `period >= MIN_PERIOD` (10 min); 30 min is the
+      shipped default. The constructor works out which side of the pair OMR sits on rather than being
+      told. It reports **no usable reading until a full period has been closed**, so bonding cannot
+      start on a price derived from nothing.
+- [ ] **`OmertaBond.setOracle(oracle, priceToleranceBps, maxOracleAge)`** — arm WALL 4. Tolerance is how
+      far a signed quote may sit ABOVE the TWAP (non-zero because a TWAP lags spot; 0 makes the wall
+      literal-accretive; hard-capped at 2000). `maxOracleAge` must exceed the keeper's poke interval or
+      honest bonds start reverting as stale.
+- [ ] **Start the oracle keeper.** `OmrTwapOracle.update()` is permissionless and must be poked at least
+      once per `maxOracleAge`, or the feed goes stale and bonding halts. That failure direction is
+      deliberate — a dead keeper must stop the mint, never leave it running on an unmaintained price —
+      but it does mean **the keeper is a production dependency, not a nice-to-have**.
 - [ ] **Arm the mint — the step that turns issuance on.** `OMR.setMinter(omertaBond)`. Do this LAST, and
-      only after `OmertaBond.dailyCapOMR` and `maxOmrPerEth` are both set to real values: those two plus
-      the compile-time `MAX_DISCOUNT_BPS` are the entire wall between a leaked quote-signer and unbounded
-      supply. `maxOmrPerEth` is **fail-closed at 0**, so bonding stays off until it is set — but
-      `dailyCapOMR = 0` means UNLIMITED, so a deploy that forgets it has no daily wall at all. Set it.
-      `setMinter(address(0))` is the one-transaction emergency stop.
+      only after `dailyCapOMR`, `maxOmrPerEth` AND the oracle are all set to real values: those, plus the
+      compile-time `MAX_DISCOUNT_BPS`, are the entire wall between a leaked quote-signer and unbounded
+      supply. `maxOmrPerEth` and the oracle are both **fail-closed**, so bonding stays off until each is
+      set — but `dailyCapOMR = 0` means UNLIMITED, so a deploy that forgets it has no daily wall at all.
+      Set it. `setMinter(address(0))` is the one-transaction emergency stop.
 - [ ] **Fund VoucherClaim's tranche (a plain OMR transfer — the bridge NEVER mints):** transfer OMR from the
       Safe into `VoucherClaim` to back signed withdrawal vouchers. Its `balanceOf` IS its cap.
       **OmertaBond no longer needs funding** — it mints each payout at bond time, which is what keeps

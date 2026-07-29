@@ -79,6 +79,35 @@ export async function makeChainReader() {
     inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }];
   return { usedNonce: (nonce) => client.readContract({ address, abi, functionName: 'usedNonce', args: [BigInt(nonce)] }) };
 }
+// THE PRICE THE CHAIN WILL JUDGE THE QUOTE BY (tokenomics v2 step 4, WALL 4). `OmertaBond.bond()`
+// now refuses any quote whose claimed market price sits above its own TWAP oracle plus tolerance —
+// so a server that signs blind against its OWN feed (the Vig buyback TWAP) has every honest quote
+// revert the moment the two drift apart, and looks perfectly healthy while doing it. Reading the
+// contract's `priceCeiling()` is what makes the two agree BY CONSTRUCTION rather than by luck.
+// Returns null when the bond chain is dormant or unreachable — the caller then signs at its own
+// price, which is exactly right, because with no chain there is no wall to disagree with.
+export async function makeBondPriceReader() {
+  if (!process.env.CHAIN_RPC_URL || !process.env.OMERTA_BOND_ADDRESS || !isAddress(process.env.OMERTA_BOND_ADDRESS)) return null;
+  const { createPublicClient, http } = await import('viem');
+  const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+  // the wrong-chain guard, same reasoning as makeChainReader: a ceiling read off a colliding deploy
+  // on another chain is worse than no ceiling, because it looks authoritative.
+  if (process.env.CHAIN_ID) {
+    try { if (Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) return null; } catch { return null; }
+  }
+  const address = getAddress(process.env.OMERTA_BOND_ADDRESS);
+  const abi = [{ type: 'function', name: 'priceCeiling', stateMutability: 'view', inputs: [],
+    outputs: [{ name: 'ceiling', type: 'uint256' }, { name: 'oraclePrice', type: 'uint256' }] }];
+  return {
+    ceiling: async () => {
+      // A reverting priceCeiling() means the oracle is unset/stale/broken — i.e. the chain is
+      // currently refusing every bond. Surface that as null so the caller can say so plainly
+      // instead of signing a quote that is guaranteed to revert.
+      const [ceiling, oraclePrice] = await client.readContract({ address, abi, functionName: 'priceCeiling' });
+      return { ceiling: Number(ceiling) / 1e18, oraclePrice: Number(oraclePrice) / 1e18 };
+    },
+  };
+}
 function signerAccount() {
   const pk = process.env.VOUCHER_SIGNER_PK;
   if (!pk) throw new GameError('chain_unconfigured', 'Withdrawals are not enabled on this server yet.');
@@ -509,9 +538,25 @@ export async function quoteBond(pool, accountId, principalEth) {
     if (!payer || !isAddress(payer)) throw new GameError('wallet', 'Link a wallet (SIWE) first — a bond quote is bound to your wallet.');
     // the live OMR-per-ETH oracle (the latest Vig buyback TWAP off-chain; the DEX TWAP on mainnet).
     const last = (await client.query('SELECT price_omr_per_eth FROM vig_buyback ORDER BY created_at DESC LIMIT 1')).rows[0];
-    const price = last ? round6(Number(last.price_omr_per_eth)) : null;
+    let price = last ? round6(Number(last.price_omr_per_eth)) : null;
     if (!(price != null && Number.isFinite(price) && price > 0))
       throw new GameError('price', 'No live OMR-ETH price yet — bonding opens once the buyback prints one.');
+    // WALL 4 PARITY. The contract judges this quote against its own TWAP; sign above that and the
+    // bond reverts on-chain no matter how healthy this server looks. So when the bond chain is live,
+    // CLAMP to the ceiling the contract will actually apply. Clamping DOWN only ever issues LESS OMR
+    // per ETH than our own feed thought was fair, so the safe direction is the automatic one — and a
+    // chain that is currently refusing every bond (unset/stale/broken oracle) is reported plainly
+    // rather than papered over with a quote that cannot land.
+    const priceReader = await makeBondPriceReader();
+    if (priceReader) {
+      let onchain = null;
+      try { onchain = await priceReader.ceiling(); } catch {
+        throw new GameError('oracle', 'The on-chain price oracle is not reporting — bonding is paused until it recovers.');
+      }
+      if (!(onchain?.ceiling > 0)) throw new GameError('oracle', 'The on-chain price oracle has no usable reading — bonding is paused.');
+      if (price > onchain.ceiling) price = round6(onchain.ceiling);
+      if (!(price > 0)) throw new GameError('oracle', 'The on-chain price ceiling is below the minimum quotable price.');
+    }
     const disc = BONDS.DISCOUNT_BPS;
     const vestSeconds = Math.floor(BONDS.VEST_HOURS * 3600);
     const payout = bondPayout(eth, price, disc);

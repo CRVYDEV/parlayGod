@@ -9,7 +9,8 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 | `GearVault.sol` | ERC-1155 gear (one tokenId per gear class). Mints only via VoucherClaim, which is **fail-closed**: a gearId only mints up to a per-class supply cap the Safe sets (`vc.setGearSupplyCap`). |
 | `OMRStaking.sol` | 14% APY (owner-set, 50% hard ceiling), pre-funded reward pool, principal always withdrawable. |
 | `OmertaFees.sol` | The inbound entry/revive fee rail (§11). Forwards each exact ETH fee straight to the dev + Vig wallets in the same tx; custodies nothing, mints nothing; emits a nonce'd event the backend watches. |
-| `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + dev + Vig) and forwarded in-tx (custodies no ETH). **THE ONLY MINT IN THE SYSTEM** (tokenomics v2 §4 — the Safe-funded tranche it used to draw on is gone). Three walls replace the tranche and all three must survive review: `dailyCapOMR` (with no tranche, this is the entire blast radius of a leaked quote-signer, and 0 means UNLIMITED), `MAX_DISCOUNT_BPS` (2000, compile-time), and `maxOmrPerEth` — the post-discount mint-RATE ceiling, **fail-closed at 0** so an unconfigured deploy cannot bond at all. Read the contract header on why wall 3 is a rate ceiling rather than the design's literal "accretive-only" test: this contract custodies nothing, so it cannot know treasury backing without an oracle, and an oracle on the mint path becomes the thing standing between a leaked key and unbounded supply. The payout is minted at BOND time, keeping `committedOMR <= omr.balanceOf(this)` true at every instant — so `sweep` still cannot touch OMR backing an outstanding bond and a claim can never fail for want of balance. EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_VEST`/`MAX_QUOTE_TTL` backstops (a leaked-then-rotated signer's far-future quotes can't stay bondable); Safe-owned, pausable; `sweepETH` rescues any stray ETH to the Safe (the OmertaFees pattern). |
+| `IOmrOracle.sol` / `OmrTwapOracle.sol` | WALL 4's price feed. A Uniswap V2 cumulative-price **TWAP** (never spot — spot on a mint path is flash-loanable), behind a minimal swappable interface so the mint path stays reviewable and the feed can follow the canonical pool. `PERIOD` has a compile-time floor so a 30-second "TWAP" cannot be deployed; reports **no usable reading** until a full period has closed; `update()` is permissionless and **must be poked at least once per `maxOracleAge`** or bonding halts (a deliberate failure direction, and a real operational dependency). |
+| `OmertaBond.sol` | The Reserve Bond (Protocol-Owned Liquidity; design `omerta-reserve-bond-design.md`). ETH in → DISCOUNTED OMR out, vested linearly; the ETH is split (POL + dev + Vig) and forwarded in-tx (custodies no ETH). **THE ONLY MINT IN THE SYSTEM** (tokenomics v2 §4 — the Safe-funded tranche it used to draw on is gone). FOUR walls replace the tranche and all four must survive review: `dailyCapOMR` (with no tranche, this is the entire blast radius of a leaked quote-signer, and 0 means UNLIMITED), `MAX_DISCOUNT_BPS` (2000, compile-time), `maxOmrPerEth` (an ABSOLUTE post-discount mint-RATE ceiling, **fail-closed at 0**), and the **accretion `oracle`** (a TWAP the signed quote's claimed market price must agree with, also fail-closed). **The property to review is the COMPOSITION of the last two**: the effective bound is `MIN(maxOmrPerEth, oracle x (1+tolerance) / (1-discount))`, so a manipulated oracle can only ever TIGHTEN what may be minted, never loosen it — which is what makes a price feed safe on a mint path. Setting tolerance and `MAX_DISCOUNT_BPS` to zero makes the wall the design's literal "accretive-only" rule; at non-zero values it is a bounded, market-tracking dilution ceiling, and should be described as that rather than as accretion. The payout is minted at BOND time, keeping `committedOMR <= omr.balanceOf(this)` true at every instant — so `sweep` still cannot touch OMR backing an outstanding bond and a claim can never fail for want of balance. EIP-712 server-signed quotes (the VoucherClaim signer discipline); `MAX_VEST`/`MAX_QUOTE_TTL` backstops (a leaked-then-rotated signer's far-future quotes can't stay bondable); Safe-owned, pausable; `sweepETH` rescues any stray ETH to the Safe (the OmertaFees pattern). |
 
 ## Test & deploy
 ```
@@ -18,14 +19,15 @@ Contracts for Robinhood Chain (Arbitrum Orbit L2, ETH gas; testnet chainId 46630
 or manually:
 ```
 forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts   # first run only
-forge test           # 77 tests incl. two 512-run fuzzes (the anti-Ponzi bound, sell-tax conservation)
+forge test           # 103 tests incl. four 512-run fuzzes (anti-Ponzi, sell-tax conservation,
+                     #   the four-wall mint-rate bound, TWAP decode overflow)
 export SAFE=0x... SIGNER=0x... RPC=https://robinhood-testnet.g.alchemy.com/v2/KEY
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --private-key $DEPLOYER_PK
 ```
 > The suite **also runs inside the sandboxed build environment** — `./run-forge-test-sandboxed.sh`
 > (forge from the official npm dist, forge-std/OZ from npm, solc via a solc-js 0.8.26 stdio shim:
-> the same compiler version+commit as native). First executed 2026-07-23 at 73/73; **77/77 green**
-> after tokenomics v2 step 4. The third-party audit should still re-run `./run-forge-test.sh` on an
+> the same compiler version+commit as native). First executed 2026-07-23 at 73/73; **103/103 green**
+> after tokenomics v2 step 4 + the accretion oracle. The third-party audit should still re-run `./run-forge-test.sh` on an
 > open-internet machine with NATIVE solc as part of its own verification.
 
 ## Server-side signing parity (for M6-B, viem)
@@ -75,9 +77,13 @@ Third-party audit of all six contracts + the signing service; counsel review of 
 
 ⚠ **Point the auditor at tokenomics v2 step 4 explicitly.** Until 2026-07-29 this suite's headline
 property was "nothing mints", and every prior review leaned on it. OMR now has a mint path and bonds
-use it. What must be reviewed as new: `OMR.minter` (single path, owner-set, no owner mint) and
-OmertaBond's three walls — and specifically that `maxOmrPerEth` is a mint-RATE ceiling, a deliberate
-deviation from the design's literal "accretive-only" wording (reasoning in the contract header).
+use it. What must be reviewed as new: `OMR.minter` (single path, owner-set, no owner mint),
+OmertaBond's four walls, and `OmrTwapOracle`. **The single highest-value thing to attack is the
+composition of walls 3 and 4** — a price feed on a mint path is normally the softest link, and the
+claim here is that it cannot be: `maxOmrPerEth` is checked independently, so a manipulated oracle can
+only tighten the bound. Break that and the mint is unbounded. Also worth attacking: the TWAP itself
+(pool depth vs window length), and the keeper dependency (`update()` must be poked within
+`maxOracleAge` or bonding halts).
 
 ## Internal red-team pass (see `../AUDIT-contracts.md`)
 Patched: gear mints are now bounded per class (was uncapped — a compromised signer could mint unlimited gear); GearVault is Safe-owned from deploy (no hot-deployer window); a `MAX_VOUCHER_TTL` deadline backstop; and the signer snippet no longer hardcodes a chainId. The OMR rail, EIP-712/replay, reentrancy, and staking pool-separation were reviewed and found sound. Accepted-as-designed (Safe is root of trust): sweep/pause, global daily-cap contention, APY-change retroactivity. The suite compiles clean (solc 0.8.26 + OZ 5.6.1 + forge-std, 0 warnings) but the producing environment had no `forge` — run `forge test` locally to execute the VM assertions.
