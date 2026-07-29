@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { logCollect } from './collection.js';
 // (tokenomics v2 step 2) the early-exit surcharge + toll split now live only on the WITHDRAWAL
 // boundary in chain.js — the AMM sell that used to carry them here is retired with the pool.
-import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding } from './game.js';
+import { GameError, bumpFamilyTask, skillMult, trunkCap, npcMult, bumpStanding, bumpMastery } from './game.js';
 import {
   CONSUMABLES, RACKETS, ASSETS, GOODS, GUNS, VESTS, CONSTANTS, SKILLS, UNDERWORLD,
   levelOf, cityEventOf, dayOf, carOf, carVal, carMelt, rollCar, rollTrim,
@@ -57,6 +57,7 @@ export async function boostCar(ch, client, h) {
     await h.rngLog(client, ch.id, 'gta', roll, 'success');
     await h.bumpDaily(client, ch.id, 'gta');
     await bumpFamilyTask(client, h, 'gta', 1);
+    await bumpMastery(client, h, ch, 'wheels', 'boost'); // THE TRADES — a clean boost is the wheelman's craft
     return { ok: true, success: true, car: { id: carId, model: model.id, trim: trim.id, dmg, rare: !!model.rare } };
   }
   const stint = 15 + Math.floor(Math.random() * 16); // 15–30s
@@ -234,6 +235,7 @@ export async function sellGood(ch, goodId, qty, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: net, reason: `goods:sell:${goodId}` });
   await takeHouse(client, tax);
   await h.bumpDaily(client, ch.id, 'goods');
+  await bumpMastery(client, h, ch, 'commerce', 'sell'); // THE TRADES — goods moved at a margin is commerce
   return { ok: true, unit, qty: n, earned: net };
 }
 

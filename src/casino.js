@@ -7,7 +7,7 @@
 // helpers below); whatever profit isn't tipped out burns. Dice are stateless (a full pass-line
 // round in one call); the Numbers is a daily ticket resolved lazily against the seed-drawn number.
 import crypto from 'node:crypto';
-import { GameError, bus, npcTier, bumpStanding, ledger, notify, rngLog } from './game.js';
+import { GameError, bus, npcTier, bumpStanding, bumpMastery, ledger, notify, rngLog } from './game.js';
 import { CASINO, UNDERWORLD, numbersDrawOf, dayOf, weekOf, levelOf, hash01, MARKET_SEED } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -128,6 +128,7 @@ export async function playDice(ch, amount, client, h) {
   await takeHouse(client, h, tax);      // the street is tipped only from realized (post-payout) profit
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // action on her floor is business
+  await bumpMastery(client, h, ch, 'gambling', 'dice');
   await h.rngLog(client, ch.id, 'casino:dice', rolls[0], `${win ? 'win' : 'loss'} $${amt} [${rolls.join(',')}]`);
   await h.track(client, ch.account_id, 'casino', { game: 'dice', amt, win, rolls: rolls.length });
   if (amt >= CASINO.HIGH_FEED) bus.emit('streets', { type: 'highroller', who: ch.name, amount: amt, win }); // whale theater
@@ -372,6 +373,7 @@ export async function betTrack(ch, race, runner, amount, client, h) {
   await takeHouse(client, h, Math.ceil(amt * 0.01));
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 2, { action: 'track' }); // her floor, her book
+  await bumpMastery(client, h, ch, 'gambling', 'trackbet');
   await h.track(client, ch.account_id, 'casino', { game: 'track', race, runner: idx, amt });
   return { ok: true, game: 'track', race, day, runner: idx, post: pick.post, horse: pick.name, odds: pick.odds, stake: amt, player: !!pick.player };
 }
@@ -705,6 +707,7 @@ export async function playNumbers(ch, pick, amount, client, h) {
   await takeHouse(client, h, tax);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'numbers' }); // the runner reports who plays
+  await bumpMastery(client, h, ch, 'gambling', 'numbers');
   await h.track(client, ch.account_id, 'casino', { game: 'numbers', amt, pick: n });
   return { ok: true, game: 'numbers', pick: n, stake: amt, drawsOnDay: day + 1, payout: CASINO.NUMBERS_PAYOUT };
 }
@@ -789,6 +792,7 @@ export async function blackjackDeal(ch, amount, client, h) {
   await bumpProfit(client, amt);
   await bumpVolume(client, amt);
   await bumpStanding(client, h, ch, 'madame', 1, { action: 'dice' }); // a table on her floor is business
+  await bumpMastery(client, h, ch, 'gambling', 'blackjack');
 
   const player = [drawCard(), drawCard()];
   const dealer = [drawCard(), drawCard()];

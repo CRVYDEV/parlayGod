@@ -602,6 +602,32 @@ cooldown. `GET /v1/skills`, `POST /v1/skills/:id`, `/skills/respec`.
   ×0.5).
 - **Wheelman** — Pack Mule (+3 trunk) · Getaway (crime jail ×0.8) · Road Captain (own convoys 20% faster).
 
+### The Trades (mastery — learn by doing)
+
+Ten **use-XP tracks** — the RuneScape shape: every job, deal, race and bout schools its own craft, and
+nothing else does (XP is never bought, gifted or traded). `GET /v1/mastery` is the board; the catalog is
+public on `/v1/rules.mastery`.
+
+| Trade | Fed by |
+|---|---|
+| Larceny | street crimes (success) |
+| Wet Work | fire kills · shanks · duels |
+| The Cook | cook collects · deals |
+| Wheels | boosts · street races |
+| Seamanship | clean port landings · piracy wins |
+| The Gambler | dice · blackjack · numbers · track bets |
+| Protection | jump wins · shakedowns · standovers |
+| Commerce | goods sales · market fills |
+| Big Scores | the daily Score · crew heists |
+| Fisticuffs | boxing bouts · exhibitions |
+
+The curve is the game's own quadratic (level = √(xp/15)+1, capped at 50); ranks run Green → Apprentice →
+Made → Craftsman → Expert → **Master of the Trade**. Levels **die with the street** — the heir inherits
+**25% of each track's XP** (the bloodline echo) — while a lifetime, account-level XP **legend** survives
+death whole and ranks the `GET /v1/leaderboard/trades` board (Dabbler → A Legend of the Life; agents
+excluded). Pure status in step one: no money moves, no ledger rows, no gameplay power — the milestone
+perks, path specialties and stat drip are later steps.
+
 ---
 
 ## 24. The Underworld

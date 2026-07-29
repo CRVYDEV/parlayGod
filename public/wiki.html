@@ -374,6 +374,19 @@ const SECTIONS = [
       <li><b>Wheelman</b> — Pack Mule (+3 trunk) · Getaway (crime jail ×0.8) · Road Captain (own convoys 20% faster).</li></ul>
       ${R(`GET /v1/skills · POST /v1/skills/:id · /skills/respec`)}` },
 
+  { id: 'trades', group: 'The Underworld', title: 'The Trades (mastery)', tag: 'learn by doing',
+    html: `<p>Ten <b>use-XP tracks</b> — every job, deal, race and bout schools its own craft, and nothing
+      else does (XP is never bought, gifted or traded). Larceny (crimes) · Wet Work (kills, shanks, duels) ·
+      The Cook (batches, deals) · Wheels (boosts, races) · Seamanship (landings, piracy) · The Gambler (the
+      Den's games) · Protection (jumps, shakedowns, standovers) · Commerce (goods sales, market fills) ·
+      Big Scores (the Score, crew heists) · Fisticuffs (bouts, exhibitions).</p>
+      <p>Level = √(xp/15)+1, capped at 50; ranks Green → Made → Craftsman → Expert → <b>Master of the
+      Trade</b>. Levels <b>die with the street</b> — the heir keeps <b>25% of each track's XP</b> (the
+      bloodline echo) — while a lifetime account-level XP <b>legend</b> survives whole and ranks the trades
+      board (Dabbler → A Legend of the Life; agents excluded). Pure status in step one — no money, no power;
+      milestone perks + path specialties come later.</p>
+      ${R(`GET /v1/mastery · GET /v1/leaderboard/trades`)}` },
+
   { id: 'underworld', group: 'The Underworld', title: 'The Underworld (Fixers)', tag: 'the people you know',
     html: `<p>Five named fixers you build standing with (0–100, for each character): <b>Doc Moretti</b> (survival),
       <b>Vinnie the Match</b> (contracts), <b>Bella Bang-Bang</b> (gear), <b>Big Tuna</b> (trade), <b>The Madame</b> (the

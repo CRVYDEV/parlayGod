@@ -8,7 +8,7 @@
 // the per-character cash check reconciles them automatically. Laundering rides the existing
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
-import { GameError, bus, skillMult, trunkCap } from './game.js';
+import { GameError, bus, skillMult, trunkCap, bumpMastery } from './game.js';
 import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, businessOf, businessTierOf, businessMaxTier,
   businessAssessedValue, launderRankOf, levelOf, effStat } from './rules.js';
 import { denAvailable, denDistribute } from './casino.js';
@@ -307,6 +307,7 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cut, reason: 'business:shakedown', counterparty: victim.id });
     }
     await h.notify(client, victim.id, 'shakedown', { from: ch.name, kind: r.kind, cut });
+    await bumpMastery(client, h, ch, 'muscle', 'shakedown'); // THE TRADES — extortion is the protection craft
     bus.emit('streets', { type: 'shakedown', by: ch.name, on: victim.name, kind: r.kind });
     return { ok: true, win: true, kind: r.kind, cut };
   }

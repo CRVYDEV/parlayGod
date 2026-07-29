@@ -5194,6 +5194,7 @@
     const t = $('#tab-life');
     await refresh();
     const sk = (await api('GET', '/v1/skills')).body || {};
+    const ms = (await api('GET', '/v1/mastery')).body || {};
     const uw = (await api('GET', '/v1/underworld')).body || {};
     const cam = (await api('GET', '/v1/campaigns')).body || {};
     const bl = (await api('GET', '/v1/bloodline')).body || {};
@@ -5208,6 +5209,15 @@
         Welsh on a debt, rat, break an oath → a <b>Mad Dog</b> (no guard steps in front of you, no family swears a pact with you).</div>
       <div class="card" style="border-color:var(--gold,#c9a227)"><span class="t">THE BLOODLINE'S NAME <span class="d">(the legend — survives death)</span></span>
         <div class="d">high-water: <b style="color:var(--ok)">${hon.peak > 0 ? '+' : ''}${hon.peak ?? 0}</b> (${hon.peakTier || '—'}) · deepest infamy: <b style="color:var(--bad)">${hon.low ?? 0}</b> (${hon.lowTier || '—'}) · <a href="#" id="honor-board">the men of honor & the most feared →</a></div><div id="honor-lb"></div></div>
+
+      <h2>The Trades <span class="d" style="font-size:11px">(learned by DOING — every job, deal, race and bout schools its craft · dies with the street, your heir keeps ${Math.round((ms.heirKeepBps ?? 2500) / 100)}% of the schooling)</span></h2>
+      <div class="d" style="font-size:11px;margin:-4px 0 6px;color:var(--dim)">The bloodline's lifetime schooling: <b>${(ms.legend?.total ?? 0).toLocaleString()}</b> XP — <b>${ms.legend?.rank || 'Dabbler'}</b> · <a href="#" id="trades-board">the deepest tradesmen →</a></div><div id="trades-lb"></div>
+      <div class="grid">${(ms.tracks || []).map((k) => `
+        <div class="card"><span class="t">${k.name} <span class="chip${k.lvl >= 40 ? ' good' : ''}">L${k.lvl} — ${k.rank}</span></span>
+          <div class="d">${k.desc}</div>
+          <div class="d" style="margin-top:4px">${k.nextAt == null ? 'MASTERED' : `${Math.floor(k.xp).toLocaleString()} / ${k.nextAt.toLocaleString()} xp to L${k.lvl + 1}`}
+            ${k.legendXp > 0 ? ` · <span style="color:var(--dim)">bloodline ${Math.floor(k.legendXp).toLocaleString()}</span>` : ''}</div>
+          ${k.nextAt != null ? `<div class="bar" style="margin-top:4px"><div class="fill" style="width:${Math.min(100, Math.round(100 * (k.xp - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0)) / Math.max(1, k.nextAt - (k.lvl > 1 ? (ms.xpDivisor ?? 15) * (k.lvl - 1) * (k.lvl - 1) : 0))))}%"></div></div>` : ''}</div>`).join('')}</div>
 
       <h2>The Build <span class="d" style="font-size:11px">(${sk.points?.available ?? 0} of ${sk.points?.total ?? 0} points free · 1 per ${sk.lvlPerPoint || 4} levels · dies with the street)</span>
         <button class="act" data-do="POST /v1/skills/respec" style="margin-left:6px">respec (${sk.respecOmr || 10} $OMR)</button></h2>
@@ -5293,6 +5303,10 @@
              <input id="van-plate" placeholder="PLATE" size="7" maxlength="8"> <button class="act" id="van-plate-go">plate it (2 $OMR)</button></div>`
           : '<div class="d" style="color:var(--dim)">boost a car in the Garage to give it a vanity plate</div>'}
       </div>`;
+    { const tb = t.querySelector('#trades-board');
+      if (tb) tb.onclick = async (e) => { e.preventDefault();
+        const b = (await api('GET', '/v1/leaderboard/trades')).body || {};
+        t.querySelector('#trades-lb').innerHTML = `<div style="margin-top:6px">${(b.trades || []).map((k) => `<div class="d">#${k.pos} ${esc(k.name)} — ${Math.floor(k.xp).toLocaleString()} xp <span class="chip">${k.rank}</span> <span style="color:var(--dim)">deepest: ${esc(k.bestTrade)}</span></div>`).join('') || '<div class="d">nobody has learned a trade yet</div>'}</div>`; }; }
     { const hb = t.querySelector('#honor-board');
       if (hb) hb.onclick = async (e) => { e.preventDefault();
         const b = (await api('GET', '/v1/leaderboard/honor')).body || {};
@@ -5523,6 +5537,7 @@
       estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,
       vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,
+      mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
       chat: () => `${d.who}: ${d.text}`,
     };
     if (T[t]) { try { return T[t](); } catch { /* fall through */ } }

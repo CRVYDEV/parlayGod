@@ -5,7 +5,7 @@
 // be entered from a cell; a street bodyguard isn't in the yard) but respecting paid revive insurance
 // and witness-protection segregation. Every action REQUIRES being jailed. Numbers are sign-off levers.
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
+import { GameError, bus, bumpMastery } from './game.js';
 import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
          yardEventOf, yardEventById, dayOf } from './rules.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
@@ -526,6 +526,7 @@ export async function shank(ch, victim, client, h) {
   // BEFORE the estate vacates the bounties. Cash only (still no loot, no chop, no feared-rep).
   const { total: bounty } = await claimBounty(client, h, ch, victim.id, ['hospitalize', 'kill']);
   const estate = await runEstate(client, h, victim, ch.name, { killerCh: ch, vendetta: true });
+  await bumpMastery(client, h, ch, 'wetwork', 'shank'); // THE TRADES — a yard kill is still the lethal art
   await bumpHonor(client, ch, HONOR.SHANK); // #1: a shiv in the yard is a coward's kill — the street remembers
   ch.jail_until = new Date(new Date(ch.jail_until).getTime() + PEN.KILL_ADD_S * 1000); // a body means more time
   bus.emit('streets', { type: 'shank', by: ch.name, victim: victim.name });

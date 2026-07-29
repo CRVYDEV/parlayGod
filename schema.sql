@@ -2287,3 +2287,26 @@ CREATE TABLE IF NOT EXISTS sell_tax_events (
   real BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ═══════════════ THE TRADES (mastery expansion, omerta-mastery-design.md) ═══════════════
+-- Per-street use-XP tracks — RuneScape farming pointed at the verbs the game already has.
+-- NUMERIC on purpose (the pg-mem INT-arithmetic quirk register); writes are absolute values
+-- computed in JS under the char lock (the npc_standing/bumpStanding discipline). XP is NOT a
+-- currency: zero transactions rows, zero §10.4 surface. Dies with the street (runEstate wipe)
+-- with a MASTERY.HEIR_KEEP_BPS echo to the heir — the founder-signed death rule.
+CREATE TABLE IF NOT EXISTS masteries (
+  character_id TEXT NOT NULL,
+  track_id TEXT NOT NULL,
+  xp NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, track_id)
+);
+
+-- The lifetime legend — account-level, survives death whole (the hitman-rep/season-kills duality:
+-- the street's LEVEL is the contestable face, the bloodline's lifetime XP is the monument).
+-- Status only: rank titles + the leaderboard, zero gameplay power.
+CREATE TABLE IF NOT EXISTS mastery_legend (
+  account_id TEXT NOT NULL,
+  track_id TEXT NOT NULL,
+  xp NUMERIC NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, track_id)
+);

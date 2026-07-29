@@ -8,7 +8,7 @@
 //   • TUNING (tuneCar) — a cash sink that adds race power (the car-progression the catalog lacked).
 // Lifetime wins are THE WHEEL — an account-level legend that SURVIVES DEATH (the boxing-legend precedent).
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, rngLog } from './game.js';
+import { GameError, bus, ledger, notify, rngLog, bumpMastery } from './game.js';
 import { RACES, raceTierOf, raceRankOf, carPower, carVal, levelOf } from './rules.js';
 import { logCarCollect } from './collection.js';
 
@@ -58,6 +58,7 @@ export async function raceNpc(ch, carId, tierId, useNos, client, h) {
   const mine = power + nos + rand(0, RACES.VARIANCE), field = tier.fieldPower + rand(0, RACES.VARIANCE);
   const win = mine > field;
   await h.rngLog(client, ch.id, `race:npc:${tier.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} (${mine} vs ${field})`);
+  await bumpMastery(client, h, ch, 'wheels', 'race'); // THE TRADES — seat time, win or lose (the cooldown is the throttle)
   if (win) {
     ch.cash = Number(ch.cash) + tier.purse; // the PURSE — a bounded faucet, only on a win
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: tier.purse, reason: 'race:purse' });
@@ -184,6 +185,7 @@ export async function raceChallenge(ch, opponent, body, client, h) {
   const cd = new Date(now.getTime() + raceCdMs());
   await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [ch.id, cd]);
   if (winner.id !== ch.id) await client.query('UPDATE characters SET race_at=$2 WHERE id=$1', [winner.id, cd]);
+  await bumpMastery(client, h, ch, 'wheels', 'race'); // THE TRADES — the challenger raced (the same cooldown throttles)
   // THE WHEEL credit only lands when the LOSER is a real racer (level floor) — AUDIT-full-system-v2
   // F-MED1: the winner-cooldown alone was inert (the cooldown gate checks the CHALLENGER, and the bump
   // fired regardless), so a ring of disposable low-level alts could pad an owner's status board by

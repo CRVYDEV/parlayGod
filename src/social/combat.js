@@ -6,7 +6,7 @@
 //
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
-import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding } from '../game.js';
+import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery } from '../game.js';
 import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
@@ -114,6 +114,7 @@ export async function jump(ch, victim, client, h, intent) {
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
+    await bumpMastery(client, h, ch, 'muscle', 'jump'); // THE TRADES — a won jump works the protection racketeer's craft
     bus.emit('streets', { type: 'jump', by: ch.name, on: victim.name, war: !!war });
     return { ok: true, win: true, intent: it.id, energy: energyCost, stolen, crates, rep, bounty, war: !!war };
   }
@@ -437,6 +438,7 @@ export async function fire(ch, victim, client, h, rounds) {
     // the assassin's legend grows (kills + feared-rep + season streak); directed hits pay a
     // bonus, a settled vendetta a bigger one
     const hit = await awardHitmanRep(client, h, ch, victim, vicLvl, directed, !!vend);
+    await bumpMastery(client, h, ch, 'wetwork', 'fire'); // THE TRADES — a confirmed kill is the lethal art
     await bumpStanding(client, h, ch, 'fixer', 5, { action: 'kill' }); // Vinnie hears about confirmed work
     // RIVALRY (step two): the Doc took an oath — blood work costs his goodwill
     await bumpStanding(client, h, ch, 'doc', -UNDERWORLD.STEP2.RIVAL_LOSS);

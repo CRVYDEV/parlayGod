@@ -3752,6 +3752,39 @@ Winds board — the arbitrage map, six districts that were six identical grey bo
 six district plates on the same art-in-`::before` / scrim-in-`::after` recipe, since the same failure
 applies: a photo behind a price reading is worthless if you cannot read the price.
 
+**THE TRADES (mastery expansion, step one) — BUILT** (`omerta-mastery-design.md`; `src/mastery.js`,
+`bumpMastery` in game.js, `test/mastery.js` — the 58th suite; founder-directed 2026-07-29 "expand the
+trait and stat system significantly... RuneScape-like farming of the stat and skill trees... more paths
+with specialties and disadvantages"; three design forks founder-answered before build: death = **die +
+bloodline echo**, path teeth = **progression speed** + one signature perk/handicap, stats-by-use =
+**yes, tightly capped**). TEN use-XP trades (`MASTERY.TRACKS` rules tail — larceny/wetwork/chemistry/
+wheels/seamanship/gambling/muscle/commerce/scores/fists), each fed ONLY by its own loop's existing
+actions at **24 hook sites** through **`bumpMastery(client, h, ch, trackId, action)`** — the
+bumpStanding twin: reads the loadOwned cache (or the row headless with `h=null` — duel winners, heist
+crew members under the already-held crew lock), UPDATE-then-INSERT upserts BOTH `masteries`
+(character-keyed) and `mastery_legend` (account-keyed) with absolute NUMERIC writes, notifies
+`mastery_up` on a level crossing. Curve = the game's own quadratic (`masteryLvlOf` = √(xp/`XP_DIVISOR`
+15)+1, capped `MAX_LVL` 50); ranks Green → Master of the Trade. **XP is NOT a currency** — zero
+`transactions` rows by construction (the test proves it + the vocabulary stays closed), no respect, no
+level gates, nothing tradeable/giftable/purchasable: every point rides an action that already paid its
+nerve/energy/cash/cooldown cost, so there is no new farm loop. **Death (founder rule):** `masteries`
+joined the runEstate wipe + migrate DISPOSITION; the estate echoes `HEIR_KEEP_BPS` (2500) of each
+track's XP to the heir (read from `h.victimOwned.mastery` BEFORE the wipe — the npc-memory/honor echo
+shape; `report.kept.masteries`); the lifetime legend survives whole. Board `GET /v1/mastery`
+(readCharacter); `GET /v1/leaderboard/trades` ranks lifetime XP with the deepest trade named (agents
+excluded, two-flat-queries + JS aggregate — the pg-mem posture); `/v1/rules.mastery` is the public
+catalog; console: "The Trades" grid on the Life tab (per-track progress bars + the legend banner +
+leaderboard link) + a `mastery_up` feed line. Port hook fires once per CLEAN LANDING (warehouse or
+fence — the landing is the seamanship); blackjack hooks the DEAL only (one play = one XP, never the
+double's second stake); wetwork/muscle hooks fire on WINS only. Mutation-verified both ways (drop the
+heir echo → caught; unhook doCrime → caught). All `MASTERY.*` numbers are founder sign-off levers
+(BALANCE.md — `HEIR_KEEP_BPS` flagged as death-softening; the XP table must be re-checked against the
+playthrough harness before step two makes it a power number). **Steps 2–4 designed, not built:**
+milestone perks (10/25/40) + the level-50 trait choice; PATHS v2 (prototype re-extract 3→6 + a
+hand-written `PATH_FX` tail matrix, home ×~1.5 / rival ×~0.6 XP rates inside bumpMastery, one signature
+perk + one handicap per path, a switch cooldown); stats-by-use (a capped daily drip on the gym's own
+diminishing curve, playthrough re-run). A combined red-team follows step 4 (the pillar discipline).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

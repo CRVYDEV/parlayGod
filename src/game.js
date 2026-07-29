@@ -9,7 +9,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue } from './rules.js';
+         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -160,6 +160,7 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'sk', skill_id, NULL::text, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_skills WHERE character_id=$1
     UNION ALL SELECT 'npc', npc_id, NULL::text, standing::numeric, NULL::numeric, touched_at FROM npc_standing WHERE character_id=$1
     UNION ALL SELECT 'grudge', npc_id, NULL::text, count::numeric, NULL::numeric, since FROM npc_grudges WHERE character_id=$1 AND count > 0
+    UNION ALL SELECT 'my', track_id, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM masteries WHERE character_id=$1
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2`,
   [ch.id, ch.account_id]);
@@ -182,6 +183,7 @@ export async function loadOwned(client, ch) {
   const npc = of('npc', (r) => ({ npc_id: r.k, standing: n(r.n), touched_at: r.ts }));
   const grudge = of('grudge', (r) => ({ npc_id: r.k, count: n(r.n), since: r.ts }));
   // R1 — the Portfolio: account-level (survives death), so keyed on account_id not character_id
+  const my = of('my', (r) => ({ track_id: r.k, xp: n(r.n) }));
   const pf = of('pf', (r) => ({ ticker: r.k, shares: n(r.n), cost_omr: n(r.n2) }));
   // THE ESTATE — account-level too (survives death; the heir inherits the compound)
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
@@ -216,6 +218,9 @@ export async function loadOwned(client, ch) {
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
     skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
+    // THE TRADES — use-XP per track (omerta-mastery-design.md). Dies with the street (a
+    // HEIR_KEEP_BPS echo carries); XP is not a currency, so nothing here touches §10.4.
+    mastery: Object.fromEntries(my.rows.map((r) => [r.track_id, Number(r.xp)])),
     // who you know — dies with the street. Idle friendships COOL (Underworld step two): the
     // EFFECTIVE standing is what everyone reads; the stored row catches up on the next bump.
     npc: Object.fromEntries(npc.rows.map((r) => [r.npc_id, decayedStanding(Number(r.standing), r.touched_at)])),
@@ -352,6 +357,52 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
   // inline here to keep game.js import-acyclic). Any fixer's tagged action can advance any
   // active chain whose current step wants it; choice steps wait for the player.
   if (action) await advanceCampaignsInline(client, ch, action);
+}
+
+// ═══ THE TRADES — the mastery XP funnel (omerta-mastery-design.md) ═══
+// The bumpStanding twin: ONE shared helper with action tags, called inline at the verb sites, so
+// the rules live in exactly one place (path XP-rate mults land here in step 3, the stat drip in
+// step 4 — every future modifier composes inside this funnel, never at a call site).
+//
+// XP is NOT a currency — this writes zero `transactions` rows, so §10.4 has no surface here. It
+// pays ZERO respect and gates ZERO character levels (respect stays the only level currency — the
+// level-240 speedrun class). Every award is throttled by the action's own nerve/energy/cash/
+// cooldown cost: there is no new farm loop, only new reward for the existing ones.
+//
+// Storage is the npc_standing discipline: NUMERIC, absolute writes computed in JS under the
+// caller's char lock, UPDATE-then-INSERT upsert, in-memory mirror so same-txn reads stay honest.
+// `h` may be null for HEADLESS callers (crew members paid by direct row updates under lock — the
+// heist-crew pattern): then `cur` is read by SQL and no mirror is written.
+export async function bumpMastery(client, h, ch, trackId, action) {
+  const track = MASTERY.TRACKS.find((t) => t.id === trackId);
+  const xp = Number(MASTERY.XP[action] || 0);
+  if (!track || !(xp > 0)) return null;   // defensive — a bad tag must never fail the action
+  const cur = h?.owned?.mastery
+    ? Number(h.owned.mastery[trackId] || 0)
+    : Number((await client.query('SELECT xp FROM masteries WHERE character_id=$1 AND track_id=$2',
+        [ch.id, trackId])).rows[0]?.xp || 0);
+  const before = masteryLvlOf(cur);
+  const next = cur + xp;
+  const upd = await client.query('UPDATE masteries SET xp=$3 WHERE character_id=$1 AND track_id=$2',
+    [ch.id, trackId, next]);
+  if (!upd.rowCount) {
+    await client.query('INSERT INTO masteries (character_id, track_id, xp) VALUES ($1,$2,$3)',
+      [ch.id, trackId, next]);
+  }
+  if (h?.owned?.mastery) h.owned.mastery[trackId] = next;
+  // the lifetime legend — account-level, survives death whole (pure status). NUMERIC + bound-param
+  // ADDITION is pg-mem-safe (the quirk is INT subtraction only — AUDIT-full-sweep).
+  const lu = await client.query('UPDATE mastery_legend SET xp = xp + $3 WHERE account_id=$1 AND track_id=$2',
+    [ch.account_id, trackId, xp]);
+  if (!lu.rowCount) {
+    await client.query('INSERT INTO mastery_legend (account_id, track_id, xp) VALUES ($1,$2,$3)',
+      [ch.account_id, trackId, xp]);
+  }
+  const after = masteryLvlOf(next);
+  if (after > before) {
+    await notify(client, ch.id, 'mastery_up', { track: trackId, name: track.name, lvl: after, rank: masteryRankOf(after) });
+  }
+  return { track: trackId, xp, lvl: after, leveled: after > before };
 }
 
 async function advanceCampaignsInline(client, ch, action) {
@@ -1015,6 +1066,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
       await h.track(client, ch.account_id, 'crime_attempt', { id: c.id, success: true });
       await h.bumpDaily(client, ch.id, 'crime');
       await bumpFamilyTask(client, h, 'crime', 1);
+      await bumpMastery(client, h, ch, 'larceny', 'crime'); // THE TRADES — a pulled job is the larceny grind
       await logCollect(client, ch.account_id, 'crimes', c.id); // THE COLLECTION — first pull of each job
       const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
       // CLUE SCROLLS (slate #4): a rare treasure-trail drop — decorative on the crime path

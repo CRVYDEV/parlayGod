@@ -2446,3 +2446,22 @@ Levers: `FAMILY_YIELD.FUND_BPS` 500 is a founder sign-off lever (pinned; sized s
 is deflation). The full-balance redemption edge (float re-round) is regression-tested at a
 measured-triggering value — the hazard fires on ~13% of 6dp amounts, so a "realistic-looking" fixture
 proves nothing.
+
+## THE TRADES (mastery expansion, step one — 2026-07-29)
+
+Founder-directed ("expand the trait and stat system significantly... RuneScape-like farming"), design
+`omerta-mastery-design.md`. Step one is a PURE STATUS axis — ten use-XP tracks fed at 24 existing hook
+sites through `bumpMastery` (the bumpStanding twin), zero `transactions` rows, zero gameplay power —
+so it sits entirely outside §10.4 and the sim-audited balance (the hitman-rep argument). Every lever
+below becomes LOAD-BEARING in later steps (milestone perks / paths v2 / stat drip), which is why they
+are recorded now:
+
+| lever | value | note |
+|---|---|---|
+| `MASTERY.XP_DIVISOR` / `MAX_LVL` | 15 / 50 | level = √(xp/15)+1 — at the measured crime pace (~60/hr) L10 ≈ 7h focused, L25 ≈ 2 days, L50 RuneScape-99 territory |
+| `MASTERY.XP` (per action) | crime 3 … fire 25 | sized ~proportional to each action's existing resource cost (nerve/energy/cash/cooldown) so XP-per-resource stays comparable across tracks and no track is the one true farm. **XP sources add NO new action** — every point rides an action that already paid its cost |
+| `MASTERY.HEIR_KEEP_BPS` | 2500 | **softens death** (the standing flag class — MEMORY_BPS / HONOR.HEIR_KEEP precedent): the heir keeps 25% of each track's XP. 0 restores hard death |
+| `MASTERY.RANKS` / `LEGEND_RANKS` | display bands | pure status |
+
+**Flag (step-two gate):** before milestone perks land, re-check the XP table against the playthrough
+harness — a perk ladder makes XP/hr a power number, and the table was sized for status only.

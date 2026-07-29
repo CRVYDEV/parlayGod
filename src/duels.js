@@ -18,7 +18,7 @@
 // pair; plus the MIN_LVL floor (both sides), the LEGEND_MIN_LVL floor on the lifetime credit,
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
-import { GameError, notify } from './game.js';
+import { GameError, notify, bumpMastery } from './game.js';
 import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
@@ -154,6 +154,9 @@ export async function challenge(ch, opponent, amount, client, h) {
     [crypto.randomUUID(), pa, pb, winner.account_id, day]);
   await client.query('UPDATE characters SET duel_at=$2 WHERE id=$1', [ch.id, new Date(Date.now() + cdMs)]);
   ch.duel_at = new Date(Date.now() + cdMs);
+  // THE TRADES — the WINNER worked the lethal art (headless h when the passive lister wins: the
+  // funnel reads cur by SQL and skips the mirror — the bumpMastery contract)
+  await bumpMastery(client, win ? h : null, winner, 'wetwork', 'duel');
   // The lifetime legend needs a real opponent (the WHEEL anti-Sybil floor) AND a NEW one each day:
   // `prior === 0` means this is the first duel against that bloodline today, so the same funded
   // lvl-10 alt can't feed wins at rate-limit speed (AUDIT-slate-drops #2 — the level floor alone

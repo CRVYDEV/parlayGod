@@ -1,6 +1,6 @@
 // M4 — growth systems: paths, the Daily Score, missions, daily contracts, and
 // the First Week (GRASSROOTS). Every formula cites spec §5.1/§7.3–7.4 / v24.
-import { GameError, cleanText, assignedSoldier, soldierResult } from './game.js';
+import { GameError, cleanText, assignedSoldier, soldierResult, bumpMastery } from './game.js';
 import { soldierFxOf, SOLDIERS } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
@@ -80,6 +80,7 @@ export async function heist(ch, client, h) {
   ch.heist_at = new Date(Date.now() + cdMs);
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: 'heist' });
   await h.bumpDaily(client, ch.id, 'heist');
+  await bumpMastery(client, h, ch, 'scores', 'score');
   const soldier = second ? await soldierResult(client, h, ch, second, { success: true }) : null;
   return { ok: true, take, rep, soldier: soldier ? { ...soldier, cut: soldierCut } : null };
 }

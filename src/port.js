@@ -8,7 +8,7 @@
 // a WIN redirects the run's would-be landing to the pirate at a CUT, so port emission can only FALL), and
 // the offshore RENDEZVOUS (a consensual mid-sea handoff of an active run to a partner's boat — §10.4-neutral).
 import crypto from 'node:crypto';
-import { GameError, bus } from './game.js';
+import { GameError, bus, bumpMastery } from './game.js';
 import { PORT, COMMISSION, NOTORIETY, boatOf, portRouteOf, boatResale, interdictChance, effHold, effSpeed, boatUpgradeCost, portRankOf, fenceMultOf, levelOf, cityHourOf, smugglerTierOf, smuggleRepPerks, notorietyNow } from './rules.js';
 import { logCollect } from './collection.js';
 import { activeDecree } from './commission.js';
@@ -196,6 +196,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
   if (roll >= p) {
     // CLEAN — the contraband slips the Coast Guard. Its BOOK VALUE = hold × the route's fence rate.
     const sale = Number(boat.run_hold) * route.sell;
+    await bumpMastery(client, h, ch, 'seamanship', 'port'); // THE TRADES — the clean LANDING is the seamanship, warehouse or fence
     if (warehouse) {
       // WAREHOUSE (step four): hold the contraband as a commodity — no cash / toll / legend yet (those fire
       // at fence). A market-timing play: fence later when the drifting price is high (or eat it if whacked).
@@ -207,7 +208,7 @@ export async function collectRun(ch, boatId, warehouse, client, h) {
     // FENCE NOW (the default) — land it straight to cash at the route rate (a bounded faucet)
     ch.cash = Number(ch.cash) + sale;
     await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: sale, reason: 'port:sale' });
-    await bumpSmuggled(client, ch.account_id, sale);   // THE SMUGGLER'S LEGEND (status, survives death)
+    await bumpSmuggled(client, ch.account_id, sale); // THE SMUGGLER'S LEGEND (status, survives death)
     const toll = await harborToll(client, h, ch, sale, rep.tollMult); // THE HARBORMASTER (step three): docks-holder toll (rep T2 halves it)
     await clearRun();
     if (sale >= 250000) bus.emit('streets', { type: 'port_landing', by: ch.name, route: route.name, value: sale });
@@ -326,6 +327,7 @@ export async function interceptRun(ch, targetBoatId, client, h) {
     await clearIntercepts(client, targetBoatId);
     await h.notify(client, boat.character_id, 'port_pirated', { route: boat.run_route, taken: take });
     if (take >= 250000) bus.emit('streets', { type: 'port_piracy', by: ch.name, route: route?.name });
+    await bumpMastery(client, h, ch, 'seamanship', 'piracy'); // THE TRADES — a prize taken at sea
     await h.track(client, ch.account_id, 'port', { act: 'piracy', win: true, take });
     return { ok: true, win: true, take, route: boat.run_route };
   }

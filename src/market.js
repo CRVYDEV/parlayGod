@@ -16,7 +16,7 @@
 // → market_listings (pot class) → street_tax singleton. Acyclic vs the global order; residual
 // races fall back to the 40P01→contention mapping.
 import crypto from 'node:crypto';
-import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding } from './game.js';
+import { GameError, bus, ledger, notify, skillMult, trunkCap, npcTier, bumpStanding, bumpMastery } from './game.js';
 import { BLACK_MARKET as MARKET, GOODS, SKILLS, UNDERWORLD } from './rules.js';
 import { logCarCollect } from './collection.js';
 
@@ -212,6 +212,7 @@ export async function fillOrder(ch, listingId, qty, client, h) {
   h.owned.cargo[l.good_id] = have - n; // trunk → the order's warehouse
   await setCargo(client, ch.id, l.good_id, have - n);
   const { net } = await paySeller(client, h, ch.id, gross, { reason: 'market:fill', inMemoryCh: ch });
+  await bumpMastery(client, h, ch, 'commerce', 'fill');
   // absolute writes (the pg-mem INT quirk); the row stays live at qty=0 until the buyer claims
   await client.query('UPDATE market_listings SET qty=$2, filled_qty=$3 WHERE id=$1',
     [listingId, Number(l.qty) - n, Number(l.filled_qty) + n]);

@@ -25,7 +25,7 @@ import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/
   const wh = readFileSync(new URL('../public/wiki.html', import.meta.url), 'utf8').toLowerCase();
   for (const term of ['spread the word', 'family tree', 'opportunity', '/agents',
     'dueling circuit', 'clue scrolls', 'megaproject', 'cellphone',
-    'ring poker', 'house window', 'gala', 'the family yield']) {
+    'ring poker', 'house window', 'gala', 'the family yield', 'the trades']) {
     assert(wm.includes(term), `docs/WIKI.md must document "${term}" (codex drift)`);
     assert(wh.includes(term), `public/wiki.html must document "${term}" (codex drift)`);
   }

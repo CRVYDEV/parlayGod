@@ -18,6 +18,7 @@ import * as Heists from '../heists.js';
 import * as Honor from '../honor.js';
 import * as K from '../kitchen.js';
 import * as Mega from '../megaproject.js';
+import * as Mastery from '../mastery.js';
 import * as Port from '../port.js';
 import * as Portfolio from '../portfolio.js';
 import * as Races from '../races.js';
@@ -76,6 +77,7 @@ export function register(app, { pool, auth, modAuth }) {
     app.get('/v1/leaderboard/feuds', { preHandler: auth }, async () => S.feudLeaderboard(pool));
     // M7 Phase 3: hire an NPC contractor for a rolled hit on a target (a ledgered cash sink).
     app.get('/v1/leaderboard/kingpins', { preHandler: auth }, async () => K.kingpinLeaderboard(pool));
+    app.get('/v1/leaderboard/trades', { preHandler: auth }, async () => Mastery.tradesLeaderboard(pool)); // THE TRADES lifetime legend
     app.get('/v1/leaderboard/sov', { preHandler: auth }, async () => Sov.sovLeaderboard(pool));
     app.get('/v1/leaderboard/bloodline', { preHandler: auth }, async () => Bloodline.bloodlineLeaderboard(pool));
     // FIVE PILLARS → Tier 4 — THE REPUTATION BOARDS (the honor legend: Men of Honor + the Most Feared)
