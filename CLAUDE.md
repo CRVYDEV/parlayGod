@@ -6470,3 +6470,39 @@ touchpoints (energy cap, nerve cap, the Doc's bill to the dollar, the presence b
 (presence widening dropped → caught; estate wipe dropped → caught). ALL `REGIMEN.*` numbers are
 founder sign-off levers, pinned in test/levers.js + tabled in BALANCE.md. Chromium-probed live
 (session trains, "🏋 Roadwork — +9 xp" toast, cooldown renders, zero page errors).
+
+**THE ROAD TO 30 + THE VOICE ON YOUR SHOULDER (task #305, three founder asks in one drop).** The
+coach ladder went silent after the early game; now it walks a player hands-on to level 30 (founder:
+"continue coaching… on a plethora of possible actions all the way up to level 30"), every rung a
+ONE-TIME milestone that SELF-CLEARS by doing the thing once (the harness-F1 rule) with the clearing
+signals chosen deliberately: ownership (guns/fronts/fighters), the account-level legends
+(heists_pulled/boxing_wins/race_wins/smuggled/intel_ops — survive death, so a veteran heir is never
+re-schooled), and MASTERY XP (any single action in a loop stamps it forever). The bands: Get
+strapped (6, armory) → trade winds (7, the goods arbitrage on-ramp) → Kitchen (8) → crew score (9)
+→ the Den (10, "bring a real stake — $1,000+", the GAMBLER_MIN_STAKE floor made legible) → the
+fight game (12) → street races (14) → **your first front (15** — founder: "not obvious… the steps
+to buy your first business"; the hint names the Laundromat AND its live catalog price so it can
+never drift from what the buy button charges**)** → legit (15) → the Port (16) → the Wire (18,
+gated on holding a tap's worth of $OMR) → blood on the ledger (22, routed at the Dueling Circuit —
+the accessible wetwork entry). **The skills rung answers "not obvious how to use skill points"**:
+it now fires on UNSPENT points (parity restatement of skills.js pointsOf — game.js cannot import
+it, the one-way rule) with concrete steps + named tier-1 picks, guarded so a veteran banking ≤4
+points for a capstone (cost 4 — CORRECT play) is never nagged: re-fires only never-learned or ≥5
+idle. **THE VOICE ON YOUR SHOULDER** (founder: the coach as your inner conscience, "a little
+angel or devil… keep the user in constant loops of progress"): the coach banner now reads as the
+😈 devil on your shoulder — a diegetic persona over the SAME server-authoritative ladder, so
+guidance lands as the game talking, not UI chrome; the angel/devil DUAL voice (safe play vs risky
+play) is the natural step two, mapping onto the existing quiet/loud verb axes (queued with the
+crime-loop de-grind). test/growth.js walks the ENTIRE road end to end — every band fires in order
+at level 20 and each clears on its exact signal, incl. the priced first-front hint —
+mutation-verified (a rung made unclearable fails the walk by name at the NEXT rung's assertion).
+**Shipped with it (live tester report): the Streets spotlight kept pointing a level-7 player at the
+LOWEST crime** — `SPOT.streets` is `.verbrow .prime` and querySelector takes the FIRST match, while
+the best-8 grid rendered ASCENDING; the grid now leads with the STRONGEST job you can pull (one
+`.reverse()`, which also makes the "your best jobs" heading true), Chromium-probed with the
+expectation computed independently node-side (tie-flip detectable even at level 1) and
+mutation-verified (reverse dropped → the probe names the wrong leading card).
+Process note recorded: the first full-suite run of this drop reported exit 0 while a suite had
+FAILED — `npm test | tail` reports TAIL's exit code, the pipe-masking trap; reruns use pipefail.
+The failure itself was the docs guard correctly catching the REGIMEN commit making SPEC's
+markdown-file count stale (a design doc counts only once tracked). Suite green + sim drift-0.

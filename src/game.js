@@ -10,7 +10,7 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
-         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf } from './rules.js';
+         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -914,17 +914,46 @@ function coachLadder(ch, acct, owned) {
   const obGameplayDone = obGameplay.filter((t) => onboard[t.id]).length;
   if (obGameplay.some((t) => !onboard[t.id])
     && add(`Finish your First Week (${obGameplayDone}/${obGameplay.length})`, 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', 'start')) return rungs;
-  // the bridge into the deep game — a ladder of "what next" so the coach never goes silent mid-game
+  // ── THE BRIDGE INTO THE DEEP GAME — a banded ladder of one-time milestones all the way to level
+  // 30 (founder-directed "continue coaching… on a plethora of possible actions all the way up to
+  // level 30"), so the coach never goes silent mid-game. EVERY rung self-clears by DOING the thing
+  // once (the harness-F1 rule): the clearing signals are ownership (guns/fronts/fighters), the
+  // account-level legends (heists_pulled/boxing_wins/race_wins/smuggled — survive death, so a
+  // veteran heir is never re-schooled), and mastery XP (any single action in that loop stamps it).
   const hasEarner = !!ch.lab || (owned.businesses || []).length || (owned.rackets || []).length
     || (owned.assets || []).length || (owned.fighters || []).length || !!owned.speakeasy;
   if (!hasEarner && lvl >= 3 && add('Money while you sleep', 'Buy a racket in The Empire — cheap passive income that pays while you\'re offline. Kitchens and fronts come later.', 'empire')) return rungs;
   // (harness F1c) `owned.skills` is a SET (loadOwned:159), so `.length` is undefined and `!undefined`
   // is always true — this rung fired forever no matter how many skills you'd bought, masking the two
   // rungs below it. Count the Set properly. (Every other collection here is a real array.)
-  const skillCount = owned.skills instanceof Set ? owned.skills.size : (owned.skills || []).length;
-  if (lvl >= 4 && !skillCount && add('You\'ve earned skill points', 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', 'life')) return rungs;
+  // (founder: "not obvious how to use your skill points once you get there") — the rung now fires
+  // on UNSPENT points, not just never-learned: parity with skills.js pointsOf (which game.js cannot
+  // import — the one-way rule — so the small formula is restated here; skillOf reads the same TREE).
+  // The hoarder guard: banking ≤ CAPSTONE_COST points is CORRECT play (capstones cost 4), so a
+  // veteran saving for one is not nagged — the rung re-fires only never-learned or ≥5 idle points.
+  const skillSet = owned.skills instanceof Set ? owned.skills : new Set(owned.skills || []);
+  const skillSpent = [...skillSet].reduce((a, id) => a + (skillOf(id)?.cost || 0), 0);
+  const skillPts = Math.floor(lvl / SKILLS.LVL_PER_POINT)
+    + Math.min(SKILLS.PRESTIGE_POINT_MAX, Math.floor(Number(acct.prestige || 0) / SKILLS.PRESTIGE_PER_POINT))
+    - skillSpent;
+  if (lvl >= 4 && skillPts >= 1 && (skillSet.size === 0 || skillPts >= 5)
+    && add('You\'ve earned skill points', `You have ${skillPts} unspent point${skillPts === 1 ? '' : 's'}. The Life ▸ Skills: press LEARN on a tier-1 skill — Bruiser (hit harder), Fast Talker (lay low cheaper), Pack Mule (bigger trunk). Tier-1s cost 1 point.`, 'life')) return rungs;
+  if (lvl >= 6 && !(owned.guns || []).length && add('Get strapped', 'The Garage ▸ Armory: buy a pistol and CARRY it. A gun backs every fight in this city — jumps, hits, standing over rivals.', 'garage')) return rungs;
+  if (lvl >= 7 && !Number(owned.mastery?.commerce || 0) && add('Learn the trade winds', 'Streets ▸ Trade Goods: buy something cheap where you stand, haul it where it\'s rich (The City ▸ Trade Winds shows the spread), sell high. This is the on-ramp to convoys and the Black Market.', 'streets')) return rungs;
   if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length && add('Cook up real money', 'Set up a Kitchen — the drug trade is the deepest earner in the game.', 'kitchen')) return rungs;
+  if (lvl >= 9 && !Number(acct.heists_pulled || 0) && add('Pull a crew score', 'Big Scores ▸ Crew Heists: plan a job or join one off the open board. One roll pays the whole crew — bigger than anything you can pull alone.', 'scores')) return rungs;
+  if (lvl >= 10 && !Number(owned.mastery?.gambling || 0) && add('A night at the Den', 'The Den at the Neon Mile — craps, blackjack, the numbers. Bring a real stake ($1,000+): the table doesn\'t respect small money.', 'den')) return rungs;
+  if (lvl >= 12 && !(owned.fighters || []).length && !Number(acct.boxing_wins || 0) && add('Get into the fight game', 'The Fights: sign a contender, train them up, stake them against other managers\' fighters. The crowd bets your main events.', 'boxing')) return rungs;
+  if (lvl >= 14 && !Number(acct.race_wins || 0) && !Number(owned.mastery?.wheels || 0) && add('Run the streets', 'Street Races: tune a car from your garage and run the PvE circuit — fee up front, purse on a win. Fast iron finally earns.', 'races')) return rungs;
+  // (founder: "not obvious… the steps you need to take to buy your first business") — concrete steps,
+  // priced off the live catalog so the hint can never drift from what the buy button charges.
+  const firstFront = BUSINESSES.find((b) => b.kind === 'laundromat');
+  if (lvl >= 15 && !(owned.businesses || []).length
+    && add('Open your first front', `The Empire ▸ The Catalog: hit BUY on the ${firstFront?.name || 'Laundromat'} ($${firstFront?.tiers?.[0]?.cost?.toLocaleString?.() || '250,000'}). It farms cash around the clock — come back daily to COLLECT, and pay the pad (upkeep) or it goes cold. Your first real empire piece.`, 'empire')) return rungs;
   if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length && add('Time to go legit', 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', 'portfolio')) return rungs;
+  if (lvl >= 16 && !Number(acct.smuggled || 0) && add('Take it to the water', 'The Port at the docks: buy a boat and run contraband in from offshore. The margins beat the streets — the Coast Guard is the risk.', 'port')) return rungs;
+  if (lvl >= 18 && !Number(acct.intel_ops || 0) && Number(acct.omr || 0) >= WIRE.TAP_OMR && add('Work the wires', 'The Wire: burn a little $OMR to tap a rival — their heat, their wealth band, whether they\'re hunting YOU. Information is the sharpest weapon in the city.', 'wire')) return rungs;
+  if (lvl >= 22 && !Number(owned.mastery?.wetwork || 0) && add('Blood on the ledger', 'Wet Work: the contract board pays real pots for real bodies. Start on the Dueling Circuit — challenge a listed duelist, win the stake, build the name.', 'pvp')) return rungs;
   // ── THE RECURRING NUDGES ── (COACH_NUDGES) Everything above is a ONE-TIME milestone that clears
   // for good once done. These three never clear, so they live down here where they fill the quiet
   // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable

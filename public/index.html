@@ -498,6 +498,7 @@
   #coach, .coachbox { background: linear-gradient(90deg, var(--neon-soft), transparent 70%);
     border: 1px solid color-mix(in srgb, var(--neon) 55%, var(--line)); border-radius: var(--r-md);
     padding: 10px 12px; margin: 0 0 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.03); }
+  #coach .cwho { color: var(--dim); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 2px; opacity: .85; }
   #coach .cl, .coachbox .cl { color: var(--neon); font-size: 14px; }
   #coach .ch, .coachbox .ch { color: var(--dim); font-size: 12.5px; margin: 3px 0 7px; line-height: 1.4; }
   /* THE PLAN — the queue of what's next (steps 2..5 under the current move), each row a jump.
@@ -2409,7 +2410,9 @@
         `<button class="cstep" data-ctab="${s.tab}" title="${esc(s.hint)}"><b>${++cpn}</b> ${esc(s.label)}</button>`).join('');
       // phones: the queue collapses behind its own header (the #1 move is always visible; the fold
       // check measures the coach box as chrome, and 4 open rows pushed every screen below the fold)
-      $('#coachwrap').innerHTML = me.coach ? `<div id="coach"><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
+      // (founder) THE VOICE ON YOUR SHOULDER — the coach reads as your inner conscience, not UI
+      // chrome: a little devil whispering the next move. Same server-authoritative ladder underneath.
+      $('#coachwrap').innerHTML = me.coach ? `<div id="coach"><div class="cwho">😈 the voice on your shoulder</div><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
         ${road5}
         <button class="act" id="coach-go" style="padding:5px 12px;font-size:12.5px">${T('b_takeme')}</button>
         ${planRows ? `<div class="cplan"><button class="cpt" id="cplan-tg">THEN:<i>+${plan.length - 1} more ▾</i></button>${planRows}</div>` : ''}</div>` : '';
@@ -3512,7 +3515,10 @@
     const allCrimes = [...(rules?.crimes || [])].sort((a, b) => a.lvl - b.lvl);
     const lvl = me?.level || 1;
     const unlocked = allCrimes.filter((c) => c.lvl <= lvl);
-    const best = unlocked.slice(-8);
+    // BEST job first (founder: the tutorial spotlight kept pointing a level-7 player at the lowest
+    // crime — querySelector takes the FIRST '.verbrow .prime', so the leading card must be the
+    // strongest one you can pull, and "your best jobs" should read best-first anyway)
+    const best = unlocked.slice(-8).reverse();
     const rest = allCrimes.filter((c) => !best.includes(c));
     const crimes = best.map(crimeCard).join('');
     const restCrimes = rest.map(crimeCard).join('');
