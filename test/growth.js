@@ -388,7 +388,37 @@ await seedCh(rook.id, "lab='street'");
 assert.equal(await coachOf(), 'You\'ve earned skill points', 'the ladder advances to skills');
 await call('POST', '/v1/skills/bruiser', { token: rook.token });
 assert.notEqual(await coachOf(), 'You\'ve earned skill points',
-  '(c) buying a skill CLEARS the rung — owned.skills is a Set, so .length would have hung here forever');
+  '(c) buying a skill CLEARS the rung — owned.skills is a Set, so .length would have hung here forever; '
+  + 'and the hoarder guard holds: 4 banked points (a capstone costs 4) is correct play, not a nag');
+// ── THE ROAD TO 30 (founder: "continue coaching… on a plethora of possible actions all the way up
+// to level 30"). Rook is level 20, so every band ≤20 fires IN ORDER, and each rung must clear the
+// moment its thing is done once — walked end to end so a dead rung can never mask the ladder below.
+const rookAid = (await pool.query(`SELECT account_id a FROM characters WHERE id='${rook.id}'`)).rows[0].a;
+assert.equal(await coachOf(), 'Get strapped', 'lvl 6+ unarmed → the armory');
+await pool.query(`INSERT INTO character_guns (character_id, gun_id) VALUES ('${rook.id}', 'pocket22')`);
+assert.equal(await coachOf(), 'Learn the trade winds', 'lvl 7+ never traded goods → the arbitrage on-ramp');
+await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'commerce', 2)`);
+// the kitchen rung is already cleared (the lab was seeded above) — the ladder skips straight past it
+assert.equal(await coachOf(), 'Pull a crew score', 'lvl 9+ never heisted → Big Scores');
+await pool.query(`UPDATE account_persistent SET heists_pulled=1 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'A night at the Den', 'lvl 10+ never gambled a real stake → the Den');
+await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'gambling', 1)`);
+assert.equal(await coachOf(), 'Get into the fight game', 'lvl 12+ no stable, no wins → The Fights');
+await pool.query(`UPDATE account_persistent SET boxing_wins=1 WHERE account_id='${rookAid}'`);
+assert.equal(await coachOf(), 'Run the streets', 'lvl 14+ never raced → Street Races');
+await pool.query(`UPDATE account_persistent SET race_wins=1 WHERE account_id='${rookAid}'`);
+// (founder: "not obvious… the steps to buy your first business") — concrete, priced off the catalog
+let front = (await call('GET', '/v1/me', { token: rook.token })).body.character.coach;
+assert.equal(front?.label, 'Open your first front', 'lvl 15+ no front → the Empire walkthrough');
+assert(/Laundromat/.test(front.hint) && /250,000/.test(front.hint), 'the hint names the front AND its live catalog price');
+await pool.query(`INSERT INTO businesses (id, character_id, kind, tier) VALUES ('cb-front-1', '${rook.id}', 'laundromat', 1)`);
+// the legit rung needs $OMR in hand (rook has none) and the wire rung needs a tap's worth — both skip
+assert.equal(await coachOf(), 'Take it to the water', 'lvl 16+ never smuggled → the Port');
+await pool.query(`UPDATE account_persistent SET smuggled=1000 WHERE account_id='${rookAid}'`);
+// lvl 22 band: raise the level and the wetwork rung surfaces; a first duel win clears it
+await seedCh(rook.id, `respect=${10 * 22 * 22}`);
+assert.equal(await coachOf(), 'Blood on the ledger', 'lvl 22+ never drew blood → the Dueling Circuit');
+await pool.query(`INSERT INTO masteries (character_id, track_id, xp) VALUES ('${rook.id}', 'wetwork', 10)`);
 // the tail: most-clearable first, the permanent decline LAST, so nothing masks anything
 await seedCh(rook.id, 'cash=400000, bank=0, energy=0');
 assert.equal(await coachOf(), 'You\'re carrying too much', 'a fat pocket surfaces the bank nudge');
