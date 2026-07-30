@@ -619,12 +619,29 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal(Number(net.rows[0].s), 0, 'contact:* legs net to zero — a transfer, never a faucet');
   r = await call('POST', '/v1/call/fulfill', { token: A.token });
   assert.equal(r.body.error, 'no_call', 'the settled call is gone');
-  // a VISIT call + the broke-void (robbed blind since they rang → the job is off, nothing moves)
+  // a VISIT call + the broke-void (robbed blind since they rang → the job is off, nothing moves).
+  // The void is a 200 RETURN, never a throw (AUDIT-street-life F3): a GameError rolls the txn back,
+  // which would resurrect the dead call and jam the one-open-call slot until the TTL sweep — so the
+  // load-bearing assertion is that the slot is FREE immediately after the void.
   r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
   assert.equal(r.placed, 1, 'a visit call places');
   await pool.query('UPDATE characters SET cash=0 WHERE id=$1', [npcId]);
   r = await call('POST', '/v1/call/fulfill', { token: A.token });
-  assert.equal(r.body.error, 'broke', 'a turned-over contact voids the request');
+  assert.equal(r.code, 200, 'a turned-over contact voids the request (a COMMITTED delete, not a rollback)');
+  assert(r.body.voided, 'the void is stated');
+  assert.equal(Number((await pool.query('SELECT COUNT(*) n FROM contact_calls WHERE character_id=$1', [A.id])).rows[0].n),
+    0, 'F3: the dead call is GONE — the slot is free, not jammed until the sweep');
+  // (Lens D LOW-2) the frozen pay is a CEILING: inflate the stored quote and the fulfilment still
+  // pays at most the LIVE price × premium — a held call is never a free option on the daily swing.
+  await pool.query('UPDATE characters SET cash=900000 WHERE id=$1', [npcId]);
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'freight', goodId: 'gin', qty: 2 });
+  assert.equal(r.placed, 1, 'a fresh freight call places');
+  const honest = Number((await pool.query('SELECT pay FROM contact_calls WHERE character_id=$1', [A.id])).rows[0].pay);
+  await pool.query('UPDATE contact_calls SET pay=$2 WHERE character_id=$1', [A.id, honest + 50000]);
+  await call('POST', '/v1/goods/buy', { token: A.token, body: { goodId: 'gin', qty: 2 } });
+  r = await call('POST', '/v1/call/fulfill', { token: A.token });
+  assert.equal(r.code, 200, 'the re-clamped freight settles');
+  assert.equal(r.body.pay, honest, 'LOW-2: paid the live price × premium, never the inflated frozen quote');
   // expiry: a lapsed request fades (the sweep) and cannot be settled
   await pool.query('UPDATE characters SET cash=40000 WHERE id=$1', [npcId]);
   await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });

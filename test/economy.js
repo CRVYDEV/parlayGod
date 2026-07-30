@@ -623,6 +623,13 @@ assert.equal(r.code, 200, `the mark loads freight (${JSON.stringify(r.body)})`);
   // the victim's shield: one landed robbery per window, however many muggers try
   await seed2("energy=200, jail_until=NULL");
   assert.equal((await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 })).body.error, 'shielded', 'the trunk shield holds');
+  // (AUDIT-street-life F4) the PERSON-crime victim gates — trunk freight rides ON the man, so a
+  // mark in LOCKUP can't be mugged for it (the "jail must never be MORE dangerous than the street"
+  // class v2/v3 closed on fire/npcHit/jump — the shared assertStreetCrime helper lacked it).
+  await pool.query(`UPDATE characters SET trunk_robbed_at=NULL, jail_until=now() + interval '10 minutes' WHERE id='${cid}'`);
+  assert.equal((await call('POST', `/v1/streets/${cid}/trunk`, { token: t2 })).body.error, 'jailed',
+    'F4: a jailed mark cannot be trunk-mugged — the freight went in with them');
+  await pool.query(`UPDATE characters SET jail_until=NULL WHERE id='${cid}'`);
 }
 // a FAILED mugging is jail (reload the mark's freight first — the win may have taken it all)
 await seed2("cunning=1, speed=1, energy=200, jail_until=NULL");

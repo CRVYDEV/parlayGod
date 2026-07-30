@@ -382,6 +382,58 @@ assert.equal(await one("SELECT COUNT(*) n FROM loans WHERE lender_character=$1 A
 assert.equal(await driftOf('character cash'), cashDrift0, 'and the cash check STILL reconciles');
 assert.equal(await escrowDrift(), escrow0, 'as does every escrow check');
 
+// (4b) (AUDIT-street-life F1 — HIGH) RETIREMENT WITH A TAKEN LOAN — retirement is not a death, so
+// voidLoansAtDeath never runs and there is no heir: an ACTIVE loan used to strand pointing at a
+// dead lender. The borrower could not repay (the two-party repay needs a living lender), yet the
+// sweep would brand them WELSHER + WANTED for the unpayable debt, and the pledged car would
+// grace-forfeit into a dead heirless fleet. Now the claim VOIDS at retirement: pledge unlocked,
+// loan gone, borrower told. (The fixture rows are a CLAIM + an ownership flag, not value — the
+// principal "moved at take time", so no ledger rows are owed and the cash check must not move.)
+{
+  const c4 = await pool.connect();
+  await c4.query('BEGIN');
+  const lender = await spawnResident(c4, { band: POPULATION.BANDS.find((b) => b.id === 'capo') });
+  await c4.query('COMMIT');
+  c4.release();
+  const carId = `car-f1-${Date.now()}`;
+  await pool.query(
+    "INSERT INTO cars (id, character_id, model_id, trim_id, dmg, pledged) VALUES ($1,$2,'falcone','base',0,true)",
+    [carId, player.id]);
+  await pool.query(
+    `INSERT INTO loans (id, lender_character, borrower_character, principal, rate, hours, status, due_at, collateral_min, collateral_car)
+     VALUES ('loan-f1', $1, $2, 10000, 0.2, 24, 'active', now() + interval '1 day', 13000, $3)`,
+    [lender.id, player.id, carId]);
+  // (F5) and a pending call FROM this resident — it must die with them, not jam the slot 24h
+  await pool.query(
+    `INSERT INTO contact_calls (character_id, npc_character, kind, district, pay, expires_at)
+     VALUES ($1,$2,'visit','docks',750, now() + interval '20 hours')`, [player.id, lender.id]);
+  // (Lens C LOW-1) and the player's black-book line to them — retirement leaves no heir, so a kept
+  // row would render a dead line FOREVER (unlike a player's number, where the heir answers)
+  const lenderAcct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [lender.id])).rows[0].a;
+  const playerAcct = (await pool.query('SELECT account_id a FROM characters WHERE id=$1', [player.id])).rows[0].a;
+  await pool.query("INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met') ON CONFLICT DO NOTHING",
+    [playerAcct, lenderAcct]);
+  const c5 = await pool.connect();
+  await c5.query('BEGIN');
+  await retireResident(c5, lender.id);
+  await c5.query('COMMIT');
+  c5.release();
+  assert.equal(await one("SELECT COUNT(*) n FROM loans WHERE id='loan-f1'"), 0,
+    'F1: the taken loan VOIDS at retirement — no unpayable debt survives the lender');
+  const car = (await pool.query('SELECT pledged, character_id FROM cars WHERE id=$1', [carId])).rows[0];
+  assert.equal(car.pledged, false, 'F1: the pledged car UNLOCKS — never grace-forfeits into a dead fleet');
+  assert.equal(car.character_id, player.id, 'and stays with the borrower');
+  assert.equal(await one(
+    "SELECT COUNT(*) n FROM notifications WHERE character_id=$1 AND type='loan_voided'", [player.id]), 1,
+    'F1: the borrower is told the book closed');
+  assert.equal(await one('SELECT COUNT(*) n FROM contact_calls WHERE npc_character=$1', [lender.id]), 0,
+    'F5: the pending call died with the caller — the slot is free');
+  assert.equal(await one('SELECT COUNT(*) n FROM contacts WHERE contact_account=$1 OR owner_account=$1', [lenderAcct]), 0,
+    "LOW-1: the retired resident's number is a disconnected line — it leaves every black book");
+  assert.equal(await driftOf('character cash'), cashDrift0, 'F1 moved no value — the cash check is unmoved');
+  await pool.query('DELETE FROM cars WHERE id=$1', [carId]); // fixture hygiene (car conservation reads rows)
+}
+
 // ════════════ THE VOCABULARY ════════════
 const inv = await runLedgerInvariants(pool, { alert: false });
 const vocab = inv.checks.find((c) => c.name === 'reason vocabulary');

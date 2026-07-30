@@ -18,22 +18,24 @@ const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || 
 
 const uid = () => crypto.randomUUID();
 
-// Best-effort under the probe-once-cached SAVEPOINT discipline (the recordRival/logCollect lesson
-// VERBATIM — pg-mem can't parse SAVEPOINT, real Postgres poisons the enclosing txn on an errored
-// statement without one). A failed book write must never roll back the action it rides in.
-let savepointsWork = null;
+// Best-effort SAVEPOINT guard — attempted PER CALL, never cached module-wide (AUDIT-street-life
+// F2). This helper rides BOTH contexts: inside a transaction (withTwoCharacters, the wire) and on
+// a bare pool connection (sendDm — autocommit). Real Postgres refuses SAVEPOINT in autocommit
+// (25P01), so a probe-once cache set by whichever context happened to run first poisons the other:
+// in-txn-first meant every sendDm 'called' grant silently vanished into the outer catch. A context
+// that refuses the savepoint falls back to the bare insert, which is safe exactly there —
+// autocommit can't be txn-poisoned, and pg-mem (which can't parse SAVEPOINT at all) doesn't poison
+// transactions on an errored statement. A failed book write must never roll back the action it
+// rides in.
 export async function recordContact(client, ownerAccount, contactAccount, how) {
   if (!ownerAccount || !contactAccount || ownerAccount === contactAccount) return;
   const insert = () => client.query(
     'INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
     [ownerAccount, contactAccount, how]);
   try {
-    if (savepointsWork === null) {
-      try { await client.query('SAVEPOINT ct_probe'); await client.query('RELEASE SAVEPOINT ct_probe'); savepointsWork = true; }
-      catch { savepointsWork = false; }
-    }
-    if (!savepointsWork) { await insert(); return; }
-    await client.query('SAVEPOINT ct_ev');
+    let sp = true;
+    try { await client.query('SAVEPOINT ct_ev'); } catch { sp = false; }
+    if (!sp) { await insert(); return; }
     try { await insert(); await client.query('RELEASE SAVEPOINT ct_ev'); }
     catch { await client.query('ROLLBACK TO SAVEPOINT ct_ev').catch(() => {}); }
   } catch { /* the book never blocks the street */ }
@@ -116,7 +118,10 @@ export async function generateContactCalls(pool, opts = {}) {
         pay = Math.floor(qty * goodPriceOf(good.id, npc.loc) * CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000);
         if (Number(npc.cash) < pay) kind = 'visit'; // they can't cover the freight — just ask you around
       }
-      if (kind === 'visit') { good = null; qty = null; pay = Math.min(CONTACTS.VISIT_TIP, Math.floor(Number(npc.cash))); }
+      // (Lens C LOW-2) the tip is FIXED, never min(tip, pocket): a sub-tip pay would encode the
+      // NPC's exact pocket cash on the board + the notify. A contact who can't cover the tip
+      // simply doesn't call (fulfilment still re-clamps to their live pocket — the broke-void).
+      if (kind === 'visit') { good = null; qty = null; pay = Number(npc.cash) >= CONTACTS.VISIT_TIP ? CONTACTS.VISIT_TIP : 0; }
       if (pay <= 0) continue; // a broke contact asks for nothing
       const ins = await pool.query(
         `INSERT INTO contact_calls (character_id, npc_character, kind, good_id, qty, district, pay, expires_at)
@@ -144,10 +149,22 @@ export async function fulfillCall(ch, npc, client, h) {
   if (call.npc_character !== npc.id) throw new GameError('wrong_contact', 'That is not who called you.');
   if (ch.loc !== call.district)
     throw new GameError('district', `They're waiting at ${districtName(call.district)} — travel there first.`);
-  const pay = Math.min(Number(call.pay), Math.floor(Number(npc.cash)));
-  if (pay <= 0) { // robbed blind since the call went out — the request voids, nothing moves
+  // (Lens D LOW-2) the frozen pay is a CEILING, never an option: goodPriceOf drifts daily and the
+  // 24h TTL spans a day boundary, so a held call was a free option on the swing — fulfil only on a
+  // day the good runs cheaper than the frozen basis and net > the premium. Re-clamp to the LIVE
+  // price × premium at fulfilment: the 15% premium is the deal, whichever day you deliver.
+  const live = call.kind === 'freight'
+    ? Math.floor(Number(call.qty) * goodPriceOf(call.good_id, call.district) * CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000)
+    : Infinity;
+  const pay = Math.min(Number(call.pay), live, Math.floor(Number(npc.cash)));
+  if (pay <= 0) {
+    // Robbed blind since the call went out — the request voids, nothing moves. RETURN, never throw
+    // (AUDIT-street-life F3): a GameError rolls the whole txn back, which would resurrect the dead
+    // call and jam the one-open-call slot until the TTL sweep. The burner precedent — a side-effect
+    // that must survive the refusal has to COMMIT, so the refusal can't be a throw.
     await client.query('DELETE FROM contact_calls WHERE character_id=$1', [ch.id]);
-    throw new GameError('broke', "They got turned over since they called — the job's off.");
+    return { ok: true, call: true, voided: true, from: npc.name,
+      message: "They got turned over since they called — the job's off." };
   }
   if (call.kind === 'freight') {
     const qty = Number(call.qty);

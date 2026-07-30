@@ -608,6 +608,15 @@ assert.equal(r.code, 200, 'contractor hired');
 assert.equal((await meOf(hirer.token)).cash, hirerPre - 50000, 'the fee burns win or lose (a §10.4 sink)');
 assert((await meOf(hirer.token)).heat >= 20, 'arranging a hit draws law heat (~25, minus a hair of decay on read)');
 assert.equal((await call('POST', `/v1/streets/${tough.id}/npchit`, { token: hirer.token, body: { tier: 'legbreaker' } })).code, 400, 'contractor cooldown between jobs');
+// AUDIT-street-life HIGH-1: an NPC hit is COVERT — the victim only ever met "a hired gun", so the
+// black-book meeting grant must NOT fire (in either direction; the payer buys anonymity)
+{
+  const pair = await pool.query(
+    `SELECT 1 FROM contacts ct JOIN characters a ON a.id=$1 JOIN characters b ON b.id=$2
+      WHERE (ct.owner_account=a.account_id AND ct.contact_account=b.account_id)
+         OR (ct.owner_account=b.account_id AND ct.contact_account=a.account_id)`, [hirer.id, tough.id]);
+  assert.equal(pair.rows.length, 0, 'an anonymous hire hands out NO phone numbers (meet:false)');
+}
 // a rookie target is off-limits
 const rook2 = await mk('Nobody Nick');
 assert.equal((await call('POST', `/v1/streets/${rook2.id}/npchit`, { token: hirer.token, body: { tier: 'professional' } })).code, 400, 'no sanctioned hits on nobodies (level floor)');

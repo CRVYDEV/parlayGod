@@ -118,11 +118,22 @@ let spy, mark, secretId;
   assert.ok(r.body.found, 're-dig lands');
   const sid = r.body.id;
   const exp0 = Number((await pool.query(`SELECT heat_exposure FROM characters WHERE id='${mark.id}'`)).rows[0].heat_exposure);
+  // clear the pair's book first — the earlier hush payment was a LEGITIMATE meeting, and this
+  // assertion is about what the EXPOSE grants (nothing)
+  await pool.query(
+    `DELETE FROM contacts WHERE owner_account IN (SELECT account_id FROM characters WHERE id IN ($1,$2))
+        AND contact_account IN (SELECT account_id FROM characters WHERE id IN ($1,$2))`, [mark.id, spy.id]);
   r = await call('POST', `/v1/secrets/${sid}/expose`, { token: spy.token });
   assert.equal(r.code, 200, `expose: ${JSON.stringify(r.body)}`);
   const exp1 = Number((await pool.query(`SELECT heat_exposure FROM characters WHERE id='${mark.id}'`)).rows[0].heat_exposure);
   assert.equal(exp1 - exp0, SECRETS.KINDS.killer.exposeHeat, "the mark's federal file thickens by exposeHeat");
-  console.log('✓ exposure feeds the RICO meter');
+  // AUDIT-street-life HIGH-1: the exposure is blamed on "the wire" — the mark must NOT gain the
+  // exposer's number from the act (the black-book meeting grant is opted out for covert actions)
+  const leak = await pool.query(
+    `SELECT 1 FROM contacts ct JOIN characters m ON m.id=$1 JOIN characters s ON s.id=$2
+      WHERE ct.owner_account=m.account_id AND ct.contact_account=s.account_id`, [mark.id, spy.id]);
+  assert.equal(leak.rows.length, 0, "the mark does not learn the exposer's number (meet:false)");
+  console.log('✓ exposure feeds the RICO meter (and leaks no number)');
 }
 
 // ═══ the worker deadline sweep — an unpaid demand BLOWS ═══

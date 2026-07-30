@@ -789,6 +789,13 @@ function stealthContest(ch, victim, h) {
 export async function robTrunk(ch, victim, client, h) {
   const TR = RIVALS.TRUNK;
   assertStreetCrime(ch, victim, h, TR.ENERGY);
+  // (AUDIT-street-life F4) the PERSON-crime victim gates — the jump v3 set. Trunk freight rides ON
+  // the man, so a mark the street can't reach (lockup, the yard boss's cover, the hole) can't be
+  // mugged for it either — the exact "jail must never be MORE dangerous than the street" class
+  // AUDIT-full-system-v2/v3 closed on fire/npcHit/jump. PROPERTY crimes (car/boat/sabotage/front)
+  // deliberately stay reachable while the owner is away — the garage doesn't go to lockup with you.
+  if (jailed(victim)) throw new GameError('jailed', "They're in lockup — the freight went in with them.");
+  if (penSafe(victim) || inHole(victim)) throw new GameError('protected', "They're locked down where you can't reach.");
   if (victim.trunk_robbed_at && Date.now() - new Date(victim.trunk_robbed_at).getTime() < TR.SHIELD_MS)
     throw new GameError('shielded', 'They just got turned over — the freight moved to safe hands for the night.');
   const lines = (await client.query(
