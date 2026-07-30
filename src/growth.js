@@ -569,7 +569,7 @@ export async function claimOnboard(ch, taskId, client, h) {
   // one outbound X call per player per window — see throttleXCheck. Skipped entirely outside live
   // mode, where verifySocial answers without touching the network.
   if (t.social && (process.env.SOCIAL_VERIFY_MODE || 'off') === 'live')
-    await throttleXCheck(client, h.accountId, 'follow');
+    await throttleXCheck(client, h.accountId, 'follow', h.pool);
   if (t.social) await verifySocial(taskId, ident);          // §4: verifies once
   else if (!CHECKS[taskId] || !CHECKS[taskId](ch, h)) throw new GameError('unfinished', 'Not done yet — the checklist pays on completion.');
   onboard[taskId] = true;
@@ -669,7 +669,7 @@ export async function claimSocial(ch, taskId, proof, client, h) {
     // pass ctx so verifyPostUp's D2 author-binding activates on the real claim path (was dead code:
     // it only fired via a direct unit call). Trust mode short-circuits before touching ctx.
     if ((process.env.SOCIAL_VERIFY_MODE || 'off') === 'live')
-      await throttleXCheck(client, h.accountId, 'post');    // the retry loop, not the happy path
+      await throttleXCheck(client, h.accountId, 'post', h.pool);    // the retry loop, not the happy path
     await verifyPostUp(pend.proof ?? proof, { client, accountId: h.accountId });
     await client.query('UPDATE social_claims SET paid=true WHERE account_id=$1 AND day=$2 AND task_id=$3',
       [h.accountId, pend.day, taskId]);

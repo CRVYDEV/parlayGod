@@ -657,7 +657,12 @@ export async function withCharacter(pool, accountId, fn) {
     const owned = await loadOwned(client, ch);
     await accrueAndLedger(client, ch, acct, owned);
 
-    const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId };
+    // `pool` is here for ONE purpose: an out-of-band write that must survive this transaction's
+    // ROLLBACK (the X-check throttle — see verify.js:throttleXCheck for why). It autocommits,
+    // because it is a DIFFERENT connection. That is also why it is a hazard: taking a second
+    // connection while this one holds row locks can exhaust the pool under load and deadlock it
+    // against itself. Use `client` for everything that belongs to the action.
+    const h = { ledger, rngLog, notify, track, bumpDaily, events: [], acct, owned, accountId, pool };
     const result = await fn(ch, client, h);
 
     if (ch.alive !== false) await persistCharacter(client, ch); // a killed row is finalized by the estate
