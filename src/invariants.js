@@ -263,7 +263,14 @@ async function collectLedgerChecks(pool) {
   const fences = await one(pool, "SELECT COUNT(*) s FROM transactions WHERE reason='fence'");
   const deaths = (await pool.query("SELECT props FROM telemetry WHERE event='death'")).rows;
   const deathCars = deaths.reduce((a, r) => a + (JSON.parse(r.props).cars || 0), 0);
-  push('car conservation', carsHeld, boosts - melts - fences - deathCars, 0);
+  // STREET WAR step two (residents-as-marks): a RESIDENT's spawn car is a second, explicitly
+  // counted faucet (an rng_audit 'npc:car' grant row per car — the boost-counting mechanism), and
+  // its retirement the matching sink (a retire row per car deleted). A resident KILLED by a player
+  // goes through the ordinary runEstate, so the death telemetry term already covers that exit; a
+  // STOLEN resident car just changes hands (rows conserve). PvP theft itself moves rows, never counts.
+  const npcCarGrants = await one(pool, "SELECT COUNT(*) s FROM rng_audit WHERE action='npc:car' AND outcome='grant'");
+  const npcCarRetires = await one(pool, "SELECT COUNT(*) s FROM rng_audit WHERE action='npc:car' AND outcome='retire'");
+  push('car conservation', carsHeld, boosts + npcCarGrants - melts - fences - deathCars - npcCarRetires, 0);
 
   // (f) CONTRABAND & AMMO: characters + exchange escrow (+ the family armories);
   // ammo starts at 25/character, crates at 0.

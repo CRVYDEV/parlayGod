@@ -19,7 +19,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          WORLD_NPCS, WORLD, BOXING, TERRITORY_RACKETS, TERRITORY_TYPES, territoryBuildCost,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
-         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION,
+         CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale,
          EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION } from '../src/rules.js';
 
 const app = await buildServer();
@@ -902,6 +902,47 @@ phase('P9.24 the Bureau returns — income-sourced scrutiny equilibrium (founder
   }
   note('bureau', 'the 5-front stack, raid tax total', `~$${fmt(Math.round(stackTax))}/day (${(stackTax / stackGross * 100).toFixed(1)}% of gross)`,
     `uniform-in-probability, size-scaled-in-cost by construction — on top of the L1b progressive pad; the passive stack (P9.20) is no longer risk-free. Dial: BUSINESS_SCRUTINY_PER_INCOME_DAY (0 restores the dormant state)`);
+}
+
+// ════════ P9.25 RESIDENTS AS MARKS — the Street War step-two faucet ceiling (analytic) ════════
+// Residents now OWN things (omerta-street-rivals-design.md §4): sleepy-joint fronts, band-priced
+// beaters, dinghies, self-bought freight. Each is a deliberate bounded faucet (the npc:seed /
+// NPC-trucking posture) — this prints the base-wide analytic CEILING from the constants so any
+// retune of POPULATION.MARKS.* / RIVALS.* is re-measured. No value seeded; §10.4 untouched.
+phase('P9.25 residents-as-marks — the step-two faucet ceilings');
+{
+  const Mk = POPULATION.MARKS;
+  const bandW = Object.fromEntries(POPULATION.BANDS.map((b) => [b.id, b.w / POPULATION.BANDS.reduce((a, x) => a + x.w, 0)]));
+  const T = POPULATION.TARGET;
+  // FRONTS: only rob/shakedown/inside realize a resident front, all bounded by the SCALED pending
+  // regen. Ceiling = scaled daily income × the max realizable share (3 rob visits/day × 15% of a
+  // 24h-capped pending ≈ 45%/day of the scaled curve; shakedown at 30% is the harder-mult variant
+  // of the SAME shared window, so 45% (rob cadence) → 90% (shakedown cadence) brackets it — print
+  // the shakedown-cadence worst case as THE ceiling).
+  let frontDay = 0, frontCount = 0;
+  for (const [band, [kind, tier]] of Object.entries(Mk.FRONTS)) {
+    const cat = BUSINESSES.find((b) => b.kind === kind); if (!cat) continue;
+    const scaledDay = cat.tiers[tier - 1].incomePerHr * 24 * Mk.FRONT_INCOME_BPS / 10000;
+    const expected = T * (bandW[band] || 0) * (Mk.FRONT_P[band] || 0);
+    frontDay += expected * scaledDay * 0.9;  // ≤90%/day realizable (3 shakedown visits × 30% of a 24h pending)
+    frontCount += expected;
+  }
+  note('marks', 'resident FRONTS (rob/shakedown ceiling)', `~$${fmt(Math.round(frontDay))}/day base-wide across ~${frontCount.toFixed(1)} sleepy joints`,
+    `each front runs at FRONT_INCOME_BPS (${Mk.FRONT_INCOME_BPS / 100}%) of the catalog curve and only ever REALIZES through the shared-window rob/shakedown/inside redirect — residents never collect. Dials: FRONT_INCOME_BPS, FRONT_P, the band FRONTS map`);
+  // CARS: standing stock ≈ one beater per marked resident, replenished only by TURNOVER — the
+  // melt/fence value of a stolen beater is the realized faucet.
+  const carEV = Object.entries(Mk.CAR_VAL).reduce((a, [band, [lo, hi]]) => a + (bandW[band] || 0) * (Mk.CAR_P[band] || 0) * (lo + hi) / 2, 0)
+    / Object.keys(Mk.CAR_VAL).reduce((a, band) => a + (bandW[band] || 0) * (Mk.CAR_P[band] || 0), 0);
+  const carsPerDay = POPULATION.TURNOVER.PER_DAY * Object.entries(Mk.CAR_P).reduce((a, [band, pp]) => a + (bandW[band] || 0) * pp, 0);
+  note('marks', 'resident CARS (steal→melt ceiling)', `~${carsPerDay.toFixed(1)} beaters/day replenished (mean value ~$${fmt(Math.round(carEV))}; melt realizes well under half)`,
+    `bounded by the turnover cap × band P × the victim shield (one vehicle/day per resident) — petty by design; conservation holds via rng_audit npc:car grant/retire rows`);
+  // BOATS: dinghy resale is the realized faucet, same turnover bound.
+  const boatPerDay = POPULATION.TURNOVER.PER_DAY * Object.entries(Mk.BOAT_P).reduce((a, [band, pp]) => a + (bandW[band] || 0) * pp, 0);
+  note('marks', 'resident BOATS (steal→resale ceiling)', `~${boatPerDay.toFixed(1)} dinghies/day × $${fmt(boatResale('dinghy'))} resale ≈ $${fmt(Math.round(boatPerDay * boatResale('dinghy')))}/day`,
+    `always the cheapest hull; bounded by turnover + the SHARED vehicle shield. Dial: BOAT_P`);
+  // FREIGHT is recycle-only (bought with seed cash at the real market rail) — a redistribution of
+  // the already-measured npc:seed stock, not a new faucet; printed for the record, not summed.
+  note('marks', 'resident FREIGHT', 'recycle-only (goods:buy from their own seed cash)', 'the robbery realizes what the resident already paid — rides the P9.21 npc:seed measurement, no new emission');
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

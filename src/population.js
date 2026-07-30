@@ -24,7 +24,7 @@
 // self-heals. The worker only tops up headcount and retires old bloodlines.
 import crypto from 'node:crypto';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
-         LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO } from './rules.js';
+         LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -104,6 +104,38 @@ export async function spawnResident(client, opts = {}) {
       'INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
       [uid(), charId, 'cash', cash - 500, 'npc:seed']);
   }
+  // ═══ STEP TWO of THE STREET WAR — residents OWN things worth taking (POPULATION.MARKS) ═══
+  // Every grant here is a DELIBERATE bounded faucet flagged in BALANCE.md; §10.4 stays exact:
+  //  · a CAR is a row — counted into the car-conservation invariant via an rng_audit 'npc:car'
+  //    grant row (the boost-counting precedent; retirement writes the matching retire row);
+  //  · a FRONT is ownership (no conservation check) whose income only ever realizes through the
+  //    rob/shakedown/inside-job REDIRECT at the sleepy-joint scale (npcPendingScale);
+  //  · a BOAT is a row with no conservation check — its resale is the flagged faucet.
+  // Tests pass opts.marks to pin the rolls; production rolls the band's P.
+  const M = POPULATION.MARKS;
+  const wants = (key) => (opts.marks ? !!opts.marks[key]
+    : Math.random() < ((key === 'car' ? M.CAR_P : key === 'front' ? M.FRONT_P : M.BOAT_P)[band.id] || 0));
+  if (wants('car')) {
+    const [lo, hi] = M.CAR_VAL[band.id] || [800, 2000];
+    const models = CARS.filter((c) => c.val >= lo && c.val <= hi);
+    if (models.length) {
+      const model = pick(models);
+      const carId = uid();
+      await client.query('INSERT INTO cars (id, character_id, model_id, trim_id, dmg) VALUES ($1,$2,$3,$4,$5)',
+        [carId, charId, model.id, 'stock', rndInt(0, 20)]);
+      await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,0,$4)',
+        [uid(), charId, 'npc:car', 'grant']);
+    }
+  }
+  if (wants('front') && M.FRONTS[band.id]) {
+    const [kind, tier] = M.FRONTS[band.id];
+    await client.query('INSERT INTO businesses (id, character_id, kind, tier) VALUES ($1,$2,$3,$4)',
+      [uid(), charId, kind, tier]);
+  }
+  if (wants('boat')) {
+    await client.query('INSERT INTO boats (id, character_id, kind) VALUES ($1,$2,$3)',
+      [uid(), charId, 'dinghy']);
+  }
   return { id: charId, name, level: lvl, band: band.id, cash };
 }
 
@@ -150,6 +182,20 @@ export async function retireResident(client, charId) {
       'INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
       [uid(), charId, 'cash', -held, 'npc:retire']);
   }
+  // STEP TWO marks leave WITH the resident (retirement is not a death, so runEstate's wipe +
+  // telemetry never see these rows — each class squares its own books here):
+  //  · cars: one rng_audit 'npc:car' retire row PER row deleted, so the car-conservation
+  //    invariant (rows == boosts + grants − melts − fences − deaths − retires) stays exact;
+  //  · boats/fronts/cargo: ownership rows with no conservation check — plain deletes.
+  const carRows = (await client.query('SELECT id FROM cars WHERE character_id=$1', [charId])).rows;
+  for (const car of carRows) {
+    await client.query('DELETE FROM cars WHERE id=$1', [car.id]);
+    await client.query('INSERT INTO rng_audit (id, character_id, action, roll, outcome) VALUES ($1,$2,$3,0,$4)',
+      [uid(), charId, 'npc:car', 'retire']);
+  }
+  await client.query('DELETE FROM boats WHERE character_id=$1', [charId]);
+  await client.query('DELETE FROM businesses WHERE character_id=$1', [charId]);
+  await client.query('DELETE FROM character_cargo WHERE character_id=$1', [charId]);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
   return { id: charId, burned: held };
 }
@@ -410,6 +456,31 @@ export async function residentAct(client, r) {
         [uid(), r.id, 'order', good.id, qty, r.loc, unit,
          new Date(Date.now() + BLACK_MARKET.MAX_TTL_H * 3600 * 1000)]);
       return 'ordered';
+    }
+  }
+
+  // 3.5 FREIGHT (step two of THE STREET WAR) — a resident sometimes carries trade goods, so the
+  //     trunk-robbery loop is live in an empty alpha. RECYCLE-ONLY: bought with the resident's OWN
+  //     seed cash at the real market price + the 2% house take, mirroring buyGood's accounting
+  //     exactly (`goods:buy:<id>` sink + takeHouse) — the robbery later realizes what the resident
+  //     already paid, never conjures. Budget floored by spendable() + GOODS_BPS so a freighted
+  //     resident can never read as picked-clean (the DRAINED_BPS margin holds).
+  const carrying = Number((await client.query(
+    'SELECT COALESCE(SUM(qty),0) n FROM character_cargo WHERE character_id=$1', [r.id])).rows[0].n);
+  if (carrying === 0) {
+    const good = pick(GOODS);
+    const unit = Math.round(goodPriceOf(good.id, r.loc));
+    const budget = Math.min(spendable(Number(r.cash)), bps(Number(r.cash), POPULATION.MARKS.GOODS_BPS));
+    const qty = Math.min(POPULATION.MARKS.GOODS_MAX_UNITS, Math.floor(budget / (unit * 1.02)));
+    if (qty >= 1) {
+      const cost = unit * qty, fee = Math.ceil(cost * 0.01), tax = Math.ceil(cost * 0.01);
+      await client.query('UPDATE characters SET cash = cash - $2 WHERE id=$1', [r.id, cost + fee + tax]);
+      await client.query('INSERT INTO transactions (id, character_id, currency, amount, reason) VALUES ($1,$2,$3,$4,$5)',
+        [uid(), r.id, 'cash', -(cost + fee + tax), `goods:buy:${good.id}`]);
+      await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [tax]);
+      await client.query('INSERT INTO character_cargo (character_id, good_id, qty) VALUES ($1,$2,$3)',
+        [r.id, good.id, qty]);
+      return 'freighted';
     }
   }
 

@@ -79,3 +79,22 @@ export async function sweepRivals(pool) {
   const r = await pool.query(`DELETE FROM rival_events WHERE at < now() - interval '${Number(RIVALS.RETENTION_D)} days'`);
   return { swept: r.rowCount || 0 };
 }
+
+// REVENGE TEETH (step two) — is `myAccountId` still NET OWED against `theirAccountId`? Their
+// recorded strikes against me must EXCEED mine against them, counted over the ledger's whole
+// retention window. Called BEFORE the current strike is recorded (recording first would count the
+// strike being judged against its own claim). Two plain COUNTs, not SUM(CASE …) — the pg-mem
+// posture. An alternating trade converges (each revenge strike is itself recorded), so the honor
+// drip is self-limiting; the residual slow pair-trade rides the accepted honor-farm posture
+// (the loan-repay precedent — BALANCE flag).
+export async function revengeOwed(client, myAccountId, theirAccountId) {
+  if (!myAccountId || !theirAccountId || myAccountId === theirAccountId) return false;
+  const them = Number((await client.query(
+    'SELECT COUNT(*) n FROM rival_events WHERE victim_account=$1 AND aggressor_account=$2',
+    [myAccountId, theirAccountId])).rows[0].n);
+  if (!them) return false;
+  const mine = Number((await client.query(
+    'SELECT COUNT(*) n FROM rival_events WHERE victim_account=$1 AND aggressor_account=$2',
+    [theirAccountId, myAccountId])).rows[0].n);
+  return them > mine;
+}

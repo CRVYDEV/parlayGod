@@ -812,6 +812,10 @@ export async function buildServer() {
     hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
+      trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
+      boatEnergy: RIVALS.BOAT_THEFT.ENERGY, boatJailS: RIVALS.BOAT_THEFT.JAIL_S,
+      sabotageEnergy: RIVALS.SABOTAGE.ENERGY, sabotageInjuryHours: Math.round(RIVALS.SABOTAGE.INJURY_MS / 3600000),
+      revengeHonor: RIVALS.REVENGE_HONOR, wireRivalMult: RIVALS.WIRE_RIVAL_MULT,
       theftEnergy: RIVALS.CAR_THEFT.ENERGY, theftJailS: RIVALS.CAR_THEFT.JAIL_S,
       victimMinLvl: RIVALS.VICTIM_MIN_LVL, victimShieldHours: Math.round(RIVALS.CAR_THEFT.VICTIM_SHIELD_MS / 3600000),
       retentionDays: RIVALS.RETENTION_D },
@@ -1283,6 +1287,13 @@ export async function buildServer() {
   // eligible car (no fleet leak) — and the rivals ledger (who has shown you malice; account-keyed)
   app.post('/v1/streets/:targetId/steal', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.stealCar(ch, victim, client, h)));
+  // STREET WAR step two — trunk robbery, boat theft (at the docks), stable sabotage
+  app.post('/v1/streets/:targetId/trunk', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.robTrunk(ch, victim, client, h)));
+  app.post('/v1/streets/:targetId/boat', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.stealBoat(ch, victim, client, h)));
+  app.post('/v1/streets/:targetId/sabotage', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.sabotage(ch, victim, client, h)));
   app.get('/v1/rivals', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client) => Rivals.rivalsBoard(client, ch.account_id)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>

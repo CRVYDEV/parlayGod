@@ -165,7 +165,8 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'trait', track_id, trait_id, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_traits WHERE character_id=$1
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
-    UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1`,
+    UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
+    UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$2 AND at > now() - interval '48 hours'`,
   [ch.id, ch.account_id]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
@@ -193,6 +194,10 @@ export async function loadOwned(client, ch) {
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
   // THE REGIMEN — discipline xp per id (dies with the street; levels derived, never stored)
   const disc = of('disc', (r) => ({ discipline: r.k, xp: n(r.n) }));
+  // STREET WAR step two — fresh malice against this bloodline (last 48h): the coach's
+  // someone-moved-on-you rung reads the COUNT (self-clears as the window rolls — the harness-F1
+  // rule; a bounded read: shields/cooldowns bound how often anyone can be wronged in 48h)
+  const rival = of('rival', (r) => ({ at: r.ts }));
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
@@ -242,6 +247,7 @@ export async function loadOwned(client, ch) {
     // collectible, so nothing here touches §10.4). Array of { ticker, shares, cost_omr } rows.
     portfolio: pf.rows.map((r) => ({ ticker: r.ticker, shares: Number(r.shares), cost_omr: Number(r.cost_omr) })),
     estate: est.rows[0] || null, // account-level compound (survives death) — a summary; the board is the full view
+    recentRivals: rival.rows.length, // STREET WAR step two — fresh malice in the last 48h (the coach rung)
   };
 }
 
@@ -877,6 +883,9 @@ function coachLadder(ch, acct, owned) {
   if (future(ch.wanted_until) && add('There\'s a price on you', 'You\'re WANTED — even your family can hunt you and NPC guns are out. Square your name at the Shylock, or lie low.', 'loans')) return rungs;
   if (ch.indicted_at && add('The Bureau indicted you', 'A RICO case is filed — the grace clock is running. Take a plea, buy the jury, or demand trial in The Law.', 'law')) return rungs;
   if (ch.welsher && add('Your name is mud', 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', 'loans')) return rungs;
+  // STREET WAR step two — the city remembers who moved on you. Self-clears as the 48h window
+  // rolls (the harness-F1 rule); under constant predation it stays lit, which is the news.
+  if ((owned.recentRivals || 0) > 0 && add('Someone moved on you', 'You were robbed, jumped or hit inside the last two days. Check YOUR RIVALS on Wet Work — the city remembers who, and settling your own scores pays honor.', 'pvp')) return rungs;
   if (Number(ch.lc_crime || 0) < 1 && add('Pull your first job', 'Head to the Streets. Pick any crime and press DO IT. That\'s the whole move — it pays cash and respect.', 'streets')) return rungs;
   // ── THE ROAD TO LEVEL 5 (founder-directed: walk a brand-new player there, no exploring needed).
   // Two rungs, both clear on their own: the nerve-wait clears in minutes, the level rung at 5 —

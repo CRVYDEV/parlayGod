@@ -9,9 +9,10 @@
 // `swap:buy` ledger (no new reason). Step-two scrutiny/raid/extortion risk is deferred by design.
 import crypto from 'node:crypto';
 import { GameError, bus, skillMult, trunkCap, bumpMastery, masteryFx } from './game.js';
-import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, businessOf, businessTierOf, businessMaxTier,
+import { CONSTANTS, M3, CASINO, BUSINESSES, SKILLS, BUSINESS_EMPIRE, RIVALS, POPULATION, businessOf, businessTierOf, businessMaxTier,
   businessAssessedValue, launderRankOf, levelOf, effStat, pathFx } from './rules.js';
-import { recordRival } from './rivals.js';
+import { recordRival, revengeOwed } from './rivals.js';
+import { bumpHonor } from './honor.js';
 import { denAvailable, denDistribute } from './casino.js';
 import { spendOmr } from './vanity.js';
 
@@ -29,6 +30,13 @@ export function accrued(row) {
   const elapsed = Math.min(Date.now() - new Date(row.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
   return Math.floor(tier.incomePerHr * Math.max(0, elapsed) / 3600000);
 }
+
+// STEP TWO of THE STREET WAR (residents-as-marks): a RESIDENT runs a SLEEPY joint — its effective
+// income is FRONT_INCOME_BPS of the catalog curve. Applied wherever a resident front's pending is
+// REALIZED (rob/shakedown here, the heist inside job) — residents never collect, so this scale IS
+// the venue's whole emission ceiling (BALANCE.md § THE STREET WAR step two; sim P9.25 measures it).
+export const npcPendingScale = (isNpc, pending) =>
+  (isNpc ? Math.floor(pending * POPULATION.MARKS.FRONT_INCOME_BPS / 10000) : pending);
 
 // L1b — THE PROGRESSIVE PAD: the upkeep rate climbs with the SIZE of the empire (BUSINESS_UPKEEP_PROG_BPS
 // per front beyond the first) — a 5-front stack pays 40% pad vs a 1-front's 20%, bounding the passive
@@ -352,8 +360,10 @@ async function extortFront(ch, victim, businessId, client, h, verb) {
   await h.rngLog(client, ch.id, `${verb}:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
   if (atk > def) {
-    const pending = accrued(r);
+    const pending = npcPendingScale(victim.is_npc, accrued(r));
     const cut = Math.floor(pending * rate);
+    // REVENGE TEETH (step two) — judged BEFORE this strike is recorded, paid only while net owed
+    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     // advance the clock by only the STOLEN share — the owner keeps the rest pending
     const elapsed = Math.min(Date.now() - new Date(r.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
     await client.query('UPDATE businesses SET last_collect_at=$2 WHERE id=$1',
@@ -364,9 +374,10 @@ async function extortFront(ch, victim, businessId, client, h, verb) {
     }
     await h.notify(client, victim.id, rob ? 'robbed' : 'shakedown', { from: ch.name, kind: r.kind, cut });
     await recordRival(client, victim.account_id, ch, verb, { kind: r.kind, cut });
+    if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR); // the code respects settled scores
     if (!rob) await bumpMastery(client, h, ch, 'muscle', 'shakedown'); // THE TRADES — extortion is the protection craft
     bus.emit('streets', { type: verb, by: ch.name, on: victim.name, kind: r.kind });
-    return { ok: true, win: true, kind: r.kind, cut, ...(rob ? { robbed: true } : {}) };
+    return { ok: true, win: true, kind: r.kind, cut, revenge, ...(rob ? { robbed: true } : {}) };
   }
   if (rob) {
     // pinched at the register — a failed robbery is a CRIME caught in the act

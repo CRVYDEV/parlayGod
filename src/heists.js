@@ -18,7 +18,7 @@ import { GameError, bus, bumpMastery } from './game.js';
 import { HEIST_JOBS, HEIST_ROLES, heistJobOf, HEIST_PLAN_TTL_MS, HEIST_RAT_BPS, HEIST_LEADER_WEIGHT,
          HEIST_INSIDE_CD_MS, HEIST_CASE_ENERGY, HEIST_CASE_STEP, HEIST_CASE_MAX, heistFenceMultOf,
          HEIST_FENCE_HEAT, HEIST_RANKS, heistRankOf, CONSTANTS, M4, levelOf, PORTFOLIO } from './rules.js';
-import { accrued, decayedScrutiny } from './business.js';
+import { accrued, decayedScrutiny, npcPendingScale } from './business.js';
 import { grantShares } from './portfolio.js';
 
 const uid = () => crypto.randomUUID();
@@ -282,7 +282,9 @@ export async function executeHeist(ch, heistId, client, h) {
     if (biz) {
       // the pot is the front's PENDING income redirected (rateBps of it) — the owner keeps the
       // rest pending, the clock advances by only the stolen share (the shakedown discipline)
-      const pending = accrued(biz);
+      // STEP TWO (residents-as-marks): a resident front's pending realizes at the sleepy-joint scale
+      const markNpc = (await client.query('SELECT is_npc FROM characters WHERE id=$1', [biz.character_id])).rows[0]?.is_npc;
+      const pending = npcPendingScale(!!markNpc, accrued(biz));
       pot = Math.floor(pending * job.rateBps / 10000);
       const elapsed = Math.min(Date.now() - new Date(biz.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
       await client.query('UPDATE businesses SET last_collect_at=$2 WHERE id=$1',

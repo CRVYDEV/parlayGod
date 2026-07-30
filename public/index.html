@@ -1642,6 +1642,9 @@
     if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
     if (body.robbed) bits.push(body.win ? `hit the register — skimmed $${fmt(body.cut)} off their ${body.kind}` : `pinched at the register — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
     else if (body.theft) bits.push(body.win ? `🚗 GONE IN SIXTY — took their ${body.car.model}` : `caught mid-hotwire — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
+    else if (body.trunk) bits.push(body.win ? `mugged the freight — ${fmt(body.qty)} ${body.good} off their back${body.revenge ? ' · 🗡 payback' : ''}` : `pinched mid-mugging — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
+    else if (body.boatTheft) bits.push(body.win ? `⚓ SLIPPED HER MOORINGS — took their ${body.boat.name}${body.revenge ? ' · 🗡 payback' : ''}` : `caught on the gangway — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
+    else if (body.sabotage) bits.push(body.win ? `🔧 wrecked their ${body.what} — ${body.name} is laid up${body.revenge ? ' · 🗡 payback' : ''}` : `caught in the stable — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
     else if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
     if (body.district && body.win === true && body.cut !== undefined && !body.kind) bits.push(`muscled the block — grabbed $${fmt(body.cut)} from their operation`);
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
@@ -4444,6 +4447,9 @@
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
           <button class="act risk" data-psteal="${s.id}" data-confirm="Boost one of their cars? A win takes the car for keeps — a miss is a stretch in lockup, and either way it burns your boost window." title="grand theft, PvP — the server picks a random car off their street; expensive iron has alarms. A miss is lockup.">steal their ride</button>
           ${(s.fronts || []).map((f) => `<button class="act risk" data-prob="${f.id}" data-confirm="Hit the register at their ${f.kind}? A win skims the take — a miss is a short stretch in lockup." title="rob their ${f.kind} — a cut of its uncollected take; stealth (cunning + speed). A miss is lockup.">rob ${f.kind}</button>`).join('')}
+          <button class="act risk" data-ptrunk="${s.id}" title="mug the freight off their back — one crate of trade goods, capped by your own trunk space; stealth. A miss is lockup.">rob trunk</button>
+          <button class="act risk" data-pboat="${s.id}" data-confirm="Steal a boat off their berth? Only works standing at the docks — a win takes the boat, a miss is a stretch in lockup, and it burns your boost window." title="boat theft at the docks — the server picks a docked boat; a big hull has watchmen. A miss is lockup.">steal boat</button>
+          <button class="act risk" data-psab="${s.id}" title="wreck their stable — one random racer or fighter laid up for hours; stealth. A miss is lockup.">sabotage</button>
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
           <button class="act risk" data-npchit="${s.id}">NPC hit</button>
           ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
@@ -4453,6 +4459,12 @@
       act('POST', `/v1/streets/${b.dataset.psteal}/steal`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-prob]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/business/${b.dataset.prob}/rob`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-ptrunk]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.ptrunk}/trunk`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-pboat]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.pboat}/boat`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-psab]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.psab}/sabotage`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-pullstake]').forEach((b) => b.onclick = () => {
       const [tid, kind] = b.dataset.pullstake.split(':');
       act('POST', `/v1/contracts/${tid}/${kind}/cancel`, {}).then(() => renderPvp());
@@ -6305,6 +6317,22 @@
       act: () => `${d.who} ${d.text}`,
       kill: () => `${d.by} whacked ${d.victim}`,
       jump: () => `${d.by} jumped ${d.on}${d.war ? ' — war points' : ''}`,
+      // THE STREET WAR — asset crimes (victim notifies + streets shouts; the notify names the attacker)
+      robbed: () => `${d.from} hit the register at your ${d.kind} — skimmed ${$c(d.cut)}`,
+      rob_failed: () => `${d.from} tried to rob your ${d.kind} — security had them pinched`,
+      car_stolen: () => `${d.from} stole your ${d.model} right off the street`,
+      car_theft_failed: () => `${d.from} got caught trying to boost your car`,
+      trunk_robbed: () => `${d.from} mugged ${d.qty} ${d.good} out of your trunk`,
+      trunk_rob_failed: () => `${d.from} tried to mug your freight — pinched`,
+      boat_stolen: () => `${d.from} slipped your ${d.kind} off its moorings`,
+      boat_theft_failed: () => `${d.from} got caught on your gangway`,
+      sabotaged: () => `${d.from} wrecked your ${d.what} ${d.name} — laid up for hours`,
+      sabotage_failed: () => `${d.from} was caught creeping your stable`,
+      rob: () => `${d.by} hit the register at ${d.on}'s ${d.kind}`,
+      car_theft: () => `${d.by} boosted a car off ${d.on}`,
+      trunk_rob: () => `${d.by} mugged the freight off ${d.on}'s back`,
+      boat_theft: () => `${d.by} stole a boat off ${d.on}'s berth`,
+      sabotage: () => `${d.by} wrecked something in ${d.on}'s stable`,
       bounty: () => `a ${$c(d.amount)} ${d.kind === 'kill' ? 'KILL' : 'hospital'} contract is out on ${d.on}`,
       bust: () => `${d.by} busted ${d.freed} out of lockup`,
       busted: () => `${d.who} got hauled in`,
