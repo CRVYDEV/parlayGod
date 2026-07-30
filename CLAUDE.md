@@ -4014,6 +4014,42 @@ never re-fires, the wanted tip's show-me lands on the Shylock, zero page errors.
 fields joined test/client.js's NOT_API list (client-internal, never sent). Suite green + sim drift-0;
 mobile 64/64; docs guard green (SPEC client-lines restated).
 
+**THE HAND-HOLDING BATCH (six founder asks in one live session, task #303).** The founder watched new
+testers and fired a list; all six shipped as one verified batch. **(1) THE ROAD TO LEVEL 5** — "the
+tutorial doesn't teach you how to get level 5 without exploring": `coachOf` became **`coachLadder`**
+(game.js) returning up to FIVE applicable rungs in priority order (`view.coach` = ladder[0], byte-
+compatible; `view.coachPlan` = the queue), with two new early rungs that walk a zero-savvy player there —
+`Get to level 5` (live respect countdown off `PACING.LEVEL_DIVISOR`, "do a job, wait for nerve, do
+another") and `Out of nerve — it comes back by itself` (nerve < 2, points at Start Here's free claims);
+both self-clear so the harness-F1 masking rule holds. The tour's Streets step now leads with "Your first
+goal: LEVEL 5." **(2) THE PLAN BOX** — "a prompt box of the next 5 things to do, always": the coach
+banner renders the whole queue as numbered tappable rows (each jumps + spotlights its screen) + a
+ROAD-TO-LEVEL-5 progress bar under level 5; on phones the queue collapses behind a "THEN: +N more ▾"
+toggle — an OPEN queue pushed every screen below the fold (the mobile guard caught it, 15 screens).
+**(3) MOBILE STREETS** — "you get stuck scrolling the crimes and never reach the bank": The Bank + The
+Map now LEAD the Streets screen (bank at ~569px on a phone, was ~1,200+px deep), and `.ico.wide` art
+strips slim 96→56px on phones, halving scroll depth on every art-card screen. **(4) JAIL** — "going to
+jail should take your screen to jail": a transition latch in renderSheet (fires on the bust moment AND a
+page that loads jailed, never on every poll) auto-jumps to the Pen; the Pen leads with a **YOUR WAYS
+OUT** card — wait / work / one-click **pay-it-all-off** (the full remaining sentence priced live, no
+typing seconds) / the wall. **(5) STAT HELP** — "tooltips over energy/nerve/health/heat": every vital
+(sheet rows + the phone strip) is TAPPABLE (ⓘ) and opens a plain-English card — what it does + how to
+refill/cool faster, live regen numbers off `rules.pacing` (a hover title is invisible on a phone).
+**(6) DAILY WORK** — "unclear how to do the quests": every contract card carries a `how:` line + a
+show-me jump keyed off the board's own `kind` — and the sweep found the real bug behind the confusion:
+the **M4 "undrawable-day gap" was still open** — the pool draws "Win N rolls in the Back Room" but
+NOTHING ever advanced the `dice` counter (the one unwired kind of 14), so ~1 day in 5 showed a quest
+that literally could not be done. Founder-directed fix: a back-room PvP dice WIN now bumps the winner's
+`dice` daily (`casino.js`; mutation-verified regression in test/casino.js asserts exactly one bump per
+round, to the winner). **Bonus (founder): THE CRIME VIGNETTE** — "show a cutscene simulating the
+result": every crime now plays a ~1.5s rubber-stamp over the job's OWN scene plate (CLEAN JOB +$N /
+BUSTED — stint), tap-to-dismiss, absent under reduced-motion; the big `playCine` stays reserved for the
+rare moments. **A probe catch worth keeping:** Start Here's DO-THIS-NEXT card had duplicated the
+`#coach` ID since it shipped — two elements, one id; the plan-box probe's strict-mode locator caught it
+(now `.coachbox`, CSS shared). Everything Chromium-probed (desktop + phone; vignette, ways-out,
+stat-help, plan-jump, bank-first order all screenshot-verified), guards green (wiring/mirror, mobile
+64/64, docs), growth-test coach-walk extended + mutation-verified, suite green + sim drift-0.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions
