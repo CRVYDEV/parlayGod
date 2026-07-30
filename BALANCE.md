@@ -2818,3 +2818,22 @@ the map; MAX_DAY stays reachable via distinct kinds), the freight pay re-clamps 
 visit tip is FIXED — a contact who can't cover it doesn't call (a sub-tip pay encoded the NPC's
 exact pocket). The covert opt-out (`{ meet: false }` on npcHit/burnerHit/exposeSecret) keeps the
 black book from revealing what the game hides.
+
+### THE FAVOR — the player-posted call (step two, task #320)
+
+Escrowed player-to-player freight requests. **No new faucet, no new sink** — the escrow moves the
+poster's own cash to a runner, and the only value that leaves is the house cut carved from the pay.
+
+| lever | value | why |
+|---|---|---|
+| `FAVOR.MAX_OPEN` | **3** | open requests per poster — bounds parked escrow per street |
+| `FAVOR.MIN_PAY` / `MAX_PAY` | **500** / **250,000** | the floor keeps dust off the board; the ceiling bounds one loot target |
+| `FAVOR.MAX_QTY` | **20** | units per request (a runner's trunk has to cover it) |
+| `FAVOR.TTL_MS` | **24h** | unrun requests refund by the worker sweep |
+| `FAVOR.TAKE_BPS` | **200** (2%) | carved FROM the pay, half → street tax / half burns — the market/speakeasy rate. Posting to your own alt is strictly LOSSY, which is the anti-collusion property |
+| `FAVOR.NOTE_MAX` | **90** | the public note (angle-brackets stripped) |
+
+§10.4: `favor:` joined the cash vocabulary + a new **`favor escrow`** check (`posted − paid − takes
+− refunded − death − loot`, the market's shape verbatim). The loot-proof-vault rule is enforced both
+ways — posting is safehouse-blocked, and a player fire-kill takes `CASH_LOOT_RATE` (25%) of a dead
+poster's open escrow (`whack:loot` + a NULL `favor:loot`), the remainder burning `favor:death`.

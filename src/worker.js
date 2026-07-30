@@ -33,6 +33,7 @@ import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
 import { sweepRivals } from './rivals.js';
 import { generateContactCalls, sweepCalls } from './contacts.js';
+import { sweepFavors } from './favors.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
@@ -280,6 +281,10 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     await safe('contact calls sweep', () => sweepCalls(pool));
     const cc = await safe('contact calls', () => generateContactCalls(pool));
     if (cc?.placed > 0) console.log(`📞 contacts: ${cc.placed} call(s) placed`);
+    // THE FAVOR: nobody ran it before the TTL, so the escrowed pay goes home (per-favor txn,
+    // characters-before-favors lock order — the loan/bounty sweep posture).
+    const fv = await safe('favor sweep', () => sweepFavors(pool));
+    if (fv?.refunded > 0) console.log(`🤝 favors: ${fv.refunded} expired, escrow refunded to the posters`);
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

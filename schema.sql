@@ -2443,3 +2443,24 @@ CREATE TABLE IF NOT EXISTS contact_calls (
   pay NUMERIC NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL
 );
+-- THE FAVOR (STREET LIFE step two): the PLAYER-posted call. Where an NPC's request draws on their
+-- own live pocket at fulfilment (recycle-only), a player's pay is ESCROWED at post — so the runner
+-- who hauls the freight across town can never arrive to find the money gone. That escrow is the
+-- whole reason this is its own table with its own §10.4 check (`favor escrow`): the open pot must
+-- always equal posted − paid − takes − refunded − death − loot, exactly like the market's.
+-- Visible to whoever holds the poster's NUMBER (the black book is what makes it reachable).
+CREATE TABLE IF NOT EXISTS favors (
+  id TEXT PRIMARY KEY,
+  poster_character TEXT NOT NULL,
+  good_id TEXT NOT NULL,
+  qty INT NOT NULL,
+  pay NUMERIC NOT NULL,                             -- escrowed at post; the runner nets pay − take
+  district TEXT NOT NULL,                           -- where the goods are wanted (the runner must stand there)
+  status TEXT NOT NULL DEFAULT 'open',              -- open | filled | cancelled | expired
+  runner_character TEXT,                            -- who ran it (NULL while open)
+  note TEXT,
+  posted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_favors_open ON favors (status, expires_at);
+CREATE INDEX IF NOT EXISTS ix_favors_poster ON favors (poster_character);

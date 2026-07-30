@@ -71,7 +71,9 @@ export const SYSTEMS = {
   'going legit (rwa)': ['rwa_invest', 'rwa_family_invest', 'rwa_family_dividend',
     'rwa_vault_claim', 'dynasty_name'],
   'the megaproject': ['megaproject_give'],
-  'street life': ['corner', 'contact_call'], // #318: corner-board claims + settled contact calls
+  // #318 corner-board claims + settled contact calls; #320 the player-posted favour, run by someone
+  // else — a `favor_run` is the clearest possible signal that the black book reached a real player.
+  'street life': ['corner', 'contact_call', 'favor_run'],
   'landmarks': ['landmark'],
   'vanity': ['vanity_name', 'vanity_gang_name'],
   'the store / pass': ['plex', 'plex_package', 'pass_claim'],

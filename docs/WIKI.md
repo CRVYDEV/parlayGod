@@ -952,6 +952,15 @@ stranger's 📱 reads 📵 until you earn the line.
 units of freight to their district (base × 1.15), or just come see them (a tip). The pay comes from
 THE CONTACT'S OWN pocket — a real transfer, never minted — and an unanswered request lapses in a day.
 
+**The Favor** (`GET /v1/favors`, `POST /v1/favors`, `POST /v1/favors/:id/run`, `DELETE /v1/favors/:id`) —
+the player-posted call. Put up to 3 requests on the wire: N units of a trade good delivered to a
+district, with the pay **escrowed the moment you post it**. Everyone who holds your number sees it;
+whoever hauls the freight there takes the money on the spot, minus a 2% house cut. That escrow is
+why this is worth posting at all — a runner can never cross town and find your pocket empty. Pull it
+back any time and the money returns; nobody runs it in a day and the money returns by itself. But
+escrow is cash sitting outside your pocket, so it is NOT a hiding place: you cannot post from a
+safehouse, and a killer takes a quarter of every open favor you were holding.
+
 ## 31. Reference
 
 ### Districts

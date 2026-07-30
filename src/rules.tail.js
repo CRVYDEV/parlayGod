@@ -3753,3 +3753,18 @@ export const CONTACTS = {
   VISIT_TIP: 750,                    // "come see me" — a tip from the contact's own pocket (recycle-only)
   GEN_PER_TICK: 4,                   // how many calls the worker tries to place per tick
 };
+
+// THE FAVOR (STREET LIFE step two) — the PLAYER-posted call. The NPC version pays out of a live
+// pocket; a player's pay is ESCROWED at post, so a runner who hauls freight across town can never
+// arrive to find the money spent. That makes it the same shape as every other P2P rail here: an
+// escrow with its own §10.4 check, and a house TAKE carved from the pay (never minted on top), so
+// paying your own alt is strictly lossy. All numbers founder sign-off levers.
+export const FAVOR = {
+  MAX_OPEN: 3,             // open requests per poster — bounds the escrow a single player can park
+  MIN_PAY: 500,
+  MAX_PAY: 250000,         // a favor is an errand, not a wire transfer (the untaxed-rail bound)
+  MAX_QTY: 20,             // units of one good per request
+  TTL_MS: 24 * 3600 * 1000,
+  TAKE_BPS: 200,           // 2% off the pay — half to the street tax, half burns (the market:take shape)
+  NOTE_MAX: 90,
+};

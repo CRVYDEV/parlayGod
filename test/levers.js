@@ -339,6 +339,14 @@ const SIGNED = [
   ['CONTACTS.CALL_FREIGHT_MAX_QTY', 8],
   ['CONTACTS.VISIT_TIP', 750],
   ['CONTACTS.GEN_PER_TICK', 4],
+  // THE FAVOR (Street Life step two) — the player-posted call. The escrow bounds are what keep a
+  // single poster from parking the bank in un-lootable rows; the take is what makes paying an alt lossy.
+  ['FAVOR.MAX_OPEN', 3],
+  ['FAVOR.MIN_PAY', 500],
+  ['FAVOR.MAX_PAY', 250000],
+  ['FAVOR.MAX_QTY', 20],
+  ['FAVOR.TTL_MS', 24 * 3600 * 1000],
+  ['FAVOR.TAKE_BPS', 200],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],

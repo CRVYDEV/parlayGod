@@ -6941,3 +6941,46 @@ the harness BY NAME on both counts. One process note worth keeping: the first cu
 finding it already had, so the recovery leg is now conditional — a guard that dies is much less
 useful at 2am than one that names the problem. `refresh()` was already correct (`if (r.code < 400)`),
 so `boot()` was the single point of failure.
+
+**THE FAVOR — the player-posted call (STREET LIFE step two, task #320) — BUILT** (`src/favors.js` —
+the 110th module; `favors` table; the `FAVOR` rules tail; `test/favors.js` — the 61st suite). Step
+one gave you calls FROM npc contacts, paid out of the contact's own live pocket at fulfilment
+(recycle-only, and if the contact gets robbed first the request VOIDS). This is the multiplayer
+half, and the one structural difference is the whole reason it is its own file with its own §10.4
+check: **a player's pay is ESCROWED AT POST**, so a runner who hauls six crates across town can
+never arrive to find the pocket empty. Post up to `FAVOR.MAX_OPEN` (3) requests — N units of a trade
+good wanted at a district, pay `MIN_PAY` $500 … `MAX_PAY` $250k held up front — and it reaches
+**everyone holding your number** (the black book is the distribution; that is what a line BUYS).
+`runFavor` is deliberately **single-party**: the money is already out of the poster's pocket and
+sitting in the row, so the poster's character is NEVER locked and the favor row's `FOR UPDATE` is
+the whole mutex serializing two runners racing the same request. The goods change hands by absolute
+writes both sides (the setCargo discipline). §10.4: `favor:` joined the cash vocabulary and the new
+**`favor escrow`** check is the market's shape verbatim — `escrow == posted − paid − takes −
+refunded − death − loot` — with the `TAKE_BPS` (2%) cut **carved FROM the pay** (one NULL-character
+row, half → `street_tax`, half burns; never minted on top, so posting to your own alt is strictly
+lossy). The **loot-proof-vault rule** applies in full (the market-order / loan-offer precedent):
+posting is safehouse-blocked, and a player fire-kill takes `CASH_LOOT_RATE` of a dead poster's open
+escrow (`whack:loot` + a NULL `favor:loot` outflow, remainder burns `favor:death`). Cancel refunds;
+the worker `sweepFavors` refunds anything nobody ran past `TTL_MS` (24h), per-favor txn, poster row
+locked before the favor row (the characters→pots order). Routes `GET /v1/favors`, `POST /v1/favors`,
+`POST /v1/favors/:id/run`, `DELETE /v1/favors/:id`; `/v1/rules.favors`; a THE FAVOR card on the
+cellphone (the board, run/travel buttons, a put-work-out form, your own open book). Three mutations
+each caught by name (the take minted on top; no death loot; `fvRefunded` dropped from the identity).
+All `FAVOR.*` numbers are founder sign-off levers (BALANCE.md; pinned in test/levers.js).
+
+**MIRROR-GUARD BLIND SPOT #3 — the declare-then-assign idiom (found while wiring THE FAVOR).** The
+favor card's first cut read its fields through a local alias inside an IIFE, and a planted bogus
+field SURVIVED a green run. Restructuring onto what looked like the covered shape did not help, and
+the reason turned out to be a third member of the family after the raw-bind (#298) and
+promise-callback (#311) holes: a renderer that wants its card to survive a failed fetch writes
+`let book = {…}; try { book = (await api('GET','/v1/contacts')).body || book; } catch {}` — and
+GETBIND scopes a binding to the innermost block containing the ASSIGNMENT, which for that shape is
+the `try` block, ending before every line of markup that reads the board. **Zero reads found, and it
+reads exactly like a pass.** The black book had been uncovered since it shipped (confirmed by
+mutation before the fix). `test/client.js` now CAPTURES the `const|let|var` keyword: a bare `x =`
+assignment is scoped to `x`'s DECLARATION (the variable's real scope), and a bare assignment whose
+declaration is not in this function is a module-scope global (`session`, `rules`) scoped to the
+function body — its reads in THAT function are then genuinely checked instead of being dropped.
+Coverage 97 → 99 boards, 534 → 547 top-level fields, 616 → 634 element fields; the fixture gained a
+contact call and two favors, since the guard's own rule is that an empty list must never read as a
+pass. Nested reads (`c.street.id`) remain the mirror's stated out-of-scope.
