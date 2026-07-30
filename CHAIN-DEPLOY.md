@@ -41,6 +41,35 @@ Devnet + testnet rehearsal may proceed now. **Mainnet is blocked on 1 + 2 + 3.**
 
 ---
 
+## 0.5 KNOWN DEFECT — the bond's RWA slice never arrives on-chain (fix before mainnet)
+
+Found 2026-07-30 while scoping the v4 hook work (`omerta-v4-hook-design.md` §9.7). Chain-dormant, so
+nothing is wrong in production today — but it fires the moment a real bond lands, on ANY chain, and it
+is invisible to both bond invariants.
+
+`OmertaBond` splits ETH **three** ways on-chain (`toPol`, `toDev`, `toVig` = the remainder) and has no
+RWA recipient at all. The backend books **four** (`BONDS.RWA_BPS` 2500 → `rwa_revenue`, the stock
+float's primary-inflow source). On the on-chain path `recordBond` reads an `onchainRwa` the watcher
+cannot supply — the `Bonded` event has no such field — so:
+
+- `rwa_eth` = **0** on every real bond,
+- the contract's whole 4750 bps remainder is booked as **Vig** revenue (signed split: 2250 Vig / 2500 RWA).
+
+The ETH is not lost (it reaches `vigRecipient`), but it reaches the wrong destination, and the slice
+that goes missing is the one that keeps the stock float growing when DEX volume is thin.
+
+**Why neither check catches it:** `runBondInvariants` check (4) is `pol + dev + vig + rwa == principal`
+— Vig absorbs the missing slice exactly, so it sums. `bond RWA slice == rwa_revenue` compares 0 to 0.
+It would surface months later as "why is the float empty?", with everything green.
+
+- [ ] **Fix (recommended): four-way split in the contract** — `rwaBps` + `rwaRecipient`, emit `toRwa`,
+      watcher + `recordBond` read it. Mirrors the existing three-way code; makes the contract the source
+      of truth for all four slices, which is what `recordBond`'s own comment already claims. Regression
+      must assert a real on-chain bond funds `rwa_revenue` (today's code fails it).
+- [ ] Interim alternative (**only** if `vigRecipient` and the RWA buy bot share one custody): split the
+      event's `toVig` 2250:2500 backend-side. If the wallets differ this books float backing against ETH
+      the float does not hold — the exact class `allocated ≤ held` and the `txHash` gate exist to prevent.
+
 ## 1. Build + test the contracts
 - [ ] `cd omerta-contracts && ./run-forge-test.sh` → all `[PASS]` (Gate 0.1). Suite: OMR, VoucherClaim,
       GearVault, OMRStaking, OmertaFees, OmertaBond (incl. fuzz).
@@ -64,9 +93,15 @@ PHASE 1 for the exact calls/args.
       the dev wallet in-tx; custodies nothing.
 - [ ] **`OmertaBond(safe, signer, omr, polBps=3750, devBps=1500, polRecipient, devRecipient, vigRecipient,
       dailyCapOMR, maxOmrPerEth)`** — POL bonding with the four-way ETH split (37.5% POL / 15% dev wallet /
-      22.5% Vig / 25% RWA-float; the RWA slice is mirrored off-chain by the backend from the `Bonded` event,
-      the on-chain forward is POL + dev + Vig). **This contract MINTS** — see below. Keep
+      22.5% Vig / 25% RWA-float) — **but see §0.5: the on-chain forward is only POL + dev + Vig, the event
+      carries no `toRwa`, and the backend therefore books the float's slice as ZERO on every real bond.
+      Fix that before this contract is deployed.** **This contract MINTS** — see below. Keep
       `polBps`/`devBps`/`maxDiscountBps` in lockstep with the backend `BONDS.*` in `src/rules.js`.
+      **Operating rule (`omerta-v4-hook-design.md` §9.6): keep `BONDS.DISCOUNT_BPS` strictly BELOW
+      `SELL_TAX.BPS`.** At today's 800 vs 900 an immediate bond-and-flip nets `1.08 × 0.91 = 0.983` — a
+      ~1.7% loss, which is what makes a bond a hold rather than an arbitrage. Invert the two and every
+      bond becomes a subsidised sell. (`MAX_DISCOUNT_BPS` 2000 against a 900 tax would be a +9% guaranteed
+      flip — it is a rogue-signer backstop, never a setting.)
       **Run `npm run dials` FIRST for the two cap arguments** — they derive from LIVE POOL DEPTH and are
       not fixed numbers. At a 100-ETH pool it gives `dailyCapOMR` **~27,000 OMR/day** (≈5% of the pool's
       OMR reserve, sized so a full day's cap dumped moves the price ≤10%) and `maxOmrPerEth` **~15,000**

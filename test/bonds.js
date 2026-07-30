@@ -10,7 +10,7 @@ import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
 import { BONDS, bondPayout } from '../src/rules.js';
 import { runLedgerInvariants } from '../src/invariants.js';
-import { runBondInvariants, reconcileBonds } from '../src/bonds.js';
+import { runBondInvariants, reconcileBonds, recordBond } from '../src/bonds.js';
 import { runVigInvariants } from '../src/vig.js';
 
 const app = await buildServer();
@@ -231,6 +231,39 @@ assert.equal(wEth, 2, 'bonded_eth still read-derives from the surviving bonds ro
 
 // ── (H) bonds are STILL out-of-band — the whole underwriter lifecycle wrote zero perturbation of the sweep ──
 assert((await runBondInvariants(pool)).ok, 'the bond invariant still holds through the underwriter lifecycle');
+
+// ── (I) THE FLOAT CANNOT BE SILENTLY STARVED (CHAIN-DEPLOY.md §0.5) ──────────────────────────────────
+// This reproduces the REAL on-chain shape, which is the point: the deployed `OmertaBond` splits ETH
+// three ways and emits `Bonded(… toPol, toDev, toVig)` with NO `toRwa`, so `syncBondEvents` cannot pass
+// an `onchainRwa` and `recordBond` books the float's 25% as ZERO on every real bond. Before this check
+// existed, that failure was INVISIBLE: check (4) is pol+dev+vig+rwa == principal and the contract's Vig
+// remainder absorbs the missing slice EXACTLY, so it summed; check (4b) compared 0 to 0. Two green
+// checks over a totally unfunded float — the shape the harnesses keep teaching, where a check that
+// cannot fail reads exactly like a clean bill of health.
+await pool.query('UPDATE bond_reserve SET capacity_omr = capacity_omr + 10000 WHERE id=1');
+const onchainShape = await recordBond(pool, {
+  nonce: 991, payer: '0x00000000000000000000000000000000000f10a7', principalEth: 2,
+  priceOmrPerEth: 5000, discountBps: 0, txHash: '0xfloatless',
+  // exactly what watcher.js:124 passes — note there is no onchainRwa, because the event has no field
+  onchainPayout: 100, onchainPol: 0.75, onchainDev: 0.3, onchainVig: 0.95,
+});
+assert.equal(onchainShape.recorded, true, 'the on-chain-shaped bond records');
+assert.equal(onchainShape.rwaEth, 0, 'and books ZERO to the float — the defect, reproduced from the real event shape');
+const starved = await runBondInvariants(pool);
+const floatChk = starved.checks.find((c) => c.name === 'every real bond funded the float');
+assert(floatChk, 'the float-funding check exists');
+assert.equal(floatChk.ok, false, 'THE FLOAT-STARVING BOND IS NOW VISIBLE — a real bond that funded no rwa_revenue fails the invariant');
+assert.equal(floatChk.lhs, 1, 'and it names how many real bonds left the float unfunded');
+// the two checks it hid behind are still green, which is exactly why (4c) had to exist
+assert.equal(starved.checks.find((c) => c.name === 'bond ETH split == principal').ok, true,
+  'check (4) STILL passes — the Vig remainder absorbs the missing slice exactly, so it can never see this');
+assert.equal(starved.checks.find((c) => c.name === 'bond RWA slice == rwa_revenue').ok, true,
+  'and check (4b) STILL passes — the accumulator and the mirror agree at zero');
+// clean up so the rest of the file (and any later assertion) sees a healthy book
+await pool.query("DELETE FROM bonds WHERE nonce=991");
+await pool.query("DELETE FROM vig_revenue WHERE source='bond' AND ref='991'");
+await pool.query('UPDATE bond_reserve SET committed_omr = committed_omr - 100, pol_eth = pol_eth - 0.75, dev_eth = dev_eth - 0.3 WHERE id=1');
+assert((await runBondInvariants(pool)).ok, 'and with the float-starving bond removed the book is healthy again');
 
 console.log('✅ THE UNDERWRITER (Reserve Bond Tier-4) test passed — THE PLEDGE (min gate, ledgered bond:pledge burn, over-pledge → omr), THE CHARTER (sequential Bronze→Silver seals, not_backer gate, ledgered bond:charter), backer-tier derivation (pledge + bondedEth×ETH_SCORE_OMR → Financier), THE UNDERWRITERS LEAGUE + the read-derived Financier crown (agent excluded, the crown flips on a bigger pledge), THE FAMILY SYNDICATE (summed roster score), §10.4 (bond: enumerated + every burn reconciles + the only drift is the SQL seed), and DEATH SURVIVAL (pledged_omr/bond_charter/bonded_eth all survive the estate)');
 

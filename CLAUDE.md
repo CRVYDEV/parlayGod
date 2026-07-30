@@ -6296,6 +6296,45 @@ still blocked on gates 2 + 3** (third-party audit of contracts AND signer, legal
 (`forge test`) stays green. **Still owed: the design's step-5 RE-SIM** — the entire cash economy was
 balanced against an extraction threat model that v2 removes.
 
+**UNISWAP v4 HOOKS ON ETH MAINNET — DESIGN ONLY** (`omerta-v4-hook-design.md`, founder-directed
+2026-07-30). Replace the ERC-20 `_update` sell tax with a v4 hook that takes the cut **in ETH inside
+the swap**, killing the reflexivity in today's design (the tax is collected in OMR but every consumer
+— founder, float, LP — needs ETH, so realising it means *selling*, which is sell pressure on the pool
+being taxed). Founder decisions recorded: pool-local taxation accepted (with the ERC-20 tax retained
+armed-at-zero as a backstop), the cut taken in ETH, OMR may go inert, dynamic fees approved **as a
+capability** (the rate curve is still its own sign-off), hook-native oracle approved. Still open: the
+cross-chain RWA leg (mainnet WETH → Arbitrum stock tokens puts a bridge inside the one path whose
+thesis is "the game only ever owes stock it already owns"), mainnet gas on the M6 withdrawal rail (a
+small `$OMR` claim can cost more than it is worth — it cuts against the Street Wage's small earners),
+and on-chain age decay (recommendation: hold at the game boundary — a hook only learns the swapper via
+a router's courtesy `msgSender()`, so the wall stops contributing exactly when someone attacks it).
+**BONDS ARE UNTOUCHED BY IT** (primary issuance vs secondary market — a bond never swaps, a swap never
+mints; the founder's "mint OMR for ETH → LP/operations" rail *is* `OmertaBond`'s POL 3750 + DEV 1500 =
+5250 bps), with three couplings and one sharp interaction: the oracle sits on the bond mint path so its
+cutover and the pool migration are ONE operation (fail-closed = a gap is a bond outage); POL has no LP
+token in v4 (a `PoolManager` position bound to the hook, so migration is deliberate work and a range
+decision); `dailyCapOMR` must be re-derived against the new depth (`npm run dials` — the cap is a
+function of DEPTH, not supply); and **at DISCOUNT 800 vs SELL_TAX 900 an immediate bond-and-flip nets
+`1.08 × 0.91 = 0.983`, so the sell tax is what makes a bond a HOLD rather than an arbitrage** — which
+means a bonder is the most motivated bypass-seeker on the chain (they hold known size on a known
+schedule), the ERC-20 backstop protects the bond programme and not just the revenue line, and
+`DISCOUNT_BPS < sellTaxBps` should be a stated operating rule.
+**A LIVE DEFECT the bonds question surfaced (`CHAIN-DEPLOY.md` §0.5, fix before mainnet, chain-dormant
+so nothing is wrong in production today):** `OmertaBond` splits ETH **three** ways on-chain (`toPol`,
+`toDev`, `toVig` = remainder) and has NO rwa recipient, but `recordBond` books **four** by reading an
+`onchainRwa` the watcher cannot supply — the `Bonded` event has no such field. So on the production
+path `rwa_eth` is **0 on every real bond** and the contract's whole 4750 bps remainder is booked as
+Vig (signed split: 2250 Vig / 2500 RWA) — the ETH reaches `vigRecipient`, but the slice that goes
+missing is the stock float's PRIMARY INFLOW, the thing v2 §6 built to keep the float growing when DEX
+volume is thin. **Both bond invariants are blind to it**: check (4) is `pol + dev + vig + rwa ==
+principal` and Vig absorbs the missing slice *exactly*, so it sums; `bond RWA slice == rwa_revenue`
+compares 0 to 0. It would have surfaced months after mainnet as "why is the float empty?" with every
+check green — the same shape the harnesses keep teaching (**a check that cannot fail reads exactly
+like a clean bill of health**). Fix = a four-way split in the contract (`rwaBps`/`rwaRecipient`/
+`toRwa`); the backend-only interim is valid ONLY if `vigRecipient` and the RWA buy bot share one
+custody, else it books float backing against ETH the float does not hold — the exact class
+`allocated ≤ held` and the `txHash` gate exist to prevent. Founder call (wallet topology, not code).
+
 **SIZING THE BOND DIALS — `tools/bond-dials.js` (`npm run dials`, the 8th harness).** The four walls
 step 4 + the oracle introduced (`dailyCapOMR`, `maxOmrPerEth`, `priceToleranceBps`,
 `OmrTwapOracle.PERIOD`) were all unset and all blocking a deploy, with CHAIN-DEPLOY.md saying "set them
