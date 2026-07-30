@@ -6913,3 +6913,31 @@ posture), corner/call Sybil (the petty-faucet posture), and — now stated hones
 ~$342k + boats/cars ≈ ~$900k/day base-wide), with `death:legacy` heir stakes outside the turnover
 meter (bounded by RETIRE_GENERATIONS + kill cadence, not player-extractable directly). Suite green
 + sim drift-0.
+
+**PRODUCTION INCIDENT — "the website is not loading correctly on mobile" (founder-reported, fixed
+2026-07-30).** The screenshot showed `undefined · gen undefined · lvl undefined`, `$NaN`, THE SHEET
+stuck on its static `…` placeholder, and — the part that made it unusable — **no tab rail, no
+bottom nav, no tab content at all**. One root cause, reproduced exactly before any fix was written:
+`boot()` handled 401 (sign in) and 404/`no_character` (create), then did `me = r.body.character ||
+r.body` — so **any other failure became the character**. A 503 while the box redeploys, the
+server's own `db_down`, a 500, a rate-limit, or the synthetic `offline` from a rejected fetch all
+land there as an ERROR ENVELOPE; `renderSheet()` then rendered `undefined` down the page and threw
+on **`me.eff.muscle`** (line ~2601), and because that throw escaped `boot()`,
+`buildTabs()`/`connectWs()`/`backfillFeed()` never ran. Production was HEALTHY when checked
+(`/health` ok, db up) with `uptimeSeconds: 683` — i.e. the founder caught a **restart window**, so
+this fired on every deploy, for whoever was loading, with nothing on screen saying why and no way
+back but a manual reload that could hit the same window again. Fixed in three layers: **(1)**
+`boot()` now validates the response (`r.code >= 400 || !who || typeof who.name !== 'string'`) and
+shows **THE LINE'S DEAD** — a screen that names the real cause (db_down / offline / rate-limit),
+says the character is safe, and **heals itself** on a backing-off retry (3s → ×1.6 → 20s cap) plus
+a manual TRY AGAIN, so a deploy clears without the player touching anything; **(2)** `renderSheet()`
+is wrapped so a throwing sheet can never take NAVIGATION down with it (a player with a stale field
+and a working tab rail can still play; a player with neither can only reload and hope); **(3)**
+`tools/mobile.js` gained a **restart-window check** (66 checks, up from 64): with `/v1/me` failing
+the player must get the honest screen with **no page error and no corpse**, and after the box
+returns the retry must restore a usable app. Mutation-verified — reverting the `boot()` guard fails
+the harness BY NAME on both counts. One process note worth keeping: the first cut of that check
+**crashed** on the follow-on click (`#btn-down-retry` never appeared) instead of reporting the
+finding it already had, so the recovery leg is now conditional — a guard that dies is much less
+useful at 2am than one that names the problem. `refresh()` was already correct (`if (r.code < 400)`),
+so `boot()` was the single point of failure.
