@@ -1011,6 +1011,18 @@
   <div style="margin-top:10px"><button class="act" id="btn-create" style="font-size:15px;padding:10px 24px">STEP OUT</button></div>
 </div>
 
+<!-- THE CITY IS UNREACHABLE. boot() used to treat ANY failed /v1/me as a character, so a server
+     RESTART (every deploy) rendered a corpse: `undefined · gen undefined`, `$NaN`, and — because
+     renderSheet() then threw on me.eff — no tab rail, no bottom nav, no content, with nothing on
+     screen saying why. This screen says why and heals itself when the box comes back. -->
+<div id="screen-down" class="center hidden">
+  <h1>THE LINE'S DEAD</h1>
+  <p id="down-why">Can't reach the city right now.</p>
+  <p class="d" style="max-width:340px;margin:0 auto">Your street is safe — this is the connection, not your character. Usually a deploy: it clears in under a minute.</p>
+  <div style="margin-top:12px"><button class="act" id="btn-down-retry" style="font-size:15px;padding:10px 24px">TRY AGAIN</button></div>
+  <p class="d" id="down-tick" style="margin-top:8px">retrying…</p>
+</div>
+
 <div id="screen-main" class="hidden">
   <div id="top">
     <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
@@ -2109,7 +2121,7 @@
 
   // ── screens ──
   function show(id) {
-    for (const s of ['screen-auth', 'screen-create', 'screen-main']) $('#' + s).classList.add('hidden');
+    for (const s of ['screen-auth', 'screen-create', 'screen-main', 'screen-down']) $('#' + s).classList.add('hidden');
     $('#' + id).classList.remove('hidden');
   }
 
@@ -2152,14 +2164,50 @@
       if (stashed && $('#new-ref') && !$('#new-ref').value) $('#new-ref').value = stashed;
       return show('screen-create');
     }
-    me = r.body.character || r.body;
+    // THE RESTART WINDOW. Anything else — a 503 while the box redeploys, the server's own `db_down`,
+    // a 500, a rate-limit, a synthetic offline from a rejected fetch — is NOT a character. This used
+    // to fall straight through: `me` became the ERROR ENVELOPE, so the sheet rendered
+    // `undefined · gen undefined` / `$NaN`, then threw on `me.eff.muscle` — and because that throw
+    // escaped boot(), buildTabs()/connectWs()/backfillFeed() never ran: no tab rail, no bottom nav,
+    // no content, and nothing on screen saying why. Reported from production on a phone (a deploy
+    // restart), reproduced exactly. A player is never shown a corpse: say it, and heal.
+    const who = r.body?.character || r.body;
+    if (r.code >= 400 || !who || typeof who.name !== 'string') return showDown(r);
+    downStop();
+    me = who;
     session = (await api('GET', '/v1/session')).body || null;
     if (!rules) rules = (await api('GET', '/v1/rules')).body;
-    show('screen-main'); renderSheet(); buildTabs(); connectWs(); backfillFeed();
+    show('screen-main');
+    // the sheet must never be able to take NAVIGATION down with it — a player with a stale field
+    // and a working tab rail can still play; a player with neither can only reload and hope.
+    try { renderSheet(); } catch (e) { console.error('renderSheet failed', e); }
+    buildTabs(); connectWs(); backfillFeed();
     // first session: the illustrated tour. Keyed on its own flag (not omerta_welcomed) ON PURPOSE —
     // existing testers who saw the old one-wall-of-text welcome get the expanded tour exactly once too.
     if (!localStorage.getItem('omerta_tour2')) openTour();
   }
+
+  // ── THE LINE'S DEAD — an honest, SELF-HEALING unreachable screen. A deploy takes well under a
+  // minute, so the page retries on its own with a visible countdown: the founder's phone would have
+  // healed itself instead of sitting on a broken sheet. Manual retry too, for a longer outage.
+  let downTimer = null, downTick = null, downWait = 3;
+  function downStop() { clearTimeout(downTimer); clearInterval(downTick); downTimer = downTick = null; downWait = 3; }
+  function showDown(r) {
+    const why = r?.body?.error === 'db_down' ? "The city's records are unreachable — the game's database is down."
+      : r?.body?.error === 'offline' ? "Can't reach the city — the server didn't answer."
+      : r?.code === 429 ? 'Too many requests from here at once — easing off for a moment.'
+      : `Can't reach the city right now (${r?.body?.error || r?.code || 'unknown'}).`;
+    $('#down-why').textContent = why;
+    show('screen-down');
+    clearTimeout(downTimer); clearInterval(downTick);
+    let left = downWait;
+    const paint = () => { $('#down-tick').textContent = left > 0 ? `trying again in ${left}s…` : 'trying again…'; };
+    paint();
+    downTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
+    downTimer = setTimeout(() => { clearInterval(downTick); boot(); }, downWait * 1000);
+    downWait = Math.min(20, Math.ceil(downWait * 1.6)); // back off, but keep checking — outages end
+  }
+  $('#btn-down-retry').onclick = () => { downStop(); $('#down-tick').textContent = 'trying again…'; boot(); };
 
   const landToken = (r) => {
     if (r.body?.token) { token = r.body.token; localStorage.setItem('omerta_token', token); boot(); return true; }
