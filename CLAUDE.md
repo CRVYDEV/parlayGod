@@ -7151,3 +7151,39 @@ rather than skipped (the honesty rule) and were swept by hand for the same class
 in this schema is uuid, so the estate wipe is safe, and `commission_proposals` was the only outlier
 left. Mutation-verified: restore the outage and pgquery names `src/game.js:166` and the exact operator
 that does not exist.
+
+**THE PITCH — the severed economies, written down where players and visitors read it (2026-07-30).**
+Tokenomics v2 changed what the game IS and the player-facing copy still described the old shape.
+Three surfaces synced: `docs/WIKI.md` §5 and the served `public/wiki.html` window section gained a
+**"Why it is built this way"** subsection, and the landing page's economy band was rewritten as **TWO
+ECONOMIES, DELIBERATELY SEVERED**. The argument is the one the design earned: most crypto games are a
+pipe (farm → convert → sell), so every payout the designers add is secretly a decision about the token
+and the only way to hold the token steady is to make the game stingy — Axie's SLP is the studied
+collapse. OMERTÀ has no pipe: **cash cannot become $OMR at any price, through any route**. What that
+buys is stated as consequences rather than adjectives — grinding cannot inflate the token, supply is
+enumerated to three faucets a nightly job proves, the Street Wage is a published halving schedule
+against a finite endowment rather than a yield someone can revise, and the one conversion runs the
+other way (burn $OMR at the Window for cash out of a till real sinks filled, refusing cleanly when
+dry). Plus the argument specific to THIS game: OMERTÀ is about risk, and a currency that was an exit
+from that risk would undo the game it lives in. The wiki keeps the honest tension too — staked $OMR
+cannot be looted, which IS a hedge, priced by the 6h unbond exposure and the early-exit toll.
+**Every claim was verified from source before it was written**, which caught one that would have been
+materially FALSE: "1M fixed supply, no second tap" — 1,000,000 is the *Street Wage's lifetime
+endowment*, not total supply, and `OMR.sol` has a `minter` (the bond contract) since v2 step 4. The
+standing compliance line holds throughout: no earnings promise, no income claim, no price talk.
+
+**A PROBABILISTIC PRECONDITION FOR A DETERMINISTIC CLAIM (the population flake, same day).** A full
+`npm test` reddened on `test/population.js` — "residents are on the duelling ladder" — and 75
+consecutive re-runs would not reproduce it. The suite's own comment already documented the class and
+its earlier mitigation ("more residents, not more turns"), which had taken it from ~1 run in 12 to
+roughly 1 in 80. That is a better coin, not a fixed test. The mechanism, once printed: a resident's
+duel limit is `DUEL_BPS` (9%) of their own cash floored at `DUELS.STAKE_MIN`, so only a seed above
+~$11.1k qualifies at all — capo/boss always, `made` only in its top tenth — and whether ANY qualifying
+resident turns up is a weighted band draw. The assertion is deterministic; its precondition was a
+lottery. Fixed by GUARANTEEING the precondition instead of making it likely: one resident is spawned
+from the `boss` band through the ordinary ledgered spawn path (`spawnResident(pool, { band })` — the
+pattern this suite already uses four times over), with a guard asserting that band's floor really does
+clear `DUELS.STAKE_MIN`, so the precondition cannot silently rot if a lever moves. What is asserted is
+untouched — `residentAct` still has to notice them and list them — and every other resident still
+arrives by the real draw. Mutation-verified: point the guaranteed spawn at `corner` and the
+precondition guard fires by name rather than the test passing on luck.
