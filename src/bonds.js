@@ -337,6 +337,28 @@ export async function runBondInvariants(pool) {
   push('bond ETH split == principal', polEth + devEth + vigEth + rwaEth, sumEth);
   // (4b) the float slice reached the bucket the buy bot draws on
   push('bond RWA slice == rwa_revenue', rwaEth, rwaMirror);
+  // (4c) THE FLOAT ACTUALLY GOT PAID. (4) and (4b) are both satisfiable by rwaEth == 0 — (4) because the
+  // Vig remainder absorbs the missing slice EXACTLY, (4b) because 0 == 0 — so between them they cannot
+  // see a total failure of the RWA leg. That is not hypothetical: the deployed `OmertaBond` splits ETH
+  // three ways (toPol/toDev/toVig) and emits no `toRwa`, so `recordBond`'s on-chain branch books
+  // rwa_eth = 0 on every REAL bond while both checks stay green (CHAIN-DEPLOY.md §0.5). This check is
+  // deliberately PER-BOND and RATE-INDEPENDENT: "every real bond that moved ETH left a float row". An
+  // aggregate `rwaEth ≈ sumEth × RWA_BPS` would false-alarm the moment the founder retunes the lever
+  // (historical bonds were booked at the old rate) and a check that cries wolf gets deleted; a merely
+  // structural "rwaEth > 0" would go quiet as soon as ONE bond funded the float, which is exactly the
+  // mixed history a real deployment has. Counting bonds with no row survives both.
+  //   Skipped when RWA_BPS is 0 (no float share signed → no row expected), and the principal guard
+  // excludes a bond so small its slice rounds below 6dp, where `recordBond` legitimately writes nothing.
+  //   Two flat queries + a JS filter rather than a correlated NOT EXISTS — pg-mem cannot parse one
+  // (the /v1/gangs precedent), and an invariant that only runs in production is not an invariant.
+  let floatless = 0;
+  if (BONDS.RWA_BPS > 0) {
+    const realRows = (await pool.query('SELECT nonce, principal_eth FROM bonds WHERE tx_hash IS NOT NULL')).rows;
+    const funded = new Set((await pool.query("SELECT ref FROM rwa_revenue WHERE source='bond'")).rows.map((x) => String(x.ref)));
+    floatless = realRows.filter((b) => Number(b.principal_eth) * BONDS.RWA_BPS / 10000 >= 0.000001
+      && !funded.has(String(b.nonce))).length;
+  }
+  checks.push({ name: 'every real bond funded the float', lhs: floatless, rhs: 0, ok: floatless === 0 });
   // (5) discounts capped
   const badDisc = Number((await pool.query('SELECT COUNT(*) n FROM bonds WHERE discount_bps > $1', [BONDS.MAX_DISCOUNT_BPS])).rows[0].n);
   checks.push({ name: 'bond discounts ≤ MAX', lhs: badDisc, rhs: 0, ok: badDisc === 0 });
