@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **105** files, **32774** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **59** files, **20056** lines (`test/`) — ratio 0.61 test:src |
-| HTTP routes | **512** registrations |
-| Database tables | **173** (`schema.sql`, 2371 lines) |
-| Client | **6,298** lines (`public/index.html`, single file, zero dependencies) |
+| Backend modules | **106** files, **33006** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **60** files, **20232** lines (`test/`) — ratio 0.61 test:src |
+| HTTP routes | **514** registrations |
+| Database tables | **174** (`schema.sql`, 2381 lines) |
+| Client | **6,339** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls) |
@@ -31,7 +31,7 @@ Everything is built on five load-bearing decisions. None has needed revision in 
 
 **`rules.js` is the constants layer, in two files.** `rules.generated.js` holds the prototype's 22 data
 tables (458 lines) and is overwritten wholesale by the extractor; `rules.tail.js` holds every helper,
-catalog, ladder and founder-signed lever (3566 lines) and the extractor never opens it. `rules.js`
+catalog, ladder and founder-signed lever (3630 lines) and the extractor never opens it. `rules.js`
 re-exports both. Nothing in `src/` hardcodes a balance number.
 
 **`withCharacter` is the transaction spine.** Every player action opens `SELECT … FOR UPDATE` on the

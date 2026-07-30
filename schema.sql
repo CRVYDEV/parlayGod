@@ -2369,3 +2369,13 @@ CREATE TABLE IF NOT EXISTS pen_talks (
   day INT NOT NULL,
   PRIMARY KEY (character_id, day)
 );
+
+-- THE CAREER (task #308): once-ever-per-ACCOUNT claim latches for the post-First-Week progression
+-- ladder. Account-level BY DESIGN — the ladder survives death (the heir keeps the climb; the
+-- once-ever bound is what caps the career: cash faucet at its lifetime total per account), so this
+-- table is NEVER estate-wiped (the first_week/onboard posture).
+CREATE TABLE IF NOT EXISTS career_claims (
+  account_id UUID NOT NULL,
+  task_id TEXT NOT NULL,
+  PRIMARY KEY (account_id, task_id)
+);

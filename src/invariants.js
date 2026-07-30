@@ -49,6 +49,9 @@ const KNOWN_REASONS = {
     // THE HUSTLE: `hustle:payoff` — the daily three-stop chain's completion faucet (character_id'd;
     // bounded ONCE a day per street by the (character, day) PK — the clue-casket posture)
     'hustle:',
+    // THE CAREER: `career:<taskId>` — the post-First-Week ladder's task rewards (character_id'd;
+    // bounded ONCE EVER per account per task by the career_claims PK — a fixed lifetime total)
+    'career:',
     // COMMISSION step three: proposal deposits — treasury→escrow (`commission:proposal`, NULL char),
     // refunded on an enacted motion (`commission:refund`) or forfeited to the confiscation pool
     // (`commission:forfeit`) — reconciled by the treasury check (b) + the commission-escrow check

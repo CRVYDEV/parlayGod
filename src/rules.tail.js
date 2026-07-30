@@ -3172,6 +3172,13 @@ export const POPULATION = {
     { id: 'capo',    w: 20, lvl: [25, 44], seed: [15000, 60000],  stat: [28, 60] },
     { id: 'boss',    w: 8,  lvl: [45, 70], seed: [60000, 200000], stat: [55, 110] },
   ],
+  // JAILBIRDS (founder: the daily "Bust a player out of lockup" contract was uncompletable on a
+  // solo run — residents never went to jail, so the §7.8 bust verb had no target). The worker keeps
+  // TARGET residents serving a sentence; a bust frees a real character through the unchanged §7.8
+  // path (its curve makes long sentences near-impossible and short tails worthwhile, so the play is
+  // catching one near the end). Pure jail_until pacing — zero §10.4; the bust:reward faucet it makes
+  // reachable is the SIGNED §7.8 one, bounded by the refill rate (BALANCE flag).
+  JAILBIRDS: { TARGET: 2, MIN_S: 240, MAX_S: 1200 },
 };
 // A resident's name: noir first + last, drawn from pools. Uniqueness is enforced by the caller
 // (living names are unique game-wide), which retries on a collision.
@@ -3563,4 +3570,61 @@ export const hustleOf = (chId, day = dayOf()) => {
   const stops = ['a', 'b', 'c'].map((s) => rest.splice(pick(s, rest.length), 1)[0]);
   const contact = `${SOLDIERS.FIRST[pick('f', SOLDIERS.FIRST.length)]} ${SOLDIERS.LAST[pick('l', SOLDIERS.LAST.length)]}`;
   return { stops, contact, leg: HUSTLE.LEGWORK[pick('k', HUSTLE.LEGWORK.length)] };
+};
+
+// ═══════════ THE CAREER — the post-First-Week progression ladder (task #308) ═══════════
+// Founder: "Once you complete The First Week there should be another list of tasks in progression
+// for the user to set out to do and receive bonuses upon completion that takes them throughout the
+// game." Five tiers, six tasks each. Rewards are CASH ONLY (the v24 social-reward rule), latched
+// ONCE per ACCOUNT (career_claims PK — the ladder survives death; the heir doesn't re-farm it), so
+// the whole faucet is bounded at the lifetime total per account. Tiers unlock at NEED claims (not
+// all six) so a declinable task — joining a family, spilling blood — never WALLS a solo player (the
+// coach harness-F1 lesson applied to a checklist); the capstone pays only on all six (the
+// completionist bonus rides the last claim's row, the First-Week pattern). The CHECK for each task
+// lives in career.js keyed by id (rules is data); every check is a server-verifiable signal —
+// ownership, an account legend, mastery XP — never client-claimed.
+export const CAREER = {
+  NEED: 4,             // claims that open the next tier
+  TIERS: [
+    { id: 'associate', name: 'Associate', capstone: 3000, tasks: [
+      { id: 'ca_path',    name: 'Declare your Path',        cash: 1000, how: 'At level 5 — the Declare Your Path card on the Streets.', tab: 'streets' },
+      { id: 'ca_strap',   name: 'Get strapped',             cash: 1000, how: 'Buy any gun at the Garage armory.', tab: 'garage' },
+      { id: 'ca_wheels',  name: 'Get wheels',               cash: 1000, how: 'Boost a car — The Garage.', tab: 'garage' },
+      { id: 'ca_bank',    name: 'Bank $25,000',             cash: 1000, how: 'The Bank on the Streets — pocket cash is lootable, banked clears in 2h.', tab: 'streets' },
+      { id: 'ca_regimen', name: 'Train a discipline',       cash: 1000, how: 'The Gym & The Regimen drawer on the Streets — any of the five.', tab: 'streets' },
+      { id: 'ca_hustle',  name: 'Complete a daily hustle',  cash: 1000, how: "TONIGHT'S HUSTLE card on the Streets — three stops across town.", tab: 'streets' },
+    ] },
+    { id: 'soldier', name: 'Soldier', capstone: 7500, tasks: [
+      { id: 'so_jump',    name: 'Win a jump',               cash: 2500, how: 'Wet Work → The Streets roster → jump somebody (a win schools your muscle).', tab: 'pvp' },
+      { id: 'so_earner',  name: 'Buy an earner',            cash: 2500, how: 'A racket or asset — The Empire catalogs.', tab: 'empire' },
+      { id: 'so_crew',    name: 'Pull a crew heist',        cash: 2500, how: 'Big Scores — plan one or join an open crew.', tab: 'scores' },
+      { id: 'so_product', name: 'Move product',             cash: 2500, how: 'The Kitchen — cook a batch, deal it on the corner.', tab: 'kitchen' },
+      { id: 'so_fight',   name: 'Win a fight',              cash: 2500, how: 'A duel (Wet Work) or a boxing bout (The Fights) — winning is what counts.', tab: 'pvp' },
+      { id: 'so_trade',   name: 'Turn a trade profit',      cash: 2500, how: 'Buy trade goods cheap, sell them dear — the Trade Winds board on The City shows the spread.', tab: 'streets' },
+    ] },
+    { id: 'made', name: 'Made Man', capstone: 15000, tasks: [
+      { id: 'md_front',   name: 'Open a front',             cash: 5000, how: 'A business front — The Empire (level 15 for the Laundromat).', tab: 'empire' },
+      { id: 'md_family',  name: 'Join a family',            cash: 5000, how: 'The Family — join one off the board, or found your own.', tab: 'family' },
+      { id: 'md_freight', name: 'Land a shipment',          cash: 5000, how: 'A Port run (The Port) or a convoy delivered (Big Scores).', tab: 'port' },
+      { id: 'md_stable',  name: 'Sign a fighter or racer',  cash: 5000, how: 'The Fights (a boxer) or The Stable (a dog or a horse).', tab: 'boxing' },
+      { id: 'md_legit',   name: 'Buy your first stock',     cash: 5000, how: 'Going Legit — the paper book survives death.', tab: 'portfolio' },
+      { id: 'md_shield',  name: 'Buy protection',           cash: 5000, how: 'A safehouse stay or a bodyguard — Wet Work → Your Defenses.', tab: 'pvp' },
+    ] },
+    { id: 'capo', name: 'Capo', capstone: 30000, tasks: [
+      { id: 'cp_vice',    name: 'Beat the odds',            cash: 10000, how: 'A real stake at the Den ($1,000+ schools you), a race win, or a purse at the Fights.', tab: 'den' },
+      { id: 'cp_kingpin', name: 'Move serious weight',      cash: 10000, how: 'Lifetime product moved past $50,000 — the Kitchen legend.', tab: 'kitchen' },
+      { id: 'cp_spy',     name: 'Work the wires',           cash: 10000, how: 'The Wire — a tap, a sweep, a dossier. Any intel op.', tab: 'wire' },
+      { id: 'cp_blood',   name: 'Draw blood',               cash: 10000, how: 'A landed hit — search, then fire. Wetwork is a trade like any other.', tab: 'pvp' },
+      { id: 'cp_empire',  name: 'Own three income streams', cash: 10000, how: 'Fronts, rackets, assets — any three earners at once.', tab: 'empire' },
+      { id: 'cp_estate',  name: 'Buy a place',              cash: 10000, how: 'The Estate — a Safe House deed to start. It survives death.', tab: 'estate' },
+    ] },
+    { id: 'don', name: 'The Don', capstone: 60000, tasks: [
+      { id: 'dn_legend',  name: 'Build a legend',           cash: 20000, how: 'Any lifetime legend past $250,000 — smuggled, product moved, or racket income.', tab: 'city' },
+      { id: 'dn_master',  name: 'Master a trade',           cash: 20000, how: 'Any trade to level 25 — The Trades on The Life.', tab: 'life' },
+      { id: 'dn_dynasty', name: 'Name your dynasty',        cash: 20000, how: 'Going Legit — the name your heirs carry.', tab: 'portfolio' },
+      { id: 'dn_monument',name: 'Put your name in stone',   cash: 20000, how: 'Contribute to the Megaproject — The City. The plaque is forever.', tab: 'city' },
+      { id: 'dn_champ',   name: 'Take a crown',             cash: 20000, how: '10 boxing wins, 10 race wins, or 5 duel wins — any champion’s record.', tab: 'boxing' },
+      { id: 'dn_name',    name: 'Become a level-40 name',   cash: 20000, how: 'Level 40. The city knows who you are.', tab: 'streets' },
+    ] },
+  ],
 };

@@ -1553,6 +1553,9 @@
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
     if (body.success === true) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}` : ''}`);
+    // the §7.8 bust — success frees them and pays; a miss is the guards taking YOU (falls through
+    // to the generic BUSTED line below, which is exactly what happened)
+    if (body.busts !== undefined && body.success) bits.push(`🔓 sprung them from lockup — +$${fmt(body.reward)} (${body.busts} lifetime bust${body.busts === 1 ? '' : 's'})`);
     if (body.success === false) bits.push((body.jailSeconds ? `BUSTED${body.approach === 'loud' ? ' (went loud)' : ''} — ${minsTxt(body.jailSeconds)} in lockup` : 'it went sideways') + (body.victim ? ` · the mark got away: ${body.victim}` : ''));
     // THE HUSTLE — a checked-in stop vs the payoff (the `contact` field is the chain's marker)
     if (body.contact && body.step !== undefined && body.of === 3)
@@ -1637,6 +1640,9 @@
       ? 'the clock is running — your post has to STAND before it pays. Come back and collect.'
       : `still standing — it pays in ${minsTxt(body.matureSeconds || 0)}.`);
     if (body.kind === 'social' && body.cash !== undefined) bits.push(`thanks for spreading the word — +$${fmt(body.cash)}${body.allDone ? ' (all done today!)' : ''}`);
+    // THE CAREER — a claimed rung on the ladder (tierOf marks the shape; capstone rides the sixth)
+    if (body.tier && body.tierOf !== undefined && body.pay !== undefined)
+      bits.push(`📜 ${body.task} — +$${fmt(body.pay)}${body.capstone ? ` (incl. the ${body.tier} capstone $${fmt(body.capstone)})` : ''} · ${body.tier} ${body.tierDone}/${body.tierOf}`);
     if (body.task && body.cash !== undefined && body.kind !== 'social') bits.push(`reward: +$${fmt(body.cash)}${body.cb ? ` +${body.cb} crates` : ''}${body.en ? ` +${body.en} energy` : ''}${body.capstone ? ' — THE FIRST WEEK IS DONE!' : ''}`);
     if (body.spent !== undefined && body.tier && body.name) bits.push(`moved up to the ${body.name}`);
     if (body.feature && body.name) bits.push(`built the ${body.name}`);
@@ -3276,9 +3282,10 @@
   async function renderStart() {
     const t = $('#tab-start');
     // two serial round trips before a single pixel painted — the tab showed nothing for both
-    const [obR, swR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social')]);
+    const [obR, swR, crR] = await Promise.all([api('GET', '/v1/onboard'), api('GET', '/v1/social'), api('GET', '/v1/career')]);
     const ob = obR.body || { tasks: [], total: 0, claimed: 0 };
     const sw = swR.body || { tasks: [] };
+    const cr = crR.body || { tiers: [] };
     // task → [tab to jump to, the coaching line] for the not-yet-done "do it" button
     const go = {
       ob_crime: ['streets', 'Pull any job on the Streets'],
@@ -3318,6 +3325,31 @@
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+      ${(() => { // THE CAREER (founder: another list of tasks in progression after the First Week,
+        // with bonuses, that takes you throughout the game). Open tiers render their task cards;
+        // the next locked tier is a one-line teaser; deeper tiers stay a count so the screen
+        // doesn't drown a fresh player in 30 cards. Once-ever per ACCOUNT — it survives death.
+        const tiers = cr.tiers || [];
+        if (!tiers.length) return '';
+        let teased = false;
+        return `<h2 style="margin-top:14px">The Career <span class="d" style="font-size:11px">— five ranks of once-ever jobs that pay cash as you climb. ${cr.need || 4} claims in a rank open the next; all six pay the rank's capstone. Yours for good — even death doesn't take the climb.</span></h2>
+        <div>${tiers.map((tr) => {
+          if (!tr.open) {
+            if (teased) return '';
+            teased = true;
+            return `<div class="d" style="color:var(--dim);font-size:12.5px;margin:6px 0">🔒 <b>${tr.name}</b> — opens at ${cr.need || 4} claims in the rank above${tr.capstone ? ` (capstone $${fmt(tr.capstone)})` : ''}. The ranks past it wait their turn.</div>`;
+          }
+          return `<h2 style="margin-top:8px;font-size:15px">${tr.complete ? '✓ ' : ''}${tr.name} <span class="d" style="font-size:11px">(${tr.done}/${tr.of}${tr.complete ? ' — capstone paid' : ` · all six pays +$${fmt(tr.capstone)}`})</span></h2>
+          <div class="grid">${tr.tasks.map((k) => `
+            <div class="card" ${!k.claimed && k.ready ? 'style="border-color:var(--neon)"' : ''}>
+              <span class="t">${k.claimed ? '✓ ' : ''}${k.name}</span>
+              ${k.claimed ? '<span class="chip good">claimed</span>' : k.ready ? '<span class="chip good">reward ready</span>' : ''}
+              <div class="d">${k.how} · pays $${fmt(k.cash)}</div>
+              ${k.claimed ? '' : k.ready
+                ? `<button class="act prime" data-crclaim="${k.id}">claim $${fmt(k.cash)}</button>`
+                : `<button class="act" data-crgo="${k.tab || 'streets'}">show me →</button>`}
+            </div>`).join('')}</div>`;
+        }).join('')}</div>`; })()}
       ${sect('howto', 'How the city works', 'the six things worth knowing — 60 seconds', `
         <div class="grid">
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-streets.jpg"><span class="t">The Streets</span>
@@ -3414,6 +3446,10 @@
       act('POST', '/v1/referral/claim', { code: nm }).then(() => renderStart());
     };
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
+    // THE CAREER — claim a done rung / jump to where a rung's work lives
+    t.querySelectorAll('[data-crclaim]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/career/${b.dataset.crclaim}`, {}).then(() => renderStart()));
+    t.querySelectorAll('[data-crgo]').forEach((b) => b.onclick = () => { setTab(b.dataset.crgo); spotlight(SPOT[b.dataset.crgo]); });
     const ht = t.querySelector('#howto-tour'); if (ht) ht.onclick = (e) => { e.preventDefault(); openTour(); };
     wireSects(t);
     t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
@@ -3608,7 +3644,7 @@
       cook: ['Cook a batch at the Kitchen.', 'kitchen'],
       deal: ['Deal product on the corner at the Kitchen.', 'kitchen'],
       heist: ['Pull the Daily Score (the card right here) — crew heists count too.', null],
-      bust: ['Bust a family member out of lockup (Wet Work roster). Needs a jailed brother.', 'pvp'],
+      bust: ['Spring ANYONE from lockup — Wet Work → The Streets roster: anyone with a LOCKUP chip shows a "bust them out" button. A success frees them and pays you; best odds near the end of a stretch.', 'pvp'],
     };
     const dailyCards = (daily.jobs || []).map((j) => {
       const ready = j.progress >= j.goal;
@@ -4271,6 +4307,7 @@
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
+          ${s.jailed ? `<button class="act prime" data-pbust="${s.id}" title="spring them from lockup — a success frees them and PAYS you (more time left = bigger reward, worse odds; the sweet spot is near the end of a stretch). A miss puts YOU inside for a few minutes.">bust them out</button>` : ''}
           <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>
           <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
           <button class="act risk" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
@@ -4305,6 +4342,10 @@
     });
     t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/streets/${b.dataset.jump}/jump`, { intent: b.dataset.intent || 'standard' }).then(() => renderPvp()));
+    // the §7.8 bust — until now this verb lived ONLY in the raw deck, so the daily "bust a player
+    // out of lockup" contract pointed at a control that did not exist
+    t.querySelectorAll('[data-pbust]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.pbust}/bust`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-search]').forEach((b) => b.onclick = async () => {
       const r = await act('POST', `/v1/streets/${b.dataset.search}/search`, {});
       if (r.code < 400 && r.body.placedAt)

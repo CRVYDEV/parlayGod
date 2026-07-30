@@ -265,6 +265,29 @@ async function runPopulationInner(pool) {
       console.error('[population] spawn failed', e.message);
     } finally { client.release(); }
   }
+  // 3. JAILBIRDS (founder: the daily "Bust a player out of lockup" contract was uncompletable on a
+  //    solo run — nobody was ever in lockup to bust). Keep TARGET residents serving a sentence so
+  //    the §7.8 bust verb always has a target, the Pen roster has faces, and the bust dailies are
+  //    completable. Pure jail_until pacing — zero §10.4 (no ledger row, no value moves); the
+  //    behaviour picker already skips jailed residents, so a collared resident just sits it out.
+  //    No bus/notify — residents emit no events (the step-two rule).
+  const jb = POPULATION.JAILBIRDS;
+  const inside = Number((await pool.query(
+    'SELECT COUNT(*) c FROM characters WHERE alive AND is_npc AND jail_until > now()')).rows[0].c);
+  out.jailed = 0;
+  for (let i = inside; i < jb.TARGET; i++) {
+    const pickable = (await pool.query(
+      `SELECT id FROM characters WHERE alive AND is_npc
+         AND (jail_until IS NULL OR jail_until < now())
+         AND (hosp_until IS NULL OR hosp_until < now()) LIMIT 24`)).rows;
+    if (!pickable.length) break;
+    const pick = pickable[Math.floor(Math.random() * pickable.length)];
+    const sentenceS = jb.MIN_S + Math.floor(Math.random() * (jb.MAX_S - jb.MIN_S + 1));
+    // absolute timestamp computed in JS (the pg-mem discipline — no interval arithmetic on a param)
+    await pool.query('UPDATE characters SET jail_until = $2 WHERE id=$1',
+      [pick.id, new Date(Date.now() + sentenceS * 1000)]);
+    out.jailed++;
+  }
   out.population = await population(pool);
   return out;
 }
