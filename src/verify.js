@@ -92,7 +92,25 @@ export const socialTaskAvailable = (taskId, acct = null) => {
 export const xCheckCdMs = () => Number(process.env.X_CHECK_CD_MS ?? 30 * 60_000);
 export const xFollowPages = () => Number(process.env.X_FOLLOW_PAGES ?? 5);
 
-export async function throttleXCheck(client, accountId, kind) {
+// THE MARKER MUST SURVIVE THE ROLLBACK, which is the whole reason it takes a second connection.
+// The comment above says a failed check must still spend the window — but the failure path is
+// `throw new GameError('verify_failed')`, and every caller runs inside `withCharacter`, which
+// ROLLS BACK on a throw. Written on the transaction's own client the marker is undone by exactly
+// the case it exists for, so a player who has not followed can re-click forever and burn up to
+// `X_FOLLOW_PAGES` (5) outbound X calls each time, against a paid quota, with nothing to stop them.
+// pg-mem's ROLLBACK is a no-op, so the whole suite saw the marker persist and reported the throttle
+// working; on real Postgres `test/growth.js` fails at the "clicking again is answered from the
+// database" assertion. Found by running the suites against real Postgres after the 2026-07-30
+// outage, which is the same engine-divergence class.
+//
+// `oob` is the POOL, not the transaction client — a pool query autocommits, so the marker lands
+// whatever the enclosing transaction then does (the `server.js` idempotency-reserve precedent).
+// Taking a second connection while holding row locks is a self-deadlock hazard in general; it is
+// safe HERE and only here because `x_checks` shares no lock with anything the action holds
+// (characters / account_persistent), and because this path runs at most once per player per
+// window. Do not copy it to a hot path. Best-effort: a throttle that cannot be written must not
+// take the player's action down with it.
+export async function throttleXCheck(client, accountId, kind, oob = null) {
   const cd = xCheckCdMs();
   if (!(cd > 0) || !client || !accountId) return;
   const prev = (await client.query(
@@ -103,9 +121,10 @@ export async function throttleXCheck(client, accountId, kind) {
     throw new GameError('verify_cooldown',
       `We just checked with X. Give it ${mins} minute${mins === 1 ? '' : 's'} and try again — do the thing first, then come back.`);
   }
-  await client.query(
-    `INSERT INTO x_checks (account_id, kind, checked_at) VALUES ($1,$2,now())
-     ON CONFLICT (account_id, kind) DO UPDATE SET checked_at=now()`, [accountId, kind]);
+  const sql = `INSERT INTO x_checks (account_id, kind, checked_at) VALUES ($1,$2,now())
+     ON CONFLICT (account_id, kind) DO UPDATE SET checked_at=now()`;
+  if (oob) { try { await oob.query(sql, [accountId, kind]); return; } catch { /* fall through */ } }
+  await client.query(sql, [accountId, kind]);
 }
 
 export async function verifySocial(taskId, acct) {
