@@ -17,7 +17,7 @@ const DISC_IDS = REGIMEN.DISCIPLINES.map((d) => d.id);
 
 // absolute-write upsert (the pg-mem INT-arithmetic discipline): read under the char lock the caller
 // already holds, write the computed total.
-async function addXp(client, characterId, discipline, xp) {
+export async function addXp(client, characterId, discipline, xp) {
   const row = (await client.query(
     'SELECT xp FROM character_disciplines WHERE character_id=$1 AND discipline=$2', [characterId, discipline])).rows[0];
   const total = Number(row?.xp || 0) + xp;
@@ -27,9 +27,12 @@ async function addXp(client, characterId, discipline, xp) {
 }
 
 // ── train a discipline — the gym's fourth-through-eighth doors, on the gym's ONE clock ──
-export async function trainDiscipline(ch, id, client, h) {
+// PEN step six threads { fromYard } to waive ONLY the jail gate (the burner `fromBurner` precedent):
+// the iron pile IS the gym for a jailed man — every other gate (energy, the shared clock, the cap)
+// stands, so jail never trains faster than the street.
+export async function trainDiscipline(ch, id, client, h, { fromYard = false } = {}) {
   if (!DISC_IDS.includes(id)) throw new GameError('bad_discipline', 'No such discipline.');
-  if (ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup.');
+  if (!fromYard && ch.jail_until && new Date(ch.jail_until) > new Date()) throw new GameError('jailed', 'No gym in lockup — but there\'s an iron pile in the yard.');
   if (Number(ch.energy) < REGIMEN.ENERGY) throw new GameError('energy', 'Too tired to train.');
   const trainCd = Number(process.env.TRAIN_CD_MS ?? PACING.TRAIN_CD_MS);
   if (trainCd > 0 && ch.train_at && new Date(ch.train_at) > new Date())

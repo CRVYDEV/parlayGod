@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, dayOf } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -1024,6 +1024,18 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
     if (r.body.victim === 'Sally Two-Steps') named = r.body;
   }
   assert(named, 'a resident standing in your district becomes the named mark');
+  // REGRESSION (the dice-counter class): a goods BUY bumps the daily 'goods' counter — the daily
+  // contract AND the hustle legwork both promise "buy OR sell", but only the sell side counted, so
+  // a goods-drawn hustle was uncompletable by buying (the suite flaked on which legwork the seed
+  // drew). Deterministic here regardless of the draw.
+  {
+    await seedCh(hus.id, 'cash=100000');
+    const g0 = (await pool.query(`SELECT counters FROM daily_progress WHERE character_id='${hus.id}' AND day=$1`, [dayOf()])).rows[0];
+    const before = g0 ? Number(JSON.parse(g0.counters).goods || 0) : 0;
+    assert.equal((await call('POST', '/v1/goods/buy', { token: hus.token, body: { goodId: 'gin', qty: 1 } })).code, 200, 'bought a unit');
+    const g1 = (await pool.query(`SELECT counters FROM daily_progress WHERE character_id='${hus.id}' AND day=$1`, [dayOf()])).rows[0];
+    assert.equal(Number(JSON.parse(g1.counters).goods || 0), before + 1, 'a goods BUY counts toward the daily goods contract (the promised "buy or sell")');
+  }
   // (2) THE HUSTLE — the daily three-stop chain: deterministic, location-gated, legwork-verified
   const b0 = (await call('GET', '/v1/hustle', { token: hus.token })).body;
   assert.equal(b0.of, 3, 'three stops');

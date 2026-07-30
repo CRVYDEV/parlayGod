@@ -1571,10 +1571,19 @@
     else if (body.cold) bits.push(body.hint || 'cold ground');
     else if (body.riddle && body.step) bits.push(`the trail continues — “${body.riddle}” (step ${body.step} of ${body.of})`);
     if (body.clue) bits.push(`🗺 a CLUE SCROLL fell out of the job — “${body.clue.riddle}”`);
-    // THE REGIMEN — a discipline session (levelUp marker) vs a claimed trainer drill (npc marker)
+    // THE REGIMEN — a discipline session (levelUp marker) vs a claimed trainer drill (npc marker).
+    // The YARD TALK's wisdom shape also carries npc+discipline but adds the character's LINE — it
+    // gets its own flavored branch below, so the drill branch skips it.
     { const dn = (id) => ((rules?.regimen?.disciplines || []).find((d) => d.id === id) || {}).name || id;
-      if (body.discipline && body.levelUp !== undefined) bits.push(`🏋 ${dn(body.discipline)} — +${body.xp} xp${body.levelUp ? ` · LEVEL ${body.level}` : ''}`);
-      if (body.discipline && body.npc) bits.push(`📋 schooled — +${body.xp} xp ${dn(body.discipline)} (now lvl ${body.level})`); }
+      if (body.discipline && body.levelUp !== undefined) bits.push(`🏋 ${body.yard ? 'the iron pile — ' : ''}${dn(body.discipline)} — +${body.xp} xp${body.levelUp ? ` · LEVEL ${body.level}` : ''}`);
+      if (body.discipline && body.npc && !body.line) bits.push(`📋 schooled — +${body.xp} xp ${dn(body.discipline)} (now lvl ${body.level})`);
+      // PEN step six — cards with the crew + the yard character
+      if (body.cards) bits.push(`🂠 cards with the crew — +${body.xp} xp at the ${body.track} table`);
+      if (body.line && body.npc && body.effect) {
+        if (body.effect === 'wisdom') bits.push(`🗣 ${body.npc}: “${body.line}” — +${body.xp} xp ${dn(body.discipline)}`);
+        else if (body.effect === 'shortcut') bits.push(`🗣 ${body.npc} knows a guy — ${Math.round(body.cutSeconds / 60)}m off your stretch`);
+        else bits.push(`🗣 ${body.npc}: “${body.line}” — a war story worth +${body.xp} xp ${body.track}`);
+      } }
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
@@ -5991,6 +6000,20 @@
       <div class="grid">${(p.commissary || []).map((it) => `
         <div class="card"><span class="t">${it.name}</span><div class="d">$${fmt(it.cost)} — ${it.desc}</div>
           <button class="act" data-penbuy="${it.id}">buy</button></div>`).join('')}</div>
+      <h2 style="margin-top:10px">The Yard Lives <span class="d">a sentence doesn't have to be dead time — build the body, learn the table, hear a story</span></h2>
+      ${(() => { // step six — THE YARD LIVES: the iron pile, cards with the crew, the daily yard character
+        const yl = p.yardLife || {};
+        const dn = (id) => ((rules?.regimen?.disciplines || []).find((d) => d.id === id) || {}).name || id;
+        const effTxt = { wisdom: 'listening builds your composure', shortcut: 'knows a guy — a word shaves time off your stretch', story: 'a war story schools your trade' };
+        return `<div class="grid">
+          <div class="card"><span class="t">The Iron Pile</span><div class="d">the yard's gym — same clock, same sweat. Builds the BODY.</div>
+            ${(yl.workoutDisciplines || []).map((id) => `<button class="act" data-workout="${id}">${esc(dn(id))}</button>`).join(' ')}</div>
+          <div class="card"><span class="t">Cards with the Crew</span><div class="d">no money on the blanket — but the table still schools you (${yl.cardsEnergy || 0} energy → gambling XP)</div>
+            <button class="act" id="pen-cards">sit in</button></div>
+          <div class="card"><span class="t">${esc(yl.character?.name || 'the yard')}</span>
+            <div class="d">"${esc(yl.character?.line || '')}" — ${effTxt[yl.character?.effect] || 'worth a listen'}</div>
+            <button class="act" id="pen-talk"${yl.talked ? ' disabled' : ''}>${yl.talked ? 'you talked today' : 'talk to them'}</button></div>
+        </div>`; })()}
       <h2 style="margin-top:10px">Yard Crews <span class="d">run with a crew — more inmates on the block covers you from the shiv (up to a cap), and the most-feared calls the shots</span></h2>
       ${p.faction ? `<div class="card"><span class="t">${p.faction.name} ${p.faction.shotCaller ? '<span class="chip good">SHOT-CALLER</span>' : ''}</span>
           <div class="d">${p.faction.mates} fellow inmate${p.faction.mates === 1 ? '' : 's'} on the block · <b>${p.faction.cover}%</b> shiv cover${p.faction.shotCaller ? ' (incl. the leadership bonus)' : ''} — you can't shank your own crew (yard omertà)</div>
@@ -6042,6 +6065,12 @@
       act('POST', '/v1/pen/faction', {}).then(() => renderPen()));
     t.querySelectorAll('[data-penrat]').forEach((btn) => btn.onclick = () =>
       act('POST', `/v1/pen/break/${btn.dataset.penrat}/rat`, {}).then(() => renderPen()));
+    // step six — THE YARD LIVES
+    t.querySelectorAll('[data-workout]').forEach((btn) => btn.onclick = () =>
+      act('POST', `/v1/pen/workout/${btn.dataset.workout}`, {}));
+    { const c = t.querySelector('#pen-cards'); if (c) c.onclick = () => act('POST', '/v1/pen/cards', {}); }
+    { const tk = t.querySelector('#pen-talk'); if (tk) tk.onclick = () =>
+      act('POST', '/v1/pen/talk', {}).then(() => renderPen()); }
   }
 
   // data-do buttons (POST/GET; an optional data-body='{...}' rides along).

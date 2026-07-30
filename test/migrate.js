@@ -93,6 +93,7 @@ const DISPOSITION = {
   character_disciplines: 'wiped', // THE REGIMEN: discipline XP dies with the street (the heir hits the gym fresh)
   npc_drills: 'wiped', // THE REGIMEN: daily trainer-drill claims are the street's own day — die with them
   hustles: 'wiped', // THE HUSTLE: the daily three-stop chain is the street's own day — dies with them (the heir draws fresh work)
+  pen_talks: 'wiped', // PEN step six: the daily yard-character conversation is the street's own day
   rigs: 'wiped', // CONVOY Tier-4: the hauler dies with the street (the cars/boats precedent)
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)

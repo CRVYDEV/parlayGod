@@ -7,7 +7,8 @@
 import crypto from 'node:crypto';
 import { GameError, bus, bumpMastery } from './game.js';
 import { PEN, penContrabandOf, penFactionOf, jailSecondsLeft, penSafe, inHole, levelOf, effStat, witproActive,
-         yardEventOf, yardEventById, dayOf } from './rules.js';
+         yardEventOf, yardEventById, dayOf, yardCharacterOf, MASTERY, disciplineLvlOf } from './rules.js';
+import { trainDiscipline, addXp } from './regimen.js';
 import { runEstate, claimBounty, npcHit } from './social.js';
 import { bumpHonor } from './honor.js';
 import { HONOR } from './rules.js';
@@ -114,6 +115,13 @@ export async function penBoard(ch, client, h) {
     // step three: THE BREAKOUT — buy a cutkit, go over the wall (become a WANTED fugitive on a win)
     breakout: { cost: penContrabandOf('cutkit')?.cost || 0, ready: (held.cutkit || 0) > 0,
       blocked: !!ev.shankBlock, fugitiveHours: Math.round(PEN.FUGITIVE_MS / 3600000) },
+    // step six — THE YARD LIVES: today's character + the in-sentence activities
+    yardLife: {
+      character: (() => { const c = yardCharacterOf(dayOf()); return { name: c.name, line: c.line, effect: c.effect }; })(),
+      talked: !!(await client.query('SELECT 1 FROM pen_talks WHERE character_id=$1 AND day=$2', [ch.id, dayOf()])).rows[0],
+      workoutDisciplines: PEN.YARD_DISCIPLINES,
+      cardsEnergy: PEN.CARDS_ENERGY,
+    },
     yard: roster,
   };
 }
@@ -131,6 +139,53 @@ export async function workYard(ch, client, h) {
   const left = new Date(ch.jail_until).getTime() - Date.now();
   ch.jail_until = new Date(Date.now() + Math.max(0, left - cutMs));
   return { ok: true, pay, cutSeconds: PEN.WORK_CUT_S, sentenceSeconds: jailSecondsLeft(ch) };
+}
+
+// ── STEP SIX — THE YARD LIVES (founder: jail was Work-or-nothing) ── three in-sentence
+// activities, all §10.4-free (XP/pacing, never currency — the whole step writes zero ledger rows).
+// THE IRON PILE trains the PHYSICAL disciplines from the yard through the SAME regimen path on the
+// SAME shared gym clock (the { fromYard } waiver — the burner precedent — so jail never trains
+// faster than the street, it just stops being dead time).
+export async function yardWorkout(ch, disciplineId, client, h) {
+  insideOnly(ch);
+  if (!PEN.YARD_DISCIPLINES.includes(disciplineId))
+    throw new GameError('bad_discipline', 'The iron pile builds the BODY — stamina, conditioning or composure.');
+  const r = await trainDiscipline(ch, disciplineId, client, h, { fromYard: true });
+  return { ...r, yard: true };
+}
+
+// CARDS WITH THE CREW — no money on the blanket (the guards take real cash games), but the table
+// still schools you: energy → gambling mastery XP (the Trades funnel, MASTERY.XP.cards).
+export async function yardCards(ch, client, h) {
+  insideOnly(ch);
+  if (Number(ch.energy) < PEN.CARDS_ENERGY) throw new GameError('energy', `A seat at the blanket takes ${PEN.CARDS_ENERGY} energy.`);
+  ch.energy = Number(ch.energy) - PEN.CARDS_ENERGY;
+  await bumpMastery(client, h, ch, 'gambling', 'cards');
+  return { ok: true, cards: true, track: 'gambling', xp: MASTERY.XP.cards };
+}
+
+// THE YARD CHARACTER — a seed-drawn fictional inmate to TALK to, once a day (the drill-claim
+// shape). Wisdom pays a composure bump, the trusty shaves the sentence (the workYard
+// good-behaviour shape — pacing, never currency), a war story schools the teller's trade.
+export async function yardTalk(ch, client, h) {
+  insideOnly(ch);
+  const day = dayOf();
+  const taken = await client.query('INSERT INTO pen_talks (character_id, day) VALUES ($1,$2) ON CONFLICT DO NOTHING', [ch.id, day]);
+  if (!taken.rowCount) throw new GameError('talked', 'You already had that conversation today.');
+  const c = yardCharacterOf(day);
+  const out = { ok: true, npc: c.name, line: c.line, effect: c.effect };
+  if (c.effect === 'wisdom') {
+    const total = await addXp(client, ch.id, 'composure', PEN.TALK_WISDOM_XP);
+    Object.assign(out, { xp: PEN.TALK_WISDOM_XP, discipline: 'composure', total, level: disciplineLvlOf(total) });
+  } else if (c.effect === 'shortcut') {
+    const left = new Date(ch.jail_until).getTime() - Date.now();
+    ch.jail_until = new Date(Date.now() + Math.max(0, left - PEN.TALK_CUT_S * 1000));
+    Object.assign(out, { cutSeconds: PEN.TALK_CUT_S, sentenceSeconds: jailSecondsLeft(ch) });
+  } else {
+    await bumpMastery(client, h, ch, c.track, 'yardtale');
+    Object.assign(out, { track: c.track, xp: MASTERY.XP.yardtale });
+  }
+  return out;
 }
 
 // POST /v1/pen/buy/:item — the commissary (a cash sink → the corrupt guard's pocket, i.e. the buyback pool)

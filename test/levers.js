@@ -304,6 +304,10 @@ const SIGNED = [
   ['PEN.SHOTCALLER_COVER', 0.1],
   ['PEN.WORK_CUT_S', 60],
   ['PEN.WORK_PAY', [200,600]],
+  // step six — THE YARD LIVES (§10.4-free: XP + pacing only, zero ledger rows)
+  ['PEN.CARDS_ENERGY', 5],
+  ['PEN.TALK_WISDOM_XP', 15],
+  ['PEN.TALK_CUT_S', 120],
   ['POPULATION.RETIRE_GENERATIONS', 6],
   ['POPULATION.SPAWN_PER_TICK', 4],
   ['POPULATION.TARGET', 48],

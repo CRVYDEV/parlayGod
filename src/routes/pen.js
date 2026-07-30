@@ -48,4 +48,11 @@ export function register(app, { pool, auth, closeSocketsOnKill }) {
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.leaveFaction(ch, client, h)));
     app.post('/v1/pen/break/:id/rat', { preHandler: auth }, async (req) =>
       G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.ratBreak(ch, req.params.id, client, h)));
+    // step six — THE YARD LIVES: the iron pile, cards with the crew, the daily yard character
+    app.post('/v1/pen/workout/:id', { preHandler: auth }, async (req) =>
+      G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.yardWorkout(ch, req.params.id, client, h)));
+    app.post('/v1/pen/cards', { preHandler: auth }, async (req) =>
+      G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.yardCards(ch, client, h)));
+    app.post('/v1/pen/talk', { preHandler: auth }, async (req) =>
+      G.withCharacter(pool, req.user.sub, (ch, client, h) => Pen.yardTalk(ch, client, h)));
 }

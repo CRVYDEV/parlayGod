@@ -2361,3 +2361,11 @@ CREATE TABLE IF NOT EXISTS hustles (
   baseline TEXT NOT NULL DEFAULT '{}',
   PRIMARY KEY (character_id, day)
 );
+
+-- PEN step six: the daily yard-character conversation — once per (inmate, day). Dies with the
+-- street (estate wipe); the seed-drawn cast lives in PEN.YARD_CAST (rules tail).
+CREATE TABLE IF NOT EXISTS pen_talks (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  PRIMARY KEY (character_id, day)
+);
