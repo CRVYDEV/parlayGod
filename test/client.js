@@ -659,8 +659,72 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
       viaAll.push([al[1], calls[i], after + al.index + al[0].length]);
     }
   }
+  // THE RAW-BIND IDIOM — `const r = await api('GET', '/p'); … const b = r.body || {};` — is how
+  // 14 renderers hold their board (they need r.code for the error card before unwrapping). GETBIND
+  // cannot see it, so those screens' displayed fields fell out of coverage SILENTLY — proven when a
+  // brand-new board's planted mutations survived a green run. Resolve it to the same bindings:
+  //   · the path may be a literal, a `'lit/' + id` concat (→ the parent route with :p), or a
+  //     ternary of two literals (the chat room picker — the reads then bind to BOTH boards)
+  //   · the `.body` unwrap alias — plain, `|| {}`, or the `r.code < 400 ? r.body : {}` guard —
+  //     optionally one sub-object deep (`const notes = r.body?.notifications || []`)
+  //   · direct `r.body?.field` reads. `error`/`message` are excluded BY NAME: they are the error
+  //     ENVELOPE (present only on a non-2xx), so demanding them of the happy-path board would be a
+  //     standing false positive on every renderer's error guard.
+  // HONESTY: every `.body` touch in the bind's region must be consumed by one of those shapes or
+  // be a bare pass-through (`describe(r.body)`, `!r.body`) — anything else is COUNTED, not skipped.
+  const viaRaw = [];
+  const RAWBIND = /(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*await\s+api\(\s*'GET'\s*,\s*([^)]*?)\)\s*;/g;
+  for (const rb of body.matchAll(RAWBIND)) {
+    const rv = rb[1], V = rv.replace('$', '\\$');
+    const lits = [...rb[2].matchAll(/([`'"])((?:\\.|(?!\1).)*?)\1/g)].map((x) => x[2]).filter((s) => s.startsWith('/v1'));
+    if (!lits.length) { unscoped++; continue; }   // a path built some way we cannot read
+    const paths = lits.map((p) => {
+      let out = p.replace(/\$\{[^}]*\}/g, ':p');
+      if (/\+\s*[a-zA-Z_$(]/.test(rb[2]) && out.endsWith('/')) out += ':p';   // '/v1/x/' + id
+      return out;
+    });
+    // the bind's region: to the next redeclaration of the same name, or the end of the renderer
+    const redecl = new RegExp(`(?:const|let|var)\\s+${V}\\s*=`, 'g');
+    redecl.lastIndex = rb.index + rb[0].length;
+    const nxt = redecl.exec(body);
+    const rStart = rb.index + rb[0].length, rEnd = nxt ? nxt.index : body.length;
+    const region = body.slice(rStart, rEnd);
+    const spans = [];   // [start, end) offsets within region already consumed by a recognised shape
+    // 1) the unwrap alias (optionally guarded / defaulted / one sub deep)
+    const aliasRe = new RegExp(
+      `(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*(?:${V}\\s*\\.\\s*code\\b[^?\\n]*\\?\\s*)?`
+      + `${V}\\s*\\.\\s*body(\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*))?`
+      + `(?:\\s*\\|\\|\\s*(?:\\{\\}|\\[\\]|null))?(?:\\s*:\\s*(?:\\{\\}|\\[\\]|null))?\\s*[;,\\n)]`, 'g');
+    for (const am of region.matchAll(aliasRe)) {
+      if (am[3] && BUILTIN.has(am[3])) continue;
+      // index = match START, not end: the alias terminator can be the `,` of a same-statement
+      // follow-on alias (`const S = r.body, o = S.owned;`), and the sub-alias scan needs to SEE
+      // that comma — anchoring past it made the `o` binding invisible and its reads vanished
+      // silently (caught by mutation: a planted bogus field on the Store's `owned` survived).
+      for (const p of paths) viaRaw.push({ v: am[1], path: p, sub: am[3] || '', index: rStart + am.index });
+      spans.push([am.index, am.index + am[0].length]);
+    }
+    // 2) direct field reads off r.body (minus the error envelope)
+    for (const dm of region.matchAll(new RegExp(`(?<![\\w$.])${V}\\s*\\.\\s*body\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
+      spans.push([dm.index, dm.index + dm[0].length]);
+      if (BUILTIN.has(dm[1]) || dm[1] === 'error' || dm[1] === 'message') continue;
+      for (const p of paths) {
+        const key = `${p}|`;
+        if (!reads.has(key)) { reads.set(key, new Set()); readWhere.set(key, m[1]); }
+        reads.get(key).add(dm[1]);
+      }
+    }
+    // 3) the honesty scan: any `.body` touch not inside a consumed span must be a bare pass-through
+    for (const bt of region.matchAll(new RegExp(`(?<![\\w$.])${V}\\s*\\.\\s*body\\b`, 'g'))) {
+      if (spans.some(([s, e]) => bt.index >= s && bt.index < e)) continue;
+      const tail = region.slice(bt.index + bt[0].length).match(/^\s*(\S{0,2})/)?.[1] ?? '';
+      if (/^(\)|,|;|\|\||\?\s|$)/.test(tail) || tail === '' || tail === '?)' ) continue;  // pass-through / truthiness
+      unscoped++;
+    }
+  }
   const binds = [...body.matchAll(GETBIND)].map((b) => ({ v: b[1], path: b[3], sub: b[5] || '', index: b.index }))
-    .concat(viaAll.map(([v, path, idx]) => ({ v, path, sub: '', index: idx })));
+    .concat(viaAll.map(([v, path, idx]) => ({ v, path, sub: '', index: idx })))
+    .concat(viaRaw);
   for (const b of binds) {
     const v = b.v, path = b.path.replace(/\$\{[^}]*\}/g, ':p');
     let scope = null;
@@ -682,6 +746,18 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     for (const d of region.matchAll(new RegExp(
       `(?:const|let|var)\\s+([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*(?:\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*\\[\\]\\s*)?)?\\.\\s*(?:filter|slice|sort|concat)\\s*\\(`, 'g'))) {
       collectList(region, d[1], d[2] ? `${key}|${d[2]}`.replace(/\|\|/, '|') : key, m[1]);
+    }
+    // ONE level of object alias — `const S = r.body, o = S.owned;` / `const id = b.identity;` —
+    // the alias holds a sub-object of the board, so its reads are that sub-object's fields. Only
+    // followed off a sub-less binding (the key format carries one sub level; deeper chains remain
+    // the mirror's stated out-of-scope, same as nested reads everywhere). An alias that never has
+    // properties read off it creates no key, so `const n = b.count` is harmless.
+    if (!b.sub) {
+      for (const al of region.matchAll(new RegExp(
+        `(?:const|let|var|,)\\s*([a-zA-Z_$][\\w$]*)\\s*=\\s*${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)\\s*(?:\\|\\|\\s*(?:\\{\\}|\\[\\]))?\\s*[;,\\n]`, 'g'))) {
+        if (BUILTIN.has(al[2])) continue;
+        binds.push({ v: al[1], path: b.path, sub: al[2], index: b.index + al.index + al[0].length });
+      }
     }
     for (const r of (nxt ? src.slice(0, nxt.index) : src)
       .matchAll(new RegExp(`(?<![\\w$.])${v.replace('$', '\\$')}\\s*\\??\\.\\s*([a-zA-Z_$][\\w$]*)`, 'g'))) {
@@ -716,6 +792,15 @@ const PARAM_FIXTURES = new Map([
     { name: 'Mirror Family ' + Math.random().toString(36).slice(2, 6), tag: 'MR' + Math.floor(Math.random() * 90 + 10) })).body?.gangId],
   ['/v1/feud/:p', async () => charId],
   ['/v1/casino/ring/:p', async () => (await inject('POST', '/v1/casino/ring/open', token, { bb: 100, buyin: 20000 })).body?.tableId],
+  // a DM thread needs a counterpart WITH a message on the line — make both here (memoized)
+  ['/v1/phone/thread/:p', async () => {
+    const t = (await inject('POST', '/v1/auth/guest')).body.token;
+    await inject('POST', '/v1/character', t, { name: 'Mirror Caller ' + Math.random().toString(36).slice(2, 6) });
+    const cid = (await inject('GET', '/v1/me', t)).body.character.id;
+    await inject('POST', '/v1/phone/dm/' + cid, token, { text: 'you there?' });
+    await inject('POST', '/v1/phone/dm/' + charId, t, { text: 'always.' });
+    return cid;
+  }],
 ]);
 // Check 4b needs every list to HAVE a row, or its fields are never compared. This is the price of
 // that check being honest — each entry exists because a list came back empty and the run said so.
@@ -818,6 +903,18 @@ async function seedLists() {
     const r2 = (await si('POST', '/v1/stable/buy', t2, { kind: 'dog', name: 'Second Runner' })).body?.id;
     await si('POST', `/v1/stable/list/${r2}`, t2, { limit: 50000 });
   });
+  // ── the LIVE events — several boards are two-shape (base config vs open-event), and the
+  // renderers read the OPEN fields, so one of everything must be running when the boards are read
+  let flyer; // the fixture's racer — the track-entry seed below reuses it
+  await trySeed('live events', async () => {
+    await q('UPDATE account_persistent SET omr=500 WHERE account_id=$1', [acct]);
+    await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
+    await si('POST', '/v1/wire/subscribe', token, { tier: 2 });          // → board.premium
+    await si('POST', '/v1/casino/tournament', token, {});                // → den.tournament open
+    flyer = (await si('POST', '/v1/stable/buy', token, { kind: 'dog', name: 'Mirror Flyer' })).body?.id;
+    await si('POST', `/v1/casino/futurity/nominate/${flyer}`, token, {});   // → den.futurity open
+    await si('POST', `/v1/stable/stakes/${flyer}`, token, {});              // → stable.stakes open
+  });
   await trySeed('port', async () => {
     await q("UPDATE characters SET loc='docks' WHERE id=$1", [two]);
     await si('POST', '/v1/port/boat/skiff', t2, {});
@@ -913,6 +1010,49 @@ async function seedLists() {
   });
   await trySeed('megaproject', () => si('POST', '/v1/megaproject/cash', token, { amount: 25000000 }));
   await trySeed('kitchen', () => q('UPDATE characters SET trade_rep=5000 WHERE id=$1', [charId]));
+
+  // ── the raw-bind renderers' lists — the mirror extension exposed these ten; each needs a row ──
+  await trySeed('wire intel', async () => {
+    await si('POST', `/v1/wire/tap/${two}`, token, {});        // → board.taps
+    await si('POST', `/v1/wire/informant/${two}`, token, {});  // → board.informants
+    await si('POST', `/v1/wire/watch/${two}`, token, {});      // → board.watches (needs the tier-2 sub above)
+  });
+  await trySeed('phone block', () => si('POST', `/v1/phone/block/${two}`, token, {}));  // blocks gate only DMs
+  await trySeed('market listing', async () => {
+    await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
+    await si('POST', '/v1/goods/buy', token, { goodId: 'gin', qty: 3 });
+    await si('POST', '/v1/market', token, { goodId: 'gin', qty: 3, price: 500 });
+  });
+  await trySeed('track entry', () => si('POST', `/v1/casino/track/enter/${flyer}`, token, {}));
+  await trySeed('races car', async () => {   // the races board lists YOUR cars — boost one (retry the odd bust)
+    for (let i = 0; i < 12; i++) {
+      // gta_at too: a FAILED boost still arms the boost cooldown, so a reset that only refills
+      // energy/nerve/jail leaves every retry bouncing off `cooldown` (seen flaky under the full suite)
+      await q("UPDATE characters SET energy=200, nerve=50, jail_until=NULL, gta_at=NULL WHERE id=$1", [charId]);
+      const r = await si('POST', '/v1/garage/boost', token, {});
+      if (r.code < 400 && r.body?.success !== false) break;
+    }
+  });
+  await trySeed('fixture boat', async () => {
+    await q("UPDATE characters SET loc='docks' WHERE id=$1", [charId]);
+    await si('POST', '/v1/port/boat/dinghy', token, {});
+  });
+  await trySeed('estate staff', async () => {
+    const cat = (await si('GET', '/v1/estate', token)).body?.household?.catalog || [];
+    const s = cat.find((x) => !x.locked);
+    await si('POST', `/v1/estate/staff/${s?.id}`, token, {});
+  });
+  // Warm the LAZY single-use param fixtures before the jail below — they memoize at first use,
+  // which is now after seedLists, and a jailed fixture can't open a ring table or place a call.
+  // (Back to neon first: the boat seed above left the fixture at the docks, and the ring is a den game.)
+  await q("UPDATE characters SET loc='neon' WHERE id=$1", [charId]);
+  await paramId('/v1/casino/ring/:p');
+  await paramId('/v1/phone/thread/:p');
+  // THE PEN'S YARD — must be LAST: /v1/pen only shows the yard from a cell, so the fixture ends the
+  // seed JAILED (with `two` on the roster). Board fetches happen after this; jail gates ACTIONS,
+  // never a board's shape, so every other read is unaffected.
+  await trySeed('pen yard', () => q(
+    "UPDATE characters SET jail_until = now() + interval '2 hours' WHERE id IN ($1, $2)", [charId, two]));
 }
 
 // Fixtures are memoized because several are SINGLE-USE — a player may only have one ring table open,
@@ -928,6 +1068,12 @@ const unlistedParam = [...reads.keys()].filter((k) => k.split('|')[0].includes('
 assert.deepEqual(unlistedParam, [], `${unlistedParam.length} route(s) the client reads from carry an id ` +
   `with no way to obtain one listed in PARAM_FIXTURES, so their fields go unchecked — add a fixture`);
 
+// The fixture runs BEFORE the top-level reads too (it used to run only before the list pass):
+// several boards are TWO-SHAPE — a base config object that gains its live fields only while an
+// event is OPEN (a registering poker tournament, a nominated futurity, an open stakes race, the
+// wire's subscriber-only premium block). The renderers read the LIVE fields, so the fixture must
+// make one of everything or those reads fail as "not returned" against the dormant shape.
+await seedLists();
 const notReturned = [], unobservable = [];
 for (const [key, fields] of reads) {
   const [rawPath, sub] = key.split('|');
@@ -959,7 +1105,6 @@ const readCount = [...reads.values()].reduce((n, s) => n + s.size, 0);
 // dishonesty this file exists to prevent.
 assert.equal(listUnresolved, 0, `${listUnresolved} iterator body/bodies could not be delimited, so element reads go unchecked`);
 assert(listReads.size > 15, `only ${listReads.size} list bindings found — the element extraction broke`);
-await seedLists();
 const listMissing = [], listEmpty = [];
 for (const [key, fields] of listReads) {
   const [rawPath, sub, listField] = key.split('|');
