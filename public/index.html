@@ -1640,7 +1640,9 @@
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
     if (body.win === true && body.stolen !== undefined) bits.push(`${body.intent === 'message' ? '📢 THE STREET SAW IT' : body.intent === 'rob' ? 'rolled them' : 'they went down'} — lifted $${fmt(body.stolen)}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.rep ? `, +${body.rep} respect` : ''}${body.war ? ' (war point)' : ''}${body.bounty ? ` · contract paid $${fmt(body.bounty)}` : ''}`);
     if (body.win === false && body.dmg !== undefined && body.field === undefined && body.wager === undefined && body.district === undefined) bits.push(`the jump went bad — you took ${body.dmg} damage`);
-    if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
+    if (body.robbed) bits.push(body.win ? `hit the register — skimmed $${fmt(body.cut)} off their ${body.kind}` : `pinched at the register — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
+    else if (body.theft) bits.push(body.win ? `🚗 GONE IN SIXTY — took their ${body.car.model}` : `caught mid-hotwire — ${body.jailedS ? Math.round(body.jailedS / 60) + 'm in' : ''} lockup`);
+    else if (body.cut !== undefined && body.kind) bits.push(body.win ? `shook 'em down — took $${fmt(body.cut)}` : 'the shakedown flopped — nothing to show for it');
     if (body.district && body.win === true && body.cut !== undefined && !body.kind) bits.push(`muscled the block — grabbed $${fmt(body.cut)} from their operation`);
     if (body.district && body.win === false && body.dmg !== undefined && body.field === undefined) bits.push(`they held the block — you took ${body.dmg} damage`);
     if (body.fortitude !== undefined && body.cost !== undefined) bits.push(`dug in — defense at level ${body.fortitude} ($${fmt(body.cost)})`);
@@ -4321,6 +4323,9 @@
 
     const duelsRes = await api('GET', '/v1/duels');
     const duels = duelsRes.code < 400 ? duelsRes.body : null; // (red-team MED) an error must not blank Wet Work
+    const rivalsRes = await api('GET', '/v1/rivals');
+    const rivals = rivalsRes.code < 400 ? (rivalsRes.body?.rivals || []) : [];
+    const rivalIds = new Set(rivals.map((r) => r.street && r.street.id).filter(Boolean));
     // A contract ON YOUR OWN HEAD rendered identically to a stranger's — the single most important
     // thing on the screen sorted in wherever the query put it. Split it out and lead with it.
     const onMe = board.filter((c) => c.target.id === me.id);
@@ -4418,10 +4423,18 @@
         <div class="card">${aart('hitman', 'journeyman')}<span class="t">Journeyman</span><div class="d">$250k · a working professional</div></div>
         <div class="card">${aart('hitman', 'professional')}<span class="t">The Professional</span><div class="d">$1M · the man in the violin case</div></div>
       </div>
+      ${rivals.length ? `<h2 style="margin-top:12px">Your Rivals <span class="d" style="font-size:11px">(who has shown you malice — the ledger follows the bloodline, and so can you)</span></h2>
+      <div class="grid">${rivals.slice(0, 8).map((r) => `
+        <div class="card" style="border-color:var(--blood)"><span class="t">${r.street ? esc(r.street.name) : 'a dead line — the heir will carry the name'}</span>
+          <div class="d">${r.total} offense${r.total === 1 ? '' : 's'} — ${Object.entries(r.kinds).map(([k, n]) => `${k.replace('_', ' ')} ×${n}`).join(' · ')}</div>
+          ${r.street ? `<div class="d">lvl ${r.street.level} · ${r.street.loc}</div>
+          <button class="act prime" data-jump="${r.street.id}" data-intent="standard">jump</button>
+          <button class="act" data-search="${r.street.id}" data-name="${esc(r.street.name)}">search</button>
+          <button class="act" data-dm="${r.street.id}">📱</button>` : ''}</div>`).join('')}</div>` : ''}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
-          ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}
+          ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}${rivalIds.has(s.id) ? '<span class="chip bad" title="this bloodline has moved against you — the rivals ledger remembers">RIVAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
           <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
           ${s.jailed ? `<button class="act prime" data-pbust="${s.id}" title="spring them from lockup — a success frees them and PAYS you (more time left = bigger reward, worse odds; the sweet spot is near the end of a stretch). A miss puts YOU inside for a few minutes.">bust them out</button>` : ''}
@@ -4429,11 +4442,17 @@
           <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
           <button class="act risk" data-jump="${s.id}" data-intent="message" title="you're there to be SEEN — big respect + a real beating, but you're not there to rob them, it costs half again the energy, and it draws the Law">send a message</button>
           <button class="act" data-search="${s.id}" data-name="${esc(s.name)}">search</button>
+          <button class="act risk" data-psteal="${s.id}" data-confirm="Boost one of their cars? A win takes the car for keeps — a miss is a stretch in lockup, and either way it burns your boost window." title="grand theft, PvP — the server picks a random car off their street; expensive iron has alarms. A miss is lockup.">steal their ride</button>
+          ${(s.fronts || []).map((f) => `<button class="act risk" data-prob="${f.id}" data-confirm="Hit the register at their ${f.kind}? A win skims the take — a miss is a short stretch in lockup." title="rob their ${f.kind} — a cut of its uncollected take; stealth (cunning + speed). A miss is lockup.">rob ${f.kind}</button>`).join('')}
           <select data-npctier="${s.id}" style="font-size:11px">${npcs.map(([id, n]) => `<option value="${id}">${n}</option>`).join('')}</select>
           <button class="act risk" data-npchit="${s.id}">NPC hit</button>
           ${s.guardPrice != null ? `<button class="act" data-hire="${s.id}">hire guard</button>` : ''}
           <button class="act" data-feud="${s.id}">feud</button></div>`).join('')}</div>`;
 
+    t.querySelectorAll('[data-psteal]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/streets/${b.dataset.psteal}/steal`, {}).then(() => renderPvp()));
+    t.querySelectorAll('[data-prob]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/business/${b.dataset.prob}/rob`, {}).then(() => renderPvp()));
     t.querySelectorAll('[data-pullstake]').forEach((b) => b.onclick = () => {
       const [tid, kind] = b.dataset.pullstake.split(':');
       act('POST', `/v1/contracts/${tid}/${kind}/cancel`, {}).then(() => renderPvp());

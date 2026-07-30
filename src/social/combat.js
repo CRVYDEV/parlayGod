@@ -7,9 +7,11 @@
 // Split out of the 2,003-line src/social.js; every function below is byte-identical to what was
 // there. Import from '../social.js' — it re-exports this package's public surface unchanged.
 import { GameError, bumpFamilyTask, bus, ledger, notify, track, loadOwned, skillMult, npcMult, npcTier, bumpStanding, bumpMastery, masteryFx } from '../game.js';
-import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx } from '../rules.js';
+import { M3, CONSTANTS, LOAN, levelOf, rankIdxOf, cityEventOf, dayOf, btkOf, gunObjOf, vestMultOf, fleetValue, effStat, npcHitmanOf, VENDETTA, COMMISSION, SKILLS, UNDERWORLD, LAW, PORT, witproActive, penSafe, inHole, HONOR, HEIST_LOOT_RATE, BUSINESSES, seasonModOf, pathFx, RIVALS, carVal } from '../rules.js';
 import { activeDecree } from '../commission.js';
 import { bumpHonor } from '../honor.js';
+import { recordRival } from '../rivals.js';
+import { logCarCollect } from '../collection.js';
 import { awardHitmanRep, claimBounty, postBounty, postFamilyContract, refundPot } from './contracts.js';
 import { bodyguardAbsorbs } from './defense.js';
 import { bearGrudges, runEstate } from './estate.js';
@@ -113,6 +115,7 @@ export async function jump(ch, victim, client, h, intent) {
           WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
+    await recordRival(client, victim.account_id, ch, 'jump', { stolen });
     await h.bumpDaily(client, ch.id, 'jump');
     await bumpFamilyTask(client, h, 'jump', 1);
     await bumpMastery(client, h, ch, 'muscle', 'jump'); // THE TRADES — a won jump works the protection racketeer's craft
@@ -467,6 +470,7 @@ export async function fire(ch, victim, client, h, rounds) {
       }
     }
     await h.notify(client, victim.id, 'whacked', { from: ch.name });
+    await recordRival(client, victim.account_id, ch, 'kill', {});
     // witnesses: 3 random living characters saw something (§7.7)
     const wits = (await client.query('SELECT id FROM characters WHERE alive AND id<>$1 AND id<>$2 LIMIT 20', [ch.id, victim.id])).rows;
     for (const w of wits.sort(() => Math.random() - 0.5).slice(0, 3))
@@ -668,3 +672,69 @@ export async function bust(ch, victim, client, h) {
 
 // ═══════════════════ THE EXCHANGE (§5.4 — escrowed order book) ═══════════════════
 // cb, ammo, and crafted consumables only; product (drugs) is rejected as item_kind.
+
+// ══════════ THE STREET WAR — grand theft, PvP (omerta-street-rivals-design.md §2) ══════════
+// Steal a car off a REAL player. A win is a pure OWNERSHIP MOVE (cars conserve by row count, no
+// ledger row — the chop/pink-slip precedent), and every grief bound is load-bearing:
+//   · the thief's clock IS the GTA clock (gta_at — one street boost OR one player theft per the
+//     signed §7.5 window, so PvP theft creates no new farm cadence)
+//   · the victim loses at most ONE car per VICTIM_SHIELD_MS however many thieves try
+//   · the server draws a RANDOM eligible car — the thief never sees the fleet (no info leak);
+//     listed (Black Market) and pledged (loan collateral) iron is escrow-locked and untouchable
+//   · expensive iron protects itself: p falls with sqrt(carVal) (alarms/garages/drivers)
+//   · a thief at GARAGE_CAP is refused (theft is opportunism, not a purchase)
+// A LOSS is jail — it's a crime, you get pinched — and the victim is told who tried. Rng-audited;
+// CAR_THEFT_P is TEST-ONLY (the BUSINESS_RAID_P precedent — never in production). Both outcomes
+// feed the RIVALS ledger (the victim's notify names the thief either way).
+export async function stealCar(ch, victim, client, h) {
+  const T = RIVALS.CAR_THEFT;
+  if (jailed(ch)) throw new GameError('jailed', 'No street work from lockup.');
+  if (safeHoused(ch)) throw new GameError('safe', "Can't work the streets while you're to ground — a safehouse is a shield, not a bunker.");
+  if (witproActive(ch)) throw new GameError('witpro', "You're in protective custody — the marshals didn't relocate you to boost cars.");
+  if (hospitalized(ch)) throw new GameError('hosp_self', "You're laid up under the Doc's care.");
+  if (Number(ch.energy) < T.ENERGY) throw new GameError('energy', `Boosting takes ${T.ENERGY} energy.`);
+  if (ch.gta_at && Date.now() < new Date(ch.gta_at).getTime() + CONSTANTS.GTA_CD_MS)
+    throw new GameError('cooldown', "The heat's still on from the last job — lay off the iron a minute.");
+  if (h.owned.cars.length >= CONSTANTS.GARAGE_CAP)
+    throw new GameError('full', `The garage holds ${CONSTANTS.GARAGE_CAP} — theft is opportunism, not a purchase. Make room first.`);
+  if (hospitalized(victim)) throw new GameError('hosp', "They're under the Doc's care. Even we have rules.");
+  if (witproActive(victim)) throw new GameError('witpro', 'They vanished into witness protection — the marshals took the cars too.');
+  if (h.owned.gangId && h.victimOwned.gangId === h.owned.gangId) throw new GameError('family', "They're family. Omertà.");
+  if (levelOf(Number(victim.respect)) < RIVALS.VICTIM_MIN_LVL)
+    throw new GameError('rookie', "A corner kid's beater isn't worth the heat — pick a made mark.");
+  if (victim.car_stolen_at && Date.now() - new Date(victim.car_stolen_at).getTime() < T.VICTIM_SHIELD_MS)
+    throw new GameError('shielded', 'Their block is crawling with cops after the last job — come back another night.');
+  const cars = (await client.query('SELECT * FROM cars WHERE character_id=$1 AND NOT listed AND NOT pledged ORDER BY id FOR UPDATE', [victim.id])).rows;
+  if (!cars.length) throw new GameError('no_car', 'They keep nothing on the street worth taking.');
+  const car = cars[Math.floor(Math.random() * cars.length)];
+  ch.energy = Number(ch.energy) - T.ENERGY;
+  ch.heat = Math.min(100, Number(ch.heat || 0) + T.HEAT);
+  ch.gta_at = new Date(); // the attempt burns the window win or lose, exactly like a street boost
+  const val = carVal(car.model_id, car.trim_id);
+  const cun = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
+  const spd = effStat(ch.speed, 'speed', h.owned.assets, h.owned.gear);
+  const p = Number(process.env.CAR_THEFT_P
+    ?? Math.min(T.MAX_P, Math.max(T.MIN_P, T.BASE_P + (cun + spd / 2) / T.STAT_SCALE - Math.sqrt(Math.max(0, val)) / T.ALARM_DIV)));
+  const roll = Math.random();
+  await h.rngLog(client, ch.id, `cartheft:${victim.id}`, roll, roll < p ? `stole ${car.model_id} (P ${p.toFixed(3)})` : `caught (P ${p.toFixed(3)})`);
+  if (roll < p) {
+    // the transfer clears the consent flags (the AUDIT-street-races-step-two class — a stolen car
+    // must not arrive still listed on the strip or offered for pinks)
+    await client.query('UPDATE cars SET character_id=$2, race_limit=NULL, pink_slip=false WHERE id=$1', [car.id, ch.id]);
+    // the victim's shield — direct SQL on the LOCKED victim row (outside persistCharacter's
+    // positional list, the active_at discipline)
+    await client.query('UPDATE characters SET car_stolen_at=now() WHERE id=$1', [victim.id]);
+    h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false });
+    h.victimOwned.cars = (h.victimOwned.cars || []).filter((c) => c.id !== car.id); // keep the in-memory fleet honest
+    await logCarCollect(client, ch.id, car.id); // THE COLLECTION — the sixth car-transfer site
+    await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id });
+    await recordRival(client, victim.account_id, ch, 'car_theft', { model: car.model_id });
+    bus.emit('streets', { type: 'car_theft', by: ch.name, on: victim.name });
+    return { ok: true, win: true, theft: true, car: { id: car.id, model: car.model_id, trim: car.trim_id, dmg: Number(car.dmg) } };
+  }
+  // pinched mid-hotwire
+  ch.jail_until = new Date(Date.now() + T.JAIL_S * 1000);
+  await h.notify(client, victim.id, 'car_theft_failed', { from: ch.name });
+  await recordRival(client, victim.account_id, ch, 'car_theft', { failed: true });
+  return { ok: true, win: false, theft: true, jailedS: T.JAIL_S };
+}

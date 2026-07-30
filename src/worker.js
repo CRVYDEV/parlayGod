@@ -31,6 +31,7 @@ import { sweepMarket } from './market.js';
 import { sweepDiplomacy } from './diplomacy.js';
 import { settleProposals, activeDecree, seatedGangs } from './commission.js';
 import { sweepSecrets } from './secrets.js';
+import { sweepRivals } from './rivals.js';
 import { spawnNpcConvoys, despawnArrivedNpc, sweepConvoyHauls } from './convoy.js';
 import { runPopulation, runResidentBehaviour } from './population.js';
 import { sweepLaw } from './law.js';
@@ -271,6 +272,7 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     // FIVE PILLARS #2: lapsed coalitions dissolve (reads filter on expires_at — row hygiene)
     await safe('diplomacy sweep', () => sweepDiplomacy(pool));
     await safe('secrets sweep', () => sweepSecrets(pool)); // unpaid demands blow at the deadline; stale dirt reaped
+    await safe('rivals sweep', () => sweepRivals(pool)); // grudges older than RETENTION_D fade off the ledger
     const hs = await safe('heist sweep', () => sweepStaleHeists(pool));
     if (hs?.swept > 0) console.log(`🗺  heists: swept ${hs.swept} stale plan(s), stakes refunded to living leaders`);
     // THE PEN co-op breakout: stale break plans abandoned, a living leader's staked cutkit refunded

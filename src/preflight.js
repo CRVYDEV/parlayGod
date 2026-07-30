@@ -23,7 +23,7 @@
 //    but a money roll becomes an always-win switch, or a §9/pacing timer collapses, server-wide.
 export const TEST_ONLY_ENV = [
   // pinned probability rolls — an always-win switch on a money or death outcome
-  'BUSINESS_RAID_P', 'BUSINESS_TAKEOVER_P', 'CLUE_DROP_P', 'CLUE_RELIC_P', 'GEAR_LOOT_CHANCE',
+  'BUSINESS_RAID_P', 'BUSINESS_TAKEOVER_P', 'CAR_THEFT_P', 'CLUE_DROP_P', 'CLUE_RELIC_P', 'GEAR_LOOT_CHANCE',
   'LAW_BUST_P', 'PEN_BREAK_P', 'PORT_INTERDICT_P', 'PORT_PIRATE_WIN', 'PORT_SINK', 'SHANK_P', 'STAT_USE_P',
   'SOLDIER_DEATH_P', 'SOV_SIEGE_P', 'SPEAKEASY_RAID_P', 'SPEAKEASY_STANDOVER_P', 'TERRITORY_RAID_P',
   'TERRITORY_RIVAL_RAID_P', 'WANTED_HUNT_P', 'WORLD_RAID_P',

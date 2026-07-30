@@ -21,6 +21,7 @@ import * as Vig from './vig.js';
 import * as Territory from './territory.js';
 import * as Diplomacy from './diplomacy.js';
 import * as Sov from './sov.js';
+import * as Rivals from './rivals.js';
 import * as Campaigns from './campaigns.js';
 import * as Bloodline from './bloodline.js';
 import * as Honor from './honor.js';
@@ -97,7 +98,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
-         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER } from './rules.js';
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -809,6 +810,11 @@ export async function buildServer() {
       drillXp: REGIMEN.DRILL_XP, trainers: REGIMEN.TRAINERS, energy: REGIMEN.ENERGY },
     // THE HUSTLE — the daily three-stop chain's config (the live chain is GET /v1/hustle)
     hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
+    // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
+    rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
+      theftEnergy: RIVALS.CAR_THEFT.ENERGY, theftJailS: RIVALS.CAR_THEFT.JAIL_S,
+      victimMinLvl: RIVALS.VICTIM_MIN_LVL, victimShieldHours: Math.round(RIVALS.CAR_THEFT.VICTIM_SHIELD_MS / 3600000),
+      retentionDays: RIVALS.RETENTION_D },
     // THE CAREER — the public ladder catalog (the /v1/catalog discoverability precedent)
     career: { need: CAREER.NEED, tiers: CAREER.TIERS.map((t) => ({ id: t.id, name: t.name, capstone: t.capstone,
       tasks: t.tasks.map((k) => ({ id: k.id, name: k.name, cash: k.cash })) })) },
@@ -964,6 +970,13 @@ export async function buildServer() {
     if (!owner) throw new G.GameError('bad_business', 'No such front.');
     return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
       Business.shakedownBusiness(ch, victim, req.params.id, client, h));
+  });
+  // rob a front — "hit the register" (the shakedown's stealth sibling on the SAME per-venue window)
+  app.post('/v1/business/:id/rob', { preHandler: auth }, async (req) => {
+    const owner = (await pool.query('SELECT character_id FROM businesses WHERE id=$1', [req.params.id])).rows[0];
+    if (!owner) throw new G.GameError('bad_business', 'No such front.');
+    return G.withTwoCharacters(pool, req.user.sub, owner.character_id, (ch, victim, client, h) =>
+      Business.robBusiness(ch, victim, req.params.id, client, h));
   });
   // Tier-4: FRONT SPECIALIZATION (a max-tier $OMR-sink build choice) + THE HOSTILE TAKEOVER (two-party PvP)
   app.post('/v1/business/:id/specialize', { preHandler: auth }, async (req) =>
@@ -1241,6 +1254,15 @@ export async function buildServer() {
     const r = await pool.query(`SELECT c.id, c.name, c.respect, c.loc, c.jail_until, c.hosp_until, c.guard_price, c.is_npc, g.tag
       FROM characters c LEFT JOIN gang_members m ON m.character_id = c.id LEFT JOIN gangs g ON g.id = m.gang_id
       WHERE c.alive ORDER BY c.respect DESC LIMIT 100`);
+    // THE STREET WAR discovery: each mark's fronts as {id, kind} — EXISTENCE, never the books
+    // (pending/scrutiny stay the owner's; the anti-precise-kill-EV info rule). One flat query
+    // + a JS group (the /v1/gangs pg-mem posture).
+    const fr = await pool.query('SELECT id, character_id, kind FROM businesses');
+    const frontsBy = new Map();
+    for (const b of fr.rows) {
+      if (!frontsBy.has(b.character_id)) frontsBy.set(b.character_id, []);
+      frontsBy.get(b.character_id).push({ id: b.id, kind: b.kind });
+    }
     return { streets: r.rows.map((c) => ({ id: c.id, name: c.name, level: levelOf(Number(c.respect)),
       respect: Number(c.respect), loc: c.loc, gangTag: c.tag || null,
       // THE POPULATION: residents are mechanically indistinguishable — every interaction runs the
@@ -1251,11 +1273,18 @@ export async function buildServer() {
       // surface the bodyguard offer so the hire market is discoverable (a guard lists a price,
       // consent-by-listing; without this the whole earnable-defense feature is unreachable)
       guardPrice: c.guard_price != null ? Math.floor(Number(c.guard_price)) : null,
+      fronts: frontsBy.get(c.id) || [],
       jailed: !!(c.jail_until && new Date(c.jail_until) > new Date()),
       hospitalized: !!(c.hosp_until && new Date(c.hosp_until) > new Date()) })) };
   });
   app.post('/v1/streets/:targetId/jump', { preHandler: auth }, async (req) =>
     G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.jump(ch, victim, client, h, req.body?.intent)));
+  // THE STREET WAR (omerta-street-rivals-design.md): grand theft PvP — the server draws a random
+  // eligible car (no fleet leak) — and the rivals ledger (who has shown you malice; account-keyed)
+  app.post('/v1/streets/:targetId/steal', { preHandler: auth }, async (req) =>
+    G.withTwoCharacters(pool, req.user.sub, req.params.targetId, (ch, victim, client, h) => S.stealCar(ch, victim, client, h)));
+  app.get('/v1/rivals', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Rivals.rivalsBoard(client, ch.account_id)));
   app.post('/v1/streets/:targetId/bounty', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => S.postBounty(ch, req.params.targetId, req.body?.amount, client, h,
       { kind: req.body?.kind, reason: req.body?.reason, hours: req.body?.hours, anon: req.body?.anon,

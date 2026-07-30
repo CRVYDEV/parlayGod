@@ -6731,3 +6731,55 @@ end-to-end + the mod view — mutation-verified (the late line broken → fails 
 stated in the block: the classifier is proven exhaustively, the RPC plumbing runs only against a
 configured chain (tools/chain-e2e.js is where real-RPC behaviour is proven). CHAIN-DEPLOY.md's
 "start the keeper" step + the audit's flag both record the resolution.
+
+**THE STREET WAR + THE RIVALS LEDGER (founder-directed 2026-07-30: "Crimes should also directly
+target the assets of users … Rob Player X's Laundromat … a Rivals system to track crimes and players
+that have shown malice to you … Cars should be able to get stolen") — BUILT** (design
+`omerta-street-rivals-design.md`; `src/rivals.js` — the 107th src module, `rival_events` — the 175th
+table, the `RIVALS` rules tail, `test/economy.js` THE STREET WAR block). Three pieces, ZERO new
+emission by construction. **(1) ROB A FRONT** — the shakedown's petty stealth sibling, ONE
+parameterized core (`business.js:extortFront(… verb)` — the resetFrontToNewOwner lesson: a copied
+block is how the sackEmpire rake-cursor drifted; `shakedownBusiness`/`robBusiness` are thin wrappers):
+15% of PENDING income (`ROB_RATE_BPS`) vs the shakedown's 30%, cunning+speed/2 contest (a different
+build wins) vs muscle, energy 8, heat 6, and a FAILED rob is JAIL (`ROB_JAIL_S` 300 — it's a crime,
+you get pinched) where a failed shakedown is a beating. **The shared window is the §10.4 argument**:
+rob + shakedown both stamp/respect `businesses.shakedown_at` (8h) — one PvP visit per venue per
+window whatever the verb, so the per-venue extraction BOUND is exactly what the signed shakedown
+audit assumed; the redirect (owner keeps the rest pending, clock advances by only the stolen share)
+rides `business:rob` under the existing `business:` prefix — zero invariants change. Discovery: the
+streets roster surfaces each mark's `fronts` as `{id, kind}` — EXISTENCE, never the books.
+**(2) STEAL A CAR** (`combat.js:stealCar`, `POST /v1/streets/:targetId/steal`) — a WIN transfers the
+ROW (cars conserve by row count — no ledger row; clears `race_limit`/`pink_slip`, the
+AUDIT-street-races-step-two consent class; `logCarCollect` = the sixth car-transfer site), a LOSS is
+10 min lockup and the victim is told who tried. The server draws a RANDOM eligible car (the thief
+never sees the fleet); listed/pledged iron is escrow-locked. `p = clamp(0.35 + (cun+spd/2)/300 −
+√carVal/3000, .05, .7)` — expensive iron protects itself. Grief bounds, each load-bearing: the
+attempt consumes the signed §7.5 `gta_at` window (no new farm cadence), the victim's
+`car_stolen_at` shield (ONE car lost per 24h however many thieves try — direct SQL on the locked
+victim row, outside persistCharacter's positional list), the rookie floor (`VICTIM_MIN_LVL` 8, rob +
+theft both), GARAGE_CAP refusal, hospitalized/witpro/family off-limits. `CAR_THEFT_P` is TEST-ONLY
+(preflight-classified, the BUSINESS_RAID_P precedent). **(3) THE RIVALS LEDGER** (`rival_events`,
+ACCOUNT-keyed BOTH sides — the vendetta/dm_blocks posture: malice follows the bloodline, no
+character_id column so the estate wipe never touches it by construction; the living street on each
+side resolved at read, the feud-ledger pattern). **The info-economy rule is load-bearing**:
+`recordRival` fires ONLY from acts whose existing notify already NAMES the aggressor (jump,
+shakedown, rob, car theft, hostile takeover, a NAMED fire-kill — the anonymous hired-gun branch is
+deliberately not recorded); it never reveals what the game hides. Best-effort under the
+probe-once-cached SAVEPOINT discipline (the logCollect lesson VERBATIM — a savepoint-first version
+silently recorded NOTHING under pg-mem, where the bare insert runs instead); `rivalsBoard` JOINs
+through rival_events + JS-dedups (pg-mem returns zero rows for `= ANY($1::uuid[])` — the MY PROFILE
+lesson) and exposes NO account UUIDs; worker `sweepRivals` fades grudges past `RETENTION_D` (90d).
+Routes `GET /v1/rivals` (readCharacter handed the GUARDED client — the D1 tripwire), `/rob`,
+`/steal`; `/v1/rules.rivals`; console: YOUR RIVALS board on Wet Work (top-8 malice grid with
+jump/search/📱 revenge shortcuts through the EXISTING rails — step one adds memory, no teeth), RIVAL
+chips on the roster, per-front `rob <kind>` buttons + a confirm-gated "steal their ride".
+`test/economy.js` proves the shared window, the 15%/85% split ledgered `business:rob`, fail = jail,
+the forced theft win/loss (flag-clearing exercised on ALL the mark's cars — a random pick makes a
+one-car fixture vacuous), car conservation by row count, ZERO ledger rows on a theft, the
+shield/cooldown/rookie gates, and the board (no UUIDs; the aggressor's own board stays clean) —
+THREE mutations each caught at its own named assertion, incl. the pinned `COUNT(*)==1` right after
+the forced win (M3 first SURVIVED via loss-path rows — a lesson: kind-count ≥1 was satisfiable by
+the wrong path). All `RIVALS.*` numbers are founder sign-off levers (BALANCE.md § THE STREET WAR;
+pinned in test/levers.js — whose register check also caught the BALANCE prose naming the never-pinned
+`GARAGE_CAP`). Step two (design §4, founder picks): trunk-goods robbery, boat theft, residents as
+marks, revenge teeth, rival-aware coach/Wire.
