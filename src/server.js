@@ -823,11 +823,13 @@ export async function buildServer() {
     // THE HUSTLE — the daily three-stop chain's config (the live chain is GET /v1/hustle)
     hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
     // WORD ON THE STREET — the district quest boards' config (the live board is GET /v1/corner)
-    corner: { perDay: CORNER.PER_DAY, maxDay: CORNER.MAX_DAY, cash: CORNER.CASH, respect: CORNER.RESPECT },
+    corner: { perDay: CORNER.PER_DAY, maxDay: CORNER.MAX_DAY, cash: CORNER.CASH, respect: CORNER.RESPECT,
+      chainSteps: CORNER.CHAIN_STEPS, chainBonus: CORNER.CHAIN_BONUS, chainRespect: CORNER.CHAIN_RESPECT },
     // THE BLACK BOOK + THE CALL — numbers are earned (meet / tap / be called), requests pay from
     // the contact's own pocket (the live book is GET /v1/contacts)
     contacts: { callTtlHours: Math.round(CONTACTS.CALL_TTL_MS / 3600000), visitTip: CONTACTS.VISIT_TIP,
-      freightPremiumBps: CONTACTS.CALL_FREIGHT_PREMIUM_BPS },
+      freightPremiumBps: CONTACTS.CALL_FREIGHT_PREMIUM_BPS,
+      ranks: CONTACTS.RANKS, standingTiers: CONTACTS.STANDING_TIERS },
     favors: { maxOpen: FAVOR.MAX_OPEN, minPay: FAVOR.MIN_PAY, maxPay: FAVOR.MAX_PAY, maxQty: FAVOR.MAX_QTY,
       takeBps: FAVOR.TAKE_BPS, ttlHours: Math.round(FAVOR.TTL_MS / 3600000) },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
@@ -1639,6 +1641,9 @@ export async function buildServer() {
     Phone.unblockLine(pool, req.user.sub, req.params.characterId));
   // THE BLACK BOOK — every number you hold (met / tapped / they called you) + your open contact call
   app.get('/v1/contacts', { preHandler: auth }, async (req) => Contacts.contactsBoard(pool, req.user.sub));
+  // THE BOOK — who knows the most people. Pure status (a count of lines held), so it ranks by a
+  // number nobody can spend; agents and residents are excluded like every other human board.
+  app.get('/v1/leaderboard/contacts', { preHandler: auth }, async () => Contacts.contactsLeaderboard(pool));
   // THE CALL — fulfil the open request. Two-party: the caller's NPC is looked up first, then both
   // rows lock in sorted order (the shakedown-route pattern — the pay can't clobber a residentAct).
   app.post('/v1/call/fulfill', { preHandler: auth }, async (req) => {

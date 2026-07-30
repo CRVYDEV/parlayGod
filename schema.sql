@@ -2412,9 +2412,15 @@ CREATE TABLE IF NOT EXISTS contacts (
   owner_account TEXT NOT NULL,
   contact_account TEXT NOT NULL,
   how TEXT NOT NULL,
+  -- STREET LIFE step two: how many of THEIR jobs you have finished. This is the relationship, and
+  -- it is what makes a contact's requests grow — a resident who has watched you deliver six times
+  -- asks for a bigger load and pays for it. Account-keyed like the row it sits on, so the standing
+  -- survives death: the heir inherits a made relationship, not a cold call.
+  jobs INT NOT NULL DEFAULT 0,
   met_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (owner_account, contact_account)
 );
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS jobs INT NOT NULL DEFAULT 0;
 -- migration seed: pre-gate DM threads mean both parties already have each other's line
 INSERT INTO contacts (owner_account, contact_account, how)
   SELECT DISTINCT from_account::text, to_account::text, 'called' FROM dm_messages ON CONFLICT DO NOTHING;
@@ -2430,6 +2436,19 @@ CREATE TABLE IF NOT EXISTS corner_jobs (
   baseline TEXT NOT NULL,
   claimed BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (character_id, day, district, slot)
+);
+-- CORNER CHAINS (STREET LIFE step two): the district's standing job — work its corner on
+-- CHAIN.STEPS SEPARATE days and the block pays a bonus. One chain per district per street; a step
+-- advances off a CLAIMED envelope in that district (never its own counter — the corner already
+-- proves the work), at most one step a day, so a chain is genuinely three days of showing up.
+-- Dies with the street: the corner does not remember a dead man's half-finished week.
+CREATE TABLE IF NOT EXISTS corner_chains (
+  character_id TEXT NOT NULL,
+  district TEXT NOT NULL,
+  step INT NOT NULL DEFAULT 0,
+  last_day INT,                                   -- the day the last step landed (one step per day)
+  started_day INT NOT NULL,
+  PRIMARY KEY (character_id, district)
 );
 -- THE CALL: one open request per street from an NPC contact (freight run / come-see-me), paid from
 -- the CONTACT'S OWN cash (recycle-only — the population step-two rule). Dies with the street.

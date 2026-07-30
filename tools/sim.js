@@ -955,6 +955,14 @@ phase('P9.26 street life — the corner ceiling + the call');
   const cornerDay = CORNER.MAX_DAY * CORNER.CASH;
   note('street life', 'THE CORNER (per-street daily ceiling)', `$${fmt(cornerDay)}/day + ${CORNER.MAX_DAY * CORNER.RESPECT} respect/day`,
     `MAX_DAY (${CORNER.MAX_DAY}) × CASH ($${CORNER.CASH}) — petty by design (the social-tasks posture: the POINTER + the respect drip are the product); every claim needs REAL counted work after accepting. Dials: MAX_DAY, CASH, RESPECT`);
+  // THE CHAIN folds its bonus into the completing claim's OWN ledger row, so it cannot widen the
+  // MAX_DAY claim cap — the per-day ceiling is the number of chains that can COMPLETE in a day.
+  // A chain advances at most once per district per day AND needs a claim there, so advances/day is
+  // bounded by min(districts, MAX_DAY); completions/day is that over CHAIN_STEPS.
+  const advDay = Math.min(DISTRICTS.length, CORNER.MAX_DAY);
+  const chainDay = (advDay / CORNER.CHAIN_STEPS) * CORNER.CHAIN_BONUS;
+  note('street life', 'THE CHAIN (per-street daily ceiling, on top)', `~$${fmt(Math.round(chainDay))}/day + ~${Math.round((advDay / CORNER.CHAIN_STEPS) * CORNER.CHAIN_RESPECT)} respect/day`,
+    `a chain completes every CHAIN_STEPS (${CORNER.CHAIN_STEPS}) days a street shows up at that district, and advances at most once per district per day gated by a real claim — so at most min(districts ${DISTRICTS.length}, MAX_DAY ${CORNER.MAX_DAY}) = ${advDay} advances/day ≈ ${(advDay / CORNER.CHAIN_STEPS).toFixed(2)} completions/day × $${fmt(CORNER.CHAIN_BONUS)}. The bonus rides the completing claim's OWN corner:job row (the First-Week capstone fold), so the claim cap still bounds it. Dials: CHAIN_BONUS, CHAIN_RESPECT, CHAIN_STEPS`);
   note('street life', 'THE CALL', 'recycle-only (paid from the contact\'s own pocket)',
     `freight pays base × ${CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000} of goods the player really hauls; visit tips $${CONTACTS.VISIT_TIP} — both legs contact:* transfers netting zero, bounded by the P9.21 npc:seed stock`);
 }
