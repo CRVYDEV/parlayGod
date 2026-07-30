@@ -470,6 +470,46 @@ const lb2 = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.tok
 const fam = lb2.families.find((f) => f.name === 'The Rainmakers');
 assert(fam && fam.recruits === 1 && fam.members >= 1, 'the family recruitment board sums the roster\'s recruits');
 
+// ── THE LATE CLAIM (the growth-funnel fix): type who sent you — at creation OR in your first days ──
+// (1) a TYPED code in the WRONG CASE still credits at creation, and the response says so
+const acctOf = async (id) => (await pool.query(`SELECT account_id a FROM characters WHERE id='${id}'`)).rows[0].a;
+{
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  const cr = await call('POST', '/v1/character', { token, body: { name: 'Typo Tony', referralCode: 'mentor max' } });
+  assert.equal(cr.body.referral, 'credited', 'a wrong-case typed code still credits (exact-then-CI match)');
+  const tid = (await meOf(token)).id;
+  const rb = (await pool.query(`SELECT referred_by FROM account_persistent WHERE account_id='${await acctOf(tid)}'`)).rows[0];
+  assert.equal(rb.referred_by, await acctOf(mentor.id), 'referred_by points at the recruiter');
+}
+// (2) an unknown code never blocks creation — but the response says it missed (no silent drop)
+{
+  const { body: { token } } = await call('POST', '/v1/auth/guest');
+  const cr = await call('POST', '/v1/character', { token, body: { name: 'Lost Larry', referralCode: 'Nobody Nowhere' } });
+  assert.equal(cr.code, 200, 'an unknown code never blocks stepping out');
+  assert.equal(cr.body.referral, 'unknown', 'the client is told the code missed');
+}
+// (3) the late claim: skipped the field → name them from Start Here, inside the window
+const late = await mk('Late Lucy'); // no code at creation
+let obLate = await call('GET', '/v1/onboard', { token: late.token });
+assert.equal(obLate.body.referral.canClaim, true, 'the board offers the who-sent-you card in the window');
+assert(obLate.body.referral.windowSeconds > 0, 'with a live countdown');
+r = await call('POST', '/v1/referral/claim', { token: late.token, body: { code: 'MENTOR MAX' } });
+assert.equal(r.code, 200, 'the late claim lands');
+assert.equal(r.body.referrer, 'Mentor Max', 'and names the recruiter it resolved');
+assert.equal((await pool.query(`SELECT referred_by FROM account_persistent WHERE account_id='${await acctOf(late.id)}'`)).rows[0].referred_by,
+  await acctOf(mentor.id), 'late attribution set referred_by — the whole §7.13 machinery reads it from here');
+assert(Number((await pool.query(`SELECT COUNT(*) n FROM referrals WHERE recruit_account='${await acctOf(late.id)}'`)).rows[0].n) === 1, 'the referral graph row written');
+obLate = await call('GET', '/v1/onboard', { token: late.token });
+assert.equal(obLate.body.referral.referred, true, 'the board reflects it'); assert.equal(obLate.body.referral.canClaim, false, 'and stops offering the card');
+// (4) the gates: once ever · not yourself · a real name · only in the first days
+assert.equal((await call('POST', '/v1/referral/claim', { token: late.token, body: { code: 'Stringer Bell' } })).body.error, 'already_referred', 'once ever');
+const gated = await mk('Gated Gary');
+assert.equal((await call('POST', '/v1/referral/claim', { token: gated.token, body: { code: 'gated gary' } })).body.error, 'self', 'not yourself');
+assert.equal((await call('POST', '/v1/referral/claim', { token: gated.token, body: { code: 'Nobody Nowhere' } })).body.error, 'unknown_code', 'a real living name only');
+assert.equal((await call('POST', '/v1/referral/claim', { token: gated.token, body: {} })).body.error, 'no_code', 'a name is required');
+await pool.query(`UPDATE accounts SET created_at = now() - interval '4 days' WHERE id='${await acctOf(gated.id)}'`);
+assert.equal((await call('POST', '/v1/referral/claim', { token: gated.token, body: { code: 'Mentor Max' } })).body.error, 'window', 'the first-days window closes');
+
 // ── THE RECRUITMENT DRIVE ("the push"): a mod-started window doubles referral CASH ──
 await app.inject({ method: 'POST', url: '/v1/mod/referral/push', payload: { hours: 6, mult: 2 }, headers: { 'x-mod-key': 'test-mod-key' } });
 const drive = (await call('GET', '/v1/leaderboard/recruiters', { token: mentor.token })).body.push;

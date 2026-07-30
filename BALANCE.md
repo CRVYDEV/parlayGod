@@ -2564,3 +2564,19 @@ small; the dials are the duel pair/day decay or a stake floor); (3) the DYNAST t
 a street maxed in several trades can dynast-mark each, compounding the `TRAIT_HEIR_BPS`
 death-softening echo (a one-line per-character uniqueness gate in chooseTrait if one-dynasty-trade
 is the intent).
+
+## THE REFERRAL ENTRY FIX (§7.13 — the missing type-in path, 2026-07-30)
+
+Founder report from the live funnel: a new user was never allowed or prompted to TYPE the name of
+who sent them — attribution rode only the invisible `?ref=` link stash, so every word-of-mouth
+recruit ("check out OMERTÀ — tell them Vito sent you") credited nobody, and a miss at creation was
+lost forever. Three changes, all attribution-only (every payout still rides the full §7.13
+qualification gates, so the Sybil posture is unchanged): **(1)** the create screen gained a
+"who sent you?" field (prefilled by a ?ref link so link arrivals see it working; a typed name
+beats the stash), with the server matching exact-then-case-insensitive and the response saying
+whether it landed (no more silent drops); **(2) THE LATE CLAIM** — `POST /v1/referral/claim`
+lets a recruit name their referrer within `M4.REF_CLAIM_WINDOW_MS` (72h) of ACCOUNT creation,
+once, while unset — surfaced as a "did someone send you?" card on Start Here; **(3)** the ops
+funnel gained `referral.lateClaims` so a high count reads as "the create-screen field is being
+missed". `REF_CLAIM_WINDOW_MS` is a founder sign-off lever (longer = friendlier, slightly wider
+retro-attribution surface; the payouts are qualification-gated either way).

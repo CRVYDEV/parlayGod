@@ -379,6 +379,11 @@ export const M4 = {
   // qualification (L8/40 jobs/3 check-ins/$25k). Cash only (never $OMR — that stays on the full
   // gate), agent-excluded, ONCE ever. Still requires real playtime, not raw signup → Sybil-bounded.
   REF_SPARK: { level: 3, jobs: 10, recruiterCash: 2500, recruitCash: 1500 },
+  // THE LATE CLAIM (§7.13 funnel fix): a recruit who missed the referral field at creation (or
+  // arrived without a ?ref link) can still name who sent them, within this window of ACCOUNT
+  // creation and only while referred_by is unset. Same Sybil posture as at-creation attribution —
+  // the payouts still ride the full qualification gates, this only decides WHO gets credited.
+  REF_CLAIM_WINDOW_MS: 72 * 3600e3,
   // TIER-2 ("the family tree", §7.13 addendum): when a recruit YOU brought in then brings in their
   // OWN qualified recruit, you earn a BOUNDED, ONE-TIME finder's fee. Deliberately a flat one-shot —
   // NOT an ongoing percentage of the grandrecruit's earnings — so it's a referral bonus, not a
