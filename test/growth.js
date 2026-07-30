@@ -548,6 +548,54 @@ assert.equal(Number((await pool.query(`SELECT amount FROM transactions WHERE cha
 await call('POST', '/v1/crimes/pick', { token: bBenny.token });
 assert.equal((await meOf(gTony.token)).cash, tonyBefore + 5000, 'the tier-2 fee fires once, not per-action');
 
+// ── MY PROFILE — the MySpace page: identity + referral tracking + LEDGER-EXACT earnings ──
+// Mentor Max's whole referral history fired above through the REAL machinery (spark + qualify +
+// milestone, plus two attribution-only recruits and one agent), so every figure here is earned,
+// never SQL-seeded — the profile must read the ledger back exactly.
+{
+  const p = (await call('GET', '/v1/profile', { token: mentor.token })).body;
+  assert.equal(p.name, 'Mentor Max', 'the profile is mine');
+  assert(p.memberSince && p.days >= 0, 'member-since rides accounts.created_at');
+  assert.equal(p.generation, 1, 'first of the line');
+  assert(typeof p.mood === 'string' && p.mood.length, 'a derived mood line');
+  assert(typeof p.spinning === 'string' && p.spinning.includes('—'), 'the now-spinning record (seeded per account+day)');
+  assert.equal(p.family?.name, 'The Rainmakers', 'the family shows');
+  assert.equal(typeof p.hitmanRank, 'string', 'the assassin rank resolves to a real title');
+  assert(typeof p.honorTier === 'string' && p.honorTier.length, 'the honor tier resolves');
+  // referral tracking: 4 brought in (Fresh Blood, agent Bot Barlow, Typo Tony, Lost Larry), 1 qualified
+  assert.equal(p.code, 'Mentor Max', "the code IS the living name");
+  assert(p.shareUrl.includes('x.com/intent/tweet'), 'a prefilled X intent');
+  assert(p.profilePath.startsWith('/u/') && p.profilePath.includes('ref='), 'the frictionless ?ref deep link');
+  assert.equal(p.recruitsTotal, 4, 'every soul brought in is on the list');
+  assert.equal(p.recruitsQualified, 1, 'one made it all the way');
+  assert.equal(p.recruitsSparked, 1, 'one sparked (the agent never sparks)');
+  assert.equal(p.recruitsLifetime, 1, 'the ladder count');
+  assert.equal(p.recruitRank, 'First Blood Brought In', 'the milestone rank');
+  // THE TAKE — ledger-exact: spark $2500 + recruiter $10k + first-blood milestone $5k
+  assert.equal(p.earnedCash, 17500, 'earned cash reads the ledger back exactly');
+  assert.equal(p.earnedOmr, 3, 'earned $OMR = the recruiter fund share (no welcome bonus to exclude — Max was never recruited)');
+  const fb = p.recruits.find((x) => x.name === 'Fresh Blood');
+  assert(fb && fb.qualified && fb.sparked && fb.alive, 'the qualified recruit is fully flagged');
+  assert.equal(fb.earnedCash, 12500, 'per-recruit attribution via counterparty (spark + recruiter; milestones are ladder-level)');
+  assert.equal(p.recruits[0].name, 'Fresh Blood', 'qualified recruits lead the Top 8');
+}
+// the RECRUIT's side: their own welcome money is NEVER "earnings from recruiting"
+{
+  const p = (await call('GET', '/v1/profile', { token: recruit.token })).body;
+  assert.equal(p.sentBy, 'Mentor Max', 'the profile names who sent you');
+  assert.equal(p.referred, true, 'referred flag');
+  assert.equal(p.earnedCash, 0, "the recruit's own referral:recruit welcome cash is excluded");
+  assert.equal(p.earnedOmr, 0, 'the +1 $OMR welcome bonus is excluded (both sides share referral:fund)');
+  assert.equal(p.recruitsTotal, 0, 'no crew of their own yet');
+}
+// tier-2 counts as recruiting income (ladder-level, un-attributed per head)
+{
+  const p = (await call('GET', '/v1/profile', { token: gTony.token })).body;
+  assert.equal(p.earnedCash, 17500 + 5000, "Grand Tony's take includes the tier-2 finder's fee");
+  const mike = p.recruits.find((x) => x.name === 'Middle Mike');
+  assert.equal(mike.earnedCash, 12500, 'per-head attribution stays spark+recruiter only');
+}
+
 // ── DAILY SOCIAL TASKS ("Spread the Word") — the organic-growth petty-cash faucet ──
 const promoter = await mk('Promoter Pete');
 let sw = (await call('GET', '/v1/social', { token: promoter.token })).body;

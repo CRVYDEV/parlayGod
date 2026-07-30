@@ -75,7 +75,7 @@ export const SYSTEMS = {
   'vanity': ['vanity_name', 'vanity_gang_name'],
   'the store / pass': ['plex', 'plex_package', 'pass_claim'],
   'growth / social': ['social_task', 'social_post', 'broadcast_share', 'first_week_step',
-    'referral_qualified', 'referral_spark', 'referral_same_ip_flag'],
+    'referral_qualified', 'referral_spark', 'referral_same_ip_flag', 'referral_claim_late'],
 };
 
 // Events that exist but are NOT player engagement — moderator actions and anti-abuse flags. Declared

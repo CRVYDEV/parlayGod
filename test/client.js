@@ -852,6 +852,11 @@ async function seedLists() {
   });
 
   // ── the boards that need another player to have acted ──
+  // MY PROFILE's Top 8 reads elements of `recruits` — a bare referral-graph row is enough for the
+  // element shape (earnedCash is computed and always present, 0 with no ledger rows behind it)
+  await trySeed('profile', () => q(
+    `INSERT INTO referrals (recruit_account, recruiter_account, qualified_at) VALUES ($1, $2, now())
+       ON CONFLICT (recruit_account) DO NOTHING`, [acct2, acct]));
   await trySeed('contracts', () => si('POST', `/v1/streets/${two}/bounty`, token, { amount: 5000, kind: 'hospitalize' }));
   await trySeed('loans', async () => {
     await si('POST', '/v1/loans', t2, { amount: 20000, rate: 0.25, hours: 24 });   // an offer from someone else

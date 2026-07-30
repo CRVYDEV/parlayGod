@@ -3877,6 +3877,40 @@ by the live probe). **(3)** the ops funnel gained `referral.lateClaims` (telemet
 the late-claim happy path + board lifecycle, and all gates; both flows browser-verified end-to-end
 (zero page errors). `REF_CLAIM_WINDOW_MS` is a founder sign-off lever.
 
+**MY PROFILE — the MySpace page (founder-directed 2026-07-30) — BUILT** (`growth.js:myProfile`,
+`GET /v1/profile` via readCharacter; a new `profile` console tab; `test/growth.js` MY PROFILE block).
+A personal page that tracks REFERRALS + what they EARNED you, on top of game identity — styled MySpace
+(the "«name» is in your extended network" banner, a two-column layout, a General details table, a
+derived MOOD line, a seeded fictional "now spinning" record via `hash01(spin:acct:day)`, the **Top 8**
+recruit grid with open-seat share hints, a Contact box with copy-link / X-intent / public-`/u/`-page
+buttons, and **THE TAKE** earnings box). PURE READ — zero §10.4 surface (it SUMS ledger rows the §7.13
+machinery already writes, moves nothing). **The earnings are LEDGER-EXACT, and the attribution rules
+are load-bearing:** cash counts `referral:recruiter` + counterparty-carrying `referral:spark`
+(recruiter-side) + the un-attributed ladder bonuses `referral:milestone`/`referral:tier2` — NEVER the
+recruit's own welcome money (`referral:recruit`, NULL-counterparty spark); $OMR sums the account's
+`referral:%` rows MINUS the player's own welcome bonus (exactly `M4.REF_RECRUIT_OMR`, iff
+`ref_paid && referred_by` — both sides share the `referral:fund` reason so it can't be told apart by
+reason). Per-recruit attribution maps the `counterparty` char id → recruit account (any generation).
+pg-mem: recruit lookups JOIN `referrals` directly — NEVER `ANY($1)`-of-array (pg-mem returns zero rows
+for it). **The board is FLAT on purpose** — the client mirror guard verifies ONE level of fields off a
+`(await api(...)).body` binding, and the nested first cut PASSED THE GUARD VACUOUSLY (two planted
+mutations survived a green run); flattening + the covered binding idiom + a one-parameter `.map()`
+lambda (a `(rc, i) =>` two-param lambda is invisible to the element extractor — face indexing moved to
+an outer counter) made every read genuinely checked, and both mutations now fail by name. Two guard
+holes found en route: **(a)** the `const r = await api('GET', …); … r.body` raw-bind idiom is invisible
+to the mirror across 14 older renderers (filed as its own task — those boards' reads are unchecked
+today), and **(b)** `tools/mobile.js` NAVIGATED to one-screen groups (profile/deck/family/start) but
+never CHECKED them — the inner loop iterates visible sub-tabs and a one-screen group shows none; fixed
+(54→62 checks, which also brought deck/family into coverage). Tab plumbing: TABS/TAB_GROUPS (its own
+ungrouped rail stop after Start)/TAB_ART (`pill-legacy`)/RENDERERS/`t_profile` in all 15 language
+packs; **kept in SIMPLE_TABS on purpose** (the six-screen fresh-player set — hiding the share link
+from exactly the new players who should spread it defeats the growth loop). `test/client.js` seedLists
+gained a referral row so the Top-8 element reads have a non-empty fixture. `test/growth.js` proves the
+board shape, the 17,500-exact mentor take + 3 $OMR, per-recruit 12,500 attribution, the recruit-side
+zero (welcome money excluded both currencies), tier-2 included at ladder level, and statuses
+(made/coming-up/gone); browser-probed end-to-end (desktop + mobile screenshots read, zero page errors,
+clipboard fallback toast). SPIN_TRACKS are fictional only (the Broadcast legal posture).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

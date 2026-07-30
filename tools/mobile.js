@@ -210,7 +210,15 @@ for (const vp of VIEWPORTS) {
   for (const g of groups) {
     await page.click(`#grouprail [data-group="${g}"]`);
     await page.waitForTimeout(200);
-    for (const t of await page.locator('#tabs [data-tab]:not(.hidden)').all()) {
+    const subs = await page.locator('#tabs [data-tab]:not(.hidden)').all();
+    // A ONE-SCREEN group (profile, deck) shows no sub-row at all, so the loop below runs zero
+    // times and the screen was NAVIGATED to but never CHECKED — walked-but-unchecked is exactly
+    // the silent coverage hole this harness exists to prevent. Check the landing screen directly.
+    if (!subs.length) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await check(page, g, vp, { contentMustShow: true });
+    }
+    for (const t of subs) {
       const id = await t.getAttribute('data-tab');
       await t.click();
       await page.evaluate(() => window.scrollTo(0, 0));   // judge the fold from the top, as a player arrives

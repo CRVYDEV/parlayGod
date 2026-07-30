@@ -5,6 +5,7 @@ import { soldierFxOf, SOLDIERS, PATH_SWITCH_CD_MS } from './rules.js';
 import {
   PATHS, MISSIONS, ONBOARD_TASKS, CONSTANTS, M4, M8, SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS,
   levelOf, dayOf, dailyJobsOf, effStat, gunObjOf, assetEnergyCap, recruitRankOf, PACING,
+  hash01, hitmanRankOf, honorTierOf,
 } from './rules.js';
 import { verifySocial, verifyPostUp, socialProviders, socialTaskAvailable, throttleXCheck } from './verify.js';
 import { spendOmr } from './vanity.js';
@@ -303,6 +304,137 @@ export async function recruitingFamilyLeaderboard(pool, limit = 20) {
   }
   return [...byGang.values()].filter((e) => e.recruits > 0)
     .sort((x, y) => y.recruits - x.recruits).slice(0, limit);
+}
+
+// ═══ MY PROFILE — the MySpace-style personal page: referral tracking + earnings + game identity.
+// PURE READ (rides readCharacter's read-only client) — status/attribution only, ZERO §10.4 surface:
+// the earnings figures SUM ledger rows the referral machinery already writes, they move nothing.
+// Attribution mechanics, so the numbers are LEDGER-EXACT rather than re-derived:
+//  • CASH is per-character. Recruiter-side rows are `referral:recruiter` + `referral:spark`
+//    (both carry `counterparty` = the recruit's character id) plus the un-attributed ladder
+//    bonuses `referral:milestone` / `referral:tier2`. The recruit's OWN welcome money
+//    (`referral:recruit`, and the NULL-counterparty `referral:spark` twin) is never counted —
+//    that was earned by being recruited, not by recruiting.
+//  • $OMR is account-keyed and BOTH sides share the `referral:fund` reason — so the player's own
+//    welcome bonus (exactly M4.REF_RECRUIT_OMR, paid iff ref_paid && referred_by) is subtracted
+//    rather than misread as recruiting income. `referral:milestone` $OMR is recruiter-only.
+// pg-mem: recruit lookups JOIN `referrals` directly — NEVER ANY($1)-of-array (pg-mem returns zero
+// rows for it; the same-IP flag in game.js documents the class). Flat queries + JS aggregation.
+const SPIN_TRACKS = [ // the "now spinning" record — seeded per (account, day); FICTIONAL tracks only (the Broadcast legal posture)
+  'Gin & Regret — The Canal Street Quartet',
+  'Last Train to Neon Mile — Dixie Holloway',
+  'Blood on the Brickworks — Sal "Two Rings" Marino',
+  'The Undertaker Waltz — The Cathedral Row Orchestra',
+  'Docks at Dawn — Mona LaRue',
+  'A Nickel for the Ferryman — The Foundry Boys',
+  'Smoke Over the Speakeasy — Bella Bang-Bang & Her Band',
+  'Cement Shoes Shuffle — The Omertà Trio',
+  'Whiskey for the Witness — Fingers Malone',
+  'Goodnight, Wise Guy — The Midnight Commission',
+];
+export async function myProfile(ch, client, h) {
+  const acct = h.acct;
+  const now = Date.now();
+  const up = (t) => !!(t && new Date(t).getTime() > now);
+  const born = (await client.query('SELECT created_at FROM accounts WHERE id=$1', [h.accountId])).rows[0];
+  const memberSince = born ? new Date(born.created_at).toISOString() : null;
+  const lvl = levelOf(Number(ch.respect));
+
+  // MOOD — MySpace's little emoticon line, derived from real state (never stored)
+  const mood =
+    up(ch.wanted_until) ? 'hunted' :
+    up(ch.jail_until) ? 'doing time' :
+    up(ch.hosp_until) ? 'on the mend' :
+    up(ch.safe_until) ? 'laying low' :
+    Number(ch.heat) >= 60 ? 'running hot' :
+    Number(ch.cash) + Number(ch.bank) >= 1_000_000 ? 'flush' :
+    lvl < 5 ? 'fresh off the bus' : 'scheming';
+  const spinning = SPIN_TRACKS[Math.floor(hash01(`spin:${h.accountId}:${dayOf()}`) * SPIN_TRACKS.length) % SPIN_TRACKS.length];
+
+  // who sent ME — the referrer's current living street (a dead line falls back to the dynasty name)
+  let sentBy = null;
+  if (acct.referred_by) {
+    const rc = (await client.query('SELECT name FROM characters WHERE account_id=$1 AND alive LIMIT 1', [acct.referred_by])).rows[0];
+    const rd = rc ? null : (await client.query('SELECT dynasty_name FROM account_persistent WHERE account_id=$1', [acct.referred_by])).rows[0];
+    sentBy = rc?.name || rd?.dynasty_name || 'a made man';
+  }
+
+  // ── the crew you brought in (§7.13) ──
+  const refs = (await client.query(
+    'SELECT recruit_account, qualified_at FROM referrals WHERE recruiter_account=$1', [h.accountId])).rows;
+  const chRows = refs.length ? (await client.query(
+    `SELECT c.id, c.account_id, c.name, c.respect, c.alive
+       FROM characters c JOIN referrals r ON r.recruit_account = c.account_id
+      WHERE r.recruiter_account = $1`, [h.accountId])).rows : [];
+  const sparkRows = refs.length ? (await client.query(
+    `SELECT a.account_id, a.ref_spark
+       FROM account_persistent a JOIN referrals r ON r.recruit_account = a.account_id
+      WHERE r.recruiter_account = $1`, [h.accountId])).rows : [];
+  const charToAcct = new Map(); // any generation — the payment counterparty was whoever lived then
+  const display = new Map();    // recruit account → the face to show (prefer the living street)
+  for (const c of chRows) {
+    charToAcct.set(c.id, c.account_id);
+    const cur = display.get(c.account_id);
+    if (!cur || (c.alive && !cur.alive)) display.set(c.account_id, c);
+  }
+  const sparked = new Map(sparkRows.map((r) => [r.account_id, !!r.ref_spark]));
+
+  // ── the take — LEDGER-EXACT recruiting income (see the attribution note above) ──
+  const cashRows = (await client.query(
+    `SELECT t.reason, t.amount, t.counterparty FROM transactions t
+       JOIN characters c ON c.id = t.character_id
+      WHERE c.account_id = $1 AND t.currency = 'cash' AND t.reason LIKE 'referral:%'`, [h.accountId])).rows;
+  let earnedCash = 0;
+  const perRecruitCash = new Map(); // recruit account → attributed cash (recruiter+spark rows only)
+  for (const t of cashRows) {
+    const amt = Number(t.amount);
+    if (t.reason === 'referral:recruiter' || (t.reason === 'referral:spark' && t.counterparty)) {
+      earnedCash += amt;
+      const ra = charToAcct.get(t.counterparty);
+      if (ra) perRecruitCash.set(ra, (perRecruitCash.get(ra) || 0) + amt);
+    } else if (t.reason === 'referral:milestone' || t.reason === 'referral:tier2') {
+      earnedCash += amt; // ladder bonuses — real recruiting income, deliberately un-attributed per head
+    } // referral:recruit + NULL-counterparty spark = the player's own welcome money, not earnings
+  }
+  const omrRows = (await client.query(
+    `SELECT reason, amount FROM transactions
+      WHERE account_id = $1 AND currency = 'omr' AND reason LIKE 'referral:%'`, [h.accountId])).rows;
+  let earnedOmr = 0;
+  for (const t of omrRows) earnedOmr += Number(t.amount);
+  if (acct.ref_paid && acct.referred_by) earnedOmr = Math.max(0, earnedOmr - M4.REF_RECRUIT_OMR);
+  earnedOmr = Math.round(earnedOmr * 1e6) / 1e6;
+
+  const recruits = refs.map((r) => {
+    const d = display.get(r.recruit_account);
+    return { name: d?.name || 'a lost soul', level: d ? levelOf(Number(d.respect)) : 0,
+      alive: !!d?.alive, sparked: sparked.get(r.recruit_account) || false,
+      qualified: !!r.qualified_at, earnedCash: perRecruitCash.get(r.recruit_account) || 0 };
+  }).sort((a, b) => (Number(b.qualified) - Number(a.qualified)) || (b.earnedCash - a.earnedCash) || (b.level - a.level));
+
+  // FLAT on purpose — the client's mirror guard (test/client.js check 4) verifies one level of
+  // fields off a board binding; a nested identity/referrals shape would leave every read on this
+  // screen unchecked (proven: mutations on a nested first cut survived a green run). Every key is
+  // ALWAYS present (null over absent) so the guard can observe the full shape on any fixture.
+  return {
+    name: ch.name, level: lvl, title: ch.title || null, mood, spinning,
+    memberSince, days: born ? Math.max(0, Math.floor((now - new Date(born.created_at).getTime()) / 86400e3)) : 0,
+    generation: Number(acct.deaths || 0) + 1, prestige: Number(acct.prestige || 0),
+    dynasty: acct.dynasty_name || null,
+    family: h.owned.gang ? { name: h.owned.gang.name, tag: h.owned.gang.tag, role: h.owned.gangRole } : null,
+    kills: Number(acct.kills || 0), hitmanRank: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
+    honorTier: honorTierOf(ch.honor).name, honorValue: Number(ch.honor || 0),
+    district: ch.loc, sentBy, referred: !!acct.referred_by,
+    code: ch.name,
+    shareUrl: socialShareUrl('referral', ch.name),
+    profilePath: `/u/${encodeURIComponent(ch.name)}?ref=${encodeURIComponent(ch.name)}`,
+    recruitRank: recruitRankOf(Number(acct.recruits || 0)),
+    recruitsLifetime: Number(acct.recruits || 0),
+    recruitsTotal: refs.length,
+    recruitsSparked: [...sparked.values()].filter(Boolean).length,
+    recruitsQualified: refs.filter((r) => r.qualified_at).length,
+    earnedCash, earnedOmr,
+    recruits,
+  };
 }
 
 // THE AGENT LEADERBOARD — a SEPARATE machine hall of fame for agent_flag players. Agents are

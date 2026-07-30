@@ -833,6 +833,11 @@ conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recrui
 - **The recruitment drive** — a time-limited event (a "🔥 RECRUITMENT DRIVE" banner) where every referral CASH
   payment multiplies; $OMR does not change. **The Recruiters** boards
   (`GET /v1/leaderboard/recruiters`) rank the top recruiters and families by recruits.
+- **My Profile** (`GET /v1/profile`, the "My Profile" screen) — your personal page: who you are (mood,
+  member-since, generation, family, honor, kills), your **Top 8** (every recruit you brought in, with
+  their status — green / coming up / made), and **The Take** — exactly what recruiting has paid you in
+  cash and $OMR, read straight from the ledger. Your copy-the-link and share buttons live here too;
+  the link carries your name as the referral code.
 
 **Spread the Word** (`GET /v1/social`, `/v1/social/:taskId/claim`) — three daily social tasks (post about the
 game, share your code, follow or repost). Each pays a small amount of **cash** ($300; $500 for all three). Cash
