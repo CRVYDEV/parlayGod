@@ -54,8 +54,15 @@ export async function rivalsBoard(pool, accountId) {
   // JOIN through rival_events rather than ANY($1)-of-array — pg-mem returns ZERO rows for
   // `= ANY($1::uuid[])` (the MY PROFILE lesson); the duplicate rows (one per event) dedup in JS.
   const streets = byAgg.size ? (await pool.query(
+    // `::text` ON THE RIVAL_EVENTS SIDE, and it is load-bearing: this schema declares
+    // `characters.account_id` TEXT but `rival_events.aggressor_account` UUID, and `uuid = text` has no
+    // operator — the statement fails to PARSE, so the board 500s for anyone who actually has a rival
+    // (the `byAgg.size` guard above means it works right up until it matters). pg-mem compares the two
+    // happily, which is why no suite saw it; `tools/pgquery.js` now does. Cast the rival_events side
+    // because `ix_rival_events_victim` has already narrowed it to one victim's events, and
+    // `characters.account_id` carries no index either way.
     `SELECT c.account_id, c.id, c.name, c.respect, c.loc FROM characters c
-       JOIN rival_events e ON e.aggressor_account = c.account_id
+       JOIN rival_events e ON e.aggressor_account::text = c.account_id
       WHERE c.alive AND e.victim_account = $1`, [accountId])).rows : [];
   const liveBy = new Map();
   for (const s of streets) if (!liveBy.has(s.account_id)) liveBy.set(s.account_id, s);

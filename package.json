@@ -12,6 +12,7 @@
     "invariants": "node -e \"import('./src/db.js').then(async ({makeDb}) => { const {runLedgerInvariants} = await import('./src/invariants.js'); console.log(JSON.stringify(await runLedgerInvariants(await makeDb()), null, 2)); })\"",
     "preflight": "node tools/preflight.js",
     "pgcheck": "node tools/pgcheck.js",
+    "pgquery": "node tools/pgquery.js",
     "sim": "node tools/sim.js",
     "playthrough": "node tools/playthrough.js",
     "loadtest": "node tools/loadtest.js",
