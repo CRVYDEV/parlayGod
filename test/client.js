@@ -676,21 +676,9 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
   // HONESTY: every `.body` touch in the bind's region must be consumed by one of those shapes or
   // be a bare pass-through (`describe(r.body)`, `!r.body`) — anything else is COUNTED, not skipped.
   const viaRaw = [];
-  const RAWBIND = /(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*await\s+api\(\s*'GET'\s*,\s*([^)]*?)\)\s*;/g;
-  for (const rb of body.matchAll(RAWBIND)) {
-    const rv = rb[1], V = rv.replace('$', '\\$');
-    const lits = [...rb[2].matchAll(/([`'"])((?:\\.|(?!\1).)*?)\1/g)].map((x) => x[2]).filter((s) => s.startsWith('/v1'));
-    if (!lits.length) { unscoped++; continue; }   // a path built some way we cannot read
-    const paths = lits.map((p) => {
-      let out = p.replace(/\$\{[^}]*\}/g, ':p');
-      if (/\+\s*[a-zA-Z_$(]/.test(rb[2]) && out.endsWith('/')) out += ':p';   // '/v1/x/' + id
-      return out;
-    });
-    // the bind's region: to the next redeclaration of the same name, or the end of the renderer
-    const redecl = new RegExp(`(?:const|let|var)\\s+${V}\\s*=`, 'g');
-    redecl.lastIndex = rb.index + rb[0].length;
-    const nxt = redecl.exec(body);
-    const rStart = rb.index + rb[0].length, rEnd = nxt ? nxt.index : body.length;
+  // ONE resolver for both idioms (RAWBIND below + THENBIND after it) — a copied block here would
+  // drift exactly the way the sackEmpire rake-cursor copy drifted; the shapes must stay identical.
+  const resolveBodyRegion = (V, paths, rStart, rEnd) => {
     const region = body.slice(rStart, rEnd);
     const spans = [];   // [start, end) offsets within region already consumed by a recognised shape
     // 1) the unwrap alias (optionally guarded / defaulted / one sub deep)
@@ -721,9 +709,44 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     for (const bt of region.matchAll(new RegExp(`(?<![\\w$.])${V}\\s*\\.\\s*body\\b`, 'g'))) {
       if (spans.some(([s, e]) => bt.index >= s && bt.index < e)) continue;
       const tail = region.slice(bt.index + bt[0].length).match(/^\s*(\S{0,2})/)?.[1] ?? '';
-      if (/^(\)|,|;|\|\||\?\s|$)/.test(tail) || tail === '' || tail === '?)' ) continue;  // pass-through / truthiness
+      if (/^(\)|,|;|\|\||&&|\?\s|$)/.test(tail) || tail === '' || tail === '?)' ) continue;  // pass-through / truthiness (`r.body && …` reads no field)
       unscoped++;
     }
+  };
+  const RAWBIND = /(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*await\s+api\(\s*'GET'\s*,\s*([^)]*?)\)\s*;/g;
+  for (const rb of body.matchAll(RAWBIND)) {
+    const rv = rb[1], V = rv.replace('$', '\\$');
+    const lits = [...rb[2].matchAll(/([`'"])((?:\\.|(?!\1).)*?)\1/g)].map((x) => x[2]).filter((s) => s.startsWith('/v1'));
+    if (!lits.length) { unscoped++; continue; }   // a path built some way we cannot read
+    const paths = lits.map((p) => {
+      let out = p.replace(/\$\{[^}]*\}/g, ':p');
+      if (/\+\s*[a-zA-Z_$(]/.test(rb[2]) && out.endsWith('/')) out += ':p';   // '/v1/x/' + id
+      return out;
+    });
+    // the bind's region: to the next redeclaration of the same name, or the end of the renderer
+    const redecl = new RegExp(`(?:const|let|var)\\s+${V}\\s*=`, 'g');
+    redecl.lastIndex = rb.index + rb[0].length;
+    const nxt = redecl.exec(body);
+    resolveBodyRegion(V, paths, rb.index + rb[0].length, nxt ? nxt.index : body.length);
+  }
+  // ── THE PROMISE-CALLBACK IDIOM (task #311) — `api('GET','/p').then((r) => { … r.body … })`.
+  // The mirror could not see this shape AT ALL: a planted bogus field inside a .then callback
+  // SURVIVED a green run (the regimen slot loader, rebuilt onto the covered idiom; the clue-slot
+  // and three leaderboard loaders shipped on it with every displayed field unchecked). Resolved
+  // with the SAME shapes as RAWBIND over the callback's balanced-brace body — via blocksOf's
+  // string-aware brace index, because these callbacks are made of multi-line template HTML where
+  // a naive "to the next }" truncates at the first interpolation (the bodyAfter lesson). A .then
+  // whose callback is NOT the `(r) => { … }` form is COUNTED (unscoped), never silently skipped.
+  const THENBIND = /api\(\s*'GET'\s*,\s*([^)]*?)\)\s*\.then\(\s*(?:async\s*)?\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*=>\s*/g;
+  for (const tb of body.matchAll(THENBIND)) {
+    const lits = [...tb[1].matchAll(/([`'"])((?:\\.|(?!\1).)*?)\1/g)].map((x) => x[2]).filter((s) => s.startsWith('/v1'));
+    if (!lits.length) { unscoped++; continue; }
+    const paths = lits.map((p) => p.replace(/\$\{[^}]*\}/g, ':p'));
+    const at = tb.index + tb[0].length;
+    if (body[at] !== '{') { unscoped++; continue; }   // a bare-expression callback — counted, not resolved
+    const blk = blks.find(([s]) => s === at);
+    if (!blk) { unscoped++; continue; }
+    resolveBodyRegion(tb[2].replace('$', '\\$'), paths, at + 1, blk[1]);
   }
   const binds = [...body.matchAll(GETBIND)].map((b) => ({ v: b[1], path: b[3], sub: b[5] || '', index: b.index }))
     .concat(viaAll.map(([v, path, idx]) => ({ v, path, sub: '', index: idx })))

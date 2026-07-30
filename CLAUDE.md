@@ -6662,3 +6662,22 @@ play, all 10 good cards carry spread intel, zero page errors + zero failed art r
 64/64; wiring/mirror green. The trade loop was already pushed by the coach's trade-winds rung, the
 Career's so_trade task, and the hustle's goods legwork — this makes the SCREEN they all point at
 worth arriving at.
+
+**THE MIRROR LEARNS THE PROMISE-CALLBACK IDIOM (task #311) — 4 more boards out of the dark.** The
+REGIMEN build proved this hole by construction (a planted bogus field inside a `.then((r) => {…})`
+slot loader SURVIVED a green run, so that renderer was rebuilt onto the covered idiom) — but the
+clue-slot and the city/recruiters leaderboard loaders still shipped on the shape, every displayed
+field unchecked. `test/client.js` now resolves `api('GET','/p').then((r) => { … })` with the SAME
+shapes as the raw-bind idiom — the resolver was first EXTRACTED into one shared `resolveBodyRegion`
+(a copied block here would drift exactly the way the sackEmpire rake-cursor copy drifted), then the
+THENBIND pass reuses it over the callback's balanced-brace body (via blocksOf's string-aware brace
+index — these callbacks are multi-line template HTML, where a naive "to the next }" truncates at the
+first interpolation). A `.then` whose callback is not the `(r) => { … }` form is COUNTED (unscoped),
+never silently skipped. One honest-scan gap surfaced en route: `if (r.body && …)` — bare truthiness
+followed by `&&` — read as an unconsumed `.body` touch (raw-bind renderers guard with `r.code`, so
+the tail list had never met it); `&&` joined the pass-through tails. Coverage 90 → 94 boards / 512 →
+526 top-level fields. Mutation-verified THREE ways: a bogus alias field in the clue-slot fails by
+name (`renderStreets reads digEnergyz off /v1/clues`), a bogus direct read in the leaderboard
+callback fails by name (`renderStart reads youz off /v1/leaderboard/city`), and — the vacuity
+check — a guard copy with the THENBIND pass deleted passes GREEN over the planted mutation, proving
+the pass is what closes the hole. Suite 60/60 + sim drift-0.
