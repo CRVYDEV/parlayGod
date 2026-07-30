@@ -6427,3 +6427,46 @@ regression now uses a MEASURED-triggering value (10.011) with the survivorship w
 (3) the guard's honest scope is REFERENCED, not GOVERNS — unwiring the lever from `redeem` alone left it
 green because the board still displayed it; only zero references fire it. Suite green + sim drift-0;
 mutation-verified ×4 (over-burn, cut-never-delivered, re-round dropped, lever unwired).
+
+**THE REGIMEN — the expanded training system (task #304, founder-directed "the training system is way
+too basic… more stats to train… daily quests picked up from NPCs") — BUILT** (`src/regimen.js`,
+`test/regimen.js` — the 59th suite; design `omerta-training-expansion-design.md`; `REGIMEN` rules
+tail; new `character_disciplines` + `npc_drills` tables). **Five DISCIPLINES** beyond
+muscle/cunning/speed (Roadwork/stamina, Steady Hands/composure, Iron Chin/conditioning, The
+Range/marksmanship, Work the Room/presence), each trained by `POST /v1/regimen/:id` on **the SAME
+`train_at` gym clock + 10 energy as a core-stat session** — breadth, never rate, so the PACING wall
+holds by construction (the shared clock is regression-tested BOTH directions). XP rides the
+masteryLvlOf quadratic (`disciplineLvlOf`, cap 25, 8–12 xp/session rng-audited); **XP is not a
+currency — zero transactions rows** (proven), so §10.4 is untouched. Each discipline is EXACTLY ONE
+new single-touchpoint modifier off the audit-locked list: stamina → `energyCapOf` +1 max energy/lvl
+(view+accrual+helpers share ONE function so the three sites cannot disagree); composure →
+`nerveCapOf` +1 max nerve per 2 lvls (nerve REGEN is untouched, so sustained crimes/hr stays
+regen-bound — the widened pool only deepens a burst); conditioning → the Doc's bill ×(1−1%/lvl)
+floored 0.75 (the doctors_friend stack shape, discounted number ledgered — pinned to the dollar via
+twins); marksmanship → +0.6/lvl on YOUR duel score (variance-buried, covered by the levers guard);
+presence → +1/lvl on the `bumpStanding` DAILY budget (widens what an ENGAGED day earns, never what a
+script farms — gifts stay cap-exempt/GIFT_CAP-bound; pinned on `npc_gain.gained`, the allowance
+ledger itself, immune to the cap-exempt lead bonuses). **THE TRAINER DRILLS** — every Underworld
+fixture sets ONE seed-drawn daily job (`drillOf` off the §7.11 hash; tasks draw ONLY from
+self-sufficient bumpDaily kinds so every drill is doable alone on day one); progress is READ from
+`daily_progress.counters` (zero new counting surface — a pulled job now advances the daily contract
+AND the drill at once, the always-something-to-do layering the founder asked for); claim
+(`POST /v1/regimen/drill/:npc`, `npc_drills` day-PK) pays `DRILL_XP` 25 to the fixture's discipline
+— Mickey the Corner tops up your WEAKEST. Both tables DIE WITH THE STREET (estate wipe +
+DISPOSITION — deliberately NO heir echo, harder than the Trades' 25%: disciplines are the body, not
+the craft). Board `GET /v1/regimen` (server-computed `pct` — the client never re-derives the curve);
+`/v1/rules.regimen`; the Streets Train drawer became **"The Gym & The Regimen"** (core stats + five
+discipline cards with XP bars + the six drill cards with live x/n progress + collect buttons),
+`describe()` humanizes sessions + drills. **En route, the M4 "undrawable-day gap" CLOSED**: dice was
+the one daily-contract kind of 14 with no bumpDaily site — `pvpDice` now bumps it (regression in
+test/casino.js). **The mirror-guard lesson repeated**: the first client cut used a
+`.then((r) => r.body)` slot loader and a planted bogus-field mutation SURVIVED the wiring guard —
+the promise-callback shape is invisible to the mirror (filed; the clue-slot shares the hole) — so
+the render was rebuilt on the covered `(await api(...)).body` idiom, after which the same mutation
+fails BY NAME (87 boards / 496 fields / 586 element fields). `test/regimen.js` covers the board +
+catalog, the banded session + shared-clock both ways + zero-ledger, all gates, four deterministic
+touchpoints (energy cap, nerve cap, the Doc's bill to the dollar, the presence budget), the drills
+(not_done tells you HOW / right discipline / once / Mickey-weakest), and death; mutation-verified
+(presence widening dropped → caught; estate wipe dropped → caught). ALL `REGIMEN.*` numbers are
+founder sign-off levers, pinned in test/levers.js + tabled in BALANCE.md. Chromium-probed live
+(session trains, "🏋 Roadwork — +9 xp" toast, cooldown renders, zero page errors).

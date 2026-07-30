@@ -19,7 +19,7 @@
 // the ELO_FLOOR, and every feed paying the 5% rake. Flagged in BALANCE.md.
 import crypto from 'crypto';
 import { GameError, notify, bumpMastery } from './game.js';
-import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx } from './rules.js';
+import { DUELS, duelRankOf, duelDivisionOf, duelStyleOf, duelTitleRankOf, levelOf, dayOf, effStat, pathFx, REGIMEN, disciplineLvlOf } from './rules.js';
 
 const jailed = (ch) => ch.jail_until && new Date(ch.jail_until) > new Date();
 const hospitalized = (ch) => ch.hosp_until && new Date(ch.hosp_until) > new Date();
@@ -116,10 +116,13 @@ export async function challenge(ch, opponent, amount, client, h) {
   const myStyle = duelStyleOf(ch.duel_style), theirStyle = duelStyleOf(opponent.duel_style);
   const myEdge = myStyle && theirStyle && myStyle.beats === theirStyle.id ? DUELS.STYLE_EDGE : 1;
   const theirEdge = myStyle && theirStyle && theirStyle.beats === myStyle.id ? DUELS.STYLE_EDGE : 1;
+  // THE REGIMEN — The Range: each side's marksmanship adds a small flat term (its ONE touchpoint;
+  // the ELO ladder self-corrects, so this shifts matchups, never prints anything)
+  const marks = (owned) => (disciplineLvlOf(Number(owned?.disciplines?.marksmanship || 0)) - 1) * REGIMEN.DUEL_ADD;
   let mine, theirs;
   do {
-    mine = (eff(ch, h.owned) + rand(0, DUELS.VARIANCE)) * myEdge * pathFx(ch, 'contest');       // PATHS v2 — the Ring's edge /
-    theirs = (eff(opponent, h.victimOwned) + rand(0, DUELS.VARIANCE)) * theirEdge * pathFx(opponent, 'contest'); // the Shadow's aversion
+    mine = (eff(ch, h.owned) + marks(h.owned) + rand(0, DUELS.VARIANCE)) * myEdge * pathFx(ch, 'contest');       // PATHS v2 — the Ring's edge /
+    theirs = (eff(opponent, h.victimOwned) + marks(h.victimOwned) + rand(0, DUELS.VARIANCE)) * theirEdge * pathFx(opponent, 'contest'); // the Shadow's aversion
   } while (mine === theirs);
   const win = mine > theirs;
   const styleClash = myEdge > 1 ? 'you had the style edge' : theirEdge > 1 ? 'they had the style edge' : null;

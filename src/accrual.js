@@ -2,7 +2,8 @@
 // BEFORE any ⏱ action. M1: regen + bank interest. M2: racket/asset income,
 // staking rewards, heat decay. M4: crew sales and Bureau raids.
 import { CONSTANTS, RACKETS, LAW, levelOf, rankIdxOf, cityEventOf, dayOf,
-         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING, pathFx } from './rules.js';
+         assetIncome, assetEnergyCap, drugOf, crewCold, envelopeActive, foundationBleedMult , seasonModOf, KITCHEN, RACKET_EMPIRE, PACING, pathFx,
+         energyCapOf, nerveCapOf } from './rules.js';
 
 const racketIncome = (id) => RACKETS.find((r) => r.id === id)?.income || 0;
 
@@ -35,8 +36,10 @@ export function accrue(ch, acct = null, ctx = {}, now = new Date()) {
   const ev = cityEventOf(dayOf());
 
   const held = ctx.held || [];
-  const maxEnergy = 50 + 2 * lvl + assetEnergyCap(assets);
-  const maxNerve = 10 + lvl;
+  // THE REGIMEN — stamina/composure raise the CAPS (pool, not rate: the pacing pass's regen
+  // numbers are untouched). Same helpers as view/coachOf, so the three sites cannot disagree.
+  const maxEnergy = energyCapOf(lvl, assetEnergyCap(assets), ctx.disciplines);
+  const maxNerve = nerveCapOf(lvl, ctx.disciplines);
   // PACING (founder-directed): energy/nerve regen is the game's master clock — at the prototype's
   // 40/min a full tank refilled in ~75 seconds, so it paced nothing and the whole progression ran
   // as fast as a player could click. Both rates now live in PACING.

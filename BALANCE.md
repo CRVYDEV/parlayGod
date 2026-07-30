@@ -2580,3 +2580,32 @@ once, while unset — surfaced as a "did someone send you?" card on Start Here; 
 funnel gained `referral.lateClaims` so a high count reads as "the create-screen field is being
 missed". `REF_CLAIM_WINDOW_MS` is a founder sign-off lever (longer = friendlier, slightly wider
 retro-attribution surface; the payouts are qualification-gated either way).
+
+## THE REGIMEN (expanded training — five disciplines + trainer drills, 2026-07-30)
+
+Founder-directed ("the training system is way too basic… more stats to train and develop that get
+interwoven into the game… daily quests picked up from NPCs"). Five DISCIPLINES beyond
+muscle/cunning/speed, trained on the SAME `train_at` gym clock as the core stats — **breadth,
+never rate**, so the PACING pass's throughput wall holds by construction (a discipline session and
+a core session spend the same slot and the same 10 energy). One trainer DRILL per Underworld
+fixture per day (seed-drawn off the §7.11 hash; progress READ from `daily_progress.counters` —
+zero new counting surface) pays `DRILL_XP` on claim. XP is not a currency — the whole system
+writes ZERO transactions rows (proven in test/regimen.js) — so §10.4 is untouched; the LEVERS are
+the five touchpoints, each a NEW single-site modifier off the audit-locked list:
+
+| lever | value | what it does | posture |
+| --- | --- | --- | --- |
+| `REGIMEN.CAP` | 25 | discipline level ceiling | pacing |
+| `REGIMEN.XP_DIVISOR` / `XP_MIN` / `XP_MAX` | 15 / 8 / 12 | the quadratic curve + per-session band (~lvl 10 ≈ 152 sessions ≈ weeks on the 3-min clock) | pacing |
+| `REGIMEN.ENERGY` | 10 | session cost (same as a core stat) | pacing |
+| `REGIMEN.DRILL_XP` | 25 | a claimed drill ≈ 2.5 sessions, once per fixture per day — the engaged-day bonus | pacing |
+| stamina (Roadwork) | +1 max energy/level | `energyCapOf` — at cap +24 energy (~2 extra gym/garage actions per refill); widens the DAY, not any payout | KEEP |
+| composure (Steady Hands) | +1 max nerve / 2 levels | `nerveCapOf` — at cap +12 nerve (~1–2 extra crimes per refill window); the crime CASH curve per attempt is untouched, this widens the pool the regen fills | **the one throughput-adjacent dial** — nerve REGEN (6/min) is unchanged, so sustained crimes/hr is regen-bound exactly as the pacing pass measured; the wider pool only deepens a BURST. Sim re-measured drift-0 |
+| conditioning (Iron Chin) | −1%/lvl off the Doc's bill, floor 0.75 | `heal()` — a discount stack like doctors_friend (0.75) × Doc T1 (0.9); the discounted number is the ledgered number | KEEP |
+| marksmanship (The Range) | +0.6/lvl to YOUR duel score | `DUELS` contest — at cap +14.4 vs VARIANCE 30; ELO self-corrects (a better shooter climbs to opponents who beat him), the wager stays the audited casino:pvp transfer | KEEP |
+| presence (Work the Room) | +1/lvl to the DAILY standing budget | `bumpStanding` cap — widens what an ENGAGED day can earn with the fixtures, never what a script earns free (the cap still binds); gifts stay cap-exempt/GIFT_CAP-bound | KEEP |
+
+Death: `character_disciplines` + `npc_drills` DIE WITH THE STREET (estate wipe + DISPOSITION) —
+no heir echo (deliberately harder than THE TRADES' 25%: disciplines are the BODY, not the craft).
+Drills draw only from self-sufficient bumpDaily kinds (crime/train/gta/goods/melt/heist), so every
+drill is doable alone on day one. Mickey the Corner trains your WEAKEST (the round-out trainer).

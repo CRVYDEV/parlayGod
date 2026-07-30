@@ -1567,6 +1567,10 @@
     else if (body.cold) bits.push(body.hint || 'cold ground');
     else if (body.riddle && body.step) bits.push(`the trail continues — “${body.riddle}” (step ${body.step} of ${body.of})`);
     if (body.clue) bits.push(`🗺 a CLUE SCROLL fell out of the job — “${body.clue.riddle}”`);
+    // THE REGIMEN — a discipline session (levelUp marker) vs a claimed trainer drill (npc marker)
+    { const dn = (id) => ((rules?.regimen?.disciplines || []).find((d) => d.id === id) || {}).name || id;
+      if (body.discipline && body.levelUp !== undefined) bits.push(`🏋 ${dn(body.discipline)} — +${body.xp} xp${body.levelUp ? ` · LEVEL ${body.level}` : ''}`);
+      if (body.discipline && body.npc) bits.push(`📋 schooled — +${body.xp} xp ${dn(body.discipline)} (now lvl ${body.level})`); }
     if (body.elo !== undefined && body.stake !== undefined && body.win !== undefined)
       bits.push(body.win ? `WON the duel ${body.myScore}–${body.theirScore} — +$${fmt(body.stake - body.rake)}, elo ${body.elo} (${body.delta > 0 ? '+' + body.delta : body.delta})`
         : `lost the duel ${body.myScore}–${body.theirScore} — −$${fmt(body.stake)}, elo ${body.elo} (${body.delta})`);
@@ -3488,6 +3492,9 @@
     const spot = prices.goods?.[me?.loc] || {};
     const daily = (await api('GET', '/v1/daily')).body || {};
     const sq = (await api('GET', '/v1/soldiers')).body || {};
+    // THE REGIMEN — bound in the `(await api(...)).body` shape ON PURPOSE (the mirror-guard idiom;
+    // a `.then((r) => r.body)` slot loader passed the guard VACUOUSLY — planted mutations survived)
+    const gym = (await api('GET', '/v1/regimen')).body || {};
     // the density fix: don't wall a player with all 29 jobs — lead with the BEST ones they can
     // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
     // D6a — THE APPROACH: every job takes a risk/reward choice. Case It = safer, low-heat, soft bust
@@ -3517,6 +3524,22 @@
     const train = (rules?.stats || []).map((s) =>
       `<button class="act" data-do="POST /v1/train/${s}"${gymCd > 0 ? ' disabled' : ''}>${s}</button>`).join('')
       + (gymCd > 0 ? ` <span class="d">gym reopens in ${mins(gymCd)}</span>` : '');
+    // THE REGIMEN — five disciplines on the SAME gym clock + the fixtures' daily drills
+    const regCd = Number(gym.trainSeconds || 0);
+    const regimenBlock = !gym.disciplines ? '' : `
+      <div class="d" style="margin-top:10px"><b>The Regimen</b> — five disciplines, trained on the same gym clock (${gym.energy} energy a session). Breadth, not shortcuts:</div>
+      <div class="grid" style="margin-top:4px">${gym.disciplines.map((d) => `
+        <div class="card"><span class="t">${d.name}</span> <span class="chip">${d.level >= d.cap ? 'MASTERED' : `lvl ${d.level}`}</span>
+          <div class="d">${d.desc}</div>
+          <div class="bar" style="margin-top:4px"><i style="width:${d.pct}%"></i></div>
+          <div class="d" style="font-size:11px">${d.level >= d.cap ? 'nothing left to teach' : `${d.xp} xp · next level at ${d.nextXp}`}</div>
+          <button class="act" data-disc="${d.id}"${regCd > 0 || d.level >= d.cap ? ' disabled' : ''}>train</button></div>`).join('')}</div>
+      ${regCd > 0 ? `<div class="d" style="color:var(--dim);font-size:12px">gym reopens in ${mins(regCd)}</div>` : ''}
+      <div class="d" style="margin-top:10px"><b>Trainer drills</b> — each fixture sets one job a day. Do it anywhere in the city, then collect the schooling here (+${rules?.regimen?.drillXp ?? 25} xp, no gym clock):</div>
+      <div class="grid" style="margin-top:4px">${gym.drills.map((d) => `
+        <div class="card"><span class="t">${d.trainer}</span> <span class="chip${d.claimed ? '' : d.done ? ' good' : ''}">${d.claimed ? 'SCHOOLED TODAY' : d.done ? 'READY' : `${d.progress}/${d.n}`}</span>
+          <div class="d">${d.how} — trains <b>${(gym.disciplines.find((x) => x.id === d.discipline) || {}).name || d.discipline}</b></div>
+          ${d.claimed ? '' : `<button class="act${d.done ? ' prime' : ''}" data-drill="${d.npc}"${d.done ? '' : ' disabled'}>${d.done ? 'collect the schooling' : `do the work first (${d.progress}/${d.n})`}</button>`}</div>`).join('')}</div>`;
     // the Path — declared once you make rank (lvl 5). Shapes how you earn for the rest of the street.
     let pathBlock = '';
     if (me && me.path) {
@@ -3609,7 +3632,10 @@
       ${pathBlock}
       <div id="clue-slot"></div>
       ${sect('streets-daily', 'Daily Work', '3 contracts a day (all three pays a $OMR bonus) + the Daily Score', `<div class="grid">${dailyCards}</div>`, dailyReady)}
-      ${sect('streets-train', 'Train', 'raise muscle / cunning / speed', train)}
+      ${sect('streets-train', 'The Gym &amp; The Regimen', 'raise your core stats + five trainable disciplines · daily drills from the fixtures', `
+        <div class="d" style="margin-bottom:4px"><b>Core stats</b> — muscle powers fights, cunning powers schemes, speed powers wheels:</div>
+        <div>${train}</div>
+        ${regimenBlock}`)}
       ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `
         <div class="d" style="color:var(--dim);font-size:12px;margin-bottom:4px">🚚 your trunk holds <b>${me.cargoCap ?? 0}</b> weight of cargo. Your <b>cars</b> are for muscle &amp; melt value — to <b>haul more</b>, buy a bigger set of <b>Wheels</b> (a truck / muscle car) in <b>The Empire ▸ Assets</b>.</div>
         <div class="grid">${goodsCards}</div>`)}
@@ -3641,6 +3667,11 @@
         const dg = slot.querySelector('#clue-dig');
         if (dg) dg.onclick = () => act('POST', '/v1/clues/dig', {}).then(() => renderStreets());
       }); }
+    // THE REGIMEN — wire the discipline sessions + drill claims built into the Train drawer above
+    t.querySelectorAll('[data-disc]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/regimen/${b.dataset.disc}`, {}).then(() => renderStreets()));
+    t.querySelectorAll('[data-drill]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/regimen/drill/${b.dataset.drill}`, {}).then(() => renderStreets()));
   }
 
   // The City board

@@ -3463,3 +3463,53 @@ export const masteryLvlOf = (xp) =>
 export const masteryXpFor = (lvl) => MASTERY.XP_DIVISOR * (lvl - 1) * (lvl - 1);
 export const masteryRankOf = (lvl) => { let n = MASTERY.RANKS[0].name; for (const r of MASTERY.RANKS) if (lvl >= r.at) n = r.name; return n; };
 export const masteryLegendRankOf = (xp) => { let n = MASTERY.LEGEND_RANKS[0].name; for (const r of MASTERY.LEGEND_RANKS) if (Number(xp) >= r.at) n = r.name; return n; };
+
+// ── THE REGIMEN (omerta-training-expansion-design.md, founder-directed 2026-07-30) ──
+// Five trainable DISCIPLINES beyond muscle/cunning/speed. Each has EXACTLY ONE named touchpoint
+// (the skills/decree discipline — a new single-site modifier, never a retune of a signed formula),
+// and training rides the SAME gym cooldown clock as the core stats — breadth, never rate, so the
+// pacing pass's throughput bound holds by construction. XP is not a currency: zero §10.4 surface.
+// ALL numbers are founder sign-off levers (BALANCE.md).
+export const REGIMEN = {
+  CAP: 25,                 // discipline level ceiling
+  XP_DIVISOR: 15,          // level = floor(√(xp/DIVISOR)) + 1 — the masteryLvlOf curve
+  XP_MIN: 8, XP_MAX: 12,   // xp per gym session (rng-audited roll)
+  ENERGY: 10,              // same as a core-stat session
+  DRILL_XP: 25,            // a claimed trainer drill ≈ 2.5 sessions — drills stay the efficient path
+  // the five disciplines + their one touchpoint each
+  DISCIPLINES: [
+    { id: 'stamina',      name: 'Roadwork',     desc: 'Every level adds +1 to your MAX energy — more gym, garage and crew work per day.' },
+    { id: 'composure',    name: 'Steady Hands', desc: 'Every 2 levels add +1 to your MAX nerve — a deeper pool for the crime loop.' },
+    { id: 'conditioning', name: 'Iron Chin',    desc: 'Healing up costs less — 1% off the Doc\'s bill per level (floor 25% off).' },
+    { id: 'marksmanship', name: 'The Range',    desc: 'A steadier shot in a DUEL — a small edge on the rated ladder per level.' },
+    { id: 'presence',     name: 'Work the Room', desc: 'The city remembers you — +1 to your DAILY Underworld standing budget per level.' },
+  ],
+  CONDITIONING_BPS: 100,   // heal ×(1 − bps·lvl/10⁴), floored…
+  CONDITIONING_FLOOR: 0.75,
+  DUEL_ADD: 0.6,           // marksmanship: + lvl × this to YOUR duel score (ELO self-corrects)
+  // THE TRAINER DRILLS — each fixture's daily quest trains ITS discipline; Mickey rounds out your weakest
+  TRAINERS: { doc: 'conditioning', armorer: 'marksmanship', harbor: 'stamina', madame: 'presence', fixer: 'composure', cornerman: 'lowest' },
+  // drill tasks draw ONLY from self-sufficient bumpDaily kinds — every drill is doable alone on day one
+  DRILL_TASKS: [
+    { kind: 'crime', n: [3, 5], how: 'pull clean jobs on the Streets' },
+    { kind: 'train', n: [2, 3], how: 'gym sessions (any stat or discipline)' },
+    { kind: 'gta',   n: [1, 1], how: 'boost a car in The Garage' },
+    { kind: 'goods', n: [2, 4], how: 'buy or sell trade goods on the Streets' },
+    { kind: 'melt',  n: [1, 1], how: 'melt a car down in The Garage' },
+    { kind: 'heist', n: [1, 1], how: 'pull the Daily Score' },
+  ],
+};
+export const disciplineLvlOf = (xp) =>
+  Math.min(REGIMEN.CAP, Math.floor(Math.sqrt(Math.max(0, Number(xp) || 0) / REGIMEN.XP_DIVISOR)) + 1);
+// THE CAP HELPERS — view, the coach and accrual all read these, so the three sites cannot disagree.
+// disc is the owned.disciplines xp map (or absent — a headless caller gets the base formula).
+export const energyCapOf = (lvl, assetCap = 0, disc = null) =>
+  50 + 2 * lvl + assetCap + (disc ? disciplineLvlOf(disc.stamina || 0) - 1 : 0);
+export const nerveCapOf = (lvl, disc = null) =>
+  10 + lvl + (disc ? Math.floor((disciplineLvlOf(disc.composure || 0) - 1) / 2) : 0);
+// the day's drill for one fixture — seed-drawn, town-wide, forecastable (the §7.11 machinery)
+export const drillOf = (npc, day = dayOf()) => {
+  const t = REGIMEN.DRILL_TASKS[Math.floor(hash01(`drill:${npc}:${day}`) * REGIMEN.DRILL_TASKS.length) % REGIMEN.DRILL_TASKS.length];
+  const n = t.n[0] + Math.floor(hash01(`drilln:${npc}:${day}`) * (t.n[1] - t.n[0] + 1));
+  return { kind: t.kind, n, how: t.how };
+};
