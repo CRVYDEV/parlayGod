@@ -11,7 +11,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
          carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
-         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE } from './rules.js';
+         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf, BUSINESSES, WIRE, RIVALS } from './rules.js';
+import { dbCaps } from './db.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -1131,6 +1132,41 @@ export function view(ch, acct = {}, owned = {}) {
       return { event: ev.id, name: ev.name, lawEvent: law.id, hour: hr.hour, phase: hr.phase, patrol: hr.patrol }; })() };
 }
 
+// THE TAKE (Street War step three, founder-directed) — debit the drawn mark for what their pocket
+// can cover, so a job's cash comes off SOMEBODY instead of out of nowhere. Returns the funded
+// amount (0 when there was nobody to take from, they were too poor, or their row was busy).
+//
+// It NEVER BLOCKS, by construction, and that is the whole lock argument. withCharacter already
+// holds the actor's row, so any second character lock taken here would invert against every
+// two-party path that locks its pair SORTED (a duel, a bout, a hire, a favor run) — an AB-BA the
+// 40P01 retry would merely paper over. So the debit runs behind `FOR UPDATE SKIP LOCKED`: a
+// contended mark is simply SKIPPED and the faucet pays the whole take, which is an independently
+// correct outcome, so the fallback costs the player nothing.
+//
+// pg-mem parses neither SKIP LOCKED nor NOWAIT, so the suite exercises the plain conditional
+// UPDATE — IDENTICAL accounting, only a different blocking posture (it can wait). The capability
+// is read from dbCaps, decided once at makeDb, rather than probed mid-transaction: a failed probe
+// would abort the enclosing txn in real Postgres (the SAVEPOINT lesson). The no-block property is
+// verified against a real Postgres, never against pg-mem.
+async function takeFromMark(client, h, ch, markRow, take) {
+  const T = RIVALS.TAKE;
+  const pocket = Math.floor(Number(markRow.cash) || 0);
+  const want = Math.min(take, Math.floor(pocket * T.POCKET_BPS / 10000));
+  if (!(want >= T.MIN)) return 0; // dust, or a mark with nothing on them — the faucet pays
+  const sql = dbCaps.skipLocked
+    ? `UPDATE characters SET cash = cash - $2 WHERE id = (
+         SELECT id FROM characters WHERE id=$1 AND alive AND is_npc AND cash >= $2
+         FOR UPDATE SKIP LOCKED
+       ) RETURNING id`
+    : 'UPDATE characters SET cash = cash - $2 WHERE id=$1 AND alive AND is_npc AND cash >= $2 RETURNING id';
+  let hit = 0;
+  try { hit = (await client.query(sql, [markRow.id, want])).rowCount; }
+  catch { return 0; } // the mark is never allowed to fail the job
+  if (!hit) return 0;
+  await h.ledger(client, { characterId: markRow.id, currency: 'cash', amount: -want, reason: 'crime:take', counterparty: ch.id });
+  return want;
+}
+
 // ── §7.2 CRIME ──
 export function doCrime(ch, crimeId, client, h, approach) {
   const c = CRIMES.find((x) => x.id === crimeId);
@@ -1163,20 +1199,21 @@ export function doCrime(ch, crimeId, client, h, approach) {
     const second = await assignedSoldier(client, ch.id);
     // THE MARK (founder: "crimes can't just be committed against nobody") — every job names a
     // victim drawn from the NPC RESIDENTS standing in your district (real characters, the
-    // population layer), falling back to the fictional noir pool. PRESENTATION ONLY: no value
-    // moves and nothing is written on the named resident — making the crime a real TRANSFER off
-    // the mark's pocket reclassifies the sim-signed §7.2 crime FAUCET, a founder sign-off call
-    // (flagged in BALANCE.md), never a silent change. Never names a real PLAYER (a player was not
-    // actually robbed, and saying so would be false information about them).
-    const mark = await (async () => {
+    // population layer), falling back to the fictional noir pool. STEP THREE (founder-directed,
+    // explicitly including the transfer) makes the mark a real SOURCE: see takeFromMark below.
+    // Never a real PLAYER — a stranger's crime roll gives them no consent, no notification and no
+    // counterplay; taking from a player is what the gated PvP asset crimes are for.
+    const markRow = await (async () => {
       try {
         const r = (await client.query(
-          'SELECT name FROM characters WHERE alive AND is_npc AND loc=$1 AND id<>$2 ORDER BY id LIMIT 8',
+          'SELECT id, name, cash FROM characters WHERE alive AND is_npc AND loc=$1 AND id<>$2 ORDER BY id LIMIT 8',
           [ch.loc, ch.id])).rows;
-        if (r.length) return r[Math.floor(roll * r.length) % r.length].name;
-      } catch { /* presentation only — never fail a job for it */ }
-      return `${SOLDIERS.FIRST[Math.floor(roll * 1000) % SOLDIERS.FIRST.length]} ${SOLDIERS.LAST[Math.floor(roll * 100000) % SOLDIERS.LAST.length]}`;
+        if (r.length) return r[Math.floor(roll * r.length) % r.length];
+      } catch { /* the mark is never allowed to fail a job */ }
+      return null;
     })();
+    const mark = markRow ? markRow.name
+      : `${SOLDIERS.FIRST[Math.floor(roll * 1000) % SOLDIERS.FIRST.length]} ${SOLDIERS.LAST[Math.floor(roll * 100000) % SOLDIERS.LAST.length]}`;
     if (roll < chance) {
       // THE APPROACH pay: payMult ≈ 1/successMult keeps cash EV flat; loud may carry a founder-set
       // cash premium (default 1.0 = EV-neutral). Rides the same crime:<id> faucet (ledgered==credited).
@@ -1191,7 +1228,15 @@ export function doCrime(ch, crimeId, client, h, approach) {
       if (second) { soldierCut = Math.floor(take * SOLDIERS.CUT_BPS / 10000); take -= soldierCut; }
       const rep = Math.round(c.respect * (ev.crimeRep || 1) * ap.repMult);
       ch.cash = Number(ch.cash) + take; ch.respect = Number(ch.respect) + rep; ch.lc_crime += 1;
-      await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take, reason: `crime:${c.id}` });
+      // THE TAKE (step three) — the mark funds what their pocket covers; the §7.2 faucet pays only
+      // the REMAINDER. The player's payout is IDENTICAL either way, so this re-SOURCES crime rather
+      // than retuning it — and it strictly REDUCES emission, because the funded share is a TRANSFER
+      // (both legs ledgered, netting zero) instead of a mint.
+      const funded = markRow ? await takeFromMark(client, h, ch, markRow, take) : 0;
+      if (funded > 0)
+        await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: funded, reason: 'crime:take', counterparty: markRow.id });
+      if (take - funded > 0)
+        await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: take - funded, reason: `crime:${c.id}` });
       // §7.2 contraband crates: Docks turf ×1.5, event cbMult, the approach (loud grabs more, quiet less)
       const pCrate = (0.25 + Number(ch.nerve) * 0.02) * (ev.cbMult || 1) * (held.includes('docks') ? 1.5 : 1) * ap.crateMult;
       let crates = 0;
@@ -1255,7 +1300,7 @@ export function doCrime(ch, crimeId, client, h, approach) {
         }
       } catch { /* the trail is a bonus, never a blocker */ }
       return { ok: true, success: true, approach: ap.id, take, rep, crates, makingsDrop, clue,
-        victim: mark, soldier: soldier ? { ...soldier, cut: soldierCut } : null };
+        victim: mark, markTook: funded, soldier: soldier ? { ...soldier, cut: soldierCut } : null };
     }
     // GETAWAY (skills): the wheelman's stints run shorter — a new modifier, sign-off lever.
     // A WHEELMAN soldier stacks the same way (a second behind the wheel — SOLDIERS sign-off lever).

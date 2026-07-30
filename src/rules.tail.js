@@ -3208,6 +3208,16 @@ export const POPULATION = {
     BOAT_P:  { capo: 0.35, boss: 0.6 },   // always the dinghy — the resale faucet stays petty
     FRONT_INCOME_BPS: 500,                // the sleepy-joint scale on the catalog income curve (sim P9.25 sized 1000→500: the shakedown-cadence ceiling ran ~$683k/day at 10%, ~2× the NPC-trucking parity band — 5% lands ~$342k worst case)
     GOODS_BPS: 1000, GOODS_MAX_UNITS: 10, // freight budget: ≤10% of cash, ≤10 units, spendable-floored
+    // ── STEP THREE: the resident's STABLE. Residents field fighters and racers so the PvP boards
+    // (the Circuit, the strip, the stable field) are LIVE in an empty alpha — the same reason step
+    // two gave them consent limits. The wager is the audited casino:pvp taxed TRANSFER, so a
+    // resident may only ever stake what they already hold: the limit is a share of their own cash,
+    // and a resident who cannot reach the system's own MIN_STAKE simply DOESN'T LIST (the step-two
+    // F2 lesson — a limit under the floor sits in an empty window and reads as a dead board).
+    // capo/boss only for that reason: a `made` resident's seed can't cover a $5k stake.
+    FIGHTER_P: { capo: 0.4, boss: 0.6 },
+    RACER_P:   { capo: 0.4, boss: 0.6 },
+    STAKE_BPS: 1500,                      // what a resident will put on one bout/match: 15% of pocket
   },
 };
 // A resident's name: noir first + last, drawn from pools. Uniqueness is enforced by the caller
@@ -3220,6 +3230,14 @@ export const NPC_LAST = ['Fontana', 'Marchetti', 'Bellini', 'Corsaro', 'Battagli
   'Moretti', 'Gallo', 'Rizzo', 'Bruno', 'Ferraro', 'Greco', 'Conti', 'Costa', 'Vitale', 'Serra',
   'Pagano', 'Sorrentino', 'Barone', 'Palumbo', 'Longo', 'Farina', 'Grasso', 'Rinaldi', 'Damico',
   'Testa', 'Fabbri', 'Orlando', 'Bianchi', 'Riva', 'Milano', 'Napoli', 'Sciarra', 'Tumbarello'];
+// A resident FIGHTER's ring name and RACER's name (step three) — pure flavor beside NPC_FIRST/LAST,
+// fictional only (the Broadcast posture: no real person's name anywhere in the city).
+export const FIGHTER_MONIKERS = ['The Hammer', 'Ironjaw', 'Lefty', 'The Butcher', 'Two-Ton', 'Sandman',
+  'The Wall', 'Cutter', 'Boom-Boom', 'The Ox', 'Nightstick', 'Glass Joe', 'Bulldog', 'The Anvil'];
+export const RACER_NAMES = ['Midnight Runner', 'Ash Widow', 'Grey Ghost', 'Lucky Penny', 'Iron Duchess',
+  'Smoke Signal', 'Copper Kettle', 'Silent Partner', 'Dark Horse', 'Tin Star', 'Red Vendetta',
+  'Paper Moon', 'Quick Nickel', 'Long Shadow', 'Bootleg Bess', 'Cinder Lane'];
+
 // pick a band by weight from a [0,1) roll
 export const npcBandOf = (roll) => {
   const total = POPULATION.BANDS.reduce((a, b) => a + b.w, 0);
@@ -3702,6 +3720,32 @@ export const RIVALS = {
   // RIVAL-AWARE WIRE — tapping a man who wronged you costs less (the discounted number is what's
   // burned/ledgered, the tradecraft-discount discipline).
   WIRE_RIVAL_MULT: 0.5,
+
+  // ══ STEP THREE (design §4, founder-directed 2026-07-30 — explicitly INCLUDING the transfer) ══
+  // THE TAKE — victim-funded crime. A pulled job's cash no longer appears out of nowhere when there
+  // is somebody in the district to take it FROM: the drawn mark funds what their pocket can cover and
+  // the §7.2 faucet covers only the REMAINDER. The PAYOUT is unchanged (the sim-signed §7.2 band), so
+  // this re-SOURCES crime, it does not retune it — and it strictly REDUCES emission, because the
+  // funded share is a TRANSFER (ledgered both sides, netting zero) instead of a mint.
+  //
+  // Marks are NPC RESIDENTS only, and that line is deliberate: a real player gets no consent, no
+  // notification and no counterplay from a stranger's crime roll. Taking from a PLAYER is what the
+  // PvP asset crimes are for (rob a front, steal a car, mug the trunk) — gated, shielded, and written
+  // into the rivals ledger so the victim knows who to answer.
+  TAKE: {
+    POCKET_BPS: 2500, // at most 25% of the mark's pocket per job — a rich mark funds more of the
+                      // take, a poor one a little, and nobody is cleaned out in a single hit. The
+                      // decay is geometric, so crime alone never walks a resident to the turnover
+                      // threshold; total extraction stays bounded by the metered seed pool (P9.21).
+    MIN: 50,          // below this the transfer is dust and the faucet just pays it
+  },
+  // REVENGE, WITH TEETH — striking a rival you are still NET OWED against now moves the CONTEST, not
+  // only the honor ledger: your attack carries REVENGE_ATK_MULT, and a landed robbery takes
+  // REVENGE_CUT_MULT of the usual cut (rob 15% → 22.5%, still under the shakedown's signed 30%, on
+  // the SAME shared per-venue window — so the signed per-venue extraction bound is untouched).
+  // Self-limiting by construction: landing the strike RECORDS it, which settles the debt.
+  REVENGE_ATK_MULT: 1.10,
+  REVENGE_CUT_MULT: 1.5,
 };
 
 // ═══════════ STREET LIFE (task #318, founder-directed) — the corner, the black book, the call ═══════════

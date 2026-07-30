@@ -27,7 +27,7 @@ import { CONTACTS, contactRankOf, contactStandingOf } from '../src/rules.js';
   for (const term of ['spread the word', 'family tree', 'opportunity', '/agents',
     'dueling circuit', 'clue scrolls', 'megaproject', 'cellphone',
     'ring poker', 'house window', 'gala', 'the family yield', 'the trades', 'my profile',
-    'the black book', 'word on the street']) {
+    'the black book', 'word on the street', 'the take']) {
     assert(wm.includes(term), `docs/WIKI.md must document "${term}" (codex drift)`);
     assert(wh.includes(term), `public/wiki.html must document "${term}" (codex drift)`);
   }

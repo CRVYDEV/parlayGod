@@ -42,6 +42,15 @@ nerve cost, a cash range, and a chance of jail if you fail. Your success rate in
 and **speed**, your family level, some districts, and your rank. A job can also give you **contraband crates**
 (you use these to buy guns and to make gear) and **makings** (ingredients for the Kitchen).
 
+**Every job has a mark, and the money comes off them.** A crime names a victim drawn from the NPC
+residents standing in your district. When that mark has money on them, THE TAKE moves it: the cash
+you earn is transferred off their pocket (up to 25% of it per job) and only the shortfall is created
+by the game. So a job on a busy street is a robbery with a name on it; a job on an empty one still
+pays exactly the same, it just comes from nowhere. Marks are always NPC residents — a real player is
+never robbed by a stranger's crime roll, because they would get no warning and no way to answer.
+Taking from a real player is what the PvP asset crimes are for (rob a front, steal a car, mug their
+trunk), and those always tell the victim who did it.
+
 **Energy and nerve** power your actions. They increase again with time. The game does not use a global clock;
 your resources increase when you do an action. Energy powers crimes and training. Nerve powers the more
 dangerous actions. **Heat** is the police attention that crime causes. Too much heat starts a police case (see

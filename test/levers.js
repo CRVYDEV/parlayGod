@@ -368,6 +368,9 @@ const SIGNED = [
   ['POPULATION.MARKS.FRONTS', { made: ['laundromat', 1], capo: ['laundromat', 2], boss: ['restaurant', 1] }],
   ['POPULATION.MARKS.BOAT_P', { capo: 0.35, boss: 0.6 }],
   ['POPULATION.MARKS.FRONT_INCOME_BPS', 500],
+  ['POPULATION.MARKS.STAKE_BPS', 1500],           // step three — the resident's stable
+  ['POPULATION.MARKS.FIGHTER_P', { capo: 0.4, boss: 0.6 }],
+  ['POPULATION.MARKS.RACER_P', { capo: 0.4, boss: 0.6 }],
   ['POPULATION.MARKS.GOODS_BPS', 1000],
   ['POPULATION.MARKS.GOODS_MAX_UNITS', 10],
   ['PORT.ESCORT_COST', 15000],
@@ -438,6 +441,11 @@ const SIGNED = [
   ['RIVALS.SABOTAGE.SHIELD_MS', 43200000],
   ['RIVALS.REVENGE_HONOR', 2],
   ['RIVALS.WIRE_RIVAL_MULT', 0.5],
+  // Street War step three (founder-directed 2026-07-30, incl. the transfer)
+  ['RIVALS.TAKE.POCKET_BPS', 2500],
+  ['RIVALS.TAKE.MIN', 50],
+  ['RIVALS.REVENGE_ATK_MULT', 1.10],
+  ['RIVALS.REVENGE_CUT_MULT', 1.5],
   ['SECRETS.DIG_OMR', 10],
   ['SECRETS.MAX_HELD', 5],
   ['SKILLS.ACTIVE_CD_MS', 28800000],

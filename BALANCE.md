@@ -2838,6 +2838,46 @@ poster's own cash to a runner, and the only value that leaves is the house cut c
 ways — posting is safehouse-blocked, and a player fire-kill takes `CASH_LOOT_RATE` (25%) of a dead
 poster's open escrow (`whack:loot` + a NULL `favor:loot`), the remainder burning `favor:death`.
 
+### THE STREET WAR step three — THE TAKE + revenge with teeth (task #322)
+
+Founder-directed 2026-07-30, **explicitly including the transfer**. The headline is a re-SOURCING of
+crime, not a retune: the payout a player receives is unchanged (the sim-signed §7.2 band), but when
+there is somebody in the district to take it from, that cash comes off THEM instead of appearing.
+
+| lever | value | why |
+|---|---|---|
+| `RIVALS.TAKE.POCKET_BPS` | **2500** | at most 25% of the mark's pocket per job — nobody is cleaned out in one hit, and the decay is geometric, so crime alone never walks a resident to the turnover threshold |
+| `RIVALS.TAKE.MIN` | **50** | below this the transfer is dust and the faucet just pays it |
+| `RIVALS.REVENGE_ATK_MULT` | **1.10** | a strike settling a debt you are still net owed carries the hand — attack only, never the mark's defence |
+| `RIVALS.REVENGE_CUT_MULT` | **1.5** | a revenge ROB takes 22.5% (15% × 1.5), still under the shakedown's signed 30%, on the SAME shared per-venue window |
+| `POPULATION.MARKS.STAKE_BPS` | **1500** | what a resident will put on one bout/match: 15% of their own pocket |
+| `POPULATION.MARKS.FIGHTER_P` / `RACER_P` | **capo .4 / boss .6** | capo+boss only — a `made` resident's seed cannot cover the $5,000 system floor |
+
+**The take is an emission REDUCTION, and that is the point.** Every funded dollar is a TRANSFER
+(both legs ledgered `crime:take`, netting zero) that would otherwise have been a `crime:<id>` FAUCET
+row. `crime:` was already in the cash vocabulary and both legs carry a `character_id`, so the
+per-character check reconciles it with **zero `invariants.js` change**. Total funded is bounded by
+the same metered resident seed pool P9.21 sizes (~$499k/day of replacement) — so it can only ever
+shrink crime's contribution to supply, never widen it. Measured every run at **sim P9.27**.
+
+**Honest about the magnitude: the theme is permanent, the economics decay.** A district holds a
+handful of residents, and 25% per job means ~7 successful jobs against the same mark walks them from
+their arrival stake down past the turnover system's "picked clean" line. So an active grinder empties
+their district's pockets fairly quickly, after which the faucet pays as it always did and the mark is
+narrative only. That is the intended shape — the take is a re-sourcing and a piece of texture, NOT a
+re-plumbing of where crime's money comes from base-wide, and it should not be described as one. It
+also means the take will push the resident turnover meter (`POPULATION.TURNOVER.PER_DAY`) toward its
+cap sooner; that meter is the bound, and once it is spent drained residents simply stay drained.
+
+**Marks are NPC RESIDENTS only, and that line is deliberate.** A real player gets no consent, no
+notification and no counterplay from a stranger's crime roll. Taking from a player is what the gated
+PvP asset crimes are for (rob a front, steal a car, mug the trunk) — shielded, cooldowned, and
+written into the rivals ledger so the victim knows who to answer.
+
+**The revenge cut is rob-only** because boosting a shakedown would push past its signed 30% ceiling,
+and the venue clock advances by the SAME boosted rate — otherwise the redirect would hand the owner
+back income that had already been taken, and stop being emission-neutral.
+
 ### THE CHAIN, THE LADDER, THE STANDING (step two, task #321)
 
 Three additions on the corner + the book. **No new §10.4 reason** — the chain bonus rides the

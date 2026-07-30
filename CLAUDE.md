@@ -6871,6 +6871,47 @@ levers (BALANCE.md § STREET LIFE; pinned in test/levers.js — POOLS/CONFLICT a
 Deferred (step two, founder picks): player-posted calls (needs an escrow surface), corner CHAINS
 (multi-day district storylines), a contact-count status ladder, standing-scaled resident requests.
 
+**STREET WAR step three — THE TAKE + revenge with teeth + resident stables (task #322, founder-directed
+2026-07-30 "including the transfer")** (`src/game.js`, `src/social/combat.js`, `src/business.js`,
+`src/population.js`, `src/db.js`; `RIVALS.TAKE`/`REVENGE_*` + `POPULATION.MARKS` stable config).
+**(1) THE TAKE — victim-funded crime.** A pulled job's cash no longer appears from nowhere when there is
+somebody in the district to take it from: the drawn MARK funds what their pocket covers
+(`TAKE.POCKET_BPS` 25%, floor `TAKE.MIN` 50) and the §7.2 faucet pays only the REMAINDER. The player's
+payout is IDENTICAL either way, so this re-SOURCES crime rather than retuning it — and it strictly
+REDUCES emission, because the funded share is a TRANSFER (both legs ledgered `crime:take`, netting zero)
+instead of a mint. `crime:` was already in the cash vocabulary and both legs carry a character_id, so the
+per-character check reconciles it with **ZERO `invariants.js` change**. **Marks are NPC RESIDENTS only** —
+a real player gets no consent, no notification and no counterplay from a stranger's crime roll; taking
+from a player is what the gated PvP asset crimes are for. **The lock argument is the interesting part:**
+`withCharacter` already holds the actor's row, so reaching for a second character row would invert against
+every two-party path that locks its pair SORTED (a duel, a bout, a hire, a favor) — an AB-BA the 40P01
+retry would merely paper over. So the debit **never blocks**: it runs behind `FOR UPDATE SKIP LOCKED`, and
+a contended mark is simply SKIPPED with the faucet paying the whole take (independently correct, so the
+fallback costs nothing). pg-mem parses neither SKIP LOCKED nor NOWAIT, so the suite exercises the plain
+conditional UPDATE — identical accounting, only a different blocking posture — and the capability is read
+from the new `db.js:dbCaps`, decided ONCE at makeDb rather than probed mid-transaction (a failed probe
+aborts the enclosing txn in real Postgres — the SAVEPOINT lesson). **Verified on a real Postgres 16**: the
+contended SKIP LOCKED path returns 0 rows in 5ms while the plain fallback blocks until `lock_timeout`
+(802ms) — the counterfactual that makes the fix load-bearing rather than decorative. **(2) REVENGE, WITH
+TEETH** — `REVENGE_ATK_MULT` (1.10) on the ATTACK of every rival-facing verb (jump, car theft, boat theft,
+trunk, sabotage, rob/shakedown — never the mark's defence; inside the existing MAX_P clamps so it can't
+beat a signed ceiling), and a revenge ROB takes `REVENGE_CUT_MULT` (1.5) of the usual cut — 15% → 22.5%,
+still under the shakedown's signed 30%, on the SAME shared per-venue window, and **rob-only** because
+boosting a shakedown would breach that ceiling. The venue clock advances by the same boosted rate, or the
+redirect would hand the owner back income already taken and stop being emission-neutral. Self-limiting:
+landing the strike RECORDS it, which settles the debt. **(3) RESIDENT STABLES** — residents field fighters
+and racers (`MARKS.FIGHTER_P`/`RACER_P`, capo+boss only) so the Circuit and the strip are LIVE in an empty
+alpha. Recycle-only holds: the consent limit is `STAKE_BPS` (15%) of their OWN pocket, and a resident who
+cannot reach the system's own `MIN_STAKE` **doesn't list at all** (a limit under the floor sits in an EMPTY
+window and reads as a dead board — the step-two F2 lesson). Retirement takes the stable with them; the
+boxing/stable/races leaderboards gained `npc_flag` alongside the agent exclusion, so beating scenery can
+never put it on a human status board. Measured every run at **sim P9.27**. Tests: `test/economy.js` (the
+whole-take fund with both legs netting zero, the POCKET_BPS cap binding, a broke mark funding nothing, an
+empty street falling back to the faucet, the revenge cut ratio + the matching clock advance),
+`test/population.js` (the covered stake, the no-list-below-floor rule, retirement clearing the stable) —
+**six mutations, each caught at its own named assertion**. All `RIVALS.TAKE.*`/`REVENGE_*`/`MARKS.*`
+numbers are founder sign-off levers (BALANCE.md § THE STREET WAR step three; pinned in test/levers.js).
+
 **RED-TEAM over Street War step two + Street Life (`AUDIT-street-life.md`, task #319).** Four
 independent lenses (§10.4/emission, correctness/locks/retirement, death/estate/info-leak,
 exploit/grief/Sybil), every finding source-verified, a regression + a named-assertion mutation per
