@@ -10,11 +10,11 @@ Written 2026-07-25. Every number below was measured from the tree, not recalled.
 
 | | |
 |---|---|
-| Backend modules | **103** files, **31826** lines (`src/`, incl. `src/routes/` and `src/social/`) |
-| Test suites | **58** files, **19655** lines (`test/`) — ratio 0.61 test:src |
-| HTTP routes | **497** registrations |
-| Database tables | **169** (`schema.sql`, 2,290 lines) |
-| Client | **6,213** lines (`public/index.html`, single file, zero dependencies) |
+| Backend modules | **104** files, **32511** lines (`src/`, incl. `src/routes/` and `src/social/`) |
+| Test suites | **59** files, **19893** lines (`test/`) — ratio 0.61 test:src |
+| HTTP routes | **507** registrations |
+| Database tables | **171** (`schema.sql`, 2,351 lines) |
+| Client | **6,244** lines (`public/index.html`, single file, zero dependencies) |
 | Ops dashboard + wiki | `public/admin.html`, `public/wiki.html` |
 | Smart contracts | **1276** lines Solidity, 8 contracts, 107 Foundry tests passing |
 | Harnesses | `tools/sim.js` (economy), `tools/playthrough.js` (player experience), `tools/pgcheck.js` (real Postgres), `tools/loadtest.js` (concurrency), `tools/chaos.js` (interruption), `tools/mobile.js` (the screens, at phone size), `tools/scale.js` (market liquidity at population scale), `tools/bond-dials.js` (sizing the on-chain mint walls) |

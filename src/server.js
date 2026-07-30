@@ -10,6 +10,7 @@ import * as E from './economy.js';
 import * as S from './social.js';
 import * as K from './kitchen.js';
 import * as W from './growth.js';
+import * as RG from './regimen.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -94,7 +95,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
-         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS } from './rules.js';
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -629,6 +630,13 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.doCrime(ch, req.params.id, client, h, req.body?.approach)));
   app.post('/v1/train/:stat', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.train(ch, req.params.stat, client, h)));
+  // THE REGIMEN — the expanded gym: five disciplines on the SAME train_at clock + NPC trainer drills
+  app.get('/v1/regimen', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => RG.regimenBoard(ch, client, h)));
+  app.post('/v1/regimen/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => RG.trainDiscipline(ch, req.params.id, client, h)));
+  app.post('/v1/regimen/drill/:npc', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => RG.claimDrill(ch, req.params.npc, client, h)));
   app.post('/v1/heal', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.heal(ch, client, h)));
   app.post('/v1/checkin', { preHandler: auth }, async (req) =>
@@ -788,6 +796,10 @@ export async function buildServer() {
       respectFormula: 'levelDivisor * (level - 1)^2' },
     crimeApproaches: Object.values(M3.CRIME_APPROACHES).map((a) => ({ id: a.id, name: a.name,
       successMult: a.successMult, payMult: a.payMult, heat: a.heat, jailMult: a.jailMult })),
+    // THE REGIMEN — the expanded gym: five disciplines + the trainer-drill config (the catalog
+    // discoverability precedent; the live board with progress is GET /v1/regimen)
+    regimen: { disciplines: REGIMEN.DISCIPLINES, cap: REGIMEN.CAP,
+      drillXp: REGIMEN.DRILL_XP, trainers: REGIMEN.TRAINERS, energy: REGIMEN.ENERGY },
     // D6a step two — the other two entry verbs' decision axes (each its own, not a copy of the crime picker)
     jumpIntents: Object.values(M3.JUMP_INTENTS).map((i) => ({ id: i.id, name: i.name,
       stealMult: i.stealMult, repMult: i.repMult, dmgMult: i.dmgMult, hospMult: i.hospMult, heat: i.heat })),

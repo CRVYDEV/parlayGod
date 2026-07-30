@@ -2331,3 +2331,21 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS path_at TIMESTAMPTZ;
 -- columns, off persistCharacter's positional UPDATE.
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS statuse_used NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS statuse_at TIMESTAMPTZ;
+
+-- THE REGIMEN (omerta-training-expansion-design.md): five trainable DISCIPLINES beyond the three
+-- core stats, each ONE named touchpoint. XP is not a currency (zero §10.4 surface); trained on the
+-- SAME gym cooldown clock as the core stats (breadth, never rate). DIES WITH THE STREET.
+CREATE TABLE IF NOT EXISTS character_disciplines (
+  character_id TEXT NOT NULL,
+  discipline TEXT NOT NULL,
+  xp INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (character_id, discipline)
+);
+-- the NPC trainer drills — one per fixture per day (seed-drawn), claimed once. Progress is READ
+-- from daily_progress.counters (zero new counting surface). Dies with the street.
+CREATE TABLE IF NOT EXISTS npc_drills (
+  character_id TEXT NOT NULL,
+  day INT NOT NULL,
+  npc TEXT NOT NULL,
+  PRIMARY KEY (character_id, day, npc)
+);

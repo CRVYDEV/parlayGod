@@ -9,7 +9,8 @@ import { CRIMES, DISTRICTS, DRUGS, RECRUIT_MILESTONES, CONSTANTS,
          crewWageOwed, crewCold, LAW, rapStageOf, bribeCostOf, retainerActive, witproActive,
          cityHourOf, cityLawEventOf, tickerPriceOf, estateTierOf, foundationOf, campaignOf, honorTierOf,
          SOLDIERS, soldierFxOf, CLUES, clueStepOf, rollClueTier, kingpinRankOf, tycoonRankOf, empireTitles, launderRankOf, frontTitles, statesmanRankOf, seasonModOf, PACING,
-         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult } from './rules.js';
+         carCollateralValue, MASTERY, masteryLvlOf, masteryRankOf, pathFx, pathXpMult,
+         REGIMEN, disciplineLvlOf, energyCapOf, nerveCapOf } from './rules.js';
 import { accrue } from './accrual.js';
 import { logCollect } from './collection.js';
 import { businessesOf } from './business.js';
@@ -163,7 +164,8 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'my', track_id, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM masteries WHERE character_id=$1
     UNION ALL SELECT 'trait', track_id, trait_id, NULL::numeric, NULL::numeric, NULL::timestamptz FROM character_traits WHERE character_id=$1
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
-    UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2`,
+    UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
+    UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1`,
   [ch.id, ch.account_id]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
@@ -189,6 +191,8 @@ export async function loadOwned(client, ch) {
   const pf = of('pf', (r) => ({ ticker: r.k, shares: n(r.n), cost_omr: n(r.n2) }));
   // THE ESTATE — account-level too (survives death; the heir inherits the compound)
   const est = of('est', (r) => ({ name: r.k, tier: n(r.n), spent_omr: n(r.n2) }));
+  // THE REGIMEN — discipline xp per id (dies with the street; levels derived, never stored)
+  const disc = of('disc', (r) => ({ discipline: r.k, xp: n(r.n) }));
   const cars = await client.query('SELECT * FROM cars WHERE character_id=$1 ORDER BY created_at', [ch.id]);
   const batch = await client.query('SELECT * FROM batches WHERE character_id=$1', [ch.id]);
   const gangId = gm.rows[0]?.gang_id || null;
@@ -220,6 +224,8 @@ export async function loadOwned(client, ch) {
     stash: st.rows.map((r) => ({ drug_id: r.drug_id, qty: Number(r.qty), quality: Number(r.quality) })),
     batch: batch.rows[0] || null,
     skills: new Set(sk.rows.map((r) => r.skill_id)), // the build — dies with the street
+    // THE REGIMEN — discipline xp map (id → xp); the cap helpers read it (dies with the street)
+    disciplines: Object.fromEntries(disc.rows.map((r) => [r.discipline, Number(r.xp)])),
     // THE TRADES — use-XP per track (omerta-mastery-design.md). Dies with the street (a
     // HEIR_KEEP_BPS echo carries); XP is not a currency, so nothing here touches §10.4.
     mastery: Object.fromEntries(my.rows.map((r) => [r.track_id, Number(r.xp)])),
@@ -301,7 +307,10 @@ export async function bumpStanding(client, h, ch, npcId, pts, { business = true,
   if (origPositive) {
     const g = (await client.query('SELECT gained FROM npc_gain WHERE character_id=$1 AND npc_id=$2 AND day=$3', [ch.id, npcId, day])).rows[0];
     const gained = g ? Number(g.gained) : 0;
-    const capped = Math.min(pts, Math.max(0, UNDERWORLD.STANDING_DAILY_CAP - gained));
+    // THE REGIMEN — Work the Room: +1 daily standing budget per presence level (the cap is the
+    // spammable-part bound; presence widens what an ENGAGED day can earn, never what a script can)
+    const presenceLvl = disciplineLvlOf(Number(h.owned?.disciplines?.presence || 0));
+    const capped = Math.min(pts, Math.max(0, UNDERWORLD.STANDING_DAILY_CAP + (presenceLvl - 1) - gained));
     if (capped > 0) { // absolute write (pg-mem INT-arithmetic quirk)
       if (g) await client.query('UPDATE npc_gain SET gained=$4 WHERE character_id=$1 AND npc_id=$2 AND day=$3', [ch.id, npcId, day, gained + capped]);
       else await client.query('INSERT INTO npc_gain (character_id, npc_id, day, gained) VALUES ($1,$2,$3,$4)', [ch.id, npcId, day, capped]);
@@ -535,6 +544,7 @@ export const trunkCap = (h) => cargoCapacity(h.owned.assets)
 export function accrueInMemory(ch, acct, owned) {
   accrue(ch, acct, { rackets: owned.rackets, assets: owned.assets, held: owned.held, stash: owned.stash,
     racketLevels: owned.racketLevels, // Tier-4 — per-racket upgrade levels multiply the drip
+    disciplines: owned.disciplines, // THE REGIMEN — stamina/composure raise the regen CAPS (pool, not rate)
     foundationTier: owned.gang?.foundation || 0 }); // THE FOUNDATION step two: the family charity speeds the exposure bleed
 }
 
@@ -855,7 +865,7 @@ function coachLadder(ch, acct, owned) {
   // collects a rung; returns TRUE when the plan is full so the caller can stop evaluating
   const add = (label, hint, tab) => { rungs.push({ label, hint, tab }); return rungs.length >= 5; };
   const lvl = levelOf(Number(ch.respect));
-  const maxEnergy = 50 + 2 * lvl + assetEnergyCap(owned.assets || []);
+  const maxEnergy = energyCapOf(lvl, assetEnergyCap(owned.assets || []), owned.disciplines);
   const now = Date.now();
   const future = (t) => t && new Date(t) > new Date(now);
   const onboard = typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {});
@@ -984,7 +994,10 @@ export function view(ch, acct = {}, owned = {}) {
     guardedBy: (ch.guarded_by && ch.guarded_until && new Date(ch.guarded_until) > new Date()) ? ch.guarded_by : null,
     guardSeconds: (ch.guarded_by && ch.guarded_until) ? Math.max(0, Math.ceil((new Date(ch.guarded_until) - Date.now()) / 1000)) : 0,
     loc: ch.loc, path: ch.path, title: ch.title, streak: ch.streak,
-    maxEnergy: 50 + 2 * lvl + assetEnergyCap(assets), maxNerve: 10 + lvl,
+    // THE REGIMEN — stamina/composure raise the caps; one helper pair, so view/coach/accrual agree
+    maxEnergy: energyCapOf(lvl, assetEnergyCap(assets), owned.disciplines), maxNerve: nerveCapOf(lvl, owned.disciplines),
+    disciplines: Object.fromEntries(REGIMEN.DISCIPLINES.map((d) =>
+      [d.id, disciplineLvlOf(Number(owned.disciplines?.[d.id] || 0))])),
     // (red-team R5) mirror the canonical trunkCap() exactly — the display had omitted the road_boss
     // capstone's +trunk, showing a maxed Wheelman a smaller trunk than the enforcement actually gives.
     cargoCap: cargoCapacity(assets)
@@ -1223,9 +1236,13 @@ export async function heal(ch, client, h) {
   const lvl = levelOf(Number(ch.respect));
   // THE DOC'S FRIEND (skills) and DOC MORETTI T1 (underworld) both discount the bill —
   // new modifiers stacking multiplicatively (0.75 × 0.9), both sign-off levers
+  // THE REGIMEN — Iron Chin: 1%/level off the bill, floored (a new stack, the doctors_friend shape)
+  const chinLvl = disciplineLvlOf(Number(h.owned.disciplines?.conditioning || 0));
+  const chin = Math.max(REGIMEN.CONDITIONING_FLOOR, 1 - REGIMEN.CONDITIONING_BPS * (chinLvl - 1) / 10000);
   const cost = Math.floor((100 - Math.floor(Number(ch.health))) * 15 * (rankIdxOf(lvl) >= 4 ? 0.9 : 1)
     * skillMult(h, 'doctors_friend', SKILLS.FX.DOC_MULT)
     * npcMult(h, 'doc', 1, UNDERWORLD.FX.DOC_MULT)
+    * chin
     * pathFx(ch, 'healCost')); // PATHS v2 — the Ring's handicap (a brawler's medical bills)
   if (cost <= 0) throw new GameError('healthy', 'Already healthy.');
   if (Number(ch.cash) < cost) throw new GameError('cash', `The Doc wants $${cost}.`);

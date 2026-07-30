@@ -90,6 +90,8 @@ const DISPOSITION = {
   clue_scrolls: 'wiped', // the treasure trail dies with the street (the heir starts a fresh hunt)
   masteries: 'wiped', // THE TRADES die with the street (the estate echoes HEIR_KEEP_BPS of each track's XP to the heir); mastery_legend is account-keyed and survives by construction
   character_traits: 'wiped', // the level-50 trait dies with the street (the DYNAST echo is read BEFORE the wipe)
+  character_disciplines: 'wiped', // THE REGIMEN: discipline XP dies with the street (the heir hits the gym fresh)
+  npc_drills: 'wiped', // THE REGIMEN: daily trainer-drill claims are the street's own day — die with them
   rigs: 'wiped', // CONVOY Tier-4: the hauler dies with the street (the cars/boats precedent)
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)
   poker_ring_seats: 'special', // RING POKER: wipeRingAtDeath folds the seat + BURNS the stack (casino:ring:death) under the table lock — never a bare DELETE (the stack is escrowed cash)

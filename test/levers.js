@@ -259,6 +259,17 @@ const SIGNED = [
   ['MASTERY.STAT_USE.P_PER_XP', 0.02],
   ['MASTERY.STAT_USE.GYM_DIM', 200],
   ['M4.REF_CLAIM_WINDOW_MS', 259200000],
+  // THE REGIMEN (2026-07-30) — five disciplines on the shared gym clock + NPC trainer drills.
+  // Pacing/status only (XP is not a currency); the touchpoint dials are the levers.
+  ['REGIMEN.CAP', 25],
+  ['REGIMEN.XP_DIVISOR', 15],
+  ['REGIMEN.XP_MIN', 8],
+  ['REGIMEN.XP_MAX', 12],
+  ['REGIMEN.ENERGY', 10],
+  ['REGIMEN.DRILL_XP', 25],
+  ['REGIMEN.CONDITIONING_BPS', 100],
+  ['REGIMEN.CONDITIONING_FLOOR', 0.75],
+  ['REGIMEN.DUEL_ADD', 0.6],
   // step three — PATHS v2 (the XP-rate axis + the switch throttle; the PATH_FX perk/handicap
   // mults live under lowercase path keys, outside the walker — the founder dials are these three)
   ['PATH_XP_HOME', 1.5],
