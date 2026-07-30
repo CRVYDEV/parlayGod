@@ -180,11 +180,18 @@ export async function buildServer() {
     if (!hit) return reply.code(404).send({ error: 'not_found' });
     return reply.type(hit.type).header('cache-control', 'public, max-age=604800, immutable').send(hit.body);
   });
-  // ── ITEM ART: one procedural SVG per catalog entry (cosmetic; no ledger surface). Public + keyless,
-  // heavily cacheable — the same id always renders the same icon. Shown in garage/port/kitchen/armory/
-  // market. Unknown kind/id falls back to a neutral emblem, so a broken <img src> never 500s. ──
+  // ── ITEM ART: a generated photo per catalog entry when one shipped (public/art/<kind>-<id>.jpg —
+  // the tools/art.js catalog pass covers every car/boat/drug/gun/vest/good), else the procedural SVG
+  // (cosmetic; no ledger surface). Public + keyless, heavily cacheable — the same id always renders
+  // the same image. Shown in garage/port/kitchen/armory/market. The photo lookup rides the SAME boot
+  // ALLOWLIST Map as /art/:file, so user input is never joined into a path here either; unknown
+  // kind/id falls through to a neutral SVG emblem, so a broken <img src> never 500s. ──
   const ART_CATALOGS = { car: CARS, boat: PORT.BOATS, drug: DRUGS, gun: GUNS, vest: VESTS, good: GOODS };
   app.get('/v1/art/:kind/:id', async (req, reply) => {
+    const photo = ART_FILES.get(`${req.params.kind}-${req.params.id}.jpg`);
+    if (photo) {
+      return reply.type(photo.type).header('cache-control', 'public, max-age=604800, immutable').send(photo.body);
+    }
     // (red-team R16) own-property lookup — a '__proto__'/'constructor' :kind on this KEYLESS public route
     // otherwise returns Object.prototype (truthy) → `.find` is undefined → an uncaught TypeError 500.
     const list = Object.prototype.hasOwnProperty.call(ART_CATALOGS, req.params.kind) ? ART_CATALOGS[req.params.kind] : null;

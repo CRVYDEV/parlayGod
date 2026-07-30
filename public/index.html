@@ -341,14 +341,16 @@
   .card:hover { border-color: var(--line2); transform: translateY(-1px); box-shadow: var(--shadow); }
   .card .t { color: var(--ink); letter-spacing: .2px; } .card .d { color: var(--dim); font-size: 12.5px; margin: 4px 0; line-height: 1.45; }
   /* procedural item art — a framed engraved plate at the top of an item card */
-  .ico { display: block; width: 100%; height: 74px; object-fit: contain; margin: -2px 0 7px;
+  /* cover, not contain: /v1/art now serves a generated PHOTO per catalog id (SVG emblem only as the
+     unknown-id fallback) — contain letterboxed a 4:3 photo into a thin floating strip */
+  .ico { display: block; width: 100%; height: 74px; object-fit: cover; margin: -2px 0 7px;
     border-radius: 6px; background:
       repeating-linear-gradient(45deg, #101219 0 2px, transparent 2px 9px),
       radial-gradient(80% 70% at 50% 42%, #1c1f28 0%, #0e1015 100%);
     border: 1px solid var(--line); }
   .ico.sm { height: 52px; }
   .ico.row { display: inline-block; width: 46px; height: 30px; vertical-align: middle;
-    margin: -3px 8px -3px 0; border: 0; background: none; border-radius: 0; }
+    margin: -3px 8px -3px 0; border: 0; background: none; border-radius: 4px; object-fit: cover; }
 
   /* ── the street panel: live feed + the troll box ── */
   .wpane { max-height: 68vh; overflow-y: auto; font-size: 13.5px; overscroll-behavior: contain; }
@@ -2846,7 +2848,7 @@
     const here = prices.goods?.[me.loc] || {};
     const listings = board.listings || [];
     const carCard = (l) => `
-      <div class="card"><span class="t">${l.car ? `${l.car.model}${l.car.trim ? ' · ' + l.car.trim : ''}` : 'iron'}</span>
+      <div class="card">${ico('car', l.car?.model)}<span class="t">${l.car ? `${l.car.model}${l.car.trim ? ' · ' + l.car.trim : ''}` : 'iron'}</span>
         ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
         <div class="d">${l.car?.plate ? `[${l.car.plate}] · ` : ''}dmg ${l.car?.dmg ?? '?'}% · seller ${l.seller}</div>
         <div class="d">bid ${l.bid != null ? '$' + fmt(l.bid) : 'none'} (floor $${fmt(l.minBid)})${l.buyNow ? ` · buy-now $${fmt(l.buyNow)}` : ''}${l.reserveMet === false ? ' · reserve NOT met' : ''} · ${mins(l.expiresSeconds)} left</div>
@@ -2855,14 +2857,14 @@
           ${l.buyNow ? `<button class="act" data-buynow="${l.id}">buy now</button>` : ''}`
         : `<button class="act" data-cancel="${l.id}">pull it</button>`}</div>`;
     const goodCard = (l) => `
-      <div class="card"><span class="t">${goodName(l.good)} × ${fmt(l.qty)}</span>
+      <div class="card">${ico('good', l.good)}<span class="t">${goodName(l.good)} × ${fmt(l.qty)}</span>
         ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
         <div class="d">$${fmt(l.unitPrice)}/unit at ${l.district} (spot here: $${fmt(here[l.good] ?? '?')}) · ${l.seller} · ${mins(l.expiresSeconds)} left</div>
         ${l.seller !== me.name ? `${l.district === me.loc ? `<input data-gqty="${l.id}" placeholder="qty" size="6">
           <button class="act" data-gbuy="${l.id}">buy</button>` : `<span class="chip cold">stand at ${l.district} to buy</span>`}`
         : `<button class="act" data-cancel="${l.id}">pull it</button>`}</div>`;
     const orderCard = (l) => `
-      <div class="card"><span class="t">WTB ${goodName(l.good)} × ${fmt(l.wanted)}</span>
+      <div class="card">${ico('good', l.good)}<span class="t">WTB ${goodName(l.good)} × ${fmt(l.wanted)}</span>
         ${l.seller === me.name ? '<span class="chip">yours</span>' : ''}
         <div class="d">pays $${fmt(l.unitPrice)}/unit at ${l.district} · ${l.seller} · ${mins(l.expiresSeconds)} left</div>
         ${l.seller !== me.name ? `${l.district === me.loc ? `<input data-fqty="${l.id}" placeholder="qty" size="6">
@@ -4301,9 +4303,12 @@
             : `<button class="act" data-gundo="equip:${g.id}">carry it</button>`)
             : `<button class="act" data-gundo="buy:${g.id}">buy</button>`}</div>`).join('')}</div>
       <div style="margin-top:8px">
-        <button class="act" id="ammo-buy">buy a box of ammo (50 rounds — $2,000)</button>
-        <select id="vest-id">${(rules?.vests || []).map((v) => `<option value="${v.id}">${v.name} (${v.omr} $OMR)</option>`).join('')}</select>
-        <button class="act" id="vest-buy">buy vest</button></div>`;
+        <button class="act" id="ammo-buy">buy a box of ammo (50 rounds — $2,000)</button></div>
+      <h2 style="margin-top:12px">The Tailor's Back Room <span class="d" style="font-size:11px">(vests — paid in $OMR)</span></h2>
+      <div class="grid">${(rules?.vests || []).map((v) => `
+        <div class="card">${ico('vest', v.id)}<span class="t">${v.name}</span>${me.vest === v.id ? '<span class="chip good">WEARING</span>' : ''}
+          <div class="d">${v.omr} $OMR${v.desc ? ` · ${v.desc}` : ''}</div>
+          ${me.vest === v.id ? '' : `<button class="act" data-vestdo="${v.id}">buy &amp; wear</button>`}</div>`).join('')}</div>`;
     t.querySelectorAll('[data-cardo]').forEach((b) => b.onclick = () => {
       const [what, id] = b.dataset.cardo.split(':');
       act('POST', `/v1/garage/${id}/${what}`, {}).then(() => renderGarage());
@@ -4314,8 +4319,8 @@
     });
     t.querySelector('#ammo-buy').onclick = () =>
       act('POST', '/v1/armory/ammo', {}).then(() => renderGarage());   // a fixed box — the armory sells no other size
-    t.querySelector('#vest-buy').onclick = () =>
-      act('POST', `/v1/armory/vest/${t.querySelector('#vest-id').value}`, {}).then(() => renderGarage());
+    t.querySelectorAll('[data-vestdo]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/armory/vest/${b.dataset.vestdo}`, {}).then(() => renderGarage()));
   }
 
   // ── THE EMPIRE: personal fronts — income, the pad, PvP risk (laundering retired) ──

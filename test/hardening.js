@@ -306,17 +306,28 @@ assert(Array.isArray(agLb.agents) && agLb.agents.some((a) => a.name === 'Machine
 // audit: liquid is published as a BAND, not an exact figure (so a hunter can't compute precise kill-EV)
 assert(agLb.agents.every((a) => typeof a.wealthBand === 'string' && typeof a.omrBand === 'string' && a.netWorth === undefined), 'agents carry banded wealth (no exact net worth leaked)');
 
-// ── ITEM ART route: one procedural SVG per catalog entry (cosmetic; keyless; must never 500) ──
+// ── ITEM ART route: a generated PHOTO per catalog entry when one shipped (public/art/<kind>-<id>.jpg),
+// else the procedural SVG emblem (cosmetic; keyless; must never 500). The catalog art pass covers every
+// car/boat/drug/gun/vest/good, so on a checkout with the art present nearly all of these are photos —
+// but the test accepts EITHER shape per id, because the route's contract is "an image, never a 500",
+// not "these exact bytes", and a fresh clone without the jpgs must still pass. ──
 const { CARS: ARC, PORT: ARP, DRUGS: ARD, GUNS: ARG, VESTS: ARV, GOODS: ARGD } = await import('../src/rules.js');
 const artCats = { car: ARC, boat: ARP.BOATS, drug: ARD, gun: ARG, vest: ARV, good: ARGD };
-let artCount = 0;
+let artCount = 0, photoCount = 0;
 for (const [kind, list] of Object.entries(artCats)) {
   for (const it of list) {
     const res = await app.inject({ method: 'GET', url: `/v1/art/${kind}/${encodeURIComponent(it.id)}` });
     assert.equal(res.statusCode, 200, `art ${kind}/${it.id} → 200`);
-    assert(/^<svg[\s\S]*<\/svg>$/.test(res.body.trim()), `art ${kind}/${it.id} is a well-formed <svg>`);
-    assert(!/undefined|NaN/.test(res.body), `art ${kind}/${it.id} carries no undefined/NaN`);
-    assert.equal(res.headers['content-type'], 'image/svg+xml; charset=utf-8', `art ${kind}/${it.id} is served as SVG`);
+    if (res.headers['content-type'] === 'image/jpeg') {
+      // a photo: real JPEG bytes (SOI marker), not an error body with an image header
+      assert.equal(res.rawPayload[0], 0xFF, `art ${kind}/${it.id} photo has JPEG magic`);
+      assert.equal(res.rawPayload[1], 0xD8, `art ${kind}/${it.id} photo has JPEG magic`);
+      photoCount++;
+    } else {
+      assert.equal(res.headers['content-type'], 'image/svg+xml; charset=utf-8', `art ${kind}/${it.id} is SVG or JPEG, nothing else`);
+      assert(/^<svg[\s\S]*<\/svg>$/.test(res.body.trim()), `art ${kind}/${it.id} is a well-formed <svg>`);
+      assert(!/undefined|NaN/.test(res.body), `art ${kind}/${it.id} carries no undefined/NaN`);
+    }
     artCount++;
   }
 }
@@ -324,6 +335,10 @@ for (const [kind, list] of Object.entries(artCats)) {
 assert.equal((await app.inject({ method: 'GET', url: '/v1/art/car/nonesuch' })).statusCode, 200, 'unknown item id → 200 emblem');
 assert.equal((await app.inject({ method: 'GET', url: '/v1/art/widget/x' })).statusCode, 200, 'unknown kind → 200 emblem');
 assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
+// with the shipped art present, the photos must actually be REACHED (a broken photo-first lookup that
+// silently fell through to SVG for everything would otherwise read as a pass)
+const artShipped = (await import('node:fs')).existsSync(new URL('../public/art/car-milk.jpg', import.meta.url));
+if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actually served (${photoCount} photos)`);
 
 // ── THE BROADCAST: shareable noir cards + public profile + frictionless ?ref attribution ──
 // PUBLIC + keyless + read-only; a card must never 500, never leak an exact dollar figure, never emit undefined/NaN.
@@ -1055,5 +1070,5 @@ assert(artCount >= 100, `every catalog item (${artCount}) rendered an icon`);
     'the drill is a mod tool — an unauthenticated caller cannot make the founder\'s phone buzz');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), procedural item art (${artCount} icons, SVG-valid, emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both)`);
 await app.close();
