@@ -149,6 +149,20 @@ export async function loadOwned(client, ch) {
   // spike passed precisely because its timestamp branch happened to be LAST — the shape only breaks at
   // the point where an untyped NULL follows a typed value. Casting everywhere removes the dependence on
   // either engine's inference rules, which is the only version that is safe to rely on.
+  //
+  // AND THE SAME LESSON A SECOND TIME, THE HARD WAY — `$3` IS `$2` AGAIN, DELIBERATELY.
+  // Postgres resolves a PARAMETER's type once for the whole statement, from how it is used. `$2` is
+  // first compared to `account_gear.account_id`, which this schema declares TEXT — so `$2` is text
+  // everywhere, and `rival_events.victim_account = $2` is `uuid = text`, for which no operator exists.
+  // The statement does not degrade: it fails to PARSE, so every branch of the union dies with it, and
+  // since loadOwned runs on every authed request that is the entire game returning 500. pg-mem compares
+  // uuid to text happily, so all 61 suites passed over a total production outage.
+  //   The schema's account ids are genuinely mixed (28 text columns, 12 uuid), which is the underlying
+  // defect; changing a live column's type is not an outage fix. So the uuid-typed branch gets its OWN
+  // parameter carrying the SAME value: `$3` is inferred uuid from its only use, `$2` stays text, and
+  // `ix_rival_events_victim` is still usable — casting the COLUMN instead (`victim_account::text=$2`)
+  // would also parse but would throw the index away. Any future branch joining on a uuid-typed account
+  // column must bind $3, not $2. `test/pgquery.js` fails the build if this regresses.
   const bulk = await client.query(`
     SELECT 'rk' AS src, racket_id AS k, NULL::text AS k2, level::numeric AS n, NULL::numeric AS n2, NULL::timestamptz AS ts
       FROM character_rackets WHERE character_id=$1
@@ -168,8 +182,8 @@ export async function loadOwned(client, ch) {
     UNION ALL SELECT 'pf', ticker, NULL::text, shares::numeric, cost_omr::numeric, NULL::timestamptz FROM portfolios WHERE account_id=$2 AND shares>0
     UNION ALL SELECT 'est', name, NULL::text, tier::numeric, spent_omr::numeric, NULL::timestamptz FROM estates WHERE account_id=$2
     UNION ALL SELECT 'disc', discipline, NULL::text, xp::numeric, NULL::numeric, NULL::timestamptz FROM character_disciplines WHERE character_id=$1
-    UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$2 AND at > now() - interval '48 hours'`,
-  [ch.id, ch.account_id]);
+    UNION ALL SELECT 'rival', aggressor_account::text, NULL::text, NULL::numeric, NULL::numeric, at FROM rival_events WHERE victim_account=$3 AND at > now() - interval '48 hours'`,
+  [ch.id, ch.account_id, ch.account_id]);
   // demultiplex — one entry per original query, in its original column names/types. Kept as
   // `{ rows: [...] }` so every reference below (`rk.rows`, `st.rows`, …) reads exactly as it did.
   const grp = new Map();
