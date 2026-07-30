@@ -3703,3 +3703,53 @@ export const RIVALS = {
   // burned/ledgered, the tradecraft-discount discipline).
   WIRE_RIVAL_MULT: 0.5,
 };
+
+// ═══════════ STREET LIFE (task #318, founder-directed) — the corner, the black book, the call ═══════════
+// Three pieces: WORD ON THE STREET (per-district daily tasks paying cash + respect — the founder's
+// "more tasks located in each area that send you on quests to gain xp and levels", some of which
+// deliberately push you into CONFLICT/meeting other players), THE BLACK BOOK (phone numbers are
+// DISCOVERABLE, never free — a meeting or intel earns the line), and THE CALL (contacts you've met
+// ring you with requests). All numbers founder sign-off levers.
+export const CORNER = {
+  PER_DAY: 3,     // tasks each district posts per day (seed-drawn, town-wide per district)
+  MAX_DAY: 5,     // total claims per street per day ACROSS districts — the hard faucet bound
+  CASH: 400,      // per claim (petty — the POINTER is the product, the social-tasks posture)
+  RESPECT: 15,    // per claim — the XP; meaningful early (level 5 = 160 respect), garnish later
+  // per-district flavored pools — bumpDaily kinds ONLY (zero new counting surface, the drill rule);
+  // every pool carries at least one CONFLICT kind and the draw GUARANTEES one lands each day
+  POOLS: {
+    docks:     ['goods', 'crime', 'jump', 'melt'],
+    canal:     ['deal', 'cook', 'crime', 'jump'],
+    brick:     ['crime', 'jump', 'bust', 'gta'],
+    neon:      ['dice', 'crime', 'jump', 'goods'],
+    foundry:   ['craft', 'gta', 'crime', 'melt'],
+    cathedral: ['train', 'crime', 'goods', 'bust'],
+  },
+  CONFLICT: ['jump', 'bust'],   // the kinds that put you FACE TO FACE (a jump meets a player; a bust springs one)
+  HOW: {
+    crime: 'pull a job', jump: 'jump somebody — conflict pays, and you walk away with their number',
+    bust: 'spring somebody from lockup', goods: 'move trade goods (buy or sell)',
+    deal: 'move product on the corner', cook: 'run a batch on the burner', dice: 'roll in the back room',
+    gta: 'boost a car', melt: 'melt one down', craft: 'work the bench', train: 'put in a session',
+  },
+};
+// The district's word for the day — PER_DAY distinct kinds off the §7.11 hash (deterministic,
+// town-wide: everyone standing there sees the same work), with one CONFLICT kind GUARANTEED (the
+// founder's "certain tasks should push you into conflict or meet other players" — if the draw came
+// up all-quiet, the last slot becomes a seeded conflict pick).
+export const cornerTasksOf = (district, day = dayOf()) => {
+  const pool = [...(CORNER.POOLS[district] || CORNER.POOLS.brick)];
+  const picks = [];
+  for (let i = 0; i < CORNER.PER_DAY && pool.length; i++)
+    picks.push(pool.splice(Math.floor(hash01(`corner:${district}:${day}:${i}`) * pool.length) % pool.length, 1)[0]);
+  if (!picks.some((k) => CORNER.CONFLICT.includes(k)))
+    picks[picks.length - 1] = CORNER.CONFLICT[Math.floor(hash01(`corner:${district}:${day}:c`) * CORNER.CONFLICT.length) % CORNER.CONFLICT.length];
+  return picks.map((kind, slot) => ({ slot, kind, how: CORNER.HOW[kind] || kind, conflict: CORNER.CONFLICT.includes(kind) }));
+};
+export const CONTACTS = {
+  CALL_TTL_MS: 24 * 3600 * 1000,     // an unanswered request lapses in a day
+  CALL_FREIGHT_PREMIUM_BPS: 11500,   // the contact pays base × 1.15 for delivery — THEIR OWN cash (recycle-only)
+  CALL_FREIGHT_MAX_QTY: 8,
+  VISIT_TIP: 750,                    // "come see me" — a tip from the contact's own pocket (recycle-only)
+  GEN_PER_TICK: 4,                   // how many calls the worker tries to place per tick
+};

@@ -52,6 +52,12 @@ const KNOWN_REASONS = {
     // THE CAREER: `career:<taskId>` — the post-First-Week ladder's task rewards (character_id'd;
     // bounded ONCE EVER per account per task by the career_claims PK — a fixed lifetime total)
     'career:',
+    // WORD ON THE STREET: `corner:job` — the district quest board's envelope (character_id'd;
+    // hard-bounded CORNER.MAX_DAY claims per street per day — a petty located faucet, BALANCE.md)
+    'corner:',
+    // THE CALL: `contact:freight` / `contact:visit` — a contact's request settled from THEIR OWN
+    // pocket (both legs character_id'd with counterparty — a pure transfer, the recycle-only rule)
+    'contact:',
     // COMMISSION step three: proposal deposits — treasury→escrow (`commission:proposal`, NULL char),
     // refunded on an enacted motion (`commission:refund`) or forfeited to the confiscation pool
     // (`commission:forfeit`) — reconciled by the treasury check (b) + the commission-escrow check

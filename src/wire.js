@@ -10,6 +10,7 @@
 import { GameError, notify, ledger } from './game.js';
 import { WIRE, wireActive, wireTierOf, wireSubTier, disinfoActive, spyRankOf, spyPerksOf, intelCost, rapStageOf, cityForecast, tickerPriceOf, PORTFOLIO, levelOf, dayOf, hash01, RIVALS } from './rules.js';
 import { spendOmr } from './vanity.js';
+import { recordContact } from './contacts.js';
 
 // STEP FOUR — the account's lifetime intel-ops (the SPYMASTER rank basis) → its TRADECRAFT perks
 const spyOps = async (client, accountId) =>
@@ -97,6 +98,9 @@ export async function placeTap(ch, targetId, client, h) {
   const upd = await client.query('UPDATE wiretaps SET expires_at=$3, created_at=now(), alerted_hunt=false, alerted_wanted=false, alerted_indicted=false WHERE watcher_character=$1 AND target_character=$2', [ch.id, targetId, exp]);
   if (!upd.rowCount) await client.query('INSERT INTO wiretaps (watcher_character, target_character, expires_at) VALUES ($1,$2,$3)', [ch.id, targetId, exp]);
   await bumpIntelOps(client, ch.account_id);
+  // STREET LIFE (the black book): a paid wire IS how you get a number without meeting the man —
+  // intel earns the line ONE-WAY (they don't get yours). Best-effort, never blocks the tap.
+  await recordContact(client, ch.account_id, t.account_id, 'intel');
   await h.track(client, ch.account_id, 'wiretap', { target: targetId });
   return { ok: true, target: targetId, spent: cost, rivalDiscount: rival, expiresSeconds: Math.ceil(WIRE.TAP_MS / 1000) };
 }
@@ -186,6 +190,7 @@ export async function pullDossier(ch, targetId, client, h) {
   const dosCost = intelCost(WIRE.DOSSIER_OMR, await spyOps(client, ch.account_id)); // step four: rank discount
   await spendOmr(client, h, dosCost, 'intel:dossier');
   await bumpIntelOps(client, ch.account_id);
+  await recordContact(client, ch.account_id, t.account_id, 'intel'); // the dossier carries their number too
   const kills = Number((await client.query('SELECT COUNT(*) n FROM kill_log WHERE killer_account=$1', [t.account_id])).rows[0].n);
   const deaths = Number((await client.query('SELECT COUNT(*) n FROM kill_log WHERE victim_account=$1', [t.account_id])).rows[0].n);
   const rat = !!(await client.query('SELECT rat FROM account_persistent WHERE account_id=$1', [t.account_id])).rows[0]?.rat;

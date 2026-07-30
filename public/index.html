@@ -416,12 +416,11 @@
     /* Measured: the wordmark + CODEX + broadcast + phone + ? + "sign out" total ~420px against a
        390px screen, so SOMETHING wraps no matter which one label you shorten — collapsing only the
        sign-out just left a lone tiny button stranded on row two, which looks worse than the wrap did.
-       Two labels collapse to their glyphs (both keep their tooltips, and 📣/📱 already read as a pair)
-       and the wordmark gives back its wide letter-spacing. That fits, with room to spare. */
+       Sign-out collapses to its glyph (it keeps its tooltip) and the wordmark gives back its wide
+       letter-spacing. That fits, with room to spare. */
     #top h1 { letter-spacing: 2px; font-size: 17px; }
-    #top #btn-logout, #top #btn-share { font-size: 0; padding: 7px 10px; }
+    #top #btn-logout { font-size: 0; padding: 7px 10px; }
     #top #btn-logout::after { content: '⏻'; font-size: 15px; line-height: 1; }
-    #top #btn-share::after { content: '📣'; font-size: 15px; line-height: 1; }
     /* the two scroll rails were chopping mid-character ("V…", "The…"), which reads as
        broken rather than as scrollable. A mask fades the cut instead. */
     #grouprail, #tabs { -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 26px), transparent 100%);
@@ -1017,7 +1016,6 @@
     <h1>OMERTÀ</h1><span class="sub">the city breathes</span>
     <span id="whoami"></span>
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
-    <button class="act" id="btn-share" title="broadcast your legend — a shareable card that credits you for every recruit">📣 broadcast</button>
     <button class="act" id="btn-phone" title="the cell — your inbox + messages" style="position:relative">📱<span id="phone-badge" class="hidden"></span></button>
     <button class="act" id="btn-sfx" title="the soundtrack — clicks, the register, the stings. Tap to mute."></button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
@@ -1601,6 +1599,13 @@
     self: "you can't do that to yourself", family: "omertà — you can't move on your own family", dry: "the pool's dry — check back after the next buyback",
     nothing: "nothing to collect", no_contracts: "no contracts on your head", maxed: "you're already at the cap", spent: "already used up",
     once: "one shot only — you've taken it", not_due: "that isn't due yet", too_soon: "not yet — the clock's still running", cooldown: "still on cooldown",
+    // STREET LIFE — `taken`/`capped`/`short` stay GENERIC (gangs/wires/exchange reuse the codes;
+    // every server throw carries its own message which wins over this fallback anyway)
+    no_number: "you don't have their number — meet them face to face, or put a wire on them",
+    taken: "already taken", not_taken: "take the job first — then do the work",
+    capped: "you've hit the cap on that",
+    no_call: "nobody is waiting on you", wrong_contact: "that's not who called you",
+    short: "you're short of what's needed",
     // The city is up, its records room isn't. Distinct from `internal` on purpose: this one is not your
     // fault, nothing you did was lost, and it will fix itself — so say that instead of "Internal".
     db_down: "the city's records are unreachable right now — nothing you did was lost. Try again in a minute.",
@@ -1635,6 +1640,13 @@
     // THE HUSTLE — a checked-in stop vs the payoff (the `contact` field is the chain's marker)
     if (body.contact && body.step !== undefined && body.of === 3)
       bits.push(body.pay ? `🤝 THE PAYOFF — $${fmt(body.pay)}. That's a day's hustle done.` : `🤝 checked in (${body.step}/3) — next: ${body.what || 'keep moving'}`);
+    // WORD ON THE STREET — took a corner job / collected the envelope
+    if (body.corner === 'accepted') bits.push(`📋 took the job — ${body.how || body.kind}. Do the work, then collect here.`);
+    if (body.corner === 'claimed') bits.push(`📋 THE ENVELOPE — $${fmt(body.cash)} + ${body.respect} respect (${body.claimedToday}/${body.maxDay} today)`);
+    // THE CALL — settled a contact's request (paid from THEIR pocket)
+    if (body.call === true && body.from) bits.push(body.kind === 'freight'
+      ? `📞 delivered ${fmt(body.qty)} ${body.good} to ${body.from} — they paid $${fmt(body.pay)}`
+      : `📞 paid ${body.from} a visit — worth $${fmt(body.pay)}`);
     if (body.win === true && !spec) bits.push(`WIN — +$${fmt(Math.abs(body.net ?? 0))}`);
     if (body.win === false && !spec) bits.push(`the house keeps it (−$${fmt(Math.abs(body.net ?? 0))})`);
     // street jump / extortion / convoy hijack — carry a `win` but no cash `net`, so each gets its own line
@@ -1882,18 +1894,9 @@
     $('#brag-x').onclick = () => b.classList.add('hidden');
     clearTimeout(b._h); b._h = setTimeout(() => b.classList.add('hidden'), 15000);
   }
-  // the 📣 broadcast button — share your dossier (the shareable card + profile) any time, not just on a win.
-  function shareDossier() {
-    const name = me?.name; if (!name) return;
-    const url = shareUrl(name);
-    const handle = (rules?.share?.xHandle || '').replace(/^@/, '');
-    const tweet = `My name rings out in OMERTÀ — a noir mob RPG. Think you can take the city?${handle ? ` @${handle}` : ''}`;
-    beaconShare('dossier');
-    if (navigator.share) { navigator.share({ title: 'OMERTÀ', text: tweet, url }).catch(() => {}); return; }
-    try { navigator.clipboard?.writeText(url); } catch {}
-    window.open(xIntent(tweet, url), '_blank', 'noopener,noreferrer');
-    toast('link copied — your card unfurls when you paste it', false);
-  }
+  // (the 📣 broadcast top-bar button was RETIRED — founder call, task #318: a permanent chrome
+  // button selling your own legend never fit; the share loop lives where it earns its place —
+  // the share-a-win brag prompts + My Profile's Contact box, both of which carry the ?ref link.)
   // one money move at a time — a global in-flight lock is the double-tap guard (buttons re-render
   // after each act, so a per-button disable is redundant; this covers every call site at once).
   let acting = false;
@@ -2230,7 +2233,6 @@
     if (!await ask(guest ? 'Burn the papers?' : 'Sign out?', msg, { yes: guest ? 'lose this street' : 'sign out', no: 'stay', danger: guest })) return;
     localStorage.removeItem('omerta_token'); location.reload();
   };
-  $('#btn-share').onclick = shareDossier;
   $('#btn-refresh').onclick = () => refresh();
   // the glossary (the ? up top) + the first-session welcome (shown once per browser)
   $('#btn-help').onclick = () => $('#glossary').classList.remove('hidden');
@@ -2326,16 +2328,35 @@
     if (r.code >= 400) { m.innerHTML = '<div class="d">the line is dead — no living street, no phone.</div>'; return; }
     const b = r.body;
     phoneBadge(b.unreadDm);
-    let streets = [];
-    try { streets = (await api('GET', '/v1/streets')).body?.streets || []; } catch { /* compose still renders */ }
-    const opts = streets.map((st) => `<option value="${st.id}">${esc(st.name)}${st.tag ? ' [' + esc(st.tag) + ']' : ''}</option>`).join('');
+    // THE BLACK BOOK (STREET LIFE): you can only dial a number you HOLD — the compose picker is
+    // your book (met / tapped / they called), never the whole roster.
+    let book = { contacts: [], call: null };
+    try { book = (await api('GET', '/v1/contacts')).body || book; } catch { /* compose still renders */ }
+    const lines = (book.contacts || []).filter((c) => c.street);
+    const HOW_CHIP = { met: 'met', intel: 'tapped', called: 'they called' };
+    const opts = lines.map((c) => `<option value="${c.street.id}">${esc(c.street.name)}${c.street.npc ? ' (resident)' : ''}</option>`).join('');
+    const call = book.call;
     m.innerHTML = `
-      <div class="card"><span class="t">NEW MESSAGE</span>
+      ${call ? `<div class="card" style="border-color:var(--neon)"><span class="t">📞 ${esc(call.from)} is asking for you</span>
+        <div class="d">${call.kind === 'freight' ? `bring <b>${call.qty} ${esc(call.good || '')}</b> to <b>${esc(call.district)}</b> — pays <b>$${fmt(call.pay)}</b> from their own pocket` : `come see them at <b>${esc(call.district)}</b> — worth <b>$${fmt(call.pay)}</b>`}
+          · lapses in ${mins(call.expiresSeconds)}</div>
+        ${me?.loc === call.district ? '<button class="act prime" id="ph-call-go">I\'m here — settle it</button>'
+          : `<button class="act" data-do="POST /v1/travel/${call.district}">travel to ${esc(call.district)}</button> <span class="d" style="font-size:11px">then settle it here</span>`}
+      </div>` : ''}
+      <div class="card"${call ? ' style="margin-top:8px"' : ''}><span class="t">NEW MESSAGE</span>
+        <div class="d" style="color:var(--dim);font-size:11.5px">you can only dial a number in your book — meet them, tap them, or let them call you first</div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-          <select id="ph-to">${opts || '<option value="">nobody on the streets</option>'}</select>
+          <select id="ph-to">${opts || '<option value="">no numbers yet</option>'}</select>
           <input id="ph-text" placeholder="say it (240 max)" maxlength="240" style="flex:1;min-width:160px">
-          <button class="act" id="ph-send">send</button>
+          <button class="act" id="ph-send"${opts ? '' : ' disabled'}>send</button>
         </div></div>
+      <div class="card" style="margin-top:8px"><span class="t">THE BLACK BOOK — numbers you hold</span>
+        ${lines.length ? lines.slice(0, 30).map((c) => `
+          <div class="ph-thread" data-th="${c.street.id}">
+            <span class="nm">${esc(c.street.name)}${c.street.npc ? ' <span class="chip cold">RESIDENT</span>' : ''} <span class="chip">${HOW_CHIP[c.how] || esc(c.how)}</span></span>
+            <span class="lp">lvl ${c.street.level} · ${esc(c.street.loc || '')}</span>
+          </div>`).join('') : '<div class="d">empty. A number is EARNED: meet someone (any face-to-face — a jump, a hire, a fade), put a wire on them, or answer when they call you.</div>'}
+      </div>
       <div class="card" style="margin-top:8px"><span class="t">THE LINE — your threads</span>
         ${b.threads.length ? b.threads.map((t) => `
           <div class="ph-thread" data-th="${t.characterId || ''}">
@@ -2355,6 +2376,8 @@
           : '<div class="d">a quiet week. It will not last.</div>'}
       </div>`;
     $('#ph-send').onclick = () => sendPhoneDm($('#ph-to').value, $('#ph-text').value);
+    { const cg = $('#ph-call-go'); if (cg) cg.onclick = () =>
+      act('POST', '/v1/call/fulfill', {}).then(() => { renderPhone(); refresh(); }); }
     m.querySelectorAll('.ph-thread').forEach((row) => { row.onclick = () => {
       const cid = row.dataset.th;
       if (cid) openPhoneThread(cid);
@@ -3644,6 +3667,8 @@
     const gym = (await api('GET', '/v1/regimen')).body || {};
     // THE HUSTLE — the daily three-stop chain (same covered idiom)
     const hu = (await api('GET', '/v1/hustle')).body || {};
+    // WORD ON THE STREET — this district's daily quest board (same covered idiom)
+    const cn = (await api('GET', '/v1/corner')).body || {};
     // the density fix: don't wall a player with all 29 jobs — lead with the BEST ones they can
     // actually pull (the highest-level unlocked, up to 8) and fold the full book behind a drawer
     // D6a — THE APPROACH: every job takes a risk/reward choice. Case It = safer, low-heat, soft bust
@@ -3808,6 +3833,18 @@
             : `<button class="act" data-do="POST /v1/travel/${hu.district}">travel to ${esc(hu.districtName || '')}</button> <span class="d" style="font-size:11px">then check in there</span>`}
         </div>`}
       </div>` : ''}
+      ${(cn.tasks || []).length ? `<div class="card" style="margin-top:8px">
+        <div class="d" style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">📋 word on the street — ${esc(cn.districtName || '')}'s board</div>
+        <div class="d">Every district posts its own work each day. Take a job HERE, do the work anywhere it happens, collect HERE — $${fmt(cn.cash || 0)} + ${cn.respect || 0} respect an envelope, ${cn.leftToday ?? 0} of ${cn.maxDay ?? 0} left today.</div>
+        <div class="grid" style="margin-top:6px">${cn.tasks.map((tk) => `
+          <div class="card"><span class="t">${tk.conflict ? '🗡 ' : ''}${esc(tk.how)}</span>
+            ${tk.conflict ? '<span class="chip" style="border-color:var(--bad);color:var(--bad)">CONFLICT</span>' : ''}
+            ${tk.claimed ? '<span class="chip good">PAID</span>'
+              : tk.accepted ? `<button class="act prime" data-corner-claim="${tk.slot}">collect the envelope</button>`
+              : `<button class="act" data-corner-take="${tk.slot}">take the job</button>`}
+          </div>`).join('')}</div>
+        <div class="d" style="color:var(--dim);font-size:11.5px;margin-top:4px">only work done AFTER you take a job counts — travel to another district for a different board</div>
+      </div>` : ''}
       <h2 style="margin-top:14px">Crimes <span class="d" style="color:var(--dim);font-size:12.5px">— your best jobs at level ${lvl}</span></h2>
       <div class="grid">${crimes || restCrimes && '<span class="d" style="color:var(--dim)">no jobs at your level yet — open the full book below</span>' || ''}</div>
       ${rest.length ? sect('crimes-all', 'The Full Book', `every job in the city (${allCrimes.length})`, `<div class="grid">${restCrimes}</div>`) : ''}
@@ -3859,6 +3896,10 @@
       }); }
     // THE HUSTLE — check in at the current stop
     { const hg = t.querySelector('#hu-go'); if (hg) hg.onclick = () => act('POST', '/v1/hustle/advance', {}).then(() => renderStreets()); }
+    t.querySelectorAll('[data-corner-take]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/corner/${b.dataset.cornerTake}/accept`, {}).then(() => renderStreets()));
+    t.querySelectorAll('[data-corner-claim]').forEach((b) => b.onclick = () =>
+      act('POST', `/v1/corner/${b.dataset.cornerClaim}/claim`, {}).then(() => renderStreets()));
     // THE REGIMEN — wire the discipline sessions + drill claims built into the Train drawer above
     t.querySelectorAll('[data-disc]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/regimen/${b.dataset.disc}`, {}).then(() => renderStreets()));
@@ -4329,6 +4370,14 @@
     const rivalsRes = await api('GET', '/v1/rivals');
     const rivals = rivalsRes.code < 400 ? (rivalsRes.body?.rivals || []) : [];
     const rivalIds = new Set(rivals.map((r) => r.street && r.street.id).filter(Boolean));
+    // THE BLACK BOOK: the roster 📱 only dials a number you HOLD — everyone else gets the honest
+    // "no number" hint (meet them, tap them, or let them call you)
+    const bookRes = await api('GET', '/v1/contacts');
+    const bookIds = new Set(bookRes.code < 400
+      ? (bookRes.body?.contacts || []).map((c) => c.street && c.street.id).filter(Boolean) : []);
+    const dmBtn = (id) => bookIds.has(id)
+      ? `<button class="act" data-dm="${id}" title="ring them on the cell">📱</button>`
+      : `<button class="act" data-nodm="1" style="opacity:.45" title="no number — meet them face to face, or put a wire on them">📵</button>`;
     // A contract ON YOUR OWN HEAD rendered identically to a stranger's — the single most important
     // thing on the screen sorted in wherever the query put it. Split it out and lead with it.
     const onMe = board.filter((c) => c.target.id === me.id);
@@ -4433,13 +4482,13 @@
           ${r.street ? `<div class="d">lvl ${r.street.level} · ${r.street.loc}</div>
           <button class="act prime" data-jump="${r.street.id}" data-intent="standard">jump</button>
           <button class="act" data-search="${r.street.id}" data-name="${esc(r.street.name)}">search</button>
-          <button class="act" data-dm="${r.street.id}">📱</button>` : ''}</div>`).join('')}</div>` : ''}
+          ${dmBtn(r.street.id)}` : ''}</div>`).join('')}</div>` : ''}
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
           ${s.jailed ? '<span class="chip cold">LOCKUP</span>' : ''}${s.hospitalized ? '<span class="chip cold">HOSPITAL</span>' : ''}${s.npc ? '<span class="chip" title="a resident of the city — a real target on every board, but not another player">RESIDENT</span>' : ''}${rivalIds.has(s.id) ? '<span class="chip bad" title="this bloodline has moved against you — the rivals ledger remembers">RIVAL</span>' : ''}
           <div class="d">${s.loc}${s.guardPrice != null ? ` · guards for $${fmt(s.guardPrice)}` : ''}</div>
-          <button class="act" data-dm="${s.id}" title="ring them on the cell">📱</button>
+          ${dmBtn(s.id)}
           ${s.jailed ? `<button class="act prime" data-pbust="${s.id}" title="spring them from lockup — a success frees them and PAYS you (more time left = bigger reward, worse odds; the sweet spot is near the end of a stretch). A miss puts YOU inside for a few minutes.">bust them out</button>` : ''}
           <button class="act" data-jump="${s.id}" data-intent="rob" title="you're there for the wallet — a bigger cut, but nobody's impressed">roll them</button>
           <button class="act prime" data-jump="${s.id}" data-intent="standard">jump</button>
@@ -4488,6 +4537,8 @@
     t.querySelectorAll('[data-dm]').forEach((b) => b.onclick = () => {
       $('#phone').classList.remove('hidden'); openPhoneThread(b.dataset.dm);
     });
+    t.querySelectorAll('[data-nodm]').forEach((b) => b.onclick = () =>
+      toast("no number — meet them face to face (a jump counts), or put a wire on them", true));
     t.querySelectorAll('[data-jump]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/streets/${b.dataset.jump}/jump`, { intent: b.dataset.intent || 'standard' }).then(() => renderPvp()));
     // the §7.8 bust — until now this verb lived ONLY in the raw deck, so the daily "bust a player
@@ -6379,6 +6430,7 @@
       estate: () => `your street fell${d.by ? ` to ${d.by}` : ''} — the heir rises`,
       vendetta: () => `blood was sworn — ${d.by ? `${d.by}'s` : 'a'} bloodline owes yours`,
       dm: () => `📱 ${d.from}: ${d.preview || 'new message'} — open the cell to reply`,
+      contact_call: () => `📞 ${d.from} is asking for you — ${d.kind === 'freight' ? `bring ${d.qty} ${d.good} to ${d.district} for $${fmt(d.pay)}` : `come see them at ${d.district} ($${fmt(d.pay)})`}. Open the cell.`,
       mastery_up: () => `your ${d.name || d.track} trade hit L${d.lvl}${d.rank ? ` — ${d.rank}` : ''}`,
       stat_use: () => `the work is paying off — +1 ${d.stat} (${d.value}) from your ${d.track} trade`,
       chat: () => `${d.who}: ${d.text}`,

@@ -84,6 +84,18 @@ assert.equal((await meOf(watcher.token)).omr, omrBefore - WIRE.TAP_OMR, 'exactly
   assert.equal((await meOf(watcher.token)).omr, omrB4 - rr.body.spent, 'and the DISCOUNTED number is what burned');
 }
 
+// ── STREET LIFE (the black book): a paid wire earns the mark's NUMBER — ONE-WAY (intel, not a
+// meeting: the watched party never gets the watcher's line) ──
+{
+  const acct = async (cid) => (await pool.query('SELECT account_id FROM characters WHERE id=$1', [cid])).rows[0].account_id;
+  const wAcct = await acct(watcher.id), mAcct = await acct(mark.id);
+  const line = await pool.query('SELECT how FROM contacts WHERE owner_account=$1 AND contact_account=$2', [wAcct, mAcct]);
+  assert.equal(line.rows.length, 1, "the tap put the mark's number in the watcher's book");
+  assert.equal(line.rows[0].how, 'intel', 'earned by INTEL, not a meeting');
+  const rev = await pool.query('SELECT 1 FROM contacts WHERE owner_account=$1 AND contact_account=$2', [mAcct, wAcct]);
+  assert.equal(rev.rows.length, 0, 'surveillance is one-way — the mark never gets the watcher\'s line');
+}
+
 // ── the intel: law stage, wealth band, ops counts ──
 r = await call('GET', '/v1/wire', { token: watcher.token });
 assert.equal(r.body.taps.length, 1, 'one wire running');

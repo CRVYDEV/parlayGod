@@ -7,7 +7,7 @@ process.env.MOD_KEY = 'test-mod-key';
 
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, dayOf } from '../src/rules.js';
+import { SOCIAL_TASKS, socialShareUrl, SOCIAL_LINKS, CONSTANTS, DISTRICTS, HUSTLE, CORNER, cornerTasksOf, dayOf } from '../src/rules.js';
 import { socialRewardsLive } from '../src/growth.js';
 import { sweepGrandReferrals } from '../src/game.js';
 
@@ -1075,5 +1075,93 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   assert((await call('GET', '/v1/hustle', { token: hus.token })).body.done, 'the board reads done');
 }
 
-console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff) + THE MARK (every job names a victim; residents in your district get named)');
+// ── WORD ON THE STREET (task #318) — the district quest boards: seed-drawn per (district, day),
+// one CONFLICT kind guaranteed, accept-then-DELTA-then-claim (the hustle baseline rule), the
+// corner:job faucet hard-bounded at CORNER.MAX_DAY envelopes a day. ──────────────────────────────
+{
+  const cw = await mk('Corner Worker');
+  const day = dayOf();
+  // 'crime' is in EVERY district pool, so it is drawn SOMEWHERE virtually every day (missing
+  // everywhere needs six independent exclusions — ~(1/4)^6); the astronomically-rare all-quiet
+  // day falls back to a counter bump so the suite never flakes on the seed.
+  let pick = null;
+  for (const d of DISTRICTS.map((x) => x.id)) {
+    const t = cornerTasksOf(d, day).find((t) => t.kind === 'crime');
+    if (t) { pick = { district: d, slot: t.slot }; break; }
+  }
+  const viaCrime = !!pick;
+  if (!pick) pick = { district: DISTRICTS[0].id, slot: 0 };
+  await seedCh(cw.id, `loc='${pick.district}', nerve=100, energy=200`);
+  // the board: PER_DAY tasks matching the seed draw, one conflict guaranteed
+  let r = await call('GET', '/v1/corner', { token: cw.token });
+  assert.equal(r.code, 200, 'the corner board reads');
+  assert.equal(r.body.tasks.length, CORNER.PER_DAY, 'PER_DAY tasks posted');
+  assert.deepEqual(r.body.tasks.map((t) => t.kind), cornerTasksOf(pick.district, day).map((t) => t.kind),
+    'the board IS the seed draw (town-wide per district)');
+  assert(r.body.tasks.some((t) => t.conflict), 'one CONFLICT kind guaranteed every day');
+  assert.equal(r.body.leftToday, CORNER.MAX_DAY, 'a fresh street has the full allowance');
+  const kind = r.body.tasks[pick.slot].kind;
+  // accept: once, snapshots the baseline
+  r = await call('POST', `/v1/corner/${pick.slot}/accept`, { token: cw.token });
+  assert.equal(r.code, 200, 'take the job');
+  assert.equal((await call('POST', `/v1/corner/${pick.slot}/accept`, { token: cw.token })).body.error, 'taken', 'once');
+  // the claim is LOCATED: at another district that slot was never taken
+  const other = DISTRICTS.map((d) => d.id).find((d) => d !== pick.district);
+  await seedCh(cw.id, `loc='${other}'`);
+  assert.equal((await call('POST', `/v1/corner/${pick.slot}/claim`, { token: cw.token })).body.error, 'not_taken',
+    'the envelope is collected where the job was taken');
+  await seedCh(cw.id, `loc='${pick.district}'`);
+  // the work comes first — the refusal NAMES the how
+  r = await call('POST', `/v1/corner/${pick.slot}/claim`, { token: cw.token });
+  assert.equal(r.body.error, 'not_done', 'no pay before the work');
+  assert(r.body.message.includes(CORNER.HOW[kind]), 'the refusal teaches the HOW');
+  // do the work — the REAL funnel when crime was drawn (a clean job bumps the daily counter),
+  // the SQL fallback otherwise (bumpDaily itself is covered per-kind elsewhere; the DELTA gate
+  // is what is under test)
+  if (viaCrime) {
+    for (let i = 0; i < 25; i++) {
+      await seedCh(cw.id, 'nerve=100, jail_until=NULL');
+      if ((await call('POST', '/v1/crimes/pick', { token: cw.token })).body.success) break;
+    }
+  } else {
+    const row = (await pool.query('SELECT counters FROM daily_progress WHERE character_id=$1 AND day=$2', [cw.id, day])).rows[0];
+    const c = row ? JSON.parse(row.counters) : {};
+    c[kind] = Number(c[kind] || 0) + 1;
+    if (row) await pool.query('UPDATE daily_progress SET counters=$3 WHERE character_id=$1 AND day=$2', [cw.id, day, JSON.stringify(c)]);
+    else await pool.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)', [cw.id, day, JSON.stringify(c)]);
+  }
+  // claim: pays cash + respect, ledgered corner:job, once
+  const before = await meOf(cw.token);
+  r = await call('POST', `/v1/corner/${pick.slot}/claim`, { token: cw.token });
+  assert.equal(r.code, 200, `the envelope pays (via ${viaCrime ? 'a real clean job' : 'the fallback bump'})`);
+  assert.equal(r.body.cash, CORNER.CASH); assert.equal(r.body.respect, CORNER.RESPECT);
+  const after = await meOf(cw.token);
+  assert.equal(after.cash, before.cash + CORNER.CASH, 'the cash landed');
+  const led = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id='${cw.id}' AND reason='corner:job'`)).rows[0];
+  assert.equal(Number(led.s), CORNER.CASH, 'a ledgered corner:job faucet (check (a) reconciles)');
+  assert.equal((await call('POST', `/v1/corner/${pick.slot}/claim`, { token: cw.token })).body.error, 'claimed', 'one envelope per job');
+  r = await call('GET', '/v1/corner', { token: cw.token });
+  assert(r.body.tasks[pick.slot].claimed, 'the board reads PAID');
+  assert.equal(r.body.claimedToday, 1, 'one claimed today');
+  // MAX_DAY is the HARD faucet bound — seed the rest of the allowance as claimed rows elsewhere,
+  // then a further claim (work done and all) is refused 'capped'
+  const pad = DISTRICTS.map((d) => d.id).filter((d) => d !== pick.district);
+  for (let i = 0; i < CORNER.MAX_DAY - 1; i++)
+    await pool.query(`INSERT INTO corner_jobs (character_id, day, district, slot, baseline, claimed)
+      VALUES ($1,$2,$3,$4,'{}',true)`, [cw.id, day, pad[i % pad.length], 90 + i]);
+  const slot2 = [0, 1, 2].find((s) => s !== pick.slot);
+  await call('POST', `/v1/corner/${slot2}/accept`, { token: cw.token });
+  { // hand the second job its delta so ONLY the cap can refuse it
+    const row = (await pool.query('SELECT counters FROM daily_progress WHERE character_id=$1 AND day=$2', [cw.id, day])).rows[0];
+    const k2 = cornerTasksOf(pick.district, day)[slot2].kind;
+    const c = row ? JSON.parse(row.counters) : {};
+    c[k2] = Number(c[k2] || 0) + 1;
+    if (row) await pool.query('UPDATE daily_progress SET counters=$3 WHERE character_id=$1 AND day=$2', [cw.id, day, JSON.stringify(c)]);
+    else await pool.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)', [cw.id, day, JSON.stringify(c)]);
+  }
+  r = await call('POST', `/v1/corner/${slot2}/claim`, { token: cw.token });
+  assert.equal(r.body.error, 'capped', `the corner pays ${CORNER.MAX_DAY} envelopes a day — the hard faucet bound`);
+}
+
+console.log('✅ M4 growth test passed — paths, kitchen (makings/cook/collect/deal/crew/raid/laylow/cleanpapers), heist, missions (+$OMR faucet), dailies (+all-three bonus), First Week (+capstone), referrals (+milestones, agent exclusion), telemetry, mod tools, M8 stat respec (sum-conserving, floor-gated, ledgered burn), THE HUSTLE (the three-stop chain: location gates, legwork delta, ledgered once-a-day payoff), WORD ON THE STREET (per-district seed boards, conflict guaranteed, accept/delta/claim, ledgered corner:job, the MAX_DAY cap) + THE MARK (every job names a victim; residents in your district get named)');
 await app.close();

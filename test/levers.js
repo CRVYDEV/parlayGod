@@ -323,6 +323,22 @@ const SIGNED = [
   ['POPULATION.JAILBIRDS.TARGET', 2],
   ['POPULATION.JAILBIRDS.MIN_S', 240],
   ['POPULATION.JAILBIRDS.MAX_S', 1200],
+  // STREET LIFE (#318) — WORD ON THE STREET (the corner faucet is HARD-bounded MAX_DAY × CASH =
+  // $2k/day + 75 respect/day; POOLS/CONFLICT are parent-object pins — the draw indexes them)
+  ['CORNER.PER_DAY', 3],
+  ['CORNER.MAX_DAY', 5],
+  ['CORNER.CASH', 400],
+  ['CORNER.RESPECT', 15],
+  ['CORNER.CONFLICT', ['jump', 'bust']],
+  ['CORNER.POOLS', { docks: ['goods', 'crime', 'jump', 'melt'], canal: ['deal', 'cook', 'crime', 'jump'],
+    brick: ['crime', 'jump', 'bust', 'gta'], neon: ['dice', 'crime', 'jump', 'goods'],
+    foundry: ['craft', 'gta', 'crime', 'melt'], cathedral: ['train', 'crime', 'goods', 'bust'] }],
+  // THE CALL — recycle-only transfers from the contact's own pocket (zero new faucet)
+  ['CONTACTS.CALL_TTL_MS', 24 * 3600 * 1000],
+  ['CONTACTS.CALL_FREIGHT_PREMIUM_BPS', 11500],
+  ['CONTACTS.CALL_FREIGHT_MAX_QTY', 8],
+  ['CONTACTS.VISIT_TIP', 750],
+  ['CONTACTS.GEN_PER_TICK', 4],
   ['POPULATION.MARKS.CAR_P', { made: 0.6, capo: 0.8, boss: 0.9 }],
   ['POPULATION.MARKS.CAR_VAL', { made: [800, 2000], capo: [2000, 8000], boss: [5000, 20000] }],
   ['POPULATION.MARKS.FRONT_P', { made: 0.4, capo: 0.6, boss: 0.8 }],
