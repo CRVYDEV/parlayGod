@@ -214,6 +214,10 @@ export async function buyGood(ch, goodId, qty, client, h) {
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -(cost + fee + tax), reason: `goods:buy:${goodId}` });
   await takeHouse(client, tax);
   await logCollect(client, ch.account_id, 'goods', goodId); // THE COLLECTION
+  // the daily 'goods' contract + the hustle legwork both promise "buy OR sell" — only the sell
+  // side counted (the dice-counter class from the daily pool), so a buy-only day couldn't complete
+  // either. The bump costs the buyer the 2% take either way; the contract payout is unchanged.
+  await h.bumpDaily(client, ch.id, 'goods');
   return { ok: true, unit, qty: n, spent: cost + fee + tax };
 }
 

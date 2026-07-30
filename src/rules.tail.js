@@ -1050,7 +1050,29 @@ export const PEN = {
   SHOTCALLER_COVER: 0.1,      // the shot-caller (top season_kills, jailed) is individually harder to touch
   // (the break rat's deal is relief-only — dodge the crew's added stretch + beating, no absolute sentence
   // cut — so a Sybil main+alt can't farm a cheap trim; see executeBreak's ratted branch)
+  // ── STEP SIX — THE YARD LIVES (founder: "Jail gets really repetitive when the only action is
+  // Work — more interactions with NPCs or more actions during the time in the Pen"). Three
+  // in-sentence activities, ALL §10.4-free (XP/pacing, never currency): the iron pile (train the
+  // PHYSICAL disciplines from the yard, on the SAME shared gym clock — jail is where hard men get
+  // harder), cards with the crew (gambling schooling for a little energy — no money at stake, the
+  // guards take real cash games), and the daily YARD CHARACTER (a seed-drawn fictional inmate to
+  // TALK to once a day — wisdom pays discipline XP, a shortcut shaves the sentence, a war story
+  // pays trade schooling). All numbers founder sign-off levers.
+  YARD_DISCIPLINES: ['stamina', 'conditioning', 'composure'], // the iron pile trains the BODY only
+  CARDS_ENERGY: 5,                       // cards with the crew: energy → gambling schooling (MASTERY.XP.cards)
+  TALK_WISDOM_XP: 15,                    // the Old Timer's lesson (a drill-sized composure bump)
+  TALK_CUT_S: 120,                       // the trusty's shortcut (the workYard good-behaviour shape)
+  YARD_CAST: [                           // fictional only (the Broadcast posture); effect drawn with the day
+    { id: 'oldtimer', name: 'The Old Timer',      effect: 'wisdom',   line: 'Forty years inside. He shows you how to hold yourself.' },
+    { id: 'trusty',   name: 'Eddie the Trusty',   effect: 'shortcut', line: 'Mops the warden\'s office. Knows which forms move a release date.' },
+    { id: 'bookie',   name: 'Sid the Book',       effect: 'story',    track: 'gambling', line: 'Ran every number in the city once. Talks odds in his sleep.' },
+    { id: 'ghostman', name: 'Quiet Pete',         effect: 'story',    track: 'larceny',  line: 'Nobody ever saw Pete work. That\'s the lesson.' },
+    { id: 'wheels',   name: 'Wheels McGee',       effect: 'story',    track: 'wheels',   line: 'Drove for three crews. Walked from every wreck.' },
+  ],
 };
+// today's yard character — seed-drawn, town-wide (the yardEventOf shape; knowable, verifiable)
+export const yardCharacterOf = (day = dayOf()) =>
+  PEN.YARD_CAST[Math.floor(hash01('yardcast:' + day + ':' + MARKET_SEED) * PEN.YARD_CAST.length) % PEN.YARD_CAST.length];
 export const penFactionOf = (id) => PEN.FACTIONS.find((f) => f.id === id) || null;
 export const penContrabandOf = (id) => PEN.CONTRABAND.find((c) => c.id === id) || null;
 export const yardEventById = (id) => PEN.YARD_EVENTS.find((e) => e.id === id) || PEN.YARD_EVENTS[0];
@@ -3349,6 +3371,7 @@ export const MASTERY = {
     sell: 2, fill: 3,                            // commerce — per goods sale / market fill
     score: 25, heist: 60,                        // scores — 8h/daily cooldown ops
     bout: 25, exhibition: 20,                    // fists — 6h exhibition cd, bouts need a willing rival
+    cards: 4, yardtale: 10,                      // PEN step six — cards with the crew / a yard war story
   },
   // The den floor: a play below this stake schools nothing — without it a min-bet ($100) spammer
   // with the Madame's comped seat farms The Gambler at the rate limit for ~free; at $1,000+ the

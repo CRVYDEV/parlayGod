@@ -8,7 +8,7 @@ process.env.PEN_YARD_EVENT = 'quiet'; // baseline: no yard incident perturbs the
 process.env.PEN_SHANK_CD_MS = '1';    // TEST-ONLY: shrink the per-attacker shank cooldown (SEARCH_MS precedent) — a dedicated block below restores it to assert the gate
 import assert from 'node:assert';
 import { buildServer } from '../src/server.js';
-import { PEN, NPC_HITMEN, yardEventOf } from '../src/rules.js';
+import { PEN, NPC_HITMEN, yardEventOf, yardCharacterOf, dayOf, MASTERY } from '../src/rules.js';
 import { sweepStaleBreaks } from '../src/pen.js';
 import { runLedgerInvariants } from '../src/invariants.js';
 
@@ -486,6 +486,66 @@ assert(Math.abs(new Date(ratMnAfter.jail_until).getTime() - ratMnJail0) < 1000, 
 assert(new Date(ratMnAfter.jail_until).getTime() < new Date(ratLdAfter.jail_until).getTime(), 'but still fares better than the honest crew (who eat the longer stretch)');
 assert(new Date(ratMnAfter.hole_until) > new Date(), 'and is holed WITH the crew so the roster never outs them');
 
+// ══ STEP SIX — THE YARD LIVES (founder: jail was Work-or-nothing) ══
+// Three in-sentence activities, all §10.4-FREE — the whole block writes ZERO transactions rows
+// (asserted below on the actor's own ledger, the strongest form of "XP is not a currency").
+const yol = await mk('Yard Yolanda');
+await seedCh(yol.id, "jail_until = now() + interval '30 minutes', energy=200");
+const txCount = async (id) => Number((await pool.query(
+  `SELECT COUNT(*) c FROM transactions WHERE character_id='${id}'`)).rows[0].c);
+const discXp = async (id, d) => Number((await pool.query(
+  `SELECT xp FROM character_disciplines WHERE character_id='${id}' AND discipline='${d}'`)).rows[0]?.xp || 0);
+const trackXp = async (id, t) => Number((await pool.query(
+  `SELECT xp FROM masteries WHERE character_id='${id}' AND track_id='${t}'`)).rows[0]?.xp || 0);
+const yolTx0 = await txCount(yol.id);
+// the board carries the yard-life block: today's seed-drawn character + the activity config
+board = (await call('GET', '/v1/pen', { token: yol.token })).body;
+const todayChar = yardCharacterOf(dayOf());
+assert.equal(board.yardLife.character.name, todayChar.name, 'the board names today\'s yard character (seed-drawn, town-wide)');
+assert.equal(board.yardLife.talked, false, 'not talked yet');
+assert.deepEqual(board.yardLife.workoutDisciplines, PEN.YARD_DISCIPLINES, 'the iron pile lists the PHYSICAL disciplines');
+assert.equal(board.yardLife.cardsEnergy, PEN.CARDS_ENERGY, 'the blanket quotes its energy price');
+// THE IRON PILE: gates — free / non-physical discipline; a jailed man is blocked from the STREET gym route
+assert.equal((await call('POST', '/v1/pen/workout/stamina', { token: freeFred.token })).body.error, 'free', 'no iron pile on the outside');
+assert.equal((await call('POST', '/v1/pen/workout/marksmanship', { token: yol.token })).body.error, 'bad_discipline', 'the iron pile builds the BODY only');
+assert.equal((await call('POST', '/v1/regimen/stamina', { token: yol.token })).body.error, 'jailed', 'the street gym stays jail-gated (the yard is the ONLY door inside)');
+// a yard workout trains the discipline — and arms the SAME shared gym clock (jail never trains faster)
+r = await call('POST', '/v1/pen/workout/stamina', { token: yol.token });
+assert.equal(r.code, 200, 'worked the iron pile');
+assert.equal(r.body.yard, true, 'flagged as a yard session');
+assert(r.body.xp >= 1 && (await discXp(yol.id, 'stamina')) === r.body.total, 'the discipline XP landed');
+assert.equal((await call('POST', '/v1/pen/workout/conditioning', { token: yol.token })).body.error, 'cooldown', 'the iron pile runs on the SHARED gym clock');
+// CARDS WITH THE CREW: energy → gambling mastery XP (no money on the blanket)
+await seedCh(yol.id, 'energy=3');
+assert.equal((await call('POST', '/v1/pen/cards', { token: yol.token })).body.error, 'energy', 'a seat at the blanket takes energy');
+await seedCh(yol.id, 'energy=200');
+r = await call('POST', '/v1/pen/cards', { token: yol.token });
+assert.equal(r.code, 200, 'sat in at the blanket');
+assert.equal(r.body.track, 'gambling', 'the table schools the gambling trade');
+assert.equal(await trackXp(yol.id, 'gambling'), MASTERY.XP.cards, 'the mastery XP landed (base rate — no path mult on a fresh street)');
+// THE YARD CHARACTER: once a day; the effect is whatever today's seed drew (computed, not assumed)
+const preTalk = (await call('GET', '/v1/pen', { token: yol.token })).body.sentenceSeconds;
+const composure0 = await discXp(yol.id, 'composure');
+r = await call('POST', '/v1/pen/talk', { token: yol.token });
+assert.equal(r.code, 200, 'talked to today\'s character');
+assert.equal(r.body.npc, todayChar.name, 'the response names them');
+assert.equal(r.body.effect, todayChar.effect, 'the effect is the seed draw');
+if (todayChar.effect === 'wisdom') {
+  assert.equal((await discXp(yol.id, 'composure')) - composure0, PEN.TALK_WISDOM_XP, 'old wisdom pays composure XP');
+} else if (todayChar.effect === 'shortcut') {
+  assert.equal(r.body.cutSeconds, PEN.TALK_CUT_S, 'the trusty\'s word shaves the stretch');
+  assert(r.body.sentenceSeconds <= preTalk - PEN.TALK_CUT_S + 2, 'the sentence actually dropped');
+} else {
+  assert.equal(r.body.track, todayChar.track, 'a war story schools the teller\'s trade');
+  assert.equal(await trackXp(yol.id, todayChar.track), MASTERY.XP.yardtale
+    + (todayChar.track === 'gambling' ? MASTERY.XP.cards : 0), 'the trade XP landed');
+}
+assert.equal((await call('POST', '/v1/pen/talk', { token: yol.token })).body.error, 'talked', 'one conversation a day');
+assert.equal((await call('GET', '/v1/pen', { token: yol.token })).body.yardLife.talked, true, 'the board remembers');
+assert.equal((await call('POST', '/v1/pen/talk', { token: freeFred.token })).body.error, 'free', 'no yard characters on the outside');
+// the whole step wrote ZERO ledger rows — XP and pacing are not currencies
+assert.equal(await txCount(yol.id), yolTx0, 'THE YARD LIVES is §10.4-free (zero transactions rows)');
+
 // ── §10.4: the Pen vocabulary is closed ──
 const vocab = (await runLedgerInvariants(pool, { alert: false })).checks.find((c) => c.name === 'reason vocabulary');
 assert(vocab.ok, `pen:* rides the §10.4 vocabulary (${JSON.stringify(vocab.unknown || [])})`);
@@ -496,5 +556,5 @@ for (let d = 0; d < 300; d++) { const e = yardEventOf(d); if (e.id === 'quiet') 
 assert(quietDays / 300 > 0.35, `quiet days are weighted up (${quietDays}/300 ≈ ${Math.round(quietDays / 3)}%, was ~14% uniform)`);
 assert(blockDays / 300 < 0.25, `hard-block days (lockdown/toss) are diluted below a quarter (${blockDays}/300)`);
 
-console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked)');
+console.log('✅ test/pen.js — the prison meta-game + step two (the hole, yard incidents, the burner phone) + step three THE BREAKOUT (cutkit sink, free/no-kit/lockdown gates, forced fail → the hole + longer stretch + beating + kit spent + NOT wanted, forced win → sentence cleared + WANTED fugitive + heat spike) + step four THE CO-OP BREAKOUT (plan stakes a cutkit, crew joins, crew_short/not_leader gates, forced win → the whole crew out + WANTED, forced fail → the whole crew in the hole + longer stretch, leader-disband + stale-sweep refund the staked kit) + step five PRISON FACTIONS (join/leave, free/bad/already gates, the board cover + SHOT-CALLER derivation moving to the most-feared, yard omertà blocking a same-crew shank while a rival stays fair game) + THE BREAK RAT (a crew member tips the guards → the break blows, the honest crew eats the hole + a longer stretch, the rat cuts a deal for time OFF but is holed WITH the crew so the roster never outs them, the feed only says somebody talked) + step six THE YARD LIVES (the iron pile trains the physical disciplines on the SHARED gym clock with the street gym still jail-gated, cards with the crew pays gambling mastery XP for energy, the daily seed-drawn yard character talks once a day with the seed\'s own effect — and the whole step writes ZERO ledger rows)');
 process.exit(0);

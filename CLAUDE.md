@@ -6536,3 +6536,40 @@ location gate, the legwork refusal (naming the HOW), the delta rule, the ledgere
 payoff, and the once-a-day cap — mutation-verified (legwork gate dropped → caught by name).
 Chromium-probed end to end through the REAL UI (card → check-in toast → teaching refusal → "the
 mark: Mabel Deuce", zero page errors).
+
+**THE PEN step six — THE YARD LIVES (task #306, founder: "Jail or The Pen get really repetitive when
+the only level action to do is just Work").** Three in-sentence activities, all §10.4-FREE — the whole
+step writes ZERO transactions rows (test-pinned on the actor's own ledger, the strongest form of "XP is
+not a currency"). **(1) THE IRON PILE** (`yardWorkout`, `POST /v1/pen/workout/:id`) trains the PHYSICAL
+disciplines (`PEN.YARD_DISCIPLINES` stamina/conditioning/composure) through the SAME regimen path on
+the SAME shared gym clock — `trainDiscipline` gained a `{ fromYard }` opt (the burner `fromBurner`
+precedent) that waives ONLY the jail gate, so every other gate (energy, the shared `train_at` clock,
+the cap) stands and jail never trains faster than the street; the street gym route stays jail-gated
+(both directions asserted). **(2) CARDS WITH THE CREW** (`yardCards`, `POST /v1/pen/cards`) — no money
+on the blanket (the guards take real cash games, so the den's GAMBLER_MIN_STAKE wall is untouched):
+`PEN.CARDS_ENERGY` (5) energy → gambling mastery XP via `bumpMastery('gambling','cards')`
+(`MASTERY.XP.cards` 4). **(3) THE YARD CHARACTER** (`yardTalk`, `POST /v1/pen/talk`) — a seed-drawn
+fictional inmate (`PEN.YARD_CAST` via `yardCharacterOf(day)`, the §7.11 hash — fictional only, the
+Broadcast posture), ONE conversation per day (`pen_talks` day-PK, ON CONFLICT → `talked`): the Old
+Timer's WISDOM pays `TALK_WISDOM_XP` (15) composure XP (`regimen.js:addXp`, exported for it), the
+trusty's SHORTCUT shaves `TALK_CUT_S` (120s) off the sentence (the workYard good-behaviour shape —
+pacing, never currency), and a WAR STORY schools the teller's trade (`MASTERY.XP.yardtale` 10 to the
+character's track). `penBoard` gained `yardLife {character, talked, workoutDisciplines, cardsEnergy}`;
+the console Pen tab gained a "The Yard Lives" section (three cards; the talk button disables for the
+day); `describe()` gained 🏋-iron-pile/🂠-cards/🗣-talk branches — the drill branch now skips the
+wisdom-talk shape (`!body.line`), which also carries npc+discipline. `pen_talks` joined the estate
+wipe + migrate DISPOSITION. `test/pen.js` step-six block covers the board, the free/bad_discipline/
+street-gym-jailed gates, the shared clock, the cards energy gate + exact mastery XP, the talk's
+seed-computed effect (asserted per `yardCharacterOf(dayOf())`, never assumed) + once/day + board flip,
+and the ZERO-ledger-rows pin — three mutations each caught at its own assertion (bump dropped,
+once/day dropped, a planted ledger row). Chromium-probed live in-jail (all three toasts land, the talk
+button disables, zero page errors — the probe also has to dismiss the first-lockup milestone tip
+BEFORE the first-visit intro, since the tip's modal-bg intercepts pointer events). **Shipped with it —
+a REAL bug the suite's own flake exposed:** THE HUSTLE's goods legwork (and the M4 daily `goods`
+contract, whose own copy at the pool says "buy or sell trade goods") was uncompletable by BUYING —
+`bumpDaily('goods')` fired only in `sellGood`, so the suite failed whenever a hustle character's seed
+drew the goods legwork (the flake fired ~1 run in 3). The dice-counter class from #303, one drop
+later: `buyGood` now bumps the counter too (the contract payout is unchanged; the buyer pays the 2%
+take either way); deterministic regression in test/growth.js, mutation-verified, 6 consecutive green
+runs. All `PEN.CARDS_ENERGY`/`TALK_*` numbers are founder sign-off levers (BALANCE.md; pinned in
+test/levers.js). The Pen now has six steps and a sentence is no longer Work-or-nothing.

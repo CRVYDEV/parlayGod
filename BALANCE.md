@@ -2629,3 +2629,19 @@ $12k/day at 60 — under the Daily Score at the same level and ~petty vs every m
 (the clue-casket posture: the MOVEMENT is the product, the money is the excuse). Both levers
 pinned in test/levers.js; §10.4: `hustle:` joined the cash vocabulary, the payoff is
 character_id'd so check (a) reconciles.
+
+## THE PEN step six — THE YARD LIVES (in-sentence activities, 2026-07-30)
+
+Founder-directed ("Jail or The Pen get really repetitive when the only level action to do is just
+Work"). Three activities, all §10.4-FREE — the whole step writes ZERO transactions rows (test-pinned):
+XP and pacing are not currencies. **THE IRON PILE** trains the PHYSICAL disciplines
+(stamina/conditioning/composure) through the SAME regimen path on the SAME shared gym clock — the
+`{ fromYard }` opt waives ONLY the jail gate (the burner precedent), so jail never trains faster than
+the street, it just stops being dead time; the street gym route stays jail-gated. **CARDS WITH THE
+CREW** — `PEN.CARDS_ENERGY` (5) energy → gambling mastery XP (`MASTERY.XP.cards` 4; no money on the
+blanket — the guards take real cash games, so the den's GAMBLER_MIN_STAKE wall is untouched).
+**THE YARD CHARACTER** — a seed-drawn fictional inmate (the Broadcast fictional-names posture), one
+conversation per day (`pen_talks` day-PK): wisdom pays `PEN.TALK_WISDOM_XP` (15) composure XP, the
+trusty's shortcut shaves `PEN.TALK_CUT_S` (120s — the workYard good-behaviour shape, pacing never
+currency), a war story pays `MASTERY.XP.yardtale` (10) to the teller's trade. All three levers are
+founder sign-off dials; none touches the signed pen:work faucet or any audit-locked surface.
