@@ -1569,6 +1569,9 @@ export async function buildServer() {
   // §7.13 THE LATE CLAIM — name who sent you (within the first-days window, once, attribution only)
   app.post('/v1/referral/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimReferral(ch, req.body?.code, client, h)));
+  // MY PROFILE — the MySpace-style personal page: identity + referral tracking + ledger-exact earnings
+  app.get('/v1/profile', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => W.myProfile(ch, client, h)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));
