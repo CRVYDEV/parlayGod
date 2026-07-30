@@ -3843,8 +3843,17 @@ charges; `/v1/rules.mastery.statUse`; console bucket line + `stat_use` feed temp
 rng row, the bucket charge, the CAP_DAY ceiling (a spent bucket grants NOTHING), the board headroom,
 the 1-day refill restoring the allowance, and P=0 landing nothing. All `STAT_USE.*` numbers are
 founder sign-off levers. **THE TRADES pillar is feature-complete** (use-XP tracks → milestone perks +
-the level-50 trait → Paths v2 with teeth → stats-by-use); the combined red-team follows (the pillar
-discipline).
+the level-50 trait → Paths v2 with teeth → stats-by-use). The combined four-lens red-team
+(`AUDIT-trades.md`: §10.4/money-touchpoints, locks/persist-clobber, death/estate/echo, XP-rate
+exploits; every finding attacked by two refuters, the two crash-unverified ones re-verified by
+hand) returned **no CRITICAL/HIGH/MED** — lenses A+B clean — and fixed three LOWs in-commit
+(regression each, mutation-verified): residents excluded from the Trades leaderboard (a resident
+winning a duel earns wetwork legend headlessly; `npc_flag` joined the agent exclusion), the
+port/races boards now quote the mastery-DISCOUNTED refit/tune price the till actually charges
+(the board/till mirror — the console renders those figures on the buy buttons), and
+`pinkSlipRace` now pays the same wheels XP its sibling race verbs do (it consumes the identical
+cooldown). Flagged for founder sign-off (BALANCE.md): the path-XP×drip coupling, fists/duel XP
+lacking an opponent-quality floor, and the per-track DYNAST echo compounding.
 
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying

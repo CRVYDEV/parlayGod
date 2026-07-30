@@ -169,6 +169,9 @@ assert.equal(r.code, 200, 'the pink-slip race runs'); assert.equal(r.body.win, t
 assert.equal(r.body.forPinks, true, 'flagged a pink-slip race'); assert.equal(r.body.wonCar.id, markCar, "won the mark's car");
 assert.equal((await pool.query(`SELECT character_id FROM cars WHERE id='${markCar}'`)).rows[0].character_id, shark.id, "the mark's junker changed hands to the shark");
 assert.equal((await pool.query(`SELECT pink_slip FROM cars WHERE id='${markCar}'`)).rows[0].pink_slip, false, 'the pink-slip flag cleared on transfer');
+// THE TRADES — a pinks race is seat time like any race: the challenger schooled Wheels
+const pinkXp = (await pool.query(`SELECT xp FROM masteries WHERE character_id='${shark.id ?? shark}' AND track_id='wheels'`)).rows[0];
+assert(pinkXp && Number(pinkXp.xp) > 0, 'the pink-slip race paid wheels mastery XP (the raceNpc/raceChallenge hook)');
 assert.equal(Number((await pool.query('SELECT COUNT(*) s FROM cars')).rows[0].s), carsBefore, 'car conservation holds — a pink-slip win moves a car, never mints one');
 // no cash moved (a pink-slip race is pure ownership — no wager, no ledger)
 assert.equal(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='race:pink'")).rows[0].s), 0, 'no race:pink ledger row — cars transfer by ownership, §10.4-neutral');
