@@ -11,6 +11,7 @@ import * as S from './social.js';
 import * as K from './kitchen.js';
 import * as W from './growth.js';
 import * as RG from './regimen.js';
+import * as Hustle from './hustle.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -95,7 +96,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
-         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN } from './rules.js';
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -637,6 +638,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => RG.trainDiscipline(ch, req.params.id, client, h)));
   app.post('/v1/regimen/drill/:npc', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => RG.claimDrill(ch, req.params.npc, client, h)));
+  // THE HUSTLE — the daily three-stop job chain (crime-loop interactivity: travel, talk, work, collect)
+  app.get('/v1/hustle', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Hustle.hustleBoard(ch, client)));
+  app.post('/v1/hustle/advance', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Hustle.advanceHustle(ch, client, h)));
   app.post('/v1/heal', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => G.heal(ch, client, h)));
   app.post('/v1/checkin', { preHandler: auth }, async (req) =>
@@ -800,6 +806,8 @@ export async function buildServer() {
     // discoverability precedent; the live board with progress is GET /v1/regimen)
     regimen: { disciplines: REGIMEN.DISCIPLINES, cap: REGIMEN.CAP,
       drillXp: REGIMEN.DRILL_XP, trainers: REGIMEN.TRAINERS, energy: REGIMEN.ENERGY },
+    // THE HUSTLE — the daily three-stop chain's config (the live chain is GET /v1/hustle)
+    hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
     // D6a step two — the other two entry verbs' decision axes (each its own, not a copy of the crime picker)
     jumpIntents: Object.values(M3.JUMP_INTENTS).map((i) => ({ id: i.id, name: i.name,
       stealMult: i.stealMult, repMult: i.repMult, dmgMult: i.dmgMult, hospMult: i.hospMult, heat: i.heat })),

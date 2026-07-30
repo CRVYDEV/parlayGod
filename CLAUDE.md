@@ -6506,3 +6506,33 @@ Process note recorded: the first full-suite run of this drop reported exit 0 whi
 FAILED — `npm test | tail` reports TAIL's exit code, the pipe-masking trap; reruns use pipefail.
 The failure itself was the docs guard correctly catching the REGIMEN commit making SPEC's
 markdown-file count stale (a design doc counts only once tracked). Suite green + sim drift-0.
+
+**THE HUSTLE + THE MARK (task #310 step one — the crime loop leaves the button, founder-directed).**
+The founder's four reports converged on one defect: the §7.2 loop was one button against nobody.
+Two structural answers, both §10.4-clean. **(1) THE MARK** — every crime result now NAMES a victim,
+drawn from the NPC residents standing in your district (real characters — the population layer) with
+a fictional noir-pool fallback; presentation only, zero value moves, and deliberately NEVER a real
+player (naming a player as robbed when nothing touched them is false information — the Broadcast
+posture). The vignette, toast and describe() all carry "the mark: <name>" on success AND "the mark
+got away" on a bust. **The "always PvP" variant is FLAGGED, not built** (BALANCE.md): taking the
+cash FROM the mark's pocket converts the sim-signed crime FAUCET into a §10.4 transfer sourced from
+the resident seed pool — a core-economy redesign that needs founder sign-off, never a patch.
+**(2) THE HUSTLE** (`src/hustle.js`, `hustles` table, `HUSTLE`/`hustleOf` rules tail) — the daily
+three-stop chain that physically routes a player around the map: MEET THE CONTACT (travel + check
+in with a seed-drawn fictional contact), DO THE LEGWORK (travel + a REAL drawn action done at that
+district — verified as a daily-counter DELTA against a baseline snapshotted at the meeting, so a
+morning's stockpiled jobs can't pre-pay it), THE PAYOFF (travel + collect). Per-street seed-drawn
+(three DISTINCT districts off the §7.11 hash — the town isn't standing on one corner), one chain a
+day (the (character, day) PK is the cap), dies with the street (estate wipe + DISPOSITION). The
+payoff is the one new faucet — `hustle:payoff` = max($600, $200×level), analytic ceiling $6k/day at
+lvl 30 (the clue-casket posture: the MOVEMENT is the product; levers pinned, BALANCE-flagged;
+`hustle:` joined the cash vocabulary, character_id'd → check (a) reconciles). Board `GET /v1/hustle`
+(step/district/what/here/pay — server-computed copy so board and errors always agree),
+`POST /v1/hustle/advance`; a devil-voiced TONIGHT'S HUSTLE card leads Streets under The Map (the
+covered GETBIND idiom — 88 boards in the mirror now) with travel-there/check-in buttons + progress
+dots; `/v1/rules.hustle`; describe() humanizes check-ins + the payoff. `test/growth.js` proves the
+fictional-fallback mark + a resident becoming the named mark, the three-distinct-stops draw, the
+location gate, the legwork refusal (naming the HOW), the delta rule, the ledgered level-scaled
+payoff, and the once-a-day cap — mutation-verified (legwork gate dropped → caught by name).
+Chromium-probed end to end through the REAL UI (card → check-in toast → teaching refusal → "the
+mark: Mabel Deuce", zero page errors).

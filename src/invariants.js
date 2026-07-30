@@ -46,6 +46,9 @@ const KNOWN_REASONS = {
     // CLUE SCROLLS: `clue:casket` — the treasure-trail faucet (character_id'd; bounded by the
     // 2% drop × one-active-hunt × the 8h post-casket cooldown — sim P9.19)
     'clue:',
+    // THE HUSTLE: `hustle:payoff` — the daily three-stop chain's completion faucet (character_id'd;
+    // bounded ONCE a day per street by the (character, day) PK — the clue-casket posture)
+    'hustle:',
     // COMMISSION step three: proposal deposits — treasury→escrow (`commission:proposal`, NULL char),
     // refunded on an enacted motion (`commission:refund`) or forfeited to the confiscation pool
     // (`commission:forfeit`) — reconciled by the treasury check (b) + the commission-escrow check
