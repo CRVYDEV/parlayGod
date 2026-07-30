@@ -2645,3 +2645,33 @@ conversation per day (`pen_talks` day-PK): wisdom pays `PEN.TALK_WISDOM_XP` (15)
 trusty's shortcut shaves `PEN.TALK_CUT_S` (120s — the workYard good-behaviour shape, pacing never
 currency), a war story pays `MASTERY.XP.yardtale` (10) to the teller's trade. All three levers are
 founder sign-off dials; none touches the signed pen:work faucet or any audit-locked surface.
+
+## JAILBIRDS (the bust verb gets a target, 2026-07-30)
+
+Founder-reported: the daily "Bust a player out of lockup" contract was uncompletable on a solo run —
+residents never went to jail, and the §7.8 bust verb had no console control (raw deck only). Fixes:
+a "bust them out" button on any LOCKUP-chipped street in the Wet Work roster, the corrected daily
+how-line (any jailed street, not "a family member"), and `POPULATION.JAILBIRDS` — the worker keeps
+`TARGET` (2) residents serving a `MIN_S`–`MAX_S` (4–20 min) sentence, refilled as they walk or are
+sprung. Pure `jail_until` pacing, zero new §10.4 reason. **The faucet it makes reachable is the
+SIGNED §7.8 `bust:reward`** (500 + remaining×15, odds 0.7 − remaining/400 floored at 0.10): the
+curve pays best near the end of a stretch, so rational play camps the tail — ~$1.4–2.3k a bust at
+40–55% odds, a miss costing the buster 3 minutes inside. Bounded by the refill: ≤ TARGET busts per
+worker tick ≈ a few $k/hour CITY-WIDE, shared — the clue-casket posture. `JAILBIRDS.*` are founder
+sign-off levers; `TARGET: 0` turns the whole thing off.
+
+## THE CAREER (post-First-Week progression ladder, 2026-07-30)
+
+Founder-directed ("Once you complete The First Week there should be another list of tasks in
+progression … receive bonuses upon completion … that takes them throughout the game"). Five ranks —
+Associate → Soldier → Made Man → Capo → The Don — six once-ever tasks each, every task a
+SERVER-VERIFIED signal (ownership, an account legend, mastery XP; nothing client-claimed). Rewards
+are CASH ONLY (the v24 rule) and latch once per ACCOUNT (`career_claims` PK, survives death — the
+heir keeps the climb and cannot re-farm), so the whole faucet is a FIXED lifetime total:
+tier-1 tasks pay $1,000 (+$3,000 capstone), then $2,500/+$7,500, $5,000/+$15,000, $10,000/+$30,000,
+$20,000/+$60,000 — **$346,500 lifetime max per account**, spread across a climb whose later ranks
+demand level-40-class play. `CAREER.NEED` (4) claims open the next rank, so a declinable task
+(a family, blood) never walls a solo player; the capstone pays only on all six. Every payout is a
+ledgered `career:<taskId>` cash faucet row (character_id'd — §10.4 check (a) reconciles). Petty vs
+every measured earner (the clue-casket posture: the TOUR of the game's systems is the product, the
+cash is the excuse); task cash values + `CAREER.NEED` are founder sign-off levers.

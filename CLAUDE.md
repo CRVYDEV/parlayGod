@@ -6573,3 +6573,44 @@ later: `buyGood` now bumps the counter too (the contract payout is unchanged; th
 take either way); deterministic regression in test/growth.js, mutation-verified, 6 consecutive green
 runs. All `PEN.CARDS_ENERGY`/`TALK_*` numbers are founder sign-off levers (BALANCE.md; pinned in
 test/levers.js). The Pen now has six steps and a sentence is no longer Work-or-nothing.
+
+**THE CAREER + THE BUST FIX (task #308, founder: "Once you complete The First Week there should be
+another list of tasks in progression … receive bonuses upon completion … that takes them throughout
+the game. Also … no way for the user to know how to complete the 'Bust a player out of jail' task,
+especially on a solo run").** Two halves. **(A) THE BUST FIX** — three legs closing the daily
+`bust1`/`bust2` contracts' dead end: **(1)** the §7.8 bust verb finally has a console control — a
+"bust them out" button on any LOCKUP-chipped street in the Wet Work roster (it lived ONLY in the raw
+deck) + a 🔓 describe() branch (the fail shape already reads correctly as the generic BUSTED line);
+**(2)** the daily how-line corrected ("Spring ANYONE from lockup" — the old copy said "a family
+member", which the code never required); **(3) JAILBIRDS** (`POPULATION.JAILBIRDS` TARGET 2 /
+MIN_S 240 / MAX_S 1200; `runPopulationInner` step 3) — the worker keeps TARGET residents serving a
+4–20 min sentence (free residents only, absolute JS-computed `jail_until`, no bus/notify — the
+residents-emit-nothing rule; the behaviour picker already skips the jailed), refilled as they walk or
+are sprung, so the bust verb has a standing target and the dailies are completable solo. Pure pacing,
+zero new §10.4 reason — the faucet it makes REACHABLE is the signed §7.8 `bust:reward` (best odds
+near the end of a stretch → rational play camps the tail; ≤ TARGET busts/tick city-wide ≈ a few
+$k/hour shared — BALANCE flag, levers pinned, `TARGET: 0` disables). `test/population.js` JAILBIRDS
+block: exactly-TARGET fill, no over-fill, a player springing a resident through the ordinary verb
+(ledgered `bust:reward`, the daily counter advances), the refill after a bust — mutation-verified.
+**(B) THE CAREER** (`src/career.js`, `test/career.js` — the 60th suite; `CAREER` rules tail;
+`career_claims` account-PK table) — the post-First-Week progression ladder: FIVE ranks (Associate →
+Soldier → Made Man → Capo → The Don), six once-ever tasks each, every task a SERVER-VERIFIED signal
+(ownership / an account legend / mastery XP — the road-to-30 clearing-signal discipline; two extra
+signals via PK lookups: a finished hustle, a megaproject contribution, a shield purchase, a racer).
+Rewards CASH ONLY (v24) and latched once per ACCOUNT — the ladder SURVIVES DEATH (the heir keeps the
+climb, cannot re-farm; `claimed` is checked BEFORE `not_done` so an heir who no longer holds the
+proving state hears "already collected") — bounding the whole faucet at a FIXED **$346,500 lifetime
+per account** (BALANCE.md; petty by design — the TOUR of the game's systems is the product).
+`CAREER.NEED` (4) claims open the next rank so a declinable task (family, blood) never walls a solo
+player (the harness-F1 lesson applied to a checklist); the rank CAPSTONE pays only on all six, folded
+into the sixth claim's ledger row (the First-Week pattern). §10.4: `career:` joined the cash
+KNOWN_REASONS, every payout a character_id'd `career:<taskId>` row. Routes `GET /v1/career` +
+`POST /v1/career/:taskId`; `/v1/rules.career` catalog; console: a "The Career" section on Start Here
+(open ranks render task cards with ready/claimed/show-me-jumps; the next locked rank is a one-line
+teaser so a fresh player isn't drowned in 30 cards) + a 📜 describe() branch. `test/career.js` proves
+the board (tier 1 open, the rest locked), the teaching `not_done`, claim→ledger→latch, `tier_locked`,
+the NEED unlock, the sixth-claim capstone in ONE row, Σ ledger rows == Σ pays + the closed
+vocabulary, and death survival — capstone + tier-gate mutations each caught by name. Chromium-probed
+end-to-end (section + locked teaser render, a seeded gun flips Get Strapped to claim-ready, the claim
+toasts 📜 and the tier reads 1/6, zero page errors). All CAREER cash values + `CAREER.NEED` +
+`JAILBIRDS.*` are founder sign-off levers.

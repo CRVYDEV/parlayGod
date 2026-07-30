@@ -393,7 +393,43 @@ assert(retires > 0, 'retirements are ledgered');
 assert.equal(npcBandOf(0.0).id, 'corner', 'the low roll is the corner band');
 assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
 
+// ── JAILBIRDS (founder: the "Bust a player out of lockup" daily was uncompletable solo) ──
+// The worker keeps TARGET residents in lockup; a bust frees one through the UNCHANGED §7.8 path.
+{
+  const jailedResidents = async () => Number((await pool.query(
+    'SELECT COUNT(*) n FROM characters WHERE alive AND is_npc AND jail_until > now()')).rows[0].n);
+  const t1 = await runPopulation(pool);
+  assert.equal(await jailedResidents(), POPULATION.JAILBIRDS.TARGET, 'the worker keeps TARGET residents serving a sentence');
+  const t2 = await runPopulation(pool);
+  assert.equal(t2.jailed, 0, 'a full jail is not over-filled on the next tick');
+  assert.equal(await jailedResidents(), POPULATION.JAILBIRDS.TARGET, 'still exactly TARGET inside');
+  void t1; // the earlier ticks in this file already filled the jail — t1 legitimately collars 0
+  // a PLAYER busts a jailbird through the ordinary §7.8 verb: give the sentence a short tail
+  // (best odds near the end — the signed curve), retry across the buster's own fail-jail
+  const bird = (await pool.query(
+    'SELECT id, name FROM characters WHERE alive AND is_npc AND jail_until > now() LIMIT 1')).rows[0];
+  const buster = await mk('Springer Sal');
+  let sprung = null;
+  for (let i = 0; i < 40 && !sprung; i++) {
+    await pool.query(`UPDATE characters SET jail_until=NULL, cash=1000 WHERE id='${buster.id}'`);
+    await pool.query(`UPDATE characters SET jail_until = now() + interval '30 seconds' WHERE id='${bird.id}'`);
+    const r = await call('POST', `/v1/streets/${bird.id}/bust`, { token: buster.token });
+    if (r.body.success) sprung = r.body;
+  }
+  assert(sprung, 'a resident jailbird is bustable through the ordinary §7.8 verb (~0.63/attempt at a 30s tail)');
+  assert(sprung.reward > 0, 'the bust paid the signed §7.8 reward');
+  assert.equal(await one(
+    `SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE character_id='${buster.id}' AND reason='bust:reward'`),
+    sprung.reward, 'the reward is the ledgered bust:reward faucet (§10.4 check (a) reconciles)');
+  const cnt = (await pool.query(
+    `SELECT counters FROM daily_progress WHERE character_id='${buster.id}' ORDER BY day DESC LIMIT 1`)).rows[0];
+  assert(cnt && Number(JSON.parse(cnt.counters).bust || 0) >= 1, 'the bust daily contract counter advanced — the bust1/bust2 dailies are completable solo at last');
+  // the freed bird counts as a vacancy the NEXT tick refills (the standing-target rule)
+  const t3 = await runPopulation(pool);
+  assert.equal(await jailedResidents(), POPULATION.JAILBIRDS.TARGET, `the jail refills to TARGET after a bust (tick jailed ${t3.jailed})`);
+}
+
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '
   + '(flag exposed), the npc:seed faucet + npc:retire sink keep §10.4 drift-0, the worker tops the city up '
-  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet');
+  + 'and retires old lines, and residents are excluded from the Street Wage, City Standing, ops and the funnel; STEP TWO: they advertise consent limits, post SECURED loan offers and standing buy orders, and retire without stranding escrow — all pure recycling, zero new faucet; JAILBIRDS: the worker keeps TARGET residents in lockup (never over-fills, refills after a bust) so the §7.8 bust verb + the bust dailies work on a solo run — the reward is the signed ledgered bust:reward faucet');
 process.exit(0);

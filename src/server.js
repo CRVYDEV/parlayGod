@@ -12,6 +12,7 @@ import * as K from './kitchen.js';
 import * as W from './growth.js';
 import * as RG from './regimen.js';
 import * as Hustle from './hustle.js';
+import * as Career from './career.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -96,7 +97,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          worldNpcOf, liberationCost, RACES, PORT, CASINO, rollStats, feudTierOf, STABLE, NOTORIETY,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
-         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE } from './rules.js';
+         PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -808,6 +809,9 @@ export async function buildServer() {
       drillXp: REGIMEN.DRILL_XP, trainers: REGIMEN.TRAINERS, energy: REGIMEN.ENERGY },
     // THE HUSTLE — the daily three-stop chain's config (the live chain is GET /v1/hustle)
     hustle: { payPerLvl: HUSTLE.PAY_PER_LVL, payMin: HUSTLE.PAY_MIN },
+    // THE CAREER — the public ladder catalog (the /v1/catalog discoverability precedent)
+    career: { need: CAREER.NEED, tiers: CAREER.TIERS.map((t) => ({ id: t.id, name: t.name, capstone: t.capstone,
+      tasks: t.tasks.map((k) => ({ id: k.id, name: k.name, cash: k.cash })) })) },
     // D6a step two — the other two entry verbs' decision axes (each its own, not a copy of the crime picker)
     jumpIntents: Object.values(M3.JUMP_INTENTS).map((i) => ({ id: i.id, name: i.name,
       stealMult: i.stealMult, repMult: i.repMult, dmgMult: i.dmgMult, hospMult: i.hospMult, heat: i.heat })),
@@ -1593,6 +1597,11 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.get('/v1/onboard', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h, client)));
+  // THE CAREER — the post-First-Week progression ladder (task #308): five tiers of once-ever tasks
+  app.get('/v1/career', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client, h) => Career.careerBoard(ch, client, h)));
+  app.post('/v1/career/:taskId', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Career.claimCareer(ch, req.params.taskId, client, h)));
   // §7.13 THE LATE CLAIM — name who sent you (within the first-days window, once, attribution only)
   app.post('/v1/referral/claim', { preHandler: auth }, async (req) =>
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimReferral(ch, req.body?.code, client, h)));

@@ -272,6 +272,9 @@ const SIGNED = [
   ['REGIMEN.DUEL_ADD', 0.6],
   // THE HUSTLE (2026-07-30) — the daily three-stop chain's completion faucet (once a day,
   // level-scaled; the clue-casket posture: petty by design, the MOVEMENT is the product)
+  // THE CAREER — the post-First-Week ladder's unlock bar (task cash values live in the CAREER
+  // catalog; the ladder is a fixed once-ever-per-account lifetime total — BALANCE.md)
+  ['CAREER.NEED', 4],
   ['HUSTLE.PAY_PER_LVL', 200],
   ['HUSTLE.PAY_MIN', 600],
   // step three — PATHS v2 (the XP-rate axis + the switch throttle; the PATH_FX perk/handicap
@@ -312,6 +315,10 @@ const SIGNED = [
   ['POPULATION.SPAWN_PER_TICK', 4],
   ['POPULATION.TARGET', 48],
   ['POPULATION.TURNOVER.PER_DAY', 24],
+  // JAILBIRDS — makes the SIGNED §7.8 bust:reward faucet reachable solo (bounded by the refill)
+  ['POPULATION.JAILBIRDS.TARGET', 2],
+  ['POPULATION.JAILBIRDS.MIN_S', 240],
+  ['POPULATION.JAILBIRDS.MAX_S', 1200],
   ['PORT.ESCORT_COST', 15000],
   ['PORT.FINE_RATE', 0.5],
   ['PORT.FLEET_MAX', 5],
