@@ -654,6 +654,8 @@
   .landing .band > * { position: relative; z-index: 1; }
   .landing .band h2 { color: var(--neon); letter-spacing: 3px; font-size: 16px; margin: 0 0 9px; font-weight: normal; }
   .landing .band p { color: var(--dim); font-size: 14px; max-width: 640px; margin: 0 auto; line-height: 1.65; }
+  /* the economy band runs to three paragraphs; with margin:0 they set as one wall of centred prose */
+  .landing .band p + p { margin-top: 11px; }
   .landing .signin { max-width: 470px; margin: 26px auto 0; text-align: center; }
   .landing .lfoot { text-align: center; color: var(--dim); font-size: 12.5px; margin-top: 30px;
     border-top: 1px solid var(--line); padding-top: 16px; line-height: 1.7; }
