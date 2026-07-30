@@ -1261,6 +1261,10 @@ export async function denInfo(pool, characterId) {
   const st = (await pool.query('SELECT current FROM poker_state WHERE id=1')).rows[0];
   const tr = st?.current ? (await pool.query("SELECT * FROM poker_tournaments WHERE id=$1 AND status='open'", [st.current])).rows[0] : null;
   const tourney = tr ? {
+    // `open: true` for shape-consistency with the futurity/stakes siblings — the client gates on
+    // `open === false`, so the LIVE shape must carry the key too or the board has a field the
+    // renderer reads that the route never returns (the mirror guard's exact complaint)
+    open: true,
     id: tr.id, pool: Number(tr.pool),
     entrants: Number((await pool.query('SELECT COUNT(*) n FROM poker_entries WHERE tournament_id=$1', [tr.id])).rows[0].n),
     seated: !!(await pool.query('SELECT 1 FROM poker_entries WHERE tournament_id=$1 AND character_id=$2', [tr.id, characterId])).rows[0],
