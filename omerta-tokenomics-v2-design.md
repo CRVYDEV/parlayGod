@@ -297,7 +297,13 @@ turns the distribution on.
    is still there and simply never fires. That is coherent and invents nothing, so it is what ships.
    But it means personal fronts carry **no PvE risk at all** — only shakedown, takeover and the
    Sacking. If fronts should still draw heat, scrutiny needs a new feed (income volume is the obvious
-   one), and that is new content, not a retune.
+   one), and that is new content, not a retune. **RESOLVED (founder-directed option b, 2026-07-30):**
+   scrutiny is now INCOME-sourced — `BUSINESS_SCRUTINY_PER_INCOME_DAY` heat per operating day's
+   income banked (tier-normalized; measured in sim P9.24 at ~one raid/10.1 days ≈ 11–12% of gross
+   for a daily collector), and the Bureau-facing specs (accountant/fixer) are un-retired. Recorded
+   in BALANCE.md § THE BUREAU RETURNS.
+
+
 2. **The RICO meter loses a feed.** `LAUNDER_HEAT` (15) and `BUSINESS_LAUNDER_HEAT` (8) were a
    recurring, self-inflicted heat source on the wealthiest players. Without them the investigation
    meter is fed by crime/kill/port heat only, so a passive earner is meaningfully harder for the Law

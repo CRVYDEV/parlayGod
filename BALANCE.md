@@ -2437,7 +2437,7 @@ A reader sweep over all 379 signed levers (alias-resolved, comments stripped —
 | lever / finding | was | now | why |
 |---|---|---|---|
 | `FAMILY_YIELD.FUND_BPS` | 0, **read by nothing** | **500** (5% of every Window redemption) | Its documented source — "a share of each 12h buyback's bought $OMR" — was deleted by step 2 (the buyback buys no $OMR), so the family yield shipped funded by a one-time legacy drain and then nothing, forever. Re-homed founder-directed: redemption is the only place $OMR now goes to die, so the families take their cut of the money changing hands. §10.4-neutral (a `yield:window` TRANSFER replacing a slice of the `window:burn` — no new reason, both already vocabularied). **The honest cost is less deflation** — at FUND_BPS 500, 5% of redeemed $OMR survives as family reserve instead of burning. Dial: 0 restores full burn. |
-| **The dark risk layer** (FLAG, founder sign-off) | fronts drew Bureau raids via laundering scrutiny | **no front can ever be raided** | Business scrutiny grew ONLY from laundering; step 2 retired laundering, so nothing writes scrutiny and the whole Business Empire step-two PvE risk layer is unreachable (`business:raid` can never fire). A front's remaining risk is PvP only (shakedown / hostile takeover / the Sacking). Passive fronts are now strictly SAFER than the curve was balanced against — the L1a/L1b flatten assumed the old risk surface. Options: (a) accept — PvP is the risk model now; (b) re-source scrutiny from INCOME (a front heats by earning); (c) trim the curve again. Not patched (ground rule #1). |
+| **The dark risk layer** — **RESOLVED 2026-07-30** (founder-directed option b) | fronts drew Bureau raids via laundering scrutiny; step 2 left the layer unreachable | **scrutiny is INCOME-sourced — a front heats by earning** | `BUSINESS_SCRUTINY_PER_INCOME_DAY` (30) heat per full operating day's income banked, tier-NORMALIZED, so raid PROBABILITY is uniform across the catalog while the raid's COST scales with size (the seized pending + 10% of tier cost). Measured (sim P9.24): a daily collector is raided ~every 10.1 days ≈ 11–12% of gross at every tier; the 5-front stack pays ~$4.24M/day on top of the L1b pad (net ~$21.6M→~$17.4M/day); a vigilant collector who banks often faces only the fine floor (~2% of gross) — the lazy/active spread is the intended shape. THE ACCOUNTANT (income heat ×0.5) + THE FIXER (fine ×0.5, decay ×2) are un-retired — the Bureau-facing specs buy a real effect again. §10.4 unchanged (`business:raid` was always a ledgered sink; the seized pending is never minted). Dial: `PER_INCOME_DAY` (0 restores the dormant state). See the section below. |
 | Decorative levers, wired | `CONSTANTS.SEARCH_MS`, `SKILLS.CAPSTONE_COST`, `CASINO.RING.IDLE_MS` duplicated as magic numbers | each now the single source of truth | Retuning them previously changed nothing — the 3h search clock was hardcoded in combat.js, the capstone cost hardcoded per tree entry, the ring idle timeout a SQL literal. |
 | Dead levers, marked | 6 step-2 orphans looked live | marked DEAD in place + exempted in the guard WITH reasons | `AMM_LP_BPS`, `STAKE_POOL_BPS`, `LAUNDER_HEAT`, `BUSINESS_LAUNDER_HEAT`, `BUSINESS_SCRUTINY_PER_CAP`, `PUBLIC_WASH_CAP_DAY` — kept for the record, read by nothing, each with a stated reason so the exemption itself cannot rot. |
 | Console false copy | the Empire tab sold "PRIVATE laundering" + per-tier wash figures + "launderable" $OMR | removed | A player was making the purchase decision for a front on a capability retired in step 2. |
@@ -2675,3 +2675,37 @@ demand level-40-class play. `CAREER.NEED` (4) claims open the next rank, so a de
 ledgered `career:<taskId>` cash faucet row (character_id'd — §10.4 check (a) reconciles). Petty vs
 every measured earner (the clue-casket posture: the TOUR of the game's systems is the product, the
 cash is the excuse); task cash values + `CAREER.NEED` are founder sign-off levers.
+
+
+## THE BUREAU RETURNS — income-sourced front scrutiny (the dark-risk-layer resolution, 2026-07-30)
+
+Founder-directed option (b) from the tokenomics-v2 migration sweep: business scrutiny's only feed
+(laundering) was retired by v2 step 2, leaving the Bureau-raid layer wired up but unreachable — no
+personal front could ever be raided, so the passive stack was strictly safer than the L1a/L1b curve
+was balanced against. A front now HEATS BY EARNING.
+
+**Mechanism** (`business.js:addIncomeScrutiny`, called at collect + at the upgrade's pending-bank):
+`heat += BUSINESS_SCRUTINY_PER_INCOME_DAY × banked / (incomePerHr × 24)` — TIER-NORMALIZED, so every
+front runs the same heat per operating day and the raid's COST scales with the size of the operation
+on its own (a raid seizes the pending — never ledgered, the territory-seize precedent — and fines
+`BUSINESS_RAID_FINE_RATE` (10%) of the tier cost, the existing ledgered `business:raid` sink).
+Heat is income-normalized, not per-collect, so cadence cannot game the heat itself; what frequent
+collection DOES buy is a small seized pending — the active-play out.
+
+| lever | value | note |
+|---|---|---|
+| `CONSTANTS.BUSINESS_SCRUTINY_PER_INCOME_DAY` | **30** | heat per full operating day's income banked; 0 restores the dormant state |
+| decay / threshold / p / fine | unchanged | `BUSINESS_SCRUTINY_DECAY_HR` 1, `BUSINESS_RAID_THRESHOLD` 60, `BUSINESS_RAID_P_PER_MIN` 0.0005, `BUSINESS_RAID_FINE_RATE` 0.10 — the signed raid math is untouched |
+
+**Measured (sim P9.24 — an expected-value walk of the daily-collector cycle mirroring
+`resolveScrutiny`'s exact math; re-run on any retune):** a daily collector is raided ~every
+**10.1 days** at every tier — laundromat t3 $170k/day (10.9% of gross) up to casino t3 $2.18M/day
+(12.1%); the **5-front stack pays ~$4.24M/day (11.8% of gross)** on top of the L1b progressive pad,
+taking the stack's net from ~$21.6M to ~$17.4M/day. A vigilant collector who banks several times a
+day faces only the fine floor (~$660k/day across the stack ≈ 1.8% of gross) — risk rewards
+attention, the higher-variance-not-higher-EV intent.
+
+**Un-retired with it:** THE ACCOUNTANT (income heat ×0.5) and THE FIXER (raid fine ×0.5, decay ×2)
+specs — refused while the layer had no feed, purchasable again now they buy a real effect
+(`business:spec` $OMR burn unchanged). §10.4: zero new reasons — the fine rides the existing
+`business:raid` sink, the seized pending was never minted, and the sim stays drift-0.

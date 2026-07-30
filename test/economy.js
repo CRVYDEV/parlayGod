@@ -407,21 +407,38 @@ assert.equal(bizBuys, -250000, 'business:buy is a ledgered cash sink');
 assert.equal(bizUp, -600000, 'business:upgrade is a ledgered cash sink');
 assert.equal(bizInc, col1 + colCap + colUp, 'business:income is a ledgered cash faucet (all three collects)');
 
-// ══════════ THE PvE RISK LAYER IS NOW DORMANT — a founder-flagged consequence, asserted ══════════
-// Front scrutiny came ONLY from laundering; an income-only front was already explicitly never
-// raided ("their risk is PvP"). Retire the wash and every front is income-only, so the Bureau-raid
-// machinery is still wired up and simply never fires. This is asserted rather than left as prose
-// because it is exactly the kind of quiet capability loss that is easy to not notice: personal
-// fronts now carry NO PvE risk at all — only shakedown, takeover and the Sacking. If fronts should
-// still draw heat, scrutiny needs a NEW feed, which is content, not a retune (design §7.2).
-process.env.BUSINESS_RAID_P = '1';   // force ANY roll that happens to be reached
-await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '3 hours' WHERE id='${bizId}'`);
+// ══════════ THE BUREAU RETURNS — scrutiny is income-sourced (the dark-risk-layer resolution) ══════════
+// Front scrutiny came ONLY from laundering and went dark with it (v2 step 2) — the dormancy was
+// asserted right here. Founder-directed option (b): a front now HEATS BY EARNING — banking income
+// adds PER_INCOME_DAY per full operating day's income (tier-normalized), so the Bureau-raid layer
+// is reachable again and its cost scales with the size of the operation (the seized pending + a
+// %-of-tier-cost fine) while the raid PROBABILITY is uniform across the catalog.
+process.env.BUSINESS_RAID_P = '0';   // no raid-roll noise while the heat itself is measured
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '6 hours' WHERE id='${bizId}'`);
 r = await call('POST', '/v1/business/collect', { token });
-assert(!r.body.raids, 'no raid — with no wash there is no scrutiny to cross the threshold');
-assert(r.body.collected > 0, 'and the income half is untouched');
+assert(r.body.collected > 0, 'the income banks as before');
 let lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
-assert.equal(lm.scrutiny, 0, 'scrutiny sits at zero and has nothing left to raise it');
-assert.equal(lm.raidRisk, false, 'so the front is never at risk from the Bureau');
+// 6h of a 24h operating day banked → + PER_INCOME_DAY × 6/24 (7.5 at the signed 30; view rounds)
+const expHeat = CONSTANTS.BUSINESS_SCRUTINY_PER_INCOME_DAY * 6 / 24;
+assert(Math.abs(lm.scrutiny - expHeat) <= 1, `banking 6h of income heats the front ~+${expHeat} (got ${lm.scrutiny})`);
+assert.equal(lm.raidRisk, false, 'below the threshold the Bureau just watches');
+assert.equal(lm.raidThreshold, CONSTANTS.BUSINESS_RAID_THRESHOLD, 'the view carries the real raid line (the territoryOf precedent)');
+// a HOT front is raided at the collect touch: the pending is SEIZED (never banked, never ledgered)
+// and the fine is a ledgered §10.4 cash sink — the machinery that sat dead now fires
+process.env.BUSINESS_RAID_P = '1';
+// scrutiny_at must sit in the PAST: the roll runs over the minutes the front actually SAT above
+// the threshold this window (1−(1−p)^minAbove), so an elapsed window of ~0 rolls nothing at any p
+await pool.query(`UPDATE businesses SET scrutiny=90, scrutiny_at = now() - interval '2 hours', last_collect_at = now() - interval '10 hours' WHERE id='${bizId}'`);
+const fined0 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:raid' AND character_id=$1", [cid])).rows[0].s);
+r = await call('POST', '/v1/business/collect', { token });
+const raid = (r.body.raids || []).find((x) => x.kind === 'laundromat');
+assert(raid, 'the hot front is raided at the collect touch');
+assert(raid.seized > 0, 'the pending income is seized');
+assert(raid.fine > 0, 'and the fine lands');
+const fined1 = Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE reason='business:raid' AND character_id=$1", [cid])).rows[0].s);
+assert.equal(fined1 - fined0, -raid.fine, 'business:raid is a ledgered §10.4 cash sink');
+lm = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+assert.equal(lm.scrutiny, 0, 'a raid clears the file');
 delete process.env.BUSINESS_RAID_P;
 await seed("cash=2000000"); // restore the pocket for the gang-founding + shakedown blocks below
 
@@ -549,13 +566,22 @@ const meLaund = await meOf(token);
 assert.equal(meLaund.launderer.washed, washed0, 'the view still surfaces the frozen legend');
 assert.equal(meLaund.launderer.rank, launderRankOf(meLaund.launderer.washed).name, 'and still ranks it on the ladder');
 
-// (B) THE ACCOUNTANT and THE FIXER are REFUSED, not silently inert. Both acted only on the
-// Bureau-raid layer, whose only feed was laundering — so they buy nothing now, and they cost real
-// $OMR. Leaving them purchasable would be selling a dead effect, which is worse than dormancy.
-for (const dead of ['accountant', 'fixer']) {
-  assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: dead } })).body.error,
-    'retired', `${dead} is refused rather than sold for $OMR it cannot repay`);
+// (B) THE ACCOUNTANT and THE FIXER are ALIVE again — the Bureau layer has a feed once more
+// (income), so the Bureau-facing specs buy a real effect and are back on the shelf. They were
+// REFUSED while the layer had no feed (selling a dead effect for real $OMR is worse than
+// dormancy); un-retiring them is part of the same resolution that re-sourced scrutiny.
+r = await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'accountant' } });
+assert.equal(r.code, 200, 'the accountant is back on the payroll');
+// and he does his job: the income heat is HALVED (scrutinyMult 0.5 now reads at the income feed)
+await pool.query(`UPDATE businesses SET scrutiny=0, scrutiny_at=now(), last_collect_at = now() - interval '6 hours', upkeep_at=now() WHERE id='${bizId}'`);
+await call('POST', '/v1/business/collect', { token });
+{
+  const lmA = (await call('GET', '/v1/business', { token })).body.businesses.find((b) => b.id === bizId);
+  const expHalf = CONSTANTS.BUSINESS_SCRUTINY_PER_INCOME_DAY * 6 / 24 / 2;
+  assert(Math.abs(lmA.scrutiny - expHalf) <= 1, `the accountant halves the Bureau heat on the take (~+${expHalf}, got ${lmA.scrutiny})`);
 }
+assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fixer' } })).code, 200,
+  'the fixer takes the retainer again');
 const omrPreSpec = await acctOf('omr');
 // THE FORTRESS still works — hostile takeovers still happen, so its +40 defence is still real
 r = await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fortress' } });
@@ -565,7 +591,7 @@ assert(Number((await pool.query("SELECT COALESCE(SUM(amount),0) s FROM transacti
 // gates: a bad spec, and specializing a NON-max-tier front
 assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'nope' } })).body.error, 'bad_spec', 'a bad spec is refused');
 await pool.query(`UPDATE businesses SET tier=2 WHERE id='${bizId}'`);
-// (fortress, not fixer — the retired specs are refused before the tier is even looked at)
+// (any spec hits the tier gate now that all three are purchasable)
 assert.equal((await call('POST', `/v1/business/${bizId}/specialize`, { token, body: { spec: 'fortress' } })).body.error, 'not_maxed', 'only a max-tier front can specialize');
 await pool.query(`UPDATE businesses SET tier=3 WHERE id='${bizId}'`);
 
@@ -625,5 +651,5 @@ await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_i
 const inv3 = await runLedgerInvariants(pool, { alert: false });
 assert(inv3.checks.find((c) => c.name === 'reason vocabulary').ok, `no unknown-reason alarm (${JSON.stringify(inv3.checks.find((c) => c.name === 'reason vocabulary').unknown || [])})`);
 
-console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, THE RETIRED AMM (both directions + the private wash rail refuse; the pool is left alone), staking (principal returns whole, yield retired to the families), gear, the 12h cash-sink tick (the whole take to the window) + the legacy-pool MERGE (idempotent), ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, §10.4 faucet/sink ledgering) + the step-two PvE risk layer now DORMANT (scrutiny had only one feed and it was laundering, so a front is never raided — asserted, because a quiet capability loss is easy to miss) with shakedown/takeover PvP intact + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend now a FROZEN historical board, THE ACCOUNTANT + THE FIXER specs REFUSED rather than sold for $OMR they can no longer repay while THE FORTRESS still works, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
+console.log('✅ M2 economy test passed — market, garage (+car conservation), workshop, goods, rackets (+lazy income), assets, THE RETIRED AMM (both directions + the private wash rail refuse; the pool is left alone), staking (principal returns whole, yield retired to the families), gear, the 12h cash-sink tick (the whole take to the window) + the legacy-pool MERGE (idempotent), ledger invariants, Risk-to-Earn bank-interest daily cap, Business Empire (catalog, level gate, buy/collect/upgrade with income cap, §10.4 faucet/sink ledgering) + the step-two PvE risk layer LIVE AGAIN (scrutiny is income-sourced — banking the take heats the front, a hot front is raided at the collect touch with the pending seized + a ledgered business:raid fine, and the view carries the real raid line) with shakedown/takeover PvP intact + RECURRING SINKS "the pad" (upkeep rate/owed in the view, paying is a ledgered business:upkeep sink resetting the clock, a front unpaid past the cold window produces nothing / no upgrades until the pad thaws it) + BALANCE sign-off (safehouse blocks deposits/collection, the >$10M bank-interest taper) + BUSINESS EMPIRE → Tier 4 (THE LAUNDERER legend now a FROZEN historical board, THE ACCOUNTANT (halves the income heat) + THE FIXER back on the shelf now the Bureau layer has a feed, THE FORTRESS unchanged, the TYCOON fold-in on collect, read-derived Front-Set titles, THE HOSTILE TAKEOVER — a taxed buyout transfer + fee burn + reset handover + level/have_kind gates, §10.4 vocabulary closed)');
 await app.close();

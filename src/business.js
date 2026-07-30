@@ -55,8 +55,11 @@ async function takeHouse(client, tax) {
 }
 
 // ── step two: the RISK layer — scrutiny + Bureau raids (lazy, the §7.1 kitchen-raid pattern) ──
-// Only LAUNDERING draws scrutiny onto a front; it decays hourly. Income-only fronts never get
-// raided — their risk is rival shakedowns (PvP), so PvE risk tracks extraction, PvP tracks wealth.
+// Scrutiny originally came only from LAUNDERING, so the v2 step-2 retirement left this whole layer
+// unreachable. RESOLVED (founder option b): a front now HEATS BY EARNING — banking income adds
+// scrutiny in proportion to how many operating DAYS' worth was collected (see addIncomeScrutiny),
+// so the Bureau watches the size of the operation and the raid layer is live again; it still
+// decays hourly, and PvP (shakedown/takeover/the Sacking) tracks wealth as before.
 // FRONT SPECIALIZATION (Tier-4): THE FIXER cools scrutiny 2× as fast (decayMult) — read off the row.
 const specDecayMult = (row) => (row.spec && BUSINESS_EMPIRE.SPECS[row.spec]?.decayMult) || 1;
 export function decayedScrutiny(row, now = Date.now()) {
@@ -114,6 +117,25 @@ async function resolveScrutiny(ch, row, client, h) {
   return { raided: false };
 }
 
+// THE BUREAU RETURNS (v2 knock-on resolved, founder option b): a front HEATS BY EARNING. Banking
+// income adds BUSINESS_SCRUTINY_PER_INCOME_DAY per full operating DAY's income collected —
+// tier-NORMALIZED (banked / dailyIncome), so every front runs the same heat-per-day whatever its
+// size, and the raid's COST scales with the operation on its own (the seized pending + a
+// %-of-tier-cost fine). Collecting more often adds the SAME total heat (it normalizes on income,
+// not on collect events — no cadence gaming) but keeps the seized pending small: the active-play
+// out, the territory smuggling pattern. THE ACCOUNTANT (spec) halves it — the Bureau-facing spec
+// is alive again. Called AFTER resolveScrutiny in the same txn (absolute write, pg-mem-safe);
+// rakeback is deliberately excluded (den-sourced, not the front's own earnings).
+async function addIncomeScrutiny(row, banked, client) {
+  const t = businessTierOf(row.kind, row.tier);
+  if (!t || banked <= 0) return;
+  const specMult = (row.spec && BUSINESS_EMPIRE.SPECS[row.spec]?.scrutinyMult) || 1;
+  const add = CONSTANTS.BUSINESS_SCRUTINY_PER_INCOME_DAY * (banked / (t.incomePerHr * 24)) * specMult;
+  const ns = Math.min(CONSTANTS.BUSINESS_SCRUTINY_MAX, Number(row.scrutiny) + add);
+  row.scrutiny = ns;
+  await client.query('UPDATE businesses SET scrutiny=$2, scrutiny_at=now() WHERE id=$1', [row.id, ns]);
+}
+
 // Buy a tier-1 front (one per kind per character). Level-gated ("acquired later"). Pocket cash pays.
 export async function buyBusiness(ch, kind, client, h) {
   const cat = businessOf(kind);
@@ -153,7 +175,13 @@ export async function collectBusiness(ch, client, h) {
     // squared — its income clock stays put (the withheld take is lost to the 24h cap, not banked).
     if (isCold(r)) { cold++; continue; }
     const inc = accrued(r);
-    if (inc > 0) { total += inc; await client.query('UPDATE businesses SET last_collect_at=now() WHERE id=$1', [r.id]); }
+    if (inc > 0) {
+      total += inc;
+      await client.query('UPDATE businesses SET last_collect_at=now() WHERE id=$1', [r.id]);
+      // the Bureau watches what a front earns — heat on the RAW per-row take (pre-pathFx: the
+      // Ledger's +10% is the collector's edge, not more business on the books)
+      await addIncomeScrutiny(r, inc, client);
+    }
     // Den RAKEBACK (casino kind): owners split RAKEBACK_BPS of the den's stake volume since their
     // cursor — the split is by the CURRENT owner count, so total rakeback per unit of volume is
     // bounded by RAKEBACK_BPS however many fronts exist. A raided casino forfeits with the rest.
@@ -238,6 +266,9 @@ export async function upgradeBusiness(ch, businessId, client, h) {
   // bank the pending at the old rate, then debit the upgrade — net in one cash figure. The upgrade
   // also squares the pad (upkeep_at=now): a fresh clock at the new rate, no retroactive rate bump.
   ch.cash = Number(ch.cash) + pending - next.cost;
+  // the banked pending draws the same income heat a collect does (r still carries the OLD tier in
+  // memory, which is the rate the pending accrued at — the right normalization)
+  if (pending > 0) await addIncomeScrutiny(r, pending, client);
   await client.query('UPDATE businesses SET tier=$2, last_collect_at=now(), upkeep_at=now() WHERE id=$1', [businessId, next.tier]);
   if (pending > 0) await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pending, reason: 'business:income' });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: -next.cost, reason: 'business:upgrade' });
@@ -252,13 +283,11 @@ export async function upgradeBusiness(ch, businessId, client, h) {
 // the street); losing it is real content coming out, and the design accepts that deliberately
 // rather than pretending the change is free.
 //
-// KNOCK-ON, flagged rather than papered over: front SCRUTINY came only from laundering — an
-// income-only front was already explicitly never raided ("their risk is PvP"). With the wash gone
-// every front is income-only, so the Bureau-raid layer built in Business Empire step two is still
-// present and simply never fires. That is coherent and invents nothing, so it is what ships, but
-// it means personal fronts now carry NO PvE risk at all — only shakedown, takeover and the
-// Sacking. Giving scrutiny a new feed (income volume is the obvious one) would be new content, so
-// it is a founder call, recorded in the design doc's §7.2.
+// KNOCK-ON, RESOLVED (founder-directed option b, 2026-07-30): front SCRUTINY came only from
+// laundering, so retiring the wash left the Bureau-raid layer wired up but unreachable — personal
+// fronts briefly carried NO PvE risk at all. Scrutiny is now fed by INCOME (`addIncomeScrutiny`
+// above — a front heats by earning), so the raid layer fires again and the Bureau-facing specs
+// (accountant/fixer) are back on the shelf. The laundering RAIL itself stays retired below.
 //
 // The route stays mounted and answers with this rather than 404ing (the retired-swap precedent),
 // and `launder_used`/`launder_at` stay on the row: they are harmless, and dropping columns from a
@@ -327,15 +356,11 @@ export async function shakedownBusiness(ch, victim, businessId, client, h) {
 // throughput untouched). Re-specializing overwrites (a fresh $OMR burn). §10.4: `business:spec` omr burn. ──
 export async function specializeBusiness(ch, businessId, spec, client, h) {
   if (!BUSINESS_EMPIRE.SPECS[spec]) throw new GameError('bad_spec', 'Pick The Fortress.');
-  // (tokenomics v2 step 2) THE ACCOUNTANT (scrutiny ×0.5) and THE FIXER (raid fine ×0.5, scrutiny
-  // decay ×2) both act only on the Bureau-raid layer, and that layer's only feed was laundering.
-  // With the wash retired they buy NOTHING — and they cost real $OMR, so leaving them on the shelf
-  // would be selling a dead effect. Refused rather than silently inert; THE FORTRESS (+40 defence
-  // against a hostile takeover) is untouched because takeovers still happen.
-  if (spec === 'accountant' || spec === 'fixer') {
-    throw new GameError('retired',
-      `${BUSINESS_EMPIRE.SPECS[spec].name} worked the Bureau, and the Bureau has nothing on your books now that cash can't be washed. Take The Fortress.`);
-  }
+  // (v2 knock-on RESOLVED) THE ACCOUNTANT (income scrutiny ×0.5) and THE FIXER (raid fine ×0.5,
+  // scrutiny decay ×2) were REFUSED while the Bureau layer had no feed (v2 step 2 retired
+  // laundering, its only source) — selling a dead effect for real $OMR would have been worse than
+  // dormancy. Scrutiny is income-sourced now, so both buy a real effect again and are back on the
+  // shelf alongside THE FORTRESS.
   const r = (await client.query('SELECT * FROM businesses WHERE id=$1 AND character_id=$2 FOR UPDATE', [businessId, ch.id])).rows[0];
   if (!r) throw new GameError('not_yours', "That's not your business.");
   if (Number(r.tier) < businessMaxTier(r.kind)) throw new GameError('not_maxed', 'Only a fully-built front can specialize — max the tier first.');
@@ -454,6 +479,7 @@ export async function businessesOf(pool, characterId) {
       cold: isCold(r),
       launderCapDay: tier?.launderCapDay || 0, launderHeadroom: Math.max(0, (tier?.launderCapDay || 0) - usedToday),
       scrutiny: Math.round(decayedScrutiny(r)), raidRisk: decayedScrutiny(r) >= CONSTANTS.BUSINESS_RAID_THRESHOLD,
+      raidThreshold: CONSTANTS.BUSINESS_RAID_THRESHOLD, // the territoryOf precedent — the client renders heat against the real line, never a hardcoded 60
       shakedownCdSeconds: r.shakedown_at ? Math.max(0, Math.ceil((new Date(r.shakedown_at).getTime() + CONSTANTS.SHAKEDOWN_CD_MS - Date.now()) / 1000)) : 0,
       nextTier: businessTierOf(r.kind, Number(r.tier) + 1) || null,
       // Tier-4: the specialization + the hostile-takeover surface
