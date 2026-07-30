@@ -4923,7 +4923,7 @@
       act('POST', `/v1/armory/vest/${b.dataset.vestdo}`, {}).then(() => renderGarage()));
   }
 
-  // ── THE EMPIRE: personal fronts — income, the pad, PvP risk (laundering retired) ──
+  // ── THE EMPIRE: personal fronts — income, the pad, PvP risk + the Bureau (heat from earning) ──
   async function renderEmpire() {
     const t = $('#tab-empire');
     await refresh();
@@ -4932,7 +4932,7 @@
     const ownedKinds = new Set(owned.map((b) => b.kind));
     const emp = rules?.empire || {};
     t.innerHTML = `
-      ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own while you are away. They cost upkeep (the pad), and a rival can shake one down or take it off you, so tend them. A late-game engine — come back as you level.') : ''}
+      ${!owned.length ? coachCard('Legit fronts — passive income', 'Buy a business (level-gated — the catalog is below) and it earns pocket cash on its own while you are away. They cost upkeep (the pad), a rival can shake one down or take it off you, and the Bureau watches what a front earns — collect often and a raid catches less. A late-game engine — come back as you level.') : ''}
       ${owned.length ? `<div class="card" style="border-color:var(--blood)"><span class="t" style="color:var(--bad)">⚠ YOUR EMPIRE IS RISK CAPITAL</span>
         <div class="d">If a rival <b>fire-kills your street</b>, the killer can <b>take over</b> your most valuable front — one they can hold. Your fronts aren't safe just because they're passive: defend yourself (a safehouse, a bodyguard), or expect to fight for them.</div></div>` : ''}
       ${me.tycoon ? `<div class="card" style="border-color:var(--gold)"><span class="t">THE TYCOON — ${me.tycoon.rank}</span>
@@ -4951,10 +4951,11 @@
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
           <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
           <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away'}</div>
+          ${b.scrutiny > 0 ? `<div class="d" style="color:var(--dim)">Bureau heat ${b.scrutiny}/${b.raidThreshold} — earning draws the eye; a raid seizes the pending + a fine. Collect often and it catches less.</div>` : ''}
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
 
-          ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): <button class="act" data-bizspec="${b.id}:fortress">${(rules?.empire?.specs?.fortress?.name) || 'The Fortress'}</button> <span style="color:var(--dim);font-size:11px">(hardens the front against takeovers — the Bureau-era specs are history)</span></div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
+          ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): <button class="act" data-bizspec="${b.id}:fortress">${(rules?.empire?.specs?.fortress?.name) || 'The Fortress'}</button> <button class="act" data-bizspec="${b.id}:accountant">${(rules?.empire?.specs?.accountant?.name) || 'The Accountant'}</button> <button class="act" data-bizspec="${b.id}:fixer">${(rules?.empire?.specs?.fixer?.name) || 'The Fixer'}</button> <span style="color:var(--dim);font-size:11px">(takeover defence · half the Bureau heat · half the fine + cools 2×)</span></div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
       <div class="card" style="margin-top:6px"><span class="t">Hostile Takeover</span>
         <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>

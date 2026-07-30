@@ -134,12 +134,21 @@ export const CONSTANTS = {
   // vs decay 48/day — the risk layer was dead code). Now a full day-cap wash adds 45 while only
   // 24 decays off, so sustained max-throughput extraction crosses the threshold in ~3 days and
   // sits hot (scrutiny caps at 100); moderate washing (≤ half cap/day) still never raids.
-  // DEAD as a live mechanic (v2 step 2). Business scrutiny grew ONLY from laundering, so with that
-  // retired nothing writes it: no front can be Bureau-raided any more, and the whole Business
-  // Empire step-two risk layer is unreachable. A front's remaining risk is PvP (shakedown, hostile
-  // takeover, the Sacking). Flagged for founder sign-off in BALANCE.md — passive fronts are now
-  // strictly safer than the curve was balanced against.
-  BUSINESS_SCRUTINY_PER_CAP: 45, BUSINESS_SCRUTINY_DECAY_HR: 1, BUSINESS_SCRUTINY_MAX: 100,
+  // THE BUREAU RETURNS (v2 knock-on RESOLVED — founder-directed option (b), 2026-07-30). Business
+  // scrutiny grew ONLY from laundering, so v2 step 2's retirement left the whole Bureau-raid layer
+  // unreachable (no front could ever be raided — passive fronts strictly SAFER than the L1a/L1b
+  // curve assumed). Scrutiny is now RE-SOURCED FROM INCOME — a front HEATS BY EARNING: banking
+  // income adds BUSINESS_SCRUTINY_PER_INCOME_DAY per full operating DAY's income collected
+  // (tier-normalized, so every front runs the same heat-per-day; the raid's COST scales with the
+  // size of the operation on its own — the seized pending + FINE_RATE × tier cost). MEASURED
+  // (sim P9.24, re-run on any retune): a daily collector nets +30 heat vs −24 decay → a raid
+  // ~every 10.1 days ≈ 11–12% of gross at every tier (the 5-front stack pays ~$4.2M/day on top of
+  // the L1b pad); a vigilant collector who banks often faces only the fine floor (~2% of gross) —
+  // the seized pending shrinks with cadence while the heat total is income-normalized, so cadence
+  // can't game the heat itself (the territory smuggling pattern). BUSINESS_SCRUTINY_PER_CAP stays
+  // DEAD (it metered the retired launder feed; kept for the historical record).
+  BUSINESS_SCRUTINY_PER_CAP: 45, BUSINESS_SCRUTINY_PER_INCOME_DAY: 30,
+  BUSINESS_SCRUTINY_DECAY_HR: 1, BUSINESS_SCRUTINY_MAX: 100,
   BUSINESS_RAID_THRESHOLD: 60, BUSINESS_RAID_P_PER_MIN: 0.0005, BUSINESS_RAID_FINE_RATE: 0.10,
   SHAKEDOWN_RATE: 0.30, SHAKEDOWN_CD_MS: 8*3600*1000, SHAKEDOWN_ENERGY: 15, SHAKEDOWN_HEAT: 10,
   // MAKE RISK PAY (sim-audit package, founder-approved direction; numbers are sign-off levers).

@@ -865,6 +865,45 @@ phase('P9.23 the re-sim — cash as a closed loop (tokenomics v2 step 5)');
     `see the severance block above: with cash out of the picture, $OMR supply is decided ONLY by the wage schedule (fixed, halving, endowment-capped), bonds (four walls), and the sink catalog. That is the whole token model now, and it no longer has a cash-shaped back door`);
 }
 
+// ════════ P9.24 THE BUREAU RETURNS — income-sourced front scrutiny (the dark-risk-layer fix) ════════
+// v2 step 2 left the Bureau-raid layer unreachable (scrutiny's only feed was the retired wash);
+// founder option (b) re-sources it from INCOME: banking income adds PER_INCOME_DAY heat per full
+// operating day's income (tier-normalized, accountant spec ×0.5). This walks the DAILY-collector
+// cycle in EXPECTED VALUE, mirroring resolveScrutiny's exact math (roll on the value at the start
+// of the window, then decay, then the day's heat) — analytic, no value seeded, §10.4 untouched.
+// Re-run after ANY retune of the BUSINESS_SCRUTINY_* / BUSINESS_RAID_* levers.
+phase('P9.24 the Bureau returns — income-sourced scrutiny equilibrium (founder option b)');
+{
+  const K = CONSTANTS.BUSINESS_SCRUTINY_PER_INCOME_DAY;                  // heat per operating day banked
+  const D = CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR * 24;                   // decay per day
+  const thr = CONSTANTS.BUSINESS_RAID_THRESHOLD, cap = CONSTANTS.BUSINESS_SCRUTINY_MAX;
+  const p = CONSTANTS.BUSINESS_RAID_P_PER_MIN;
+  let stackTax = 0, stackGross = 0;
+  for (const b of BUSINESSES) {
+    const top = b.tiers[b.tiers.length - 1];
+    const daily = top.incomePerHr * 24;
+    // E[days to first raid] from cold, collecting daily — a renewal cycle since a raid resets to 0
+    let scr = 0, alive = 1, eDay = 0, day = 0;
+    while (alive > 1e-6 && day < 400) {
+      day++;
+      const hrsAbove = Math.min(24, Math.max(0, (scr - thr) / CONSTANTS.BUSINESS_SCRUTINY_DECAY_HR));
+      const pDay = 1 - Math.pow(1 - p, hrsAbove * 60);
+      eDay += alive * pDay * day;
+      alive *= (1 - pDay);
+      scr = Math.min(cap, Math.max(0, scr - D) + K);
+    }
+    const cycle = eDay + alive * 400;                                    // days per raid, daily collector
+    const raidCost = daily + top.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE; // the seized pending day + the fine
+    const taxDay = raidCost / cycle;
+    stackTax += taxDay; stackGross += daily;
+    note('bureau', `${b.kind} t${b.tiers.length} (daily collector)`,
+      `a raid ~every ${cycle.toFixed(1)}d ≈ $${fmt(Math.round(taxDay))}/day (${(taxDay / daily * 100).toFixed(1)}% of gross)`,
+      `heat +${K}/operating day vs −${D}/day decay; a raid seizes the pending day ($${fmt(daily)}) + fines ${CONSTANTS.BUSINESS_RAID_FINE_RATE * 100}% of tier cost ($${fmt(Math.round(top.cost * CONSTANTS.BUSINESS_RAID_FINE_RATE))}); collect more often and the seized pending shrinks (the heat total is income-normalized, so cadence can't game IT)`);
+  }
+  note('bureau', 'the 5-front stack, raid tax total', `~$${fmt(Math.round(stackTax))}/day (${(stackTax / stackGross * 100).toFixed(1)}% of gross)`,
+    `uniform-in-probability, size-scaled-in-cost by construction — on top of the L1b progressive pad; the passive stack (P9.20) is no longer risk-free. Dial: BUSINESS_SCRUTINY_PER_INCOME_DAY (0 restores the dormant state)`);
+}
+
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════
 phase('P10 §10.4 ledger invariants over the ENTIRE sim (nothing was seeded)');
 const inv = await runLedgerInvariants(pool);

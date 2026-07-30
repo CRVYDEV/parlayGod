@@ -6681,3 +6681,33 @@ name (`renderStreets reads digEnergyz off /v1/clues`), a bogus direct read in th
 callback fails by name (`renderStart reads youz off /v1/leaderboard/city`), and — the vacuity
 check — a guard copy with the THENBIND pass deleted passes GREEN over the planted mutation, proving
 the pass is what closes the hole. Suite 60/60 + sim drift-0.
+
+**THE BUREAU RETURNS — income-sourced front scrutiny (the dark-risk-layer resolution, founder-directed
+option b, 2026-07-30).** The tokenomics-v2 migration sweep's biggest live imbalance: business scrutiny
+grew ONLY from laundering, so step 2's retirement left the whole Bureau-raid layer wired up but
+UNREACHABLE — no personal front could ever be raided, and the passive stack was strictly safer than the
+L1a/L1b curve was balanced against. Now **a front HEATS BY EARNING**: `business.js:addIncomeScrutiny`
+(called at collect + at the upgrade's pending-bank; rakeback deliberately excluded) adds
+`BUSINESS_SCRUTINY_PER_INCOME_DAY` (30, the new pinned lever) per full operating DAY's income banked —
+**tier-NORMALIZED** (`banked / (incomePerHr×24)`), so every front runs the same heat-per-day and the
+raid's COST scales with the size of the operation on its own (the seized pending + the existing 10%-of-
+tier-cost `business:raid` fine). Heat is income-normalized, not per-collect, so cadence can't game the
+heat itself; what frequent collection buys is a SMALL seized pending — the active-play out (the
+territory smuggling pattern). **Measured (sim P9.24** — an expected-value walk of the daily-collector
+cycle mirroring `resolveScrutiny`'s exact math, printed every run): a daily collector is raided ~every
+**10.1 days ≈ 11–12% of gross at every tier**; the 5-front stack pays **~$4.24M/day** on top of the L1b
+pad (net ~$21.6M → ~$17.4M/day); a vigilant multi-collect owner faces only the fine floor (~2% of
+gross). **Un-retired with it:** THE ACCOUNTANT (income heat ×0.5, read at the new feed) + THE FIXER
+(fine ×0.5, decay ×2) — refused while the layer had no feed, purchasable again now they buy a real
+effect; THE FORTRESS unchanged. §10.4: **zero new reasons** (the fine rides the existing ledgered
+`business:raid` sink; the seized pending is never minted — sweep stays drift-0). View gained
+`raidThreshold` (the territoryOf precedent) and the console Empire cards a Bureau-heat line + all three
+spec buttons; the signed decay/threshold/p/fine quadruple is untouched, and the raid-roll window trap
+(elapsed≈0 → `1−(1−p)^0` rolls nothing at any p) is documented in the regression. `test/economy.js`
+flips the old asserted-DORMANT block: banking 6h of income heats the front ~+7.5, a hot front is raided
+at the collect touch (pending seized + the ledgered fine, file cleared), the accountant halves the heat
+to the point, the fixer takes the retainer again — mutation-verified BOTH ways (heat feed dropped →
+"got 0"; accountant mult dropped → "got 7"). The levers guard caught its own class en route: the new
+BALANCE section NAMED two never-pinned levers (`BUSINESS_SCRUTINY_DECAY_HR`, `BUSINESS_RAID_FINE_RATE`)
+and refused the build until they were pinned. All numbers founder sign-off levers
+(`PER_INCOME_DAY: 0` restores the dormant state); BALANCE.md § THE BUREAU RETURNS is the record.
