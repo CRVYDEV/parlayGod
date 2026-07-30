@@ -13,6 +13,7 @@ import { M3, LOAN, levelOf, dayOf, VENDETTA, feudTierOf, UNDERWORLD, LAW, MASTER
 import { abandonRaidsAtDeath } from '../world.js';
 import { voidListingsAtDeath, burnBidsAtDeath } from '../market.js';
 import { voidLoansAtDeath } from '../loans.js';
+import { voidFavorsAtDeath } from '../favors.js';
 import { wipeSpeakeasyAtDeath } from '../speakeasy.js';
 import { wipeRingAtDeath } from '../ring.js';
 import { wipeFighterAtDeath, cancelMainEventsAtDeath } from '../boxing.js';
@@ -316,6 +317,10 @@ export async function runEstate(client, h, victim, killerName, opts = {}) {
   // survives — SIGN-OFF Tier 4, §10.4-neutral); a debt owed BY the dead borrower is uncollectable.
   const ln = await voidLoansAtDeath(client, victim.id, h, opts.killerCh, estateLootRate, heirId);
   if (opts.killerCh && ln.looted) report.loanLoot = ln.looted;
+  // THE FAVOR: a dead poster's open escrow is the same loot surface as a market order or a loan
+  // offer — a PLAYER fire-kill takes its share, the rest burns (never a loot-proof vault).
+  const fv = await voidFavorsAtDeath(client, victim.id, opts.killerCh, estateLootRate);
+  if (opts.killerCh && fv.looted) report.favorLoot = fv.looted;
   if (h.victimOwned.gangId) await removeMember(client, h.victimOwned.gangId, victim.id);
 
   victim.alive = false;

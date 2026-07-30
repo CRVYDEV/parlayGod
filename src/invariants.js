@@ -58,6 +58,11 @@ const KNOWN_REASONS = {
     // THE CALL: `contact:freight` / `contact:visit` — a contact's request settled from THEIR OWN
     // pocket (both legs character_id'd with counterparty — a pure transfer, the recycle-only rule)
     'contact:',
+    // THE FAVOR (step two): a PLAYER-posted call. `favor:post` escrows the pay, `favor:pay` is the
+    // runner's net, `favor:take` the 2% carved from it (NULL char — half street tax, half burns),
+    // `favor:refund` cancel/expiry, `favor:loot`/`favor:death` the dead poster's escrow. Reconciled
+    // by the per-character check (a) AND its own `favor escrow` identity below.
+    'favor:',
     // COMMISSION step three: proposal deposits — treasury→escrow (`commission:proposal`, NULL char),
     // refunded on an enacted motion (`commission:refund`) or forfeited to the confiscation pool
     // (`commission:forfeit`) — reconciled by the treasury check (b) + the commission-escrow check
@@ -331,6 +336,21 @@ async function collectLedgerChecks(pool) {
   // the escrow-side outflow (the rest of the escrow burns as loan:death). The market:loot precedent.
   const loanLoot = -(await sum(pool, "currency='cash' AND reason='loan:loot'"));
   push('loan escrow', loanEscrow, loanOffered - loanTaken - loanRefunded - loanDeath - loanLoot);
+
+  // (f4b) THE FAVOR ESCROW (Street Life step two) — the market-escrow twin. A player's posted pay
+  // sits in the row, not a pocket, so the open pot must equal what was posted minus everything that
+  // has left it: the runner's net, the house take carved from the pay (never minted on top), the
+  // refunds (cancel/expiry) and — because parked liquid is never a loot-proof vault — a dead
+  // poster's escrow split into the killer's cut (`favor:loot`, matched by a `whack:loot` credit in
+  // check (a)) and the burn.
+  const favorEscrow = await one(pool, "SELECT COALESCE(SUM(pay),0) s FROM favors WHERE status='open'");
+  const fvPosted = -(await sum(pool, "currency='cash' AND reason='favor:post'"));
+  const fvPaid = await sum(pool, "currency='cash' AND reason='favor:pay'");
+  const fvTakes = -(await sum(pool, "currency='cash' AND reason='favor:take'"));
+  const fvRefunded = await sum(pool, "currency='cash' AND reason='favor:refund'");
+  const fvDeath = -(await sum(pool, "currency='cash' AND reason='favor:death'"));
+  const fvLoot = -(await sum(pool, "currency='cash' AND reason='favor:loot'"));
+  push('favor escrow', favorEscrow, fvPosted - fvPaid - fvTakes - fvRefunded - fvDeath - fvLoot);
 
   // (f4b) THE LOAN HOUSE (step 5 — the backed NPC lender): the window's pool == funded (mod, from the
   // confiscation pool) + the vig share + repayments + seizures − principal lent. Every flow is a

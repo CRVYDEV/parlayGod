@@ -15,6 +15,7 @@ import * as Hustle from './hustle.js';
 import * as Career from './career.js';
 import * as Corner from './corner.js';
 import * as Contacts from './contacts.js';
+import * as Favors from './favors.js';
 import * as A from './auth.js';
 import * as Chain from './chain.js';
 import * as Fees from './fees.js';
@@ -101,7 +102,7 @@ import { dayOf, cityEventOf, priceBlock, goodPriceOf, demandOf, makingsPriceOf,
          EMISSION, emissionEpochOf, epochBudget, wageRequireMinted, TAX, withdrawTaxBps,
          HONOR, DIPLOMACY, SOV, CAMPAIGNS, CAMPAIGN_MIN_STANDING, MARRIAGE, SOLDIERS, SECRETS, KITCHEN, RACKET_EMPIRE, BUSINESS_EMPIRE, PACING, MASTERY,
          PATH_FX, PATH_XP_HOME, PATH_XP_RIVAL, PATH_SWITCH_CD_MS, REGIMEN, HUSTLE, CAREER, RIVALS,
-         CORNER, CONTACTS } from './rules.js';
+         CORNER, CONTACTS, FAVOR } from './rules.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -827,6 +828,8 @@ export async function buildServer() {
     // the contact's own pocket (the live book is GET /v1/contacts)
     contacts: { callTtlHours: Math.round(CONTACTS.CALL_TTL_MS / 3600000), visitTip: CONTACTS.VISIT_TIP,
       freightPremiumBps: CONTACTS.CALL_FREIGHT_PREMIUM_BPS },
+    favors: { maxOpen: FAVOR.MAX_OPEN, minPay: FAVOR.MIN_PAY, maxPay: FAVOR.MAX_PAY, maxQty: FAVOR.MAX_QTY,
+      takeBps: FAVOR.TAKE_BPS, ttlHours: Math.round(FAVOR.TTL_MS / 3600000) },
     // THE STREET WAR + RIVALS (discoverability — costs and bounds only; the odds stay server-side)
     rivals: { robRateBps: RIVALS.ROB_RATE_BPS, robEnergy: RIVALS.ROB_ENERGY, robJailS: RIVALS.ROB_JAIL_S,
       trunkEnergy: RIVALS.TRUNK.ENERGY, trunkJailS: RIVALS.TRUNK.JAIL_S,
@@ -1646,6 +1649,16 @@ export async function buildServer() {
     return G.withTwoCharacters(pool, req.user.sub, call.npc_character, (ch, npc, client, h) =>
       Contacts.fulfillCall(ch, npc, client, h));
   });
+  // THE FAVOR (step two) — the PLAYER-posted call. Single-party throughout: the pay is escrowed on
+  // the row at post, so a runner never locks the poster's character (no two-party lock surface).
+  app.get('/v1/favors', { preHandler: auth }, async (req) =>
+    G.readCharacter(pool, req.user.sub, (ch, client) => Favors.favorBoard(ch, client)));
+  app.post('/v1/favors', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Favors.postFavor(ch, req.body || {}, client, h)));
+  app.post('/v1/favors/:id/run', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Favors.runFavor(ch, req.params.id, client, h)));
+  app.delete('/v1/favors/:id', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => Favors.cancelFavor(ch, req.params.id, client, h)));
 
   registerKitchen(app, { pool, auth });
 

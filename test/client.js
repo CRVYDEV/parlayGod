@@ -632,7 +632,15 @@ const collectList = (src, v, key, fn) => {
   }
 };
 
-const GETBIND = /(?:const|let|var)?\s*([a-zA-Z_$][\w$]*)\s*=\s*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\2\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
+// The keyword is CAPTURED (group 1) because its absence changes where the binding's scope is. A
+// renderer that wants the card to survive a failed fetch writes the board as a declare-then-assign:
+//   let book = { contacts: [] };
+//   try { book = (await api('GET','/v1/contacts')).body || book; } catch { /* still renders */ }
+// The assignment sits inside the TRY block, so the innermost block containing it ends before the
+// markup that reads the board — and taking that block as the scope finds zero reads while looking
+// exactly like a pass. (Third member of this family, after the raw-bind and promise-callback holes:
+// a bare `x =` is scoped to x's DECLARATION, which is the variable's real scope.)
+const GETBIND = /(?:(const|let|var)\s+)?([a-zA-Z_$][\w$]*)\s*=\s*\(await api\(\s*'GET'\s*,\s*([`'"])([^`'"]+)\3\s*\)\)\s*\.body(\s*\?\.\s*([a-zA-Z_$][\w$]*))?/g;
 const reads = new Map(), readWhere = new Map();
 let unscoped = 0, shadowUnresolved = 0;
 for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(/g)) {
@@ -750,13 +758,26 @@ for (const m of html.matchAll(/\b(?:async\s+)?function\s+([a-zA-Z_$][\w$]*)\s*\(
     if (!blk) { unscoped++; continue; }
     resolveBodyRegion(tb[2].replace('$', '\\$'), paths, at + 1, blk[1]);
   }
-  const binds = [...body.matchAll(GETBIND)].map((b) => ({ v: b[1], path: b[3], sub: b[5] || '', index: b.index }))
+  const binds = [...body.matchAll(GETBIND)].map((b) => ({ v: b[2], path: b[4], sub: b[6] || '', index: b.index, bare: !b[1] }))
     .concat(viaAll.map(([v, path, idx]) => ({ v, path, sub: '', index: idx })))
     .concat(viaRaw);
   for (const b of binds) {
     const v = b.v, path = b.path.replace(/\$\{[^}]*\}/g, ':p');
-    let scope = null;
-    for (const [s, e] of blks) if (s < b.index && b.index < e && (!scope || (e - s) < (scope[1] - scope[0]))) scope = [s, e];
+    // A bare `x = (await api(...)).body` re-assigns a variable declared elsewhere, so the block
+    // holding the ASSIGNMENT (typically a try) is not the block the reads live in — scope it to the
+    // DECLARATION instead. No declaration found means the shape is one this cannot resolve, and an
+    // unresolvable binding is COUNTED, never quietly given the wrong block.
+    let at = b.index, moduleScoped = false;
+    if (b.bare) {
+      const dre = new RegExp(`(?:const|let|var)\\s+${v.replace('$', '\\$')}\\b`, 'g');
+      let d = null, mm; while ((mm = dre.exec(body)) && mm.index < b.index) d = mm.index;
+      // no declaration in this function ⇒ a module-scope global (`session`, `rules`). Its reads span
+      // the whole app, which a per-function scan cannot model — so cover the ones IN THIS FUNCTION
+      // (real reads, correctly attributed) rather than dropping the binding.
+      if (d === null) moduleScoped = true; else at = d;
+    }
+    let scope = moduleScoped ? [0, body.length] : null;
+    if (!scope) for (const [s, e] of blks) if (s < at && at < e && (!scope || (e - s) < (scope[1] - scope[0]))) scope = [s, e];
     if (!scope) { unscoped++; continue; }
     const { src, unresolved } = blankShadows(body.slice(b.index, scope[1]), v);
     shadowUnresolved += unresolved;
@@ -1077,6 +1098,18 @@ async function seedLists() {
     const s = cat.find((x) => !x.locked);
     await si('POST', `/v1/estate/staff/${s?.id}`, token, {});
   });
+  // STREET LIFE — the phone's three lists. `book.call` and the favor board are only reachable
+  // through the black book, so the contacts row comes first: a favor is visible to whoever holds
+  // the POSTER's number, which is the entire point of the mechanic.
+  await trySeed('phone contacts', () => q(
+    "INSERT INTO contacts (owner_account, contact_account, how) VALUES ($1,$2,'met'), ($2,$1,'met') ON CONFLICT DO NOTHING",
+    [acct, acct2]));
+  await trySeed('contact call', () => q(
+    `INSERT INTO contact_calls (character_id, npc_character, kind, good_id, qty, district, pay, expires_at)
+     VALUES ($1,$2,'freight','gin',3,'neon',9000, now() + interval '6 hours') ON CONFLICT DO NOTHING`,
+    [charId, two]));
+  await trySeed('favor (theirs)', () => si('POST', '/v1/favors', t2, { goodId: 'gin', qty: 3, pay: 9000, district: 'neon', note: 'quietly' }));
+  await trySeed('favor (mine)', () => si('POST', '/v1/favors', token, { goodId: 'gin', qty: 2, pay: 4000, district: 'docks' }));
   // Warm the LAZY single-use param fixtures before the jail below — they memoize at first use,
   // which is now after seedLists, and a jailed fixture can't open a ring table or place a call.
   // (Back to neon first: the boat seed above left the fixture at the docks, and the ring is a den game.)
