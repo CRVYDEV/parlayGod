@@ -324,6 +324,177 @@ for (const [i, b] of R.PORT.BOATS.entries()) MANIFEST.push({
   prompt: `${BOAT_SUBJECT[i] || 'a small wooden boat'}, moored at a fog-bound wooden jetty on black water at night, one lantern on the boards, ${NOIR}`,
 });
 
+// ═══ ACTION ART — the verbs, not the things ═══════════════════════════════════════
+// The catalog pass covered what you OWN; this pass covers what you DO. Each image sits on an
+// action card the player taps hundreds of times (a crime, a heist job, a den game), so the brief
+// is a SCENE that reads at thumbnail size: one clear subject, no crowd of detail. All 16:9 —
+// these ride wide card headers, not the 4:3 item thumbs.
+//
+// The portrait vocabulary is separate ON PURPOSE: the shared NOIR string says "unpeopled", which
+// is exactly wrong for a fixture portrait. Faces are FICTIONAL characters only (the Broadcast
+// legal posture) — no lookalikes, no real names, invented mugs.
+const SCENE = '1940s American noir, hard chiaroscuro, deep shadow, teal and amber light, film grain, '
+  + 'muted desaturated palette, cinematic, unpeopled, no signage, no lettering, no writing anywhere, no watermark';
+const PORTRAIT = 'a 1940s American noir character portrait, head and shoulders, hard chiaroscuro, one warm '
+  + 'amber key light against deep teal shadow, film grain, muted desaturated palette, painterly photographic, '
+  + 'fictional person, no lettering, no writing anywhere, no watermark';
+
+// 29 crimes — the core loop; every player stares at these cards from minute one.
+const CRIME_SUBJECT = {
+  pick: 'a gloved hand lifting a leather wallet from an overcoat pocket on a crowded rainy street corner, seen close',
+  stereo: 'a jimmied sedan door open at night, wires pulled from under a dashboard, a screwdriver on the seat',
+  numbers: 'a folded betting slip and a stub pencil passed over a tenement stoop rail at dusk',
+  booze: 'a wooden whiskey case being slid off the open tail of a parked delivery truck in an alley',
+  shake: "a shopkeeper's counter with the till drawer open and a heavy shadow falling across it",
+  highroll: 'a drunk gambler\'s trilby and scattered banknotes on wet cobbles outside a club door',
+  truck: 'a box truck stopped on a dark road, headlights blazing into fog, its rear doors swung open',
+  furs: 'mink fur coats bundled over an arm in a dim uptown service corridor',
+  poker: 'an overturned wooden chair beside a felt-topped table, clay chips spilled across the floor, one swinging overhead lamp',
+  cardgame: 'a crooked card sharp\'s workbench: a fanned deck of playing cards, a razor blade and shaved corner scraps under an amber desk lamp',
+  torch: 'a warehouse window glowing orange from inside, smoke curling out under the eaves at night',
+  alderman: 'a manila envelope of photographs sliding across a polished city-hall desk in lamplight',
+  armored: 'an armored bank truck stopped on a bridge at night, one door blown open, smoke drifting',
+  jewelry: 'a jeweler\'s display case with the glass lifted away, empty velvet ring slots, a torch beam',
+  payroll: 'a payroll office cage window with bundled pay envelopes stacked behind bent bars',
+  vaultjob: 'a round bank vault door ajar with drill dust on the marble floor, a work lamp burning',
+  railfreight: 'a freight boxcar door rolled open at a night siding, crates in torchlight, steam drifting',
+  harbormaster: 'the harbor master\'s ledger and cap on a desk overlooking foggy docks through a window',
+  fixfight: 'a boxing corner stool and a cash-stuffed envelope under the ring ropes in a dark arena',
+  diamond: 'a briefcase of loose diamonds open on the tarmac of a foggy airfield beside a propeller plane',
+  counting: 'a rival\'s counting-room table heaped with banded cash and a tipped-over adding machine',
+  museum: 'a museum gallery at night, a gold mask missing from its glass plinth, alarm light sweeping',
+  fedtrain: 'a mail train stopped at night, its steel car door cut open, gold cases in lantern light',
+  customs: 'a customs bond warehouse aisle of stenciled crates, a bolt cutter left on the floor',
+  mint: 'an overturned mint convoy truck spilling coin sacks across a night highway, flares burning',
+  grandcasino: 'a casino count-room cage stacked with chips and cash trays, the barred door swung wide',
+  clearing: 'a stock-exchange clearing floor after hours, ticker tape drifting across marble in half-light',
+  bonds: 'a leather portfolio of engraved bearer bonds open on a mahogany boardroom table at night',
+  depository: 'a federal depository corridor of barred gold cages receding into darkness, one flashlight beam',
+};
+for (const c of R.CRIMES) MANIFEST.push({
+  id: `crime-${c.id}`, model: PRO, ar: '16:9', job: `crime card: ${c.name}`,
+  prompt: `${CRIME_SUBJECT[c.id] || 'a shadowy street crime scene at night'}, ${SCENE}`,
+});
+
+// 12 crew heist jobs — the Big Scores board.
+const HEIST_SUBJECT = {
+  corner: 'a corner grocery at night, register drawer open, the door bell still swinging',
+  payroll: 'a payroll office safe hauled onto a hand truck in a dark stairwell',
+  inside: 'a nightclub back office rifled by flashlight, ledger pages scattered',
+  jewel: 'a smashed jewelry vitrine spilling pearls under a sweeping alarm light',
+  vault: 'a bank vault interior, deposit boxes pried open, drill smoke in the torch beam',
+  armored: 'an armored car tipped in a rail underpass, doors blown, cash boxes in headlights',
+  casino: 'a casino count room mid-heist, duffel bags gaping on the counting table',
+  fedtrain: 'a reserve train car cut open at night, mint pallets in lantern light, steam everywhere',
+  diamond: 'a diamond district workshop, loupe and scattered stones under one bench lamp',
+  museum: 'a museum rotunda at night, moonlight falling through an open skylight onto an empty display plinth, a coil of climbing rope on the marble floor',
+  goldvault: 'a gold depository rack of bullion bars half-emptied, a loaded dolly waiting',
+  thefed: 'a federal reserve corridor of vault gates standing open into darkness, red alarm glow',
+};
+for (const j of R.HEIST_JOBS) MANIFEST.push({
+  id: `heist-${j.id}`, model: PRO, ar: '16:9', job: `heist job card: ${j.name}`,
+  prompt: `${HEIST_SUBJECT[j.id] || 'a heist scene at night'}, ${SCENE}`,
+});
+
+// 6 Underworld fixtures — PORTRAITS (the one pass that wants a face).
+const NPC_SUBJECT = {
+  doc: 'a weary silver-haired back-alley surgeon in a collarless shirt and worn waistcoat, stethoscope around his neck, kind exhausted eyes',
+  fixer: 'a sharp-featured middle-aged fight fixer in a pinstripe suit and loosened silk tie, toothpick in the corner of his mouth, sly grin',
+  armorer: 'a hard-eyed woman gunsmith in her forties, sleeves rolled, oil-smudged leather apron over a blouse, red lipstick, unimpressed stare',
+  harbor: 'a huge bearded longshoreman boss in a wool watch cap and pea coat, weathered face, pipe smoke curling',
+  madame: 'an elegant nightclub madame in her fifties, velvet gown and long gloves, cigarette holder, knowing half-smile',
+  cornerman: 'a squat old boxing cornerman with a flattened nose and cauliflower ears, towel over one shoulder, flat cap',
+};
+for (const n of R.UNDERWORLD.NPCS) MANIFEST.push({
+  id: `npc-${n.id}`, model: PRO, ar: '4:3', job: `underworld fixture portrait: ${n.name}`,
+  prompt: `${NPC_SUBJECT[n.id] || 'a 1940s underworld character'}, ${PORTRAIT}`,
+});
+
+// 5 rival cartel outfits — the World raid cards.
+const OUTFIT_SUBJECT = {
+  dockrats: 'a gang of silhouettes among stacked cargo crates and rowboats under a pier at night',
+  zappa: 'a row of black sedans idling outside a shuttered social club, exhaust in the cold air',
+  kryl: 'a fortified warehouse compound behind chain-link, floodlights and guard silhouettes in fog',
+  moreau: 'a colonial mansion at night ringed by palm shadows, armed silhouettes on the veranda',
+  volkov: 'an ice-crusted freighter deck bristling with crates and fur-coated silhouettes, searchlight sweeping',
+};
+for (const w of R.WORLD_NPCS) MANIFEST.push({
+  id: `outfit-${w.id}`, model: PRO, ar: '16:9', job: `world outfit card: ${w.name}`,
+  prompt: `${OUTFIT_SUBJECT[w.id] || 'a rival gang stronghold at night'}, ${SCENE.replace(', unpeopled', '')}`,
+});
+
+// 9 den games — the Den's sections were the flashiest room with the barest cards.
+const GAME_SUBJECT = {
+  dice: 'two red dice mid-tumble over a chalked brick wall corner, crumpled bills on the ground',
+  numbers: 'a numbers slip and three brass lottery balls on a cigar-burned counter',
+  fight: 'a boxing ring under one cone of smoky light in a packed dark arena, ropes taut',
+  blackjack: 'neat stacks of clay chips and a small varnished wooden card box on worn green felt, one cone of warm lamp light',
+  poker: 'two facing stacks of clay chips on a green felt table with a brass banker\'s lamp, cigar smoke drifting through the light',
+  ring: 'a round felt-topped table in a wood-panelled private room, five whiskey glasses and a full ashtray, one low hanging lamp',
+  tournament: 'a silver trophy cup beside stacked poker chips under a single spotlight',
+  track: 'greyhounds bursting from a starting trap under floodlights at a night track, sand flying',
+  futurity: 'racehorses thundering past a grandstand at night, silks blurred, rail lights streaking',
+};
+for (const [gid, sub] of Object.entries(GAME_SUBJECT)) MANIFEST.push({
+  id: `game-${gid}`, model: PRO, ar: '16:9', job: `den game card: ${gid}`,
+  prompt: `${sub}, ${SCENE.replace(', unpeopled', '')}`,
+});
+
+// 3 NPC hitman tiers + 3 boxing NPC tiers + 5 business fronts + estate/speakeasy ladders.
+const HITMAN_SUBJECT = {
+  legbreaker: 'a baseball bat leaning against a brick wall beside a single work glove under a bare bulb',
+  journeyman: 'a revolver and a folded fee envelope on a diner table, coffee going cold',
+  professional: 'a violin case open on a hotel bed showing a disassembled rifle in velvet',
+};
+for (const [i, h] of R.NPC_HITMEN.entries()) MANIFEST.push({
+  id: `hitman-${h.id}`, model: PRO, ar: '16:9', job: `NPC hitman tier: ${h.name}`,
+  prompt: `${HITMAN_SUBJECT[h.id] || 'a hired killer\'s tools'}, ${SCENE}`,
+});
+const BOXER_SUBJECT = {
+  clubfighter: 'a lean young boxer shadowboxing alone in a dim gym, tape on his fists',
+  journeyman: 'a scarred veteran boxer leaning on the ropes, gloves down, sizing up the camera',
+  gatekeeper: 'a massive heavyweight seated on a corner stool like a throne, arms crossed, in shadow',
+};
+for (const b of R.BOXING.NPC_TIERS) MANIFEST.push({
+  id: `boxer-${b.id}`, model: PRO, ar: '4:3', job: `boxing NPC tier: ${b.name}`,
+  prompt: `${BOXER_SUBJECT[b.id] || 'a 1940s boxer'}, ${PORTRAIT.replace('head and shoulders', 'three-quarter figure')}`,
+});
+const BUSINESS_SUBJECT = {
+  laundromat: 'a corner laundromat at night, washers glowing, steam on the glass',
+  restaurant: 'a red-checked-tablecloth Italian restaurant, candle bottles, one lit table',
+  nightclub: 'a nightclub stage with a lone microphone in a spotlight, empty tables in the dark',
+  hotel: 'a grand hotel lobby at night, brass and marble, one bellhop cart abandoned',
+  casino: 'a grand gaming hall at closing time, tables covered in white sheets, one glowing wheel of fortune, a chandelier half lit',
+};
+for (const b of R.BUSINESSES) MANIFEST.push({
+  id: `business-${b.kind}`, model: PRO, ar: '16:9', job: `business front card: ${b.name}`,
+  prompt: `${BUSINESS_SUBJECT[b.kind] || 'a storefront at night'}, ${SCENE}`,
+});
+// ladders keyed by TIER NUMBER — a ladder is ordered by definition, so the tier IS the stable id
+const ESTATE_SUBJECT = [
+  'a bare room over a social club, a cot, a hat on a nail, one window of neon glow',
+  'a narrow brick row house at dusk, warm light in one window, iron railings',
+  'an uptown brownstone with tall bay windows and a gas lamp, rain-slicked steps',
+  'a country estate at the end of a poplar drive at dusk, windows lit gold',
+  'a walled compound at night, iron gates, guard lights, a long black car in the court',
+  'a marble palazzo above the city at night, colonnaded terrace, fountain lit from below',
+];
+R.ESTATE.TIERS.forEach((t, i) => MANIFEST.push({
+  id: `estate-${t.tier}`, model: PRO, ar: '16:9', job: `estate tier: ${t.name}`,
+  prompt: `${ESTATE_SUBJECT[i] || 'a grand house at night'}, ${SCENE}`,
+}));
+const CLUB_SUBJECT = [
+  'a cramped speakeasy backroom, crates for stools, a bottle-lined shelf, one candle',
+  'a small velvet lounge with a curved leather bar and low amber lamps',
+  'a moody blue-lit jazz room, double bass leaning by the stage, smoke hanging',
+  'a glamorous supper club of white tablecloths and a chrome bandstand, chandelier glow',
+  'a cathedral-scaled grand club, vaulted ceiling, tiered balconies, a sea of candlelit tables',
+];
+R.SPEAKEASY.TIERS.forEach((t, i) => MANIFEST.push({
+  id: `club-${t.tier}`, model: PRO, ar: '16:9', job: `speakeasy tier: ${t.name}`,
+  prompt: `${CLUB_SUBJECT[i] || 'a hidden bar'}, ${SCENE}`,
+}));
+
 // ── plumbing ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const force = args.includes('--force');
