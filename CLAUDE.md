@@ -3959,6 +3959,34 @@ Suite green + sim drift-0. Deliberately NOT generated: gear (its market is the o
 art can wait for the NFT metadata call) and per-district goods variants (one plate per good is the thumb
 job).
 
+**ACTION ART + THE TOUR — the verbs get plates, and the tutorial the testers asked for (task #300/#301).**
+Two founder directives in one drop: imagery on the action surfaces that were still bare text, and an
+expanded onboarding experience. **(1) 90 more generated plates** (total spend $10.48 of the $12 cap, all
+ledgered): 29 CRIME scene vignettes (the core-loop cards every player stares at from minute one), 12 heist
+jobs, 6 Underworld fixture PORTRAITS (a separate PORTRAIT vocabulary — the shared NOIR string says
+"unpeopled", which is exactly wrong for a face; all faces fictional, the Broadcast posture), 5 cartel
+outfits, 9 den games, 3 hitman tiers, 3 boxing house fighters, 5 business fronts, and the estate (6) +
+speakeasy (5) ladders keyed by TIER NUMBER (a ladder is ordered by definition, so the tier IS the stable
+id). **The contact-sheet review earned its keep again**: fal's post-generation safety checker returned
+identical 7,799-byte BLACK frames for every dark smoky card-table scene and for a rope "dangling" from a
+skylight (reading as a noose) — deterministic on the OUTPUT distribution, not the prompt words, so the fix
+was object-macro rewording ("an overturned chair, spilled clay chips") that changes what gets rendered; and
+one prompt's "wooden card-dealing shoe" rendered a literal leather shoe on the felt. **(2) Wiring**: a new
+`aart(kind,id)` helper + `.ico.wide` (96px cover strip) — crime cards, the Den's games (keyed off each felt
+card's own HEADING post-`feltify`, since the games carry no ids), City outfits, Life fixture portraits, a
+"Hitmen for Hire" strip on Wet Work, Empire fronts (owned + catalog), the Estate deed (tier plate), the
+Speakeasy house + nightlife boards (tier plates), a boxing house-fighter strip, and heist jobs (my-job +
+open-crew cards matched job-name→id; a live `#hj-preview` that follows the plan select). **(3) THE TOUR** —
+the one-wall-of-text welcome modal became a 7-step ILLUSTRATED tour (one idea + one plate per step: the
+loop, the Streets, your money, death is real, the family, the Law, follow the coach), keyed on its own
+`omerta_tour2` flag so existing testers see the expanded version exactly once; skip/back/dots; replayable
+from the ? glossary header AND the new **"How the city works"** collapsible primer on Start Here (six
+illustrated mini-cards, always available). **(4) THE COACH NAV PULSE** — the tab/group/bnav button the ▸
+coach line points at breathes (`.coachhint`, cleared on re-render, never lit on the tab you're already on,
+dead under reduced-motion) — so "take me there" has a visible destination. `tools/mobile.js` now CHECKS the
+tour's layout as its own screen (62→64 checks) instead of blind-dismissing it. Suite green + sim drift-0;
+wiring + mirror guards green; Chromium-probed (tour, crimes, fixtures, den, outfits — zero page errors).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

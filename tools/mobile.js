@@ -193,7 +193,13 @@ for (const vp of VIEWPORTS) {
   await page.fill('#new-name', 'Probe ' + Math.random().toString(36).slice(2, 8));
   await page.click('#btn-create');
   await page.waitForSelector('#screen-main:not(.hidden)', { timeout: 20000 });
-  if (await page.locator('#welcome:not(.hidden)').count()) { await page.click('#welcome-go'); await page.waitForTimeout(300); }
+  // the first-session TOUR (the illustrated multi-step welcome) — check ITS layout on the first
+  // step, then skip out; a layout guard that dismissed it blind would leave the game's very first
+  // screen unchecked, which is the headline-defect class this harness exists for
+  if (await page.locator('#welcome:not(.hidden)').count()) {
+    await check(page, 'the tour (step 1)', vp);
+    await page.click('#tour-skip'); await page.waitForTimeout(300);
+  }
 
   // THE NEW PLAYER'S FIRST SCREEN. Checked before anything is unlocked, because this is the exact
   // state the headline defect lived in and the one every single player passes through.

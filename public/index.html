@@ -349,6 +349,7 @@
       radial-gradient(80% 70% at 50% 42%, #1c1f28 0%, #0e1015 100%);
     border: 1px solid var(--line); }
   .ico.sm { height: 52px; }
+  .ico.wide { height: 96px; }
   .ico.row { display: inline-block; width: 46px; height: 30px; vertical-align: middle;
     margin: -3px 8px -3px 0; border: 0; background: none; border-radius: 4px; object-fit: cover; }
 
@@ -433,6 +434,22 @@
     padding: 22px 24px; box-shadow: var(--shadow-pop), 0 0 40px var(--neon-soft);
     animation: modalIn .3s var(--ease); overscroll-behavior: contain; }
   @keyframes modalIn { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+  /* THE TOUR — the illustrated multi-step welcome (tester feedback: a real tutorial, not one wall of text) */
+  .modal.tour { padding: 0 0 16px; overflow: hidden; display: flex; flex-direction: column; }
+  #tour-art { width: 100%; height: 180px; object-fit: cover; display: block; border-bottom: 1px solid var(--line);
+    background: #0e1015; }
+  #tour-body { padding: 14px 22px 4px; min-height: 168px; }
+  #tour-body h2 { margin-top: 0; }
+  .tour-nav { display: flex; align-items: center; justify-content: space-between; padding: 6px 22px 0; gap: 10px; }
+  #tour-dots { display: flex; gap: 7px; }
+  #tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background .2s; }
+  #tour-dots i.on { background: var(--neon); }
+  .ghostbtn { opacity: .55; }
+  @media (max-width: 760px) { #tour-art { height: 130px; } #tour-body { min-height: 190px; } }
+  /* the coach's nav pulse — the button the ▸ coach line points at breathes so "take me there" has a
+     visible destination even if the banner scrolled away (killed wholesale by the reduced-motion switch) */
+  .coachhint { animation: coachPulse 2.2s ease-in-out infinite; }
+  @keyframes coachPulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 10px 1px var(--neon-soft); border-color: var(--neon); } }
   .modal h2 { color: var(--neon); letter-spacing: 3px; font-weight: normal; margin: 0 0 6px; font-size: 18px; }
   .modal p, .modal li { color: var(--ink); font-size: 14px; line-height: 1.55; }
   .modal .dim { color: var(--dim); font-size: 13.5px; }
@@ -994,15 +1011,16 @@
   <nav id="bnav" aria-label="sections"></nav>
 </div>
 
-<!-- first-session welcome (shown once) -->
-<div id="welcome" class="modal-bg hidden"><div class="modal">
-  <h2>WELCOME TO THE CITY</h2>
-  <p class="dim">A noir mob RPG. You start as a nobody. You end as a name people are afraid to say — or a body in the river. That part's up to you.</p>
-  <p><b>The loop:</b> pull jobs for cash → train your muscle, cunning &amp; speed → bank what you earn (pocket cash gets jumped) → join a family → set up earners that pay while you sleep → climb, scheme, and take the city.</p>
-  <p><b>Two things that matter:</b> <span style="color:var(--neon)">respect</span> is your level — everything gates on it. And when you die, your <span style="color:var(--neon)">street</span> dies with you, but your <span style="color:var(--neon)">account</span> (prestige, $OMR, gear, your legit portfolio) survives to your heir. Play like it counts.</p>
-  <p class="dim">This city is deep — kitchens, families, wars, the Law, loan sharks, casinos, going legit. Don't try to learn it all at once. Watch the <span style="color:var(--neon)">▸ coach line</span> on your sheet — it always names the one thing to do next. Two survival rules: <b>bank your cash</b>, and <b>don't carry a debt or a body you can't answer for.</b></p>
-  <p class="dim">The <b>Start Here</b> tab is your first-week checklist — it pays cash to teach you the ropes. Lost? Tap the <b>?</b> up top for the glossary, or open the <b>CODEX</b> for the full rulebook. Now go make your bones.</p>
-  <div style="margin-top:14px;text-align:right"><button class="act" id="welcome-go" style="font-size:15px;padding:10px 22px">STEP OUT →</button></div>
+<!-- first-session tour (shown once; replayable from the ? panel and Start Here) -->
+<div id="welcome" class="modal-bg hidden"><div class="modal tour">
+  <img id="tour-art" alt="" src="">
+  <div id="tour-body"></div>
+  <div class="tour-nav">
+    <div id="tour-dots"></div>
+    <div><button id="tour-skip" class="act ghostbtn">skip</button>
+      <button id="tour-back" class="act">← back</button>
+      <button class="act" id="tour-next" style="font-size:15px;padding:9px 20px">next →</button></div>
+  </div>
 </div></div>
 
 <!-- the death / heir moment (F2) — the "play for keeps" beat, shown the turn a street dies -->
@@ -1021,7 +1039,7 @@
 
 <!-- the glossary (? button) -->
 <div id="glossary" class="modal-bg hidden"><div class="modal">
-  <h2>THE LAY OF THE LAND</h2>
+  <h2>THE LAY OF THE LAND <button class="act" id="glossary-tour" style="float:right;font-size:12px;padding:5px 10px;letter-spacing:normal">▶ replay the tour</button></h2>
   <dl>
     <dt>Respect / Level</dt><dd>Your standing. Respect is XP; your level is derived from it and gates every job, path, and perk.</dd>
     <dt>Nerve</dt><dd>What <b>crime</b> costs. It's the clock on the street loop — jobs are gated by nerve, not energy, so a grinding session is paced by how fast nerve trickles back.</dd>
@@ -1398,8 +1416,11 @@
   }
   // the working line — a thin indeterminate hairline at the very top while an action is in flight
   const busy = document.createElement('div'); busy.id = 'busy'; document.body.appendChild(busy);
-  // procedural item art — one engraved SVG per catalog id, served by GET /v1/art/:kind/:id.
+  // item art — a generated photo per catalog id (SVG emblem fallback), served by GET /v1/art/:kind/:id.
   const ico = (kind, id) => id ? `<img class="ico" loading="lazy" alt="" src="/v1/art/${kind}/${encodeURIComponent(id)}">` : '';
+  // action art — the same route, but a WIDE strip for the verb cards (crimes, den games, heist jobs,
+  // outfits, fixtures). Same server fallback chain, so a missing plate degrades to an emblem, never a hole.
+  const aart = (kind, id) => (id !== null && id !== undefined && id !== '') ? `<img class="ico wide" loading="lazy" alt="" src="/v1/art/${kind}/${encodeURIComponent(id)}">` : '';
   let token = localStorage.getItem('omerta_token') || null;
   let me = null, rules = null, ws = null, session = null;
   // THE BROADCAST — frictionless referral attribution: a shared link (/u/<name>?ref=<name>) drops
@@ -1931,7 +1952,9 @@
     session = (await api('GET', '/v1/session')).body || null;
     if (!rules) rules = (await api('GET', '/v1/rules')).body;
     show('screen-main'); renderSheet(); buildTabs(); connectWs(); backfillFeed();
-    if (!localStorage.getItem('omerta_welcomed')) $('#welcome').classList.remove('hidden'); // first session: orient them
+    // first session: the illustrated tour. Keyed on its own flag (not omerta_welcomed) ON PURPOSE —
+    // existing testers who saw the old one-wall-of-text welcome get the expanded tour exactly once too.
+    if (!localStorage.getItem('omerta_tour2')) openTour();
   }
 
   const landToken = (r) => {
@@ -2015,8 +2038,54 @@
   // the glossary (the ? up top) + the first-session welcome (shown once per browser)
   $('#btn-help').onclick = () => $('#glossary').classList.remove('hidden');
   $('#glossary-close').onclick = () => $('#glossary').classList.add('hidden');
+  $('#glossary-tour').onclick = () => { $('#glossary').classList.add('hidden'); openTour(); };
   $('#glossary').onclick = (e) => { if (e.target.id === 'glossary') $('#glossary').classList.add('hidden'); };
-  $('#welcome-go').onclick = () => { localStorage.setItem('omerta_welcomed', '1'); $('#welcome').classList.add('hidden'); setTab('start'); };
+  // ── THE TOUR — the illustrated multi-step welcome. Content matches the glossary/codex register
+  // (English prose, like all game prose); each step is one idea + one plate, because the old
+  // single-modal welcome was five paragraphs nobody read (tester feedback).
+  const TOUR = [
+    { art: 'hero-poster', title: 'WELCOME TO THE CITY', body:
+      `<p>A noir mob RPG. You start as a nobody. You end as a name people are afraid to say — or a body in the river.</p>
+       <p><b>The loop:</b> pull jobs for cash → train up → bank what you earn → join a family → set up earners that pay while you sleep → take the city.</p>` },
+    { art: 'interior-streets', title: 'THE STREETS', body:
+      `<p>Crimes run on <b style="color:var(--neon)">nerve</b> (it refills on its own). Every job has three plays: <b>case it</b> (quiet, smaller take), <b>do it</b>, or <b>go loud</b> (bigger score, draws the Law).</p>
+       <p class="dim">Get busted and you sit in lockup. The gym runs on <b>energy</b> — muscle, cunning and speed decide fights, heists and escapes.</p>` },
+    { art: 'interior-legit', title: 'YOUR MONEY', body:
+      `<p><b>Pocket cash gets jumped.</b> Bank it — deposits ride "in transit" for a couple of hours before they're safe, so bank early, not on the way to a fight.</p>
+       <p class="dim"><b style="color:var(--neon)">$OMR</b> is the token — earned by playing well, spent on the serious things, and losable if you get whacked holding it loose. Staked or vaulted is safe harbour.</p>` },
+    { art: 'card-whacked', title: 'DEATH IS REAL', body:
+      `<p>Another player can end your street — for good. But your <b style="color:var(--neon)">account</b> survives: prestige, $OMR, your legit portfolio and estate pass to your <b>heir</b>, who rises with the family name.</p>
+       <p class="dim">Shields exist — the safehouse, a bodyguard, revive insurance. None are forever. Play like it counts.</p>` },
+    { art: 'interior-family', title: 'THE FAMILY & THE PEOPLE', body:
+      `<p>Nobody survives alone. A <b>family</b> means turf, a treasury, wars and a seat at the Commission. The city's <b>fixtures</b> — the Doc, the Madame, the rest — remember who's good to them.</p>
+       <p class="dim">So do your enemies. Kill a man and his bloodline swears a vendetta.</p>` },
+    { art: 'interior-law', title: 'THE LAW IS WATCHING', body:
+      `<p>Every loud job feeds your <b style="color:var(--bad)">heat</b>, and heat feeds a RICO case. Lay low, pay the right people, or face the courtroom — a conviction seizes your money and puts you in the Pen.</p>
+       <p class="dim">The Pen is a place, not a timeout: work the yard, bribe the guard, or go over the wall.</p>` },
+    { art: 'interior-start', title: 'FOLLOW THE COACH', body:
+      `<p>This city is deep. Don't learn it all at once — the <b style="color:var(--neon)">▸ coach line</b> on your sheet always names the one thing to do next, and the glowing button shows where.</p>
+       <p><b>Start Here</b> is your first-week checklist — it pays cash to teach you the ropes. The <b>?</b> up top is the glossary (and replays this tour); the <b>CODEX</b> is the full rulebook. Now go make your bones.</p>` },
+  ];
+  let tourAt = 0;
+  function tourStep(i) {
+    tourAt = Math.max(0, Math.min(TOUR.length - 1, i));
+    const s = TOUR[tourAt], last = tourAt === TOUR.length - 1;
+    $('#tour-art').src = `/art/${s.art}.jpg`;
+    $('#tour-body').innerHTML = `<h2>${s.title}</h2>${s.body}`;
+    $('#tour-dots').innerHTML = TOUR.map((_, j) => `<i${j === tourAt ? ' class="on"' : ''}></i>`).join('');
+    $('#tour-back').style.visibility = tourAt ? 'visible' : 'hidden';
+    $('#tour-skip').style.display = last ? 'none' : '';
+    $('#tour-next').textContent = last ? 'STEP OUT →' : 'next →';
+  }
+  function openTour() { tourStep(0); $('#welcome').classList.remove('hidden'); }
+  window.openTour = openTour;   // replay buttons (glossary header + Start Here primer) reach it by name
+  const endTour = () => {
+    localStorage.setItem('omerta_tour2', '1'); localStorage.setItem('omerta_welcomed', '1');
+    $('#welcome').classList.add('hidden'); setTab('start');
+  };
+  $('#tour-next').onclick = () => (tourAt === TOUR.length - 1 ? endTour() : tourStep(tourAt + 1));
+  $('#tour-back').onclick = () => tourStep(tourAt - 1);
+  $('#tour-skip').onclick = endTour;
 
   // ── THE CELLPHONE (the 📱 up top) — inbox + player-to-player DMs ──
   let phoneOpenThread = null; // counterpart character id while a thread view is open
@@ -2228,6 +2297,16 @@
     // THE COACH — the server-computed single next step (guides new players; quietly absent for vets)
     $('#coachwrap').innerHTML = me.coach ? `<div id="coach"><div class="cl">▸ ${me.coach.label}</div><div class="ch">${me.coach.hint}</div>
       <button class="act" id="coach-go" style="padding:5px 12px;font-size:12.5px">${T('b_takeme')}</button></div>` : '';
+    // …and its nav pulse: the button the coach points at breathes, so the destination is visible
+    // even when the banner has scrolled away. Cleared first (the coach moves as you progress), and
+    // never lit while you're already standing on the target tab.
+    document.querySelectorAll('.coachhint').forEach((b) => b.classList.remove('coachhint'));
+    if (me.coach && me.coach.tab && currentTab !== me.coach.tab) {
+      const grp = groupOf(me.coach.tab);
+      for (const sel of [`#tabs [data-tab="${me.coach.tab}"]`, `[data-group="${grp}"]`, `#bnav [data-go="${me.coach.tab}"]`, `#bnav [data-go="${grp}"]`]) {
+        const b = document.querySelector(sel); if (b) b.classList.add('coachhint');
+      }
+    }
     // the phone strip: the four numbers you glance at, always in reach, so the full sheet can sit below
     // the tab content without costing you your vitals. Hidden by CSS on desktop, where the sheet is a column.
     $('#vitals').innerHTML = `<span class="v-cash">$${fmt(me.cash)}</span>`
@@ -2974,6 +3053,21 @@
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+      ${sect('howto', 'How the city works', 'the six things worth knowing — 60 seconds', `
+        <div class="grid">
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-streets.jpg"><span class="t">The Streets</span>
+            <div class="d">Crime runs on <b>nerve</b>; the gym on <b>energy</b>. Every job: case it (quiet), do it, or go loud (bigger, hotter).</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-legit.jpg"><span class="t">Your Money</span>
+            <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staked is safe harbour.</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/card-whacked.jpg"><span class="t">Death Is Real</span>
+            <div class="d">Your street can be killed for good. Your <b>account</b> — prestige, $OMR, portfolio, estate — survives to your heir.</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-family.jpg"><span class="t">The Family</span>
+            <div class="d">Turf, treasury, wars, the Commission. Nobody survives alone — and enemies' bloodlines swear vendettas.</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-law.jpg"><span class="t">The Law</span>
+            <div class="d">Heat feeds a RICO case. Lay low, pay the right people, or face the courtroom — and the Pen behind it.</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-start.jpg"><span class="t">Follow the Coach</span>
+            <div class="d">The ▸ coach line on your sheet names the next move; the glowing nav button shows where. <a href="#" id="howto-tour">replay the full tour →</a></div></div>
+        </div>`)}
       ${ob.referral?.canClaim ? `<div class="card" style="margin-top:10px;border-color:var(--neon)"><span class="t">📣 DID SOMEONE SEND YOU?</span>
         <div class="d">If a player told you about OMERTÀ, name them — they get credit as you come up (it costs you nothing). ${Math.max(1, Math.round((ob.referral.windowSeconds || 0) / 3600))}h left to set it.</div>
         <div class="row" style="margin-top:6px"><input id="ref-claim-name" placeholder="their street name" value="${esc(refDraft)}" style="max-width:220px">
@@ -3055,6 +3149,8 @@
       act('POST', '/v1/referral/claim', { code: nm }).then(() => renderStart());
     };
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
+    const ht = t.querySelector('#howto-tour'); if (ht) ht.onclick = (e) => { e.preventDefault(); openTour(); };
+    wireSects(t);
     t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
     t.querySelectorAll('[data-swclaim]').forEach((b) => b.onclick = () => {
       const inp = t.querySelector(`.sw-proof[data-for="${b.dataset.swclaim}"]`);
@@ -3155,7 +3251,7 @@
     // but draws law heat + a harder bust. Same cash EV — the choice is your risk appetite.
     const dis = (c) => (me?.level || 1) < c.lvl ? ' disabled' : '';
     const crimeCard = (c) => `
-      <div class="card"><span class="t">${c.name}</span>
+      <div class="card">${aart('crime', c.id)}<span class="t">${c.name}</span>
         <div class="d">lvl ${c.lvl} · ${c.nerve} nerve · $${fmt(c.cash[0])}–$${fmt(c.cash[1])}${c.jail ? ' · jail risk' : ''}</div>
         <div class="verbrow">
           <button class="act" style="opacity:.8" data-do="POST /v1/crimes/${c.id}" data-body='{"approach":"quiet"}'${dis(c)}>case it</button>
@@ -3347,7 +3443,7 @@
         <div class="d">a held outfit pays TRIBUTE to the treasury (a conquered vassal) · pending: <b>$${fmt(w.frontier.tributePending)}</b></div>
         ${w.frontier.tributePending > 0 ? '<button class="act" id="w-collect">collect the tribute → treasury</button>' : '<span class="d" style="color:var(--dim)">nothing to collect yet — it accrues while you hold the turf</span>'}</div>` : ''}
       <div class="grid">${(w.npcs || []).map((n) => `
-        <div class="card"><span class="t">${n.name}</span>${n.coop ? '<span class="chip">apex</span>' : ''}${n.routed ? '<span class="chip good">ROUTED</span>' : ''}${n.enraged ? '<span class="chip bad">ON ALERT</span>' : ''}${n.rising ? '<span class="chip bad">🔥 RISING</span>' : ''}
+        <div class="card">${aart('outfit', n.id)}<span class="t">${n.name}</span>${n.coop ? '<span class="chip">apex</span>' : ''}${n.routed ? '<span class="chip good">ROUTED</span>' : ''}${n.enraged ? '<span class="chip bad">ON ALERT</span>' : ''}${n.rising ? '<span class="chip bad">🔥 RISING</span>' : ''}
           ${n.heldBy ? `<div class="d">frontier held by <b>${n.heldBy.name}</b> [${n.heldBy.tag}]${n.heldBy.mine ? ' <span class="chip good">yours</span>' : ''}${n.heldBy.mine && n.tributePending != null ? ` · tribute $${fmt(n.tributePending)} pending ($${fmt(n.tributePerHr)}/hr)` : ''}${!n.heldBy.mine ? ` · garrison $${fmt(n.garrison)}` : ''}</div>` : (n.coop ? '<div class="d" style="color:var(--dim)">frontier: open — rout it to claim its tribute</div>' : `<div class="d" style="color:var(--dim)">frontier: open — rout it ($${fmt(n.tributePerHr)}/hr tribute)</div>`)}
           <div class="d">strength ${n.strengthPct}% · lvl ${n.minLvl}+${n.odds != null ? ` · your solo odds ${n.odds}%` : ''}${n.enraged ? ' · <span style="color:var(--bad)">enraged — dug in</span>' : ''}</div>
           ${n.canRaid ? `<button class="act" data-raid="${n.id}">raid (energy + ammo)</button>` : `<span class="chip">need lvl ${n.minLvl}</span>`}
@@ -3532,6 +3628,15 @@
     // Grouping is done here rather than in the template because the games are added and reordered
     // constantly, and a structural pass over the rendered DOM can't fall out of sync with them.
     feltify(t);
+    // …and each game's plate, matched off its own heading (the games carry no ids — the same reason
+    // feltify exists). A heading with no plate simply gets none; the back-room fade shares the dice.
+    const GAME_ART = { 'Street Craps': 'dice', 'The Numbers': 'numbers', 'The Fight': 'fight', 'The Track': 'track',
+      'Blackjack': 'blackjack', "Hold'em Table": 'poker', 'Ring Poker': 'ring', 'The Tournament': 'tournament',
+      'The Futurity': 'futurity', 'Back Room': 'dice' };
+    t.querySelectorAll('.card.felt h2').forEach((h) => {
+      const key = Object.keys(GAME_ART).find((k) => h.textContent.trim().startsWith(k));
+      if (key) h.insertAdjacentHTML('beforebegin', aart('game', GAME_ART[key]));
+    });
     // the roll draws itself — act() hands every result to revealFor(), which shows the pass line
     // OUTSIDE the tab (see reveal()), since this handler re-renders the Den right after and
     // anything drawn into the tab would be destroyed before it could play
@@ -3823,6 +3928,12 @@
                 <button class="act" data-duel="${x.id}">DUEL</button>
               </div></div>`).join('') || '<div class="card"><div class="d">the circuit is empty — list yourself and start the ladder</div></div>'}
         </div>`; })()}
+      <h2 style="margin-top:12px">The Hitmen for Hire <span class="d" style="font-size:11px">(pay a fixed fee — the house rolls the hit; pick the tier on any mark below)</span></h2>
+      <div class="grid">
+        <div class="card">${aart('hitman', 'legbreaker')}<span class="t">Leg-Breaker</span><div class="d">$50k · the cheap muscle — a chance, not a promise</div></div>
+        <div class="card">${aart('hitman', 'journeyman')}<span class="t">Journeyman</span><div class="d">$250k · a working professional</div></div>
+        <div class="card">${aart('hitman', 'professional')}<span class="t">The Professional</span><div class="d">$1M · the man in the violin case</div></div>
+      </div>
       <h2 style="margin-top:12px">The Streets (${streets.length})</h2>
       <div class="grid">${streets.map((s) => `
         <div class="card"><span class="t">${esc(s.name)}</span> <span class="d">lvl ${s.level}${s.gangTag ? ' · ' + s.gangTag : ''}</span>
@@ -4347,7 +4458,7 @@
         <button class="act" data-do="POST /v1/business/collect" style="margin-left:8px">collect all</button>
         <button class="act" data-do="POST /v1/business/upkeep">pay the pad</button></h2>
       ${owned.length ? `<div class="grid">${owned.map((b) => `
-        <div class="card"><span class="t">${b.name} · tier ${b.tier}</span>
+        <div class="card">${aart('business', b.kind)}<span class="t">${b.name} · tier ${b.tier}</span>
           ${b.cold ? '<span class="chip bad">COLD — pay the pad</span>' : ''}${b.raidRisk ? '<span class="chip bad">FEDS WATCHING</span>' : ''}
           <div class="d">$${fmt(b.incomePerHr)}/hr · pending $${fmt(b.pending)} · pad owed $${fmt(b.upkeepOwed)}</div>
           <div class="d">${b.kind === 'casino' ? 'den rakeback at collect' : 'earns while you are away'}</div>
@@ -4362,7 +4473,7 @@
 
       <h2 style="margin-top:12px">The Catalog <span class="d" style="font-size:11px">(passive income — buy once, collect forever)</span></h2>
       <div class="grid">${cat.map((c) => `
-        <div class="card"><span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
+        <div class="card">${aart('business', c.kind)}<span class="t">${c.name}</span>${ownedKinds.has(c.kind) ? '<span class="chip good">owned</span>' : ''}
           <div class="d">level ${c.lvl}+ · t1 $${fmt(c.tiers[0].cost)} → $${fmt(c.tiers[0].incomePerHr)}/hr</div>
           ${ownedKinds.has(c.kind) ? '' : `<button class="act" data-bizbuy="${c.kind}">buy</button>`}</div>`).join('')}</div>
 
@@ -4418,7 +4529,7 @@
         <div class="d">The nightlife legend — earned by being seen (rounds + bottles) and running a room. <a href="#" id="sp-nl">the leaderboard →</a></div></div>
       <h2>You're at: ${distName(me.loc)}</h2>
       ${mine ? `
-      <div class="card" style="border-color:var(--neon)"><span class="t">${mine.name || mine.tierName} <span class="chip good">YOUR HOUSE</span></span>
+      <div class="card" style="border-color:var(--neon)">${aart('club', mine.tier)}<span class="t">${mine.name || mine.tierName} <span class="chip good">YOUR HOUSE</span></span>
         ${mine.shutSeconds ? `<span class="chip bad">RAIDED — dark ${mins(mine.shutSeconds)}</span>` : mine.raidRisk ? '<span class="chip bad">HOT — the Prohibition boys are watching</span>' : ''}
         <div class="d">${distName(mine.district)} · ${mine.tierName} · prestige ${mine.prestige} · $${fmt(mine.incomePerHr)}/hr · pending $${fmt(mine.pending)} · notoriety ${mine.notoriety}</div>
         <button class="act" data-do="POST /v1/speakeasy/collect" style="border-color:var(--neon)">collect the bar take</button>
@@ -4450,7 +4561,7 @@
 
       <h2 style="margin-top:12px">The Nightlife <span class="d" style="font-size:11px">(ranked by prestige — where the city goes to be seen)</span></h2>
       <div class="grid">${(b.clubs || []).map((c) => `
-        <div class="card"><span class="t">${c.name || distName(c.district)}</span>${c.mine ? '<span class="chip good">yours</span>' : ''}${c.decorName ? `<span class="chip">${c.decorName}</span>` : ''}${c.salePrice && !c.mine ? `<span class="chip gold">for sale $${fmt(c.salePrice)}</span>` : ''}
+        <div class="card">${aart('club', c.tier)}<span class="t">${c.name || distName(c.district)}</span>${c.mine ? '<span class="chip good">yours</span>' : ''}${c.decorName ? `<span class="chip">${c.decorName}</span>` : ''}${c.salePrice && !c.mine ? `<span class="chip gold">for sale $${fmt(c.salePrice)}</span>` : ''}
           <div class="d">${distName(c.district)} · ${c.tierName} · ${c.owner} · prestige ${c.prestige} · ${c.regulars} regular${c.regulars === 1 ? '' : 's'}</div>
           ${c.guestList?.length ? `<div class="d">seen here: ${c.guestList.map((g) => `${g.you ? '<b>' + g.name + '</b>' : g.name}${g.regular ? '★' : ''}`).join(', ')}</div>` : '<div class="d" style="color:var(--dim)">quiet tonight</div>'}
           ${!c.mine && c.district !== me.loc ? `<button class="act" data-travel="${c.district}">go there</button>` : ''}
@@ -4496,6 +4607,9 @@
         ${b.champion.callout ? `<div class="d" style="color:var(--neon)">🥊 CALLOUT: ${b.champion.callout.challenger} has called out the champ${b.champion.callout.deadlineSeconds > 0 ? ` — the champ must accept within ${mins(b.champion.callout.deadlineSeconds)} or forfeit the belt` : ' — <span style="color:var(--bad)">accept overdue — forfeit imminent</span>'}
           ${b.champion.onMe && b.champion.callout.deadlineSeconds > 0 ? '<button class="act" id="bx-accept" style="border-color:var(--neon)">accept the challenge (title main event)</button>' : ''}</div>`
           : (b.champion.contender && b.champion.contender.mine && !b.champion.onMe ? `<div class="d"><button class="act" id="bx-callout" data-cf="${b.champion.contender.fighterId}" style="border-color:var(--bad)">📣 call out the champ (mandatory title shot)</button></div>` : '')}</div>` : ''}
+      ${npc.length ? `<div class="grid" style="margin-top:8px">${npc.map((n) => `
+        <div class="card">${aart('boxer', n.id)}<span class="t">${n.name}</span>
+          <div class="d">house fighter · fee $${fmt(n.fee)} → purse $${fmt(n.purse)} <span style="color:var(--dim)">(pick a fighter below to take the bout)</span></div></div>`).join('')}</div>` : ''}
       <h2 style="margin-top:10px;font-size:15px">Your Stable <span class="d" style="font-size:11px">(${stable.length}/${max})</span></h2>
       <div class="grid">${stable.map((y) => `
         <div class="card" ${y.belt ? 'style="border-color:var(--neon)"' : ''}><span class="t">${y.belt ? '🏆 ' : ''}${y.name} <span class="chip good">${y.rank}</span> <span class="chip">${y.record}</span></span>
@@ -4791,13 +4905,14 @@
         ${hb.you.hotLoot > 0 ? `<div style="margin-top:6px">🔥 <b>hot loot: $${fmt(hb.you.hotLoot)}</b> <span class="d">— fence it at today's rate (draws heat; a killer loots half if you're marked)</span>
           <button class="act" data-do="POST /v1/heists/fence">fence it</button></div>` : ''}</div>` : ''}
       ${my ? `
-        <div class="card" style="border-color:var(--neon)"><span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>${my.fenced ? ' <span class="chip" style="color:var(--warn)">🔥 HOT</span>' : ''}
+        <div class="card" style="border-color:var(--neon)">${aart('heist', (hb.jobs || []).find((jj) => jj.name === my.name)?.id)}<span class="t">${my.name}</span> <span class="chip">${my.leader ? 'YOUR JOB' : 'crewed up'}</span>${my.fenced ? ' <span class="chip" style="color:var(--warn)">🔥 HOT</span>' : ''}
           <div class="d">crew: ${my.crew.map((c) => `${c.name} (${c.role})${c.cased ? ' ✓cased' : ''}`).join(', ')}${my.crewNeeded > 0 ? ` · ${my.crewNeeded} seat${my.crewNeeded > 1 ? 's' : ''} open` : ' · READY'}</div>
           <button class="act" data-heistdo="case:${my.id}">case the joint (${hb.caseEnergy} energy — raises the odds)</button>
           ${my.leader ? `<button class="act" data-heistdo="execute:${my.id}" ${my.crewNeeded > 0 ? 'disabled' : ''}>EXECUTE</button>
             <button class="act" data-heistdo="leave:${my.id}">disband</button>` : `<button class="act" data-heistdo="leave:${my.id}">walk away</button>`}
           <button class="act" data-heistdo="rat:${my.id}" style="opacity:.55">…talk to the badges</button></div>` : `
         <div class="d" style="color:var(--dim);font-size:13.5px;margin-bottom:4px">plan one (you front the stake) or crew up off the board:</div>
+        <img id="hj-preview" class="ico wide" alt="" src="/v1/art/heist/${(hb.jobs || [])[0]?.id || ''}" style="max-width:420px">
         <select id="hj-job">${(hb.jobs || []).map((jb) => `<option value="${jb.id}"${jb.locked ? ' disabled' : ''}>${jb.name} — ${jb.crew} crew, lvl ${jb.lvl}, stake $${fmt(jb.stake)}${jb.locked ? ` (needs ${jb.minPulled} scores)` : ''}</option>`).join('')}</select>
         <select id="hj-role">${(hb.jobs?.[0]?.roles || []).map((ro) => `<option>${ro}</option>`).join('')}</select>
         <input id="hj-biz" placeholder="mark's business id (inside job)" size="24" style="display:none">
@@ -4805,7 +4920,7 @@
         <button class="act" id="hj-plan">plan it</button>
         <div class="d" style="font-size:11.5px;margin-top:2px">🏆 <a href="#" id="hj-lb">the most notorious crews →</a></div>`}
       ${(hb.open || []).length ? `<div class="grid" style="margin-top:6px">${hb.open.map((o) => `
-        <div class="card"><span class="t">${o.name}</span>
+        <div class="card">${aart('heist', (hb.jobs || []).find((jj) => jj.name === o.name)?.id)}<span class="t">${o.name}</span>
           <div class="d">${o.leader}'s job · ${o.crew} in, ${o.crewNeeded} needed · lvl ${o.lvl}+</div>
           ${!my && o.rolesOpen.length ? `<select data-joinrole="${o.id}">${o.rolesOpen.map((ro) => `<option>${ro}</option>`).join('')}</select>
           <button class="act" data-joinheist="${o.id}">crew up</button>` : ''}</div>`).join('')}</div>` : ''}
@@ -4851,6 +4966,7 @@
         const jb = (hb.jobs || []).find((x) => x.id === jobSel.value);
         t.querySelector('#hj-role').innerHTML = (jb?.roles || []).map((ro) => `<option>${ro}</option>`).join('');
         const inside = jobSel.value === 'inside';
+        const pv = t.querySelector('#hj-preview'); if (pv) pv.src = `/v1/art/heist/${jobSel.value}`;
         t.querySelector('#hj-biz').style.display = inside ? 'inline-block' : 'none';
         t.querySelector('#hj-fencelbl').style.display = inside ? 'none' : 'inline-block'; // no fence on the shakedown
       };
@@ -5219,7 +5335,7 @@
       <h2>${e.name ? e.name : (e.tierName || 'No Compound Yet')}
         <span class="d" style="font-size:12.5px">${e.tierName ? `· ${e.tierName} · ${fmt(e.spent)} $OMR sunk` : ''}</span>
         ${auc.collector ? `<span class="chip">${auc.collector.rank} · ${fmt(auc.collector.sunk)} $OMR sunk into prestige</span>` : ''}</h2>
-      <div class="card"><span class="t">The Deed</span>
+      <div class="card">${e.tier > 0 ? aart('estate', e.tier) : ''}<span class="t">The Deed</span>
         <div class="d">${e.tierName ? `You hold a ${e.tierName}.` : 'You don\'t own a thing worth showing.'} · ${fmt(Math.floor(e.omr || 0))} $OMR on hand</div>
         ${e.nextTier ? `<button class="act" id="est-up">move up → ${e.nextTier.name} (${fmt(e.nextTier.omr)} $OMR)</button> <span class="d">${e.nextTier.blurb}</span>` : '<span class="chip good">THE COMPOUND — top of the world</span>'}
         ${e.tier > 0 ? `<div style="margin-top:6px"><input id="est-name" placeholder="name the place" size="18"> <button class="act" id="est-name-go">name it (${fmt(rules?.estate?.nameOmr ?? 3)} $OMR)</button></div>` : ''}</div>
@@ -5399,7 +5515,7 @@
         ${uw.lead ? `<span class="chip good">today's lead: ${uw.lead.npc} — ${uw.lead.task || 'any business'}</span>` : ''}
         ${uw.errand ? `<span class="chip">errand: ${uw.errand.npc} ${uw.errand.step}/${uw.errand.of} — ${uw.errand.task}</span>` : ''}</h2>
       <div class="grid">${(uw.npcs || []).map((n) => `
-        <div class="card"><span class="t">${n.name}</span> <span class="chip ${n.tier >= 3 ? 'good' : ''}">standing ${n.standing} · tier ${n.tier}</span>
+        <div class="card">${aart('npc', n.id)}<span class="t">${n.name}</span> <span class="chip ${n.tier >= 3 ? 'good' : ''}">standing ${n.standing} · tier ${n.tier}</span>
           ${n.grudge ? `<span class="chip bad">${n.grudge} grudge${n.grudge > 1 ? 's' : ''}</span>` : ''}
           <div class="d">earns: ${n.earn}</div>
           <div class="d">${(n.perks || []).map((p, i) => `${i < n.tier ? '◆' : '◇'} ${p}`).join('<br>')}</div>
