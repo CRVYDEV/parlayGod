@@ -402,8 +402,12 @@ export async function portBoard(ch, client, h) {
       id: b.id, kind: b.kind, name: spec?.name, hold: effHold(b, spec), speed: effSpeed(b, spec),
       baseHold: spec?.hold, baseSpeed: spec?.speed, hull: Number(b.hull) || 0, engine: Number(b.engine) || 0,
       rendezvous: !!b.rendezvous,
-      hullCost: (Number(b.hull) || 0) < PORT.STEP2.UPGRADE_MAX ? boatUpgradeCost(b, spec, 'hull') : null,
-      engineCost: (Number(b.engine) || 0) < PORT.STEP2.UPGRADE_MAX ? boatUpgradeCost(b, spec, 'engine') : null,
+      // the console renders these on the buy buttons, so quote what the till will actually
+      // CHARGE — the seamanship-discounted number (the board/till mirror discipline)
+      hullCost: (Number(b.hull) || 0) < PORT.STEP2.UPGRADE_MAX
+        ? Math.floor(boatUpgradeCost(b, spec, 'hull') * masteryFx(h, 'seamanship')) : null,
+      engineCost: (Number(b.engine) || 0) < PORT.STEP2.UPGRADE_MAX
+        ? Math.floor(boatUpgradeCost(b, spec, 'engine') * masteryFx(h, 'seamanship')) : null,
       status: !out ? 'docked' : arrived ? 'arrived' : 'at_sea',
       route: b.run_route || null,
       etaSeconds: out && !arrived ? Math.ceil((new Date(b.run_until).getTime() - now) / 1000) : 0,

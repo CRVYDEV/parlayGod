@@ -82,13 +82,15 @@ export async function chooseTrait(ch, trackId, traitId, client, h) {
 
 // THE TRADES legend leaderboard — lifetime XP across every track (account-level, survives death),
 // ranked with the bloodline's deepest trade beside the total. Agents excluded (the kingpin/boxing
-// posture: a payout-free status board still doesn't seat machines).
+// posture: a payout-free status board still doesn't seat machines) AND residents excluded — a
+// resident who wins a duel earns wetwork legend headlessly (duels.js pays the passive winner), and
+// the population rule is that any step giving residents a legend excludes them on that board.
 export async function tradesLeaderboard(pool) {
   // flat aggregate then a per-account best-track pick in JS (the /v1/gangs two-flat-queries
   // precedent — pg-mem chokes on correlated subqueries and DISTINCT ON)
   const rows = (await pool.query(
     `SELECT ml.account_id, ml.track_id, ml.xp, c.name FROM mastery_legend ml
-       JOIN account_persistent ap ON ap.account_id = ml.account_id AND NOT ap.agent_flag
+       JOIN account_persistent ap ON ap.account_id = ml.account_id AND NOT ap.agent_flag AND NOT ap.npc_flag
        JOIN characters c ON c.account_id = ml.account_id AND c.alive
       WHERE ml.xp > 0`)).rows;
   const byAcct = new Map();

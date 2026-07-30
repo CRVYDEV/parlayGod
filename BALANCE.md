@@ -2554,3 +2554,13 @@ pacing holds — 2h at the keyboard ≈ level 12, 5h ≈ 20, 10h ≈ 33; the 7-d
 level 34 / $1.4M / 13 of 28 missions (the level-240 speedrun stays closed). The drip's worst case
 is ≤3 stat points/day on top of a gym session training ~40/hr — invisible at the pacing scale,
 exactly the intent.
+
+**Red-team flags (AUDIT-trades.md — founder sign-off, NOT patched):** (1) the path XP multiplier
+COUPLES to the stat drip (a home trade trains its stat ~1.5× faster, still inside CAP_DAY —
+retuning `PATH_XP_HOME` moves stat-training speed too); (2) fists bout XP (25) and duel wetwork XP
+(10) have NO opponent-quality floor, unlike the legends they sit beside — alt-feeding schools the
+mastery at ~the rake's cost (levels die with the street, perks are pacing-only, so blast radius is
+small; the dials are the duel pair/day decay or a stake floor); (3) the DYNAST trait is PER-TRACK —
+a street maxed in several trades can dynast-mark each, compounding the `TRAIT_HEIR_BPS`
+death-softening echo (a one-line per-character uniqueness gate in chooseTrait if one-dynasty-trade
+is the intent).

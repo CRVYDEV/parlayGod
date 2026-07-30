@@ -112,6 +112,13 @@ r = await call('GET', '/v1/leaderboard/trades', { token: gus.token });
 assert.equal(r.code, 200, 'the board is readable');
 assert(r.body.trades.some((k) => k.name === 'Grinder Gus'), 'the bloodline (via the living heir) is ranked');
 assert(!r.body.trades.some((k) => k.name === 'Bot Bertha'), 'agents never seat the trades board');
+// residents excluded too — a resident who wins a duel earns wetwork legend headlessly, and the
+// population rule is that any step giving residents a legend excludes them on that board
+const resi = await mk('Resident Rita');
+await pool.query(`UPDATE account_persistent SET npc_flag=true WHERE account_id='${resi.aid}'`);
+await pool.query(`INSERT INTO mastery_legend (account_id, track_id, xp) VALUES ('${resi.aid}', 'wetwork', 888888)`);
+r = await call('GET', '/v1/leaderboard/trades', { token: gus.token });
+assert(!r.body.trades.some((k) => k.name === 'Resident Rita'), 'residents never seat the trades board');
 const gusRow = r.body.trades.find((k) => k.name === 'Grinder Gus');
 assert(gusRow.bestTrade === 'Larceny', 'the deepest trade is named');
 
@@ -155,6 +162,19 @@ const piaTune = (await call('POST', `/v1/races/tune/${await carOf(pia.token)}`, 
 assert.equal(fredTune.spent, RACES.TUNE_COST, 'the unschooled pay sticker');
 assert.equal(piaTune.spent, Math.floor(fredTune.spent * MASTERY.PERKS.wheels.fx[1]),
   'the L25 wheelman pays the discounted rate — and the discounted number is what was charged');
+// the STRIP quotes what the till charges (the board/till mirror — a button must not lie)
+r = await call('GET', '/v1/races', { token: pia.token });
+assert.equal(r.body.tune.cost, piaTune.spent, 'the races board quotes the DISCOUNTED tune price');
+
+// SEAMANSHIP: the port board quotes the refit price the dry dock will actually charge
+await setXp(pia.id, 'seamanship', masteryXpFor(10)); // L10 → the first rung
+const boatBuy = await call('POST', '/v1/port/boat/dinghy', { token: pia.token });
+assert.equal(boatBuy.code, 200, 'a dinghy in the fleet');
+r = await call('GET', '/v1/port', { token: pia.token });
+const dinghy = r.body.fleet.find((b) => b.id === boatBuy.body.boat.id);
+const refit = await call('POST', `/v1/port/upgrade/${dinghy.id}`, { token: pia.token, body: { part: 'hull' } });
+assert.equal(refit.body.spent, dinghy.hullCost,
+  'the port board quoted exactly what the refit charged (the DISCOUNTED number, both)');
 
 // COMMERCE perk: the listing fee is discounted (deterministic — the fee is a pure formula)
 await setXp(pia.id, 'commerce', masteryXpFor(40)); // L40 → the third rung

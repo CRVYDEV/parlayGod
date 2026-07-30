@@ -248,6 +248,9 @@ export async function pinkSlipRace(ch, opponent, body, client, h) {
   // WHEEL credit gated on the loser's level (anti-Sybil — the raceChallenge floor; a pink win is already a
   // real car-cost play, but keep the status floor consistent so a ring can't pad the board with junk iron).
   if (levelOf(Number(loser.respect)) >= RACES.WHEEL_MIN_LVL) await bumpWheel(client, winner.account_id);
+  // THE TRADES — seat time is seat time: a pinks race consumes the same race_at throttle a wager
+  // race spends earning its XP, so it schools Wheels too (the raceNpc/raceChallenge hook)
+  await bumpMastery(client, h, ch, 'wheels', 'race');
   await h.rngLog(client, ch.id, `race:pink:${their.id}`, mine, `${win ? 'win' : 'loss'}${nos ? ' +nos' : ''} for pinks (${mine} vs ${theirs})`);
   await h.notify(client, opponent.id, 'race_pink', { from: ch.name, theyWon: !win, car: wonCar.model_id });
   bus.emit('streets', { type: 'race_pink', by: ch.name, vs: opponent.name, win });
@@ -283,7 +286,9 @@ export async function raceBoard(ch, client, h) {
   return {
     cars, strip,
     tiers: RACES.TIERS.map((t) => ({ id: t.id, name: t.name, minLvl: t.minLvl, fee: t.fee, purse: t.purse, fieldPower: t.fieldPower })),
-    tune: { cost: RACES.TUNE_COST, max: RACES.TUNE_MAX }, wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX },
+    // quote the wheels-discounted tune price — it's what tuneCar will actually charge
+    tune: { cost: Math.floor(RACES.TUNE_COST * masteryFx(h, 'wheels')), max: RACES.TUNE_MAX },
+    wager: { min: RACES.WAGER_MIN, max: RACES.WAGER_MAX },
     nos: { cost: RACES.NOS_COST, max: RACES.NOS_MAX, power: RACES.NOS_POWER },
     grandPrix,
     legend: { wins, rank: raceRankOf(wins).name }, cooldownSeconds: cdLeft,
