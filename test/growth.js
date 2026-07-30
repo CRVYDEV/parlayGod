@@ -352,11 +352,27 @@ const rook = await mk('Rookie Ray');
 let rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
 assert(rm.coach && rm.coach.label === 'Pull your first job', 'a fresh street is coached to its first job');
 assert.equal(rm.coach.tab, 'streets', 'and pointed at the Streets');
+// (founder) THE PLAN — "the next 5 things to do, always": coachPlan is the whole queue in priority
+// order, plan[0] IS the coach, and below level 5 the road to 5 is queued right behind the first job
+// so a brand-new player never has to guess what comes after the current step.
+assert(Array.isArray(rm.coachPlan) && rm.coachPlan.length >= 2, 'coachPlan is a queue, not one rung');
+assert.equal(rm.coachPlan[0].label, rm.coach.label, 'plan[0] IS the coach');
+assert(rm.coachPlan.some((s) => s.label === 'Get to level 5'), 'the road to level 5 is queued for a fresh street');
 // land a job → the coach moves off "first job"
 await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL');
 for (let i = 0; i < 20; i++) { const c = await call('POST', '/v1/crimes/pick', { token: rook.token }); if (c.body.success) break; await seedCh(rook.id, 'nerve=50, energy=200, jail_until=NULL'); }
 rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
 assert.notEqual(rm.coach?.label, 'Pull your first job', 'once the first job is pulled the coach advances');
+// (founder) THE ROAD TO LEVEL 5 — below 5, with nerve in the tank, the coach's one instruction is
+// "keep pulling jobs", with the live respect distance in the hint (no exploring required)…
+assert.equal(rm.coach?.label, 'Get to level 5', 'below level 5 the coach walks the road there');
+assert(/respect/.test(rm.coach.hint) && rm.coach.tab === 'streets', 'quoting the respect distance, pointing at the Streets');
+// …and with the nerve pool EMPTY it says exactly what to do while waiting (a rung that clears
+// itself in minutes, so it can never mask the ladder — the harness-F1 rule)
+await seedCh(rook.id, 'nerve=0');
+rm = (await call('GET', '/v1/me', { token: rook.token })).body.character;
+assert.equal(rm.coach?.label, 'Out of nerve — it comes back by itself', 'an empty pool coaches the productive wait');
+assert.equal(rm.coach.tab, 'start', 'and points at Start Here (claim what\'s READY while nerve refills)');
 // (harness F1) THE COACH MUST NOT DEAD-END. THREE separate rungs could never clear for a solo
 // player, each masking every rung below it — the harness caught it by reporting the same coach line
 // for a whole simulated 7-day run, and a 30-day run still stuck at "Finish your First Week" at

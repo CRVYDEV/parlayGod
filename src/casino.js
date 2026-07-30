@@ -188,6 +188,10 @@ export async function pvpDice(ch, fader, amount, client, h) {
   // matches the PvE trio's den_volume→street_tax order — else the two hottest den paths AB-BA.
   await bumpVolume(client, pot);
   await client.query('UPDATE street_tax SET pool = pool + $1 WHERE id=1', [Math.floor(rake / 2)]);
+  // the "Win N rolls in the Back Room" daily contract — this WAS the M4 undrawable-day gap (the
+  // pool draws dice contracts but nothing ever advanced them, so ~1 day in 5 showed a quest that
+  // could not be done; founder-directed fix 2026-07-30). Only a WIN counts, matching the card.
+  await h.bumpDaily(client, winner.id, 'dice');
   await bumpStanding(client, h, ch, 'madame', 3, { action: 'fade' }); // back-room action is her favorite kind
   await h.rngLog(client, ch.id, `casino:pvp:${fader.id}`, mine, `${win ? 'win' : 'loss'} $${amt} (${mine} vs ${theirs})`);
   await h.notify(client, fader.id, 'backroom_dice', { from: ch.name, amount: amt, theyWon: !win });

@@ -149,6 +149,18 @@ for (let i = 0; i < 30 && (pvpW === 0 || pvpL === 0); i++) {
     Math.floor(rake / 2), 'half the rake to the street, the rest burns');
 }
 assert(pvpW > 0 && pvpL > 0, `both sides won at least once (${pvpW}/${pvpL})`);
+// (founder 2026-07-30) the M4 "undrawable-day gap" is closed: a back-room WIN advances the 'dice'
+// daily counter, so "Win N rolls in the Back Room" is finally a quest that can be done. Both men
+// won at least once above, so BOTH counters must carry dice > 0 (only wins count — total == pvpW+pvpL).
+{
+  const dcount = async (id) => {
+    const rows = (await pool.query('SELECT counters FROM daily_progress WHERE character_id=$1', [id])).rows;
+    return rows.reduce((s, r) => s + (JSON.parse(r.counters).dice || 0), 0);
+  };
+  const louD = await dcount((await meOf(token)).id), danD = await dcount(did);
+  assert(louD > 0 && danD > 0, `back-room WINS advance the dice daily for whoever won (${louD}/${danD})`);
+  assert.equal(louD + danD, pvpW + pvpL, 'exactly one dice bump per round — the winner\'s');
+}
 
 // ── the fight: one capped bet a week; the family holding neon can buy the result ──
 // SIGN-OFF (2.5): the book won't take action from a rookie — an anti-alt floor on the fix-Sybil ring

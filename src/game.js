@@ -648,7 +648,7 @@ export async function withCharacter(pool, accountId, fn) {
       catch (e) { console.error('referral tier-2 (post-commit, non-fatal)', e?.code || e); }
     }
     // (red-team R4 idempotency finding-2) the action has COMMITTED — a post-commit RENDER failure
-    // (view()/coachOf on a corrupt column) must NOT surface a non-2xx, or the idempotency hook releases
+    // (view()/coachLadder on a corrupt column) must NOT surface a non-2xx, or the idempotency hook releases
     // the key → a retry re-executes the committed action (double-spend). Degrade the snapshot, never the
     // success — same discipline as the referral post-commit hooks above.
     let character = null;
@@ -846,23 +846,37 @@ async function persistCharacter(client, ch) {
 // THE COACH — the single highest-value next step for THIS player, server-authoritative so the client
 // never guesses. A priority ladder: emergencies first (lockup, hospital, bleeding), then the big
 // progression unlocks (a Path, a family), then safety (bank your cash), then finishing the First Week,
-// then just staying active. Pure guidance — reads state, moves nothing. Returns { label, hint, tab }.
-function coachOf(ch, acct, owned) {
+// then just staying active. Pure guidance — reads state, moves nothing.
+// coachLadder returns UP TO FIVE applicable rungs in priority order (founder-directed "the next 5
+// things to do, always" — the client renders the queue); view.coach = ladder[0], so every existing
+// consumer (the sheet banner, onboardBoard, the tests) sees the same single next step as before.
+function coachLadder(ch, acct, owned) {
+  const rungs = [];
+  // collects a rung; returns TRUE when the plan is full so the caller can stop evaluating
+  const add = (label, hint, tab) => { rungs.push({ label, hint, tab }); return rungs.length >= 5; };
   const lvl = levelOf(Number(ch.respect));
   const maxEnergy = 50 + 2 * lvl + assetEnergyCap(owned.assets || []);
   const now = Date.now();
   const future = (t) => t && new Date(t) > new Date(now);
   const onboard = typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {});
   const obDone = ONBOARD_TASKS.filter((t) => onboard[t.id]).length;
-  if (future(ch.jail_until)) return { label: 'You\'re in lockup', hint: 'Sit it out — or work the Pen: bribe the guard, work the yard, watch your back.', tab: 'pen' };
-  if (future(ch.hosp_until)) return { label: 'Under the Doc\'s care', hint: 'You\'re healing up and UNTOUCHABLE — rivals can\'t jump or shoot you. You can still work jobs and run your rackets; only fighting is off.', tab: 'streets' };
-  if (Number(ch.health) < 30) return { label: 'You\'re bleeding out', hint: 'Heal up before someone finishes the job (the Heal button, top-left).', tab: 'streets' };
+  if (future(ch.jail_until) && add('You\'re in lockup', 'Sit it out — or work the Pen: bribe the guard, work the yard, watch your back.', 'pen')) return rungs;
+  if (future(ch.hosp_until) && add('Under the Doc\'s care', 'You\'re healing up and UNTOUCHABLE — rivals can\'t jump or shoot you. You can still work jobs and run your rackets; only fighting is off.', 'streets')) return rungs;
+  if (Number(ch.health) < 30 && add('You\'re bleeding out', 'Heal up before someone finishes the job (the Heal button, top-left).', 'streets')) return rungs;
   // urgent, time-boxed threats — these cost you if you sit on them (all false for a fresh street)
-  if (future(ch.wanted_until)) return { label: 'There\'s a price on you', hint: 'You\'re WANTED — even your family can hunt you and NPC guns are out. Square your name at the Shylock, or lie low.', tab: 'loans' };
-  if (ch.indicted_at) return { label: 'The Bureau indicted you', hint: 'A RICO case is filed — the grace clock is running. Take a plea, buy the jury, or demand trial in The Law.', tab: 'law' };
-  if (ch.welsher) return { label: 'Your name is mud', hint: 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', tab: 'loans' };
-  if (Number(ch.lc_crime || 0) < 1) return { label: 'Pull your first job', hint: 'Head to the Streets and run any crime — it\'s how everything starts. Then follow Start Here.', tab: 'streets' };
-  if (lvl >= 5 && !ch.path) return { label: 'You\'ve made rank', hint: 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', tab: 'streets' };
+  if (future(ch.wanted_until) && add('There\'s a price on you', 'You\'re WANTED — even your family can hunt you and NPC guns are out. Square your name at the Shylock, or lie low.', 'loans')) return rungs;
+  if (ch.indicted_at && add('The Bureau indicted you', 'A RICO case is filed — the grace clock is running. Take a plea, buy the jury, or demand trial in The Law.', 'law')) return rungs;
+  if (ch.welsher && add('Your name is mud', 'You welshed on a debt — nobody lends to you. Square it at the Shylock to borrow again.', 'loans')) return rungs;
+  if (Number(ch.lc_crime || 0) < 1 && add('Pull your first job', 'Head to the Streets. Pick any crime and press DO IT. That\'s the whole move — it pays cash and respect.', 'streets')) return rungs;
+  // ── THE ROAD TO LEVEL 5 (founder-directed: walk a brand-new player there, no exploring needed).
+  // Two rungs, both clear on their own: the nerve-wait clears in minutes, the level rung at 5 —
+  // so neither can mask the ladder below (the harness-F1 rule).
+  if (lvl < 5) {
+    if (Number(ch.nerve) < 2 && add('Out of nerve — it comes back by itself', 'Nerve is what jobs cost, and it refills on its own (a few points a minute). While you wait: collect anything marked READY on Start Here — that\'s free money — or train at the gym on the Streets.', 'start')) return rungs;
+    const need = Math.max(0, PACING.LEVEL_DIVISOR * 16 - Number(ch.respect));
+    if (add('Get to level 5', `Keep pulling jobs. Every job pays respect, and respect IS your level — ${need} more respect reaches level 5, where you choose your Path. That\'s the whole plan: do a job, wait for nerve, do another.`, 'streets')) return rungs;
+  }
+  if (lvl >= 5 && !ch.path && add('You\'ve made rank', 'Declare a Path — The Gun, The Ledger, or The Kitchen. It shapes how you earn.', 'streets')) return rungs;
   // (harness F1) A rung that a player can DECLINE forever, or one that RE-ARMS every few minutes,
   // must never sit above the one-time milestone rungs — it masks all of them permanently. The
   // progression harness caught exactly that: a solo player who never joined a family was pinned on
@@ -871,8 +885,8 @@ function coachOf(ch, acct, owned) {
   // nudges now sit at the BOTTOM of the ladder (see COACH_NUDGES), where they fill the quiet moments
   // instead of blocking the ladder. The early band is kept: for a brand-new street, joining a family
   // genuinely IS the next thing.
-  if (!owned.gangId && lvl >= 3 && lvl <= M3.COACH_FAMILY_BAND_LVL)
-    return { label: 'Nobody survives alone', hint: 'Join a family or found your own — turf, tribute, wars, and backup.', tab: 'family' };
+  if (!owned.gangId && lvl >= 3 && lvl <= M3.COACH_FAMILY_BAND_LVL
+    && add('Nobody survives alone', 'Join a family or found your own — turf, tribute, wars, and backup.', 'family')) return rungs;
   // (audit F1) Only the GAMEPLAY First-Week tasks gate the coach. The 3 socials + the wallet link are
   // OPTIONAL bonuses on Start Here — they throw `verify_unavailable` when SOCIAL_VERIFY_MODE is off
   // (the default), so counting them would pin the coach at "Finish your First Week" forever and mask
@@ -888,32 +902,33 @@ function coachOf(ch, acct, owned) {
   // denominator promised a total nobody could reach. Counting the gate is true under every config
   // (and needs no import from verify.js, which imports game.js — the one-way rule holds).
   const obGameplayDone = obGameplay.filter((t) => onboard[t.id]).length;
-  if (obGameplay.some((t) => !onboard[t.id]))
-    return { label: `Finish your First Week (${obGameplayDone}/${obGameplay.length})`, hint: 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', tab: 'start' };
+  if (obGameplay.some((t) => !onboard[t.id])
+    && add(`Finish your First Week (${obGameplayDone}/${obGameplay.length})`, 'The checklist pays cash to teach you the ropes — claim what\'s ready over on Start Here.', 'start')) return rungs;
   // the bridge into the deep game — a ladder of "what next" so the coach never goes silent mid-game
   const hasEarner = !!ch.lab || (owned.businesses || []).length || (owned.rackets || []).length
     || (owned.assets || []).length || (owned.fighters || []).length || !!owned.speakeasy;
-  if (!hasEarner && lvl >= 3) return { label: 'Money while you sleep', hint: 'Buy a racket in The Empire — cheap passive income that pays while you\'re offline. Kitchens and fronts come later.', tab: 'empire' };
+  if (!hasEarner && lvl >= 3 && add('Money while you sleep', 'Buy a racket in The Empire — cheap passive income that pays while you\'re offline. Kitchens and fronts come later.', 'empire')) return rungs;
   // (harness F1c) `owned.skills` is a SET (loadOwned:159), so `.length` is undefined and `!undefined`
   // is always true — this rung fired forever no matter how many skills you'd bought, masking the two
   // rungs below it. Count the Set properly. (Every other collection here is a real array.)
   const skillCount = owned.skills instanceof Set ? owned.skills.size : (owned.skills || []).length;
-  if (lvl >= 4 && !skillCount) return { label: 'You\'ve earned skill points', hint: 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', tab: 'life' };
-  if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length) return { label: 'Cook up real money', hint: 'Set up a Kitchen — the drug trade is the deepest earner in the game.', tab: 'kitchen' };
-  if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length) return { label: 'Time to go legit', hint: 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', tab: 'portfolio' };
+  if (lvl >= 4 && !skillCount && add('You\'ve earned skill points', 'Spend them in The Life on a branch — Enforcer, Operator, or Wheelman — for permanent edges.', 'life')) return rungs;
+  if (!ch.lab && lvl >= 8 && !(owned.businesses || []).length && add('Cook up real money', 'Set up a Kitchen — the drug trade is the deepest earner in the game.', 'kitchen')) return rungs;
+  if (lvl >= 15 && Number(acct.omr || 0) > 0 && !(owned.portfolio || []).length && add('Time to go legit', 'Wash $OMR into a real blue-chip book — it survives your death and pays a dividend. Going Legit.', 'portfolio')) return rungs;
   // ── THE RECURRING NUDGES ── (COACH_NUDGES) Everything above is a ONE-TIME milestone that clears
   // for good once done. These three never clear, so they live down here where they fill the quiet
   // moments instead of masking the ladder. The SAME rule orders the tail itself: most-clearable
   // first, permanent LAST — otherwise the permanent one masks the actionable ones (a solo player
   // would never be told to bank a fat pocket).
-  if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)) return { label: 'You\'re carrying too much', hint: 'Bank your pocket cash before someone jumps you for it — the streets are watching.', tab: 'streets' };
+  if (Number(ch.cash) > CONSTANTS.COACH_BANK_NUDGE && Number(ch.cash) > Number(ch.bank)
+    && add('You\'re carrying too much', 'Bank your pocket cash before someone jumps you for it — the streets are watching.', 'streets')) return rungs;
   // (harness) A street player runs on NERVE, never energy — the bar sits full ~94% of the time, so
   // a full tank isn't idle capacity, it's UNSPENT ACCESS to the physical content. Name what spends
   // it, or the bar reads as broken.
-  if (Number(ch.energy) >= maxEnergy * 0.75) return { label: 'Full tank', hint: 'Crime runs on nerve — energy is what the PHYSICAL work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns. You\'ve got a full tank going unspent.', tab: 'streets' };
+  if (Number(ch.energy) >= maxEnergy * 0.75 && add('Full tank', 'Crime runs on nerve — energy is what the PHYSICAL work costs: the gym, boosting cars, heist crews, cartel raids, convoy ambushes, shakedowns. You\'ve got a full tank going unspent.', 'streets')) return rungs;
   // the one a player can decline forever — so it sits at the very bottom, never masking anything
-  if (!owned.gangId && lvl >= 3) return { label: 'Still running solo', hint: 'You can play the whole game alone, but a family is turf, tribute, wars and backup — worth a look.', tab: 'family' };
-  return null; // an established player who knows the ropes — no nag
+  if (!owned.gangId && lvl >= 3 && add('Still running solo', 'You can play the whole game alone, but a family is turf, tribute, wars and backup — worth a look.', 'family')) return rungs;
+  return rungs; // possibly empty — an established player who knows the ropes gets no nag
 }
 
 export function view(ch, acct = {}, owned = {}) {
@@ -1042,7 +1057,9 @@ export function view(ch, acct = {}, owned = {}) {
     hitmanRep: Number(acct.hitman_rep || 0), kills: Number(acct.kills || 0), seasonKills: Number(ch.season_kills || 0),
     hitmanTitle: hitmanRankOf(Number(acct.hitman_rep || 0)).title,
     onboard: typeof acct.onboard === 'string' ? JSON.parse(acct.onboard || '{}') : (acct.onboard || {}),
-    coach: coachOf(ch, acct, owned), // the guided next-step advisor (the sheet surfaces it)
+    // the guided next-step advisor: `coach` is THE next move (unchanged shape), `coachPlan` is the
+    // whole queue — up to 5 applicable rungs in priority order (the client's "your next moves" box)
+    ...(() => { const plan = coachLadder(ch, acct, owned); return { coach: plan[0] || null, coachPlan: plan }; })(),
     netWorth: Math.floor(Number(ch.cash) + Number(ch.bank) + assetsValue(assets)),
     cityEvent: cityEventOf(dayOf()).id,
     // THE LIVING WORLD — the city at a glance: the two event tracks + the intraday clock (GET /v1/city
