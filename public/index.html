@@ -903,6 +903,9 @@
   <h1>A NAME</h1>
   <p>Every street name is a debt someone eventually collects.</p>
   <input id="new-name" placeholder="street name" style="width:260px;font-size:16px">
+  <div style="margin-top:8px">
+    <input id="new-ref" placeholder="who sent you? their street name (optional)" style="width:260px;font-size:13px" title="If a player told you about OMERTÀ, type their street name — they get credit as you come up.">
+  </div>
   <div style="margin-top:10px"><button class="act" id="btn-create" style="font-size:15px;padding:10px 24px">STEP OUT</button></div>
 </div>
 
@@ -1382,6 +1385,10 @@
   // ── the street talks back: turn a raw response into one human line ──
   // known single-word server rejections → plain talk (the server returns codes, not sentences)
   const ERRMAP = {
+    no_code: "type their street name first",
+    already_referred: "your referrer is already on record",
+    unknown_code: "nobody goes by that name — check the spelling with them",
+    window: "that window has closed — referrers are named in your first days",
     verify_busy: "X is busy right now — try again in a few minutes (nothing is lost)",
     verify_cooldown: "we just checked with X — do the thing first, then come back in a bit",
     task_unavailable: "that one isn't on the checklist on this server",
@@ -1415,6 +1422,7 @@
     internal: "something broke on our end — that's a bug, not you. Try again; if it keeps happening, say so.",
   };
   function describe(body, code) {
+    if (body && body.referrer && body.ok) return `on the record — ${body.referrer} gets credit as you come up`;
     if (!body || typeof body !== 'object') return code < 400 ? 'done.' : 'no dice.';
     if (code >= 400) { const e = body.error; return body.message || (e && ERRMAP[e]) || (e ? e.replace(/_/g, ' ') : `the city said no (${code})`); }
     const bits = [];
@@ -1889,7 +1897,12 @@
     if (!token) return show('screen-auth');
     const r = await api('GET', '/v1/me');
     if (r.code === 401) { token = null; localStorage.removeItem('omerta_token'); return show('screen-auth'); }
-    if (r.code === 404 || r.body?.error === 'no_character') return show('screen-create');
+    if (r.code === 404 || r.body?.error === 'no_character') {
+      // a ?ref link stashed a referrer — show it IN the field so link arrivals see it working
+      const stashed = localStorage.getItem('omerta_ref');
+      if (stashed && $('#new-ref') && !$('#new-ref').value) $('#new-ref').value = stashed;
+      return show('screen-create');
+    }
     me = r.body.character || r.body;
     session = (await api('GET', '/v1/session')).body || null;
     if (!rules) rules = (await api('GET', '/v1/rules')).body;
@@ -1951,9 +1964,16 @@
     landToken(await api(`POST`, `/v1/auth/${provider}`, { token: tok, ...(inviteCode ? { inviteCode } : {}) }));
   };
   $('#btn-create').onclick = async () => {
-    const ref = localStorage.getItem('omerta_ref') || '';   // frictionless referral — the shared link credited the sharer
+    // a TYPED referrer beats the stashed ?ref link (word-of-mouth recruits finally have a way in);
+    // the boot prefill puts the stashed link name IN the field so link arrivals see it working
+    const ref = ($('#new-ref')?.value || '').trim() || localStorage.getItem('omerta_ref') || '';
     const r = await api('POST', '/v1/character', { name: $('#new-name').value.trim(), ...(ref ? { referralCode: ref } : {}) });
-    if (r.code < 400) { localStorage.removeItem('omerta_ref'); boot(); } else toast(r.body?.message || r.body?.error, true);
+    if (r.code < 400) {
+      localStorage.removeItem('omerta_ref');
+      if (r.body?.referral === 'unknown') toast('could not find a street by that name — you can still name your referrer from Start Here in your first days', true);
+      else if (r.body?.referral === 'credited') toast('your referrer gets credit as you come up');
+      boot();
+    } else toast(r.body?.message || r.body?.error, true);
   };
   $('#btn-logout').onclick = async () => {
     // A GUEST has no way back in — the token IS the only key, so signing out abandons the street
@@ -2900,6 +2920,10 @@
     const reward = (r) => `$${fmt(r.cash || 0)}${r.cb ? ` + ${r.cb} crate${r.cb > 1 ? 's' : ''}` : ''}${r.en ? ` + ${r.en} energy` : ''}`;
     // the single most actionable step: a reward that's ready to claim, else the first thing to go do
     const next = ob.tasks.find((x) => !x.claimed && x.ready) || ob.tasks.find((x) => !x.claimed && !x.social) || ob.tasks.find((x) => !x.claimed);
+    // a background re-render (WS event / 30s poll) fires the moment focus moves from the
+    // who-sent-you input to its button — the focus guard doesn't cover that instant, and the
+    // rebuilt card would wipe the half-typed name. Carry the draft across the rebuild.
+    const refDraft = t.querySelector('#ref-claim-name')?.value || '';
     t.innerHTML = `
       <!-- The City Standing led this screen — so the FIRST thing a brand-new player saw was six bars
            at 0% and a leaderboard of strangers, with the checklist (the actual point) pushed below.
@@ -2923,6 +2947,10 @@
             : `<button class="act" data-obgo="${x.id}">${(go[x.id] || [, 'do it'])[1]} →</button>`}
         </div>`).join('')}</div>
       <div class="d" style="color:var(--dim);font-size:12.5px;margin-top:10px">Finish all of it for a capstone bonus (${reward(ob.capstone || {})}). Stuck? The other tabs across the top are the whole city — Streets is your bread and butter.</div>
+      ${ob.referral?.canClaim ? `<div class="card" style="margin-top:10px;border-color:var(--neon)"><span class="t">📣 DID SOMEONE SEND YOU?</span>
+        <div class="d">If a player told you about OMERTÀ, name them — they get credit as you come up (it costs you nothing). ${Math.max(1, Math.round((ob.referral.windowSeconds || 0) / 3600))}h left to set it.</div>
+        <div class="row" style="margin-top:6px"><input id="ref-claim-name" placeholder="their street name" value="${esc(refDraft)}" style="max-width:220px">
+        <button class="act" id="ref-claim-btn">that's who sent me</button></div></div>` : ''}
 
       ${!ob.allDone ? `<h2 style="margin-top:14px">The City Standing <span class="d" style="font-size:11px">— where you'll sit once you've made your bones</span></h2>
       <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
@@ -2993,6 +3021,12 @@
     });
     t.querySelectorAll('[data-obclaim]').forEach((b) => b.onclick = () =>
       act('POST', `/v1/onboard/${b.dataset.obclaim}/claim`).then(() => renderStart()));
+    const refBtn = t.querySelector('#ref-claim-btn');
+    if (refBtn) refBtn.onclick = () => {
+      const nm = (t.querySelector('#ref-claim-name')?.value || '').trim();
+      if (!nm) return toast('type their street name first', true);
+      act('POST', '/v1/referral/claim', { code: nm }).then(() => renderStart());
+    };
     t.querySelectorAll('[data-obgo]').forEach((b) => b.onclick = () => setTab((go[b.dataset.obgo] || ['streets'])[0]));
     t.querySelectorAll('[data-mission]').forEach((b) => b.onclick = () => act('POST', `/v1/missions/${b.dataset.mission}`, {}).then(() => renderStart()));
     t.querySelectorAll('[data-swclaim]').forEach((b) => b.onclick = () => {

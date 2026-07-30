@@ -245,6 +245,9 @@ export async function funnelStats(pool) {
     recruiters: await one('SELECT COUNT(*) n FROM account_persistent WHERE recruits > 0'),          // brought at least one made man in
     totalRecruits: await one('SELECT COALESCE(SUM(recruits),0) n FROM account_persistent'),         // qualified recruits, all-time
     reReferred: await one('SELECT COUNT(*) n FROM account_persistent WHERE referred_by IS NOT NULL AND recruits > 0'), // a recruit who then recruited (viral depth)
+    // THE LATE CLAIM — attribution recovered after creation (word-of-mouth recruits who typed the
+    // name from Start Here). High numbers here mean the create-screen field is being missed.
+    lateClaims: await one("SELECT COUNT(*) n FROM telemetry WHERE event='referral_claim_late'"),
   };
   // K-factor ≈ qualified recruits per account (>1 means the loop compounds); spark→qualify conversion
   referral.kFactor = accounts ? Math.round((referral.totalRecruits / accounts) * 100) / 100 : 0;
@@ -370,8 +373,53 @@ export async function onboardBoard(ch, h, client) {
       claimed: !!onboard[t.id],
       ready: t.social ? true : !!(CHECKS[t.id] && CHECKS[t.id](ch, h)), // social tasks verify at claim time
     }));
+  // THE LATE CLAIM surface — Start Here renders a "who sent you?" card while the window is open
+  let referral = { referred: !!h.acct.referred_by, canClaim: false, windowSeconds: 0 };
+  if (client && !h.acct.referred_by) {
+    const born = (await client.query('SELECT created_at FROM accounts WHERE id=$1', [h.accountId])).rows[0];
+    const left = born ? new Date(born.created_at).getTime() + M4.REF_CLAIM_WINDOW_MS - Date.now() : 0;
+    if (left > 0) referral = { referred: false, canClaim: true, windowSeconds: Math.ceil(left / 1000) };
+  }
   return { tasks, claimed: tasks.filter((t) => t.claimed).length, total: tasks.length,
-    allDone: tasks.every((t) => t.claimed), capstone: CONSTANTS.ONBOARD_CAPSTONE };
+    allDone: tasks.every((t) => t.claimed), capstone: CONSTANTS.ONBOARD_CAPSTONE, referral };
+}
+
+// §7.13 THE LATE CLAIM — the growth-funnel fix: a recruit who missed the referral field at
+// creation (word of mouth, no ?ref link, a typo) can still name who sent them — within
+// M4.REF_CLAIM_WINDOW_MS of ACCOUNT creation, and only while no referrer is on record. Pure
+// ATTRIBUTION: it decides WHO gets credited; every payout still rides the full §7.13
+// qualification gates (level/jobs/check-ins/earnings), so the Sybil posture is unchanged from
+// naming them at creation. Exact name match first (case-sensitive names may coexist), then
+// case-insensitive — a shift key must not cost the recruiter their credit.
+export async function claimReferral(ch, code, client, h) {
+  const name = cleanText(String(code ?? '')).slice(0, 40).trim();
+  if (!name) throw new GameError('no_code', 'Whose name? Tell us who sent you.');
+  if (h.acct.referred_by) throw new GameError('already_referred', 'Your referrer is already on record.');
+  const born = (await client.query('SELECT created_at FROM accounts WHERE id=$1', [h.accountId])).rows[0];
+  if (!born || Date.now() - new Date(born.created_at).getTime() > M4.REF_CLAIM_WINDOW_MS)
+    throw new GameError('window', 'That window has closed — a referrer is named in your first days in the city.');
+  if (name.toLowerCase() === String(ch.name).toLowerCase())
+    throw new GameError('self', "You can't have sent yourself.");
+  let rec = (await client.query(
+    'SELECT account_id, name FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1',
+    [name, h.accountId])).rows[0];
+  if (!rec) rec = (await client.query(
+    'SELECT account_id, name FROM characters WHERE LOWER(name)=LOWER($1) AND alive AND account_id<>$2 LIMIT 1',
+    [name, h.accountId])).rows[0];
+  if (!rec) throw new GameError('unknown_code', `Nobody on the streets goes by "${name}". Check the spelling with them.`);
+  // atomic — the IS NULL guard means a concurrent claim can't double-set; referred_by is NOT in
+  // persistAccount's positional list, so this direct write survives the commit (mirror is honesty)
+  const upd = await client.query(
+    'UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL',
+    [rec.account_id, h.accountId]);
+  if (!upd.rowCount) throw new GameError('already_referred', 'Your referrer is already on record.');
+  const already = await client.query('SELECT 1 FROM referrals WHERE recruit_account=$1', [h.accountId]);
+  if (!already.rows.length)
+    await client.query('INSERT INTO referrals (recruit_account, recruiter_account) VALUES ($1,$2)',
+      [h.accountId, rec.account_id]);
+  h.acct.referred_by = rec.account_id;
+  await h.track(client, h.accountId, 'referral_claim_late', { recruiter: rec.name });
+  return { ok: true, referrer: rec.name };
 }
 
 export async function claimOnboard(ch, taskId, client, h) {

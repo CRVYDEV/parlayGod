@@ -813,6 +813,10 @@ in** each day for a streak bonus.
 
 **Referrals** (section 7.13) — your referral code is your character **name**. A recruit qualifies after 4
 conditions (L8, 40 jobs, 3 check-ins, $25k net worth). Milestones pay the recruiter cash, $OMR, and titles.
+- **Naming your referrer** — a recruit can type the sharer's street name in the **"who sent you?"
+  field when they create their character** (a shared `?ref=` link pre-fills it), or — if they missed
+  it — from the **"Did someone send you?" card on Start Here within their first 3 days**. Spelling is
+  forgiven on case; attribution is set once and can't be changed after.
 - **The spark** — a small EARLY payment ($2,500 for the recruiter, $1,500 for the recruit, cash only) when
   your recruit reaches L3 and 10 jobs, before full qualification — fast feedback so you continue to recruit.
 - **Tier-2 "the family tree"** — when a recruit that YOU brought in then brings in their OWN qualified
@@ -828,7 +832,7 @@ only, one time each day, agents excluded. A share pays in two steps: first you R
 feeds the referral system. (This needs `SOCIAL_VERIFY_MODE` not equal to off; a wrong deploy shows the tab but
 pays nothing.)
 
-**The First Week** (`GET /v1/onboard`, `/onboard/:taskId/claim`) — a 9-task checklist (do a job, boost a car,
+**The First Week** (`GET /v1/onboard`, `/onboard/:taskId/claim`) — an 8-task checklist (do a job, boost a car,
 use the bank, declare a Path, join a family, link a wallet, three social tasks). It pays cash to teach you the
 game, with a final bonus. **The Coach** (the ▸ line on your sheet) always names your single best next action.
 

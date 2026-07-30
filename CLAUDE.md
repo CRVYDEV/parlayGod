@@ -3855,6 +3855,28 @@ port/races boards now quote the mastery-DISCOUNTED refit/tune price the till act
 cooldown). Flagged for founder sign-off (BALANCE.md): the path-XP×drip coupling, fists/duel XP
 lacking an opponent-quality floor, and the per-track DYNAST echo compounding.
 
+**THE REFERRAL ENTRY FIX (§7.13 — founder-reported funnel leak, 2026-07-30).** A new user was never
+allowed or prompted to TYPE who referred them — attribution rode only the invisible `?ref=`
+localStorage stash, so every word-of-mouth recruit credited nobody and a miss at creation was lost
+forever. Three changes, all ATTRIBUTION-only (payouts still ride the full §7.13 qualification
+gates — the Sybil posture is unchanged): **(1)** the create screen gained a "who sent you?
+(optional)" field (prefilled by a ?ref link so link arrivals see it working; a typed name beats the
+stash); the server matches the name EXACT-then-case-insensitive and the create response carries
+`referral: 'credited'|'unknown'` so a typo is TOLD to the player instead of silently dropped.
+**(2) THE LATE CLAIM** — `growth.js:claimReferral` / `POST /v1/referral/claim {code}`: name your
+referrer within `M4.REF_CLAIM_WINDOW_MS` (72h) of ACCOUNT creation, once, only while `referred_by`
+is unset (atomic IS-NULL update; `referred_by` is NOT in persistAccount's positional list so the
+direct write is clobber-safe); gates no_code/self/unknown_code/already_referred/window; writes the
+`referrals` graph row; the whole spark/qualify/tier-2 machinery reads `referred_by` fresh so late
+attribution feeds it untouched. Surfaced as `onboardBoard.referral {referred, canClaim,
+windowSeconds}` → a "DID SOMEONE SEND YOU?" card on Start Here (draft preserved across background
+re-renders — a WS/poll re-render at the focus-shift instant was wiping the half-typed name, caught
+by the live probe). **(3)** the ops funnel gained `referral.lateClaims` (telemetry
+`referral_claim_late`) so a high count reads as "the create field is being missed".
+`test/growth.js` covers wrong-case credit at creation, unknown-code-never-blocks + the honest flag,
+the late-claim happy path + board lifecycle, and all gates; both flows browser-verified end-to-end
+(zero page errors). `REF_CLAIM_WINDOW_MS` is a founder sign-off lever.
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions

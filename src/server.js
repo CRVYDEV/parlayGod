@@ -546,6 +546,7 @@ export async function buildServer() {
     // every fresh character rolls a UNIQUE build — same fixed budget (no power creep), different
     // shape (no two the same). Server-authoritative randomness, logged to rng_audit (§ ground rule #3).
     const st = rollStats();
+    let referral; // 'credited' | 'unknown' | undefined — did a supplied referral code land?
     // (red-team R13 data-integrity) the account-existence check was a RACED check-then-insert (raw
     // pool.query, no lock) — two concurrent creates with DIFFERENT names both passed it and both INSERTed
     // → two living characters on one account (an uncontrollable "ghost", since every load reads rows[0]).
@@ -570,14 +571,21 @@ export async function buildServer() {
       // apply any Store Street-Wire window parked while the account had no living character (audit)
       await Store.claimPendingWire(client, req.user.sub, id);
       if (req.body?.referralCode) {
-        // §7.13 — the referral code is the recruiter's character name
-        const rec = await client.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [String(req.body.referralCode), req.user.sub]);
+        // §7.13 — the referral code is the recruiter's character name. Exact match first (case-
+        // sensitive names may coexist), then case-insensitive — a typed name shouldn't lose
+        // attribution to a shift key. The response says whether it landed, so the client can tell
+        // the player instead of silently dropping their referrer (the growth-funnel leak).
+        const code = String(req.body.referralCode);
+        let rec = await client.query('SELECT account_id FROM characters WHERE name=$1 AND alive AND account_id<>$2 LIMIT 1', [code, req.user.sub]);
+        if (!rec.rows.length)
+          rec = await client.query('SELECT account_id FROM characters WHERE LOWER(name)=LOWER($1) AND alive AND account_id<>$2 LIMIT 1', [code, req.user.sub]);
         if (rec.rows.length) {
           await client.query('UPDATE account_persistent SET referred_by=$1 WHERE account_id=$2 AND referred_by IS NULL', [rec.rows[0].account_id, req.user.sub]);
           const already = await client.query('SELECT 1 FROM referrals WHERE recruit_account=$1', [req.user.sub]);
           if (!already.rows.length)
             await client.query('INSERT INTO referrals (recruit_account, recruiter_account) VALUES ($1,$2)', [req.user.sub, rec.rows[0].account_id]);
-        }
+          referral = 'credited';
+        } else referral = 'unknown';
       }
       await client.query('COMMIT');
     } catch (e) {
@@ -585,7 +593,7 @@ export async function buildServer() {
       if (e?.code === '23505') throw new G.GameError('name_taken', 'Someone on the streets already goes by that name.'); // name-index race backstop
       throw e;
     } finally { client.release(); }
-    return { ok: true, id };
+    return { ok: true, id, ...(referral ? { referral } : {}) };
   });
 
   // The sheet — the single most-polled route in the game, and the one production caught queueing on
@@ -1558,6 +1566,9 @@ export async function buildServer() {
     G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimDaily(ch, req.params.id, client, h)));
   app.get('/v1/onboard', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => W.onboardBoard(ch, h, client)));
+  // §7.13 THE LATE CLAIM — name who sent you (within the first-days window, once, attribution only)
+  app.post('/v1/referral/claim', { preHandler: auth }, async (req) =>
+    G.withCharacter(pool, req.user.sub, (ch, client, h) => W.claimReferral(ch, req.body?.code, client, h)));
   // THE STREET WAGE (the value-creation pivot) — the public emission board: epoch, budget, your progress
   app.get('/v1/wage', { preHandler: auth }, async (req) =>
     G.readCharacter(pool, req.user.sub, (ch, client, h) => Emission.wageBoard(client, ch, h.acct)));

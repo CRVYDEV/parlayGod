@@ -258,6 +258,7 @@ const SIGNED = [
   ['MASTERY.STAT_USE.CAP_DAY', 3],
   ['MASTERY.STAT_USE.P_PER_XP', 0.02],
   ['MASTERY.STAT_USE.GYM_DIM', 200],
+  ['M4.REF_CLAIM_WINDOW_MS', 259200000],
   // step three — PATHS v2 (the XP-rate axis + the switch throttle; the PATH_FX perk/handicap
   // mults live under lowercase path keys, outside the walker — the founder dials are these three)
   ['PATH_XP_HOME', 1.5],
