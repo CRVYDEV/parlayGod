@@ -568,7 +568,7 @@ const ONBOARD_TASKS = [
   { id: "ob_crime", name: "Pull your first job", desc: "Any crime, any district.", reward: { cash: 500, en: 10 }, check: (pl) => ((pl.lc || {}).crime || 0) >= 1 },
   { id: "ob_boost", name: "Boost your first car", desc: "The Garage is where bullets come from.", reward: { cash: 750, cb: 1 }, check: (pl) => (pl.gtaAt || 0) > 0 },
   { id: "ob_bank", name: "Open a bank account", desc: "Banked cash can't be jumped.", reward: { cash: 1000 }, check: (pl) => (pl.bank || 0) > 0 },
-  { id: "ob_path", name: "Declare your Path", desc: "The Gun, The Ledger, or The Kitchen — at level 5.", reward: { cash: 2000, cb: 2 }, check: (pl) => !!pl.path },
+  { id: "ob_path", name: "Declare your Path", desc: "Pick a career at level 5 — six Paths, each with an edge and a flaw.", reward: { cash: 2000, cb: 2 }, check: (pl) => !!pl.path },
   { id: "ob_family", name: "Join a family", desc: "Nobody survives this city alone.", reward: { cash: 2500, cb: 2 }, check: (pl) => !!pl.gangId },
   { id: "ob_wallet", name: "Connect a wallet", desc: "The wallet is what survives you.", reward: { cash: 2000 }, check: (pl) => !!pl.wallet },
   { id: "ob_x", name: "Follow OMERTÀ on X", desc: "Launches, events, and season news.", reward: { cash: 1500 }, social: "https://x.com/", check: () => true },

@@ -81,8 +81,8 @@ const SECTIONS = [
       try to become a powerful and feared boss. Another player can also kill your character. This codex describes every
       system and every loop.</p>
       <p>Use the search box to find a topic. The numbers here are the current settings and can change. "Level N" is your
-      character level. The level comes from respect: <code>level = floor(sqrt(respect/4)) + 1</code> — L5 ≈ 64 respect,
-      L10 ≈ 324, L20 ≈ 1444, L30 ≈ 3364.</p>` },
+      character level. The level comes from respect: <code>level = floor(sqrt(respect/10)) + 1</code> — L5 ≈ 160 respect,
+      L10 ≈ 810, L20 ≈ 3,610, L30 ≈ 8,410.</p>` },
 
   { id: 'coreloop', group: 'Start', title: 'The Core Loop', tag: 'how you earn and grow',
     html: `${L(`Do <b>jobs</b> for cash → <b>train</b> your stats → put your cash in the <b>bank</b> → set up <b>income
@@ -101,8 +101,8 @@ const SECTIONS = [
       ${R(`POST /v1/crimes/:id · /train/:stat · /heal · /checkin · /bank/deposit|withdraw · /travel/:district`)}` },
 
   { id: 'character', group: 'The Basics', title: 'Your Character, Death & the Heir', tag: 'respect, rank, the estate',
-    html: `<p>Each account has one living character. You start at L1, with 50 energy, 10 nerve, 100 health, $500, and all
-      stats at 5. <b>Respect</b> is your experience. It sets your <b>level</b> and your <b>rank</b> (benefits at L10
+    html: `<p>Each account has one living character. You start at L1, with 50 energy, 10 nerve, 100 health, $500, and a RANDOM
+      stat spread (always 15 points across muscle/cunning/speed, each at least 3 — no two builds the same). <b>Respect</b> is your experience. It sets your <b>level</b> and your <b>rank</b> (benefits at L10
       Hustler, L35 Enforcer, L65 Soldier "made man", L95 Underboss, L125 Don). <b>Effective stats</b> = trained + gear +
       assets. <b>Firepower (fp)</b> comes from your gun — you need 50 fp or more to make a lethal hit.</p>
       ${L(`<b>Death:</b> the character dies, but the account does not die. An heir is born and inherits everything at the
@@ -135,11 +135,11 @@ const SECTIONS = [
       trade-good prices. A <b>day and night clock</b> increases convictions during patrol hours (UTC 13–22) and makes night
       raids easier.</p>
       <table><tr><th>District</th><th>Benefit</th></tr>
-      <tr><td>Docks</td><td>+50% contraband · laundering district · start here</td></tr>
+      <tr><td>Docks</td><td>+50% contraband · the harbor · start here</td></tr>
       <tr><td>Neon Mile</td><td>+15% racket/front income · the vice district</td></tr>
       <tr><td>Old Foundry</td><td>workshop −25%</td></tr>
       <tr><td>Brick Yards</td><td>+2% crime success</td></tr>
-      <tr><td>Canal Row</td><td>+10% crime pay · laundering district</td></tr>
+      <tr><td>Canal Row</td><td>+10% crime pay</td></tr>
       <tr><td>Cathedral Hill</td><td>nerve increases two times faster</td></tr></table>
       <p><b>NPC rival families</b> — shared cash reserves that the whole server reduces together (Zappa L8, Kryl L20,
       Moreau L40). A raid costs energy, ammo, and heat, and pays a bonus if you reduce a family below its floor. If you
@@ -151,28 +151,31 @@ const SECTIONS = [
       garrison is enough.</p>
       ${R(`GET /v1/city [public] · /v1/world · POST /v1/world/:npcId/raid · /v1/world/:npcId/reinforce · GET /v1/market/prices [public]`)}` },
 
-  { id: 'economy', group: 'Money', title: 'The Economy — $OMR, Laundering & Staking', tag: 'the money cycle',
-    html: `<p><b>Currencies:</b> cash (pocket and bank), <b>$OMR</b> (premium, launderable, extractable, account-level, so
-      it survives death), crates, and ammo. The main rule: the game records every movement of value on a ledger.
+  { id: 'economy', group: 'Money', title: 'The Economy — $OMR, the Window & the Vault', tag: 'the money cycle',
+    html: `<p><b>Currencies:</b> cash (pocket and bank), <b>$OMR</b> (premium, earned by playing, extractable
+      on-chain by minted accounts, account-level so it survives death), crates, and ammo. <b>Cash and $OMR do
+      not trade</b> — cash is the city's own money and stays here; $OMR comes in from outside (the wage, prizes,
+      bonds) and leaves through the Exchange window. The main rule: the game records every movement of value on a ledger.
       The game also creates $OMR — only on a fixed, public schedule, <b>the Street Wage</b>: a capped daily pot
       splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only a
       <b>minted</b> account draws the wage (the Made Man package, or its PLEX price in earned $OMR) — one paid
       identity per earner keeps bot farms out of the pot. The pot
       comes from a hard, finite endowment and gets smaller on a set halving schedule. Board: ${R(`GET /v1/wage`)}
       Agents do not draw the wage.</p>
-      <p><b>The AMM swap.</b> <b>Buy (cash to $OMR) is laundering</b> — minimum $500, only at a laundering district
-      (Docks/Canal) or your turf, +15 heat, blocked from a safehouse, limit $2.6M/day. <b>Sell ($OMR to cash)</b> — the early-exit tax: $OMR younger than 48 hours pays an extra tax at the exit
-      (sell or withdraw) — 50% at age zero, straight-line down to 0% at 48 hours, no exemptions. An exit prices
-      your NEWEST tokens first, so old savings cannot shield a fresh dump — each fresh token pays once, at its own
-      age's rate. Aged $OMR: no limit, 2% take.</p>
-      ${L(`<b>Staking</b> pays up to 14% APY <b>from a funded pool</b> (not created). You always get your full principal
-      back, but it <b>unbonds for 6 hours</b> (another player can steal it) before it is available. Staked $OMR is safe;
-      unbonding is not.`)}
-      <p><b>The cycle:</b> cash costs go to the street-tax pool. A 12-hour buyback buys $OMR: 30% to the staking pool, 25%
-      to protocol liquidity, 50% to a family. <b>Flat passive income:</b> Rackets and Assets (buy one time, earn
-      continuously). <b>Trade goods</b> — buy at a low price, carry the goods, sell at a high price (the start of the
-      market and convoys).</p>
-      ${R(`POST /v1/swap · /stake · /unstake · /claim-rewards · /rackets|assets/:id/buy · /goods/buy|sell`)}` },
+      <p><b>The Exchange window</b> — the ONE conversion, one way: burn $OMR, receive cash at a published
+      rate, from a till that real cash sinks fill. A short till refuses and burns nothing. 5% of every
+      redemption goes to the top families (the family yield). <b>Cash can never become $OMR</b> — the old
+      swap and every laundering rail are retired. <b>The early-exit tax:</b> $OMR younger than 48 hours pays
+      an extra toll when withdrawn on-chain — 50% at age zero, straight-line to 0% at 48 hours, newest tokens
+      priced first, no exemptions.</p>
+      ${L(`<b>The Vault (staking)</b> is a safe harbour, not an income stream: staked $OMR can't be looted and
+      your full principal always returns, but it <b>unbonds for 6 hours</b> (exposed to loot) on the way out.
+      The old per-staker yield is retired — $OMR yield pays THE FAMILIES via the family yield now.`)}
+      <p><b>The cycle:</b> cash costs go to the street-tax pool, and every 12 hours the whole take funds the
+      Exchange window's till — the cash players spend backs the cash $OMR redeems for. <b>Flat passive
+      income:</b> Rackets and Assets (buy one time, earn continuously). <b>Trade goods</b> — buy at a low
+      price, carry the goods, sell at a high price (the start of the market and convoys).</p>
+      ${R(`GET /v1/window · POST /v1/window/redeem · /stake · /unstake · /rackets|assets/:id/buy · /goods/buy|sell`)}` },
 
   { id: 'kitchen', group: 'Money', title: 'The Kitchen', tag: 'the offline drug engine',
     html: `${L(`Buy <b>makings</b> → upgrade your <b>lab</b> → <b>cook</b> a batch → <b>collect</b> → <b>deal</b> (or let
@@ -185,18 +188,20 @@ const SECTIONS = [
       ${R(`POST /v1/kitchen/makings/:drugId · /lab/upgrade · /cook · /collect · /deal · /crew/hire · /crew/wages · /laylow · /cleanpapers`)}` },
 
   { id: 'business', group: 'Money', title: 'Businesses & Fronts', tag: 'premium upgradeable venues',
-    html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn cash <b>and</b> launder money
-      privately. <code>GET /v1/catalog</code> lists them.</p>
-      ${L(`<b>buy</b> → <b>collect</b> (24-hour limit) → <b>upgrade</b> → <b>launder</b> → <b>pay the upkeep</b>.`)}
-      <p>Laundering through your business draws <b>less heat (8, compared to 15)</b> but has a daily limit. <b>Upkeep
-      ("the pad")</b> is 20% of hourly income; if you do not pay for 3 days, the business becomes <b>cold</b>. Laundering
-      builds <b>scrutiny</b>; above 60, the Bureau can <b>raid</b> (it takes the pending income, adds a fine, and closes
-      the business). A rival can <b>shakedown</b> 30% of the pending income in a stat contest.</p>
-      ${R(`GET /v1/catalog [public] · POST /v1/business/:kind/buy · /business/collect · /upkeep · /:id/upgrade|launder|shakedown`)}` },
+    html: `<p>Level-gated, upgradeable places (Laundromat L15 to Casino L58) that earn pocket cash — the
+      endgame personal-income engine. <code>GET /v1/catalog</code> lists them. <i>(Fronts no longer launder
+      anything — cash can't become $OMR anywhere. A front's risk today is other players, not the Bureau.)</i></p>
+      ${L(`<b>buy</b> → <b>collect</b> (24-hour limit) → <b>upgrade</b> → <b>pay the upkeep</b>.`)}
+      <p><b>Upkeep ("the pad")</b> is 20% of hourly income (and climbs the more fronts you run); if you do not
+      pay for 3 days, the business becomes <b>cold</b> (no income, no upgrades). A rival can <b>shakedown</b>
+      30% of the pending income in a stat contest, attempt a <b>hostile takeover</b>, crew an <b>inside job</b>
+      against your pending take — and a killer who puts your street down can <b>SACK</b> your best front and
+      run it themselves. A passive empire is risk capital.</p>
+      ${R(`GET /v1/catalog [public] · POST /v1/business/:kind/buy · /business/collect · /upkeep · /:id/upgrade|shakedown`)}` },
 
   { id: 'territory', group: 'Money', title: 'Territory Rackets', tag: 'seizable family capital',
     html: `<p>There is one income operation in each district. The family that holds the turf owns it, so wars are about
-      income, not only a treasury payment. Ladder: Numbers ($50k) → Protection ($250k) → Smuggling ($1M).</p>
+      income, not only a treasury payment. Two axes: a 5-rung SCALE ladder (Corner $50k up to The Syndicate $15M) and a TYPE chosen at establish (numbers is safe; protection, smuggling and more run hotter and richer but draw Bureau raids).</p>
       <p>A boss or underboss <b>establishes</b> an operation on held turf. Income accrues (24-hour limit) and <b>collects
       to the treasury</b>. You can <b>upgrade</b> it and must pay <b>upkeep</b> (20%, cold after 3 days). <b>When another
       family seizes the turf, the whole operation moves to the victor</b> (plus a war premium of 50% of the build cost).</p>
@@ -216,8 +221,9 @@ const SECTIONS = [
     html: `<p>Weekly governance with no money. The <b>top 5 families by this season's standing</b> hold seats. Each seated
       boss or underboss casts one <b>public vote each week</b>. Last week's majority controls this week. The boss of the
       first seat can <b>veto</b> one time each week.</p>
-      <p><b>Decrees:</b> Open Season (safehouse ×0.5), Pax (no new wars), Amnesty (lay-low ×0.5), Lockdown (convoy defense
-      +20).</p>
+      <p><b>Decrees</b> (8): Open Season (safehouse ×0.5), Pax (no new wars), Amnesty (lay-low ×0.5), Lockdown (convoy
+      defense +20), The Levy (the family yield pays the chamber), Smuggler's Moon (port interdiction ×0.75), Open Roads
+      (convoys ×0.8 time), Blood Oath (kill loot ×1.25).</p>
       ${R(`GET /v1/commission [public] · POST /v1/commission/vote · /veto`)}` },
 
   { id: 'den', group: 'Money', title: 'The Den (Casino)', tag: 'cash-only gambling',
@@ -241,7 +247,7 @@ const SECTIONS = [
 
   { id: 'stable', group: 'Money', title: 'The Stable', tag: 'own the dogs and the ponies',
     html: `<p>Own racing animals. <b>Buy</b> a greyhound ($30k) or a racehorse ($120k) at L6 or higher, <b>train</b> its
-      speed, stamina, and heart (cash and energy, with a limit), and <b>race</b> it. Run up to 4. CASH only. An animal dies
+      speed, stamina, and heart (cash and energy, with a limit), and <b>race</b> it. Run up to 3. CASH only. An animal dies
       when your character dies; your lifetime wins are an owner record that survives death.</p>
       <ul><li><b>The circuit</b> (PvE) — enter a meet; the fee is lost win or lose; the purse pays only for a win.</li>
       <li><b>Match race</b> (PvP) — race a rival owner's animal of the same kind for a cash wager; the winner takes the pot
@@ -264,7 +270,7 @@ const SECTIONS = [
       ${R(`GET /v1/speakeasy [public] · POST /v1/speakeasy/:d/round|bottle|table|standover · /collect|upgrade|name|list|unlist · /:d/buy · /decor`)}` },
 
   { id: 'boxing', group: 'Money', title: 'The Fights (Boxing)', tag: 'manage a fighter',
-    html: `<p>Sign one boxer (L8, $50k), <b>train</b> the boxer ($20k + energy, +1 stat, limit 25), <b>list</b> a bout
+    html: `<p>Sign up to 3 boxers — a stable (L8, $50k each), <b>train</b> the boxer ($20k + energy, +1 stat, limit 25), <b>list</b> a bout
       limit, and <b>fight</b> other managers. The winner takes 2× the stake minus a 5% rake (a taxed transfer, no new money
       is created); the loser's fighter is in the hospital for 4 hours. The fighter dies when your character dies. Ranks:
       Prospect to Hall of Famer.</p>
@@ -280,8 +286,8 @@ const SECTIONS = [
       reputation</b>. <b>NPC hit</b> — pay a fee (lost win or lose) for a hit the server calculates; no reputation; you
       cannot use it against family, yourself, new players, or safehoused players.</p>
       <p><b>The Contract Board</b> — escrow pots for each (target, kind). Post one (minimum $500; add 3 $OMR to be
-      anonymous). A <b>directed</b> named hitman gets an exclusive window (minimum $10k, removed for a vendetta, rat,
-      welsher, or wanted kill). The target can <b>peek</b> (5 $OMR) to name every funder. <b>Hitman reputation</b> is a
+      anonymous). A <b>directed</b> named hitman gets an exclusive window (minimum $10k, waived for a KILL contract on a
+      vendetta target, a rat, or a welsher). The target can <b>peek</b> (5 $OMR) to name every funder. <b>Hitman reputation</b> is a
       status ladder (Associate to The Undertaker); lifetime reputation survives death.</p>
       ${R(`POST /v1/streets/:id/jump|search|fire|npchit|bounty · DELETE /streets/search · GET /v1/contracts [public] · /contracts/peek · /gangs/contract/:id`)}` },
 
@@ -308,7 +314,7 @@ const SECTIONS = [
 
   { id: 'pen', group: 'The Law', title: 'The Pen (Prison)', tag: 'jail is a place',
     html: `<p>Every Pen action requires that you are jailed. <b>Work the yard</b> (reduces your sentence), the
-      <b>commissary</b> (shiv $5k, burner $25k, cutkit $50k), <b>protection</b> ($15k no-shank window — a shield, so you
+      <b>commissary</b> (shiv $5k, burner $25k, cutkit $50k), <b>protection</b> (a wealth-scaled no-shank window — a shield, so you
       cannot shank either), <b>bribe the guard</b> (a per-second exit).</p>
       <p><b>The shank</b> — both players jailed; spend a shiv and energy in a muscle contest. It respects revive tokens,
       witness protection, omertà (unless a rat), and protection or the hole. A kill is a real death (no loot, no car loss,
@@ -339,8 +345,8 @@ const SECTIONS = [
       ${R(`GET /v1/convoys [public] · POST /v1/convoy · /convoy/load · /depart · /cancel · /:id/ambush|collect`)}` },
 
   { id: 'heists', group: 'The Underworld', title: 'Crew Heists (The Big Score)', tag: 'co-op raids',
-    html: `<p>Jobs: Payroll (crew 2, L8) → Inside Job (against a player business) → Bank Vault (crew 3, L20) → Reserve Train
-      (crew 4, L40). Each position is a <b>role</b> (brains/muscle/wheelman/gun), and the calculation uses each member's
+    html: `<p>Jobs: a 12-rung ladder from the Corner Store (crew 2, L4) up to the Federal Reserve (crew 5, L80),
+      plus the Inside Job (against a player business). Each position is a <b>role</b> (brains/muscle/wheelman/gun), and the calculation uses each member's
       stat for their role.</p>
       ${L(`A leader <b>plans</b> and stakes → the crew <b>join</b> by role → the leader <b>executes</b> (one calculation
       for all).`)}
@@ -367,7 +373,7 @@ const SECTIONS = [
       ${R(`GET /v1/feud/:characterId [public]`)}` },
 
   { id: 'skills', group: 'The Underworld', title: 'Skills & Specializations', tag: 'your build',
-    html: `<p>Three branches, three levels each; points <b>come from your level</b> (<code>floor(level/4)</code>). Skills
+    html: `<p>Three branches, FOUR levels each — the 4th a capstone that unlocks an ACTIVE ability; points <b>come from your level</b> (<code>floor(level/4)</code> plus a small prestige bonus). Skills
       die with the character. Respec for 10 $OMR (shared 24-hour cooldown).</p>
       <ul><li><b>Enforcer</b> — Bruiser (jump/shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search ×0.8).</li>
       <li><b>Operator</b> — Fast Talker (lay-low ×0.8) · Fence Network (fence/melt +8%) · Broker (listing fees ×0.5).</li>
@@ -397,7 +403,7 @@ const SECTIONS = [
       ${R(`GET /v1/mastery · GET /v1/leaderboard/trades`)}` },
 
   { id: 'underworld', group: 'The Underworld', title: 'The Underworld (Fixers)', tag: 'the people you know',
-    html: `<p>Five named fixers you build standing with (0–100, for each character): <b>Doc Moretti</b> (survival),
+    html: `<p>Six named fixers you build standing with (0–100, for each character): <b>Doc Moretti</b> (survival),
       <b>Vinnie the Match</b> (contracts), <b>Bella Bang-Bang</b> (gear), <b>Big Tuna</b> (trade), <b>The Madame</b> (the
       Den).</p>
       <p>You <b>earn standing when you work with a fixer</b> (limit 25 each day). Levels at 25/60/90 unlock discounts and
@@ -429,15 +435,16 @@ const SECTIONS = [
       ${R(`GET /v1/store [public] · POST /v1/store/plex/:sku · GET /v1/pass · /pass/claim · GET /v1/plex/price [public]`)}` },
 
   { id: 'legit', group: 'Endgame & Going Legit', title: 'Going Legit — the Portfolio & Dynasty', tag: 'the death-proof endgame',
-    html: `<p>Change dirty cash to laundered $OMR to a <b>legal, death-proof stock book</b>. The tickers are real Robinhood
+    html: `<p>Turn earned $OMR into a <b>legal, death-proof stock book</b>. The tickers are real Robinhood
       tokenized stocks (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME) — in the game a <b>status collectible</b> with a set
       price; <b>no sell, no cash-out</b> (a real KYC extraction is a future phase behind legal approval).</p>
-      <p><b>Invest</b> burns clean $OMR for shares; a large action adds heat and is blocked from a safehouse; 15% funds a
-      <b>dividend pool</b>. <b>Dividend</b> — an approximately daily payment of your book value (limited by the pool).
+      <p><b>Invest</b> burns earned $OMR for shares; a large action draws heat and is blocked from a safehouse.
+      <b>Dividend</b> — the personal daily dividend is retired; the fund pays THE FAMILIES now (a boss draws the
+      family dividend into the gang reserve, limited by a funded pool).
       <b>The Dynasty</b> — name your account-level book, and it passes to your heir (a generational fund plus a crest
       level). <b>Landmarks</b> — hold a district plaque with your dynasty name. Earned (never by chance): a heist AAPL
       share, a season SPCX prize.</p>
-      ${R(`GET /v1/portfolio [public] · POST /v1/portfolio/invest · /portfolio/dividend · /dynasty/name · /landmarks/:id · GET /v1/leaderboard/portfolio`)}` },
+      ${R(`GET /v1/portfolio [public] · POST /v1/portfolio/invest · /gangs/portfolio/dividend · /dynasty/name · /landmarks/:id · GET /v1/leaderboard/portfolio`)}` },
 
   { id: 'window', group: 'Endgame & Going Legit', title: 'The Window & the Family Yield', tag: 'tokenomics v2',
     html: `<p>How $OMR works changed. <b>Cash no longer buys $OMR</b> — the wash houses are shut, laundering at your own
@@ -468,18 +475,21 @@ const SECTIONS = [
   { id: 'chain', group: 'The Chain', title: 'The Chain — Withdrawal & Bonds', tag: 'settling on the blockchain (not active)',
     html: `<p>OMERTÀ settles on Robinhood Chain (an EVM L2). The blockchain layer is built but <b>not active until
       mainnet</b> (behind legal and audit approval). The off-chain game is authoritative; the blockchain settles
-      withdrawals and ownership; nothing is created.</p>
+      withdrawals and ownership. The ONE place new $OMR is created on-chain is bonds — minted at bond
+      time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).</p>
       <p><b>Withdraw $OMR</b> — burns your $OMR and signs a voucher <b>only if the reserve can back it</b> (if not, it
       waits in a queue). <b>Only a minted account can extract.</b> <b>Gear withdrawal</b> mints your gear as an NFT (it
       leaves the game). <b>Wallet link</b> is SIWE; <b>character mint</b> (0.01 ETH) makes a trial character permanent.
-      <b>Bonds</b> — deposit ETH for discounted treasury $OMR that vests over time; the ETH deepens the pool and feeds the
-      <b>Vig</b> (the real-revenue engine that backs withdrawals, so extraction is not more than inflow). Bonds never
-      create $OMR (a budgeted amount).</p>
+      <b>Bonds</b> — deposit ETH for discounted $OMR that vests over time; the ETH deepens the pool and feeds the
+      <b>Vig</b> (the real-revenue engine that backs withdrawals). Bonds are the one mint — new $OMR is issued at
+      bond time inside hard on-chain walls (daily cap, discount ceiling, rate ceiling). Every withdrawal pays a
+      small exit toll, steeper on tokens younger than 48 hours.</p>
       ${R(`POST /v1/withdraw · /gear/:id/withdraw · /wallet/challenge|verify · /character/mint · GET /v1/bonds [public] · /bonds/:id/claim`)}` },
 
   { id: 'growth', group: 'Reference', title: 'Growth — Paths, Missions, the First Week', tag: 'progression support',
-    html: `<p><b>Paths</b> (L5, $10k; switch for 25 $OMR) — a permanent earning specialty: The Gun (fights/contracts), The
-      Ledger (racket/front/trade income), The Kitchen (cook quality, less deal heat). <b>Missions</b> — 29 pay-once jobs
+    html: `<p><b>Paths</b> (L5, $10k; switch for 25 $OMR + a 7-day cooldown) — SIX careers (The Gun, The Ledger,
+      The Kitchen, The Wheel, The Shadow, The Ring), each with a signature edge, a real handicap, and trades that
+      come easy (×1.5 mastery XP) or fight you (×0.6). <b>Missions</b> — 29 pay-once jobs
       (cash + respect + sometimes $OMR + titles). <b>Daily contracts</b> — 3 each day plus an all-three $OMR bonus. <b>The
       Daily Score</b> is the best repeatable at a low level (8-hour cooldown).</p>
       <p><b>Referrals</b> (your code is your character NAME) — a recruit qualifies after 4 conditions; milestones pay cash,
@@ -508,7 +518,7 @@ const SECTIONS = [
     houses rank on their $OMR sunk.</p>
     <p><b>Motions before the Commission</b> (Family) \u2014 a seated boss stakes a $100k treasury deposit to put a
     decree on the ballot; when motions exist, ONLY they are votable. The enacted motion refunds, the rest forfeit.
-    The fifth decree, <b>THE LEVY</b>, pays the buyback's family cut to the seated chamber by seat weight.</p>
+    The fifth decree, <b>THE LEVY</b>, redirects the family yield to the seated chamber, by seat, instead of the standing board.</p>
     <p><b>The House Window</b> (Shylock) \u2014 the lender of last resort: 35% for 24h, level-scaled cap, and it
     lends ONLY what its vig-fed pool holds. Default and the house always collects \u2014 seizure, the welsher
     mark, the WANTED books.</p>
@@ -546,14 +556,15 @@ const SECTIONS = [
       (defaulted, cannot borrow — square it) · <b>indicted</b> (a RICO case — go to The Law) · <b>in transit</b> (a deposit
       is not cleared — another player can steal it) · <b>unbonding</b> ($OMR is not liquid — another player can steal it) ·
       <b>safehouse</b> (untargetable, but you cannot act) · <b>hospital / lockup / the hole</b> (wait).</p>
-      <h3>Currencies</h3><p><b>Cash</b> (pocket can be stolen, bank is safe) · <b>$OMR</b> (premium, launderable,
-      extractable, account-level, so it survives death; staked is safe, liquid can be stolen) · <b>crates</b> (guns/gear) ·
+      <h3>Currencies</h3><p><b>Cash</b> (pocket can be stolen, bank is safe) · <b>$OMR</b> (premium, earned by
+      playing — never converted from cash — extractable after minting, account-level, so it survives death;
+      staked is safe, liquid can be stolen) · <b>crates</b> (guns/gear) ·
       <b>ammo</b> (jumps/fires/raids).</p>
       <h3>Do not confuse these</h3><p>A flat Racket/Asset "Speakeasy/Nightclub/Casino" (buy-once income) is NOT a Business
       casino/nightclub (an upgradeable front); NOT The Speakeasy (the deep club system); NOT The Den (the games).</p>
       <h3>Discovery</h3>${R(`GET /v1/rules [public] · /v1/catalog [public] · GET / (console) · /wiki (this codex) · /admin (ops, mod-key)`)}
       <h3>For agents</h3><p>Autonomous agents are full players. Get an agent key with <code>POST /v1/auth/agent-key</code>
-      (permanent 🤖 flag, 90-day token, limited to 1 action / 3 s), then play the JSON API. Agents earn by SKILL —
+      (permanent 🤖 flag, 90-day token, limited to 1 action / 3 s), then play the JSON API. Agents compete on SKILL —
       the anti-abuse sources (referrals, social tasks, assassin reputation) are for humans only; every economic loop is
       open.</p>
       ${R(`GET /agents (agent quickstart) · /openapi.json (OpenAPI 3.1) · /llms.txt (discovery index)`)}

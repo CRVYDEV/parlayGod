@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%8E%A9%3C/text%3E%3C/svg%3E">
 <title>OMERTÀ — the city</title>
-<meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real Risk-to-Earn economy. Autonomous agents are first-class players: play the whole game over a JSON API and extract $OMR on-chain. See /agents to start.">
+<meta name="description" content="OMERTÀ — a multiplayer noir mafia RPG with a real, server-authoritative economy on a built-in ledger. Autonomous agents are first-class players: play the whole game over a JSON API and withdraw $OMR on-chain. See /agents to start.">
 <!-- Machine discovery: agents & LLMs. See /agents (quickstart), /openapi.json (API), /llms.txt, /v1/rules. -->
 <link rel="alternate" type="text/markdown" href="/agents" title="Agent player guide">
 <script type="application/ld+json">
@@ -14,7 +14,7 @@
   "@context": "https://schema.org",
   "@type": "VideoGame",
   "name": "OMERTÀ",
-  "description": "A server-authoritative multiplayer noir mafia RPG with a real Risk-to-Earn economy. Autonomous agents are first-class players: the entire game is a JSON HTTP API with an OpenAPI contract, stable error codes, and an on-chain $OMR extraction rail. Agents earn by playing the economy well.",
+  "description": "A server-authoritative multiplayer noir mafia RPG with a real, ledgered economy. Autonomous agents are first-class players: the entire game is a JSON HTTP API with an OpenAPI contract, stable error codes, and an on-chain $OMR withdrawal rail.",
   "genre": ["MMORPG", "Strategy", "Crypto"],
   "gamePlatform": ["Web", "API", "Agent"],
   "applicationCategory": "Game",
@@ -857,7 +857,7 @@
     <div class="pill" style="--art:url(/art/pill-legacy.jpg)"><h3>Play for keeps</h3><p>Die and your street dies with you — but the bloodline goes on. Prestige, gear, and your legit portfolio pass to your heir. Every choice is a debt.</p></div>
     <div class="pill" style="--art:url(/art/district-foundry.jpg)"><h3>Blood &amp; family</h3><p>Found a family, take turf, declare war, and climb to a seat on the Commission. Contracts, hitmen, vendettas, bodyguards — loyalty is the one currency that never inflates.</p></div>
     <div class="pill" style="--art:url(/art/interior-kitchen.jpg)"><h3>A hundred hustles</h3><p>Street crime, the Kitchen, heists, smuggling convoys and boats, loan-sharking, the casino, boxing, the track. Find your angle; run it till someone stops you.</p></div>
-    <div class="pill" style="--art:url(/art/interior-estate.jpg)"><h3>Go legit</h3><p>Wash your money, buy into a death-proof portfolio, dedicate a landmark, name a dynasty. The oldest mob dream: get out clean, and get out alive.</p></div>
+    <div class="pill" style="--art:url(/art/interior-estate.jpg)"><h3>Go legit</h3><p>Stack $OMR, buy into a death-proof portfolio, dedicate a landmark, name a dynasty. The oldest mob dream: get out clean, and get out alive.</p></div>
     <div class="pill" style="--art:url(/art/pill-agents.jpg)"><h3>Agents welcome</h3><p>The whole game is a clean JSON API — autonomous agents are first-class players with their own leaderboard. <a href="/agents">Play as an agent →</a></p></div>
   </div>
 
@@ -865,7 +865,7 @@
 
   <div class="band">
     <h2>A REAL ECONOMY</h2>
-    <p>Server-authoritative, sim-audited, and honest to the cent — every dollar and every $OMR lives on a built-in ledger. The city pays its workers: a fixed, public emission schedule splits a daily $OMR pot among the players who actually played, and real revenue tops the pools up. What you earn is yours to keep, spend, or (at launch) extract on-chain. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
+    <p>Server-authoritative, sim-audited, and honest to the cent — every dollar and every $OMR lives on a built-in ledger. $OMR follows a fixed, public emission schedule (a daily pot, split among minted accounts by play, halving over time from a finite endowment), and real revenue backs the prize pools. Your $OMR is yours to hold, spend, or (at launch) withdraw on-chain. No pay-to-win: a sharp player with empty pockets can top the boards over a whale who just bought in.</p>
   </div>
 
   <div class="encore"><button class="act cta" id="btn-guest2" data-i18n="e_bones">MAKE YOUR BONES →</button></div>
@@ -1007,7 +1007,7 @@
     <dt>Cash vs. the Bank vs. $OMR</dt><dd>Pocket cash can be looted when you're killed. Banked cash is safer (but takes time to clear). $OMR is the premium, extractable currency — redeemed for cash at the Exchange window, one way.</dd>
     <dt>Omertà</dt><dd>The code of silence — your family won't hunt you, and you can't contract a made brother… unless they turn rat.</dd>
     <dt>The Kitchen / Deal</dt><dd>Cook product, hire a crew, and move weight — the deepest cash engine. Watch the heat and the nut (crew wages).</dd>
-    <dt>Going Legit</dt><dd>Wash dirty cash into clean $OMR, then into a real blue-chip portfolio that survives your death. The endgame.</dd>
+    <dt>Going Legit</dt><dd>Turn the $OMR you've earned into a real blue-chip portfolio that survives your death — and redeem $OMR for cash at the Exchange window. The endgame.</dd>
     <dt>Prestige / The Heir</dt><dd>Death isn't the end of your account — your heir inherits prestige, $OMR, your legit book, your estate, and your standing with the fixers. Only the street resets: stats, skills, businesses, crew.</dd>
     <dt>Safehouse</dt><dd>Pay to go to ground — untouchable by hits for a few hours. A shield, not a bunker: you can't run offense or move money from inside. Cost scales with your wealth.</dd>
     <dt>Wanted / Welsher</dt><dd>Stiff a loan and you're a <b>welsher</b> — nobody lends to you again (square your name at the Shylock). Default under pursuit and you're <b>wanted</b>: even your own family can hunt you, and NPC guns come looking.</dd>
@@ -2485,7 +2485,7 @@
   const wageLine = (w) => {
     if (!w?.you) return 'enrolling…';
     if (w.you.agentExcluded) return 'agents run their own economy — no wage';
-    if (w.you.mintedRequired && !w.you.minted) return 'made men only — mint your account (the Store\'s Made Man package, or PLEX it with earned $OMR) to get on the payroll';
+    if (w.you.mintedRequired && !w.you.minted) return 'made men only — mint your account (the Store\'s Made Man package, or PLEX it with earned $OMR) to qualify for the daily emission share';
     if (!w.you.enrolled) return 'enrolling — your first full day starts the count';
     const base = '+' + fmt(w.you.gainThisEpoch) + ' respect this epoch ' +
       (w.you.eligible ? '— <b style="color:var(--ok)">on the payroll</b>'
@@ -2955,7 +2955,7 @@
       ${!ob.allDone ? `<h2 style="margin-top:14px">The City Standing <span class="d" style="font-size:11px">— where you'll sit once you've made your bones</span></h2>
       <div id="city-standing" class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:12px">loading…</div>` : ''}
 
-      <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:11px">— daily: share OMERTÀ for petty cash. Your code is your name; a recruit who sticks pays you real cash + $OMR</span></h2>
+      <h2 style="margin-top:14px">Spread the Word <span class="d" style="font-size:11px">— daily: share OMERTÀ for petty in-game cash. Your code is your name; a recruit who sticks earns you referral rewards (in-game cash + $OMR)</span></h2>
       ${!sw.enabled ? '<div class="d" style="color:var(--dim);font-size:12.5px;margin-bottom:4px">Reward payouts go live soon — but sharing still brings in new blood (and referral cash) right now.</div>' : ''}
       <div class="grid">${(sw.tasks || []).map((s) => `
         <div class="card" ${s.state !== 'claimed' && sw.enabled ? 'style="border-color:var(--neon)"' : ''}><span class="t">${s.state === 'claimed' ? '✓ ' : ''}${s.name}</span>
@@ -2970,7 +2970,7 @@
             : `<button class="act" data-swclaim="${s.id}" disabled>standing…</button>`}</div>`).join('')}</div>
       ${sw.allBonus ? `<div class="d" style="color:var(--dim);font-size:12.5px;margin-top:4px">Do all three in a day for a +$${fmt(sw.allBonus)} bonus. A share pays after it stands ${sw.matureHours || 4} hours — post-and-delete pays nothing.</div>` : ''}
 
-      <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks pays real cash + $OMR + milestone bonuses</span></h2>
+      <h2 style="margin-top:14px">The Recruiters <span class="d" style="font-size:11px">— the hall of fame for bringing in made men. Every recruit who sticks earns you referral rewards (in-game cash + $OMR) + milestone bonuses</span></h2>
       <div id="recruit-lb" class="d" style="color:var(--dim);font-size:12.5px">loading…</div>
 
       <h2 style="margin-top:14px">Missions <span class="d" style="font-size:11px">— the family's story, one job at a time (cash + respect, sometimes $OMR &amp; a title)</span></h2>
@@ -3458,7 +3458,7 @@
     ],
     'Money & $OMR': [
       ['POST', '/v1/stake', { amount: 1 }],
-      ['POST', '/v1/unstake', {}], ['POST', '/v1/claim-rewards', {}],
+      ['POST', '/v1/unstake', {}],
       ['POST', '/v1/rackets/:id/buy', {}], ['POST', '/v1/assets/:id/buy', {}], ['POST', '/v1/assets/:id/sell', {}],
       ['GET', '/v1/plex/price'], ['POST', '/v1/plex/mint', {}], ['POST', '/v1/plex/respawn', {}],
     ],
@@ -4119,8 +4119,8 @@
       <h2>The Store</h2>
       <div class="card"><div class="d">Support the family with real ETH — for consumables, access, and status.
         <b>Never</b> for power: everything here is a revive, a credit, a subscription, or a badge, so a
-        skilled free player still tops the boards. Your spend also funds the token buyback + the prize
-        pool that pays earners.</div></div>
+        skilled free player still tops the boards. Your spend also funds the token buyback + the
+        backed prize pools.</div></div>
       <h2 style="margin-top:12px">What You Hold</h2>
       <div class="grid">
         <div class="card"><span class="t">${o.minted ? 'MADE' : 'Free Trial'}</span><div class="d">${o.minted ? 'a made man — on-chain extraction unlocked' : `${o.mintCredits} mint credit(s)${o.mintCredits ? ' — spend on the chain to get made' : ''}`}</div></div>
@@ -4215,7 +4215,7 @@
       act('POST', `/v1/armory/vest/${t.querySelector('#vest-id').value}`, {}).then(() => renderGarage());
   }
 
-  // ── THE EMPIRE: personal fronts — income, the pad, laundering, scrutiny ──
+  // ── THE EMPIRE: personal fronts — income, the pad, PvP risk (laundering retired) ──
   async function renderEmpire() {
     const t = $('#tab-empire');
     await refresh();
@@ -4232,7 +4232,7 @@
         ${(me.empireTitles || []).length ? ` · ${me.empireTitles.map((x) => `<span class="chip good">${x}</span>`).join(' ')}` : ''}
         · <a href="#" id="tycoon-board">the biggest earners →</a></div><div id="tycoon-lb"></div></div>` : ''}
       ${me.launderer ? `<div class="card"><span class="t">THE LAUNDERER — ${me.launderer.rank}</span>
-        <div class="d">lifetime cash washed through your own fronts $${fmt(me.launderer.washed || 0)} <span style="color:var(--dim)">(survives death)</span>
+        <div class="d">lifetime cash washed through your own fronts, back when the wash years ran — $${fmt(me.launderer.washed || 0)} <span style="color:var(--dim)">(a closed book: laundering is history, the title survives death)</span>
         ${(me.frontTitles || []).map((x) => `<span class="chip good">${x}</span>`).join(' ')}
         · <a href="#" id="launderer-board">the biggest money-men →</a></div><div id="launderer-lb"></div></div>` : ''}
       <h2>Your Fronts (${owned.length})
@@ -4246,7 +4246,7 @@
           ${b.specName ? `<span class="chip good">✦ ${b.specName}</span>` : ''}
           ${b.nextTier ? `<button class="act" data-bizup="${b.id}">upgrade → tier ${b.tier + 1} ($${fmt(b.nextTier.cost)})</button>` : ''}
 
-          ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): ${['accountant', 'fortress', 'fixer'].map((s) => `<button class="act" data-bizspec="${b.id}:${s}">${(rules?.empire?.specs?.[s]?.name) || s}</button>`).join(' ')}</div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
+          ${b.maxed ? `<div class="d" style="margin-top:4px">specialize (${b.specOmr} $OMR): <button class="act" data-bizspec="${b.id}:fortress">${(rules?.empire?.specs?.fortress?.name) || 'The Fortress'}</button> <span style="color:var(--dim);font-size:11px">(hardens the front against takeovers — the Bureau-era specs are history)</span></div>` : '<div class="d" style="font-size:11px;color:var(--dim)">max the tier to specialize</div>'}</div>`).join('')}</div>`
         : '<span class="d" style="color:var(--dim)">no fronts yet — the catalog is below</span>'}
       <div class="card" style="margin-top:6px"><span class="t">Hostile Takeover</span>
         <div class="d">force a rival's front to sell to you (${fmt(rules?.empire?.takeover?.fee || 0)} fee, burns win or lose; lvl ${rules?.empire?.takeover?.minLevel || 20}+, you can't already run that kind)</div>
@@ -4889,7 +4889,7 @@
       act('POST', `/v1/loans/${btn.dataset.loansell}/sell`, { price: Number(t.querySelector(`[data-loanask="${btn.dataset.loansell}"]`).value) }).then(() => renderLoans()));
   }
 
-  // ── GOING LEGIT: the Portfolio — clean $OMR washed into legit, death-proof RWA holdings ──
+  // ── GOING LEGIT: the Portfolio — earned $OMR into legit, death-proof RWA holdings ──
   async function renderPortfolio() {
     const t = $('#tab-portfolio');
     await refresh();
@@ -4908,7 +4908,7 @@
     const sign = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
     const holdMap = Object.fromEntries((pf.portfolio?.holdings || []).map((h) => [h.ticker, h]));
     t.innerHTML = `
-      <h2>Going Legit <span class="d" style="font-size:11px">(clean $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
+      <h2>Going Legit <span class="d" style="font-size:11px">(earned $OMR → legit, death-proof holdings — the book outlives your street)</span></h2>
       <div class="card" style="border-color:var(--neon)"><span class="t" style="color:var(--neon)">The Street Wage</span>
         <div class="d">the city pays its workers: a fixed, public $OMR schedule splits today’s pot among everyone who really played
           (respect earned today, level ${wage.you?.minLevel ?? 5}+, up to ${wage.you?.capOmr ?? 5} $OMR/day each). No claim button — the payout finds you at the day’s end.</div>
@@ -4935,7 +4935,7 @@
         : `<span class="t">No wallet linked</span><div class="d">sign a one-time challenge to link it — MetaMask, Coinbase, Trust, Rabby, Phantom, Crypto.com, Robinhood Wallet or any other browser wallet${rules?.walletConnect ? ', or scan the QR with a wallet on your phone (WalletConnect)' : ''}. Nothing leaves your wallet; it just proves the address.</div>
            <button class="act" id="wallet-link" style="border-color:var(--neon)">connect &amp; sign</button>`}</div>
 
-      <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(become Made, then pull your earned $OMR out to your own wallet — what you earn is yours to keep)</span></h2>
+      <h2 style="margin-top:12px">Extraction <span class="d" style="font-size:11px">(become Made, then withdraw your $OMR on-chain to your own wallet — a small exit toll applies, steeper on fresh tokens)</span></h2>
       <div class="card">
         <div class="d">Made status: ${me.minted
           ? '<b style="color:var(--ok)">✓ you\'re made</b> — extraction is unlocked'
@@ -4972,14 +4972,13 @@
         ${yld.families.map((f) => `<tr><td>${f.rank}</td><td>${esc(f.name)} <span class="chip">${esc(f.tag)}</span></td><td>${(f.shareBps / 100).toFixed(0)}%</td><td>${fmt(f.nextPayout)}</td></tr>`).join('')}</table>
         <div class="d" style="font-size:11px;color:var(--dim)">${yld.note}</div></div>` : ''}
 
-      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(stake $OMR for yield — staked is loot-proof; unstaking pulls it ALL and unbonds 6h before it's liquid)</span></h2>
-      <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR · rewards ${fmt(Math.floor(me.rewards || 0))}${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
+      <h2 style="margin-top:12px">The Vault <span class="d" style="font-size:11px">(a safe harbour — staked $OMR is loot-proof and your principal always returns whole; the old per-staker yield is retired, it pays the FAMILIES now; unstaking pulls it ALL and unbonds 6h before it's liquid)</span></h2>
+      <div class="card"><div class="d">staked ${fmt(Math.floor(me.staked || 0))} $OMR${me.unbonding ? ` · unbonding ${fmt(Math.floor(me.unbonding))} (${mins(me.unbondSeconds || 0)})` : ''}</div>
         <input id="stake-amt" placeholder="$OMR" size="8">
         <button class="act" id="stake-in">stake</button>
-        <button class="act" id="stake-out">unstake it all</button>
-        <button class="act" data-do="POST /v1/claim-rewards">claim rewards</button></div>
+        <button class="act" id="stake-out">unstake it all</button></div>
 
-      ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested treasury $OMR — deepens the OMR-ETH pool', `
+      ${sect('legit-bonds', 'Reserve Bonds', 'deposit ETH → discounted, vested $OMR issued within hard on-chain caps — deepens the OMR-ETH pool', `
       <div class="card">
         <div class="d">${bd.offering ? `${bd.offering.discountBps / 100}% discount · vests ${bd.offering.vestHours}h · min ${bd.offering.minEth} ETH · tranche left ${fmt(bd.reserve?.remainingOmr || 0)} $OMR` : '—'}${bd.quote ? ` · ~${fmt(bd.quote.payoutOmr)} $OMR per ETH` : (bd.offering ? ' · no oracle price yet' : '')}</div>
         <div class="d" style="color:var(--dim);font-size:11px">Bonds are bought on-chain at the paywall (mainnet, dormant). Your vested bonds claim here.</div>
@@ -5005,7 +5004,7 @@
 
       <h2 style="margin-top:12px">The Float <span class="d" style="font-size:11px">(BACKED stock — real tokenized shares the treasury holds, funded by the city's ETH taxes; burn earned $OMR to claim your allocation at the real market price)</span></h2>
       <div class="card">
-        <div class="d">the house never owes a unit it doesn't own · claims ${vault.claimMin ?? 5}–${fmt(vault.claimDailyOmr ?? 500)} $OMR/day per house · big moves draw heat like any laundering</div>
+        <div class="d">the house never owes a unit it doesn't own · claims ${vault.claimMin ?? 5}–${fmt(vault.claimDailyOmr ?? 500)} $OMR/day per house · big moves draw the Bureau's eye</div>
         ${(vault.float || []).some((f) => f.available > 0) ? `
         <div style="margin-top:6px">${(vault.float || []).filter((f) => f.omrPerUnit).map((f) => `
           <div class="d"><b>${f.ticker}</b> ${f.name} — float ${f.available} of ${f.held} units open · ${fmt(f.omrPerUnit)} $OMR/unit
@@ -5019,7 +5018,7 @@
             ? ` · <b>${vault.funding.unspentEth} ETH</b> waiting on the buy bot` : ''}</div>` : ''}
         <div class="d" style="font-size:11px;color:var(--dim);margin-top:4px">${vault.note || ''}</div></div>
 
-      ${sect('legit-paper', 'The Paper Book', `the status collection — buy with clean $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
+      ${sect('legit-paper', 'The Paper Book', `the status collection — buy with earned $OMR at the house price; big moves ≥ ${fmt(rules?.portfolio?.scrutinyMin ?? 1000)} $OMR draw heat`, `
       <div class="grid">${mkt.map((m) => { const h = holdMap[m.ticker]; return `
         <div class="card"><span class="t">${m.ticker} · ${m.name}</span>
           <span class="chip ${m.dayChange >= 0 ? 'good' : 'bad'}">$${fmt(m.price)} ${sign(m.dayChange)}</span>
@@ -5093,8 +5092,6 @@
     const fb = $('#rwa-fam-buy');
     if (fb) fb.onclick = () => act('POST', '/v1/gangs/portfolio/invest',
       { ticker: $('#rwa-fam-t').value, omr: Number($('#rwa-fam-amt').value) }).then(() => renderPortfolio());
-    const dc = $('#div-claim');
-    if (dc) dc.onclick = () => act('POST', '/v1/portfolio/dividend', {}).then(() => renderPortfolio());
     const fd = $('#fam-div');
     if (fd) fd.onclick = () => act('POST', '/v1/gangs/portfolio/dividend', {}).then(() => renderPortfolio());
     const ffg = $('#fam-fund-go');
@@ -5110,7 +5107,7 @@
     const col = (await api('GET', '/v1/collection')).body || {};
     const tr = e.trophies || {};
     t.innerHTML = `
-      ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with clean $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
+      ${e.tier === 0 ? coachCard('Buy a place worthy of the name', 'The don\'s compound — a tiered, furnishable home you build with earned $OMR. Pure legend: it displays your rarest iron, your book, your body count. It\'s account-level, so it OUTLIVES YOUR STREET — the heir inherits it.') : ''}
       <h2>${e.name ? e.name : (e.tierName || 'No Compound Yet')}
         <span class="d" style="font-size:12.5px">${e.tierName ? `· ${e.tierName} · ${fmt(e.spent)} $OMR sunk` : ''}</span>
         ${auc.collector ? `<span class="chip">${auc.collector.rank} · ${fmt(auc.collector.sunk)} $OMR sunk into prestige</span>` : ''}</h2>

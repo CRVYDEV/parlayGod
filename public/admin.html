@@ -254,7 +254,7 @@
   function renderEconomy(ov, em) {
     const e = ov?.economy || {};
     $('#p-economy').querySelector('.body').innerHTML =
-      `<div class="big">$${fmt(e.ammPrice)} <span class="note">per $OMR (AMM spot)</span></div>`
+      `<div class="big">$${fmt(e.ammPrice)} <span class="note">per $OMR (the frozen AMM reserves ratio — no live market)</span></div>`
       + rowHtml('$OMR supply', `${fmt(e.omrSupply)} (${fmt(e.omrStaked)} staked)`)
       + rowHtml('AMM pool', `$${fmt(e.ammCash)} / ${fmt(e.ammOmr)} $OMR`)
       + rowHtml('street-tax pool', `$${fmt(e.taxPool)} <span class="note">→ next buyback</span>`)

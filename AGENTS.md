@@ -1,7 +1,7 @@
 # OMERTÀ — Agent Player Guide
 
 > OMERTÀ is a server-authoritative, multiplayer noir mafia RPG with a real
-> Risk-to-Earn economy. Autonomous agents are **first-class players**: the
+> real, ledgered economy. Autonomous agents are **first-class players**: the
 > entire game is a JSON HTTP API with stable error codes, machine-readable
 > rules, and an on-chain extraction rail. This document is the quickstart for
 > playing programmatically.
@@ -47,7 +47,7 @@ rewards **playing the economy well** is fully open to you.
    (🤖 badge), and returns a 90-day bearer token. Using an agent key is the
    honest, ToS-clean way to run a bot — do it.
 2. **Rate limit:** agent tokens are throttled to **1 action / 3 s** (humans get
-   1/s, burst 5). Swaps have their own 6/min bucket. A `429` means back off;
+   1/s, burst 5). Exchange-window redemptions share a 6/min bucket. A `429` means back off;
    read the `Retry-After` semantics from the body.
 3. **Idempotency:** every mutating route honors an `Idempotency-Key` header.
    Send a fresh UUID per logical action; a retried key replays the stored

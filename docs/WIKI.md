@@ -7,7 +7,7 @@ CODEX button in the top bar).
 > **How to read this document.** The numbers are the current settings. They can change.
 > The routes start with `/v1/…`. A route needs a character with a login, unless the route has the mark
 > **[public]**, **[mod]**, or **[chain]**.
-> "Level N" is the character level. The level comes from respect: `level = floor(sqrt(respect/4)) + 1`.
+> "Level N" is the character level. The level comes from respect: `level = floor(sqrt(respect/10)) + 1` — L5 ≈ 160 respect, L10 ≈ 810, L20 ≈ 3,610.
 > For example: L5 ≈ 64 respect, L10 ≈ 324, L20 ≈ 1444, L30 ≈ 3364.
 
 ---
@@ -15,7 +15,7 @@ CODEX button in the top bar).
 ## Table of contents
 1. [The core loop](#1-the-core-loop) · 2. [Your character, death & the heir](#2-your-character-death--the-heir) ·
 3. [Cars, guns & gear](#3-cars-guns--gear) · 4. [The city & the living world](#4-the-city--the-living-world) ·
-5. [The economy — $OMR, cash, laundering, staking](#5-the-economy) · 6. [The Kitchen](#6-the-kitchen) ·
+5. [The economy — $OMR, cash, the window, the vault](#5-the-economy) · 6. [The Kitchen](#6-the-kitchen) ·
 7. [Businesses & fronts](#7-businesses--fronts) · 8. [Territory rackets](#8-territory-rackets) ·
 9. [Families](#9-families) · 10. [The Commission](#10-the-commission) · 11. [The Den (casino)](#11-the-den) ·
 12. [The Speakeasy](#12-the-speakeasy) · 13. [The Fights (boxing)](#13-the-fights) ·
@@ -138,14 +138,14 @@ decreases ×2). `GET /v1/city` [public] shows the current day and a **7-day fore
 night clock** — during patrol hours (UTC 13:00–22:00), RICO convictions are stronger (×1.15). At night, NPC
 raids are easier.
 
-**The 6 districts:** **Docks** (+50% contraband, a laundering district), **Neon Mile** (+15% racket and
+**The 6 districts:** **Docks** (+50% contraband, the harbor), **Neon Mile** (+15% racket and
 business income; the vice district — casino, speakeasy), **Old Foundry** (workshop −25%), **Brick Yards** (+2%
-crime success), **Canal Row** (+10% crime pay, a laundering district), **Cathedral Hill** (nerve increases two
+crime success), **Canal Row** (+10% crime pay), **Cathedral Hill** (nerve increases two
 times faster).
 
 **NPC rival families** (`GET /v1/world`, `POST /v1/world/:npcId/raid`) — these are shared cash reserves for the
-whole server. All players attack them together. This is a cooperative task. The families are: Zappa Crew (L8),
-Kryl Syndicate (L20), Moreau Cartel (L40). A raid costs energy, ammo, and heat. It takes a limited amount of
+whole server. All players attack them together. This is a cooperative task. The outfits are: Dock Rats (L4), Zappa Crew (L8),
+Kryl Syndicate (L20), Moreau Cartel (L40), Volkov Bratva (L55) — the top three need a CREW raid. A raid costs energy, ammo, and heat. It takes a limited amount of
 cash. It pays a one-time bonus if you reduce a family below its floor. If the family repels the raid, you go
 to hospital. If you defeat a family, your **family holds its outpost**. The outpost pays tribute to your
 treasury. A rival family can take the outpost if it pays more than your garrison.
@@ -160,8 +160,11 @@ with raids, a small garrison is enough.
 
 ## 5. The economy
 
-**Currencies:** **cash** (in your pocket and your bank), **$OMR** (the premium currency; you can launder it
-and extract it; it is held at the account level, so it survives death), **crates** (cb), and **ammo**. The
+**Currencies:** **cash** (in your pocket and your bank), **$OMR** (the premium currency; earned by
+playing, extractable on-chain by minted accounts; held at the account level, so it survives death),
+**crates** (cb), and **ammo**. **Cash and $OMR do not trade** — cash is the city's own money and it
+stays in the city; $OMR comes in from outside (the wage, prizes, bonds) and leaves through the
+Exchange window. The
 main economic rule (section 10.4): the game records and checks every movement of value. The game also
 *creates* $OMR — but only on a fixed, public schedule called **the Street Wage**: each day, a capped pot
 splits between the players who really played that day (respect earned, level 5+, up to 5 $OMR each). Only
@@ -171,26 +174,28 @@ finite Emission Endowment and gets smaller on a set schedule (a halving every ~6
 records every created unit, and an alarm fires if emission ever passes the endowment.
 Board: `GET /v1/wage`. Agents do not draw the wage.
 
-**The AMM swap** (`POST /v1/swap`) — a pool that converts cash to $OMR and $OMR to cash.
-- **Buy (cash to $OMR) is laundering.** The minimum is $500. You can do it **only** at a laundering district
-  (Docks or Canal Row) or on your family's turf. It adds **+15 heat**. It is **blocked from a safehouse**. The
-  limit is $2.6M per account each day. The fee is 1% plus a 1% tax. Laundering is a deliberate, visible
-  action.
-- **Sell ($OMR to cash)** — no location limit. The house takes 2%. **The early-exit tax:** $OMR that you
-  received less than 48 hours ago pays an extra tax when you sell it or withdraw it — 50% at age zero,
-  and it decreases in a straight line to 0% at 48 hours. An exit always prices your NEWEST tokens first,
-  so old savings cannot shield a fresh dump — each fresh token pays once, at its own age's rate. Hold a
-  token for two days and it exits free. There are no exemptions.
+**The Exchange window** (`GET /v1/window`, `POST /v1/window/redeem`) — the ONE conversion in the
+game, and it runs one way: **burn $OMR, receive cash at a published rate**, from a till that real
+cash sinks fill (the street take). A short till refuses cleanly and burns nothing — the window is a
+claim on what was funded, never a promise. 5% of every redemption goes to the top families (the
+family yield). **Cash can never become $OMR** — the old AMM swap and every laundering rail
+(street and private) are retired; those routes answer `retired`.
+- **The early-exit tax on withdrawals:** $OMR that you received less than 48 hours ago pays an
+  extra toll when you extract it on-chain — 50% at age zero, decreasing in a straight line to 0% at
+  48 hours, newest tokens priced first so old savings cannot shield a fresh dump. Hold a token for
+  two days and it exits free. There are no exemptions.
 
-**Staking** (`POST /v1/stake`, `/unstake`, `/claim-rewards`) — the rate can reach a **14% APY limit**. The game
-pays this from a **funded pool** (it is not created): 30% of each buyback adds to the pool. **You always get
-your full principal back, but it "unbonds" for 6 hours** (no interest, and another player can steal it during
-this time) before it is available. Staked $OMR is safe from theft. Unbonding $OMR is not safe.
+**The Vault (staking)** (`POST /v1/stake`, `/unstake`) — a safe harbour, not an income stream.
+**Staked $OMR cannot be looted by a killer; you always get your full principal back**, but it
+"unbonds" for 6 hours (exposed to loot during that window) before it is liquid. The old per-staker
+yield is retired (`/claim-rewards` answers `retired`): $OMR yield now pays THE FAMILIES — the top
+families by seasonal standing draw the **family yield** into their gang reserves.
 
-**The money cycle:** cash costs (the swap tax, the casino cut, and other fees) go to the **street-tax pool**. A
-**buyback** runs every 12 hours and buys $OMR from the pool. It divides the $OMR: 30% to the staking pool, 25%
-to protocol-owned liquidity, 50% to a family, divided by standing. This is how players who spend fund players
-who earn.
+**The money cycle:** cash costs (the casino cut, house takes, fines, and other fees) go to the
+**street-tax pool**, and every 12 hours the whole take funds the **Exchange window's till** — so the
+cash that players spend is what backs the cash that $OMR redeems for. On the $OMR side, a cut of
+every window redemption flows to the top families (**the family yield**). Spenders fund earners;
+nothing is created to make it so.
 
 **Flat passive income** (buy one time, then earn continuously — this is different from Businesses):
 **Rackets** (`/v1/rackets/:id/buy`, Laundromat L3 to The Invisible Hand L100) and **Assets**
@@ -230,26 +235,24 @@ assassin and trade ranks.
 
 ## 7. Businesses & fronts
 
-Businesses are premium, level-gated, **upgradeable** places. They earn pocket cash **and** launder money
-privately. They are the endgame Risk-to-Earn engine. They are different from flat Rackets and Assets. Catalog:
-**Laundromat (L15) to Casino (L58)**. Each has 3 levels. You can own one of each kind. `GET /v1/catalog`
-[public] lists them all.
+Businesses are premium, level-gated, **upgradeable** places that earn pocket cash — the endgame
+personal-income engine, different from flat Rackets and Assets. Catalog: **Laundromat (L15) to
+Casino (L58)**. Each has 3 levels. You can own one of each kind. `GET /v1/catalog` [public] lists
+them all. *(Fronts no longer launder anything — cash can't become $OMR anywhere since the wash
+houses shut. A front's risk today is other players, not the Bureau.)*
 
-Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hour limit, `/business/collect`) →
-**upgrade** (`/business/:id/upgrade`) → **launder** (`/business/:id/launder`) → **pay the upkeep**.
+Loop: **buy** (`/v1/business/:kind/buy`) → **collect** (income accrues, 24-hour limit,
+`/business/collect`) → **upgrade** (`/business/:id/upgrade`) → **pay the upkeep**.
 
-- **Launder** cash to $OMR through the same AMM. The business's **daily capacity** controls this (not the
-  district). It draws **less heat (8, compared to 15 on the street)**. Your own books are safer. It is still
-  blocked from a safehouse.
-- **Upkeep** (also called "the pad," `/business/upkeep`) — this is 20% of the hourly income. It accrues to a
-  7-day limit. If you do not pay for 3 days, the business becomes **cold** (no income, no laundering) until
-  you pay.
-- **Scrutiny and raids** — laundering builds scrutiny. Above 60, the Bureau can **raid** (it takes the pending
-  income, adds a fine, and closes the business). A business that only earns income is never raided (its risk
-  is PvP).
-- **Shakedown** (`/business/:id/shakedown`) — a rival takes 30% of the pending income in a muscle and cunning
-  contest (8-hour cooldown, costs energy and heat). You cannot shake down a family member or a safehoused
-  owner.
+- **Upkeep** (also called "the pad," `/business/upkeep`) — this is 20% of the hourly income (and
+  it climbs the more fronts you run). It accrues to a 7-day limit. If you do not pay for 3 days,
+  the business becomes **cold** (no income, no upgrades) until you pay.
+- **Shakedown** (`/business/:id/shakedown`) — a rival takes 30% of the pending income in a muscle
+  and cunning contest (8-hour cooldown, costs energy and heat). You cannot shake down a family
+  member or a safehoused owner.
+- **The bigger threats** — a rival can attempt a **hostile takeover** (a forced sale), an
+  inside-job crew heist can raid your pending take, and a killer who puts your street down can
+  **SACK** your best front and run it themselves. A passive empire is risk capital — defend it.
 
 ---
 
@@ -334,7 +337,7 @@ racehorse ($120k) at level 6 or higher (`/v1/stable/buy`). **Train** its speed, 
 (`/v1/stable/train/:id`, cash and energy, with a limit). **Race** it. The PvE **circuit** pays a purse
 (`/v1/stable/circuit/:id` — the entry fee is lost win or lose; the purse pays only for a win). The PvP **match
 race** is against another owner's animal of the same kind (`/v1/stable/match/:opponentId` — you agree by
-listing a wager; the winner takes the pot minus a 5% share). You can run up to 4 animals. An animal **dies
+listing a wager; the winner takes the pot minus a 5% share). You can run up to 3 animals. An animal **dies
 when your character dies**. Your lifetime wins are an **owner record** that survives death
 (`/v1/leaderboard/stable`). CASH only. **Breed** two animals of the same kind into a foal that inherits their
 form (`/v1/stable/breed` — this is a head start, not a way to pass the limit; both parents retire). Enter **The
@@ -376,7 +379,7 @@ casino, and a social place. It dies when the owner's character dies. `GET /v1/sp
 
 ## 13. The Fights
 
-Sign and manage **one boxer** (L8, $50k). Train the boxer. Fight the boxer against other managers.
+Sign and manage a **stable of up to 3 boxers** (L8, $50k each). Train the boxer. Fight the boxer against other managers.
 `GET /v1/boxing`.
 
 Loop: **recruit** (`/v1/boxing/recruit`, stats power/chin/speed set to 6–14) → **train** (`/boxing/train`,
@@ -423,7 +426,7 @@ You earn reputation only from targets at L5 or higher. It is reduced if you kill
 
 ## 15. Make risk pay
 
-A kill is designed to pay. A skilled player who takes risks can earn.
+A kill is designed to be worth the risk — contracts, war points, and loot all attach to it.
 
 **Loot (only for a PLAYER fire-kill):** the killer takes 25% of the victim's **pocket and in-transit** cash and
 20% of their **liquid and unbonding** $OMR. **Cleared bank cash and staked $OMR are safe.** (An NPC kill and a
@@ -510,7 +513,8 @@ optional **directed** to a named borrower, or **collateralized** by a car). A bo
 (`/loans/:id/take`; one active loan at a time; the borrower pledges a car if it is secured, and that car
 locks). The borrower owes `principal × (1 + rate)` by the due date.
 
-**Repay** (`/loans/:id/repay`) returns the debt. A 5% vig goes to the buyback pool. **Cancel**
+**Repay** (`/loans/:id/repay`) returns the debt. A 5% vig splits between the street-tax pool and the
+Loan House's lending pool. **Cancel**
 (`/loans/:id/cancel`) removes an offer that no one took. **Default and collect** (`/loans/:id/collect`, past
 due) — the lender takes the pocket and in-transit cash (cleared bank and staked $OMR are safe), takes the
 pledged car, sends the borrower to hospital for 30 minutes, and marks the borrower a permanent **welsher** (no
@@ -592,8 +596,9 @@ your vendetta target. An NPC kill and a mod kill do not start a feud.
 
 ## 23. Skills
 
-Your character build. **Three branches, three levels each.** Points **come from your level** (`floor(level/4)`
-— one full branch is about L24). Skills **die with the character**. Respec for 10 $OMR on the shared 24-hour
+Your character build. **Three branches, FOUR levels each** — the 4th a capstone that also unlocks an
+ACTIVE ability. Points **come from your level** (`floor(level/4)`, plus a small prestige bonus — a full
+branch is about L40). Skills **die with the character**. Respec for 10 $OMR on the shared 24-hour
 cooldown. `GET /v1/skills`, `POST /v1/skills/:id`, `/skills/respec`.
 
 - **Enforcer** — Bruiser (jump and shakedown ×1.08) · Doctor's Friend (heal ×0.75) · Executioner (search
@@ -720,16 +725,16 @@ funded prize pool (never created). This is account-level, so it survives death.
 
 ## 27. Going Legit
 
-The final step of the laundering path: change dirty cash to laundered $OMR to a **legal, death-proof stock
+The last stop for earned $OMR: turn it into a **legal, death-proof stock
 book**. The tickers are **real Robinhood tokenized stocks** (GLD, AAPL, AMZN, TSLA, HOOD, NVDA, SPCX, GME). In
 the game, they are a **status collectible** with a set price. There is **no cash-out and no sell** (this is a
 legal rule; a real KYC extraction is a future phase behind legal approval). `GET /v1/portfolio` [public].
 
-- **Invest** (`/v1/portfolio/invest`) burns clean $OMR for fractional shares. A large action (1000 $OMR or
-  more in a day) adds heat (the laundering warning sign) and is blocked from a safehouse. 15% of each invest
-  funds a **dividend pool**.
-- **Dividend** (`/portfolio/dividend`) — an approximately daily payment of your book value from that pool
-  (limited by the pool, never created). The family book also earns one (`/gangs/portfolio/dividend`).
+- **Invest** (`/v1/portfolio/invest`) burns earned $OMR for fractional shares. A large action (1000 $OMR or
+  more in a day) draws the Bureau's eye (heat) and is blocked from a safehouse.
+- **Dividend** — the personal daily dividend is retired; the fund pays THE FAMILIES now. A boss or
+  underboss draws the **family dividend** into the gang reserve (`/gangs/portfolio/dividend`),
+  limited by a funded pool, never created.
 - **The Dynasty** — the book is account-level, so it is a **generational fund**: name it (`/dynasty/name`,
   `/gangs/portfolio/name`). The book and a crest level pass to your heir.
 - **Landmarks** (`/v1/landmarks/:districtId`) — one plaque in each district. The largest $OMR investor holds
@@ -779,10 +784,12 @@ into escrow. An outbid bidder gets a refund immediately. Won items are account-l
 
 OMERTÀ settles on Robinhood Chain (an EVM L2). The blockchain layer is built but **not active until mainnet**
 (behind legal and audit approval). The design: the off-chain game is authoritative; the blockchain settles
-withdrawals and ownership proofs; nothing is created.
+withdrawals and ownership proofs. The ONE place new $OMR is created on-chain is bonds — minted at
+bond time inside hard walls (a daily cap, a discount ceiling, a rate ceiling).
 
 - **Withdraw $OMR** (`/v1/withdraw`) — this burns your $OMR (a legal burn) and signs an EIP-712 voucher **only
-  if the reserve can back it** (the full-reserve queue; if not, it waits in a queue). **Only a minted account
+  if the reserve can back it** (the full-reserve queue; if not, it waits in a queue). Every withdrawal pays a
+  **2% exit toll** (steeper on tokens younger than 48 hours — the early-exit tax). **Only a minted account
   can extract.**
 - **Gear withdrawal** (`/gear/:id/withdraw`) — mints your in-game gear as an ERC-1155 NFT (it leaves the game,
   and it becomes safe and tradeable).
@@ -790,19 +797,20 @@ withdrawals and ownership proofs; nothing is created.
   (`/character/mint`) — a 0.01 ETH fee makes a free-trial character permanent (able to withdraw). Revive
   insurance is a 0.10 ETH fee.
 - **Bonds** (`GET /v1/bonds` [public], `/bonds/:id/claim`) — the Reserve Bond (Protocol-Owned Liquidity):
-  deposit ETH to receive **discounted treasury $OMR that vests over time**. The ETH deepens the OMR-ETH pool
-  and feeds the Vig. It **never creates $OMR** — the payout comes from a budgeted amount.
+  deposit ETH to receive **discounted $OMR that vests over time**. The ETH deepens the OMR-ETH pool
+  and feeds the Vig. Bonds are the ONE mint — new $OMR is issued at bond time inside hard on-chain
+  walls (a daily cap, a discount ceiling, a rate ceiling).
 
 The **Vig** is the real-revenue engine: fee, store, and bond revenue buys hard $OMR that backs withdrawals and
-funds the prize pool. So "extraction is not more than inflow" is always true.
+funds the prize pools.
 
 ---
 
 ## 30. Growth
 
-**Paths** (`POST /v1/path`, at L5 for $10k; switch for 25 $OMR) — a permanent earning specialty: **The Gun**
-(+10% fight power, +15% hit contracts), **The Ledger** (+10% racket and business income, +5% trade), **The
-Kitchen** (+15% cook quality, −25% deal heat).
+**Paths** (`POST /v1/path`, at L5 for $10k; switch for 25 $OMR + a 7-day cooldown) — a career, not just a
+bonus: SIX Paths (**The Gun**, **The Ledger**, **The Kitchen**, **The Wheel**, **The Shadow**, **The Ring**),
+each with a signature edge, a REAL handicap, and trades that come easy (×1.5 mastery XP) or fight you (×0.6).
 
 **Missions** (`/v1/missions/:id`) — 29 pay-once jobs with level and stat requirements. They pay cash, respect,
 sometimes $OMR (a legal source, one time for each account), and titles.
@@ -832,8 +840,8 @@ only, one time each day, agents excluded. A share pays in two steps: first you R
 feeds the referral system. (This needs `SOCIAL_VERIFY_MODE` not equal to off; a wrong deploy shows the tab but
 pays nothing.)
 
-**The First Week** (`GET /v1/onboard`, `/onboard/:taskId/claim`) — an 8-task checklist (do a job, boost a car,
-use the bank, declare a Path, join a family, link a wallet, three social tasks). It pays cash to teach you the
+**The First Week** (`GET /v1/onboard`, `/onboard/:taskId/claim`) — a short checklist (do a job, boost a car,
+use the bank, declare a Path, join a family, link a wallet, follow on X). It pays cash to teach you the
 game, with a final bonus. **The Coach** (the ▸ line on your sheet) always names your single best next action.
 
 **Vanity** — name change (5 $OMR), custom title (10), car plate (2), family color (10), family rename (25).
@@ -869,10 +877,11 @@ hands minus the 5% rake, and your **ELO** moves. The rating is seasonal (resets 
 dies with your street, and feeds `GET /v1/leaderboard/duels`. Lifetime wins are a dynasty legend.
 Rematch-farming the same opponent pays less and less each day.
 
-**Clue Scrolls** (the Streets tab) — a rare drop on any successful job starts a treasure trail:
-3–5 riddles, each naming a district (sometimes an hour of day). Travel there and DIG (5 energy).
-The last dig opens a **casket** ($3k–$12k) and counts on your lifetime diggers' legend. One hunt
-at a time; after a casket the streets go quiet for 8 hours.
+**Clue Scrolls** (the Streets tab) — a rare drop on any successful job starts a treasure trail. Trails
+come in TIERS (easy 3 steps up to master 7), each riddle naming a district (sometimes an hour of day).
+Travel there and DIG (5 energy). The last dig opens a **casket** ($3k up to $120k on a master scroll,
+with a shot at a RELIC for the Collection) and counts on your lifetime diggers' legend. One hunt at a
+time; after a casket the streets go quiet for 8 hours.
 
 **The Season** (the City tab) — each 28-day season MAY carry one rule twist drawn from a public
 pool (The Crackdown, Blood in the Streets, The Gold Rush — or a vanilla Dead Quiet season). The
@@ -889,8 +898,8 @@ and puts every guest's name on your list. `GET /v1/leaderboard/estates` ranks th
 **Motions before the Commission** (Family tab) — a seated family's boss can now TABLE A MOTION:
 stake a $100,000 treasury deposit to put a decree on the week's ballot. When any motions exist,
 ONLY proposed decrees are votable; the enacted motion's deposit comes home, every other forfeits to
-the confiscation pool. The fifth decree is **THE LEVY** — while in force, the buyback's family cut
-pays the five seated families by seat weight instead of the lifetime top-25. Politics finally pays.
+the confiscation pool. The fifth decree is **THE LEVY** — while in force, the family yield
+pays the seated families by seat instead of the standing board. Politics finally pays.
 
 **The House Window** (Shylock tab; `POST /v1/loans/house`) — the lender of last resort. Always
 open, terms deliberately bad (35% for 24 hours, a level-scaled cap), and it lends ONLY what its
@@ -925,11 +934,11 @@ family chat from AFTER you joined — no back-reading a family you infiltrate).
 ### Districts
 | District | Benefit |
 |---|---|
-| Docks | +50% contraband on crimes; a laundering district; the start district |
+| Docks | +50% contraband on crimes; the harbor; the start district |
 | Neon Mile | +15% racket and business income; the vice district (casino, speakeasy) |
 | Old Foundry | Workshop crafting −25% cash |
 | Brick Yards | +2% crime success |
-| Canal Row | +10% crime pay; a laundering district |
+| Canal Row | +10% crime pay |
 | Cathedral Hill | Nerve increases two times faster |
 
 ### The three "safe from looting" places
@@ -944,8 +953,8 @@ can steal it) · **unbonding** ($OMR is not liquid yet — another player can st
 
 ### Currency quick-reference
 - **Cash** — earned everywhere. Pocket cash can be stolen. Bank cash is safe (after it clears).
-- **$OMR** — the premium currency. It is laundered from cash, can be staked, and can be extracted (after you
-  mint). It is account-level, so it survives death. Staked $OMR is safe. Liquid and unbonding $OMR can be
+- **$OMR** — the premium currency. It is earned by playing (never converted from cash), can be staked,
+  and can be extracted (after you mint). It is account-level, so it survives death. Staked $OMR is safe. Liquid and unbonding $OMR can be
   stolen.
 - **Crates (cb)** — from crimes and cooking. Use them to buy guns and make gear.
 - **Ammo** — from melting cars, or bought at $2000 for 50. Used on jumps, fires, raids, and ambushes.
