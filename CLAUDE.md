@@ -3987,6 +3987,33 @@ dead under reduced-motion) — so "take me there" has a visible destination. `to
 tour's layout as its own screen (62→64 checks) instead of blind-dismissing it. Suite green + sim drift-0;
 wiring + mirror guards green; Chromium-probed (tour, crimes, fixtures, den, outfits — zero page errors).
 
+**ONBOARDING STEP TWO — first-visit intros, the spotlight, and milestone tips (task #302).** The tour
+teaches the city BEFORE you've lived it; this layer teaches each place as you arrive and each lesson at
+the moment it lands. All client-only (`public/index.html`), reusing shipped art, zero backend/§10.4
+surface. **(1) FIRST-VISIT INTROS** — a one-time "FIRST TIME HERE" card (plate + two sentences + got-it)
+per screen (`TAB_INTRO`, 21 tabs; `renderIntro` in setTab; dismiss stores `omerta_seen_<tab>`).
+`#introwrap` is the FIRST CHILD of `#tabbodies` but OUTSIDE the per-tab divs — inside so the mobile
+fold-check counts it as the screen's own content (it explains the screen you just tapped; the first
+placement, between `#tabart` and `#tabbodies`, failed `tools/mobile.js` on 15 tabs as chrome pushing
+content below the fold), outside so renderers rewriting their `#tab-<id>` can never resurrect a dismissed
+card (buildTabs appends, never rewrites, so the child survives). **(2) THE SPOTLIGHT** — coach-go and
+tip-jumps land on the exact CONTROL, scrolled + lit (`SPOT` per-tab selector map + `spotlight()`: scoped
+to `#tab-<currentTab>`, scrollIntoView center, `.spotlit` outline persists ~6.5s — reduced-motion keeps
+the outline, loses only the breathing; a tab with no SPOT entry is a clean no-op). **(3) MILESTONE TIPS**
+— one-time illustrated explainers the first time something happens TO you (`TIPS` + `checkTips(me)` at
+the end of renderSheet): first lockup (→ Pen), first hospital stay (the "protection, not prison" lesson),
+heat ≥ 30 (→ Law), going WANTED (→ square-your-name at the Shylock), a ≥$10k unbanked pocket (the
+loot-surface lesson). Each keyed `omerta_tip_<id>` (stored on SHOW — a dismissed lesson never nags), at
+most one per render, gated behind the tour and behind any OPEN dialog — and that gate found a real trap:
+five STATIC `.modal-bg` wrappers (tour/death/wallet-picker/glossary/phone) live in the DOM permanently
+behind `.hidden`, so a bare `.modal-bg` query matches ALWAYS and would have silenced every tip forever;
+the gate is `.modal-bg:not(.hidden)`. Probed end-to-end in Chromium through the REAL render path (no
+debug hooks — Playwright intercepts `/v1/me` + dispatches the client's own visibility-return refresh):
+intro shows/dismisses/stays dismissed, spotlight lights the control, the fat-pocket tip fires once and
+never re-fires, the wanted tip's show-me lands on the Shylock, zero page errors. The `id:`/`tab:` literal
+fields joined test/client.js's NOT_API list (client-internal, never sent). Suite green + sim drift-0;
+mobile 64/64; docs guard green (SPEC client-lines restated).
+
 ## Sensitive design notes
 - **The Street Wage pays players on a schedule — legal surface (counsel-gated messaging).** Paying
   players real-value $OMR at scale can trigger money-transmission / employment / securities questions
