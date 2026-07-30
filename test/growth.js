@@ -1163,6 +1163,99 @@ assert.equal((await call('POST', '/v1/respec', { token: chef.token, body: { musc
   assert.equal(r.body.error, 'capped', `the corner pays ${CORNER.MAX_DAY} envelopes a day — the hard faucet bound`);
 }
 
+// ── STREET LIFE step two — THE CHAIN (task #321): the district's standing job. A claimed envelope
+// HERE advances the block's chain, at most one step a day, and the completing step pays a bonus
+// folded into that claim's own ledger row (so the chain can never add a claim past MAX_DAY). ─────
+{
+  const ch = await mk('Chain Walker');
+  const day = dayOf();
+  // pick a district that drew 'crime' so the whole chain runs through the REAL funnel
+  let pick = null;
+  for (const d of DISTRICTS.map((x) => x.id)) {
+    const t = cornerTasksOf(d, day).find((t) => t.kind === 'crime');
+    if (t) { pick = { district: d, slot: t.slot }; break; }
+  }
+  const viaCrime = !!pick;
+  if (!pick) pick = { district: DISTRICTS[0].id, slot: 0 };
+  await seedCh(ch.id, `loc='${pick.district}', nerve=100, energy=200`);
+  const kind = cornerTasksOf(pick.district, day)[pick.slot].kind;
+  // a fresh street has no chain running here
+  let r = await call('GET', '/v1/corner', { token: ch.token });
+  assert.equal(r.body.chain.step, 0, 'no chain running on a corner you have never worked');
+  assert.equal(r.body.chain.steps, CORNER.CHAIN_STEPS, 'the board publishes how long the block job runs');
+  assert.equal(r.body.chain.bonus, CORNER.CHAIN_BONUS, 'and what it pays');
+
+  // work the corner CHAIN_STEPS times, one per day — each claim on its own day advances one step
+  const doWork = async (d) => {
+    if (viaCrime) {
+      for (let i = 0; i < 25; i++) {
+        await seedCh(ch.id, 'nerve=100, jail_until=NULL');
+        if ((await call('POST', '/v1/crimes/pick', { token: ch.token })).body.success) return;
+      }
+    }
+    const row = (await pool.query('SELECT counters FROM daily_progress WHERE character_id=$1 AND day=$2', [ch.id, d])).rows[0];
+    const c = row ? JSON.parse(row.counters) : {};
+    c[kind] = Number(c[kind] || 0) + 1;
+    if (row) await pool.query('UPDATE daily_progress SET counters=$3 WHERE character_id=$1 AND day=$2', [ch.id, d, JSON.stringify(c)]);
+    else await pool.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)', [ch.id, d, JSON.stringify(c)]);
+  };
+  let last = null, extraEnvelopes = 0;
+  for (let step = 1; step <= CORNER.CHAIN_STEPS; step++) {
+    await call('POST', `/v1/corner/${pick.slot}/accept`, { token: ch.token });
+    await doWork(day);
+    last = await call('POST', `/v1/corner/${pick.slot}/claim`, { token: ch.token });
+    assert.equal(last.code, 200, `claim ${step} pays`);
+    if (step < CORNER.CHAIN_STEPS) {
+      assert.equal(last.body.chain.step, step, `the block job is ${step}/${CORNER.CHAIN_STEPS}`);
+      assert.equal(last.body.cash, CORNER.CASH, 'a mid-chain envelope is just an envelope');
+      const board = await call('GET', '/v1/corner', { token: ch.token });
+      assert.equal(board.body.chain.advancedToday, true, 'the board says you already showed up today');
+      // THE POINT, driven rather than asserted off a flag: a SECOND envelope on this corner TODAY
+      // pays, but does NOT move the chain. A chain is DAYS of showing up, not a busy afternoon —
+      // without the one-step-a-day guard the whole three-day job falls in one sitting.
+      if (step === 1) {
+        const other = [0, 1, 2].find((sl) => sl !== pick.slot
+          && cornerTasksOf(pick.district, day)[sl].kind !== kind);
+        if (other !== undefined) {
+          const k2 = cornerTasksOf(pick.district, day)[other].kind;
+          await call('POST', `/v1/corner/${other}/accept`, { token: ch.token });
+          const row = (await pool.query('SELECT counters FROM daily_progress WHERE character_id=$1 AND day=$2', [ch.id, day])).rows[0];
+          const c = row ? JSON.parse(row.counters) : {};
+          c[k2] = Number(c[k2] || 0) + 1;
+          if (row) await pool.query('UPDATE daily_progress SET counters=$3 WHERE character_id=$1 AND day=$2', [ch.id, day, JSON.stringify(c)]);
+          else await pool.query('INSERT INTO daily_progress (character_id, day, counters) VALUES ($1,$2,$3)', [ch.id, day, JSON.stringify(c)]);
+          const second = await call('POST', `/v1/corner/${other}/claim`, { token: ch.token });
+          assert.equal(second.code, 200, 'the second envelope of the day still pays');
+          assert.equal(second.body.cash, CORNER.CASH, 'as an envelope, not a bonus');
+          extraEnvelopes++;
+          assert.equal(second.body.chain, undefined, 'and it reports no chain movement');
+          assert.equal((await pool.query(
+            'SELECT step FROM corner_chains WHERE character_id=$1 AND district=$2', [ch.id, pick.district])).rows[0].step,
+            1, 'the chain is STILL at step 1 — a second envelope today does not advance it');
+        }
+      }
+      // roll the clock + clear the day's claims so the next step is a genuinely different day
+      await pool.query('DELETE FROM corner_jobs WHERE character_id=$1', [ch.id]);
+      await pool.query('UPDATE corner_chains SET last_day = last_day - 1 WHERE character_id=$1', [ch.id]);
+    }
+  }
+  assert.equal(last.body.chain.done, true, 'the block pays on the last day');
+  assert.equal(last.body.cash, CORNER.CASH + CORNER.CHAIN_BONUS, 'the bonus rides the completing envelope');
+  assert.equal(last.body.respect, CORNER.RESPECT + CORNER.CHAIN_RESPECT, 'and the respect with it');
+  const paid = Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM transactions WHERE character_id='${ch.id}' AND reason='corner:job'`)).rows[0].s);
+  assert.equal(paid, CORNER.CASH * (CORNER.CHAIN_STEPS + extraEnvelopes) + CORNER.CHAIN_BONUS,
+    'the corner paid one envelope per claim and exactly ONE bonus (the pocket also carries the crime work that drove it)');
+  // ONE ROW PER CLAIM — the bonus is folded in, never a second faucet row (the capstone precedent)
+  const rows = (await pool.query(
+    `SELECT amount FROM transactions WHERE character_id='${ch.id}' AND reason='corner:job' ORDER BY amount`)).rows;
+  assert.equal(rows.length, CORNER.CHAIN_STEPS + extraEnvelopes, 'one ledger row per claim — the chain adds no rows');
+  assert.equal(Number(rows[rows.length - 1].amount), CORNER.CASH + CORNER.CHAIN_BONUS,
+    'the completing row carries the bonus, so the faucet stays inside the MAX_DAY bound');
+  // and the chain resets — the block has another job for you
+  assert.equal((await call('GET', '/v1/corner', { token: ch.token })).body.chain.step, 0, 'a finished chain starts over');
+}
+
 // ── (AUDIT-street-life, lenses A+D) ONE ENVELOPE PER KIND PER DAY: the same kind sits in several
 // districts' pools and every accepted slot snapshots the SAME shared daily counter, so ONE action
 // used to satisfy every same-kind slot on the map (accept crime in 5 districts → 1 crime → 5 × $400).

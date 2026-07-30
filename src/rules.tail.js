@@ -3726,6 +3726,15 @@ export const CORNER = {
     cathedral: ['train', 'crime', 'goods', 'bust'],
   },
   CONFLICT: ['jump', 'bust'],   // the kinds that put you FACE TO FACE (a jump meets a player; a bust springs one)
+  // THE CHAIN (step two) — the district's standing job. Work a corner on STEPS separate days and
+  // the block pays a bonus on the last one. It rides the CLAIM (never its own counter), at most one
+  // step a day, so a chain is three days of showing up in the same place — the thing a one-shot
+  // daily board could not ask for. The bonus folds INTO the completing claim's ledger row (the
+  // First-Week capstone precedent), so it never adds a claim and stays inside MAX_DAY: the ceiling
+  // is MAX_DAY × (CASH + CHAIN_BONUS) a day, and reaching it needs STEPS days of work per district.
+  CHAIN_STEPS: 3,
+  CHAIN_BONUS: 1500,            // the block's thank-you — 3.75× a single envelope for 3 days of it
+  CHAIN_RESPECT: 40,
   HOW: {
     crime: 'pull a job', jump: 'jump somebody — conflict pays, and you walk away with their number',
     bust: 'spring somebody from lockup', goods: 'move trade goods (buy or sell)',
@@ -3752,6 +3761,40 @@ export const CONTACTS = {
   CALL_FREIGHT_MAX_QTY: 8,
   VISIT_TIP: 750,                    // "come see me" — a tip from the contact's own pocket (recycle-only)
   GEN_PER_TICK: 4,                   // how many calls the worker tries to place per tick
+
+  // ── STREET LIFE step two ────────────────────────────────────────────────────────────────────
+  // THE BOOK — a status ladder on how many numbers you hold. Pure display: a rank moves nothing,
+  // gates nothing, and is derived on read from COUNT(contacts), so there is no §10.4 surface and
+  // nothing to farm beyond actually meeting people. (The hitman-rep / spymaster board posture.)
+  RANKS: [
+    { at: 0, title: 'Nobody Calls' }, { at: 5, title: 'A Few Numbers' },
+    { at: 15, title: 'Well Connected' }, { at: 40, title: 'The Rolodex' },
+    { at: 80, title: 'Everybody Knows You' }, { at: 150, title: 'The Switchboard' },
+  ],
+  // STANDING — the relationship with ONE contact, counted in jobs finished for them. A resident who
+  // has watched you deliver six times asks for a bigger load and pays for it. The tier scales what
+  // they ASK (qty) and what they TIP, never where the money comes from: generation still skips a
+  // request the contact cannot cover, and fulfilment still re-clamps to their live pocket, so
+  // recycle-only holds at every tier — a deep relationship moves more of the SAME bounded pool.
+  STANDING_TIERS: [
+    { at: 0, name: 'a stranger', qtyMult: 1.0, tipMult: 1.0 },
+    { at: 3, name: 'a regular', qtyMult: 1.5, tipMult: 1.4 },
+    { at: 8, name: 'a friend', qtyMult: 2.0, tipMult: 1.8 },
+    { at: 20, name: 'family', qtyMult: 3.0, tipMult: 2.5 },
+  ],
+};
+// how many numbers you hold → the badge (derived on read, never stored)
+export const contactRankOf = (n) => {
+  let r = CONTACTS.RANKS[0];
+  for (const x of CONTACTS.RANKS) if (Number(n) >= x.at) r = x;
+  return r.title;
+};
+export const contactNextRank = (n) => CONTACTS.RANKS.find((x) => x.at > Number(n)) || null;
+// jobs finished for ONE contact → how they treat you
+export const contactStandingOf = (jobs) => {
+  let t = CONTACTS.STANDING_TIERS[0];
+  for (const x of CONTACTS.STANDING_TIERS) if (Number(jobs || 0) >= x.at) t = x;
+  return t;
 };
 
 // THE FAVOR (STREET LIFE step two) — the PLAYER-posted call. The NPC version pays out of a live

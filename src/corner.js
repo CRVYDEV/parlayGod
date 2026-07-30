@@ -28,6 +28,8 @@ export async function cornerBoard(ch, client) {
     'SELECT district, slot, claimed FROM corner_jobs WHERE character_id=$1 AND day=$2', [ch.id, day])).rows;
   const here = new Map(jobs.filter((j) => j.district === ch.loc).map((j) => [Number(j.slot), j]));
   const claimedToday = jobs.filter((j) => j.claimed).length;
+  const chain = (await client.query(
+    'SELECT step, last_day FROM corner_chains WHERE character_id=$1 AND district=$2', [ch.id, ch.loc])).rows[0];
   return {
     district: ch.loc, districtName: districtName(ch.loc),
     cash: CORNER.CASH, respect: CORNER.RESPECT,
@@ -37,7 +39,37 @@ export async function cornerBoard(ch, client) {
       accepted: here.has(t.slot),
       claimed: !!here.get(t.slot)?.claimed,
     })),
+    // THE CHAIN — the block's standing job here. `advancedToday` is why a second envelope in the
+    // same district today does not move it: a chain is DAYS of showing up, not a busy afternoon.
+    chain: {
+      step: Number(chain?.step || 0), steps: CORNER.CHAIN_STEPS,
+      advancedToday: Number(chain?.last_day || -1) === day,
+      bonus: CORNER.CHAIN_BONUS, respectBonus: CORNER.CHAIN_RESPECT,
+    },
   };
+}
+
+// A claimed envelope advances THIS district's chain — at most one step a day, and the completing
+// step pays the bonus. Returns the payout to FOLD INTO the claim's own ledger row (the First-Week
+// capstone precedent): one row, one claim, so the chain can never widen the MAX_DAY bound.
+async function advanceChain(client, ch, day) {
+  const row = (await client.query(
+    'SELECT step, last_day FROM corner_chains WHERE character_id=$1 AND district=$2 FOR UPDATE',
+    [ch.id, ch.loc])).rows[0];
+  if (row && Number(row.last_day) === day) return null;   // already showed up here today
+  const step = Number(row?.step || 0) + 1;
+  if (step >= CORNER.CHAIN_STEPS) {
+    // the block pays. Delete rather than reset-to-zero so a fresh chain starts on the next claim —
+    // the row's existence IS "a chain is running", which keeps the board honest with no extra flag.
+    await client.query('DELETE FROM corner_chains WHERE character_id=$1 AND district=$2', [ch.id, ch.loc]);
+    return { done: true, step: CORNER.CHAIN_STEPS, cash: CORNER.CHAIN_BONUS, respect: CORNER.CHAIN_RESPECT };
+  }
+  if (row) await client.query(
+    'UPDATE corner_chains SET step=$3, last_day=$4 WHERE character_id=$1 AND district=$2', [ch.id, ch.loc, step, day]);
+  else await client.query(
+    'INSERT INTO corner_chains (character_id, district, step, last_day, started_day) VALUES ($1,$2,$3,$4,$4)',
+    [ch.id, ch.loc, step, day]);
+  return { done: false, step, of: CORNER.CHAIN_STEPS };
 }
 
 // take the job — snapshots the counters so only work done AFTER counts
@@ -87,10 +119,15 @@ export async function claimCorner(ch, slot, client, h) {
   await client.query(
     'UPDATE corner_jobs SET claimed=true WHERE character_id=$1 AND day=$2 AND district=$3 AND slot=$4',
     [ch.id, day, ch.loc, t.slot]);
-  ch.cash = Number(ch.cash) + CORNER.CASH;
-  ch.respect = Number(ch.respect) + CORNER.RESPECT;
-  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: CORNER.CASH, reason: 'corner:job' });
-  await h.track(client, ch.account_id, 'corner', { kind: t.kind, district: ch.loc });
-  return { ok: true, corner: 'claimed', kind: t.kind, cash: CORNER.CASH, respect: CORNER.RESPECT,
-    claimedToday: claimedToday + 1, maxDay: CORNER.MAX_DAY };
+  // the block's standing job moves on a CLAIM here, and its bonus rides this claim's own row
+  const chain = await advanceChain(client, ch, day);
+  const cash = CORNER.CASH + (chain?.done ? chain.cash : 0);
+  const respect = CORNER.RESPECT + (chain?.done ? chain.respect : 0);
+  ch.cash = Number(ch.cash) + cash;
+  ch.respect = Number(ch.respect) + respect;
+  await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cash, reason: 'corner:job' });
+  await h.track(client, ch.account_id, 'corner', { kind: t.kind, district: ch.loc, chain: chain?.done || false });
+  return { ok: true, corner: 'claimed', kind: t.kind, cash, respect,
+    claimedToday: claimedToday + 1, maxDay: CORNER.MAX_DAY,
+    ...(chain ? { chain: chain.done ? { done: true, district: ch.loc, bonus: chain.cash } : { step: chain.step, of: chain.of } } : {}) };
 }

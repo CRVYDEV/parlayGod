@@ -6984,3 +6984,36 @@ function body — its reads in THAT function are then genuinely checked instead 
 Coverage 97 → 99 boards, 534 → 547 top-level fields, 616 → 634 element fields; the fixture gained a
 contact call and two favors, since the guard's own rule is that an empty list must never read as a
 pass. Nested reads (`c.street.id`) remain the mirror's stated out-of-scope.
+
+**STREET LIFE step two — THE CHAIN, THE LADDER, THE STANDING (task #321) — BUILT** (`src/corner.js`,
+`src/contacts.js`, the `corner_chains` table + `contacts.jobs`, `CORNER.CHAIN_*` / `CONTACTS.RANKS` /
+`CONTACTS.STANDING_TIERS` in the rules tail; `test/growth.js` + `test/hardening.js`). Three additions
+that give the corner a reason to come back and the black book a reason to grow, with **no new §10.4
+reason** — the chain bonus rides the existing `corner:job` faucet, and the other two move no value at
+all. **(1) THE CHAIN** — every district now has a standing job: work its corner on `CHAIN_STEPS` (3)
+SEPARATE days and the block pays `CHAIN_BONUS` ($1,500) + 40 respect on the last one. It advances off
+a CLAIMED envelope there (never its own counter — the corner already proves the work), **at most one
+step a day**, so a chain is genuinely three days of showing up rather than a busy afternoon; a second
+envelope in that district today still pays and reports no chain movement. The bonus is folded into the
+COMPLETING claim's own ledger row (the First-Week capstone precedent), which is what keeps the faucet
+inside the signed bound: a chain never adds a claim, so the ceiling stays `MAX_DAY × (CASH + BONUS)`
+≈ $9,500/day worst case and needs three days in five districts to reach. `corner_chains` dies with the
+street (estate wipe + the migrate DISPOSITION map) — a new man starts the block's job cold.
+**(2) THE LADDER** — how many numbers you hold is now a rank (`CONTACTS.RANKS`, Nobody Calls → The
+Switchboard), derived on read from a COUNT so there is no stored axis to farm, plus
+`GET /v1/leaderboard/contacts` for the busiest books. The routes guard earned its keep here: it caught
+the new board being public when its 27 siblings are authed, and the fix was to give it `auth` rather
+than an allowlist exemption — which is exactly what that guard's own comment says the cheapest path
+should be. **(3) THE STANDING** — `contacts.jobs` counts what you have finished for ONE contact
+(bumped at `fulfillCall`, account-keyed like the row it sits on, so it survives both deaths), and
+`CONTACTS.STANDING_TIERS` (a stranger → a regular → a friend → family) scales what they ASK: qty
+×1.0→×3.0 and the tip ×1.0→×2.5. **It scales the ask, never the source** — generation still skips a
+request the contact cannot cover and fulfilment still re-clamps to their live pocket, so the
+recycle-only rule holds at every tier and the resident-extraction ceiling is unchanged. Console: a
+standing-job line on the corner board (progress + a "you showed up today" chip) and the rank + a
+per-contact jobs/standing chip on the black book. Four mutations each caught at their own named
+assertion — the bonus not folded (a second faucet row), the one-step-a-day guard dropped, standing not
+scaling the ask, and the jobs bump dropped. The second of those was VACUOUS on its first cut, because
+the test rolled the clock between steps and never made two claims on one day; it now DRIVES a
+same-day second claim and asserts the chain did not move. All numbers are founder sign-off levers
+(BALANCE.md; pinned in test/levers.js).

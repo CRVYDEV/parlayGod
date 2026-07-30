@@ -13,7 +13,7 @@
 // pure transfer). Zero new faucet.
 import crypto from 'node:crypto';
 import { GameError, notify } from './game.js';
-import { CONTACTS, GOODS, DISTRICTS, goodPriceOf, levelOf } from './rules.js';
+import { CONTACTS, GOODS, DISTRICTS, goodPriceOf, levelOf, contactRankOf, contactNextRank, contactStandingOf } from './rules.js';
 const districtName = (id) => (DISTRICTS.find((d) => d.id === id) || {}).name || id;
 
 const uid = () => crypto.randomUUID();
@@ -58,19 +58,26 @@ export async function hasContact(q, ownerAccount, contactAccount) {
 // (the number outlives the man — the heir answers), shown dead until the heir rises.
 export async function contactsBoard(pool, accountId) {
   const rows = (await pool.query(
-    `SELECT ct.contact_account, ct.how, ct.met_at,
+    `SELECT ct.contact_account, ct.how, ct.met_at, ct.jobs,
             c.id AS char_id, c.name, c.respect, c.loc, c.is_npc
        FROM contacts ct
        LEFT JOIN characters c ON c.account_id = ct.contact_account AND c.alive
       WHERE ct.owner_account=$1 ORDER BY ct.met_at DESC LIMIT 200`, [accountId])).rows;
+  // the ladder is counted, not stored — LIMIT 200 above is a display cap, so ask for the real total
+  const lines = Number((await pool.query(
+    'SELECT COUNT(*) n FROM contacts WHERE owner_account=$1', [accountId])).rows[0].n);
   const call = (await pool.query(
     `SELECT cc.*, n.name AS npc_name FROM contact_calls cc
        JOIN characters me ON me.account_id=$1 AND me.alive AND me.id = cc.character_id
        LEFT JOIN characters n ON n.id = cc.npc_character AND n.alive
       WHERE cc.expires_at > now()`, [accountId])).rows[0] || null;
+  const next = contactNextRank(lines);
   return {
+    lines, rank: contactRankOf(lines),
+    nextRank: next ? { title: next.title, at: next.at, need: next.at - lines } : null,
     contacts: rows.map((r) => ({
       how: r.how, metAt: r.met_at,
+      jobs: Number(r.jobs || 0), standing: contactStandingOf(r.jobs).name,
       street: r.char_id ? { id: r.char_id, name: r.name, level: levelOf(Number(r.respect)), loc: r.loc, npc: !!r.is_npc } : null,
     })),
     call: call && call.npc_name ? {
@@ -78,6 +85,28 @@ export async function contactsBoard(pool, accountId) {
       district: call.district, pay: Number(call.pay),
       expiresSeconds: Math.max(0, Math.ceil((new Date(call.expires_at) - Date.now()) / 1000)),
     } : null,
+  };
+}
+
+// THE BOOK — who knows the most people. Pure status on a COUNT, so there is nothing to spend and
+// nothing to drift; agents and residents are excluded like every other human board. Two flat
+// queries + a JS join (the /v1/gangs precedent — pg-mem can't take the correlated form).
+export async function contactsLeaderboard(pool, limit = 25) {
+  const counts = (await pool.query(
+    `SELECT ct.owner_account, COUNT(*)::int n FROM contacts ct
+       JOIN account_persistent ap ON ap.account_id = ct.owner_account AND NOT ap.agent_flag AND NOT ap.npc_flag
+      GROUP BY ct.owner_account`)).rows;
+  if (!counts.length) return { book: [] };
+  const streets = new Map((await pool.query(
+    'SELECT account_id, id, name FROM characters WHERE alive AND NOT is_npc')).rows.map((r) => [r.account_id, r]));
+  return {
+    book: counts
+      .map((c) => ({ lines: Number(c.n), street: streets.get(c.owner_account) }))
+      .filter((x) => x.street)
+      .sort((a, b) => b.lines - a.lines || String(a.street.id).localeCompare(String(b.street.id)))
+      .slice(0, limit)
+      .map((x, i) => ({ rank: i + 1, name: x.street.name, characterId: x.street.id,
+        lines: x.lines, title: contactRankOf(x.lines) })),
   };
 }
 
@@ -102,12 +131,16 @@ export async function generateContactCalls(pool, opts = {}) {
   for (const ch of picked) {
     try {
       const npcs = (await pool.query(
-        `SELECT n.id, n.name, n.cash, n.loc FROM contacts ct
+        `SELECT n.id, n.name, n.cash, n.loc, ct.jobs FROM contacts ct
            JOIN characters n ON n.account_id = ct.contact_account AND n.alive AND n.is_npc
           WHERE ct.owner_account=$1 ORDER BY n.id`, [ch.account_id])).rows;
       if (!npcs.length) continue;
       const npc = opts.npcCharacterId ? npcs.find((n) => n.id === opts.npcCharacterId) : npcs[Math.floor(Math.random() * npcs.length)];
       if (!npc) continue;
+      // STANDING (step two): how they treat you scales with how many of their jobs you've finished.
+      // It moves the ASK, never the source — a bigger request is still paid from this NPC's own
+      // pocket and still skipped when they can't cover it, so the recycle-only rule is untouched.
+      const st = contactStandingOf(npc.jobs);
       let kind = opts.kind || (Math.random() < 0.6 ? 'freight' : 'visit');
       let good = null, qty = null, pay = 0;
       if (kind === 'freight') {
@@ -115,13 +148,19 @@ export async function generateContactCalls(pool, opts = {}) {
         qty = 1 + Math.floor(Math.random() * CONTACTS.CALL_FREIGHT_MAX_QTY);
         if (opts.goodId) { good = GOODS.find((g) => g.id === opts.goodId) || good; }
         if (opts.qty) qty = opts.qty;
+        // a regular gets asked for more — the cap still bounds one request's size
+        qty = Math.max(1, Math.min(CONTACTS.CALL_FREIGHT_MAX_QTY, Math.round(qty * st.qtyMult)));
         pay = Math.floor(qty * goodPriceOf(good.id, npc.loc) * CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000);
         if (Number(npc.cash) < pay) kind = 'visit'; // they can't cover the freight — just ask you around
       }
-      // (Lens C LOW-2) the tip is FIXED, never min(tip, pocket): a sub-tip pay would encode the
-      // NPC's exact pocket cash on the board + the notify. A contact who can't cover the tip
-      // simply doesn't call (fulfilment still re-clamps to their live pocket — the broke-void).
-      if (kind === 'visit') { good = null; qty = null; pay = Number(npc.cash) >= CONTACTS.VISIT_TIP ? CONTACTS.VISIT_TIP : 0; }
+      // (Lens C LOW-2) the tip is FIXED for a given standing, never min(tip, pocket): a sub-tip pay
+      // would encode the NPC's exact pocket cash on the board + the notify. A contact who can't
+      // cover it simply doesn't call (fulfilment still re-clamps to their live pocket — the void).
+      if (kind === 'visit') {
+        good = null; qty = null;
+        const tip = Math.floor(CONTACTS.VISIT_TIP * st.tipMult);
+        pay = Number(npc.cash) >= tip ? tip : 0;
+      }
       if (pay <= 0) continue; // a broke contact asks for nothing
       const ins = await pool.query(
         `INSERT INTO contact_calls (character_id, npc_character, kind, good_id, qty, district, pay, expires_at)
@@ -187,8 +226,16 @@ export async function fulfillCall(ch, npc, client, h) {
   await h.ledger(client, { characterId: npc.id, currency: 'cash', amount: -pay, reason, counterparty: ch.id });
   await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: pay, reason, counterparty: npc.id });
   await client.query('DELETE FROM contact_calls WHERE character_id=$1', [ch.id]);
+  // the relationship deepens — this is what makes their next call bigger. Absolute-safe: `jobs + 1`
+  // is an addition on an INT column, which is the form pg-mem evaluates correctly (only a bound
+  // SUBTRACTION sign-flips). Account-keyed, so it survives both parties' deaths like the row does.
+  const bumped = await client.query(
+    'UPDATE contacts SET jobs = jobs + 1 WHERE owner_account=$1 AND contact_account=$2 RETURNING jobs',
+    [ch.account_id, npc.account_id]);
+  const jobs = Number(bumped.rows[0]?.jobs || 0);
   await h.track(client, ch.account_id, 'contact_call', { kind: call.kind, pay });
   return { ok: true, call: true, kind: call.kind, from: npc.name, pay,
+    jobs, standing: contactStandingOf(jobs).name,
     ...(call.kind === 'freight' ? { good: call.good_id, qty: Number(call.qty) } : {}) };
 }
 

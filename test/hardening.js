@@ -16,6 +16,7 @@ import { buildServer } from '../src/server.js';
 import { runLedgerInvariants, alertDrift } from '../src/invariants.js';
 import { runSeasonRollover } from '../src/worker.js';
 import { deadlockToRetry as G_deadlockToRetry, withCharacterRead } from '../src/game.js';
+import { CONTACTS, contactRankOf, contactStandingOf } from '../src/rules.js';
 
 // audit (process): the two codices (canonical docs/WIKI.md + served public/wiki.html) drifted — a
 // system landed in one but not the other. This drift-detector fails if a system this audit re-synced
@@ -650,6 +651,50 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
   assert.equal(r.body.error, 'no_call', 'a lapsed request cannot be settled');
   r = await sweepCalls(pool);
   assert(r.swept >= 1, 'the sweep reaps lapsed requests');
+
+  // ── STREET LIFE step two (task #321): THE BOOK's ladder + per-contact STANDING ──
+  // The ladder is derived from a COUNT and moves nothing; standing is jobs finished for ONE
+  // contact, and it scales what they ASK, never where the money comes from.
+  r = await call('GET', '/v1/contacts', { token: A.token });
+  assert.equal(r.body.lines, r.body.contacts.length, 'the ladder counts the lines you really hold');
+  assert.equal(r.body.rank, contactRankOf(r.body.lines), 'and names the rank for that count');
+  assert(r.body.nextRank && r.body.nextRank.need > 0, 'the board says how many more numbers to the next badge');
+  // A has finished 2 of the grocer's jobs by now (a freight and the re-clamped freight); the visit
+  // calls VOIDED or lapsed, and a void is not a job — only a settled call deepens the relationship.
+  const mo = r.body.contacts.find((c) => c.street && c.street.id === npcId);
+  assert.equal(mo.jobs, 2, 'two settled calls = two jobs done for the grocer (a void is not a job)');
+  assert.equal(mo.standing, contactStandingOf(2).name, 'and the board names how they treat you');
+  // STANDING SCALES THE ASK: push the relationship to the top tier and the same call comes back
+  // BIGGER — qty × the tier's multiplier, capped by CALL_FREIGHT_MAX_QTY.
+  const top = CONTACTS.STANDING_TIERS[CONTACTS.STANDING_TIERS.length - 1];
+  await pool.query('UPDATE contacts SET jobs=$3 WHERE owner_account=$1 AND contact_account=$2',
+    [await acctOf2(A.id), npcAcct, top.at]);
+  await pool.query('UPDATE characters SET cash=900000 WHERE id=$1', [npcId]);
+  await pool.query('DELETE FROM contact_calls WHERE character_id=$1', [A.id]);
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'freight', goodId: 'gin', qty: 2 });
+  assert.equal(r.placed, 1, 'family calls too');
+  const bigQty = Number((await pool.query('SELECT qty FROM contact_calls WHERE character_id=$1', [A.id])).rows[0].qty);
+  assert.equal(bigQty, Math.min(CONTACTS.CALL_FREIGHT_MAX_QTY, Math.round(2 * top.qtyMult)),
+    'family asks for a bigger load — scaled by the tier, still capped by CALL_FREIGHT_MAX_QTY');
+  // ...and the TIP scales the same way, still paid from their own pocket
+  await pool.query('DELETE FROM contact_calls WHERE character_id=$1', [A.id]);
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
+  assert.equal(Number((await pool.query('SELECT pay FROM contact_calls WHERE character_id=$1', [A.id])).rows[0].pay),
+    Math.floor(CONTACTS.VISIT_TIP * top.tipMult), 'family tips better');
+  // THE RECYCLE-ONLY RULE HOLDS AT EVERY TIER: a contact who cannot cover the bigger ask does not
+  // call at all — standing moves the ASK, never the source.
+  await pool.query('DELETE FROM contact_calls WHERE character_id=$1', [A.id]);
+  await pool.query('UPDATE characters SET cash=1 WHERE id=$1', [npcId]);
+  r = await generateContactCalls(pool, { characterId: A.id, npcCharacterId: npcId, kind: 'visit' });
+  assert.equal(r.placed, 0, 'a broke contact asks for nothing, however well they know you');
+
+  // THE BOOK leaderboard — ranks by lines held, residents and agents excluded
+  r = await call('GET', '/v1/leaderboard/contacts', { token: A.token });
+  assert.equal(r.code, 200, 'the book board is public');
+  const meRow = r.body.book.find((x) => x.characterId === A.id);
+  assert(meRow && meRow.lines >= 2, 'the busiest book is on the board with its real count');
+  assert(meRow.title, 'carrying its badge');
+  assert(!r.body.book.some((x) => x.characterId === npcId), 'residents never rank on a human board');
 }
 
 // ── ONE-CLICK X SIGN-IN (OAuth2 PKCE redirect) — dormant without env; configured: /start mints a
@@ -1194,5 +1239,5 @@ if (artShipped) assert(photoCount >= 100, `the shipped catalog photos are actual
     'the drill is a mod tool — an unauthenticated caller cannot make the founder\'s phone buzz');
 }
 
-console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both), STREET LIFE (the black book: no_number gate, a jump-meeting is mutual, blocks precede the number gate; THE CALL: contact-only generation, one-open-call PK, located freight fulfilment paid from the contact's own pocket — contact:* legs net to zero, broke-void, expiry sweep)`);
+console.log(`✅ M5 hardening test passed — §10.4 invariant job (zero drift on an earned economy, drift alarm fires), idempotency keys, invite codes, X OAuth + guest upgrade, season rollover, rate limits (human burst / agent 1-per-3s / swap 6-per-min), catalog item art (${artCount} icons — ${photoCount} generated photos, SVG emblem fallback), THE BROADCAST (dossier/cards/profile, no exact-wealth leak, clean fallbacks), PRESENCE + THE TROLL BOX (online counter, city + family-gated chat, sanitized + flood-braked), ONE-CLICK X SIGN-IN (PKCE start/state/callback surface, dormant without env), THE CELLPHONE (DM send/gates/flood brake, threads + unread + seen, inbox peek without flipping delivered, zero ledger rows) + STEP TWO BLOCKED LINES (block/unblock, dead tone both directions, board + thread surfacing, history stands, self/double gates), DB-DOWN LEGIBILITY (503 db_down not 500 internal, GET /health up+down+recovery, real bugs still report as bugs), THE LOCK-FREE READ PATH (D1: a clean read is served without FOR UPDATE, a read with real accrual behind it declines and the route re-runs under the lock so the banked state and the rendered view agree, a read still CHECKPOINTS accrual while a read with nothing to bank leaves the clock alone, and the write guard refuses ten write/lock forms including MERGE, COPY, SELECT-INTO, setval and FOR UPDATE without refusing three legitimate reads), BACKUP HEALTH (pg_stat_archiver: shipping/failing/healed-not-realarming/quiet/unsupported, surfaced on the ops dashboard, and archive_mode=off reads as NOT RUNNING rather than healthy — the worker alerts on both), STREET LIFE (the black book: no_number gate, a jump-meeting is mutual, blocks precede the number gate; THE CALL: contact-only generation, one-open-call PK, located freight fulfilment paid from the contact's own pocket — contact:* legs net to zero, broke-void, expiry sweep) + STEP TWO THE BOOK (a ladder derived from the lines you hold, per-contact STANDING deepening with every settled call so a regular's next request is BIGGER — capped, and still refused outright when they can't cover it, so recycle-only holds at every tier — plus the lines-held leaderboard with residents excluded)`);
 await app.close();

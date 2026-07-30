@@ -942,11 +942,22 @@ guaranteed). Take a job WHERE it's posted, do the work anywhere it happens, coll
 at the district: $400 + 15 respect each, at most 5 envelopes a day across the whole city. Only work
 done AFTER you take a job counts.
 
+**The block's standing job** — work the same district's corner on **3 separate days** and it pays a
+**$1,500 + 40 respect** bonus on the last one. A second envelope in that district today still pays,
+but it does not move the chain: a chain is days of showing up, not a busy afternoon. Finish one and
+the block has another for you.
+
 **The Black Book** (`GET /v1/contacts`) — phone numbers are EARNED, never free. You get a line three
 ways: **meet them** (any completed face-to-face — a jump, a hire, a fade, a duel — hands BOTH sides
 the other's number), **tap them** (a wiretap or dossier earns it one-way; they never get yours), or
 **answer** (whoever rings you reveals their own number). The phone's compose list IS your book — a
-stranger's 📱 reads 📵 until you earn the line.
+stranger's 📱 reads 📵 until you earn the line. How many lines you hold is a **rank** — Nobody Calls up to The
+Switchboard — and `GET /v1/leaderboard/contacts` ranks the busiest books in the city.
+
+**Standing** — every job you finish for one contact deepens that relationship (a stranger → a
+regular → a friend → family). A contact who knows you asks for **bigger loads and tips better**.
+The money still comes from their own pocket, so a contact who cannot cover the bigger ask simply
+does not call: standing moves what they ASK, never where it comes from.
 
 **The Call** (`POST /v1/call/fulfill`) — contacts you've met ring you with paid requests: bring N
 units of freight to their district (base × 1.15), or just come see them (a tip). The pay comes from

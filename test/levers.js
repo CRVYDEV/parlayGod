@@ -333,12 +333,27 @@ const SIGNED = [
   ['CORNER.POOLS', { docks: ['goods', 'crime', 'jump', 'melt'], canal: ['deal', 'cook', 'crime', 'jump'],
     brick: ['crime', 'jump', 'bust', 'gta'], neon: ['dice', 'crime', 'jump', 'goods'],
     foundry: ['craft', 'gta', 'crime', 'melt'], cathedral: ['train', 'crime', 'goods', 'bust'] }],
+  // THE CHAIN (step two) — the block's standing job. The bonus rides the COMPLETING claim's own
+  // ledger row, so the faucet ceiling stays MAX_DAY claims a day; STEPS is what makes it a week.
+  ['CORNER.CHAIN_STEPS', 3],
+  ['CORNER.CHAIN_BONUS', 1500],
+  ['CORNER.CHAIN_RESPECT', 40],
   // THE CALL — recycle-only transfers from the contact's own pocket (zero new faucet)
   ['CONTACTS.CALL_TTL_MS', 24 * 3600 * 1000],
   ['CONTACTS.CALL_FREIGHT_PREMIUM_BPS', 11500],
   ['CONTACTS.CALL_FREIGHT_MAX_QTY', 8],
   ['CONTACTS.VISIT_TIP', 750],
   ['CONTACTS.GEN_PER_TICK', 4],
+  // THE BOOK (step two) — a status ladder on lines held (moves nothing) and the per-contact
+  // STANDING that scales what a regular asks for. Recycle-only holds at every tier: the ask grows,
+  // the source does not — generation still skips what the contact can't cover.
+  ['CONTACTS.RANKS', [{ at: 0, title: 'Nobody Calls' }, { at: 5, title: 'A Few Numbers' },
+    { at: 15, title: 'Well Connected' }, { at: 40, title: 'The Rolodex' },
+    { at: 80, title: 'Everybody Knows You' }, { at: 150, title: 'The Switchboard' }]],
+  ['CONTACTS.STANDING_TIERS', [{ at: 0, name: 'a stranger', qtyMult: 1.0, tipMult: 1.0 },
+    { at: 3, name: 'a regular', qtyMult: 1.5, tipMult: 1.4 },
+    { at: 8, name: 'a friend', qtyMult: 2.0, tipMult: 1.8 },
+    { at: 20, name: 'family', qtyMult: 3.0, tipMult: 2.5 }]],
   // THE FAVOR (Street Life step two) — the player-posted call. The escrow bounds are what keep a
   // single poster from parking the bank in un-lootable rows; the take is what makes paying an alt lossy.
   ['FAVOR.MAX_OPEN', 3],

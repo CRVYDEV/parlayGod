@@ -95,6 +95,7 @@ const DISPOSITION = {
   hustles: 'wiped', // THE HUSTLE: the daily three-stop chain is the street's own day — dies with them (the heir draws fresh work)
   pen_talks: 'wiped', // PEN step six: the daily yard-character conversation is the street's own day
   corner_jobs: 'wiped', // STREET LIFE: the district quest board is the street's own day — dies with them
+  corner_chains: 'wiped', // the block's standing job is a WEEK of showing up — a new man starts it cold
   contact_calls: 'wiped', // STREET LIFE: an open contact call dies with the street (no escrow — the pay only moves at fulfilment; `contacts` itself is account-keyed and survives by construction)
   rigs: 'wiped', // CONVOY Tier-4: the hauler dies with the street (the cars/boats precedent)
   route_notoriety: 'wiped', // TIER C: per-lane heat is the street's own reputation — dies with them (the heir runs clean lanes)

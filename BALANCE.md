@@ -2837,3 +2837,32 @@ poster's own cash to a runner, and the only value that leaves is the house cut c
 − refunded − death − loot`, the market's shape verbatim). The loot-proof-vault rule is enforced both
 ways — posting is safehouse-blocked, and a player fire-kill takes `CASH_LOOT_RATE` (25%) of a dead
 poster's open escrow (`whack:loot` + a NULL `favor:loot`), the remainder burning `favor:death`.
+
+### THE CHAIN, THE LADDER, THE STANDING (step two, task #321)
+
+Three additions on the corner + the book. **No new §10.4 reason** — the chain bonus rides the
+existing `corner:job` faucet, and the ladder and the standing move no value at all.
+
+| lever | value | why |
+|---|---|---|
+| `CORNER.CHAIN_STEPS` | **3** | separate DAYS working one district's corner — what makes it a week, not an afternoon |
+| `CORNER.CHAIN_BONUS` | **1,500** | the block's thank-you: 3.75× a single envelope for three days of showing up |
+| `CORNER.CHAIN_RESPECT` | **40** | the XP with it |
+| `CONTACTS.RANKS` | 6 tiers, 0 → 150 lines | a badge on how many numbers you hold — display-only, derived from a COUNT |
+| `CONTACTS.STANDING_TIERS` | 4 tiers at 0/3/8/20 jobs | how ONE contact treats you: qty ×1.0 → ×3.0, tip ×1.0 → ×2.5 |
+
+**The chain's faucet is bounded by the claim, not added to it.** The bonus is folded into the
+COMPLETING claim's own ledger row (the First-Week capstone precedent), so a chain never adds an
+envelope. **Measured (sim P9.26, printed every run):** a chain advances at most once per district
+per day and needs a real claim there, so advances/day ≤ `min(districts 6, MAX_DAY 5)` = 5 and
+completions/day ≤ 5 ÷ `CHAIN_STEPS` = 1.67 — **~$2,500/day + ~67 respect/day on top of the corner's
+$2,000 + 75**, and only for a street that keeps five separate corners running. (The naive
+`MAX_DAY × CHAIN_BONUS` bound is unreachable: a chain cannot complete twice at one district in a
+day.) A second envelope in the same district on the same day pays as an envelope and does NOT
+advance the chain.
+
+**The standing scales the ASK, never the source.** A regular is asked for a bigger load and tipped
+better, but generation still skips a request the contact cannot cover and fulfilment still
+re-clamps to their live pocket — so recycle-only holds at every tier, and the resident-extraction
+ceiling is unchanged (it is bounded by the seed pool, not by how well they know you).
+
