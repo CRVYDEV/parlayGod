@@ -1281,7 +1281,7 @@ export const COMMISSION = {
     // REDIRECT (zero new money): while in force, the 12h buyback's EXISTING family split (normally
     // pro-rata to the top-25 by lifetime standing) pays the SEATED chamber instead, weighted by
     // seat (5..1). One touchpoint (worker.js runBuyback); amounts and §10.4 posture unchanged.
-    { id: 'the_levy',    name: 'The Levy',    desc: "The buyback's family cut is levied by the chamber — the five seated families collect it, by seat." },
+    { id: 'the_levy',    name: 'The Levy',    desc: 'The family yield is levied by the chamber — the seated families collect it, by seat, instead of the standing board.' },
   ],
   // step three — PROPOSALS WITH DEPOSITS (design omerta-deep-deferred-design.md §B): a seated
   // family may PROPOSE a decree for the week being voted, staking a treasury CASH deposit. When any

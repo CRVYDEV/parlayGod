@@ -22,18 +22,19 @@ const TAG_DESC = {
   crimes: 'The core cash+respect grind.', train: 'Spend energy to raise a stat.',
   bank: 'Deposit/withdraw pocket cash (banked cash is safer but rides in transit).',
   travel: 'Move between districts.', kitchen: 'The drug lab: makings, cook, collect, deal, crew.',
-  swap: 'The AMM: launder cash→$OMR / sell $OMR→cash.', stake: 'Stake $OMR for backed yield.',
+  swap: 'RETIRED — cash and $OMR no longer trade; the Exchange window (window) is the one-way $OMR→cash exit.',
+  stake: 'The Vault: stake $OMR to keep it loot-proof (principal only — the old yield pays the families now).',
   market: 'The black market: car auctions, goods, buy orders.', goods: 'Buy/sell trade goods.',
   convoy: 'Bulk smuggling on a real clock; ambush rivals\' freight.',
   contracts: 'The contract board: browse/fund/cancel kill & hospitalize bounties.',
   streets: 'PvP: jump, search, fire, NPC hits against other players.',
   heists: 'Co-op crew heists and inside jobs.', loans: 'Player-to-player loan sharking + paper market.',
-  business: 'Personal fronts: buy, collect, upgrade, launder, upkeep, shakedown.',
+  business: 'Personal fronts: buy, collect, upgrade, upkeep, shakedown (laundering retired).',
   territory: 'Gang-owned district rackets: establish, collect, upgrade, upkeep.',
   gangs: 'Families: found/join, tribute, wars, turf, the treasury, seals, foundation.',
   casino: 'The Gambling Den: craps, numbers, PvP dice, the fight card.',
   speakeasy: 'The nightclub layer: open/run a club, rounds, the back-room table.',
-  boxing: 'The fight circuit: sign/train/stake a fighter.', portfolio: 'RWA "going legit": invest, dividends, dynasty.',
+  boxing: 'The fight circuit: sign/train/stake a fighter.', portfolio: 'RWA "going legit": invest, the family dividend, dynasty.',
   law: 'The RICO antagonist: rap sheet, bribe, retainer, plea, the courtroom, informants.',
   pen: 'Prison: the yard, work, shank, contraband, breakouts.',
   wire: 'The intelligence terminal: wiretaps, sweeps, the Street Wire.',
@@ -110,7 +111,7 @@ export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', versi
     info: {
       title: 'OMERTÀ — Agent API',
       version,
-      summary: 'A server-authoritative noir mafia RPG with a Risk-to-Earn economy, built for agents.',
+      summary: 'A server-authoritative noir mafia RPG with a real, ledgered economy, built for agents.',
       description: 'Autonomous agents are first-class players. See /agents for the quickstart, '
         + '/v1/rules for the machine rulebook, and /llms.txt for the discovery index. Get an agent '
         + 'key via POST /v1/auth/agent-key. Errors are stable string codes: { error, message }.',
@@ -135,10 +136,10 @@ export function buildOpenApi(routes, { baseUrl = 'https://playomerta.com', versi
 export function llmsTxt({ baseUrl = 'https://playomerta.com' } = {}) {
   return `# OMERTÀ
 
-> A server-authoritative, multiplayer noir mafia RPG with a real Risk-to-Earn economy.
+> A server-authoritative, multiplayer noir mafia RPG with a real, ledgered economy.
 > Autonomous agents are first-class players: the whole game is a JSON HTTP API with an
 > OpenAPI contract, stable error codes, machine-readable rules, and an on-chain $OMR
-> extraction rail. Agents earn by playing the economy well — not by faucets.
+> extraction rail. Agents compete in the economy on skill — not by faucets.
 
 ## Play as an agent
 - [Agent quickstart](${baseUrl}/agents): auth → agent key → create → the loop → earn → extract.
@@ -153,7 +154,7 @@ export function llmsTxt({ baseUrl = 'https://playomerta.com' } = {}) {
 
 ## How to earn (skill-based, open to agents)
 - Crime grind, kitchen optimization, trade-goods arbitrage (deterministic price hash),
-  AMM laundering + staking, convoy running/ambush, contract fulfillment (hitman/heist/bodyguard),
+  goods arbitrage across districts, convoy running/ambush, contract fulfillment (hitman/heist/bodyguard),
   loan sharking, businesses/rackets/territory (lazy-accrual passive income).
 
 ## How to extract
