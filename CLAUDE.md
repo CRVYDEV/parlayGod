@@ -6614,3 +6614,30 @@ vocabulary, and death survival — capstone + tier-gate mutations each caught by
 end-to-end (section + locked teaser render, a seeded gun flips Get Strapped to claim-ready, the claim
 toasts 📜 and the tier reads 1/6, zero page errors). All CAREER cash values + `CAREER.NEED` +
 `JAILBIRDS.*` are founder sign-off levers.
+
+**THE SOUNDTRACK (task #307, founder: "addition of sounds when playing and when clicking … Search for
+certain sounds that contain addictive tones … fit the mafia theme").** A WebAudio-SYNTHESIZED audio
+layer in `public/index.html` — zero assets, zero deps, license-free, so the single-file console stays
+self-contained (a CDN or embedded MP3s would have broken that or bloated the file). The `SFX` module:
+one lazy AudioContext (created on the FIRST user gesture — the autoplay policy — through a compressor
++ a 0.28 master gain), two synth voices (`tone` = pitch-glide oscillator with exponential decay through
+an optional lowpass; `noise` = a decaying filtered burst), and a SEVEN-sound noir vocabulary kept
+deliberately small (a sound on every event teaches the ear to ignore all of them — the
+cinematic-rarity lesson, in audio): `click` (felt-damped tick on every button press, wired at
+pointerdown so the GESTURE that unlocks the context is the one that clicks), `ok` (a soft two-note
+confirm on any clean action without a cinematic), `cash` (the register's coin chime, riding the sheet's
+money tick-up — the canonical money-changed detector, so passive income rings it too), `win` (a rising
+minor-key sting inside `playCine` — kills, level-ups, paydays, breakouts all inherit it), `bad` (a low
+thud on any failed action, beside the existing shake), `jail` (an inharmonic cell-door clang on the
+jail-transition latch — the same latch that jumps the screen to the Pen), `ring` (the cellphone).
+Every path is try/caught so a missing/broken AudioContext degrades to SILENCE, never an error;
+deliberately NOT gated on prefers-reduced-motion (motion is not sound — audio has its own switch): a
+🔊/🔇 top-bar toggle persisting `omerta_sfx` in localStorage, default ON. Chromium-probed (toggle
+renders/flips/persists both ways; four real crimes fired through click/ok/cash/bad with ZERO page
+errors); mobile 64/64; the wiring guard caught two of its own classes en route — the `spec ? null :
+'ok'` ternary reading as a `null:` field (rewritten as a plain `if`) and the WebAudio `type:` literals
+(declared NOT_API with a reason). HONEST SCOPE (the mobile-harness argument): the probe proves the
+layer can never break the game; whether the sounds FEEL right needs a person with speakers — the
+founder should listen and dial (`master.gain` 0.28 + the per-sound gains are the knobs, all in the
+SOUNDS table). Deferred: per-game flavor (dice rattle at the den, engine notes at the races) — pure
+vocabulary adds once the base palette is approved.

@@ -245,6 +245,7 @@ const NOT_API = new Set([
   'placeholder',// askNum()'s input placeholder
   'id',         // the milestone-TIPS registry key (localStorage suffix, client-internal)
   'tab',        // TIPS jump targets — setTab() destinations, never sent to the server
+  'type',       // THE SOUNDTRACK's WebAudio oscillator type ('sine'/'triangle'/…) — synth-internal, never sent
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];

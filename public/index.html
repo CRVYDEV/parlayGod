@@ -1019,6 +1019,7 @@
     <a href="/wiki" target="_blank" class="act" style="text-decoration:none" title="the codex — every system explained">CODEX</a>
     <button class="act" id="btn-share" title="broadcast your legend — a shareable card that credits you for every recruit">📣 broadcast</button>
     <button class="act" id="btn-phone" title="the cell — your inbox + messages" style="position:relative">📱<span id="phone-badge" class="hidden"></span></button>
+    <button class="act" id="btn-sfx" title="the soundtrack — clicks, the register, the stings. Tap to mute."></button>
     <span class="help" id="btn-help" title="what does all this mean?">?</span>
     <button class="act" id="btn-logout" title="sign out of this account">sign out</button>
   </div>
@@ -1202,6 +1203,79 @@
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const HAPTIC = { tap: 8, success: [12, 30, 14], error: [40, 60, 40], big: [18, 40, 18, 40, 70] };
   const haptic = (kind) => { if (REDUCED) return; try { navigator.vibrate?.(HAPTIC[kind] || 8); } catch {} };
+  // ── THE SOUNDTRACK (task #307, founder: "addition of sounds when playing and when clicking …
+  // addictive tones … fit the mafia theme"). WebAudio-SYNTHESIZED — zero assets, zero deps,
+  // license-free, so the single-file console stays self-contained. The context is created lazily
+  // on the first user gesture (autoplay policy); a 🔊 top-bar toggle persists the mute; every path
+  // is try/caught so a browser with no (or a broken) AudioContext degrades to SILENCE, never an
+  // error. Deliberately NOT gated on prefers-reduced-motion — motion is not sound, and the audio
+  // has its own switch. The palette is the noir room: felt-damped clicks, a register's coin chime,
+  // a rising minor sting for the big moments, a cell door for lockup.
+  const SFX = (() => {
+    let ctx = null, master = null;
+    const enabled = () => localStorage.getItem('omerta_sfx') !== 'off';
+    const ensure = () => {
+      try {
+        if (!ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+          ctx = new AC();
+          const comp = ctx.createDynamicsCompressor();
+          master = ctx.createGain(); master.gain.value = 0.28;
+          master.connect(comp); comp.connect(ctx.destination);
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx.state !== 'closed';
+      } catch { return false; }
+    };
+    // one voice: a tone with optional pitch glide + exponential decay through an optional lowpass
+    const tone = (t0, { f, f2, dur = 0.15, type = 'sine', g = 0.5, lp = 0 }) => {
+      const o = ctx.createOscillator(), env = ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t0);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+      env.gain.setValueAtTime(0.0001, t0);
+      env.gain.exponentialRampToValueAtTime(g, t0 + 0.008);
+      env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      let head = o;
+      if (lp) { const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = lp; o.connect(fl); head = fl; }
+      head.connect(env); env.connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    };
+    const noise = (t0, { dur = 0.06, g = 0.3, hp = 1200, lp = 0 }) => {
+      const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+      const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const env = ctx.createGain(); env.gain.value = g;
+      let head = src;
+      const f1 = ctx.createBiquadFilter(); f1.type = 'highpass'; f1.frequency.value = hp; head.connect(f1); head = f1;
+      if (lp) { const f2c = ctx.createBiquadFilter(); f2c.type = 'lowpass'; f2c.frequency.value = lp; head.connect(f2c); head = f2c; }
+      head.connect(env); env.connect(master);
+      src.start(t0);
+    };
+    // the vocabulary — each a tiny score played at "now". Kept SMALL on purpose: a sound on every
+    // event teaches the ear to ignore all of them (the cinematic-rarity lesson, in audio).
+    const SOUNDS = {
+      click: (t) => { noise(t, { dur: 0.018, g: 0.10, hp: 2500 }); tone(t, { f: 1600, dur: 0.03, g: 0.05 }); },
+      ok:    (t) => { tone(t, { f: 660, dur: 0.07, g: 0.09 }); tone(t + 0.06, { f: 880, dur: 0.09, g: 0.09 }); },
+      cash:  (t) => { tone(t, { f: 1318.5, dur: 0.09, g: 0.15, type: 'triangle' }); tone(t + 0.07, { f: 1975.5, dur: 0.16, g: 0.13, type: 'triangle' }); noise(t, { dur: 0.03, g: 0.05, hp: 4000 }); },
+      win:   (t) => { [220, 261.6, 329.6, 440].forEach((f, i) => tone(t + i * 0.09, { f, dur: 0.22, g: 0.13, type: 'triangle' })); tone(t + 0.36, { f: 880, dur: 0.5, g: 0.09 }); },
+      bad:   (t) => { tone(t, { f: 130, f2: 70, dur: 0.18, g: 0.15, type: 'square', lp: 400 }); noise(t, { dur: 0.05, g: 0.07, hp: 300, lp: 1200 }); },
+      jail:  (t) => { [187, 463, 747, 1123].forEach((f) => tone(t, { f, dur: 0.55, g: 0.06, type: 'triangle' })); noise(t, { dur: 0.08, g: 0.13, hp: 700 }); },
+      ring:  (t) => { tone(t, { f: 1046.5, dur: 0.12, g: 0.08 }); tone(t + 0.15, { f: 1046.5, dur: 0.12, g: 0.06 }); },
+    };
+    const play = (name) => {
+      if (!enabled() || !SOUNDS[name]) return;
+      try { if (!ensure()) return; SOUNDS[name](ctx.currentTime); } catch { /* silence, never an error */ }
+    };
+    return { play, enabled, toggle() { localStorage.setItem('omerta_sfx', enabled() ? 'off' : 'on'); return enabled(); } };
+  })();
+  const sfx = (n) => SFX.play(n);
+  // every button press gets the felt-damped click (pointerdown so it lands on the GESTURE — which
+  // is also what unlocks the AudioContext); disabled buttons never fire pointer events
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target?.closest?.('button.act, .tab, .grp, .bn')) sfx('click');
+  }, { passive: true });
   // one delegated listener arms every button in the app with a touch tick — no per-site wiring.
   // It also remembers WHICH button was pressed, so a payout can float up from the control that
   // earned it rather than from the middle of the screen (the render replaces innerHTML, so the
@@ -1475,6 +1549,7 @@
 
   // one place that turns a spec into sound, light and motion
   function playCine(spec) {
+    sfx('win');
     if (!spec) return;
     if (spec.fx === 'violent') { shake(); flash('radial-gradient(60% 50% at 50% 45%, rgba(192,57,43,.5), transparent)'); haptic('big'); }
     else if (spec.fx === 'payday') { flash('radial-gradient(60% 50% at 50% 45%, rgba(232,179,75,.34), transparent)'); haptic('big'); }
@@ -1869,8 +1944,9 @@
             if (d > 0) floatVal(`+$${fmt(d)}`, true, lastPressed);
           }
         }
+        if (!spec) sfx('ok'); // the cinematic carries its own sting; everything else confirms softly
         const bt = bragText(r.body); if (bt) { haptic('big'); showBrag(bt); }
-      } else if (r.code >= 400) { shake(); }
+      } else if (r.code >= 400) { shake(); sfx('bad'); }
       await refresh();
       return r;
     } finally { acting = false; document.body.style.cursor = ''; busy.classList.remove('on'); }
@@ -2153,6 +2229,11 @@
   $('#btn-refresh').onclick = () => refresh();
   // the glossary (the ? up top) + the first-session welcome (shown once per browser)
   $('#btn-help').onclick = () => $('#glossary').classList.remove('hidden');
+  // THE SOUNDTRACK toggle — the label IS the state; muting persists across sessions
+  { const sb = $('#btn-sfx');
+    const paint = () => { sb.textContent = SFX.enabled() ? '🔊' : '🔇'; };
+    paint();
+    sb.onclick = () => { const on = SFX.toggle(); paint(); if (on) sfx('ok'); toast(on ? 'the city has a soundtrack again' : 'silence — the professional’s choice', false); }; }
   $('#glossary-close').onclick = () => $('#glossary').classList.add('hidden');
   $('#glossary-tour').onclick = () => { $('#glossary').classList.add('hidden'); openTour(); };
   $('#glossary').onclick = (e) => { if (e.target.id === 'glossary') $('#glossary').classList.add('hidden'); };
@@ -2216,6 +2297,7 @@
   }
   // a live dm arrived over the wire — bump the badge; if the phone is open, refresh the view
   function phoneRing(p) {
+    sfx('ring');
     phoneBadge(phoneUnread + 1);
     if (!$('#phone').classList.contains('hidden')) {
       if (phoneOpenThread && p.fromCharacter === phoneOpenThread) openPhoneThread(phoneOpenThread);
@@ -2491,6 +2573,7 @@
     { const prev = renderSheet._cash; renderSheet._cash = me.cash;
       if (prev !== undefined && prev !== me.cash) { const m = $('#sheet .money');
         if (m) { m.classList.add(me.cash > prev ? 'tick-up' : 'tick-down');
+          if (me.cash > prev) sfx('cash');
           countUp(m, prev, me.cash);
           setTimeout(() => m.classList.remove('tick-up', 'tick-down'), 900); } } }
     // LEVELLING UP — the money tick above has fired on every $3 pickpocket since M1, while the one
@@ -2506,6 +2589,7 @@
     // you went. A latch on the transition (and on a page that LOADS jailed), never on every poll,
     // so a jailed player who navigates away isn't yanked back.
     { const was = renderSheet._jailed; const isJ = Number(me.jailSeconds) > 0; renderSheet._jailed = isJ;
+      if (isJ && was === false) sfx('jail');
       if (isJ && was !== true && currentTab !== 'pen') {
         setTab('pen');
         if (was === false) toast('they took you in — this is your world now. Work it, buy your way out, or wait.');
