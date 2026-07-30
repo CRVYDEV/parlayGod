@@ -25,7 +25,8 @@
 import crypto from 'node:crypto';
 import { notify } from './game.js';
 import { POPULATION, NPC_FIRST, NPC_LAST, npcBandOf, DISTRICTS, PACING, dayOf,
-         LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf } from './rules.js';
+         LOAN, loanOwed, GOODS, BLACK_MARKET, M3, DUELS, CASINO, CARS, goodPriceOf,
+         BOXING, STABLE, stableKindOf, FIGHTER_MONIKERS, RACER_NAMES } from './rules.js';
 
 const uid = () => crypto.randomUUID();
 const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
@@ -114,8 +115,8 @@ export async function spawnResident(client, opts = {}) {
   //  · a BOAT is a row with no conservation check — its resale is the flagged faucet.
   // Tests pass opts.marks to pin the rolls; production rolls the band's P.
   const M = POPULATION.MARKS;
-  const wants = (key) => (opts.marks ? !!opts.marks[key]
-    : Math.random() < ((key === 'car' ? M.CAR_P : key === 'front' ? M.FRONT_P : M.BOAT_P)[band.id] || 0));
+  const P_OF = { car: M.CAR_P, front: M.FRONT_P, boat: M.BOAT_P, fighter: M.FIGHTER_P, racer: M.RACER_P };
+  const wants = (key) => (opts.marks ? !!opts.marks[key] : Math.random() < ((P_OF[key] || {})[band.id] || 0));
   if (wants('car')) {
     const [lo, hi] = M.CAR_VAL[band.id] || [800, 2000];
     const models = CARS.filter((c) => c.val >= lo && c.val <= hi);
@@ -136,6 +137,27 @@ export async function spawnResident(client, opts = {}) {
   if (wants('boat')) {
     await client.query('INSERT INTO boats (id, character_id, kind) VALUES ($1,$2,$3)',
       [uid(), charId, 'dinghy']);
+  }
+  // ═══ STEP THREE — the resident's STABLE, so the PvP boards are LIVE in an empty alpha ═══
+  // A fighter/racer is an ownership row with no conservation check. The listing is what makes the
+  // board real, and it obeys the recycle-only rule: a resident may only ever advertise a stake they
+  // ALREADY HOLD (a share of their own pocket), and one who cannot reach the system's own floor
+  // simply DOESN'T LIST — a limit under MIN_STAKE sits in an empty window and reads as a dead board
+  // (the step-two F2 lesson). Nothing here initiates: a player always makes the match.
+  const stake = Math.floor(cash * M.STAKE_BPS / 10000);
+  if (wants('fighter')) {
+    const lim = stake >= BOXING.MIN_STAKE ? Math.min(stake, BOXING.MAX_STAKE) : null;
+    await client.query('INSERT INTO fighters (id, character_id, name, power, chin, speed, bout_limit) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [uid(), charId, `${pick(NPC_FIRST)} '${pick(FIGHTER_MONIKERS)}' ${pick(NPC_LAST)}`,
+       rndInt(BOXING.STAT_MIN, BOXING.STAT_MAX), rndInt(BOXING.STAT_MIN, BOXING.STAT_MAX), rndInt(BOXING.STAT_MIN, BOXING.STAT_MAX), lim]);
+  }
+  if (wants('racer')) {
+    const kind = Math.random() < 0.5 ? 'dog' : 'horse';
+    const k = stableKindOf(kind);
+    const lim = stake >= STABLE.MIN_STAKE ? Math.min(stake, STABLE.MAX_STAKE) : null;
+    await client.query('INSERT INTO racers (id, character_id, kind, name, speed, stamina, heart, race_limit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uid(), charId, kind, `${pick(RACER_NAMES)}`,
+       rndInt(k.statMin, k.statMax), rndInt(k.statMin, k.statMax), rndInt(k.statMin, k.statMax), lim]);
   }
   return { id: charId, name, level: lvl, band: band.id, cash };
 }
@@ -220,6 +242,10 @@ export async function retireResident(client, charId) {
   }
   await client.query('DELETE FROM boats WHERE character_id=$1', [charId]);
   await client.query('DELETE FROM businesses WHERE character_id=$1', [charId]);
+  // the stable leaves with them (step three) — a retired resident's fighter must not linger on the
+  // circuit board taking bouts nobody can collect, the same reason their loan escrow is reclaimed
+  await client.query('DELETE FROM fighters WHERE character_id=$1', [charId]);
+  await client.query('DELETE FROM racers WHERE character_id=$1', [charId]);
   await client.query('DELETE FROM character_cargo WHERE character_id=$1', [charId]);
   await client.query('UPDATE characters SET alive=false, cash=0, bank=0 WHERE id=$1', [charId]);
   return { id: charId, burned: held };

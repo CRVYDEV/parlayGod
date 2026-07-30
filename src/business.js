@@ -345,29 +345,38 @@ async function extortFront(ch, victim, businessId, client, h, verb) {
   ch.heat = Math.min(100, Number(ch.heat || 0) + heat); // exposure win or lose (clamp 100, audit LOW-2)
   await client.query('UPDATE businesses SET shakedown_at=now() WHERE id=$1', [businessId]);
 
+  // REVENGE, WITH TEETH (step three) — judged BEFORE the roll (so it can carry the striker's hand)
+  // and before the strike is RECORDED below (else this strike would count against the debt it is
+  // settling). Boosts the ATTACK only, never the owner's defence.
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+  const revM = revenge ? RIVALS.REVENGE_ATK_MULT : 1;
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // shakedown: the enforcer's contest (BRUISER/MADE MAN/muscle-mastery stack — signed levers).
   // rob: the sneak-thief's — cunning + speed both sides (a different build wins), deliberately
   // NO skill/mastery stack in step one (new XP/perk surface is its own review — design roadmap).
-  const atk = rob
+  const atk = (rob
     ? eff('cunning') + eff('speed') * 0.5 + Math.random() * 25
     : (eff('muscle') + eff('cunning') * 0.5) * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT)
-      * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk (the shakedown half of the muscle axis)
+      * masteryFx(h, 'muscle') + Math.random() * 25) * revM; // TRADES perk (the shakedown half of the muscle axis)
   const def = rob
     ? vEff('cunning') + vEff('speed') * 0.5 + Math.random() * 25
     : vEff('muscle') + vEff('cunning') * 0.5 + Math.random() * 25;
   await h.rngLog(client, ch.id, `${verb}:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
 
   if (atk > def) {
+    // A revenge ROBBERY takes a bigger bite: 15% → 22.5%, still under the SHAKEDOWN's signed 30%
+    // on the SAME shared per-venue window, so the signed per-venue extraction bound is untouched.
+    // Deliberately rob-only — boosting a shakedown would push past that signed 30% ceiling.
+    const effRate = rob && revenge ? rate * RIVALS.REVENGE_CUT_MULT : rate;
     const pending = npcPendingScale(victim.is_npc, accrued(r));
-    const cut = Math.floor(pending * rate);
-    // REVENGE TEETH (step two) — judged BEFORE this strike is recorded, paid only while net owed
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
-    // advance the clock by only the STOLEN share — the owner keeps the rest pending
+    const cut = Math.floor(pending * effRate);
+    // advance the clock by only the STOLEN share — the owner keeps the rest pending. It MUST use
+    // the same effRate the cut used, or the redirect stops being emission-neutral (a bigger bite
+    // with an unchanged clock would hand the owner back income that was already taken).
     const elapsed = Math.min(Date.now() - new Date(r.last_collect_at).getTime(), CONSTANTS.BUSINESS_CAP_MS);
     await client.query('UPDATE businesses SET last_collect_at=$2 WHERE id=$1',
-      [businessId, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - rate)))]);
+      [businessId, new Date(Date.now() - Math.floor(Math.max(0, elapsed) * (1 - effRate)))]);
     if (cut > 0) {
       ch.cash = Number(ch.cash) + cut;
       await h.ledger(client, { characterId: ch.id, currency: 'cash', amount: cut, reason: rob ? 'business:rob' : 'business:shakedown', counterparty: victim.id });

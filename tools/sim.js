@@ -20,7 +20,7 @@ import { CRIMES, GUNS, CONSTANTS, M3, LOAN, btkOf,
          frontierTributePerHr, liberationCost, worldNpcOf, SPEAKEASY, PEN, RACES,
          PORT, boatOf, portRouteOf, interdictChance,
          CONVOY, DISTRICTS, goodPriceOf, STABLE , CLUES, BUSINESSES, PACING, POPULATION, boatResale, CORNER, CONTACTS,
-         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION } from '../src/rules.js';
+         EXCHANGE, EMISSION, ESTATE, WIRE, GANG_SEALS, FOUNDATION, RIVALS } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -965,6 +965,27 @@ phase('P9.26 street life — the corner ceiling + the call');
     `a chain completes every CHAIN_STEPS (${CORNER.CHAIN_STEPS}) days a street shows up at that district, and advances at most once per district per day gated by a real claim — so at most min(districts ${DISTRICTS.length}, MAX_DAY ${CORNER.MAX_DAY}) = ${advDay} advances/day ≈ ${(advDay / CORNER.CHAIN_STEPS).toFixed(2)} completions/day × $${fmt(CORNER.CHAIN_BONUS)}. The bonus rides the completing claim's OWN corner:job row (the First-Week capstone fold), so the claim cap still bounds it. Dials: CHAIN_BONUS, CHAIN_RESPECT, CHAIN_STEPS`);
   note('street life', 'THE CALL', 'recycle-only (paid from the contact\'s own pocket)',
     `freight pays base × ${CONTACTS.CALL_FREIGHT_PREMIUM_BPS / 10000} of goods the player really hauls; visit tips $${CONTACTS.VISIT_TIP} — both legs contact:* transfers netting zero, bounded by the P9.21 npc:seed stock`);
+}
+
+// ════════════════ P9.27 STREET WAR step three — THE TAKE ════════════════
+// The founder-directed re-sourcing: a job's cash comes off the drawn MARK first and the §7.2 faucet
+// only covers the remainder. The PAYOUT is unchanged, so this is measured as an EMISSION REDUCTION,
+// not a balance change — the interesting number is what share of crime stops being a mint.
+phase('P9.27 street war step three — the take (crime re-sourced off the marks)');
+{
+  const T = RIVALS.TAKE;
+  // A resident funds min(take, POCKET_BPS of pocket). Across the band mix the seed pool is a STOCK
+  // (~the P9.21 figure), so the honest ceiling on how much crime it can fund is that stock's
+  // turnover, not a per-job share — beyond it every job falls back to the faucet.
+  const meanSeed = POPULATION.BANDS.reduce((a, b) => a + b.w * (b.seed[0] + b.seed[1]) / 2, 0)
+    / POPULATION.BANDS.reduce((a, b) => a + b.w, 0);
+  const perJobCap = Math.floor(meanSeed * T.POCKET_BPS / 10000);
+  note('street war', 'THE TAKE — what one mark can fund', `$${fmt(perJobCap)} per job at the mean resident`,
+    `min(take, POCKET_BPS ${T.POCKET_BPS / 100}% of pocket), floor $${T.MIN}. A rich mark funds a whole job; a picked-clean one funds nothing and the faucet pays — so crime NEVER pays less, it just stops being a mint when there is somebody to take it from`);
+  note('street war', 'THE TAKE — emission effect', 'a REDUCTION, bounded by the resident seed stock',
+    `every funded dollar is a TRANSFER (both legs ledgered crime:take, netting zero) that would otherwise have been a crime:<id> FAUCET row. Total funded is bounded by the same metered seed pool P9.21 sizes (~$${fmt(Math.round(POPULATION.TURNOVER.PER_DAY * meanSeed))}/day of replacement), so the take can only ever SHRINK crime's contribution to supply — never widen it`);
+  note('street war', 'REVENGE, with teeth', `atk ×${RIVALS.REVENGE_ATK_MULT}, a revenge ROB takes ${(RIVALS.ROB_RATE_BPS / 100 * RIVALS.REVENGE_CUT_MULT).toFixed(1)}%`,
+    `rob-only (a boosted shakedown would breach its signed ${RIVALS.SHAKEDOWN_RATE_BPS ? RIVALS.SHAKEDOWN_RATE_BPS / 100 : 30}% ceiling) and on the SAME shared per-venue window, so the signed per-venue extraction bound is untouched; the venue clock advances by the same boosted rate, so the redirect stays emission-neutral. Self-limiting: landing the strike records it, settling the debt`);
 }
 
 // ════════════════ P10: THE §10.4 SWEEP — the whole point ════════════════

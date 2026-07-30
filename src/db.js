@@ -4,6 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// What the live driver can actually do, decided ONCE at makeDb (a driver property, not a per-call
+// one). Deliberately NOT a runtime probe: in real Postgres a failed statement aborts the ENCLOSING
+// transaction (25P02), so probing an unsupported feature mid-txn would poison it — the same class
+// the recordRival/recordContact SAVEPOINT lessons cover. `skipLocked` is false under pg-mem, which
+// parses neither SKIP LOCKED nor NOWAIT; callers must keep a fallback that is CORRECT on its own
+// terms (never a silently different outcome — only a different blocking posture).
+export const dbCaps = { skipLocked: false };
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA = fs.readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
 // A fixed key for the boot-time schema advisory lock (any constant bigint — must match across processes).
@@ -187,6 +195,7 @@ export async function makeDb() {
       await boot.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_KEY]).catch(() => {});
       boot.release();
     }
+    dbCaps.skipLocked = true; // real Postgres — see dbCaps
     return pool;
   }
   // (red-team R9 config F2) A production deploy that forgot DATABASE_URL would SILENTLY boot the whole
@@ -194,6 +203,7 @@ export async function makeDb() {
   // with subtly different SQL semantics. Refuse rather than fail open (the JWT/MARKET_SEED posture).
   if (process.env.NODE_ENV === 'production')
     throw new Error('DATABASE_URL must be set in production — refusing to boot on the in-memory pg-mem database (all state would be lost on restart).');
+  dbCaps.skipLocked = false; // pg-mem parses neither SKIP LOCKED nor NOWAIT
   const { newDb } = await import('pg-mem');
   const mem = newDb();
   const { Pool } = mem.adapters.createPg();

@@ -67,7 +67,11 @@ export async function jump(ch, victim, client, h, intent) {
   const eff = (s) => effStat(ch[s], s, h.owned.assets, h.owned.gear);
   const vEff = (s) => effStat(victim[s], s, h.victimOwned.assets, h.victimOwned.gear);
   // BRUISER (skills): the enforcer hits harder — a new modifier on the attack term, sign-off lever
+  // judged BEFORE the roll (so it can carry the hand) and before the strike is RECORDED below
+  // (else this very strike would count against the debt it is settling)
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
   const atk = (eff('muscle') + eff('speed') * 0.5 + (gunObjOf(ch.gun)?.fp || 0) * 0.4 + (rIdx >= 3 ? 5 : 0))
+    * (revenge ? RIVALS.REVENGE_ATK_MULT : 1)
     * pathFx(ch, 'jumpAtk') * skillMult(h, 'bruiser', SKILLS.FX.BRUISER_MULT) * skillMult(h, 'made_man', SKILLS.FX.MADE_MAN_MULT) // PATHS v2 — gun keeps 1.1; the Ledger's soft hands read 0.95
     * masteryFx(h, 'muscle') + Math.random() * 25; // TRADES perk — the bruiser contest-mult precedent
   const def = (vEff('muscle') + vEff('speed') * 0.5 + (gunObjOf(victim.gun)?.fp || 0) * 0.4) + Math.random() * 25;
@@ -114,8 +118,6 @@ export async function jump(ch, victim, client, h, intent) {
                           war_score_them = war_score_them + CASE WHEN id=$2 THEN 1 ELSE 0 END
           WHERE id IN ($1,$2)`, [h.owned.gangId, h.victimOwned.gangId]);
     }
-    // REVENGE TEETH (step two) — judged BEFORE this strike is recorded (else it counts against itself)
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'attack', { from: ch.name, stolen, cb: crates, dmg, hospMs });
     await recordRival(client, victim.account_id, ch, 'jump', { stolen });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
@@ -721,8 +723,11 @@ export async function stealCar(ch, victim, client, h) {
   const val = carVal(car.model_id, car.trim_id);
   const cun = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
   const spd = effStat(ch.speed, 'speed', h.owned.assets, h.owned.gear);
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+  // the revenge hand rides INSIDE the MAX_P clamp — settling a score never beats the signed ceiling
   const p = Number(process.env.CAR_THEFT_P
-    ?? Math.min(T.MAX_P, Math.max(T.MIN_P, T.BASE_P + (cun + spd / 2) / T.STAT_SCALE - Math.sqrt(Math.max(0, val)) / T.ALARM_DIV)));
+    ?? Math.min(T.MAX_P, Math.max(T.MIN_P, (T.BASE_P + (cun + spd / 2) / T.STAT_SCALE - Math.sqrt(Math.max(0, val)) / T.ALARM_DIV)
+      * (revenge ? RIVALS.REVENGE_ATK_MULT : 1))));
   const roll = Math.random();
   await h.rngLog(client, ch.id, `cartheft:${victim.id}`, roll, roll < p ? `stole ${car.model_id} (P ${p.toFixed(3)})` : `caught (P ${p.toFixed(3)})`);
   if (roll < p) {
@@ -735,7 +740,6 @@ export async function stealCar(ch, victim, client, h) {
     h.owned.cars.push({ ...car, character_id: ch.id, race_limit: null, pink_slip: false });
     h.victimOwned.cars = (h.victimOwned.cars || []).filter((c) => c.id !== car.id); // keep the in-memory fleet honest
     await logCarCollect(client, ch.id, car.id); // THE COLLECTION — the sixth car-transfer site
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'car_stolen', { from: ch.name, model: car.model_id });
     await recordRival(client, victim.account_id, ch, 'car_theft', { model: car.model_id });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
@@ -774,10 +778,14 @@ function assertStreetCrime(ch, victim, h, energy) {
 
 // The sneak-thief's contest — cunning + speed/2 both sides (the rob-a-front contest verbatim;
 // deliberately NO skill/mastery stack in step two — a new perk surface is its own review).
-function stealthContest(ch, victim, h) {
+// REVENGE, WITH TEETH (step three): settling a score you are still NET OWED carries the striker's
+// hand — a single multiplicative modifier on the ATTACK only (never the mark's defence), off every
+// audit-locked surface. Self-limiting by construction: landing the strike records it, which settles
+// the debt, so the boost cannot be farmed against the same rival twice without them earning it back.
+function stealthContest(ch, victim, h, revenge = false) {
   const eff = (st) => effStat(ch[st], st, h.owned.assets, h.owned.gear);
   const vEff = (st) => effStat(victim[st], st, h.victimOwned.assets, h.victimOwned.gear);
-  return { atk: eff('cunning') + eff('speed') * 0.5 + Math.random() * 25,
+  return { atk: (eff('cunning') + eff('speed') * 0.5 + Math.random() * 25) * (revenge ? RIVALS.REVENGE_ATK_MULT : 1),
            def: vEff('cunning') + vEff('speed') * 0.5 + Math.random() * 25 };
 }
 
@@ -805,7 +813,8 @@ export async function robTrunk(ch, victim, client, h) {
   if (free <= 0) throw new GameError('cargo', 'Your own trunk is full — where would you even put it?');
   ch.energy = Number(ch.energy) - TR.ENERGY;
   ch.heat = Math.min(100, Number(ch.heat || 0) + TR.HEAT);
-  const { atk, def } = stealthContest(ch, victim, h);
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+  const { atk, def } = stealthContest(ch, victim, h, revenge);
   await h.rngLog(client, ch.id, `trunkrob:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
   if (atk > def) {
     const line = lines[Math.floor(Math.random() * lines.length)];
@@ -821,7 +830,6 @@ export async function robTrunk(ch, victim, client, h) {
     if (h.victimOwned?.cargo) h.victimOwned.cargo[line.good_id] = vLeft;
     // the victim's shield — direct SQL on the LOCKED victim row (outside persist's positional list)
     await client.query('UPDATE characters SET trunk_robbed_at=now() WHERE id=$1', [victim.id]);
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'trunk_robbed', { from: ch.name, good: line.good_id, qty: take });
     await recordRival(client, victim.account_id, ch, 'trunk_rob', { good: line.good_id, qty: take });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
@@ -862,15 +870,17 @@ export async function stealBoat(ch, victim, client, h) {
   const spec = boatOf(boat.kind);
   const cun = effStat(ch.cunning, 'cunning', h.owned.assets, h.owned.gear);
   const spd = effStat(ch.speed, 'speed', h.owned.assets, h.owned.gear);
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+  // the revenge hand rides INSIDE the MAX_P clamp (the stealCar rule) — never beats the ceiling
   const p = Number(process.env.CAR_THEFT_P
-    ?? Math.min(C.MAX_P, Math.max(C.MIN_P, C.BASE_P + (cun + spd / 2) / C.STAT_SCALE - Math.sqrt(Math.max(0, spec?.cost || 0)) / C.ALARM_DIV)));
+    ?? Math.min(C.MAX_P, Math.max(C.MIN_P, (C.BASE_P + (cun + spd / 2) / C.STAT_SCALE - Math.sqrt(Math.max(0, spec?.cost || 0)) / C.ALARM_DIV)
+      * (revenge ? RIVALS.REVENGE_ATK_MULT : 1))));
   const roll = Math.random();
   await h.rngLog(client, ch.id, `boattheft:${victim.id}`, roll, roll < p ? `stole ${boat.kind} (P ${p.toFixed(3)})` : `caught (P ${p.toFixed(3)})`);
   if (roll < p) {
     await client.query('UPDATE boats SET character_id=$2, rendezvous=false WHERE id=$1', [boat.id, ch.id]);
     await client.query('DELETE FROM port_intercepts WHERE boat_id=$1', [boat.id]);
     await client.query('UPDATE characters SET car_stolen_at=now() WHERE id=$1', [victim.id]);
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'boat_stolen', { from: ch.name, kind: boat.kind });
     await recordRival(client, victim.account_id, ch, 'boat_theft', { kind: boat.kind });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);
@@ -903,7 +913,8 @@ export async function sabotage(ch, victim, client, h) {
   if (!targets.length) throw new GameError('nothing', 'They keep no stable worth wrecking.');
   ch.energy = Number(ch.energy) - SB.ENERGY;
   ch.heat = Math.min(100, Number(ch.heat || 0) + SB.HEAT);
-  const { atk, def } = stealthContest(ch, victim, h);
+  const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
+  const { atk, def } = stealthContest(ch, victim, h, revenge);
   await h.rngLog(client, ch.id, `sabotage:${victim.id}`, Math.round(atk * 100) / 100, atk > def ? 'win' : 'loss');
   if (atk > def) {
     const t = targets[Math.floor(Math.random() * targets.length)];
@@ -911,7 +922,6 @@ export async function sabotage(ch, victim, client, h) {
     await client.query(`UPDATE ${t.what === 'racer' ? 'racers' : 'fighters'} SET injured_until=$2 WHERE id=$1`,
       [t.id, new Date(Date.now() + SB.INJURY_MS)]);
     await client.query('UPDATE characters SET sabotaged_at=now() WHERE id=$1', [victim.id]);
-    const revenge = await revengeOwed(client, ch.account_id, victim.account_id);
     await h.notify(client, victim.id, 'sabotaged', { from: ch.name, name: t.name, what: t.what });
     await recordRival(client, victim.account_id, ch, 'sabotage', { name: t.name, what: t.what });
     if (revenge) await bumpHonor(client, ch, RIVALS.REVENGE_HONOR);

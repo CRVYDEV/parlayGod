@@ -1648,7 +1648,7 @@
     if (body.rerolled && body.stats) bits.push(`new build rolled — muscle ${body.stats.muscle} / cunning ${body.stats.cunning} / speed ${body.stats.speed}`);
     if (body.proposedTo) bits.push(`🕊 you offered a sit-down to the ${body.proposedTo} bloodline`);
     if (body.peaceWith) bits.push(`🕊 the feud with ${body.peaceWith} is BURIED — peace`);
-    if (body.success === true) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}` : ''}`);
+    if (body.success === true) bits.push(`${body.approach === 'loud' ? '🔊 loud job' : body.approach === 'quiet' ? '🤫 quiet job' : 'clean job'} — $${fmt(body.take || 0)}${body.rep ? `, +${body.rep} respect` : ''}${body.crates ? `, ${body.crates} crate${body.crates > 1 ? 's' : ''}` : ''}${body.victim ? ` · the mark: ${body.victim}${body.markTook ? ` (took $${fmt(body.markTook)} off them)` : ''}` : ''}`);
     // the §7.8 bust — success frees them and pays; a miss is the guards taking YOU (falls through
     // to the generic BUSTED line below, which is exactly what happened)
     if (body.busts !== undefined && body.success) bits.push(`🔓 sprung them from lockup — +$${fmt(body.reward)} (${body.busts} lifetime bust${body.busts === 1 ? '' : 's'})`);

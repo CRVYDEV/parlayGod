@@ -95,8 +95,27 @@ contracts, vendettas, duels — pointed at a name you now remember).
 - **Residents as marks** — give NPC residents fronts/cars so the asset-crime loop is live in an
   empty alpha (each needs its own recycle-only §10.4 reasoning, the population step-two rule).
 - **Revenge teeth** — a rep/honor bonus for striking a recorded rival (the vendetta 1.5× shape) —
-  a lever with real power, so its own sign-off.
+  a lever with real power, so its own sign-off.  *(step two: honor; step three: real teeth)*
 - **Rival-aware surfaces** — the coach naming your newest rival; the Wire discounting intel on them.
+
+### Step three — BUILT (founder-directed 2026-07-30, explicitly including the transfer)
+
+- **THE TAKE — victim-funded crime.** A job's cash comes off the drawn MARK first; the §7.2 faucet
+  covers only the remainder. The PAYOUT is unchanged, so this re-SOURCES crime rather than retuning
+  it, and it strictly REDUCES emission (the funded share is a transfer, not a mint). Bounded by
+  `TAKE.POCKET_BPS` per job and, base-wide, by the metered resident seed pool.
+  **Marks are NPC residents only** — a real player gets no consent, notification or counterplay from
+  a stranger's crime roll; taking from a player is what the gated PvP asset crimes are for.
+  *Lock posture:* the actor's row is already held, so the debit runs behind `FOR UPDATE SKIP LOCKED`
+  and can never block — a contended mark is skipped and the faucet pays. pg-mem parses neither
+  SKIP LOCKED nor NOWAIT, so the suite runs the plain conditional UPDATE (same accounting, can wait);
+  the no-block property is verified against real Postgres.
+- **Revenge, with teeth.** `REVENGE_ATK_MULT` on the attack of every rival-facing verb, and a revenge
+  ROB takes `REVENGE_CUT_MULT` of the usual cut (rob-only — a boosted shakedown would breach its
+  signed 30%; the venue clock advances by the same boosted rate so the redirect stays neutral).
+- **Resident stables.** Residents field fighters and racers so the PvP boards are live in an empty
+  alpha, listing only stakes they already hold and never listing below the system's own floor.
+  They are excluded from the boxing/stable/races status boards.
 
 ## 5. §10.4 & balance record
 
@@ -106,6 +125,15 @@ curve (the shakedown argument verbatim, at half the rate on the same shared wind
 per-venue extraction BOUND is unchanged). Car theft writes no ledger row and conserves cars by row
 count. Rivals moves nothing. **No new faucet → no new sim probe**; the levers land in
 `RIVALS.*` (rules tail), pinned in test/levers.js, tabled in BALANCE.md.
+
+**Step three.** `crime:take` is a TRANSFER: the mark's leg (negative, counterparty = the thief) and
+the thief's leg (positive, counterparty = the mark) both carry a `character_id`, and `crime:` was
+already in the cash vocabulary — so check (a) reconciles it with **zero `invariants.js` change**, and
+the net effect on supply is a REDUCTION (every funded dollar would otherwise have been a
+`crime:<id>` faucet row). Measured at sim **P9.27**. The revenge cut is the same redirect at a
+higher rate on the same shared per-venue window, with the venue clock advanced by the same rate, so
+it stays emission-neutral. Resident stables move no currency at spawn; their wagers are the audited
+`casino:pvp` taxed transfer, bounded by the stake they hold.
 
 ## 6. Step-one red-team note (2026-07-30, in-build)
 

@@ -629,7 +629,7 @@ export async function boxingLeaderboard(pool, characterId) {
     .filter((x) => x.wins > 0 || x.form > 0).sort((a, b) => b.wins - a.wins || b.form - a.form).slice(0, 15);
   const legend = (await pool.query(
     `SELECT a.boxing_wins, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.boxing_wins > 0 AND NOT a.agent_flag ORDER BY a.boxing_wins DESC LIMIT 15`)).rows // agents excluded from the human status board (F-LOW2)
+      WHERE a.boxing_wins > 0 AND NOT a.agent_flag AND NOT a.npc_flag ORDER BY a.boxing_wins DESC LIMIT 15`)).rows // agents AND residents excluded from the human status board (F-LOW2; a resident fields fighters since step three, so a player LOSING to one must not put scenery on the board)
     .map((r) => ({ manager: r.name, wins: Number(r.boxing_wins), title: boxerLegendOf(r.boxing_wins).name }));
   return { fighters, legend };
 }

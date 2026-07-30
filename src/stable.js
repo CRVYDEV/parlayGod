@@ -394,7 +394,7 @@ export async function stableLeaderboard(pool) {
     .filter((x) => x.wins > 0 || x.form > 0).sort((a, b) => b.wins - a.wins || b.form - a.form).slice(0, 15);
   const legend = (await pool.query(
     `SELECT a.racer_wins, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.racer_wins > 0 AND NOT a.agent_flag ORDER BY a.racer_wins DESC LIMIT 15`)).rows // agents excluded from the human status board
+      WHERE a.racer_wins > 0 AND NOT a.agent_flag AND NOT a.npc_flag ORDER BY a.racer_wins DESC LIMIT 15`)).rows // agents AND residents excluded from the human status board (residents field racers since step three)
     .map((r) => ({ owner: r.name, wins: Number(r.racer_wins), title: racerLegendOf(r.racer_wins).name }));
   return { racers, legend };
 }

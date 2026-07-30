@@ -435,6 +435,6 @@ async function grandPrixInfo(client, ch) {
 export async function raceLeaderboard(pool) {
   const rows = (await pool.query(
     `SELECT a.race_wins, c.name FROM account_persistent a JOIN characters c ON c.account_id=a.account_id AND c.alive
-      WHERE a.race_wins > 0 AND NOT a.agent_flag ORDER BY a.race_wins DESC LIMIT 15`)).rows; // agents excluded from the human status board (F-LOW2, the hitman-rep precedent)
+      WHERE a.race_wins > 0 AND NOT a.agent_flag AND NOT a.npc_flag ORDER BY a.race_wins DESC LIMIT 15`)).rows; // agents AND residents excluded from the human status board (F-LOW2, the hitman-rep precedent)
   return { drivers: rows.map((r) => ({ name: r.name, wins: Number(r.race_wins), rank: raceRankOf(r.race_wins).name })) };
 }

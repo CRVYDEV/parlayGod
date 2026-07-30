@@ -18,7 +18,7 @@ import { cityStanding } from '../src/standing.js';
 import { funnelStats } from '../src/growth.js';
 import { opsOverview } from '../src/ops.js';
 import { runWageEpoch } from '../src/emission.js';
-import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO } from '../src/rules.js';
+import { POPULATION, levelOf, npcBandOf, M3, DUELS, CASINO, BOXING, STABLE } from '../src/rules.js';
 
 const app = await buildServer();
 const pool = app.pool;
@@ -586,6 +586,46 @@ assert.equal(npcBandOf(0.999).id, 'boss', 'the high roll is the boss band');
     if (rb.code === 200 && rb.body.win) mug = rb.body;
   }
   assert(mug && mug.qty >= 1, `the resident's freight is muggable (${JSON.stringify(mug)})`);
+}
+
+// ══════════ STREET WAR step three — the resident's STABLE ══════════
+// Residents field fighters and racers so the PvP boards (the Circuit, the strip) are LIVE in an
+// empty alpha. The listing obeys recycle-only: a resident advertises only a stake they ALREADY
+// HOLD, and one who cannot reach the system's own floor simply DOESN'T LIST — a limit under
+// MIN_STAKE sits in an EMPTY window (`amt >= MIN_STAKE && amt <= limit`) and reads as a dead board.
+{
+  const cS = await pool.connect();
+  try {
+    await cS.query('BEGIN');
+    const rich = await spawnResident(cS, { band: POPULATION.BANDS.find((b) => b.id === 'boss'),
+      marks: { fighter: true, racer: true } });
+    const f = (await cS.query('SELECT * FROM fighters WHERE character_id=$1', [rich.id])).rows[0];
+    const r = (await cS.query('SELECT * FROM racers WHERE character_id=$1', [rich.id])).rows[0];
+    assert(f && r, 'a boss resident fields a fighter and a racer');
+    assert(f.name.includes("'"), `the fighter carries a ring name (${f.name})`);
+    assert(['dog', 'horse'].includes(r.kind), `the racer is a real kind (${r.kind})`);
+    // the stake is covered by their own pocket AND clears the system floor — never an empty window
+    assert.equal(Number(f.bout_limit), Math.min(Math.floor(rich.cash * POPULATION.MARKS.STAKE_BPS / 10000), BOXING.MAX_STAKE),
+      'the bout limit is a share of the pocket they actually hold');
+    assert(Number(f.bout_limit) >= BOXING.MIN_STAKE, 'and clears the circuit floor, so the board is really playable');
+    assert(Number(f.bout_limit) <= Number(rich.cash), 'recycle-only: a resident never advertises more than they hold');
+    assert(Number(r.race_limit) >= STABLE.MIN_STAKE, 'the racer likewise sits in a live window');
+
+    // a resident too poor to cover the floor DOESN'T LIST (rather than listing an untakeable stake)
+    const poor = await spawnResident(cS, { band: POPULATION.BANDS.find((b) => b.id === 'made'),
+      marks: { fighter: true, racer: true } });
+    const pf = (await cS.query('SELECT * FROM fighters WHERE character_id=$1', [poor.id])).rows[0];
+    if (Math.floor(poor.cash * POPULATION.MARKS.STAKE_BPS / 10000) < BOXING.MIN_STAKE)
+      assert.equal(pf.bout_limit, null, 'a resident who cannot cover MIN_STAKE leaves the limit unset — no dead board entry');
+
+    // retirement takes the stable with them — no fighter lingering on a board nobody can collect from
+    await retireResident(cS, rich.id);
+    assert.equal(Number((await cS.query('SELECT COUNT(*) n FROM fighters WHERE character_id=$1', [rich.id])).rows[0].n), 0,
+      'a retired resident leaves no fighter behind');
+    assert.equal(Number((await cS.query('SELECT COUNT(*) n FROM racers WHERE character_id=$1', [rich.id])).rows[0].n), 0,
+      'nor a racer');
+    await cS.query('ROLLBACK');
+  } finally { cS.release(); }
 }
 
 console.log('✅ THE POPULATION passed — residents spawn as real flagged characters on the streets roster '

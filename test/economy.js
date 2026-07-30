@@ -4,9 +4,11 @@
 process.env.EARLY_SELL_TAX_BPS = '0'; // legacy exact-amount swap assertions run surcharge-free (dedicated coverage: chain/emission suites)
 process.env.MOD_KEY = 'test-mod-key'; // Phase 4 emission-pool ops routes are mod-gated
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { runBuyback, mergeLegacyPools } from '../src/worker.js';
-import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, RIVALS, frontTitles, launderRankOf, businessMaxTier } from '../src/rules.js';
+import { CARS, carVal, carMelt, CONSTANTS, BUSINESS_EMPIRE, RIVALS, frontTitles, launderRankOf, businessMaxTier, POPULATION } from '../src/rules.js';
+import { spawnResident } from '../src/population.js';
 
 // ── car catalog integrity (content expansion guard: no dupe ids, well-formed, on-curve) ──
 {
@@ -905,6 +907,109 @@ await pool.query(`UPDATE account_persistent SET agent_flag=true WHERE account_id
 lbL = (await call('GET', '/v1/leaderboard/launderers', { token })).body;
 assert(!lbL.launderers.some((x) => x.name === cidName), 'an agent-flagged launderer is excluded from the board');
 await pool.query(`UPDATE account_persistent SET agent_flag=false WHERE account_id=(SELECT account_id FROM characters WHERE id='${cid}')`);
+
+// ══════════ THE STREET WAR step three — THE TAKE + revenge with teeth ══════════
+// (founder-directed 2026-07-30, explicitly including the transfer). A pulled job's cash now comes
+// off the drawn MARK when there is one to take it from; the §7.2 faucet pays only the remainder.
+// The player's payout is unchanged, so this re-SOURCES crime rather than retuning it — and it
+// strictly REDUCES emission, since the funded share is a transfer instead of a mint.
+{
+  const rowsFor = async (id, like) => Number((await pool.query(
+    `SELECT COALESCE(SUM(amount),0) n FROM transactions WHERE character_id=$1 AND reason LIKE $2`, [id, like])).rows[0].n);
+  // one resident, standing where our man works, so the draw is deterministic
+  await pool.query("DELETE FROM characters WHERE is_npc AND loc='cathedral'");
+  const res = await spawnResident(pool, { band: POPULATION.BANDS.find((b) => b.id === 'boss'), level: 20 });
+  await pool.query("UPDATE characters SET loc='cathedral', cash=1000000 WHERE id=$1", [res.id]);
+  await seed("cash=0, jail_until=NULL, hosp_until=NULL, nerve=200, energy=200, cunning=900, speed=900, loc='cathedral', respect=625000");
+
+  const pullUntilWin = async () => {
+    for (let i = 0; i < 60; i++) {
+      await seed('nerve=200, jail_until=NULL');
+      const rr = await call('POST', '/v1/crimes/customs', { token, body: { approach: 'standard' } });
+      assert.equal(rr.code, 200, `the job resolves (${JSON.stringify(rr.body)})`);
+      if (rr.body.success) return rr.body;
+    }
+    throw new Error('a 900-cunning street never landed a customs job in 60 tries');
+  };
+
+  // (A) a mark who can cover it funds the WHOLE take — a transfer, not a mint
+  const before = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [res.id])).rows[0].cash);
+  const takeRowsBefore = await rowsFor(cid, 'crime:take');
+  const won = await pullUntilWin();
+  assert.equal(won.markTook, won.take, `the mark covered the whole take (${JSON.stringify(won)})`);
+  assert(won.victim && won.victim.length > 0, 'and the job names who it came off');
+  const after = Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [res.id])).rows[0].cash);
+  assert.equal(before - after, won.take, "the mark's pocket is lighter by exactly what was taken");
+  assert.equal(await rowsFor(cid, 'crime:take') - takeRowsBefore, won.take, 'the thief\'s crime:take leg is ledgered');
+  assert.equal(await rowsFor(res.id, 'crime:take'), -won.take, 'the mark\'s leg is the exact negative — the pair NETS ZERO');
+
+  // (B) the POCKET_BPS cap — one job never cleans a mark out
+  await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [res.id, 4000]);
+  const capped = await pullUntilWin();
+  assert.equal(capped.markTook, Math.floor(4000 * RIVALS.TAKE.POCKET_BPS / 10000),
+    `a job takes at most POCKET_BPS of the pocket (${JSON.stringify(capped)})`);
+  assert(capped.markTook < capped.take, 'and the §7.2 faucet covers the remainder — the payout is unchanged');
+  assert.equal(Number((await pool.query('SELECT cash FROM characters WHERE id=$1', [res.id])).rows[0].cash),
+    4000 - capped.markTook, 'the mark keeps the rest');
+
+  // (C) a mark with nothing worth taking — the faucet pays it all, no dust transfer
+  await pool.query('UPDATE characters SET cash=$2 WHERE id=$1', [res.id, 10]);
+  const takeBefore = await rowsFor(cid, 'crime:take');
+  const dust = await pullUntilWin();
+  assert.equal(dust.markTook, 0, 'below RIVALS.TAKE.MIN nothing moves — a broke mark funds nothing');
+  assert.equal(await rowsFor(cid, 'crime:take'), takeBefore, 'and no dust crime:take row is written');
+
+  // (D) NOBODY in the district — the faucet pays, exactly as before step three
+  await pool.query("UPDATE characters SET loc='neon' WHERE id=$1", [res.id]);
+  const alone = await pullUntilWin();
+  assert.equal(alone.markTook, 0, 'an empty street funds nothing');
+  assert(alone.take > 0, 'but the job still pays its signed §7.2 band');
+  await pool.query('DELETE FROM characters WHERE id=$1', [res.id]);
+}
+
+// REVENGE, WITH TEETH — a strike settling a debt you are still NET OWED takes a bigger bite. The
+// ROB rate goes 15% → 22.5% (still under the shakedown's signed 30%, on the same shared window),
+// and the venue clock must advance by that SAME rate or the redirect stops being emission-neutral.
+{
+  await seed("cash=1000000, jail_until=NULL, hosp_until=NULL, energy=200, heat=0, muscle=5, cunning=5, speed=5, loc='cathedral', respect=625000");
+  await seed2("cash=1000000, jail_until=NULL, hosp_until=NULL, energy=200, heat=0, muscle=3000, cunning=3000, speed=3000, loc='cathedral', respect=625000");
+  // the mark needs a front of their own — earlier blocks may have taken theirs in a buyout
+  if (!(await pool.query('SELECT id FROM businesses WHERE character_id=$1 LIMIT 1', [cid])).rows[0])
+    await call('POST', '/v1/business/laundromat/buy', { token });
+  const front = (await pool.query('SELECT id FROM businesses WHERE character_id=$1 LIMIT 1', [cid])).rows[0];
+  assert(front, 'the mark runs a front to rob');
+  const robCut = async () => {
+    await pool.query('UPDATE businesses SET shakedown_at=NULL, last_collect_at=now() - interval \'20 hours\' WHERE id=$1', [front.id]);
+    await seed2('energy=200, jail_until=NULL, hosp_until=NULL');
+    const rr = await call('POST', `/v1/business/${front.id}/rob`, { token: t2 });
+    assert.equal(rr.code, 200, `the robbery resolves (${JSON.stringify(rr.body)})`);
+    assert(rr.body.win, 'a 3000-stat thief takes it');
+    return rr.body;
+  };
+  // no debt yet — the plain 15%
+  await pool.query('DELETE FROM rival_events');
+  const plain = await robCut();
+  assert(!plain.revenge, 'no debt owed, so no revenge hand');
+  // now the OWNER has wronged them: the payback robbery takes the bigger bite
+  const accOf = async (id) => (await pool.query('SELECT account_id FROM characters WHERE id=$1', [id])).rows[0].account_id;
+  // three, not one: the `plain` robbery above RECORDED itself against the owner, and the debt has
+  // to still be NET OWED after that (strikes-against-me > mine-against-them) for the hand to carry
+  for (let i = 0; i < 3; i++)
+    await pool.query('INSERT INTO rival_events (id, victim_account, aggressor_account, kind, detail) VALUES ($1,$2,$3,$4,$5)',
+      [crypto.randomUUID(), await accOf(c2), await accOf(cid), 'jump', JSON.stringify({})]);
+  const avenged = await robCut();
+  assert(avenged.revenge, 'the ledger says they are owed');
+  const ratio = avenged.cut / plain.cut;
+  assert(Math.abs(ratio - RIVALS.REVENGE_CUT_MULT) < 0.02,
+    `a revenge robbery takes REVENGE_CUT_MULT of the usual cut (got ${ratio.toFixed(3)}, want ${RIVALS.REVENGE_CUT_MULT})`);
+  // the clock moved by the SAME boosted rate — the owner keeps exactly the untaken share
+  const left = (await pool.query('SELECT last_collect_at FROM businesses WHERE id=$1', [front.id])).rows[0].last_collect_at;
+  const keptMs = Date.now() - new Date(left).getTime();
+  const wantKept = 20 * 3600 * 1000 * (1 - RIVALS.ROB_RATE_BPS / 10000 * RIVALS.REVENGE_CUT_MULT);
+  assert(Math.abs(keptMs - wantKept) / wantKept < 0.05,
+    `the venue clock advanced by the SAME boosted rate — emission-neutral (kept ${Math.round(keptMs / 3600000)}h, want ${Math.round(wantKept / 3600000)}h)`);
+  await pool.query('DELETE FROM rival_events');
+}
 
 // (G) §10.4 — the vocabulary stays closed with business:spec (omr) + takeover/buyout (cash) in the mix
 const inv3 = await runLedgerInvariants(pool, { alert: false });
