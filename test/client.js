@@ -243,6 +243,8 @@ const NOT_API = new Set([
   'fx',         // cineFor()'s own spec — which flash/shake to play, never sent anywhere
   'no',         // ask()'s decline-button label
   'placeholder',// askNum()'s input placeholder
+  'id',         // the milestone-TIPS registry key (localStorage suffix, client-internal)
+  'tab',        // TIPS jump targets — setTab() destinations, never sent to the server
 ]);
 // `field: 'value'` (deck bodies, JS objects) and `"field":"value"` (data-body attributes).
 const literals = [];

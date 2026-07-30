@@ -445,6 +445,24 @@
   #tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background .2s; }
   #tour-dots i.on { background: var(--neon); }
   .ghostbtn { opacity: .55; }
+  /* FIRST-VISIT SYSTEM INTROS — a one-time "what this place is" banner per tab. #introwrap is the
+     first child of #tabbodies but OUTSIDE the per-tab divs, so a WS-driven re-render can't
+     resurrect a dismissed card mid-visit (placement rationale at the markup). */
+  #introwrap:empty { display: none; }
+  .intro-card { display: flex; gap: 12px; align-items: center; margin: -6px 0 14px; padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--neon) 35%, transparent); border-radius: var(--r-lg);
+    background: linear-gradient(180deg, var(--panel2), var(--panel)); }
+  .intro-card img { width: 130px; height: 74px; object-fit: cover; border-radius: 6px; flex: none; }
+  .intro-card .t2 { color: var(--neon); letter-spacing: 2px; font-size: 12.5px; }
+  .intro-card p { margin: 3px 0 0; font-size: 13px; color: var(--ink); line-height: 1.45; }
+  @media (max-width: 760px) { .intro-card { flex-wrap: wrap; } .intro-card img { width: 84px; height: 56px; } }
+  /* THE SPOTLIGHT — the coach's "take me there" lands on the exact control, scrolled + lit. The
+     outline persists (reduced-motion still sees WHERE), only the breathing is motion. */
+  .spotlit { outline: 2px solid var(--neon); box-shadow: 0 0 18px 2px var(--neon-soft);
+    border-radius: 8px; animation: coachPulse 1.4s ease-in-out 4; }
+  /* MILESTONE TIPS — the one-time illustrated explainer that fires the first time something
+     happens TO you (first lockup, first hospital stay, heat climbing, going WANTED). */
+  .tip-art { width: 100%; height: 130px; object-fit: cover; border-radius: 6px; margin-bottom: 10px; filter: saturate(.85); }
   @media (max-width: 760px) { #tour-art { height: 130px; } #tour-body { min-height: 190px; } }
   /* the coach's nav pulse — the button the ▸ coach line points at breathes so "take me there" has a
      visible destination even if the banner scrolled away (killed wholesale by the reduced-motion switch) */
@@ -987,7 +1005,11 @@
       <div id="grouprail"></div>
       <div id="tabs"></div>
       <div id="tabart" class="hidden"><span></span></div>
-      <div id="tabbodies"></div>
+      <!-- #introwrap lives INSIDE #tabbodies (first child) but OUTSIDE the per-tab divs: the
+           first-visit card counts as the screen's own content (it explains the screen you just
+           tapped), while renderers — which rewrite only their #tab-<id> — can never resurrect a
+           dismissed card mid-visit. -->
+      <div id="tabbodies"><div id="introwrap"></div></div>
     </div>
 
     <div class="panel" id="wirepanel">
@@ -2365,7 +2387,7 @@
       document.body.dataset.mood = danger ? 'danger' : safe ? 'safe' : '';
       const hr = (me.city && typeof me.city.hour === 'number') ? me.city.hour : new Date().getUTCHours();
       document.body.dataset.tod = hr < 5 ? 'night' : hr < 8 ? 'dawn' : hr < 18 ? 'day' : hr < 21 ? 'dusk' : 'night'; }
-    if (me.coach) { const cg = $('#coach-go'); if (cg) cg.onclick = () => setTab(me.coach.tab); }
+    if (me.coach) { const cg = $('#coach-go'); if (cg) cg.onclick = () => { setTab(me.coach.tab); spotlight(SPOT[me.coach.tab]); }; }
     { const rr = $('#reroll-go'); if (rr) rr.onclick = () => act('POST', '/v1/character/reroll', {}).then(() => refresh()); }
     // a GHOST account lives in this browser only — the claim card upgrades it in place (same
     // account row, same street, §4 guest→provider) so a lost device doesn't mean a lost life
@@ -2400,6 +2422,46 @@
         else toast(r.body?.message || r.body?.error, true);
       };
     } else if (claim) claim.innerHTML = '';
+    checkTips(me);
+  }
+
+  // ── MILESTONE TIPS — one-time explainers for the first time something happens TO you.
+  // The tour teaches the city before you've lived it; these fire at the moment a lesson actually
+  // lands (your first lockup, your first hospital stay, heat climbing, a WANTED poster, a fat
+  // unbanked pocket). Each shows ONCE per browser, at most one per render, and never over the
+  // tour or another open dialog — a lesson delivered on top of a lesson teaches neither.
+  const TIPS = [
+    { id: 'jail', when: (m) => m.jailSeconds > 0, art: 'interior-pen', tab: 'pen',
+      title: 'YOUR FIRST STRETCH', body: 'Lockup is a place, not a timeout. Work the yard for cash and good behaviour, buy protection, bribe the guard — or plan something dumber with the other inmates. The Pen screen is open while you\'re inside.' },
+    { id: 'hosp', when: (m) => m.hospSeconds > 0, art: 'npc-doc', tab: null,
+      title: 'THE DOC\'S CARE', body: 'You\'re healing — and that\'s PROTECTION, not prison. Nobody can touch you in here, and you can still pull jobs, trade and bank. Only fighting is off until you\'re back on your feet.' },
+    { id: 'heat', when: (m) => Number(m.heat) >= 30, art: 'interior-law', tab: 'law',
+      title: 'THE BUREAU IS WATCHING', body: 'Heat feeds a federal case: past 60 they raid, and a long file becomes a RICO indictment. Lay low at the Kitchen when it climbs — and check The Law screen to read your rap sheet before it reads you.' },
+    { id: 'wanted', when: (m) => !!m.wanted, art: 'card-wanted', tab: 'loans',
+      title: 'YOU\'RE WANTED', body: 'Your name is on a poster: family protection is void and bounty hunters roll for you every hour. Go to ground until it lapses — or square your name at the Shylock and walk clean.' },
+    { id: 'bank', when: (m) => m.cash >= 10000 && !m.bank, art: 'interior-streets', tab: null,
+      title: 'THAT POCKET IS LOOTABLE', body: 'A killer takes a cut of what you CARRY — pocket cash and deposits still in transit. The bank on the Streets screen is your vault: deposits clear in a couple of hours, and cleared money can\'t be looted.' },
+  ];
+  function checkTips(m) {
+    if (!m) return;
+    if (!localStorage.getItem('omerta_tour2')) return;   // the tour goes first
+    // never stack on an OPEN dialog — the five static .modal-bg wrappers (tour, death, wallet
+    // picker, glossary, phone) live in the DOM permanently behind .hidden, so a bare .modal-bg
+    // query matches always and would silence every tip forever
+    if (document.querySelector('.modal-bg:not(.hidden)')) return;
+    for (const t of TIPS) {
+      if (localStorage.getItem('omerta_tip_' + t.id) || !t.when(m)) continue;
+      localStorage.setItem('omerta_tip_' + t.id, '1');   // stored on SHOW — a dismissed lesson never nags
+      const { bg, close } = dialog(`<img class="tip-art" alt="" src="/art/${t.art}.jpg">
+        <h2>${esc(t.title)}</h2><p class="dim" style="white-space:pre-line">${esc(t.body)}</p>
+        <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+          ${t.tab ? '<button class="act prime" data-tipgo>show me →</button>' : ''}
+          <button class="act" data-tipok>got it</button></div>`, { wide: true });
+      bg.querySelector('[data-tipok]').onclick = close;
+      const go = bg.querySelector('[data-tipgo]');
+      if (go) go.onclick = () => { close(); setTab(t.tab); spotlight(SPOT[t.tab]); };
+      break;                                             // at most one lesson per render
+    }
   }
 
   // ── tabs ──
@@ -2537,6 +2599,60 @@
     garage: renderGarage, empire: renderEmpire, speakeasy: renderSpeakeasy, boxing: renderBoxing,
     scores: renderScores, loans: renderLoans, portfolio: renderPortfolio, estate: renderEstate,
     life: renderLife, pen: renderPen, wire: renderWire, store: renderStore, races: renderRaces, port: renderPort, stable: renderStable };
+  // ── FIRST-VISIT SYSTEM INTROS — the tutorial, scaled across the whole city: the first time a
+  // player opens a system they get ONE illustrated sentence on what it is and what to do first.
+  // Dismiss is remembered per tab. Prose is English like all game prose (the i18n chrome rule).
+  const TAB_INTRO = {
+    city: 'The living city: today\'s events, the weather that moves goods prices (the arbitrage map), rival NPC cartels to raid, and the monument the whole server is building. Check the forecast — plan around it.',
+    kitchen: 'The drug game: buy makings, cook a batch, deal it on the corner. Deals draw heat, heat draws the Law — lay low when it climbs. Hire crew and they sell for you while you sleep.',
+    empire: 'Legit fronts that farm cash while you\'re away. They cost upkeep, rivals can shake them down — and if you\'re killed, your killer can take one. Passive is not the same as safe.',
+    scores: 'The big jobs: your solo Score, crew heists (crew up with real players — or rat), and smuggling convoys anyone on the road can ambush. Start with the solo Score, crew up at level 8.',
+    market: 'Player-to-player trade: auction cars, buy and sell goods (pickup is district-pinned — you go to the dock), post buy orders. Prices are set by people, so the deals are real.',
+    port: 'Contraband by sea: buy a boat, run a route, slip the Coast Guard. Faster boats and escorts beat interdiction; repeat the same lane and they learn it. Sell the boat back anytime.',
+    den: 'The house games — dice, numbers, cards, the track. CASH only, entertainment-priced: the house keeps an edge, so play for the thrill, not the rent. Back-room games are against real players.',
+    speakeasy: 'Own the district\'s nightclub: it farms cash and it\'s where the city is SEEN. Buy rounds at rivals\' clubs to build renown; a hot club draws Prohibition raids.',
+    boxing: 'Sign a fighter, train them, stake them against other managers — or the house card. The crowd bets your main events. Your fighters die with your street; your manager legend doesn\'t.',
+    races: 'Your garage is a stable: tune a car, race the circuit, wager against rivals — or race for pink slips (winner takes the car). NOS is for underdogs.',
+    stable: 'Own the dogs and the ponies: buy, train, race the circuit, breed champions, and run them in the town\'s daily card where everyone bets.',
+    pvp: 'Wet work: contracts on marks, hunting, duels, and your own defenses. Killing is contract-driven — the pot pays, loot is the tip. Check YOUR DEFENSES before you make enemies.',
+    loans: 'The Shylock: lend at your own rates (secured by a car if you\'re smart), or borrow — and understand that defaulting brands you a welsher and puts hunters on you.',
+    law: 'Your RICO case: heat feeds the meter, the meter becomes an indictment, an indictment becomes a courtroom. Bribe, retain a lawyer, or flip on a rival — each has a price.',
+    pen: 'Lockup is a place, not a timeout: work the yard, buy protection, bribe the guard, join a crew — or go over the wall and live wanted.',
+    wire: 'Information is a weapon: tap rivals to see what they hold, sweep your own lines, buy the dirt. Everything here is paid in $OMR — knowing is never free.',
+    family: 'Nobody survives alone: a family means turf, a shared treasury, wars, territory rackets, and a seat at the Commission. Join one, or found your own.',
+    portfolio: 'Going legit: the token exchange, staking, the Street Wage, and the RWA book that survives your death. This is where street money becomes generational.',
+    estate: 'The compound: a $OMR monument to your bloodline — tiers, wings, staff, galas, the auction block. Pure status, survives death, and status is the point.',
+    store: 'Real-money support: revives, passes, cosmetics — never power. A skilled free player still tops every board; spending here funds the prize pools.',
+    life: 'Who you are and who you know: skills, the Trades, your Path, and the six fixtures of the Underworld — earn their trust and the whole city gets cheaper.',
+  };
+  function renderIntro(id) {
+    const w = $('#introwrap'); if (!w) return;
+    const it = TAB_INTRO[id];
+    if (!it || localStorage.getItem('omerta_seen_' + id)) { w.innerHTML = ''; return; }
+    w.innerHTML = `<div class="intro-card"><img alt="" src="/art/${TAB_ART[id] || 'interior-streets'}.jpg">
+      <div style="flex:1;min-width:180px"><span class="t2">FIRST TIME HERE</span><p>${it}</p></div>
+      <button class="act" id="intro-got">got it</button></div>`;
+    w.querySelector('#intro-got').onclick = () => { localStorage.setItem('omerta_seen_' + id, '1'); w.innerHTML = ''; };
+  }
+  // ── THE SPOTLIGHT — "take me there" should land on the CONTROL, not just the right screen.
+  // Per-tab: the one control a coached newcomer is most likely being sent to. A missing selector
+  // is a clean no-op (the tab itself was the destination).
+  const SPOT = {
+    streets: '.verbrow .prime', garage: '[data-do="POST /v1/garage/boost"]',
+    start: '[data-obclaim], [data-obgo]', family: '#fam-found, [data-joingang], [data-join]',
+    portfolio: '#wal-link, #wallet-connect', life: '[data-learn]', pen: '[data-do="POST /v1/pen/work"]',
+  };
+  function spotlight(sel) {
+    if (!sel) return;
+    setTimeout(() => {
+      const scoped = sel.split(',').map((x) => `#tab-${currentTab} ${x.trim()}`).join(', ');
+      const el = document.querySelector(scoped) || document.querySelector(sel);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: REDUCED ? 'auto' : 'smooth' });
+      el.classList.add('spotlit');
+      setTimeout(() => el.classList.remove('spotlit'), 6500);
+    }, 700);
+  }
   let currentTab = 'streets';
   function setTab(id) {
     // a deliberate jump to a screen simple mode hides (a coach hint, a checklist task) opens the whole city
@@ -2565,6 +2681,7 @@
     document.body.dataset.group = grp;
     const bn = $('#bnav');
     if (bn) for (const b of bn.children) b.classList.toggle('on', groupOf(b.dataset.go) === grp);
+    renderIntro(id);   // the one-time "first time here" banner (outside the tab body — re-render-proof)
     RENDERERS[id]?.();
   }
   // re-render the OPEN tab (debounced) when live state changes — so a board a player is staring at
