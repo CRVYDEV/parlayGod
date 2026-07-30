@@ -650,3 +650,64 @@ export async function bondCalldata(pool, accountId, nonce) {
     deadline: Number(q.deadline), // the client can warn if the quote has expired
   };
 }
+
+// ══════════ THE ORACLE KEEPER WATCHDOG (AUDIT-oracle.md's one open flag) ══════════
+// The TWAP oracle only moves when someone pokes `update()`, and the keeper doing the poking is an
+// operational dependency the repo had NO monitor for — a silent keeper halt is indistinguishable
+// from low demand right up until bonds start refusing (staleness/rebaseline), and a keeper outage
+// is exactly the F2 attack window. The backup watchdog (`archiverHealth` → `alertDrift`, latched
+// per episode) is the precedent; this is its chain-side twin. Split like `dbhealth.js`: a PURE
+// classifier the suite can exercise exhaustively + thin RPC plumbing that resolves the oracle
+// address FROM the bond contract's own `oracle()` getter (no new env — one less thing to drift).
+//
+// Alert BEFORE the product breaks: the oracle discards a window past PERIOD × MAX_WINDOW_MULT (4)
+// and `maxOracleAge` typically sits near 2× PERIOD, so `ORACLE_LATE_MULT` (2) flags the keeper as
+// late while bonding still works — lead time, not a post-mortem.
+export const ORACLE_LATE_MULT = 2;
+// States (each earning its place, the archiverHealth discipline):
+//   dormant     — no bond chain configured / wrong chain: nothing to watch, never alert
+//   unset       — the bond has NO oracle set: bonding is refusing every quote, and it is config
+//   ok          — priceCeiling() answers and the keeper poked within ORACLE_LATE_MULT × PERIOD
+//   keeper-late — priceCeiling() still answers but the last poke is overdue: the keeper has halted
+//                 and bonding WILL start refusing when staleness bites — the alarm with lead time
+//   down        — priceCeiling() reverting (unset/stale/rebaselined/zero average): bonding is
+//                 refusing every quote RIGHT NOW
+//   unreachable — the RPC errored: not knowing is not the same as broken (never alert on it here;
+//                 a persistently dead RPC already fails the chain sync loudly)
+export function classifyOracleHealth({ oracleAddr, periodS, lastUpdateS, ceilingOk, nowS = Math.floor(Date.now() / 1000) }) {
+  if (!oracleAddr || /^0x0{40}$/i.test(oracleAddr)) return { state: 'unset', note: 'the bond contract has no oracle set — every bond quote is refused' };
+  const age = Math.max(0, nowS - Number(lastUpdateS));
+  const lateAfter = Number(periodS) * ORACLE_LATE_MULT;
+  const base = { oracleAddr, periodS: Number(periodS), ageS: age, lateAfterS: lateAfter };
+  if (!ceilingOk) return { ...base, state: 'down', note: 'priceCeiling() is reverting — bonding is refusing every quote right now' };
+  if (age > lateAfter) return { ...base, state: 'keeper-late', note: `the keeper has not poked update() in ${age}s (> ${lateAfter}s) — bonding still works but will refuse when staleness bites` };
+  return { ...base, state: 'ok' };
+}
+export async function bondOracleHealth() {
+  if (!process.env.CHAIN_RPC_URL || !process.env.OMERTA_BOND_ADDRESS || !isAddress(process.env.OMERTA_BOND_ADDRESS)) return { state: 'dormant' };
+  try {
+    const { createPublicClient, http } = await import('viem');
+    const client = createPublicClient({ transport: http(process.env.CHAIN_RPC_URL) });
+    // the wrong-chain guard (the makeBondPriceReader posture): a reading off a colliding deploy on
+    // another chain is worse than none, because it looks authoritative
+    if (process.env.CHAIN_ID && Number(process.env.CHAIN_ID) !== Number(await client.getChainId())) return { state: 'dormant' };
+    const bond = getAddress(process.env.OMERTA_BOND_ADDRESS);
+    const bondAbi = [
+      { type: 'function', name: 'oracle', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+      { type: 'function', name: 'priceCeiling', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }, { type: 'uint256' }] },
+    ];
+    const oracleAddr = await client.readContract({ address: bond, abi: bondAbi, functionName: 'oracle' });
+    if (!oracleAddr || /^0x0{40}$/i.test(oracleAddr)) return classifyOracleHealth({ oracleAddr });
+    const oAbi = [
+      { type: 'function', name: 'PERIOD', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint32' }] },
+      { type: 'function', name: 'lastUpdate', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+    ];
+    const [periodS, lastUpdateS] = await Promise.all([
+      client.readContract({ address: oracleAddr, abi: oAbi, functionName: 'PERIOD' }),
+      client.readContract({ address: oracleAddr, abi: oAbi, functionName: 'lastUpdate' }),
+    ]);
+    let ceilingOk = true;
+    try { await client.readContract({ address: bond, abi: bondAbi, functionName: 'priceCeiling' }); } catch { ceilingOk = false; }
+    return classifyOracleHealth({ oracleAddr, periodS, lastUpdateS, ceilingOk });
+  } catch (e) { return { state: 'unreachable', note: e.message }; }
+}
