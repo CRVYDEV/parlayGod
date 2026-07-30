@@ -2250,6 +2250,9 @@
     { art: 'interior-legit', title: 'YOUR MONEY', body:
       `<p><b>Pocket cash gets jumped.</b> Bank it — deposits ride "in transit" for a couple of hours before they're safe, so bank early, not on the way to a fight.</p>
        <p class="dim"><b style="color:var(--neon)">$OMR</b> is the token — earned by playing well, spent on the serious things, and losable if you get whacked holding it loose. Staked or vaulted is safe harbour.</p>` },
+    { art: 'interior-trade', title: 'THE FREIGHT GAME', body:
+      `<p><b>Trade goods are the city's oldest hustle</b> — every district posts its own prices, fresh each day. Buy gin where it's cheap, drive across town, sell it where it's rich. The spread is your margin.</p>
+       <p class="dim">Start small on the Streets (the Trade Goods drawer shows each good's cheapest and richest district). Scale up later: <b>convoys</b> haul in bulk, <b>boats</b> run contraband, and the <b>Trade Winds</b> board on The City maps the whole day's spread.</p>` },
     { art: 'card-whacked', title: 'DEATH IS REAL', body:
       `<p>Another player can end your street — for good. But your <b style="color:var(--neon)">account</b> survives: prestige, $OMR, your legit portfolio and estate pass to your <b>heir</b>, who rises with the family name.</p>
        <p class="dim">Shields exist — the safehouse, a bodyguard, revive insurance. None are forever. Play like it counts.</p>` },
@@ -3440,6 +3443,8 @@
             <div class="d">Crime runs on <b>nerve</b>; the gym on <b>energy</b>. Every job: case it (quiet), do it, or go loud (bigger, hotter).</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-legit.jpg"><span class="t">Your Money</span>
             <div class="d">Pocket cash gets jumped — <b>bank it</b> (deposits clear after a couple hours). $OMR is the token; staked is safe harbour.</div></div>
+          <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-trade.jpg"><span class="t">The Freight Game</span>
+            <div class="d">Every district posts its own goods prices daily. <b>Buy cheap, haul, sell rich</b> — the Trade Goods drawer on the Streets shows each good's spread; convoys and boats move it in bulk.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/card-whacked.jpg"><span class="t">Death Is Real</span>
             <div class="d">Your street can be killed for good. Your <b>account</b> — prestige, $OMR, portfolio, estate — survives to your heir.</div></div>
           <div class="card"><img class="ico wide" loading="lazy" alt="" src="/art/interior-family.jpg"><span class="t">The Family</span>
@@ -3703,10 +3708,30 @@
     // Trade goods — buy at the district spot price, carry weight in the trunk, sell high elsewhere.
     // This is the on-ramp for the Black Market goods trade AND smuggling convoys (both need a stocked trunk).
     const cargo = me?.cargo || {};
+    // THE FREIGHT GAME (task #309, founder: trade goods as a core theme). Every good card carries
+    // its own arbitrage read — where it's cheapest, where it's richest, the spread — computed from
+    // the SERVER's own per-district price board (the Trade Winds derivation, per GOOD instead of
+    // per district; nothing re-derives game math, it just sorts what /v1/market/prices returned).
+    const allPrices = prices.goods || {};
+    const goodIntel = (id) => {
+      const rows = Object.entries(allPrices).map(([d, m]) => [d, Number(m?.[id])]).filter(([, p]) => p > 0);
+      if (rows.length < 2) return null;
+      rows.sort((a, b) => a[1] - b[1]);
+      const [lo, hi] = [rows[0], rows[rows.length - 1]];
+      return { lo, hi, pct: Math.round((hi[1] / lo[1] - 1) * 100) };
+    };
+    // the day's best play: the single widest-spread good — the hero card names it
+    const bestPlay = (rules?.goods || []).map((g) => ({ g, i: goodIntel(g.id) }))
+      .filter((x) => x.i).sort((a, b) => b.i.pct - a.i.pct)[0];
     const goodsCards = (rules?.goods || []).map((g) => {
       const price = spot[g.id], held = cargo[g.id] || 0;
-      return `<div class="card">${ico('good', g.id)}<span class="t">${g.name}</span>
-        <div class="d">spot here: $${price != null ? fmt(price) : '—'} · in trunk: ${held}</div>
+      const i = goodIntel(g.id);
+      const here = me?.loc;
+      const flag = i && here === i.lo[0] ? '<span class="chip good">CHEAPEST HERE — buy</span>'
+        : i && here === i.hi[0] ? '<span class="chip" style="border-color:var(--gold,#c9a227);color:var(--gold,#c9a227)">RICHEST HERE — sell</span>' : '';
+      return `<div class="card"><img class="ico wide" loading="lazy" alt="" src="/v1/art/good/${g.id}"><span class="t">${g.name}</span> ${flag}
+        <div class="d">spot here: <b>$${price != null ? fmt(price) : '—'}</b> · in trunk: ${held}</div>
+        ${i ? `<div class="d" style="font-size:11.5px;color:var(--dim)">cheapest: ${i.lo[0]} $${fmt(i.lo[1])} · richest: ${i.hi[0]} $${fmt(i.hi[1])} · <b>+${i.pct}%</b> spread</div>` : ''}
         <input data-gd="${g.id}" placeholder="qty" size="5">
         <button class="act" data-gdbuy="${g.id}">buy</button>
         <button class="act" data-gdsell="${g.id}"${held ? '' : ' disabled'}>sell</button></div>`;
@@ -3788,8 +3813,16 @@
         <div class="d" style="margin-bottom:4px"><b>Core stats</b> — muscle powers fights, cunning powers schemes, speed powers wheels:</div>
         <div>${train}</div>
         ${regimenBlock}`)}
-      ${sect('streets-goods', 'Trade Goods', 'buy low here, haul it, sell high (feeds the Black Market &amp; convoys)', `
-        <div class="d" style="color:var(--dim);font-size:12px;margin-bottom:4px">🚚 your trunk holds <b>${me.cargoCap ?? 0}</b> weight of cargo. Your <b>cars</b> are for muscle &amp; melt value — to <b>haul more</b>, buy a bigger set of <b>Wheels</b> (a truck / muscle car) in <b>The Empire ▸ Assets</b>.</div>
+      ${sect('streets-goods', 'Trade Goods — the Freight Game', 'buy low, haul it, sell high (feeds the Black Market, convoys &amp; the Port)', `
+        <div class="card">
+          <img class="ico wide" loading="lazy" alt="" src="/art/interior-trade.jpg">
+          <span class="t">THE FREIGHT GAME</span>
+          <div class="d">Every district posts its own prices, fresh each day. The whole racket in one line:
+          <b>buy where it's cheap, travel, sell where it's rich</b> — the spread is your margin, your trunk is your ceiling.
+          ${bestPlay ? `Today's best board: <b>${bestPlay.g.name}</b> — ${bestPlay.i.lo[0]} $${fmt(bestPlay.i.lo[1])} → ${bestPlay.i.hi[0]} $${fmt(bestPlay.i.hi[1])} (<b>+${bestPlay.i.pct}%</b>).` : ''}
+          Bulk players move the same freight by <b>convoy</b> (Big Scores) and by <b>boat</b> (the Port).</div>
+        </div>
+        <div class="d" style="color:var(--dim);font-size:12px;margin:4px 0">🚚 your trunk holds <b>${me.cargoCap ?? 0}</b> weight of cargo. Your <b>cars</b> are for muscle &amp; melt value — to <b>haul more</b>, buy a bigger set of <b>Wheels</b> (a truck / muscle car) in <b>The Empire ▸ Assets</b>.</div>
         <div class="grid">${goodsCards}</div>`)}
       ${sect('streets-second', 'Your Second', `named muscle who rides along on jobs, takes ${(sq.cutBps || 500) / 100}% of the take… and can DIE for good`, soldierBlock, (sq.roster || []).length > 0)}`;
     wireSects(t);

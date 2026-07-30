@@ -6641,3 +6641,24 @@ layer can never break the game; whether the sounds FEEL right needs a person wit
 founder should listen and dial (`master.gain` 0.28 + the per-sound gains are the knobs, all in the
 SOUNDS table). Deferred: per-game flavor (dice rattle at the den, engine notes at the races) — pure
 vocabulary adds once the base palette is approved.
+
+**THE FREIGHT GAME (task #309, founder: "generate good images for the 'Trade Goods' section … it
+needs to be integrated as a more core theme and reserved a section of onboarding and tutorial").**
+Three legs, all client/presentation — zero mechanics touched, §10.4 untouched. **(1) Art** — one new
+generated plate `interior-trade` (a dockside freight warehouse: crate stacks, a loaded hand truck, a
+truck backed to the dock, water beyond — approved on the contact sheet first roll; lifetime art spend
+$10.52 of the $12 cap), and the 10 EXISTING good still-lifes promoted from 74px `ico` squares to wide
+`ico wide` scene strips on their cards. **(2) The core theme** — the Streets drawer became **"Trade
+Goods — the Freight Game"**: a hero card (the plate + the loop in one line + **today's best board** —
+the single widest-spread good with its cheapest→richest route and %), and EVERY good card now carries
+its own arbitrage read — cheapest district + price, richest + price, the spread %, and a CHEAPEST
+HERE — buy / RICHEST HERE — sell flag when you're standing on the extreme. All computed by SORTING
+the server's own `/v1/market/prices` district×good matrix (the City Trade Winds derivation, per GOOD
+instead of per district — nothing re-derives game math). **(3) Onboarding** — the tour gained an 8th
+step, THE FREIGHT GAME (between YOUR MONEY and DEATH IS REAL — replayable from the glossary/primer,
+so existing testers can reach it), and the Start Here "How the city works" primer gained a seventh
+card. Chromium-probed end-to-end: the tour shows the freight step, the hero names the day's best
+play, all 10 good cards carry spread intel, zero page errors + zero failed art requests; mobile
+64/64; wiring/mirror green. The trade loop was already pushed by the coach's trade-winds rung, the
+Career's so_trade task, and the hustle's goods legwork — this makes the SCREEN they all point at
+worth arriving at.
