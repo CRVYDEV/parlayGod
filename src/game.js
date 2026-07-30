@@ -162,7 +162,7 @@ export async function loadOwned(client, ch) {
   // parameter carrying the SAME value: `$3` is inferred uuid from its only use, `$2` stays text, and
   // `ix_rival_events_victim` is still usable — casting the COLUMN instead (`victim_account::text=$2`)
   // would also parse but would throw the index away. Any future branch joining on a uuid-typed account
-  // column must bind $3, not $2. `test/pgquery.js` fails the build if this regresses.
+  // column must bind $3, not $2. `tools/pgquery.js` fails the build if this regresses.
   const bulk = await client.query(`
     SELECT 'rk' AS src, racket_id AS k, NULL::text AS k2, level::numeric AS n, NULL::numeric AS n2, NULL::timestamptz AS ts
       FROM character_rackets WHERE character_id=$1

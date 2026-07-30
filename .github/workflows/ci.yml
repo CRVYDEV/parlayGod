@@ -100,6 +100,28 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # FIRST, because it is the cheapest and the most diagnostic. `PREPARE`s every static SQL string
+      # in src/ against the real engine: full parse and type resolution, no rows read, about a second.
+      # It exists because on 2026-07-30 a `uuid = text` comparison made loadOwned fail to PARSE, which
+      # 500'd every authed request for hours while all 61 pg-mem suites stayed green. pgcheck caught
+      # that one only because it happens to call /v1/me; this catches the class wherever it lives, and
+      # it found two more live 500s (GET /v1/rivals, GET /v1/commission) on its first run.
+      - name: pgquery (every SQL string parses on real Postgres)
+        env:
+          DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_query
+        run: |
+          node -e "
+            const { Client } = require('pg');
+            (async () => {
+              const c = new Client({ connectionString: 'postgres://postgres:pgcheck@localhost:5432/postgres' });
+              await c.connect();
+              await c.query('DROP DATABASE IF EXISTS omerta_query');
+              await c.query('CREATE DATABASE omerta_query');
+              await c.end();
+            })().catch((e) => { console.error(e); process.exit(1); });
+          "
+          npm run pgquery
+
       - name: pgcheck (pooling, row locks, timeouts, migration, ledger)
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
@@ -116,7 +138,13 @@ jobs:
       # find out on the day you need a restore. Two of its verifications were written after real
       # defects (a missing `pg_restore -f -` that would have failed EVERY backup; a schema-only dump
       # passing every check while holding no rows), so they get a regression of their own.
+      # `!cancelled()` on every harness below: these are INDEPENDENT checks, and until now the first
+      # failure skipped all of them. When pgcheck went red on 2026-07-30 the backup self-test, chaos
+      # and loadtest silently stopped running too — for eight commits — so a second regression could
+      # have ridden in behind the first with nothing to catch it. A guard that stops running is a
+      # guard that has been deleted.
       - name: backup self-test (dump, verify, refuse, restore)
+        if: '!cancelled()'
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
         run: npm run backup:selftest
@@ -127,6 +155,7 @@ jobs:
       # project already depends on rather than psql, so this does not rely on what the runner image
       # happens to ship.
       - name: create throwaway databases for the interruption + concurrency harnesses
+        if: '!cancelled()'
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_check
         run: |
@@ -154,6 +183,7 @@ jobs:
       # and its summary line stops claiming the outage path was covered. Run it by hand against a
       # local Postgres before a deploy that touches the pool or a transaction boundary.
       - name: chaos (interrupted sweeps, killed backends, wage-epoch crash-resume)
+        if: '!cancelled()'
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_chaos
           JWT_SECRET: ci-jwt-secret-not-a-real-one
@@ -169,6 +199,7 @@ jobs:
       # Deliberately a small field: this is a correctness gate, not a benchmark, and a shared runner's
       # req/s figure means nothing anyway.
       - name: loadtest (concurrent players, deadlock counter, §10.4 delta)
+        if: '!cancelled()'
         env:
           DATABASE_URL: postgres://postgres:pgcheck@localhost:5432/omerta_load
           JWT_SECRET: ci-jwt-secret-not-a-real-one
